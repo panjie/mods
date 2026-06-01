@@ -75,6 +75,7 @@ var help = map[string]string{
 	"mcp-list":          "List all available MCP servers",
 	"mcp-list-tools":    "List all available tools from enabled MCP servers",
 	"mcp-timeout":        "Timeout for MCP server calls, defaults to 15 seconds",
+	"show-tool-calls":     "Show tool call messages like \"Ran tool\" in output",
 	"web-search":          "Enable web search for up-to-date information (uses Bing by default)",
 	"web-search-provider": "Web search provider: bing, tavily, or custom",
 	"web-search-api-key":  "API key for the web search provider (required for tavily)",
@@ -195,6 +196,7 @@ type Config struct {
 	MCPDisable   []string
 	MCPTimeout   time.Duration `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 
+	ShowToolCalls     bool   `yaml:"show-tool-calls" env:"SHOW_TOOL_CALLS"`
 	WebSearch         bool   `yaml:"web-search" env:"WEB_SEARCH"`
 	WebSearchProvider string `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
 	WebSearchAPIKey   string `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
@@ -296,7 +298,8 @@ func defaultConfig() Config {
 			"markdown": defaultMarkdownFormatText,
 			"json":     defaultJSONFormatText,
 		},
-		MCPTimeout: 15 * time.Second,
+		MCPTimeout:     15 * time.Second,
+		ShowToolCalls:  true,
 	}
 }
 

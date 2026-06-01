@@ -24,6 +24,8 @@ mcp-servers:
 mcp-timeout: 15s
 # {{ index .Help "web-search" }}
 web-search: false
+# {{ index .Help "show-tool-calls" }}
+show-tool-calls: true
 # {{ index .Help "web-search-provider" }}
 # Supported: bing (default), tavily, custom
 web-search-provider: bing

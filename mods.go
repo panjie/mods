@@ -551,7 +551,9 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			errh:   msg.errh,
 		}
 		for _, call := range results {
-			toolMsg.content += call.String()
+			if m.Config.ShowToolCalls {
+				toolMsg.content += call.String()
+			}
 		}
 		if len(results) == 0 {
 			m.messages = msg.stream.Messages()

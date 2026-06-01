@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +34,9 @@ import (
 	"github.com/charmbracelet/mods/internal/openai"
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/stream"
+	"github.com/charmbracelet/mods/internal/websearch"
 	"github.com/charmbracelet/x/exp/ordered"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 type state int
@@ -399,8 +402,38 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			return err
 		}
 
+		if cfg.WebSearch {
+			if tools == nil {
+				tools = make(map[string][]mcp.Tool)
+			}
+			tools["web"] = []mcp.Tool{websearch.Tool()}
+		}
+
 		if err := m.setupStreamContext(content, mod); err != nil {
 			return err
+		}
+
+		wscfg := websearch.Config{
+			Enabled:    cfg.WebSearch,
+			Provider:   cfg.WebSearchProvider,
+			APIKey:     cfg.WebSearchAPIKey,
+			MaxResults: 5,
+		}
+
+		if cfg.WebSearch && content != "" {
+			searchCtx, searchCancel := context.WithTimeout(m.ctx, websearch.SearchTimeout)
+			m.cancelRequest = append(m.cancelRequest, searchCancel)
+			if results, err := websearch.Search(searchCtx, wscfg, content); err == nil && results != "" {
+				last := len(m.messages)
+				if last > 0 && m.messages[last-1].Role == proto.RoleUser {
+					m.messages = append(m.messages[:last-1],
+						proto.Message{
+							Role:    proto.RoleSystem,
+							Content: "The following is current information from the web that may help answer the user's question:\n\n" + results,
+						},
+						m.messages[last-1])
+				}
+			}
 		}
 
 		request := proto.Request{
@@ -416,6 +449,9 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			ToolCaller: func(name string, data []byte) (string, error) {
 				ctx, cancel := context.WithTimeout(m.ctx, config.MCPTimeout)
 				m.cancelRequest = append(m.cancelRequest, cancel)
+				if wscfg.Enabled && strings.HasPrefix(name, "web_") {
+					return websearchCallTool(ctx, wscfg, name, data)
+				}
 				return toolCall(ctx, name, data)
 			},
 		}
@@ -753,4 +789,26 @@ func ptrOrNil[T number](t T) *T {
 		return nil
 	}
 	return &t
+}
+
+func websearchCallTool(ctx context.Context, cfg websearch.Config, name string, data []byte) (string, error) {
+	toolName := strings.TrimPrefix(name, "web_")
+	if toolName != "web_search" {
+		return "", fmt.Errorf("websearch: unknown tool: %q", name)
+	}
+
+	var args struct {
+		Query string `json:"query"`
+	}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &args); err != nil {
+			return "", fmt.Errorf("websearch: %w: %s", err, string(data))
+		}
+	}
+
+	if args.Query == "" {
+		return "", fmt.Errorf("websearch: empty search query")
+	}
+
+	return websearch.Search(ctx, cfg, args.Query)
 }

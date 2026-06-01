@@ -74,7 +74,10 @@ var help = map[string]string{
 	"mcp-disable":       "Disable specific MCP servers",
 	"mcp-list":          "List all available MCP servers",
 	"mcp-list-tools":    "List all available tools from enabled MCP servers",
-	"mcp-timeout":       "Timeout for MCP server calls, defaults to 15 seconds",
+	"mcp-timeout":        "Timeout for MCP server calls, defaults to 15 seconds",
+	"web-search":          "Enable web search for up-to-date information (uses Bing by default)",
+	"web-search-provider": "Web search provider: bing, tavily, or custom",
+	"web-search-api-key":  "API key for the web search provider (required for tavily)",
 }
 
 // Model represents the LLM model used in the API call.
@@ -191,6 +194,10 @@ type Config struct {
 	MCPListTools bool
 	MCPDisable   []string
 	MCPTimeout   time.Duration `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
+
+	WebSearch         bool   `yaml:"web-search" env:"WEB_SEARCH"`
+	WebSearchProvider string `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
+	WebSearchAPIKey   string `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
 
 	openEditor                                         bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string

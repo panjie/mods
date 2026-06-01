@@ -286,6 +286,9 @@ func initFlags() {
 	flags.BoolVar(&config.MCPList, "mcp-list", false, stdoutStyles().FlagDesc.Render(help["mcp-list"]))
 	flags.BoolVar(&config.MCPListTools, "mcp-list-tools", false, stdoutStyles().FlagDesc.Render(help["mcp-list-tools"]))
 	flags.StringArrayVar(&config.MCPDisable, "mcp-disable", nil, stdoutStyles().FlagDesc.Render(help["mcp-disable"]))
+	flags.BoolVar(&config.WebSearch, "web-search", config.WebSearch, stdoutStyles().FlagDesc.Render(help["web-search"]))
+	flags.StringVar(&config.WebSearchProvider, "web-search-provider", config.WebSearchProvider, stdoutStyles().FlagDesc.Render(help["web-search-provider"]))
+	flags.StringVar(&config.WebSearchAPIKey, "web-search-api-key", config.WebSearchAPIKey, stdoutStyles().FlagDesc.Render(help["web-search-api-key"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
 	flags.SortFlags = false
 

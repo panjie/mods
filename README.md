@@ -178,6 +178,13 @@ Check the [`./features.md`](./features.md) for more details.
 - `--reset-settings`: Restore settings to default
 - `--theme`: Theme to use in the forms; valid choices are: `charm`, `catppuccin`, `dracula`, and `base16`
 - `--status-text`: Text to show while generating
+- `--show-tool-calls`: Show tool call messages like "Ran tool" in output
+
+#### Web Search
+
+- `--web-search`: Enable web search for up-to-date information (uses Bing by default)
+- `--web-search-provider`: Web search provider (`bing`, `tavily`, or a custom URL)
+- `--web-search-api-key`: API key for the web search provider (required for Tavily)
 
 #### Conversations
 
@@ -260,6 +267,28 @@ Mods supports using Gemini models from Google.
 
 Set the `GOOGLE_API_KEY` enviroment variable. If you don't have one yet,
 you can get it from the [Google AI Studio](https://aistudio.google.com/apikey).
+
+### Web Search
+
+Mods can search the web to provide up-to-date information in responses. Bing is the default provider and requires no API key.
+
+```bash
+# Enable web search
+mods --web-search "What's the latest Go version?"
+```
+
+**Tavily** provides AI-optimized search results. Set your API key:
+
+```bash
+export MODS_WEB_SEARCH_PROVIDER=tavily
+export MODS_WEB_SEARCH_API_KEY=tvly-xxxxxxxxxxxxx
+```
+
+**Custom providers** are supported via a base URL pointing to a compatible search API:
+
+```bash
+mods --web-search --web-search-provider=https://your-search-api.example.com "query"
+```
 
 ## Contributing
 

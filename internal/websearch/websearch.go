@@ -115,7 +115,6 @@ func newRequest(ctx context.Context, method, urlStr string) (*http.Request, erro
 func searchBing(ctx context.Context, query string, maxResults int) ([]Result, error) {
 	params := url.Values{}
 	params.Set("q", query)
-	params.Set("setlang", "en")
 	params.Set("count", fmt.Sprintf("%d", maxResults))
 
 	u := "https://www.bing.com/search?" + params.Encode()

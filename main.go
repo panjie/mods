@@ -292,6 +292,7 @@ func initFlags() {
 	flags.StringVar(&config.WebSearchAPIKey, "web-search-api-key", config.WebSearchAPIKey, stdoutStyles().FlagDesc.Render(help["web-search-api-key"]))
 	flags.StringArrayVarP(&config.Images, "image", "i", config.Images, stdoutStyles().FlagDesc.Render(help["image"]))
 	flags.BoolVar(&config.StdinImage, "stdin-image", config.StdinImage, stdoutStyles().FlagDesc.Render(help["stdin-image"]))
+	flags.BoolVar(&config.ClipboardImage, "clipboard-image", config.ClipboardImage, stdoutStyles().FlagDesc.Render(help["clipboard-image"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
 	flags.SortFlags = false
 

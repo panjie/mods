@@ -35,6 +35,8 @@ web-search-provider: bing
 # images: []
 # {{ index .Help "stdin-image" }}
 # stdin-image: false
+# {{ index .Help "clipboard-image" }}
+# clipboard-image: false
 # {{ index .Help "roles" }}
 roles:
   "default": []

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/mods/internal/clipboard"
 	"github.com/charmbracelet/mods/internal/proto"
 
 	imageutil "github.com/charmbracelet/mods/internal/image"
@@ -91,6 +92,25 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			return modsError{err: err, reason: "Could not detect stdin image format"}
 		}
 		images = append(images, proto.Image{Data: m.stdinImageData, MimeType: mime})
+	}
+	// Attach clipboard image if requested
+	if cfg.ClipboardImage {
+		data, _, err := clipboard.ReadImage()
+		if err != nil {
+			return modsError{err: err, reason: "Could not read image from clipboard"}
+		}
+		supportedMime, err := imageutil.DetectMimeType(data)
+		if err != nil {
+			return modsError{err: err, reason: "Unsupported clipboard image format"}
+		}
+		totalBytes += len(data)
+		if totalBytes > imageutil.MaxTotalImageBytes {
+			return modsError{
+				err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
+				reason: "Images too large",
+			}
+		}
+		images = append(images, proto.Image{Data: data, MimeType: supportedMime})
 	}
 	if len(images) > 0 {
 		lastIdx := len(m.messages) - 1

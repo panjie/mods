@@ -184,6 +184,7 @@ Check the [`./features.md`](./features.md) for more details.
 
 - `-i`, `--image`: Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths
 - `--stdin-image`: Treat piped stdin input as raw image data instead of text
+- `--clipboard-image`: Attach the current image in the system clipboard to the prompt
 
 #### Web Search
 
@@ -308,6 +309,9 @@ mods -i chart.png -i diagram.jpg "Compare these two images"
 
 # Image from stdin (useful with curl or program-generated images)
 cat photo.jpg | mods --stdin-image "Describe this photo"
+
+# Image from clipboard
+mods --clipboard-image "Describe this screenshot"
 ```
 
 Supported formats: PNG, JPEG, GIF, WebP. Maximum total image size: 20MB. Cohere models do not support image input.

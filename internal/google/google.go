@@ -42,7 +42,14 @@ func DefaultConfig(model, authToken string) Config {
 
 // Part is a datatype containing media that is part of a multi-part Content message.
 type Part struct {
-	Text string `json:"text,omitempty"`
+	Text       string `json:"text,omitempty"`
+	InlineData *Blob  `json:"inlineData,omitempty"`
+}
+
+// Blob contains raw media bytes to be sent inline to the model.
+type Blob struct {
+	MimeType string `json:"mimeType,omitempty"`
+	Data     string `json:"data,omitempty"` // base64-encoded
 }
 
 // Content is the base structured datatype containing multi-part content of a message.

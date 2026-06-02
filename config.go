@@ -79,6 +79,8 @@ var help = map[string]string{
 	"web-search":          "Enable web search for up-to-date information (uses Bing by default)",
 	"web-search-provider": "Web search provider: bing, tavily, or custom",
 	"web-search-api-key":  "API key for the web search provider (required for tavily)",
+	"image":               "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
+	"stdin-image": "Treat piped stdin input as raw image data instead of text",
 }
 
 // Model represents the LLM model used in the API call.
@@ -200,6 +202,9 @@ type Config struct {
 	WebSearch         bool   `yaml:"web-search" env:"WEB_SEARCH"`
 	WebSearchProvider string `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
 	WebSearchAPIKey   string `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+
+	Images     []string `yaml:"images" env:"IMAGES"`
+	StdinImage bool     `yaml:"stdin-image" env:"STDIN_IMAGE"`
 
 	openEditor                                         bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string

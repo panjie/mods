@@ -290,6 +290,8 @@ func initFlags() {
 	flags.BoolVar(&config.WebSearch, "web-search", config.WebSearch, stdoutStyles().FlagDesc.Render(help["web-search"]))
 	flags.StringVar(&config.WebSearchProvider, "web-search-provider", config.WebSearchProvider, stdoutStyles().FlagDesc.Render(help["web-search-provider"]))
 	flags.StringVar(&config.WebSearchAPIKey, "web-search-api-key", config.WebSearchAPIKey, stdoutStyles().FlagDesc.Render(help["web-search-api-key"]))
+	flags.StringArrayVarP(&config.Images, "image", "i", config.Images, stdoutStyles().FlagDesc.Render(help["image"]))
+	flags.BoolVar(&config.StdinImage, "stdin-image", config.StdinImage, stdoutStyles().FlagDesc.Render(help["stdin-image"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
 	flags.SortFlags = false
 

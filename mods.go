@@ -77,6 +77,8 @@ type Mods struct {
 	content      []string
 	contentMutex *sync.Mutex
 
+	stdinImageData []byte
+
 	ctx context.Context
 }
 
@@ -141,6 +143,24 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.state = configLoadedState
 		cmds = append(cmds, m.readStdinCmd)
+
+		case stdinImageInput:
+			m.stdinImageData = msg.data
+			if m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
+				return m, m.quit
+			}
+			if m.Config.Dirs ||
+				len(m.Config.Delete) > 0 ||
+				m.Config.DeleteOlderThan != 0 ||
+				m.Config.ShowHelp ||
+				m.Config.List ||
+				m.Config.ListRoles ||
+				m.Config.Settings ||
+				m.Config.ResetSettings {
+				return m, m.quit
+			}
+			m.state = requestState
+			cmds = append(cmds, m.startCompletionCmd(""))
 
 	case completionInput:
 		if msg.content != "" {
@@ -412,6 +432,16 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		if err := m.setupStreamContext(content, mod); err != nil {
 			return err
 		}
+		if mod.API == "cohere" {
+			for _, msg := range m.messages {
+				if len(msg.Images) > 0 {
+					return modsError{
+						err:    fmt.Errorf("image attachments are not supported for Cohere models"),
+						reason: "Image attachments are not supported for this provider",
+					}
+				}
+			}
+		}
 
 		wscfg := websearch.Config{
 			Enabled:    cfg.WebSearch,
@@ -647,9 +677,16 @@ func (m *Mods) readStdinCmd() tea.Msg {
 			return modsError{err, "Unable to read stdin."}
 		}
 
+		if m.Config.StdinImage {
+			return stdinImageInput{data: stdinBytes}
+		}
 		return completionInput{increaseIndent(string(stdinBytes))}
 	}
 	return completionInput{""}
+}
+
+type stdinImageInput struct {
+	data []byte
 }
 
 func (m *Mods) readFromCache() tea.Cmd {

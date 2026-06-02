@@ -17,6 +17,12 @@ const (
 	RoleTool      = "tool"
 )
 
+// Image represents an image attachment in a message.
+type Image struct {
+	Data     []byte // raw image bytes
+	MimeType string // e.g., "image/png", "image/jpeg"
+}
+
 // Chunk is a streaming chunk of text.
 type Chunk struct {
 	Content string
@@ -46,6 +52,7 @@ func (c ToolCallStatus) String() string {
 type Message struct {
 	Role      string
 	Content   string
+	Images    []Image
 	ToolCalls []ToolCall
 }
 

@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -41,8 +42,20 @@ func fromProtoMessages(input []proto.Message) (system []anthropic.TextBlockParam
 				break
 			}
 		case proto.RoleUser:
-			block := anthropic.NewTextBlock(msg.Content)
-			messages = append(messages, anthropic.NewUserMessage(block))
+			if len(msg.Images) > 0 {
+				var blocks []anthropic.ContentBlockParamUnion
+				for _, img := range msg.Images {
+					b64 := base64.StdEncoding.EncodeToString(img.Data)
+					blocks = append(blocks, anthropic.NewImageBlockBase64(img.MimeType, b64))
+				}
+				if msg.Content != "" {
+					blocks = append(blocks, anthropic.NewTextBlock(msg.Content))
+				}
+				messages = append(messages, anthropic.NewUserMessage(blocks...))
+			} else {
+				block := anthropic.NewTextBlock(msg.Content)
+				messages = append(messages, anthropic.NewUserMessage(block))
+			}
 		case proto.RoleAssistant:
 			blocks := []anthropic.ContentBlockParamUnion{
 				anthropic.NewTextBlock(msg.Content),

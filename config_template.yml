@@ -31,6 +31,10 @@ show-tool-calls: true
 web-search-provider: bing
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
+# {{ index .Help "image" }}
+# images: []
+# {{ index .Help "stdin-image" }}
+# stdin-image: false
 # {{ index .Help "roles" }}
 roles:
   "default": []

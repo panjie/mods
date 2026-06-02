@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -41,6 +42,10 @@ func fromProtoMessage(input proto.Message) api.Message {
 	m := api.Message{
 		Content: input.Content,
 		Role:    input.Role,
+	}
+	for _, img := range input.Images {
+		b64 := base64.StdEncoding.EncodeToString(img.Data)
+		m.Images = append(m.Images, api.ImageData(b64))
 	}
 	for _, call := range input.ToolCalls {
 		var args api.ToolCallFunctionArguments

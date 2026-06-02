@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/mods/internal/proto"
+
+	imageutil "github.com/charmbracelet/mods/internal/image"
 )
 
 func (m *Mods) setupStreamContext(content string, mod Model) error {
@@ -65,6 +67,35 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		Role:    proto.RoleUser,
 		Content: content,
 	})
+	// Attach images from CLI flags
+	var images []proto.Image
+	var totalBytes int
+	for _, path := range cfg.Images {
+		data, mime, err := imageutil.ReadImage(path)
+		if err != nil {
+			return modsError{err: err, reason: "Could not read image file"}
+		}
+		totalBytes += len(data)
+		if totalBytes > imageutil.MaxTotalImageBytes {
+			return modsError{
+				err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
+				reason: "Images too large",
+			}
+		}
+		images = append(images, proto.Image{Data: data, MimeType: mime})
+	}
+	// Attach stdin image data if present
+	if len(m.stdinImageData) > 0 {
+		mime, err := imageutil.DetectMimeType(m.stdinImageData)
+		if err != nil {
+			return modsError{err: err, reason: "Could not detect stdin image format"}
+		}
+		images = append(images, proto.Image{Data: m.stdinImageData, MimeType: mime})
+	}
+	if len(images) > 0 {
+		lastIdx := len(m.messages) - 1
+		m.messages[lastIdx].Images = images
+	}
 
 	return nil
 }

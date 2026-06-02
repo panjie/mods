@@ -180,6 +180,11 @@ Check the [`./features.md`](./features.md) for more details.
 - `--status-text`: Text to show while generating
 - `--show-tool-calls`: Show tool call messages like "Ran tool" in output
 
+#### Image Support
+
+- `-i`, `--image`: Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths
+- `--stdin-image`: Treat piped stdin input as raw image data instead of text
+
 #### Web Search
 
 - `--web-search`: Enable web search for up-to-date information (uses Bing by default)
@@ -289,6 +294,23 @@ export MODS_WEB_SEARCH_API_KEY=tvly-xxxxxxxxxxxxx
 ```bash
 mods --web-search --web-search-provider=https://your-search-api.example.com "query"
 ```
+
+### Image Support
+
+Mods can analyze images using vision-capable models (GPT-4o, Claude, Gemini, Ollama vision models).
+
+```bash
+# Analyze a single image
+mods -i screenshot.png "What does this screenshot show?"
+
+# Compare multiple images
+mods -i chart.png -i diagram.jpg "Compare these two images"
+
+# Image from stdin (useful with curl or program-generated images)
+cat photo.jpg | mods --stdin-image "Describe this photo"
+```
+
+Supported formats: PNG, JPEG, GIF, WebP. Maximum total image size: 20MB. Cohere models do not support image input.
 
 ## Contributing
 

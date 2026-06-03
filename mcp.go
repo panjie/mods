@@ -186,7 +186,7 @@ func toolCall(ctx context.Context, name string, data []byte) (string, error) {
 		request := mcp.CallToolRequest{}
 		request.Params.Name = tool
 		request.Params.Arguments = args
-		result, err = client.CallTool(context.Background(), request)
+		result, err = client.CallTool(ctx, request)
 		client.Close() //nolint:errcheck
 		if err == nil {
 			lastErr = nil

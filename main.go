@@ -157,8 +157,8 @@ var (
 						reason: "Could not edit your settings file.",
 					}
 				}
-			hideCommandWindow(c)
-			c.Stdin = os.Stdin
+				hideCommandWindow(c)
+				c.Stdin = os.Stdin
 				c.Stdout = os.Stdout
 				c.Stderr = os.Stderr
 				if err := c.Run(); err != nil {
@@ -304,8 +304,7 @@ func initFlags() {
 
 	for _, name := range []string{"show", "delete", "continue"} {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			results, _ := db.Completions(toComplete)
-			return results, cobra.ShellCompDirectiveDefault
+			return conversationCompletions(toComplete), cobra.ShellCompDirectiveDefault
 		})
 	}
 	_ = rootCmd.RegisterFlagCompletionFunc("role", func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -341,6 +340,22 @@ func initFlags() {
 		"mcp-list",
 		"mcp-list-tools",
 	)
+}
+
+func conversationCompletions(toComplete string) []string {
+	var err error
+	if db == nil {
+		db, err = openDB(filepath.Join(config.CachePath, "conversations", "mods.db"))
+		if err != nil {
+			return nil
+		}
+	}
+
+	results, err := db.Completions(toComplete)
+	if err != nil {
+		return nil
+	}
+	return results
 }
 
 func main() {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"text/template"
 	"time"
 
@@ -29,61 +30,61 @@ const (
 )
 
 var help = map[string]string{
-	"api":               "OpenAI compatible REST API (openai, localai, anthropic, ...)",
-	"apis":              "Aliases and endpoints for OpenAI compatible REST API",
-	"http-proxy":        "HTTP proxy to use for API requests",
-	"model":             "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
-	"ask-model":         "Ask which model to use via interactive prompt",
-	"max-input-chars":   "Default character limit on input to model",
-	"format":            "Ask for the response to be formatted as markdown unless otherwise set",
-	"format-text":       "Text to append when using the -f flag",
-	"role":              "System role to use",
-	"roles":             "List of predefined system messages that can be used as roles",
-	"list-roles":        "List the roles defined in your configuration file",
-	"prompt":            "Include the prompt from the arguments and stdin, truncate stdin to specified number of lines",
-	"prompt-args":       "Include the prompt from the arguments in the response",
-	"raw":               "Render output as raw text when connected to a TTY",
-	"quiet":             "Quiet mode (hide the spinner while loading and stderr messages for success)",
-	"help":              "Show help and exit",
-	"version":           "Show version and exit",
-	"max-retries":       "Maximum number of times to retry API calls",
-	"no-limit":          "Turn off the client-side limit on the size of the input into the model",
-	"word-wrap":         "Wrap formatted output at specific width (default is 80)",
-	"max-tokens":        "Maximum number of tokens in response",
-	"temp":              "Temperature (randomness) of results, from 0.0 to 2.0, -1.0 to disable",
-	"stop":              "Up to 4 sequences where the API will stop generating further tokens",
-	"topp":              "TopP, an alternative to temperature that narrows response, from 0.0 to 1.0, -1.0 to disable",
-	"topk":              "TopK, only sample from the top K options for each subsequent token, -1 to disable",
-	"fanciness":         "Your desired level of fanciness",
-	"status-text":       "Text to show while generating",
-	"settings":          "Open settings in your $EDITOR",
-	"dirs":              "Print the directories in which mods store its data",
-	"reset-settings":    "Backup your old settings file and reset everything to the defaults",
-	"continue":          "Continue from the last response or a given save title",
-	"continue-last":     "Continue from the last response",
-	"no-cache":          "Disables caching of the prompt/response",
-	"title":             "Saves the current conversation with the given title",
-	"list":              "Lists saved conversations",
-	"delete":            "Deletes one or more saved conversations with the given titles or IDs",
-	"delete-older-than": "Deletes all saved conversations older than the specified duration; valid values are " + strings.EnglishJoin(duration.ValidUnits(), true),
-	"show":              "Show a saved conversation with the given title or ID",
-	"theme":             "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
-	"show-last":         "Show the last saved conversation",
-	"editor":            "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
-	"mcp-servers":       "MCP Servers configurations",
-	"mcp-enable":        "Enable only specific MCP servers (whitelist, overrides disable list)",
-	"mcp-disable":       "Disable specific MCP servers",
-	"mcp-list":          "List all available MCP servers",
-	"mcp-list-tools":    "List all available tools from enabled MCP servers",
-	"mcp-timeout":        "Timeout for MCP server calls, defaults to 15 seconds",
+	"api":                 "OpenAI compatible REST API (openai, localai, anthropic, ...)",
+	"apis":                "Aliases and endpoints for OpenAI compatible REST API",
+	"http-proxy":          "HTTP proxy to use for API requests",
+	"model":               "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
+	"ask-model":           "Ask which model to use via interactive prompt",
+	"max-input-chars":     "Default character limit on input to model",
+	"format":              "Ask for the response to be formatted as markdown unless otherwise set",
+	"format-text":         "Text to append when using the -f flag",
+	"role":                "System role to use",
+	"roles":               "List of predefined system messages that can be used as roles",
+	"list-roles":          "List the roles defined in your configuration file",
+	"prompt":              "Include the prompt from the arguments and stdin, truncate stdin to specified number of lines",
+	"prompt-args":         "Include the prompt from the arguments in the response",
+	"raw":                 "Render output as raw text when connected to a TTY",
+	"quiet":               "Quiet mode (hide the spinner while loading and stderr messages for success)",
+	"help":                "Show help and exit",
+	"version":             "Show version and exit",
+	"max-retries":         "Maximum number of times to retry API calls",
+	"no-limit":            "Turn off the client-side limit on the size of the input into the model",
+	"word-wrap":           "Wrap formatted output at specific width (default is 80)",
+	"max-tokens":          "Maximum number of tokens in response",
+	"temp":                "Temperature (randomness) of results, from 0.0 to 2.0, -1.0 to disable",
+	"stop":                "Up to 4 sequences where the API will stop generating further tokens",
+	"topp":                "TopP, an alternative to temperature that narrows response, from 0.0 to 1.0, -1.0 to disable",
+	"topk":                "TopK, only sample from the top K options for each subsequent token, -1 to disable",
+	"fanciness":           "Your desired level of fanciness",
+	"status-text":         "Text to show while generating",
+	"settings":            "Open settings in your $EDITOR",
+	"dirs":                "Print the directories in which mods store its data",
+	"reset-settings":      "Backup your old settings file and reset everything to the defaults",
+	"continue":            "Continue from the last response or a given save title",
+	"continue-last":       "Continue from the last response",
+	"no-cache":            "Disables caching of the prompt/response",
+	"title":               "Saves the current conversation with the given title",
+	"list":                "Lists saved conversations",
+	"delete":              "Deletes one or more saved conversations with the given titles or IDs",
+	"delete-older-than":   "Deletes all saved conversations older than the specified duration; valid values are " + strings.EnglishJoin(duration.ValidUnits(), true),
+	"show":                "Show a saved conversation with the given title or ID",
+	"theme":               "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
+	"show-last":           "Show the last saved conversation",
+	"editor":              "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
+	"mcp-servers":         "MCP Servers configurations",
+	"mcp-enable":          "Enable only specific MCP servers (whitelist, overrides disable list)",
+	"mcp-disable":         "Disable specific MCP servers",
+	"mcp-list":            "List all available MCP servers",
+	"mcp-list-tools":      "List all available tools from enabled MCP servers",
+	"mcp-timeout":         "Timeout for MCP server calls, defaults to 15 seconds",
 	"show-tool-calls":     "Show tool call messages like \"Ran tool\" in output",
 	"web-search":          "Enable web search for up-to-date information (uses Bing by default)",
 	"web-search-provider": "Web search provider: bing, tavily, or custom",
 	"web-search-api-key":  "API key for the web search provider (required for tavily)",
-	"image":            "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
-	"stdin-image":      "Treat piped stdin input as raw image data instead of text",
-	"clipboard-image":  "Attach the current image in the system clipboard to the prompt",
-	"debug":           "Enable debug mode to print execution steps, tool calls, and request details",
+	"image":               "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
+	"stdin-image":         "Treat piped stdin input as raw image data instead of text",
+	"clipboard-image":     "Attach the current image in the system clipboard to the prompt",
+	"debug":               "Enable debug mode to print execution steps, tool calls, and request details",
 }
 
 // Model represents the LLM model used in the API call.
@@ -195,11 +196,11 @@ type Config struct {
 	DeleteOlderThan     time.Duration
 	User                string
 
-	MCPServers    map[string]MCPServerConfig `yaml:"mcp-servers"`
-	MCPList       bool
-	MCPListTools  bool
-	MCPEnable     []string
-	MCPDisable    []string
+	MCPServers   map[string]MCPServerConfig `yaml:"mcp-servers"`
+	MCPList      bool
+	MCPListTools bool
+	MCPEnable    []string
+	MCPDisable   []string
 	MCPTimeout   time.Duration `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 
 	ShowToolCalls     bool   `yaml:"show-tool-calls" env:"SHOW_TOOL_CALLS"`
@@ -227,7 +228,7 @@ type MCPServerConfig struct {
 
 func ensureConfig() (Config, error) {
 	var c Config
-	sp, err := xdg.ConfigFile(filepath.Join("mods", "mods.yml"))
+	sp, err := settingsFilePath()
 	if err != nil {
 		return c, modsError{err, "Could not find settings path."}
 	}
@@ -271,6 +272,23 @@ func ensureConfig() (Config, error) {
 	return c, nil
 }
 
+func settingsFilePath() (string, error) {
+	relPath := filepath.Join("mods", "mods.yml")
+	if runtime.GOOS != "darwin" {
+		return xdg.ConfigFile(relPath)
+	}
+
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		configHome = filepath.Join(home, ".config")
+	}
+	return filepath.Join(configHome, relPath), nil
+}
+
 func writeConfigFile(path string) error {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return createConfigFile(path)
@@ -309,8 +327,8 @@ func defaultConfig() Config {
 			"markdown": defaultMarkdownFormatText,
 			"json":     defaultJSONFormatText,
 		},
-		MCPTimeout:     15 * time.Second,
-		ShowToolCalls:  true,
+		MCPTimeout:    15 * time.Second,
+		ShowToolCalls: true,
 	}
 }
 

@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsCompletionCmd(t *testing.T) {
@@ -59,4 +61,16 @@ func TestIsManCmd(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConversationCompletions(t *testing.T) {
+	saveDB := db
+	defer func() { db = saveDB }()
+
+	db = testDB(t)
+	const id = "df31ae23ab8b75b5643c2f846c570997edc71333"
+	require.NoError(t, db.Save(id, "message 1", "openai", "gpt-4o"))
+
+	results := conversationCompletions("df31")
+	require.Equal(t, []string{"df31ae2\tmessage 1"}, results)
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,4 +25,25 @@ func TestConfig(t *testing.T) {
 			"json":     "as json",
 		}), cfg.FormatText)
 	})
+}
+
+func TestSettingsFilePathDarwin(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin-specific default config path")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path, err := settingsFilePath()
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(home, ".config", "mods", "mods.yml"), path)
+
+	xdgConfigHome := filepath.Join(t.TempDir(), "xdg-config")
+	t.Setenv("XDG_CONFIG_HOME", xdgConfigHome)
+
+	path, err = settingsFilePath()
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(xdgConfigHome, "mods", "mods.yml"), path)
 }

@@ -143,6 +143,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	if err != nil {
 		stream.err = err
 	}
+	stream.messages = append([]proto.Message(nil), request.Messages...)
 	return stream
 }
 
@@ -204,6 +205,8 @@ type Stream struct {
 	response    *http.Response
 	err         error
 	unmarshaler Unmarshaler
+	message     string
+	messages    []proto.Message
 
 	httpHeader
 }
@@ -219,8 +222,14 @@ func (s *Stream) Err() error { return s.err }
 
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message {
-	// Gemini does not support returning streamed messages after the fact.
-	return nil
+	messages := append([]proto.Message(nil), s.messages...)
+	if s.message != "" {
+		messages = append(messages, proto.Message{
+			Role:    proto.RoleAssistant,
+			Content: s.message,
+		})
+	}
+	return messages
 }
 
 // Next implements stream.Stream.
@@ -287,9 +296,10 @@ func (s *Stream) Current() (proto.Chunk, error) {
 			return proto.Chunk{}, stream.ErrNoContent
 		}
 
-		return proto.Chunk{
-			Content: chunk.Candidates[0].Content.Parts[0].Text,
-		}, nil
+		text := chunk.Candidates[0].Content.Parts[0].Text
+		s.message += text
+
+		return proto.Chunk{Content: text}, nil
 	}
 }
 

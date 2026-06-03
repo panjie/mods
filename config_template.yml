@@ -113,44 +113,37 @@ apis:
         aliases: ["5codex", "gpt5codex", "codex"]
         max-input-chars: 400000
         fallback: gpt-5
+      gpt-5.1:
+        aliases: ["5.1", "gpt5.1", "gpt-5-1"]
+        max-input-chars: 794000
+        fallback: gpt-5
+      gpt-5.2:
+        aliases: ["5.2", "gpt5.2", "gpt-5-2"]
+        max-input-chars: 794000
+        fallback: gpt-5.1
+      gpt-5.4:
+        aliases: ["5.4", "gpt5.4", "gpt-5-4"]
+        max-input-chars: 794000
+        fallback: gpt-5.2
+      gpt-5.5:
+        aliases: ["5.5", "gpt5.5", "gpt-5-5"]
+        max-input-chars: 794000
+        fallback: gpt-5.4
       gpt-4o:
         aliases: ["4o"]
         max-input-chars: 392000
         fallback: gpt-4
-      gpt-4:
-        aliases: ["4"]
-        max-input-chars: 24500
-        fallback: gpt-3.5-turbo
-      gpt-4-1106-preview:
-        aliases: ["128k"]
-        max-input-chars: 392000
-        fallback: gpt-4
-      gpt-4-32k:
-        aliases: ["32k"]
-        max-input-chars: 98000
-        fallback: gpt-4
-      gpt-3.5-turbo:
-        aliases: ["35t"]
-        max-input-chars: 12250
-        fallback: gpt-3.5
-      gpt-3.5-turbo-1106:
-        aliases: ["35t-1106"]
-        max-input-chars: 12250
-        fallback: gpt-3.5-turbo
-      gpt-3.5-turbo-16k:
-        aliases: ["35t16k"]
-        max-input-chars: 44500
-        fallback: gpt-3.5
-      gpt-3.5:
-        aliases: ["35"]
-        max-input-chars: 12250
-        fallback:
+      gpt-4.1:
+        aliases: ["4.1", "gpt4.1", "gpt-4-1"]
+        max-input-chars: 4000000
+        fallback: gpt-4o
+      gpt-4.5:
+        aliases: ["4.5", "gpt4.5", "gpt-4-5"]
+        max-input-chars: 512000
+        fallback: gpt-4.1
       o1:
         aliases: ["o1"]
         max-input-chars: 200000
-      o1-preview:
-        aliases: ["o1-preview"]
-        max-input-chars: 128000
       o1-mini:
         aliases: ["o1-mini"]
         max-input-chars: 128000
@@ -167,6 +160,10 @@ apis:
         aliases: ["o3m", "o3-mini"]
         max-input-chars: 200000
         fallback: o1-mini
+      o4-mini:
+        aliases: ["o4", "o4m", "o4-mini"]
+        max-input-chars: 794000
+        fallback: o3-mini
   anthropic:
     base-url: https://api.anthropic.com/v1
     api-key:
@@ -186,18 +183,40 @@ apis:
       claude-3-5-haiku-20241022:
         aliases: ["claude3.5-haiku", "haiku"]
         max-input-chars: 680000
+      claude-haiku-4-5-20251001:
+        aliases: ["claude-haiku-4.5", "haiku-4.5"]
+        max-input-chars: 800000
+      claude-sonnet-4-5-20251101:
+        aliases: ["claude-sonnet-4.5", "sonnet-4.5"]
+        max-input-chars: 800000
+      claude-opus-4-5-20251101:
+        aliases: ["claude-opus-4.5", "opus-4.5"]
+        max-input-chars: 800000
   cohere:
     base-url: https://api.cohere.com/v1
     models:
-      command-r-plus:
-        max-input-chars: 128000
-      command-r:
-        max-input-chars: 128000
+      command-a-plus-05-2026:
+        aliases: ["command-a-plus", "command-a+"]
+        max-input-chars: 512000
+      command-a-03-2025:
+        aliases: ["command-a"]
+        max-input-chars: 1024000
+      command-r7b-12-2024:
+        aliases: ["command-r7b"]
+        max-input-chars: 512000
+      command-a-reasoning-08-2025:
+        aliases: ["command-a-reasoning"]
+        max-input-chars: 1024000
+      command-a-vision-07-2025:
+        aliases: ["command-a-vision"]
+        max-input-chars: 512000
   google:
     models: # https://ai.google.dev/gemini-api/docs/models/gemini
+      # Deprecated: use gemini-2.5-flash-preview-05-06
       gemini-1.5-pro-latest:
         aliases: ["gmp", "gemini", "gemini-1.5-pro"]
         max-input-chars: 392000
+      # Deprecated: use gemini-2.5-flash-preview-05-06
       gemini-1.5-flash-latest:
         aliases: ["gmf", "flash", "gemini-1.5-flash"]
         max-input-chars: 392000
@@ -206,6 +225,12 @@ apis:
         max-input-chars: 4194304
       gemini-2.0-flash-lite:
         aliases: ["gm2fl", "flash-2-lite", "gemini-2-flash-lite"]
+        max-input-chars: 4194304
+      gemini-2.5-pro-preview-05-06:
+        aliases: ["gm2.5p", "gemini-2.5-pro"]
+        max-input-chars: 4194304
+      gemini-2.5-flash-preview-05-06:
+        aliases: ["gm2.5f", "gemini-2.5-flash"]
         max-input-chars: 4194304
 
   ollama:
@@ -434,12 +459,13 @@ apis:
     api-key:
     api-key-env: DEEPSEEK_API_KEY
     models:
-      deepseek-chat:
-        aliases: ["chat"]
-        max-input-chars: 384000
-      deepseek-reasoner:
-        aliases: ["r1"]
-        max-input-chars: 384000
+      deepseek-v4-flash:
+        aliases: ["v4-flash", "flash", "deepseek-chat", "chat"]
+        max-input-chars: 4000000
+        fallback: deepseek-v4-pro
+      deepseek-v4-pro:
+        aliases: ["v4-pro", "pro", "deepseek-reasoner", "r1"]
+        max-input-chars: 4000000
   # GitHub Models
   # https://github.com/marketplace/models
   github-models:

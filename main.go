@@ -12,6 +12,7 @@ import (
 	"runtime/pprof"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/atotto/clipboard"
 	timeago "github.com/caarlos0/timea.go"
@@ -157,6 +158,7 @@ var (
 						reason: "Could not edit your settings file.",
 					}
 				}
+				c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 				c.Stdin = os.Stdin
 				c.Stdout = os.Stdout
 				c.Stderr = os.Stderr
@@ -513,6 +515,8 @@ func resetSettings() error {
 		return modsError{err, "Couldn't write config file."}
 	}
 	// The copy was successful, so now delete the original file
+	inputFile.Close()
+	outputFile.Close()
 	err = os.Remove(config.SettingsPath)
 	if err != nil {
 		return modsError{err, "Couldn't remove config file."}
@@ -947,6 +951,7 @@ func prefixFromEditor() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not open editor: %w", err)
 	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout

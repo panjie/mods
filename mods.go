@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"syscall"
 	"slices"
 	"strconv"
 	"strings"
@@ -571,7 +572,9 @@ func (m Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
 		if err != nil {
 			return "", modsError{err, "Failed to parse api-key-cmd"}
 		}
-		out, err := exec.Command(args[0], args[1:]...).CombinedOutput() //nolint:gosec
+		cmd := exec.Command(args[0], args[1:]...) //nolint:gosec
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return "", modsError{err, "Cannot exec api-key-cmd"}
 		}

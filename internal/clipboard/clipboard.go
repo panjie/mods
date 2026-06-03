@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 )
 
 var ErrNoImage = errors.New("no image found in clipboard")
@@ -23,6 +24,7 @@ func ReadImage() ([]byte, string, error) {
 func execCmd(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Env = os.Environ()
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

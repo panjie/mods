@@ -8,11 +8,14 @@ import (
 	"iter"
 	"maps"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"golang.org/x/sync/errgroup"
 )
@@ -102,10 +105,16 @@ func initMcpClient(ctx context.Context, server MCPServerConfig) (*client.Client,
 
 	switch server.Type {
 	case "", "stdio":
-		cli, err = client.NewStdioMCPClient(
+		cli, err = client.NewStdioMCPClientWithOptions(
 			server.Command,
 			append(os.Environ(), server.Env...),
-			server.Args...,
+			server.Args,
+			transport.WithCommandFunc(func(ctx context.Context, command string, env []string, args []string) (*exec.Cmd, error) {
+				cmd := exec.CommandContext(ctx, command, args...)
+				cmd.Env = append(os.Environ(), env...)
+				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+				return cmd, nil
+			}),
 		)
 	case "sse":
 		cli, err = client.NewSSEMCPClient(server.URL)

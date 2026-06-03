@@ -17,7 +17,7 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []anthropic.ToolUnionParam {
 			tools = append(tools, anthropic.ToolUnionParam{
 				OfTool: &anthropic.ToolParam{
 					InputSchema: anthropic.ToolInputSchemaParam{
-						Properties: tool.InputSchema.Properties,
+						Properties: stripDescriptions(tool.InputSchema.Properties),
 					},
 					Name:        fmt.Sprintf("%s_%s", name, tool.Name),
 					Description: anthropic.String(tool.Description),
@@ -26,6 +26,41 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []anthropic.ToolUnionParam {
 		}
 	}
 	return tools
+}
+
+func stripDescriptions(props map[string]any) map[string]any {
+	if props == nil {
+		return nil
+	}
+	out := make(map[string]any, len(props))
+	for k, v := range props {
+		m, ok := v.(map[string]any)
+		if !ok {
+			out[k] = v
+			continue
+		}
+		cleaned := make(map[string]any, len(m))
+		for mk, mv := range m {
+			if mk == "description" {
+				continue
+			}
+			if mk == "properties" {
+				if nested, ok := mv.(map[string]any); ok {
+					cleaned[mk] = stripDescriptions(nested)
+					continue
+				}
+			}
+			if mk == "items" {
+				if items, ok := mv.(map[string]any); ok {
+					cleaned[mk] = stripDescriptions(items)
+					continue
+				}
+			}
+			cleaned[mk] = mv
+		}
+		out[k] = cleaned
+	}
+	return out
 }
 
 func fromProtoMessages(input []proto.Message) (system []anthropic.TextBlockParam, messages []anthropic.MessageParam) {

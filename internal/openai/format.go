@@ -16,7 +16,7 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []openai.ChatCompletionToolParam {
 		for _, tool := range serverTools {
 			params := map[string]any{
 				"type":       "object",
-				"properties": tool.InputSchema.Properties,
+				"properties": stripDescriptions(tool.InputSchema.Properties),
 			}
 			if len(tool.InputSchema.Required) > 0 {
 				params["required"] = tool.InputSchema.Required
@@ -33,6 +33,41 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []openai.ChatCompletionToolParam {
 		}
 	}
 	return tools
+}
+
+func stripDescriptions(props map[string]any) map[string]any {
+	if props == nil {
+		return nil
+	}
+	out := make(map[string]any, len(props))
+	for k, v := range props {
+		m, ok := v.(map[string]any)
+		if !ok {
+			out[k] = v
+			continue
+		}
+		cleaned := make(map[string]any, len(m))
+		for mk, mv := range m {
+			if mk == "description" {
+				continue
+			}
+			if mk == "properties" {
+				if nested, ok := mv.(map[string]any); ok {
+					cleaned[mk] = stripDescriptions(nested)
+					continue
+				}
+			}
+			if mk == "items" {
+				if items, ok := mv.(map[string]any); ok {
+					cleaned[mk] = stripDescriptions(items)
+					continue
+				}
+			}
+			cleaned[mk] = mv
+		}
+		out[k] = cleaned
+	}
+	return out
 }
 
 func fromProtoMessages(input []proto.Message) []openai.ChatCompletionMessageParamUnion {

@@ -55,6 +55,12 @@ func (m *Mods) handleAPIError(err *openai.Error, mod Model, content string) tea.
 		return m.retry(content, modsError{
 			err: err, reason: fmt.Sprintf("You’ve hit your %s API rate limit.", mod.API),
 		})
+	case http.StatusRequestEntityTooLarge:
+		return modsError{err: err, reason: fmt.Sprintf(
+			"Request too large for %s API. Try reducing input size, removing images, or using %s.",
+			mod.API,
+			m.Styles.InlineCode.Render("--no-limit=false"),
+		)}
 	case http.StatusInternalServerError:
 		if mod.API == "openai" {
 			return m.retry(content, modsError{err: err, reason: "OpenAI API server error."})
@@ -65,6 +71,9 @@ func (m *Mods) handleAPIError(err *openai.Error, mod Model, content string) tea.
 			mod.API,
 		)}
 	default:
+		if err.StatusCode >= 400 && err.StatusCode < 500 {
+			return modsError{err: err, reason: fmt.Sprintf("%s API request error (HTTP %d).", mod.API, err.StatusCode)}
+		}
 		return m.retry(content, modsError{err: err, reason: "Unknown API error."})
 	}
 }

@@ -12,8 +12,10 @@ import (
 func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg {
 	ae := &openai.Error{}
 	if errors.As(err, &ae) {
+		debugPrintf("API error: HTTP %d, code=%q, message=%q", ae.StatusCode, ae.Code, ae.Message)
 		return m.handleAPIError(ae, mod, content)
 	}
+	debugPrintf("Request error (non-API): %v", err)
 	return modsError{err, fmt.Sprintf(
 		"There was a problem with the %s API request.",
 		mod.API,

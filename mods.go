@@ -289,9 +289,11 @@ func (m *Mods) quit() tea.Msg {
 func (m *Mods) retry(content string, err modsError) tea.Msg {
 	m.retries++
 	if m.retries >= m.Config.MaxRetries {
+		debugPrintf("API error: giving up after %d retries (max=%d)", m.retries, m.Config.MaxRetries)
 		return err
 	}
 	wait := time.Millisecond * 100 * time.Duration(math.Pow(2, float64(m.retries))) //nolint:mnd
+	debugPrintf("API error: retry %d/%d in %v -> %s", m.retries, m.Config.MaxRetries, wait, err.reason)
 	time.Sleep(wait)
 	return completionInput{content}
 }
@@ -422,6 +424,18 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			return err
 		}
 
+		if debugEnabled() {
+			toolCount := 0
+			for sname, serverTools := range tools {
+				debugPrintf("MCP server %q: %d tool(s)", sname, len(serverTools))
+				for _, t := range serverTools {
+					debugPrintf("  Tool: %s_%s", sname, t.Name)
+				}
+				toolCount += len(serverTools)
+			}
+			debugPrintf("MCP: %d server(s) enabled, %d total tool(s)", len(tools), toolCount)
+		}
+
 		if cfg.WebSearch {
 			if tools == nil {
 				tools = make(map[string][]mcp.Tool)
@@ -509,6 +523,28 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			return modsError{err, "Could not setup client"}
 		}
 
+		if debugEnabled() {
+			debugPrintf("API request -> model=%s, api=%s", mod.Name, mod.API)
+			debugPrintf("Request: %d message(s), %d tool definition(s)", len(m.messages), countTools(tools))
+			tempStr := "unset"
+			if request.Temperature != nil {
+				tempStr = fmt.Sprintf("%.2f", *request.Temperature)
+			}
+			toppStr := "unset"
+			if request.TopP != nil {
+				toppStr = fmt.Sprintf("%.2f", *request.TopP)
+			}
+			maxTokStr := "unset"
+			if request.MaxTokens != nil {
+				maxTokStr = fmt.Sprintf("%d", *request.MaxTokens)
+			}
+			debugPrintf("Request: temp=%s, topp=%s, max_tokens=%s", tempStr, toppStr, maxTokStr)
+			debugPrintf("Request: no-limit=%v, max-input-chars=%d", cfg.NoLimit, mod.MaxChars)
+			if cfg.HTTPProxy != "" {
+				debugPrintf("HTTP proxy: %s", cfg.HTTPProxy)
+			}
+		}
+
 		stream := client.Request(m.ctx, request)
 		return m.receiveCompletionStreamCmd(completionOutput{
 			stream: stream,
@@ -581,6 +617,11 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			errh:   msg.errh,
 		}
 		for _, call := range results {
+			if call.Err != nil {
+				debugPrintf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+			} else {
+				debugPrintf("Tool call: %s", call.Name)
+			}
 			if m.Config.ShowToolCalls {
 				toolMsg.content += call.String()
 			}
@@ -625,7 +666,6 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 			}
 		}
 
-		// if we are continuing last, update the existing conversation
 		if continueLast {
 			writeID = readID
 		}
@@ -637,12 +677,14 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 		if !sha1reg.MatchString(writeID) {
 			convo, err := m.db.Find(writeID)
 			if err != nil {
-				// its a new conversation with a title
 				writeID = newConversationID()
 			} else {
 				writeID = convo.ID
 			}
 		}
+
+		debugPrintf("Conversation: write_id=%s, read_id=%s, continue_last=%v, title=%s",
+			writeID[:min(sha1short, len(writeID))], readID[:min(sha1short, len(readID))], continueLast, title)
 
 		return cacheDetailsMsg{
 			WriteID: writeID,
@@ -677,11 +719,15 @@ func (m *Mods) readStdinCmd() tea.Msg {
 			return modsError{err, "Unable to read stdin."}
 		}
 
+		debugPrintf("Stdin: pipe mode, %d bytes read", len(stdinBytes))
+		debugPrintf("Stdin image mode: %v", m.Config.StdinImage)
+
 		if m.Config.StdinImage {
 			return stdinImageInput{data: stdinBytes}
 		}
 		return completionInput{increaseIndent(string(stdinBytes))}
 	}
+	debugPrintf("Stdin: TTY mode, no piped input")
 	return completionInput{""}
 }
 

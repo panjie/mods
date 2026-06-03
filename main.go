@@ -293,6 +293,7 @@ func initFlags() {
 	flags.StringArrayVarP(&config.Images, "image", "i", config.Images, stdoutStyles().FlagDesc.Render(help["image"]))
 	flags.BoolVar(&config.StdinImage, "stdin-image", config.StdinImage, stdoutStyles().FlagDesc.Render(help["stdin-image"]))
 	flags.BoolVar(&config.ClipboardImage, "clipboard-image", config.ClipboardImage, stdoutStyles().FlagDesc.Render(help["clipboard-image"]))
+	flags.BoolVarP(&config.Debug, "debug", "D", config.Debug, stdoutStyles().FlagDesc.Render(help["debug"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
 	flags.SortFlags = false
 
@@ -346,12 +347,15 @@ func main() {
 	config, err = ensureConfig()
 	if err != nil {
 		handleError(modsError{err, "Could not load your configuration file."})
-		// if user is editing the settings, only print out the error, but do
-		// not exit.
 		if !slices.Contains(os.Args, "--settings") {
 			os.Exit(1)
 		}
 	}
+
+	debugPrintf("Config loaded from: %s", config.SettingsPath)
+	debugPrintf("API: %s, Model: %s", config.API, config.Model)
+	debugPrintf("Role: %s, Format: %v, Format-as: %s, Raw: %v, Quiet: %v", config.Role, config.Format, config.FormatAs, config.Raw, config.Quiet)
+	debugPrintf("Cache path: %s", config.CachePath)
 
 	// XXX: this must come after creating the config.
 	initFlags()

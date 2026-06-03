@@ -12,6 +12,8 @@ type styles struct {
 	CliArgs,
 	Comment,
 	CyclingChars,
+	DebugHeader,
+	DebugDetails,
 	ErrorHeader,
 	ErrorDetails,
 	ErrPadding,
@@ -33,6 +35,8 @@ func makeStyles(r *lipgloss.Renderer) (s styles) {
 	s.CliArgs = r.NewStyle().Foreground(lipgloss.Color("#585858"))
 	s.Comment = r.NewStyle().Foreground(lipgloss.Color("#757575"))
 	s.CyclingChars = r.NewStyle().Foreground(lipgloss.Color("#FF87D7"))
+	s.DebugHeader = r.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#FFD700")).Bold(true).Padding(0, 1).SetString("DEBUG")
+	s.DebugDetails = r.NewStyle().Foreground(lipgloss.Color("#B8860B"))
 	s.ErrorHeader = r.NewStyle().Foreground(lipgloss.Color("#F1F1F1")).Background(lipgloss.Color("#FF5F87")).Bold(true).Padding(0, 1).SetString("ERROR")
 	s.ErrorDetails = s.Comment
 	s.ErrPadding = r.NewStyle().Padding(0, horizontalEdgePadding)

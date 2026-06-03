@@ -82,6 +82,7 @@ var help = map[string]string{
 	"image":            "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
 	"stdin-image":      "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":  "Attach the current image in the system clipboard to the prompt",
+	"debug":           "Enable debug mode to print execution steps, tool calls, and request details",
 }
 
 // Model represents the LLM model used in the API call.
@@ -207,6 +208,7 @@ type Config struct {
 	Images         []string `yaml:"images" env:"IMAGES"`
 	StdinImage     bool     `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage bool     `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
+	Debug          bool     `yaml:"debug" env:"DEBUG"`
 
 	openEditor                                         bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string

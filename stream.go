@@ -47,8 +47,21 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		content = strings.TrimSpace(prefix + "\n\n" + content)
 	}
 
-	if !cfg.NoLimit && int64(len(content)) > mod.MaxChars {
+	origLen := int64(len(content))
+	if !cfg.NoLimit && origLen > mod.MaxChars {
 		content = content[:mod.MaxChars]
+	}
+
+	debugPrintf("Context: %d system message(s), %d existing message(s)", len(m.messages), 0)
+	for i, msg := range m.messages {
+		debugPrintf("  System message #%d (%d chars): %s", i+1, len(msg.Content), truncateStr(msg.Content, 200))
+	}
+	if origLen > 0 {
+		truncNote := ""
+		if !cfg.NoLimit && origLen > mod.MaxChars {
+			truncNote = fmt.Sprintf(" (truncated from %d to %d chars, max-input-chars=%d)", origLen, len(content), mod.MaxChars)
+		}
+		debugPrintf("  User message (%d chars): %s%s", len(content), truncateStr(strings.ReplaceAll(content, "\n", "\\n"), 300), truncNote)
 	}
 
 	if !cfg.NoCache && cfg.cacheReadFromID != "" {
@@ -62,6 +75,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 				),
 			}
 		}
+		debugPrintf("Cache: read %d messages from %s", len(m.messages), cfg.cacheReadFromID[:min(sha1short, len(cfg.cacheReadFromID))])
 	}
 
 	m.messages = append(m.messages, proto.Message{
@@ -115,6 +129,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	if len(images) > 0 {
 		lastIdx := len(m.messages) - 1
 		m.messages[lastIdx].Images = images
+		debugPrintf("Images: %d image(s), %d total bytes", len(images), totalBytes)
 	}
 
 	return nil

@@ -33,6 +33,9 @@ func enabledMCPs() iter.Seq2[string, MCPServerConfig] {
 }
 
 func isMCPEnabled(name string) bool {
+	if len(config.MCPEnable) > 0 {
+		return slices.Contains(config.MCPEnable, name)
+	}
 	return !slices.Contains(config.MCPDisable, "*") &&
 		!slices.Contains(config.MCPDisable, name)
 }

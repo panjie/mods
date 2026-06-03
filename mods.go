@@ -626,7 +626,12 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			if call.Err != nil {
 				debugPrintf("Tool call FAILED: %s -> %v", call.Name, call.Err)
 			} else {
-				debugPrintf("Tool call: %s", call.Name)
+				argPreview := truncateStr(string(call.Arguments), 120)
+				if argPreview != "" {
+					debugPrintf("Tool call: %s(%s)", call.Name, argPreview)
+				} else {
+					debugPrintf("Tool call: %s", call.Name)
+				}
 			}
 			if m.Config.ShowToolCalls {
 				toolMsg.content += call.String()
@@ -640,15 +645,22 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			}
 		}
 		m.toolCallRounds++
-		const maxToolCallRounds = 8
-		if m.toolCallRounds > maxToolCallRounds {
-			debugPrintf("Tool call rounds exceeded limit (%d), stopping", maxToolCallRounds)
+		maxRounds := 8
+		if m.Config.WebSearch {
+			maxRounds = 4
+		}
+		if m.toolCallRounds > maxRounds {
+			debugPrintf("Tool call rounds exceeded limit (%d), stopping", maxRounds)
 			m.messages = msg.stream.Messages()
+			content := lastAssistantContent(m.messages)
+			if content != "" {
+				m.appendToOutput(content)
+			}
 			return completionOutput{
 				errh: msg.errh,
 			}
 		}
-		debugPrintf("Tool call round %d/%d", m.toolCallRounds, maxToolCallRounds)
+		debugPrintf("Tool call round %d/%d", m.toolCallRounds, maxRounds)
 		return toolMsg
 	}
 }

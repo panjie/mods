@@ -30,8 +30,9 @@ type Chunk struct {
 
 // ToolCallStatus is the status of a tool call.
 type ToolCallStatus struct {
-	Name string
-	Err  error
+	Name      string
+	Arguments []byte
+	Err       error
 }
 
 func (c ToolCallStatus) String() string {

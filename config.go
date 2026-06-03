@@ -71,6 +71,7 @@ var help = map[string]string{
 	"show-last":         "Show the last saved conversation",
 	"editor":            "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":       "MCP Servers configurations",
+	"mcp-enable":        "Enable only specific MCP servers (whitelist, overrides disable list)",
 	"mcp-disable":       "Disable specific MCP servers",
 	"mcp-list":          "List all available MCP servers",
 	"mcp-list-tools":    "List all available tools from enabled MCP servers",
@@ -194,10 +195,11 @@ type Config struct {
 	DeleteOlderThan     time.Duration
 	User                string
 
-	MCPServers   map[string]MCPServerConfig `yaml:"mcp-servers"`
-	MCPList      bool
-	MCPListTools bool
-	MCPDisable   []string
+	MCPServers    map[string]MCPServerConfig `yaml:"mcp-servers"`
+	MCPList       bool
+	MCPListTools  bool
+	MCPEnable     []string
+	MCPDisable    []string
 	MCPTimeout   time.Duration `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 
 	ShowToolCalls     bool   `yaml:"show-tool-calls" env:"SHOW_TOOL_CALLS"`

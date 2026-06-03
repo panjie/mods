@@ -17,9 +17,9 @@ func debugPrintf(format string, args ...any) {
 	if !config.Debug {
 		return
 	}
-	header := " " + stderrStyles().DebugHeader.String() + " "
+	header := stderrStyles().DebugHeader.String()
 	detail := stderrStyles().DebugDetails.Render(fmt.Sprintf(format, args...))
-	fmt.Fprint(os.Stderr, header, detail, "\n")
+	fmt.Fprintf(os.Stderr, "\r %s %s\n", header, detail)
 }
 
 func debugPrintJSON(label string, v any) {
@@ -41,7 +41,7 @@ func debugPrintJSON(label string, v any) {
 	for _, line := range lines {
 		if line != "" {
 			detail := stderrStyles().DebugDetails.Render("  " + line)
-			fmt.Fprint(os.Stderr, "           ", detail, "\n")
+			fmt.Fprintf(os.Stderr, "\r           %s\n", detail)
 		}
 	}
 }

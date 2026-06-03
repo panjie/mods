@@ -17,7 +17,7 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []anthropic.ToolUnionParam {
 			tools = append(tools, anthropic.ToolUnionParam{
 				OfTool: &anthropic.ToolParam{
 					InputSchema: anthropic.ToolInputSchemaParam{
-						Properties: stripDescriptions(tool.InputSchema.Properties),
+						Properties: stripSchema(tool.InputSchema.Properties),
 					},
 					Name:        fmt.Sprintf("%s_%s", name, tool.Name),
 					Description: anthropic.String(tool.Description),
@@ -28,12 +28,22 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []anthropic.ToolUnionParam {
 	return tools
 }
 
-func stripDescriptions(props map[string]any) map[string]any {
+var stripKeys = map[string]bool{
+	"description": true,
+	"title":       true,
+	"examples":    true,
+	"default":     true,
+}
+
+func stripSchema(props map[string]any) map[string]any {
 	if props == nil {
 		return nil
 	}
 	out := make(map[string]any, len(props))
 	for k, v := range props {
+		if stripKeys[k] {
+			continue
+		}
 		m, ok := v.(map[string]any)
 		if !ok {
 			out[k] = v
@@ -41,18 +51,18 @@ func stripDescriptions(props map[string]any) map[string]any {
 		}
 		cleaned := make(map[string]any, len(m))
 		for mk, mv := range m {
-			if mk == "description" {
+			if stripKeys[mk] {
 				continue
 			}
 			if mk == "properties" {
 				if nested, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripDescriptions(nested)
+					cleaned[mk] = stripSchema(nested)
 					continue
 				}
 			}
 			if mk == "items" {
 				if items, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripDescriptions(items)
+					cleaned[mk] = stripSchema(items)
 					continue
 				}
 			}

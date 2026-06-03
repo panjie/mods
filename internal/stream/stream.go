@@ -4,12 +4,15 @@ package stream
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/charmbracelet/mods/internal/proto"
 )
 
 // ErrNoContent happens when the client is returning no content.
 var ErrNoContent = errors.New("no content")
+
+const maxToolResultChars = 25000
 
 // Client is a streaming client.
 type Client interface {
@@ -50,6 +53,11 @@ func CallTool(
 	content, err := caller(name, data)
 	if content == "" && err != nil {
 		content = err.Error()
+	}
+	if len(content) > maxToolResultChars {
+		content = content[:maxToolResultChars] +
+			fmt.Sprintf("\n\n[Output truncated at %d chars. Use more specific tools (e.g. list_directory instead of directory_tree, or read_file for single files) to retrieve targeted content.]",
+				maxToolResultChars)
 	}
 	return proto.Message{
 			Role:    proto.RoleTool,

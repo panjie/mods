@@ -59,6 +59,7 @@ type Mods struct {
 	Error         *modsError
 	state         state
 	retries       int
+	toolCallRounds int
 	renderer      *lipgloss.Renderer
 	glam          *glamour.TermRenderer
 	glamViewport  viewport.Model
@@ -543,6 +544,11 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			if cfg.HTTPProxy != "" {
 				debugPrintf("HTTP proxy: %s", cfg.HTTPProxy)
 			}
+			if b, err := json.Marshal(request.Messages); err == nil {
+				toolBody, _ := json.Marshal(request.Tools)
+				debugPrintf("Request: ~%dKB body (%dKB messages + %dKB tools)",
+					(len(b)+len(toolBody))/1024, len(b)/1024, len(toolBody)/1024)
+			}
 		}
 
 		stream := client.Request(m.ctx, request)
@@ -628,10 +634,21 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 		}
 		if len(results) == 0 {
 			m.messages = msg.stream.Messages()
+			m.toolCallRounds = 0
 			return completionOutput{
 				errh: msg.errh,
 			}
 		}
+		m.toolCallRounds++
+		const maxToolCallRounds = 8
+		if m.toolCallRounds > maxToolCallRounds {
+			debugPrintf("Tool call rounds exceeded limit (%d), stopping", maxToolCallRounds)
+			m.messages = msg.stream.Messages()
+			return completionOutput{
+				errh: msg.errh,
+			}
+		}
+		debugPrintf("Tool call round %d/%d", m.toolCallRounds, maxToolCallRounds)
 		return toolMsg
 	}
 }

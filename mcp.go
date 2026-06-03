@@ -155,11 +155,6 @@ func toolCall(ctx context.Context, name string, data []byte) (string, error) {
 	if !isMCPEnabled(sname) {
 		return "", fmt.Errorf("mcp: server is disabled: %q", sname)
 	}
-	client, err := initMcpClient(ctx, server)
-	if err != nil {
-		return "", fmt.Errorf("mcp: %w", err)
-	}
-	defer client.Close() //nolint:errcheck
 
 	var args map[string]any
 	if len(data) > 0 {
@@ -168,12 +163,29 @@ func toolCall(ctx context.Context, name string, data []byte) (string, error) {
 		}
 	}
 
-	request := mcp.CallToolRequest{}
-	request.Params.Name = tool
-	request.Params.Arguments = args
-	result, err := client.CallTool(context.Background(), request)
-	if err != nil {
-		return "", fmt.Errorf("mcp: %w", err)
+	var result *mcp.CallToolResult
+	var lastErr error
+	for attempt := range 2 {
+		client, err := initMcpClient(ctx, server)
+		if err != nil {
+			lastErr = fmt.Errorf("mcp: %w", err)
+			continue
+		}
+
+		request := mcp.CallToolRequest{}
+		request.Params.Name = tool
+		request.Params.Arguments = args
+		result, err = client.CallTool(context.Background(), request)
+		client.Close() //nolint:errcheck
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+		debugPrintf("MCP retry %d/%d for %s: %v", attempt+1, 1, name, err)
+	}
+	if lastErr != nil {
+		return "", fmt.Errorf("mcp: %w", lastErr)
 	}
 
 	var sb strings.Builder

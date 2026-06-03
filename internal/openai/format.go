@@ -16,7 +16,7 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []openai.ChatCompletionToolParam {
 		for _, tool := range serverTools {
 			params := map[string]any{
 				"type":       "object",
-				"properties": stripDescriptions(tool.InputSchema.Properties),
+				"properties": stripSchema(tool.InputSchema.Properties),
 			}
 			if len(tool.InputSchema.Required) > 0 {
 				params["required"] = tool.InputSchema.Required
@@ -35,12 +35,22 @@ func fromMCPTools(mcps map[string][]mcp.Tool) []openai.ChatCompletionToolParam {
 	return tools
 }
 
-func stripDescriptions(props map[string]any) map[string]any {
+var stripKeys = map[string]bool{
+	"description": true,
+	"title":       true,
+	"examples":    true,
+	"default":     true,
+}
+
+func stripSchema(props map[string]any) map[string]any {
 	if props == nil {
 		return nil
 	}
 	out := make(map[string]any, len(props))
 	for k, v := range props {
+		if stripKeys[k] {
+			continue
+		}
 		m, ok := v.(map[string]any)
 		if !ok {
 			out[k] = v
@@ -48,18 +58,18 @@ func stripDescriptions(props map[string]any) map[string]any {
 		}
 		cleaned := make(map[string]any, len(m))
 		for mk, mv := range m {
-			if mk == "description" {
+			if stripKeys[mk] {
 				continue
 			}
 			if mk == "properties" {
 				if nested, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripDescriptions(nested)
+					cleaned[mk] = stripSchema(nested)
 					continue
 				}
 			}
 			if mk == "items" {
 				if items, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripDescriptions(items)
+					cleaned[mk] = stripSchema(items)
 					continue
 				}
 			}

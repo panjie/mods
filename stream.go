@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/mods/internal/clipboard"
@@ -13,6 +15,16 @@ import (
 func (m *Mods) setupStreamContext(content string, mod Model) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
+
+	cwd, _ := os.Getwd()
+	hostname, _ := os.Hostname()
+	user := os.Getenv("USER")
+	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s",
+		cwd, user, hostname, runtime.GOOS, runtime.GOARCH)
+	m.messages = append(m.messages, proto.Message{
+		Role:    proto.RoleSystem,
+		Content: sysInfo,
+	})
 	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && txt != "" {
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,

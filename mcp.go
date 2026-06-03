@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -112,7 +111,7 @@ func initMcpClient(ctx context.Context, server MCPServerConfig) (*client.Client,
 			transport.WithCommandFunc(func(ctx context.Context, command string, env []string, args []string) (*exec.Cmd, error) {
 				cmd := exec.CommandContext(ctx, command, args...)
 				cmd.Env = append(os.Environ(), env...)
-				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+				hideCommandWindow(cmd)
 				return cmd, nil
 			}),
 		)

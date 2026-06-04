@@ -2,8 +2,7 @@ package main
 
 import "fmt"
 
-// newUserErrorf is a user-facing error.
-// this function is mostly to avoid linters complain about errors starting with a capitalized letter.
+// newUserErrorf creates a formatted error for display to the user.
 func newUserErrorf(format string, a ...any) error {
 	return fmt.Errorf(format, a...)
 }

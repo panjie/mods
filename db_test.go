@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"modernc.org/sqlite"
 )
 
 func testDB(tb testing.TB) *convoDB {
@@ -15,6 +16,21 @@ func testDB(tb testing.TB) *convoDB {
 		require.NoError(tb, db.Close())
 	})
 	return db
+}
+
+func TestHandleSqliteErr(t *testing.T) {
+	t.Run("sqlite error wrapped", func(t *testing.T) {
+		sqerr := &sqlite.Error{}
+		err := handleSqliteErr(sqerr)
+		require.Error(t, err)
+		require.ErrorIs(t, err, sqerr, "should wrap the original sqlite error")
+	})
+
+	t.Run("non-sqlite error passthrough", func(t *testing.T) {
+		original := fmt.Errorf("some error")
+		err := handleSqliteErr(original)
+		require.Equal(t, original, err)
+	})
 }
 
 func TestConvoDB(t *testing.T) {

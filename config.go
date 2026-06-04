@@ -87,6 +87,7 @@ var help = map[string]string{
 	"stdin-image":         "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":     "Attach the current image in the system clipboard to the prompt",
 	"debug":               "Enable debug mode to print execution steps, tool calls, and request details",
+	"max-tool-rounds":     "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
 }
 
 // Model represents the LLM model used in the API call.
@@ -216,6 +217,7 @@ type Config struct {
 	StdinImage     bool     `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage bool     `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
 	Debug          bool     `yaml:"debug" env:"DEBUG"`
+	MaxToolRounds  int      `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	openEditor                                         bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string

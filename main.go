@@ -296,6 +296,7 @@ func initFlags() {
 	flags.BoolVar(&config.StdinImage, "stdin-image", config.StdinImage, stdoutStyles().FlagDesc.Render(help["stdin-image"]))
 	flags.BoolVar(&config.ClipboardImage, "clipboard-image", config.ClipboardImage, stdoutStyles().FlagDesc.Render(help["clipboard-image"]))
 	flags.BoolVarP(&config.Debug, "debug", "D", config.Debug, stdoutStyles().FlagDesc.Render(help["debug"]))
+	flags.IntVar(&config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds, stdoutStyles().FlagDesc.Render(help["max-tool-rounds"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
 	flags.SortFlags = false
 

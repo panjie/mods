@@ -79,6 +79,8 @@ include-prompt-args: false
 include-prompt: 0
 # {{ index .Help "max-retries" }}
 max-retries: 5
+# {{ index .Help "max-tool-rounds" }}
+max-tool-rounds: 30
 # {{ index .Help "fanciness" }}
 fanciness: 10
 # {{ index .Help "status-text" }}

@@ -59,6 +59,7 @@ type Mods struct {
 	state          state
 	retries        int
 	toolCallRounds int
+	totalRounds    int
 	renderer       *lipgloss.Renderer
 	glam           *glamour.TermRenderer
 	glamViewport   viewport.Model
@@ -628,17 +629,25 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 		if len(results) == 0 {
 			m.messages = msg.stream.Messages()
 			m.toolCallRounds = 0
+			m.totalRounds = 0
 			return completionOutput{
 				errh: msg.errh,
 			}
 		}
-		m.toolCallRounds++
-		maxRounds := 8
-		if m.Config.WebSearch {
-			maxRounds = 4
+		m.totalRounds++
+		hasFailed := slices.ContainsFunc(results, func(c proto.ToolCallStatus) bool {
+			return c.Err != nil
+		})
+		if hasFailed {
+			m.toolCallRounds++
 		}
-		if m.toolCallRounds > maxRounds {
-			debugPrintf("Tool call rounds exceeded limit (%d), stopping", maxRounds)
+		maxTotal := m.Config.MaxToolRounds
+		if maxTotal <= 0 {
+			maxTotal = 30
+		}
+		const maxFailedRounds = 3
+		if m.toolCallRounds > maxFailedRounds {
+			debugPrintf("Tool call failed rounds exceeded limit (%d), stopping", maxFailedRounds)
 			m.messages = msg.stream.Messages()
 			content := lastAssistantContent(m.messages)
 			if content != "" {
@@ -648,7 +657,18 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 				errh: msg.errh,
 			}
 		}
-		debugPrintf("Tool call round %d/%d", m.toolCallRounds, maxRounds)
+		if m.totalRounds > maxTotal {
+			debugPrintf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
+			m.messages = msg.stream.Messages()
+			content := lastAssistantContent(m.messages)
+			if content != "" {
+				m.appendToOutput(content)
+			}
+			return completionOutput{
+				errh: msg.errh,
+			}
+		}
+		debugPrintf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxFailedRounds)
 		return toolMsg
 	}
 }

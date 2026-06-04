@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"os"
+	"regexp"
+	"strings"
 
 	toolregistry "github.com/charmbracelet/mods/internal/tools"
 	"github.com/charmbracelet/mods/internal/websearch"
 )
 
-func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config) (*toolregistry.Registry, error) {
+var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[\w./-]+|[\w.-]+\.(go|ts|tsx|js|jsx|py|rs|java|c|cc|cpp|h|hpp|md|txt|json|yaml|yml|toml|mod|sum|sh|sql))($|\s|[,.，。:：;；])`)
+
+func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config, prompt string) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
 
 	cwd, err := os.Getwd()
@@ -16,7 +20,7 @@ func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config)
 		return nil, err
 	}
 
-	if cfg.BuiltinTools.Filesystem {
+	if shouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
 			Root: cwd,
 		}); err != nil {
@@ -51,4 +55,34 @@ func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config)
 	}
 
 	return registry, nil
+}
+
+func shouldEnableFilesystemTools(cfg *Config, prompt string) bool {
+	switch cfg.BuiltinTools.Filesystem {
+	case FilesystemAlways:
+		return true
+	case FilesystemNever:
+		return false
+	case "", FilesystemAuto:
+		return promptLooksFileRelated(prompt)
+	default:
+		return false
+	}
+}
+
+func promptLooksFileRelated(prompt string) bool {
+	p := strings.ToLower(prompt)
+	keywords := []string{
+		"file", "files", "directory", "folder", "repo", "repository",
+		"codebase", "source", "write", "edit", "modify", "patch",
+		"grep", "rg",
+		"文件", "目录", "代码", "仓库", "项目",
+		"修改", "编辑", "修复",
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(p, keyword) {
+			return true
+		}
+	}
+	return filesystemPathPattern.MatchString(prompt)
 }

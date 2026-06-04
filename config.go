@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	stdstrings "strings"
 	"text/template"
 	"time"
 
@@ -222,11 +223,61 @@ type Config struct {
 
 // BuiltinToolsConfig controls native tools implemented by mods.
 type BuiltinToolsConfig struct {
-	Filesystem         bool          `yaml:"filesystem"`
-	Shell              bool          `yaml:"shell"`
-	SequentialThinking bool          `yaml:"sequential-thinking"`
-	ShellTimeout       time.Duration `yaml:"shell-timeout"`
-	ShellMaxOutput     int           `yaml:"shell-max-output"`
+	Filesystem         FilesystemMode `yaml:"filesystem"`
+	Shell              bool           `yaml:"shell"`
+	SequentialThinking bool           `yaml:"sequential-thinking"`
+	ShellTimeout       time.Duration  `yaml:"shell-timeout"`
+	ShellMaxOutput     int            `yaml:"shell-max-output"`
+}
+
+// FilesystemMode controls when native filesystem tools are exposed.
+type FilesystemMode string
+
+const (
+	FilesystemAuto   FilesystemMode = "auto"
+	FilesystemAlways FilesystemMode = "true"
+	FilesystemNever  FilesystemMode = "false"
+)
+
+// UnmarshalYAML accepts both the new string modes and old boolean values.
+func (m *FilesystemMode) UnmarshalYAML(node *yaml.Node) error {
+	if node.Tag == "!!bool" {
+		var enabled bool
+		if err := node.Decode(&enabled); err != nil {
+			return err
+		}
+		if enabled {
+			*m = FilesystemAlways
+		} else {
+			*m = FilesystemNever
+		}
+		return nil
+	}
+
+	var value string
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	mode, err := parseFilesystemMode(value)
+	if err != nil {
+		return err
+	}
+	*m = mode
+	return nil
+}
+
+func parseFilesystemMode(value string) (FilesystemMode, error) {
+	value = stdstrings.ToLower(stdstrings.TrimSpace(value))
+	switch value {
+	case "", "auto":
+		return FilesystemAuto, nil
+	case "true", "always", "on":
+		return FilesystemAlways, nil
+	case "false", "never", "off":
+		return FilesystemNever, nil
+	default:
+		return "", fmt.Errorf("invalid builtin-tools.filesystem mode %q, expected auto, true, or false", value)
+	}
 }
 
 // MCPServerConfig holds configuration for an MCP server.
@@ -342,7 +393,7 @@ func defaultConfig() Config {
 		MCPTimeout:    15 * time.Second,
 		ShowToolCalls: true,
 		BuiltinTools: BuiltinToolsConfig{
-			Filesystem:         true,
+			Filesystem:         FilesystemAuto,
 			Shell:              false,
 			SequentialThinking: false,
 			ShellTimeout:       30 * time.Second,

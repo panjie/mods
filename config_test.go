@@ -27,6 +27,26 @@ func TestConfig(t *testing.T) {
 	})
 }
 
+func TestFilesystemModeYAML(t *testing.T) {
+	t.Run("string auto", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte("builtin-tools:\n  filesystem: auto"), &cfg))
+		require.Equal(t, FilesystemAuto, cfg.BuiltinTools.Filesystem)
+	})
+
+	t.Run("legacy bool true", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte("builtin-tools:\n  filesystem: true"), &cfg))
+		require.Equal(t, FilesystemAlways, cfg.BuiltinTools.Filesystem)
+	})
+
+	t.Run("legacy bool false", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte("builtin-tools:\n  filesystem: false"), &cfg))
+		require.Equal(t, FilesystemNever, cfg.BuiltinTools.Filesystem)
+	})
+}
+
 func TestSettingsFilePathDarwin(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("darwin-specific default config path")

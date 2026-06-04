@@ -425,7 +425,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 
 		ctx, cancel := context.WithTimeout(m.ctx, config.MCPTimeout)
 		m.cancelRequest = append(m.cancelRequest, cancel)
-		registry, err := buildToolRegistry(ctx, cfg, wscfg)
+		registry, err := buildToolRegistry(ctx, cfg, wscfg, cfg.Prefix+"\n"+content)
 		if err != nil {
 			return err
 		}

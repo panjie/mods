@@ -24,7 +24,7 @@ mcp-servers:
 mcp-timeout: 15s
 # {{ index .Help "builtin-tools" }}
 builtin-tools:
-  filesystem: true
+  filesystem: auto
   shell: false
   sequential-thinking: false
   shell-timeout: 30s

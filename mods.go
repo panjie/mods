@@ -455,22 +455,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			}
 		}
 
-		if cfg.WebSearch && content != "" {
-			searchCtx, searchCancel := context.WithTimeout(m.ctx, websearch.SearchTimeout)
-			m.cancelRequest = append(m.cancelRequest, searchCancel)
-			if results, err := websearch.Search(searchCtx, wscfg, content); err == nil && results != "" {
-				last := len(m.messages)
-				if last > 0 && m.messages[last-1].Role == proto.RoleUser {
-					m.messages = append(m.messages[:last-1],
-						proto.Message{
-							Role:    proto.RoleSystem,
-							Content: "The following is current information from the web that may help answer the user's question:\n\n" + results,
-						},
-						m.messages[last-1])
-				}
-			}
-		}
-
 		request := proto.Request{
 			Messages:    m.messages,
 			API:         mod.API,

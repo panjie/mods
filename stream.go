@@ -41,7 +41,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			}
 		}
 		for _, msg := range roleSetup {
-			content, err := loadMsg(msg)
+			content, err := loadMsg(m.ctx, msg)
 			if err != nil {
 				return modsError{
 					err:    err,
@@ -116,6 +116,13 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		mime, err := imageutil.DetectMimeType(m.stdinImageData)
 		if err != nil {
 			return modsError{err: err, reason: "Could not detect stdin image format"}
+		}
+		totalBytes += len(m.stdinImageData)
+		if totalBytes > imageutil.MaxTotalImageBytes {
+			return modsError{
+				err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
+				reason: "Images too large",
+			}
 		}
 		images = append(images, proto.Image{Data: m.stdinImageData, MimeType: mime})
 	}

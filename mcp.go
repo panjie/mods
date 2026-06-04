@@ -193,7 +193,7 @@ func toolCall(ctx context.Context, name string, data []byte) (string, error) {
 			break
 		}
 		lastErr = err
-		debugPrintf("MCP retry %d/%d for %s: %v", attempt+1, 1, name, err)
+		debugPrintf("MCP retry %d/2 for %s: %v", attempt+1, name, err)
 	}
 	if lastErr != nil {
 		return "", fmt.Errorf("mcp: %w", lastErr)

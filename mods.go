@@ -223,7 +223,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 	}
-	if !m.Config.Quiet && (m.state == configLoadedState || m.state == requestState) {
+	if !m.Config.Quiet && (m.state == configLoadedState || m.state == requestState) && m.anim != nil {
 		var cmd tea.Cmd
 		m.anim, cmd = m.anim.Update(msg)
 		cmds = append(cmds, cmd)
@@ -303,6 +303,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	if m.Config.Show != "" || m.Config.ShowLast {
 		return m.readFromCache()
 	}
+
+	m.cancelRequest = nil
 
 	return func() tea.Msg {
 		var mod Model

@@ -17,6 +17,8 @@ var sha1reg = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
 
 func newConversationID() string {
 	b := make([]byte, sha1ReadBlockSize)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		debugPrintf("rand.Read failed for conversation ID: %v", err)
+	}
 	return fmt.Sprintf("%x", sha1.Sum(b)) //nolint: gosec
 }

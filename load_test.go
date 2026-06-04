@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,9 +10,10 @@ import (
 )
 
 func TestLoad(t *testing.T) {
+	ctx := context.Background()
 	const content = "just text"
 	t.Run("normal msg", func(t *testing.T) {
-		msg, err := loadMsg(content)
+		msg, err := loadMsg(ctx, content)
 		require.NoError(t, err)
 		require.Equal(t, content, msg)
 	})
@@ -20,19 +22,19 @@ func TestLoad(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "foo.txt")
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
-		msg, err := loadMsg("file://" + path)
+		msg, err := loadMsg(ctx, "file://"+path)
 		require.NoError(t, err)
 		require.Equal(t, content, msg)
 	})
 
 	t.Run("http url", func(t *testing.T) {
-		msg, err := loadMsg("http://raw.githubusercontent.com/charmbracelet/mods/main/LICENSE")
+		msg, err := loadMsg(ctx, "http://raw.githubusercontent.com/charmbracelet/mods/main/LICENSE")
 		require.NoError(t, err)
 		require.Contains(t, msg, "MIT License")
 	})
 
 	t.Run("https url", func(t *testing.T) {
-		msg, err := loadMsg("https://raw.githubusercontent.com/charmbracelet/mods/main/LICENSE")
+		msg, err := loadMsg(ctx, "https://raw.githubusercontent.com/charmbracelet/mods/main/LICENSE")
 		require.NoError(t, err)
 		require.Contains(t, msg, "MIT License")
 	})

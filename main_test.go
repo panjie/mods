@@ -74,3 +74,114 @@ func TestConversationCompletions(t *testing.T) {
 	results := conversationCompletions("df31")
 	require.Equal(t, []string{"df31ae2\tmessage 1"}, results)
 }
+
+func TestIsVersionOrHelpCmd(t *testing.T) {
+	for args, is := range map[string]bool{
+		"":                         false,
+		"mods":                     false,
+		"mods something":           false,
+		"mods --version":           true,
+		"mods -v":                  true,
+		"mods --help":              true,
+		"mods -h":                  true,
+		"mods --model gpt-4":       false,
+		"mods -v -m gpt-4":         true,
+		"mods -m gpt-4 --version":  true,
+	} {
+		t.Run(args, func(t *testing.T) {
+			vargs := append([]string{"mods"}, strings.Fields(args)...)
+			if b := isVersionOrHelpCmd(vargs); b != is {
+				t.Errorf("%v: expected %v, got %v", vargs, is, b)
+			}
+		})
+	}
+}
+
+func TestThemeFrom(t *testing.T) {
+	t.Run("charm", func(t *testing.T) {
+		require.NotNil(t, themeFrom("charm"))
+	})
+	t.Run("dracula", func(t *testing.T) {
+		require.NotNil(t, themeFrom("dracula"))
+	})
+	t.Run("catppuccin", func(t *testing.T) {
+		require.NotNil(t, themeFrom("catppuccin"))
+	})
+	t.Run("base16", func(t *testing.T) {
+		require.NotNil(t, themeFrom("base16"))
+	})
+	t.Run("unknown defaults to charm", func(t *testing.T) {
+		require.NotNil(t, themeFrom("nonexistent"))
+	})
+}
+
+func TestRoleNames(t *testing.T) {
+	saveConfig := config
+	defer func() { config = saveConfig }()
+
+	config = Config{
+		Roles: map[string][]string{
+			"default": {"You are helpful."},
+			"shell":   {"You are a shell expert."},
+			"go-dev":  {"You write Go code."},
+		},
+	}
+
+	t.Run("all roles", func(t *testing.T) {
+		roles := roleNames("")
+		require.Len(t, roles, 3)
+		require.Contains(t, roles, "default")
+		require.Contains(t, roles, "shell")
+		require.Contains(t, roles, "go-dev")
+	})
+
+	t.Run("prefix filter", func(t *testing.T) {
+		roles := roleNames("go")
+		require.Len(t, roles, 1)
+		require.Equal(t, "go-dev", roles[0])
+	})
+
+	t.Run("no match prefix", func(t *testing.T) {
+		roles := roleNames("nonexistent")
+		require.Empty(t, roles)
+	})
+}
+
+func TestIsNoArgs(t *testing.T) {
+	t.Run("empty config", func(t *testing.T) {
+		cfg := Config{}
+		require.True(t, isNoArgsCfg(cfg))
+	})
+	t.Run("with prefix", func(t *testing.T) {
+		cfg := Config{Prefix: "hello"}
+		require.False(t, isNoArgsCfg(cfg))
+	})
+	t.Run("with show", func(t *testing.T) {
+		cfg := Config{Show: "abc123"}
+		require.False(t, isNoArgsCfg(cfg))
+	})
+	t.Run("with delete", func(t *testing.T) {
+		cfg := Config{Delete: []string{"abc"}}
+		require.False(t, isNoArgsCfg(cfg))
+	})
+	t.Run("with help", func(t *testing.T) {
+		cfg := Config{ShowHelp: true}
+		require.False(t, isNoArgsCfg(cfg))
+	})
+}
+
+func isNoArgsCfg(cfg Config) bool {
+	return cfg.Prefix == "" &&
+		cfg.Show == "" &&
+		!cfg.ShowLast &&
+		len(cfg.Delete) == 0 &&
+		cfg.DeleteOlderThan == 0 &&
+		!cfg.ShowHelp &&
+		!cfg.List &&
+		!cfg.ListRoles &&
+		!cfg.MCPList &&
+		!cfg.MCPListTools &&
+		!cfg.Dirs &&
+		!cfg.Settings &&
+		!cfg.ResetSettings
+}

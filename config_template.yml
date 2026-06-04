@@ -115,8 +115,8 @@ builtin-tools:
 web-search: false
 
 # {{ index .Help "web-search-provider" }}
-# Supported: google (default), bing, tavily, custom
-web-search-provider: google
+# Supported: duckduckgo (default), tavily, custom
+web-search-provider: duckduckgo
 
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:

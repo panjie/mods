@@ -187,8 +187,8 @@ Check the [`./features.md`](./features.md) for more details.
 
 #### Web Search
 
-- `--web-search`: Enable web search for up-to-date information (uses Bing by default)
-- `--web-search-provider`: Web search provider (`bing`, `tavily`, or a custom URL)
+- `--web-search`: Enable web search for up-to-date information (uses DuckDuckGo by default)
+- `--web-search-provider`: Web search provider (`duckduckgo`, `tavily`, or `custom`)
 - `--web-search-api-key`: API key for the web search provider (required for Tavily)
 
 #### Conversations
@@ -275,7 +275,7 @@ you can get it from the [Google AI Studio](https://aistudio.google.com/apikey).
 
 ### Web Search
 
-Mods can search the web to provide up-to-date information in responses. Bing is the default provider and requires no API key.
+Mods can search the web to provide up-to-date information in responses. DuckDuckGo is the default provider and requires no API key.
 
 ```bash
 # Enable web search

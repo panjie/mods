@@ -1,6 +1,7 @@
 package websearch
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -22,52 +23,6 @@ func TestCleanHTML(t *testing.T) {
 	})
 	t.Run("empty", func(t *testing.T) {
 		require.Empty(t, cleanHTML(""))
-	})
-}
-
-func TestParseBingBlock(t *testing.T) {
-	t.Run("complete block", func(t *testing.T) {
-		html := `<li class="b_algo"><h2><a href="https://example.com">Example Title</a></h2><div class="b_caption"><p>Example snippet text</p></div></li>`
-		result := parseBingBlock(html)
-		require.Equal(t, "https://example.com", result.URL)
-		require.Equal(t, "Example Title", result.Title)
-		require.Equal(t, "Example snippet text", result.Snippet)
-	})
-
-	t.Run("no h2 returns empty", func(t *testing.T) {
-		result := parseBingBlock(`<li class="b_algo"><div>no h2</div></li>`)
-		require.Empty(t, result.URL)
-		require.Empty(t, result.Title)
-	})
-
-	t.Run("no caption", func(t *testing.T) {
-		html := `<li class="b_algo"><h2><a href="https://x.com">Title</a></h2></li>`
-		result := parseBingBlock(html)
-		require.Equal(t, "https://x.com", result.URL)
-		require.Equal(t, "Title", result.Title)
-		require.Empty(t, result.Snippet)
-	})
-}
-
-func TestParseBingHTML(t *testing.T) {
-	t.Run("single result", func(t *testing.T) {
-		html := `<li class="b_algo"><h2><a href="https://a.com">A Title</a></h2><div class="b_caption"><p>Snippet</p></div></li>`
-		results := parseBingHTML(html, 3)
-		require.Len(t, results, 1)
-		require.Equal(t, "A Title", results[0].Title)
-	})
-
-	t.Run("respects max results", func(t *testing.T) {
-		html := `<li class="b_algo"><h2><a href="https://1.com">One</a></h2></li>`
-		html += `<li class="b_algo"><h2><a href="https://2.com">Two</a></h2></li>`
-		html += `<li class="b_algo"><h2><a href="https://3.com">Three</a></h2></li>`
-		results := parseBingHTML(html, 2)
-		require.Len(t, results, 2)
-	})
-
-	t.Run("no results", func(t *testing.T) {
-		results := parseBingHTML("<div>no algo</div>", 5)
-		require.Empty(t, results)
 	})
 }
 
@@ -94,37 +49,104 @@ func formatResults(query string, results []Result) string {
 	return string(sb)
 }
 
-func TestParseGoogleBlock(t *testing.T) {
-	t.Run("complete block", func(t *testing.T) {
-		html := `<div class="g"><a href="https://example.com"><h3>Example Title</h3></a><span class="VwiC3b">Example snippet text</span></div>`
-		result := parseGoogleBlock(html)
-		require.Equal(t, "https://example.com", result.URL)
-		require.Equal(t, "Example Title", result.Title)
-		require.Contains(t, result.Snippet, "Example snippet text")
-	})
-
-	t.Run("no h3 returns empty", func(t *testing.T) {
-		result := parseGoogleBlock(`<div class="g"><a href="https://x.com">no title</a></div>`)
-		require.Empty(t, result.Title)
-	})
-
-	t.Run("h3 without anchor", func(t *testing.T) {
-		result := parseGoogleBlock(`<div class="g"><h3>Title</h3><span>Snippet</span></div>`)
-		require.Equal(t, "Title", result.Title)
-	})
-}
-
-func TestParseGoogleHTML(t *testing.T) {
-	t.Run("single result", func(t *testing.T) {
-		html := `<div class="g"><a href="https://a.com"><h3>A Title</h3></a><span class="VwiC3b">Snippet here</span></div>`
-		results := parseGoogleHTML(html, 3)
+func TestParseDuckDuckGoInstant(t *testing.T) {
+	t.Run("answer", func(t *testing.T) {
+		results := parseDuckDuckGoInstant("life", duckDuckGoInstantResponse{
+			Answer:     "42",
+			AnswerType: "answer",
+		}, 5)
 		require.Len(t, results, 1)
-		require.Equal(t, "A Title", results[0].Title)
+		require.Equal(t, "answer", results[0].Title)
+		require.Equal(t, "https://duckduckgo.com/?q=life", results[0].URL)
+		require.Equal(t, "42", results[0].Snippet)
 	})
 
-	t.Run("no results", func(t *testing.T) {
-		results := parseGoogleHTML("<div>no results</div>", 5)
-		require.Empty(t, results)
+	t.Run("abstract", func(t *testing.T) {
+		results := parseDuckDuckGoInstant("go", duckDuckGoInstantResponse{
+			Heading:      "Go",
+			AbstractText: "Go is a programming language.",
+			AbstractURL:  "https://example.com/go",
+		}, 5)
+		require.Len(t, results, 1)
+		require.Equal(t, "Go", results[0].Title)
+		require.Equal(t, "https://example.com/go", results[0].URL)
+		require.Equal(t, "Go is a programming language.", results[0].Snippet)
+	})
+
+	t.Run("definition", func(t *testing.T) {
+		results := parseDuckDuckGoInstant("term", duckDuckGoInstantResponse{
+			Heading:       "Term",
+			Definition:    "A word or phrase.",
+			DefinitionURL: "https://example.com/term",
+		}, 5)
+		require.Len(t, results, 1)
+		require.Equal(t, "Term", results[0].Title)
+		require.Equal(t, "https://example.com/term", results[0].URL)
+		require.Equal(t, "A word or phrase.", results[0].Snippet)
+	})
+
+	t.Run("nested related topics", func(t *testing.T) {
+		results := parseDuckDuckGoInstant("mods", duckDuckGoInstantResponse{
+			RelatedTopics: []duckDuckGoTopic{
+				{
+					Topics: []duckDuckGoTopic{
+						{
+							FirstURL: "https://example.com/mods",
+							Text:     "mods - AI on the command line",
+						},
+					},
+				},
+			},
+		}, 5)
+		require.Len(t, results, 1)
+		require.Equal(t, "mods", results[0].Title)
+		require.Equal(t, "https://example.com/mods", results[0].URL)
+		require.Equal(t, "mods - AI on the command line", results[0].Snippet)
+	})
+
+	t.Run("respects max results", func(t *testing.T) {
+		results := parseDuckDuckGoInstant("x", duckDuckGoInstantResponse{
+			Answer:       "answer",
+			AbstractText: "abstract",
+			Definition:   "definition",
+		}, 2)
+		require.Len(t, results, 2)
+	})
+
+	t.Run("empty response", func(t *testing.T) {
+		require.Empty(t, parseDuckDuckGoInstant("empty", duckDuckGoInstantResponse{}, 5))
 	})
 }
 
+func TestNormalizeProvider(t *testing.T) {
+	tests := map[string]provider{
+		"":           providerDuckDuckGo,
+		"duckduckgo": providerDuckDuckGo,
+		"ddg":        providerDuckDuckGo,
+		"google":     providerDuckDuckGo,
+		"bing":       providerDuckDuckGo,
+		"tavily":     providerTavily,
+		"custom":     providerCustom,
+		"https://x":  providerCustom,
+		"unknown":    providerDuckDuckGo,
+	}
+	for input, expected := range tests {
+		t.Run(input, func(t *testing.T) {
+			require.Equal(t, expected, normalizeProvider(input))
+		})
+	}
+}
+
+func TestSearchProviderValidation(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("tavily requires api key", func(t *testing.T) {
+		_, err := search(ctx, Config{Provider: "tavily"}, "query")
+		require.EqualError(t, err, "web search: tavily provider requires an API key")
+	})
+
+	t.Run("custom requires base url", func(t *testing.T) {
+		_, err := search(ctx, Config{Provider: "custom"}, "query")
+		require.EqualError(t, err, "web search: custom provider requires a base URL")
+	})
+}

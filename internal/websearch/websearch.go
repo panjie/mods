@@ -17,6 +17,14 @@ const (
 	SearchTimeout     = 10 * time.Second
 )
 
+type provider string
+
+const (
+	providerDuckDuckGo provider = "duckduckgo"
+	providerTavily     provider = "tavily"
+	providerCustom     provider = "custom"
+)
+
 type Config struct {
 	Enabled    bool
 	Provider   string
@@ -50,9 +58,11 @@ type Result struct {
 }
 
 func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
-	provider := cfg.Provider
-	if provider == "" {
-		provider = "google"
+	provider := normalizeProvider(cfg.Provider)
+	baseURL := cfg.BaseURL
+	if providerURL := providerBaseURL(cfg.Provider); providerURL != "" {
+		provider = providerCustom
+		baseURL = providerURL
 	}
 	maxResults := cfg.MaxResults
 	if maxResults <= 0 {
@@ -60,23 +70,46 @@ func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
 	}
 
 	switch provider {
-	case "tavily":
+	case providerDuckDuckGo:
+		return searchDuckDuckGoInstant(ctx, query, maxResults)
+	case providerTavily:
 		if cfg.APIKey == "" {
 			return nil, fmt.Errorf("web search: tavily provider requires an API key")
 		}
 		return searchTavily(ctx, cfg.APIKey, query, maxResults)
-	case "google":
-		return searchGoogle(ctx, query, maxResults)
-	case "bing":
-		return searchBing(ctx, query, maxResults)
-	case "custom":
-		if cfg.BaseURL == "" {
+	case providerCustom:
+		if baseURL == "" {
 			return nil, fmt.Errorf("web search: custom provider requires a base URL")
 		}
-		return searchCustom(ctx, cfg.BaseURL, cfg.APIKey, query, maxResults)
+		return searchCustom(ctx, baseURL, cfg.APIKey, query, maxResults)
 	default:
-		return searchGoogle(ctx, query, maxResults)
+		return searchDuckDuckGoInstant(ctx, query, maxResults)
 	}
+}
+
+func normalizeProvider(value string) provider {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if providerBaseURL(value) != "" {
+		return providerCustom
+	}
+	switch value {
+	case "", "duckduckgo", "ddg", "google", "bing":
+		return providerDuckDuckGo
+	case "tavily":
+		return providerTavily
+	case "custom":
+		return providerCustom
+	default:
+		return providerDuckDuckGo
+	}
+}
+
+func providerBaseURL(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		return value
+	}
+	return ""
 }
 
 func httpClient() *http.Client {
@@ -95,225 +128,146 @@ func newRequest(ctx context.Context, method, urlStr string) (*http.Request, erro
 	return req, nil
 }
 
-func searchBing(ctx context.Context, query string, maxResults int) ([]Result, error) {
+func searchDuckDuckGoInstant(ctx context.Context, query string, maxResults int) ([]Result, error) {
 	params := url.Values{}
 	params.Set("q", query)
-	params.Set("count", fmt.Sprintf("%d", maxResults))
+	params.Set("format", "json")
+	params.Set("no_redirect", "1")
+	params.Set("no_html", "1")
+	params.Set("skip_disambig", "1")
 
-	u := "https://www.bing.com/search?" + params.Encode()
+	u := "https://api.duckduckgo.com/?" + params.Encode()
 	req, err := newRequest(ctx, http.MethodGet, u)
 	if err != nil {
-		return nil, fmt.Errorf("searching Bing: %w", err)
+		return nil, fmt.Errorf("searching DuckDuckGo: %w", err)
 	}
 
 	resp, err := httpClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("searching Bing: %w", err)
+		return nil, fmt.Errorf("searching DuckDuckGo: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("searching Bing: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("searching DuckDuckGo: HTTP %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("searching Bing: %w", err)
+	var ddgResp duckDuckGoInstantResponse
+	if err := json.NewDecoder(resp.Body).Decode(&ddgResp); err != nil {
+		return nil, fmt.Errorf("searching DuckDuckGo: %w", err)
 	}
 
-	return parseBingHTML(string(body), maxResults), nil
+	return parseDuckDuckGoInstant(query, ddgResp, maxResults), nil
 }
 
-func parseBingHTML(html string, maxResults int) []Result {
-	var results []Result
+type duckDuckGoInstantResponse struct {
+	Answer        string            `json:"Answer"`
+	AnswerType    string            `json:"AnswerType"`
+	AbstractText  string            `json:"AbstractText"`
+	AbstractURL   string            `json:"AbstractURL"`
+	Definition    string            `json:"Definition"`
+	DefinitionURL string            `json:"DefinitionURL"`
+	Heading       string            `json:"Heading"`
+	RelatedTopics []duckDuckGoTopic `json:"RelatedTopics"`
+}
 
-	for len(results) < maxResults {
-		liIdx := strings.Index(html, `class="b_algo"`)
-		if liIdx < 0 {
-			break
-		}
-		html = html[liIdx:]
+type duckDuckGoTopic struct {
+	FirstURL string            `json:"FirstURL"`
+	Text     string            `json:"Text"`
+	Topics   []duckDuckGoTopic `json:"Topics"`
+}
 
-		liEnd := strings.Index(html, `</li>`)
-		if liEnd < 0 {
-			break
-		}
-		block := html[:liEnd+5]
-		html = html[liEnd+5:]
-
-		result := parseBingBlock(block)
-		if result.Title == "" && result.Snippet == "" {
-			continue
-		}
-		results = append(results, result)
+func parseDuckDuckGoInstant(query string, resp duckDuckGoInstantResponse, maxResults int) []Result {
+	if maxResults <= 0 {
+		maxResults = defaultMaxResults
+	}
+	results := make([]Result, 0, maxResults)
+	fallbackURL := duckDuckGoFallbackURL(query)
+	title := strings.TrimSpace(resp.Heading)
+	if title == "" {
+		title = query
 	}
 
+	if answer := strings.TrimSpace(resp.Answer); answer != "" {
+		answerTitle := title
+		if resp.AnswerType != "" {
+			answerTitle = strings.TrimSpace(resp.AnswerType)
+		}
+		results = appendDuckDuckGoResult(results, maxResults, Result{
+			Title:   answerTitle,
+			URL:     fallbackURL,
+			Snippet: answer,
+		})
+	}
+
+	if abstract := strings.TrimSpace(resp.AbstractText); abstract != "" {
+		results = appendDuckDuckGoResult(results, maxResults, Result{
+			Title:   title,
+			URL:     firstNonEmpty(resp.AbstractURL, fallbackURL),
+			Snippet: abstract,
+		})
+	}
+
+	if definition := strings.TrimSpace(resp.Definition); definition != "" {
+		results = appendDuckDuckGoResult(results, maxResults, Result{
+			Title:   title,
+			URL:     firstNonEmpty(resp.DefinitionURL, fallbackURL),
+			Snippet: definition,
+		})
+	}
+
+	return appendDuckDuckGoTopics(results, maxResults, resp.RelatedTopics, fallbackURL)
+}
+
+func appendDuckDuckGoTopics(results []Result, maxResults int, topics []duckDuckGoTopic, fallbackURL string) []Result {
+	for _, topic := range topics {
+		if len(results) >= maxResults {
+			break
+		}
+		if len(topic.Topics) > 0 {
+			results = appendDuckDuckGoTopics(results, maxResults, topic.Topics, fallbackURL)
+			continue
+		}
+		text := strings.TrimSpace(topic.Text)
+		if text == "" {
+			continue
+		}
+		title := text
+		if first, _, ok := strings.Cut(text, " - "); ok {
+			title = first
+		}
+		results = appendDuckDuckGoResult(results, maxResults, Result{
+			Title:   title,
+			URL:     firstNonEmpty(topic.FirstURL, fallbackURL),
+			Snippet: text,
+		})
+	}
 	return results
 }
 
-func parseBingBlock(block string) Result {
-	var result Result
-
-	h2Start := strings.Index(block, "<h2")
-	if h2Start < 0 {
-		return result
+func appendDuckDuckGoResult(results []Result, maxResults int, result Result) []Result {
+	if len(results) >= maxResults || strings.TrimSpace(result.Snippet) == "" {
+		return results
 	}
-	h2Block := block[h2Start:]
-
-	hrefStart := strings.Index(h2Block, `href="`)
-	if hrefStart >= 0 {
-		hrefStart += 6
-		hrefEnd := strings.Index(h2Block[hrefStart:], `"`)
-		if hrefEnd >= 0 {
-			result.URL = h2Block[hrefStart : hrefStart+hrefEnd]
-		}
-	}
-
-	aStart := strings.Index(h2Block, ">")
-	aEnd := strings.Index(h2Block, "</a>")
-	if aStart >= 0 && aEnd > aStart {
-		inner := h2Block[aStart+1 : aEnd]
-		result.Title = cleanHTML(inner)
-	}
-
-	captionStart := strings.Index(block, `class="b_caption"`)
-	if captionStart >= 0 {
-		captionBlock := block[captionStart:]
-		pStart := strings.Index(captionBlock, "<p")
-		if pStart >= 0 {
-			pBlock := captionBlock[pStart:]
-			pTagEnd := strings.Index(pBlock, ">")
-			pClose := strings.Index(pBlock, "</p>")
-			if pTagEnd >= 0 && pClose > pTagEnd {
-				inner := pBlock[pTagEnd+1 : pClose]
-				result.Snippet = cleanHTML(inner)
-			}
-		}
-	}
-
-	return result
+	result.Title = cleanHTML(result.Title)
+	result.URL = strings.TrimSpace(result.URL)
+	result.Snippet = cleanHTML(result.Snippet)
+	return append(results, result)
 }
 
-func searchGoogle(ctx context.Context, query string, maxResults int) ([]Result, error) {
+func duckDuckGoFallbackURL(query string) string {
 	params := url.Values{}
 	params.Set("q", query)
-	params.Set("num", fmt.Sprintf("%d", maxResults))
-	params.Set("hl", "en")
-
-	u := "https://www.google.com/search?" + params.Encode()
-	req, err := newRequest(ctx, http.MethodGet, u)
-	if err != nil {
-		return nil, fmt.Errorf("searching Google: %w", err)
-	}
-
-	resp, err := httpClient().Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("searching Google: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("searching Google: HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("searching Google: %w", err)
-	}
-
-	return parseGoogleHTML(string(body), maxResults), nil
+	return "https://duckduckgo.com/?" + params.Encode()
 }
 
-func parseGoogleHTML(html string, maxResults int) []Result {
-	var results []Result
-
-	for len(results) < maxResults {
-		block, rest, ok := extractGoogleBlock(html)
-		if !ok {
-			break
-		}
-		html = rest
-
-		result := parseGoogleBlock(block)
-		if result.Title == "" && result.Snippet == "" {
-			continue
-		}
-		results = append(results, result)
-	}
-
-	return results
-}
-
-func extractGoogleBlock(html string) (block, rest string, ok bool) {
-	gIdx := strings.Index(html, `<div class="g"`)
-	if gIdx < 0 {
-		return "", "", false
-	}
-
-	html = html[gIdx:]
-
-	gClose := strings.Index(html, `<div class="g"`)
-	if gClose > 0 {
-		block = html[:gClose]
-		rest = html[gClose:]
-	} else {
-		block = html
-		rest = ""
-	}
-
-	return block, rest, true
-}
-
-func parseGoogleBlock(block string) Result {
-	var result Result
-
-	h3Start := strings.Index(block, "<h3")
-	if h3Start < 0 {
-		return result
-	}
-
-	aBefore := strings.LastIndex(block[:h3Start], "<a ")
-	if aBefore >= 0 {
-		aBlock := block[aBefore:]
-		hrefStart := strings.Index(aBlock, `href="`)
-		if hrefStart >= 0 {
-			hrefStart += 6
-			hrefEnd := strings.Index(aBlock[hrefStart:], `"`)
-			if hrefEnd >= 0 {
-				result.URL = aBlock[hrefStart : hrefStart+hrefEnd]
-			}
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
 		}
 	}
-
-	h3Block := block[h3Start:]
-	h3TagEnd := strings.Index(h3Block, ">")
-	h3Close := strings.Index(h3Block, "</h3>")
-	if h3TagEnd >= 0 && h3Close > h3TagEnd {
-		result.Title = cleanHTML(h3Block[h3TagEnd+1 : h3Close])
-	}
-
-	spanStart := strings.Index(block, `<span class="`)
-	if spanStart >= 0 {
-		spanBlock := block[spanStart:]
-		spanTagEnd := strings.Index(spanBlock, ">")
-		spanClose := strings.Index(spanBlock, "</span>")
-		if spanTagEnd >= 0 && spanClose > spanTagEnd {
-			inner := spanBlock[spanTagEnd+1 : spanClose]
-			if len(inner) > len(result.Title)+5 {
-				result.Snippet = cleanHTML(inner)
-			}
-		}
-	}
-
-	if result.Snippet == "" {
-		h3Idx := strings.Index(block, "</h3>")
-		if h3Idx >= 0 {
-			after := block[h3Idx+5:]
-			result.Snippet = cleanHTML(after[:min(500, len(after))])
-		}
-	}
-
-	return result
+	return ""
 }
 
 func searchTavily(ctx context.Context, apiKey, query string, maxResults int) ([]Result, error) {

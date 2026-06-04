@@ -1,7 +1,7 @@
 # {{ index .Help "api" }}
 default-api: openai
 # {{ index .Help "model" }}
-default-model: gpt-4o
+default-model: gpt-5
 
 # ── Formatting ────────────────────────────────────────────────────
 
@@ -155,31 +155,34 @@ apis:
     api-key-env: OPENAI_API_KEY
     # api-key-cmd: rbw get -f OPENAI_API_KEY chat.openai.com
     models:
-      gpt-4o-mini:
-        aliases: ["4o-mini"]
-        max-input-chars: 392000
-        fallback: gpt-4o
-      gpt-4o:
-        aliases: ["4o"]
-        max-input-chars: 392000
+      gpt-5.2:
+        aliases: ["5.2", "gpt5.2", "gpt-5-2"]
+        max-input-chars: 794000
+        fallback: gpt-5
+      gpt-5:
+        aliases: ["5", "gpt5"]
+        max-input-chars: 794000
         fallback: gpt-4.1
       gpt-4.1:
         aliases: ["4.1", "gpt4.1", "gpt-4-1"]
         max-input-chars: 4000000
-        fallback: gpt-4o
-      o3:
-        aliases: ["o3"]
-        max-input-chars: 794000
+        fallback: gpt-5
       o4-mini:
         aliases: ["o4", "o4m", "o4-mini"]
+        max-input-chars: 794000
+      o3:
+        aliases: ["o3"]
         max-input-chars: 794000
 
   google:
     models:
-      gemini-2.5-flash-preview-05-06:
-        aliases: ["gm2.5f", "gemini-2.5-flash"]
+      gemini-3.5-flash:
+        aliases: ["gm3.5f", "gemini-3.5-flash"]
         max-input-chars: 4194304
-      gemini-2.5-pro-preview-05-06:
+      gemini-3.1-pro:
+        aliases: ["gm3.1p", "gemini-3.1-pro"]
+        max-input-chars: 4194304
+      gemini-2.5-pro:
         aliases: ["gm2.5p", "gemini-2.5-pro"]
         max-input-chars: 4194304
 
@@ -229,27 +232,33 @@ apis:
     api-key:
     api-key-env: OPENROUTER_API_KEY
     models:
+      deepseek/deepseek-v4-flash:
+        aliases: ["or-v4-flash"]
+        max-input-chars: 4000000
       anthropic/claude-sonnet-4:
         aliases: ["or-sonnet-4"]
         max-input-chars: 680000
-      google/gemini-2.5-pro:
-        aliases: ["or-gemini-2.5-pro"]
+      google/gemini-3.1-pro:
+        aliases: ["or-gemini-3.1-pro"]
         max-input-chars: 4194304
-      openai/gpt-4o:
-        aliases: ["or-gpt-4o"]
-        max-input-chars: 392000
 
   # ── Local / Self-hosted ───────────────────────────────────────
 
   ollama:
     base-url: http://localhost:11434
     models:
-      "llama3.2:3b":
-        aliases: ["llama3.2"]
-        max-input-chars: 650000
-      "llama3.2:1b":
-        aliases: ["llama3.2_1b"]
-        max-input-chars: 650000
+      "llama4:16x17b":
+        aliases: ["llama4", "scout"]
+        max-input-chars: 1600000
+      "llama3.3:70b":
+        aliases: ["llama3.3", "llama3.3-70b"]
+        max-input-chars: 392000
+      "qwen2.5:7b":
+        aliases: ["qwen2.5", "qwen"]
+        max-input-chars: 392000
+      "mistral:7b":
+        aliases: ["mistral"]
+        max-input-chars: 392000
 
   # Example: custom OpenAI-compatible server
   # custom:

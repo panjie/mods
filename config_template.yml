@@ -13,6 +13,9 @@ format-text:
 # {{ index .Help "format" }}
 format: false
 
+# {{ index .Help "minimal" }}
+minimal: false
+
 # ── Roles ─────────────────────────────────────────────────────────
 
 # {{ index .Help "roles" }}

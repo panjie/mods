@@ -158,12 +158,21 @@ identifier and a title (like `git`!).
 
 Check the [`./features.md`](./features.md) for more details.
 
+## Pipeline-Friendly Output
+
+Use `--minimal` when another command needs to consume the answer directly. It tells the model to skip explanations and print list results one item per line.
+
+```sh
+ls -l | mods --minimal "pick the biggest five file names" | gum choose
+```
+
 ## Usage
 
 - `-m`, `--model`: Specify Large Language Model to use
 - `-M`, `--ask-model`: Ask which model to use via interactive prompt
 - `-f`, `--format`: Ask the LLM to format the response in a given format
 - `--format-as`: Specify the format for the output (used with `--format`)
+- `--minimal`: Output only the final result, optimized for pipelines
 - `-P`, `--prompt` Include the prompt from the arguments and stdin, truncate stdin to specified number of lines
 - `-p`, `--prompt-args`: Include the prompt from the arguments in the response
 - `-q`, `--quiet`: Only output errors to standard err

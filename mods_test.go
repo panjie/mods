@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -292,6 +295,70 @@ func TestToolOperationLabel(t *testing.T) {
 	t.Run("unicode and narrow width truncate safely", func(t *testing.T) {
 		got := toolOperationLabel("web_search", []byte(`{"query":"搜索 一个 很长 很长 的 查询 内容"}`), 20)
 		require.Equal(t, "Searching web: 搜索...", got)
+	})
+}
+
+func TestSetupStreamContextMinimal(t *testing.T) {
+	newTestMods := func(cfg Config) *Mods {
+		if cfg.Roles == nil {
+			cfg.Roles = map[string][]string{}
+		}
+		if cfg.FormatText == nil {
+			cfg.FormatText = defaultConfig().FormatText
+		}
+		if cfg.FormatAs == "" {
+			cfg.FormatAs = "markdown"
+		}
+		return &Mods{
+			Config: &cfg,
+			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			ctx:    context.Background(),
+		}
+	}
+	contents := func(messages []proto.Message) []string {
+		out := make([]string, 0, len(messages))
+		for _, msg := range messages {
+			if msg.Role == proto.RoleSystem {
+				out = append(out, msg.Content)
+			}
+		}
+		return out
+	}
+	model := Model{MaxChars: 1000}
+
+	t.Run("minimal disabled", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NotContains(t, contents(m.messages), minimalSystemPrompt)
+	})
+
+	t.Run("minimal adds system prompt", func(t *testing.T) {
+		m := newTestMods(Config{Minimal: true})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, contents(m.messages), minimalSystemPrompt)
+	})
+
+	t.Run("minimal suppresses format prompt", func(t *testing.T) {
+		m := newTestMods(Config{Minimal: true, Format: true})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		systemMessages := contents(m.messages)
+		require.Contains(t, systemMessages, minimalSystemPrompt)
+		require.NotContains(t, systemMessages, defaultMarkdownFormatText)
+	})
+
+	t.Run("minimal follows role prompt", func(t *testing.T) {
+		m := newTestMods(Config{
+			Minimal: true,
+			Role:    "shell",
+			Roles:   map[string][]string{"shell": {"role prompt"}},
+		})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		systemMessages := contents(m.messages)
+		roleIndex := slices.Index(systemMessages, "role prompt")
+		minimalIndex := slices.Index(systemMessages, minimalSystemPrompt)
+		require.NotEqual(t, -1, roleIndex)
+		require.NotEqual(t, -1, minimalIndex)
+		require.Less(t, roleIndex, minimalIndex)
 	})
 }
 

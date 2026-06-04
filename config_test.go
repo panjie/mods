@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/caarlos0/env/v9"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -24,6 +25,21 @@ func TestConfig(t *testing.T) {
 			"markdown": "as markdown",
 			"json":     "as json",
 		}), cfg.FormatText)
+	})
+}
+
+func TestMinimalConfig(t *testing.T) {
+	t.Run("yaml", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte("minimal: true"), &cfg))
+		require.True(t, cfg.Minimal)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("MODS_MINIMAL", "true")
+		var cfg Config
+		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+		require.True(t, cfg.Minimal)
 	})
 }
 

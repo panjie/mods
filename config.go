@@ -28,6 +28,7 @@ var configTemplate string
 const (
 	defaultMarkdownFormatText = "Format the response as markdown without enclosing backticks."
 	defaultJSONFormatText     = "Format the response as json without enclosing backticks."
+	minimalSystemPrompt       = "Return only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
 )
 
 var help = map[string]string{
@@ -39,6 +40,7 @@ var help = map[string]string{
 	"max-input-chars":     "Default character limit on input to model",
 	"format":              "Ask for the response to be formatted as markdown unless otherwise set",
 	"format-text":         "Text to append when using the -f flag",
+	"minimal":             "Output only the final result, optimized for pipelines",
 	"role":                "System role to use",
 	"roles":               "List of predefined system messages that can be used as roles",
 	"list-roles":          "List the roles defined in your configuration file",
@@ -155,6 +157,7 @@ type Config struct {
 	Format              bool       `yaml:"format" env:"FORMAT"`
 	FormatText          FormatText `yaml:"format-text"`
 	FormatAs            string     `yaml:"format-as" env:"FORMAT_AS"`
+	Minimal             bool       `yaml:"minimal" env:"MINIMAL"`
 	Raw                 bool       `yaml:"raw" env:"RAW"`
 	Quiet               bool       `yaml:"quiet" env:"QUIET"`
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`

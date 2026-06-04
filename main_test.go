@@ -77,16 +77,16 @@ func TestConversationCompletions(t *testing.T) {
 
 func TestIsVersionOrHelpCmd(t *testing.T) {
 	for args, is := range map[string]bool{
-		"":                         false,
-		"mods":                     false,
-		"mods something":           false,
-		"mods --version":           true,
-		"mods -v":                  true,
-		"mods --help":              true,
-		"mods -h":                  true,
-		"mods --model gpt-4":       false,
-		"mods -v -m gpt-4":         true,
-		"mods -m gpt-4 --version":  true,
+		"":                        false,
+		"mods":                    false,
+		"mods something":          false,
+		"mods --version":          true,
+		"mods -v":                 true,
+		"mods --help":             true,
+		"mods -h":                 true,
+		"mods --model gpt-4":      false,
+		"mods -v -m gpt-4":        true,
+		"mods -m gpt-4 --version": true,
 	} {
 		t.Run(args, func(t *testing.T) {
 			vargs := append([]string{"mods"}, strings.Fields(args)...)
@@ -113,6 +113,13 @@ func TestThemeFrom(t *testing.T) {
 	t.Run("unknown defaults to charm", func(t *testing.T) {
 		require.NotNil(t, themeFrom("nonexistent"))
 	})
+}
+
+func TestMinimalFlagRegistered(t *testing.T) {
+	if rootCmd.Flags().Lookup("minimal") == nil {
+		initFlags()
+	}
+	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
 
 func TestRoleNames(t *testing.T) {

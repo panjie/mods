@@ -25,7 +25,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		Role:    proto.RoleSystem,
 		Content: sysInfo,
 	})
-	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && txt != "" {
+	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && !cfg.Minimal && txt != "" {
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,
 			Content: txt,
@@ -53,6 +53,13 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 				Content: content,
 			})
 		}
+	}
+
+	if cfg.Minimal {
+		m.messages = append(m.messages, proto.Message{
+			Role:    proto.RoleSystem,
+			Content: minimalSystemPrompt,
+		})
 	}
 
 	if prefix := cfg.Prefix; prefix != "" {

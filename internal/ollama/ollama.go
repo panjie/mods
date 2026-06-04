@@ -56,7 +56,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		Model:    request.Model,
 		Messages: fromProtoMessages(request.Messages),
 		Stream:   &b,
-		Tools:    fromMCPTools(request.Tools),
+		Tools:    fromToolSpecs(request.Tools),
 		Options:  map[string]any{},
 	}
 

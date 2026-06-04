@@ -36,7 +36,6 @@ import (
 	"github.com/charmbracelet/mods/internal/stream"
 	"github.com/charmbracelet/mods/internal/websearch"
 	"github.com/charmbracelet/x/exp/ordered"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 type state int
@@ -53,23 +52,23 @@ const (
 // Mods is the Bubble Tea model that manages reading stdin and querying the
 // OpenAI API.
 type Mods struct {
-	Output        string
-	Input         string
-	Styles        styles
-	Error         *modsError
-	state         state
-	retries       int
+	Output         string
+	Input          string
+	Styles         styles
+	Error          *modsError
+	state          state
+	retries        int
 	toolCallRounds int
-	renderer      *lipgloss.Renderer
-	glam          *glamour.TermRenderer
-	glamViewport  viewport.Model
-	glamOutput    string
-	glamHeight    int
-	messages      []proto.Message
-	cancelRequest []context.CancelFunc
-	anim          tea.Model
-	width         int
-	height        int
+	renderer       *lipgloss.Renderer
+	glam           *glamour.TermRenderer
+	glamViewport   viewport.Model
+	glamOutput     string
+	glamHeight     int
+	messages       []proto.Message
+	cancelRequest  []context.CancelFunc
+	anim           tea.Model
+	width          int
+	height         int
 
 	db     *convoDB
 	cache  *cache.Conversations
@@ -145,23 +144,23 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = configLoadedState
 		cmds = append(cmds, m.readStdinCmd)
 
-		case stdinImageInput:
-			m.stdinImageData = msg.data
-			if m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
-				return m, m.quit
-			}
-			if m.Config.Dirs ||
-				len(m.Config.Delete) > 0 ||
-				m.Config.DeleteOlderThan != 0 ||
-				m.Config.ShowHelp ||
-				m.Config.List ||
-				m.Config.ListRoles ||
-				m.Config.Settings ||
-				m.Config.ResetSettings {
-				return m, m.quit
-			}
-			m.state = requestState
-			cmds = append(cmds, m.startCompletionCmd(""))
+	case stdinImageInput:
+		m.stdinImageData = msg.data
+		if m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
+			return m, m.quit
+		}
+		if m.Config.Dirs ||
+			len(m.Config.Delete) > 0 ||
+			m.Config.DeleteOlderThan != 0 ||
+			m.Config.ShowHelp ||
+			m.Config.List ||
+			m.Config.ListRoles ||
+			m.Config.Settings ||
+			m.Config.ResetSettings {
+			return m, m.quit
+		}
+		m.state = requestState
+		cmds = append(cmds, m.startCompletionCmd(""))
 
 	case completionInput:
 		if msg.content != "" {
@@ -417,31 +416,26 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			cfg.MaxTokens = 0
 		}
 
+		wscfg := websearch.Config{
+			Enabled:    cfg.WebSearch,
+			Provider:   cfg.WebSearchProvider,
+			APIKey:     cfg.WebSearchAPIKey,
+			MaxResults: 5,
+		}
+
 		ctx, cancel := context.WithTimeout(m.ctx, config.MCPTimeout)
 		m.cancelRequest = append(m.cancelRequest, cancel)
-
-		tools, err := mcpTools(ctx)
+		registry, err := buildToolRegistry(ctx, cfg, wscfg)
 		if err != nil {
 			return err
 		}
+		tools := registry.Specs()
 
 		if debugEnabled() {
-			toolCount := 0
-			for sname, serverTools := range tools {
-				debugPrintf("MCP server %q: %d tool(s)", sname, len(serverTools))
-				for _, t := range serverTools {
-					debugPrintf("  Tool: %s_%s", sname, t.Name)
-				}
-				toolCount += len(serverTools)
+			debugPrintf("Tools: %d total tool(s)", len(tools))
+			for _, t := range tools {
+				debugPrintf("  Tool: %s", t.Name)
 			}
-			debugPrintf("MCP: %d server(s) enabled, %d total tool(s)", len(tools), toolCount)
-		}
-
-		if cfg.WebSearch {
-			if tools == nil {
-				tools = make(map[string][]mcp.Tool)
-			}
-			tools["web"] = []mcp.Tool{websearch.Tool()}
 		}
 
 		if err := m.setupStreamContext(content, mod); err != nil {
@@ -456,13 +450,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 					}
 				}
 			}
-		}
-
-		wscfg := websearch.Config{
-			Enabled:    cfg.WebSearch,
-			Provider:   cfg.WebSearchProvider,
-			APIKey:     cfg.WebSearchAPIKey,
-			MaxResults: 5,
 		}
 
 		if cfg.WebSearch && content != "" {
@@ -494,10 +481,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			ToolCaller: func(name string, data []byte) (string, error) {
 				ctx, cancel := context.WithTimeout(m.ctx, config.MCPTimeout)
 				m.cancelRequest = append(m.cancelRequest, cancel)
-				if wscfg.Enabled && strings.HasPrefix(name, "web_") {
-					return websearchCallTool(ctx, wscfg, name, data)
-				}
-				return toolCall(ctx, name, data)
+				return registry.Call(ctx, name, data)
 			},
 		}
 		if cfg.MaxTokens > 0 {
@@ -905,26 +889,4 @@ func ptrOrNil[T number](t T) *T {
 		return nil
 	}
 	return &t
-}
-
-func websearchCallTool(ctx context.Context, cfg websearch.Config, name string, data []byte) (string, error) {
-	toolName := strings.TrimPrefix(name, "web_")
-	if toolName != "web_search" {
-		return "", fmt.Errorf("websearch: unknown tool: %q", name)
-	}
-
-	var args struct {
-		Query string `json:"query"`
-	}
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &args); err != nil {
-			return "", fmt.Errorf("websearch: %w: %s", err, string(data))
-		}
-	}
-
-	if args.Query == "" {
-		return "", fmt.Errorf("websearch: empty search query")
-	}
-
-	return websearch.Search(ctx, cfg, args.Query)
 }

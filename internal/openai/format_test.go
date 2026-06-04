@@ -3,7 +3,7 @@ package openai
 import (
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/charmbracelet/mods/internal/proto"
 )
 
 func TestStripSchema(t *testing.T) {
@@ -45,7 +45,7 @@ func TestStripSchema(t *testing.T) {
 	t.Run("recursively strips nested properties", func(t *testing.T) {
 		props := map[string]any{
 			"config": map[string]any{
-				"type": "object",
+				"type":        "object",
 				"description": "config block",
 				"properties": map[string]any{
 					"name": map[string]any{
@@ -82,7 +82,7 @@ func TestStripSchema(t *testing.T) {
 	})
 }
 
-func TestFromMCPTools_stripsToolSchemas(t *testing.T) {
+func TestFromToolSpecs_stripsToolSchemas(t *testing.T) {
 	schemaProps := map[string]any{
 		"query": map[string]any{
 			"type":        "string",
@@ -91,19 +91,18 @@ func TestFromMCPTools_stripsToolSchemas(t *testing.T) {
 			"default":     "",
 		},
 	}
-	tools := map[string][]mcp.Tool{
-		"web": {
-			{
-				Name:        "web_search",
-				Description: "search the web",
-				InputSchema: mcp.ToolInputSchema{
-					Properties: schemaProps,
-					Required:   []string{"query"},
-				},
+	tools := []proto.ToolSpec{
+		{
+			Name:        "web_search",
+			Description: "search the web",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": schemaProps,
+				"required":   []string{"query"},
 			},
 		},
 	}
-	result := fromMCPTools(tools)
+	result := fromToolSpecs(tools)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 tool, got %d", len(result))
 	}

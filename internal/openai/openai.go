@@ -70,7 +70,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		Model:    request.Model,
 		User:     openai.String(request.User),
 		Messages: fromProtoMessages(request.Messages),
-		Tools:    fromMCPTools(request.Tools),
+		Tools:    fromToolSpecs(request.Tools),
 	}
 
 	if request.API != "perplexity" || !strings.Contains(request.Model, "online") {

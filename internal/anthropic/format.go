@@ -3,27 +3,27 @@ package anthropic
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
-func fromMCPTools(mcps map[string][]mcp.Tool) []anthropic.ToolUnionParam {
+func fromToolSpecs(specs []proto.ToolSpec) []anthropic.ToolUnionParam {
 	var tools []anthropic.ToolUnionParam
-	for name, serverTools := range mcps {
-		for _, tool := range serverTools {
-			tools = append(tools, anthropic.ToolUnionParam{
-				OfTool: &anthropic.ToolParam{
-					InputSchema: anthropic.ToolInputSchemaParam{
-						Properties: stripSchema(tool.InputSchema.Properties),
-					},
-					Name:        fmt.Sprintf("%s_%s", name, tool.Name),
-					Description: anthropic.String(tool.Description),
-				},
-			})
+	for _, spec := range specs {
+		props := map[string]any{}
+		if schemaProps, ok := spec.InputSchema["properties"].(map[string]any); ok {
+			props = stripSchema(schemaProps)
 		}
+		tools = append(tools, anthropic.ToolUnionParam{
+			OfTool: &anthropic.ToolParam{
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: props,
+				},
+				Name:        spec.Name,
+				Description: anthropic.String(spec.Description),
+			},
+		})
 	}
 	return tools
 }

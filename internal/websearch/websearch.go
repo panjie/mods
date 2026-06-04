@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 const (
@@ -25,23 +23,6 @@ type Config struct {
 	APIKey     string
 	BaseURL    string
 	MaxResults int
-}
-
-func Tool() mcp.Tool {
-	return mcp.Tool{
-		Name:        "web_search",
-		Description: "Search the web for current, up-to-date information. Use this tool when you need information that may not be in your training data, or when you need the latest news, facts, or real-time data. Returns formatted search results with titles, URLs, and snippets.",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]any{
-				"query": map[string]any{
-					"type":        "string",
-					"description": "The search query to look up on the web",
-				},
-			},
-			Required: []string{"query"},
-		},
-	}
 }
 
 func Search(ctx context.Context, cfg Config, query string) (string, error) {

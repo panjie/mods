@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/charmbracelet/mods/internal/proto"
 )
 
 func debugEnabled() bool {
@@ -53,10 +53,6 @@ func truncateStr(s string, max int) string {
 	return s
 }
 
-func countTools(tools map[string][]mcp.Tool) int {
-	var n int
-	for _, serverTools := range tools {
-		n += len(serverTools)
-	}
-	return n
+func countTools(tools []proto.ToolSpec) int {
+	return len(tools)
 }

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/charmbracelet/mods/internal/proto"
+	toolregistry "github.com/charmbracelet/mods/internal/tools"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -95,6 +97,48 @@ func mcpTools(ctx context.Context) (map[string][]mcp.Tool, error) {
 		return nil, err //nolint:wrapcheck
 	}
 	return result, nil
+}
+
+func registerMCPTools(ctx context.Context, registry *toolregistry.Registry) error {
+	servers, err := mcpTools(ctx)
+	if err != nil {
+		return err
+	}
+	for sname, serverTools := range servers {
+		for _, tool := range serverTools {
+			name := fmt.Sprintf("%s_%s", sname, tool.Name)
+			spec := proto.ToolSpec{
+				Name:        name,
+				Description: tool.Description,
+				InputSchema: mcpInputSchema(tool),
+			}
+			if err := registry.Register(toolregistry.Tool{
+				Spec: spec,
+				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
+					return toolCall(ctx, name, data)
+				},
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func mcpInputSchema(tool mcp.Tool) map[string]any {
+	schema := map[string]any{
+		"type": "object",
+	}
+	if tool.InputSchema.Type != "" {
+		schema["type"] = tool.InputSchema.Type
+	}
+	if tool.InputSchema.Properties != nil {
+		schema["properties"] = tool.InputSchema.Properties
+	}
+	if len(tool.InputSchema.Required) > 0 {
+		schema["required"] = tool.InputSchema.Required
+	}
+	return schema
 }
 
 // initMcpClient creates and initializes an MCP client.

@@ -27,7 +27,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		Model:         anthropic.Model(request.Model),
 		Messages:      messages,
 		System:        system,
-		Tools:         fromMCPTools(request.Tools),
+		Tools:         fromToolSpecs(request.Tools),
 		StopSequences: request.Stop,
 	}
 

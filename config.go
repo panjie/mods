@@ -77,6 +77,7 @@ var help = map[string]string{
 	"mcp-list":            "List all available MCP servers",
 	"mcp-list-tools":      "List all available tools from enabled MCP servers",
 	"mcp-timeout":         "Timeout for MCP server calls, defaults to 15 seconds",
+	"builtin-tools":       "Native tool configuration for filesystem, shell, and sequential thinking tools",
 	"show-tool-calls":     "Show tool call messages like \"Ran tool\" in output",
 	"web-search":          "Enable web search for up-to-date information (uses Bing by default)",
 	"web-search-provider": "Web search provider: bing, tavily, or custom",
@@ -203,6 +204,8 @@ type Config struct {
 	MCPDisable   []string
 	MCPTimeout   time.Duration `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 
+	BuiltinTools BuiltinToolsConfig `yaml:"builtin-tools"`
+
 	ShowToolCalls     bool   `yaml:"show-tool-calls" env:"SHOW_TOOL_CALLS"`
 	WebSearch         bool   `yaml:"web-search" env:"WEB_SEARCH"`
 	WebSearchProvider string `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
@@ -217,6 +220,15 @@ type Config struct {
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string
 }
 
+// BuiltinToolsConfig controls native tools implemented by mods.
+type BuiltinToolsConfig struct {
+	Filesystem         bool          `yaml:"filesystem"`
+	Shell              bool          `yaml:"shell"`
+	SequentialThinking bool          `yaml:"sequential-thinking"`
+	ShellTimeout       time.Duration `yaml:"shell-timeout"`
+	ShellMaxOutput     int           `yaml:"shell-max-output"`
+}
+
 // MCPServerConfig holds configuration for an MCP server.
 type MCPServerConfig struct {
 	Type    string   `yaml:"type"`
@@ -227,7 +239,7 @@ type MCPServerConfig struct {
 }
 
 func ensureConfig() (Config, error) {
-	var c Config
+	c := defaultConfig()
 	sp, err := settingsFilePath()
 	if err != nil {
 		return c, modsError{err, "Could not find settings path."}
@@ -329,6 +341,13 @@ func defaultConfig() Config {
 		},
 		MCPTimeout:    15 * time.Second,
 		ShowToolCalls: true,
+		BuiltinTools: BuiltinToolsConfig{
+			Filesystem:         true,
+			Shell:              false,
+			SequentialThinking: false,
+			ShellTimeout:       30 * time.Second,
+			ShellMaxOutput:     20000,
+		},
 	}
 }
 

@@ -3,29 +3,26 @@ package ollama
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/ollama/ollama/api"
 )
 
-func fromMCPTools(mcps map[string][]mcp.Tool) []api.Tool {
+func fromToolSpecs(specs []proto.ToolSpec) []api.Tool {
 	var tools []api.Tool
-	for name, serverTools := range mcps {
-		for _, tool := range serverTools {
-			t := api.Tool{
-				Type:  "function",
-				Items: nil,
-				Function: api.ToolFunction{
-					Name:        fmt.Sprintf("%s_%s", name, tool.Name),
-					Description: tool.Description,
-				},
-			}
-			_ = json.Unmarshal(tool.RawInputSchema, &t.Function.Parameters)
-			tools = append(tools, t)
+	for _, spec := range specs {
+		t := api.Tool{
+			Type:  "function",
+			Items: nil,
+			Function: api.ToolFunction{
+				Name:        spec.Name,
+				Description: spec.Description,
+			},
 		}
+		b, _ := json.Marshal(spec.InputSchema)
+		_ = json.Unmarshal(b, &t.Function.Parameters)
+		tools = append(tools, t)
 	}
 	return tools
 }

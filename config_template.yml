@@ -22,6 +22,13 @@ mcp-servers:
   #     - "ghcr.io/github/github-mcp-server"
 # {{ index .Help "mcp-timeout" }}
 mcp-timeout: 15s
+# {{ index .Help "builtin-tools" }}
+builtin-tools:
+  filesystem: true
+  shell: false
+  sequential-thinking: false
+  shell-timeout: 30s
+  shell-max-output: 20000
 # {{ index .Help "web-search" }}
 web-search: false
 # {{ index .Help "show-tool-calls" }}

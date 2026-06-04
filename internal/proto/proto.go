@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // Roles.
@@ -70,13 +68,20 @@ type Function struct {
 	Arguments []byte
 }
 
+// ToolSpec is a provider-neutral function/tool definition.
+type ToolSpec struct {
+	Name        string
+	Description string
+	InputSchema map[string]any
+}
+
 // Request is a chat request.
 type Request struct {
 	Messages       []Message
 	API            string
 	Model          string
 	User           string
-	Tools          map[string][]mcp.Tool
+	Tools          []ToolSpec
 	Temperature    *float64
 	TopP           *float64
 	TopK           *int64

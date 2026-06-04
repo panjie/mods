@@ -5,32 +5,26 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared/constant"
 )
 
-func fromMCPTools(mcps map[string][]mcp.Tool) []openai.ChatCompletionToolParam {
+func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 	var tools []openai.ChatCompletionToolParam
-	for name, serverTools := range mcps {
-		for _, tool := range serverTools {
-			params := map[string]any{
-				"type":       "object",
-				"properties": stripSchema(tool.InputSchema.Properties),
-			}
-			if len(tool.InputSchema.Required) > 0 {
-				params["required"] = tool.InputSchema.Required
-			}
-
-			tools = append(tools, openai.ChatCompletionToolParam{
-				Type: constant.Function("function"),
-				Function: openai.FunctionDefinitionParam{
-					Name:        fmt.Sprintf("%s_%s", name, tool.Name),
-					Description: openai.String(tool.Description),
-					Parameters:  params,
-				},
-			})
+	for _, spec := range specs {
+		params := stripSchema(spec.InputSchema)
+		if params == nil {
+			params = map[string]any{"type": "object"}
 		}
+
+		tools = append(tools, openai.ChatCompletionToolParam{
+			Type: constant.Function("function"),
+			Function: openai.FunctionDefinitionParam{
+				Name:        spec.Name,
+				Description: openai.String(spec.Description),
+				Parameters:  params,
+			},
+		})
 	}
 	return tools
 }
@@ -50,6 +44,18 @@ func stripSchema(props map[string]any) map[string]any {
 	for k, v := range props {
 		if stripKeys[k] {
 			continue
+		}
+		if k == "properties" {
+			if nested, ok := v.(map[string]any); ok {
+				out[k] = stripSchema(nested)
+				continue
+			}
+		}
+		if k == "items" {
+			if items, ok := v.(map[string]any); ok {
+				out[k] = stripSchema(items)
+				continue
+			}
 		}
 		m, ok := v.(map[string]any)
 		if !ok {

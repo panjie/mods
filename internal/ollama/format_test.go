@@ -4,36 +4,34 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/ollama/ollama/api"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFromMCPTools(t *testing.T) {
+func TestFromToolSpecs(t *testing.T) {
 	t.Run("single tool", func(t *testing.T) {
-		mcps := map[string][]mcp.Tool{
-			"filesystem": {{
-				Name:        "read_file",
-				Description: "Read a file",
-				InputSchema: mcp.ToolInputSchema{
-					Properties: map[string]any{
-						"path": map[string]any{
-							"type":        "string",
-							"description": "File path",
-						},
+		specs := []proto.ToolSpec{{
+			Name:        "read_file",
+			Description: "Read a file",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "File path",
 					},
 				},
-			}},
-		}
-		tools := fromMCPTools(mcps)
+			},
+		}}
+		tools := fromToolSpecs(specs)
 		require.Len(t, tools, 1)
 		require.Equal(t, "function", tools[0].Type)
-		require.Equal(t, "filesystem_read_file", tools[0].Function.Name)
+		require.Equal(t, "read_file", tools[0].Function.Name)
 		require.Equal(t, "Read a file", tools[0].Function.Description)
 	})
 
 	t.Run("empty", func(t *testing.T) {
-		tools := fromMCPTools(nil)
+		tools := fromToolSpecs(nil)
 		require.Empty(t, tools)
 	})
 }

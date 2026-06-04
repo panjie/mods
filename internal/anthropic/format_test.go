@@ -5,44 +5,41 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFromMCPTools(t *testing.T) {
+func TestFromToolSpecs(t *testing.T) {
 	t.Run("single tool", func(t *testing.T) {
-		mcps := map[string][]mcp.Tool{
-			"github": {{
-				Name:        "search_repos",
-				Description: "Search GitHub repositories",
-				InputSchema: mcp.ToolInputSchema{
-					Properties: map[string]any{
-						"query": map[string]any{
-							"type":        "string",
-							"description": "Search query",
-						},
+		specs := []proto.ToolSpec{{
+			Name:        "search_repos",
+			Description: "Search GitHub repositories",
+			InputSchema: map[string]any{
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Search query",
 					},
 				},
-			}},
-		}
-		tools := fromMCPTools(mcps)
+			},
+		}}
+		tools := fromToolSpecs(specs)
 		require.Len(t, tools, 1)
 		require.NotNil(t, tools[0].OfTool)
-		require.Equal(t, "github_search_repos", tools[0].OfTool.Name)
+		require.Equal(t, "search_repos", tools[0].OfTool.Name)
 		require.True(t, tools[0].OfTool.Description.Valid())
 	})
 
-	t.Run("multiple servers", func(t *testing.T) {
-		mcps := map[string][]mcp.Tool{
-			"srv1": {{Name: "t1", Description: "desc1"}},
-			"srv2": {{Name: "t2", Description: "desc2"}},
+	t.Run("multiple tools", func(t *testing.T) {
+		specs := []proto.ToolSpec{
+			{Name: "t1", Description: "desc1"},
+			{Name: "t2", Description: "desc2"},
 		}
-		tools := fromMCPTools(mcps)
+		tools := fromToolSpecs(specs)
 		require.Len(t, tools, 2)
 	})
 
 	t.Run("empty", func(t *testing.T) {
-		tools := fromMCPTools(nil)
+		tools := fromToolSpecs(nil)
 		require.Empty(t, tools)
 	})
 }
@@ -142,8 +139,6 @@ func TestFromProtoMessages(t *testing.T) {
 func TestToProtoMessage(t *testing.T) {
 	t.Run("assistant with text", func(t *testing.T) {
 		_ = json.RawMessage(`{"key":"value"}`)
-		// toProtoMessage requires proper Anthropic types, not easily constructed
-		// Testing indirectly via fromProtoMessages symmetry
 		input := []proto.Message{
 			{Role: proto.RoleAssistant, Content: "I think so.", ToolCalls: []proto.ToolCall{
 				{

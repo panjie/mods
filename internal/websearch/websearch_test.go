@@ -7,17 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTool(t *testing.T) {
-	tool := Tool()
-	require.Equal(t, "web_search", tool.Name)
-	require.NotEmpty(t, tool.Description)
-	require.Equal(t, "object", tool.InputSchema.Type)
-	props, ok := tool.InputSchema.Properties["query"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "string", props["type"])
-	require.Contains(t, tool.InputSchema.Required, "query")
-}
-
 func TestCleanHTML(t *testing.T) {
 	t.Run("removes tags", func(t *testing.T) {
 		require.Equal(t, "Hello World", cleanHTML("<p>Hello <b>World</b></p>"))

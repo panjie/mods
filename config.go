@@ -81,7 +81,7 @@ var help = map[string]string{
 	"builtin-tools":       "Native tool configuration for filesystem, shell, and sequential thinking tools",
 	"show-tool-calls":     "Show tool call messages like \"Ran tool\" in output",
 	"web-search":          "Enable web search for up-to-date information (uses Bing by default)",
-	"web-search-provider": "Web search provider: bing, tavily, or custom",
+	"web-search-provider": "Web search provider: google (default), bing, tavily, or custom",
 	"web-search-api-key":  "API key for the web search provider (required for tavily)",
 	"image":               "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
 	"stdin-image":         "Treat piped stdin input as raw image data instead of text",

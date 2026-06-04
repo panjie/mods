@@ -94,3 +94,37 @@ func formatResults(query string, results []Result) string {
 	return string(sb)
 }
 
+func TestParseGoogleBlock(t *testing.T) {
+	t.Run("complete block", func(t *testing.T) {
+		html := `<div class="g"><a href="https://example.com"><h3>Example Title</h3></a><span class="VwiC3b">Example snippet text</span></div>`
+		result := parseGoogleBlock(html)
+		require.Equal(t, "https://example.com", result.URL)
+		require.Equal(t, "Example Title", result.Title)
+		require.Contains(t, result.Snippet, "Example snippet text")
+	})
+
+	t.Run("no h3 returns empty", func(t *testing.T) {
+		result := parseGoogleBlock(`<div class="g"><a href="https://x.com">no title</a></div>`)
+		require.Empty(t, result.Title)
+	})
+
+	t.Run("h3 without anchor", func(t *testing.T) {
+		result := parseGoogleBlock(`<div class="g"><h3>Title</h3><span>Snippet</span></div>`)
+		require.Equal(t, "Title", result.Title)
+	})
+}
+
+func TestParseGoogleHTML(t *testing.T) {
+	t.Run("single result", func(t *testing.T) {
+		html := `<div class="g"><a href="https://a.com"><h3>A Title</h3></a><span class="VwiC3b">Snippet here</span></div>`
+		results := parseGoogleHTML(html, 3)
+		require.Len(t, results, 1)
+		require.Equal(t, "A Title", results[0].Title)
+	})
+
+	t.Run("no results", func(t *testing.T) {
+		results := parseGoogleHTML("<div>no results</div>", 5)
+		require.Empty(t, results)
+	})
+}
+

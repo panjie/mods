@@ -52,7 +52,7 @@ type Result struct {
 func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
 	provider := cfg.Provider
 	if provider == "" {
-		provider = "bing"
+		provider = "google"
 	}
 	maxResults := cfg.MaxResults
 	if maxResults <= 0 {
@@ -65,6 +65,8 @@ func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
 			return nil, fmt.Errorf("web search: tavily provider requires an API key")
 		}
 		return searchTavily(ctx, cfg.APIKey, query, maxResults)
+	case "google":
+		return searchGoogle(ctx, query, maxResults)
 	case "bing":
 		return searchBing(ctx, query, maxResults)
 	case "custom":
@@ -73,7 +75,7 @@ func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
 		}
 		return searchCustom(ctx, cfg.BaseURL, cfg.APIKey, query, maxResults)
 	default:
-		return searchBing(ctx, query, maxResults)
+		return searchGoogle(ctx, query, maxResults)
 	}
 }
 
@@ -186,6 +188,128 @@ func parseBingBlock(block string) Result {
 				inner := pBlock[pTagEnd+1 : pClose]
 				result.Snippet = cleanHTML(inner)
 			}
+		}
+	}
+
+	return result
+}
+
+func searchGoogle(ctx context.Context, query string, maxResults int) ([]Result, error) {
+	params := url.Values{}
+	params.Set("q", query)
+	params.Set("num", fmt.Sprintf("%d", maxResults))
+	params.Set("hl", "en")
+
+	u := "https://www.google.com/search?" + params.Encode()
+	req, err := newRequest(ctx, http.MethodGet, u)
+	if err != nil {
+		return nil, fmt.Errorf("searching Google: %w", err)
+	}
+
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("searching Google: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("searching Google: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("searching Google: %w", err)
+	}
+
+	return parseGoogleHTML(string(body), maxResults), nil
+}
+
+func parseGoogleHTML(html string, maxResults int) []Result {
+	var results []Result
+
+	for len(results) < maxResults {
+		block, rest, ok := extractGoogleBlock(html)
+		if !ok {
+			break
+		}
+		html = rest
+
+		result := parseGoogleBlock(block)
+		if result.Title == "" && result.Snippet == "" {
+			continue
+		}
+		results = append(results, result)
+	}
+
+	return results
+}
+
+func extractGoogleBlock(html string) (block, rest string, ok bool) {
+	gIdx := strings.Index(html, `<div class="g"`)
+	if gIdx < 0 {
+		return "", "", false
+	}
+
+	html = html[gIdx:]
+
+	gClose := strings.Index(html, `<div class="g"`)
+	if gClose > 0 {
+		block = html[:gClose]
+		rest = html[gClose:]
+	} else {
+		block = html
+		rest = ""
+	}
+
+	return block, rest, true
+}
+
+func parseGoogleBlock(block string) Result {
+	var result Result
+
+	h3Start := strings.Index(block, "<h3")
+	if h3Start < 0 {
+		return result
+	}
+
+	aBefore := strings.LastIndex(block[:h3Start], "<a ")
+	if aBefore >= 0 {
+		aBlock := block[aBefore:]
+		hrefStart := strings.Index(aBlock, `href="`)
+		if hrefStart >= 0 {
+			hrefStart += 6
+			hrefEnd := strings.Index(aBlock[hrefStart:], `"`)
+			if hrefEnd >= 0 {
+				result.URL = aBlock[hrefStart : hrefStart+hrefEnd]
+			}
+		}
+	}
+
+	h3Block := block[h3Start:]
+	h3TagEnd := strings.Index(h3Block, ">")
+	h3Close := strings.Index(h3Block, "</h3>")
+	if h3TagEnd >= 0 && h3Close > h3TagEnd {
+		result.Title = cleanHTML(h3Block[h3TagEnd+1 : h3Close])
+	}
+
+	spanStart := strings.Index(block, `<span class="`)
+	if spanStart >= 0 {
+		spanBlock := block[spanStart:]
+		spanTagEnd := strings.Index(spanBlock, ">")
+		spanClose := strings.Index(spanBlock, "</span>")
+		if spanTagEnd >= 0 && spanClose > spanTagEnd {
+			inner := spanBlock[spanTagEnd+1 : spanClose]
+			if len(inner) > len(result.Title)+5 {
+				result.Snippet = cleanHTML(inner)
+			}
+		}
+	}
+
+	if result.Snippet == "" {
+		h3Idx := strings.Index(block, "</h3>")
+		if h3Idx >= 0 {
+			after := block[h3Idx+5:]
+			result.Snippet = cleanHTML(after[:min(500, len(after))])
 		}
 	}
 

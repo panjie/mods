@@ -34,8 +34,8 @@ web-search: false
 # {{ index .Help "show-tool-calls" }}
 show-tool-calls: true
 # {{ index .Help "web-search-provider" }}
-# Supported: bing (default), tavily, custom
-web-search-provider: bing
+# Supported: google (default), bing, tavily, custom
+web-search-provider: google
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
 # {{ index .Help "image" }}

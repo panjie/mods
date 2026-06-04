@@ -111,9 +111,6 @@ builtin-tools:
   shell-timeout: 30s
   shell-max-output: 20000
 
-# {{ index .Help "show-tool-calls" }}
-show-tool-calls: true
-
 # {{ index .Help "web-search" }}
 web-search: false
 

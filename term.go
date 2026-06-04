@@ -17,6 +17,10 @@ var isOutputTTY = sync.OnceValue(func() bool {
 	return isatty.IsTerminal(os.Stdout.Fd())
 })
 
+var isErrorTTY = sync.OnceValue(func() bool {
+	return isatty.IsTerminal(os.Stderr.Fd())
+})
+
 var stdoutRenderer = sync.OnceValue(func() *lipgloss.Renderer {
 	return lipgloss.DefaultRenderer()
 })

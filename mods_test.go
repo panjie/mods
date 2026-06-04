@@ -4,8 +4,18 @@ import (
 	"fmt"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
+
+type staticModel string
+
+func (s staticModel) Init() tea.Cmd { return nil }
+
+func (s staticModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return s, nil }
+
+func (s staticModel) View() string { return string(s) }
 
 func TestFindCacheOpsDetails(t *testing.T) {
 	newMods := func(t *testing.T) *Mods {
@@ -233,6 +243,91 @@ func TestIncreaseIndent(t *testing.T) {
 	})
 }
 
+func TestToolOperationLabel(t *testing.T) {
+	t.Run("web search query", func(t *testing.T) {
+		got := toolOperationLabel("web_search", []byte(`{"query":"GUI wrapper for command line tools"}`), 80)
+		require.Equal(t, "Searching web: GUI wrapper for command line tools", got)
+	})
+
+	t.Run("shell command preview", func(t *testing.T) {
+		got := toolOperationLabel("shell_run", []byte(`{"command":"go   test   ./...\necho done"}`), 80)
+		require.Equal(t, "Running command: go test ./...", got)
+	})
+
+	t.Run("file read path", func(t *testing.T) {
+		got := toolOperationLabel("fs_read_file", []byte(`{"path":"mods.go"}`), 80)
+		require.Equal(t, "Reading file: mods.go", got)
+	})
+
+	t.Run("file write path", func(t *testing.T) {
+		got := toolOperationLabel("fs_write_file", []byte(`{"path":"mods.go","content":"package main"}`), 80)
+		require.Equal(t, "Writing file: mods.go", got)
+	})
+
+	t.Run("file search query and path", func(t *testing.T) {
+		got := toolOperationLabel("fs_search", []byte(`{"path":"internal","query":"toolOperationLabel"}`), 80)
+		require.Equal(t, "Searching files: toolOperationLabel in internal", got)
+	})
+
+	t.Run("thinking note", func(t *testing.T) {
+		got := toolOperationLabel("thinking_note", []byte(`{"thought":"checking the next step","done":false}`), 80)
+		require.Equal(t, "Thinking: checking the next step", got)
+	})
+
+	t.Run("unknown tool preferred fields", func(t *testing.T) {
+		got := toolOperationLabel("github_search", []byte(`{"query":"mods status bar","repo":"panjie/mods","irrelevant":"x"}`), 120)
+		require.Equal(t, "Running tool: github_search (query=mods status bar, repo=panjie/mods)", got)
+	})
+
+	t.Run("invalid json falls back", func(t *testing.T) {
+		got := toolOperationLabel("mcp_tool", []byte(`{nope`), 80)
+		require.Equal(t, "Running tool: mcp_tool", got)
+	})
+
+	t.Run("empty args falls back", func(t *testing.T) {
+		got := toolOperationLabel("mcp_tool", []byte(`{}`), 80)
+		require.Equal(t, "Running tool: mcp_tool", got)
+	})
+
+	t.Run("unicode and narrow width truncate safely", func(t *testing.T) {
+		got := toolOperationLabel("web_search", []byte(`{"query":"搜索 一个 很长 很长 的 查询 内容"}`), 20)
+		require.Equal(t, "Searching web: 搜索...", got)
+	})
+}
+
+func TestOperationStatusView(t *testing.T) {
+	newTestMods := func() *Mods {
+		return &Mods{
+			Config:              &Config{},
+			Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+			anim:                staticModel("Generating"),
+			state:               requestState,
+			showOperationStatus: true,
+			width:               80,
+		}
+	}
+
+	t.Run("shows active operation", func(t *testing.T) {
+		m := newTestMods()
+		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
+		require.Contains(t, m.View(), "Running command: go test ./...")
+	})
+
+	t.Run("clears active operation", func(t *testing.T) {
+		m := newTestMods()
+		_, _ = m.Update(toolOperationStatusMsg{content: "Running tool: fs_read_file"})
+		_, _ = m.Update(toolOperationStatusMsg{done: true})
+		require.NotContains(t, m.View(), "Running tool: fs_read_file")
+	})
+
+	t.Run("quiet hides active operation", func(t *testing.T) {
+		m := newTestMods()
+		m.Config.Quiet = true
+		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
+		require.NotContains(t, m.View(), "Running command: go test ./...")
+	})
+}
+
 func TestViewportNeeded(t *testing.T) {
 	t.Run("viewport taller than window", func(t *testing.T) {
 		m := &Mods{glamHeight: 100, height: 50}
@@ -275,9 +370,9 @@ func TestResolveModel(t *testing.T) {
 		{
 			Name: "openai",
 			Models: map[string]Model{
-				"gpt-4":    {Aliases: []string{"4"}},
-				"gpt-4o":   {Aliases: []string{"4o"}},
-				"gpt-3.5":  {},
+				"gpt-4":   {Aliases: []string{"4"}},
+				"gpt-4o":  {Aliases: []string{"4o"}},
+				"gpt-3.5": {},
 			},
 		},
 		{

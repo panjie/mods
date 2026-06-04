@@ -288,7 +288,6 @@ func initFlags() {
 	flags.BoolVar(&config.MCPListTools, "mcp-list-tools", false, stdoutStyles().FlagDesc.Render(help["mcp-list-tools"]))
 	flags.StringArrayVar(&config.MCPDisable, "mcp-disable", nil, stdoutStyles().FlagDesc.Render(help["mcp-disable"]))
 	flags.StringArrayVar(&config.MCPEnable, "mcp-enable", nil, stdoutStyles().FlagDesc.Render(help["mcp-enable"]))
-	flags.BoolVar(&config.ShowToolCalls, "show-tool-calls", config.ShowToolCalls, stdoutStyles().FlagDesc.Render(help["show-tool-calls"]))
 	flags.BoolVar(&config.WebSearch, "web-search", config.WebSearch, stdoutStyles().FlagDesc.Render(help["web-search"]))
 	flags.StringVar(&config.WebSearchProvider, "web-search-provider", config.WebSearchProvider, stdoutStyles().FlagDesc.Render(help["web-search-provider"]))
 	flags.StringVar(&config.WebSearchAPIKey, "web-search-api-key", config.WebSearchAPIKey, stdoutStyles().FlagDesc.Render(help["web-search-api-key"]))

@@ -52,31 +52,35 @@ const (
 // Mods is the Bubble Tea model that manages reading stdin and querying the
 // OpenAI API.
 type Mods struct {
-	Output         string
-	Input          string
-	Styles         styles
-	Error          *modsError
-	state          state
-	retries        int
-	toolCallRounds int
-	totalRounds    int
-	renderer       *lipgloss.Renderer
-	glam           *glamour.TermRenderer
-	glamViewport   viewport.Model
-	glamOutput     string
-	glamHeight     int
-	messages       []proto.Message
-	cancelRequest  []context.CancelFunc
-	anim           tea.Model
-	width          int
-	height         int
+	Output              string
+	Input               string
+	Styles              styles
+	Error               *modsError
+	state               state
+	retries             int
+	toolCallRounds      int
+	totalRounds         int
+	renderer            *lipgloss.Renderer
+	glam                *glamour.TermRenderer
+	glamViewport        viewport.Model
+	glamOutput          string
+	glamHeight          int
+	messages            []proto.Message
+	cancelRequest       []context.CancelFunc
+	anim                tea.Model
+	activeOperation     string
+	width               int
+	height              int
+	showOperationStatus bool
 
 	db     *convoDB
 	cache  *cache.Conversations
 	Config *Config
 
-	content      []string
-	contentMutex *sync.Mutex
+	content        []string
+	contentMutex   *sync.Mutex
+	operationMutex sync.Mutex
+	toolOperations chan<- toolOperationStatusMsg
 
 	stdinImageData []byte
 
@@ -97,16 +101,17 @@ func newMods(
 	vp := viewport.New(0, 0)
 	vp.GotoBottom()
 	return &Mods{
-		Styles:       makeStyles(r),
-		glam:         gr,
-		state:        startState,
-		renderer:     r,
-		glamViewport: vp,
-		contentMutex: &sync.Mutex{},
-		db:           db,
-		cache:        cache,
-		Config:       cfg,
-		ctx:          ctx,
+		Styles:              makeStyles(r),
+		glam:                gr,
+		state:               startState,
+		renderer:            r,
+		glamViewport:        vp,
+		contentMutex:        &sync.Mutex{},
+		showOperationStatus: isOutputTTY() && isErrorTTY() && !cfg.Raw,
+		db:                  db,
+		cache:               cache,
+		Config:              cfg,
+		ctx:                 ctx,
 	}
 }
 
@@ -120,6 +125,23 @@ type completionOutput struct {
 	content string
 	stream  stream.Stream
 	errh    func(error) tea.Msg
+}
+
+type toolCallsStartMsg struct {
+	stream stream.Stream
+	errh   func(error) tea.Msg
+}
+
+type toolCallsOutput struct {
+	results []proto.ToolCallStatus
+	stream  stream.Stream
+	errh    func(error) tea.Msg
+}
+
+type toolOperationStatusMsg struct {
+	content string
+	done    bool
+	ch      <-chan toolOperationStatusMsg
 }
 
 // Init implements tea.Model.
@@ -207,6 +229,77 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			stream: msg.stream,
 			errh:   msg.errh,
 		}))
+	case toolCallsStartMsg:
+		ch := make(chan toolOperationStatusMsg, 8)
+		m.setToolOperationChannel(ch)
+		m.activeOperation = "Running tools"
+		m.state = responseState
+		cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.callToolsCmd(msg, ch))
+	case toolOperationStatusMsg:
+		if msg.done {
+			m.activeOperation = ""
+			break
+		}
+		m.activeOperation = msg.content
+		if msg.ch != nil {
+			cmds = append(cmds, m.pollToolOperationStatusCmd(msg.ch))
+		}
+	case toolCallsOutput:
+		m.activeOperation = ""
+		toolMsg := completionOutput{
+			stream: msg.stream,
+			errh:   msg.errh,
+		}
+		for _, call := range msg.results {
+			if call.Err != nil {
+				debugPrintf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+			} else {
+				argPreview := truncateStr(string(call.Arguments), 120)
+				if argPreview != "" {
+					debugPrintf("Tool call: %s(%s)", call.Name, argPreview)
+				} else {
+					debugPrintf("Tool call: %s", call.Name)
+				}
+			}
+		}
+		if len(msg.results) == 0 {
+			m.messages = msg.stream.Messages()
+			m.toolCallRounds = 0
+			m.totalRounds = 0
+			return m, msgCmd(completionOutput{errh: msg.errh})
+		}
+		m.totalRounds++
+		hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
+			return c.Err != nil
+		})
+		if hasFailed {
+			m.toolCallRounds++
+		}
+		maxTotal := m.Config.MaxToolRounds
+		if maxTotal <= 0 {
+			maxTotal = 30
+		}
+		const maxFailedRounds = 3
+		if m.toolCallRounds > maxFailedRounds {
+			debugPrintf("Tool call failed rounds exceeded limit (%d), stopping", maxFailedRounds)
+			m.messages = msg.stream.Messages()
+			content := lastAssistantContent(m.messages)
+			if content != "" {
+				m.appendToOutput(content)
+			}
+			return m, msgCmd(completionOutput{errh: msg.errh})
+		}
+		if m.totalRounds > maxTotal {
+			debugPrintf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
+			m.messages = msg.stream.Messages()
+			content := lastAssistantContent(m.messages)
+			if content != "" {
+				m.appendToOutput(content)
+			}
+			return m, msgCmd(completionOutput{errh: msg.errh})
+		}
+		debugPrintf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxFailedRounds)
+		return m, msgCmd(toolMsg)
 	case modsError:
 		m.Error = &msg
 		m.state = errorState
@@ -250,19 +343,19 @@ func (m *Mods) View() string {
 		return ""
 	case requestState:
 		if !m.Config.Quiet {
-			return m.anim.View()
+			return m.renderWithOperation(m.anim.View())
 		}
 	case responseState:
 		if !m.Config.Raw && isOutputTTY() {
 			if m.viewportNeeded() {
-				return m.glamViewport.View()
+				return m.renderWithOperation(m.glamViewport.View())
 			}
 			// We don't need the viewport yet.
-			return m.glamOutput
+			return m.renderWithOperation(m.glamOutput)
 		}
 
 		if isOutputTTY() && !m.Config.Raw {
-			return m.Output
+			return m.renderWithOperation(m.Output)
 		}
 
 		m.contentMutex.Lock()
@@ -278,6 +371,28 @@ func (m *Mods) View() string {
 		return ""
 	}
 	return ""
+}
+
+func (m *Mods) renderWithOperation(content string) string {
+	if m.Config.Quiet || !m.showOperationStatus || strings.TrimSpace(m.activeOperation) == "" {
+		return content
+	}
+	status := m.operationStatusLine()
+	if content == "" {
+		return status
+	}
+	return strings.TrimRight(content, "\n") + "\n" + status
+}
+
+func (m *Mods) operationStatusLine() string {
+	text := truncateOperationStatus(m.activeOperation, m.width)
+	return m.Styles.Comment.Render(text)
+}
+
+func msgCmd(msg tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		return msg
+	}
 }
 
 func (m *Mods) quit() tea.Msg {
@@ -468,6 +583,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			ToolCaller: func(name string, data []byte) (string, error) {
 				ctx, cancel := context.WithTimeout(m.ctx, config.MCPTimeout)
 				m.cancelRequest = append(m.cancelRequest, cancel)
+				m.sendToolOperationStatus(toolOperationLabel(name, data, m.width))
 				return registry.Call(ctx, name, data)
 			},
 		}
@@ -590,70 +706,61 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			return msg.errh(err)
 		}
 
-		results := msg.stream.CallTools()
-		toolMsg := completionOutput{
+		return toolCallsStartMsg{
 			stream: msg.stream,
 			errh:   msg.errh,
 		}
-		for _, call := range results {
-			if call.Err != nil {
-				debugPrintf("Tool call FAILED: %s -> %v", call.Name, call.Err)
-			} else {
-				argPreview := truncateStr(string(call.Arguments), 120)
-				if argPreview != "" {
-					debugPrintf("Tool call: %s(%s)", call.Name, argPreview)
-				} else {
-					debugPrintf("Tool call: %s", call.Name)
-				}
-			}
-			if m.Config.ShowToolCalls {
-				toolMsg.content += call.String()
-			}
+	}
+}
+
+func (m *Mods) callToolsCmd(msg toolCallsStartMsg, ch chan toolOperationStatusMsg) tea.Cmd {
+	return func() tea.Msg {
+		results := msg.stream.CallTools()
+		m.clearToolOperationChannel(ch)
+		return toolCallsOutput{
+			results: results,
+			stream:  msg.stream,
+			errh:    msg.errh,
 		}
-		if len(results) == 0 {
-			m.messages = msg.stream.Messages()
-			m.toolCallRounds = 0
-			m.totalRounds = 0
-			return completionOutput{
-				errh: msg.errh,
-			}
+	}
+}
+
+func (m *Mods) pollToolOperationStatusCmd(ch <-chan toolOperationStatusMsg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return toolOperationStatusMsg{done: true}
 		}
-		m.totalRounds++
-		hasFailed := slices.ContainsFunc(results, func(c proto.ToolCallStatus) bool {
-			return c.Err != nil
-		})
-		if hasFailed {
-			m.toolCallRounds++
-		}
-		maxTotal := m.Config.MaxToolRounds
-		if maxTotal <= 0 {
-			maxTotal = 30
-		}
-		const maxFailedRounds = 3
-		if m.toolCallRounds > maxFailedRounds {
-			debugPrintf("Tool call failed rounds exceeded limit (%d), stopping", maxFailedRounds)
-			m.messages = msg.stream.Messages()
-			content := lastAssistantContent(m.messages)
-			if content != "" {
-				m.appendToOutput(content)
-			}
-			return completionOutput{
-				errh: msg.errh,
-			}
-		}
-		if m.totalRounds > maxTotal {
-			debugPrintf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
-			m.messages = msg.stream.Messages()
-			content := lastAssistantContent(m.messages)
-			if content != "" {
-				m.appendToOutput(content)
-			}
-			return completionOutput{
-				errh: msg.errh,
-			}
-		}
-		debugPrintf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxFailedRounds)
-		return toolMsg
+		msg.ch = ch
+		return msg
+	}
+}
+
+func (m *Mods) setToolOperationChannel(ch chan<- toolOperationStatusMsg) {
+	m.operationMutex.Lock()
+	defer m.operationMutex.Unlock()
+	m.toolOperations = ch
+}
+
+func (m *Mods) clearToolOperationChannel(ch chan toolOperationStatusMsg) {
+	m.operationMutex.Lock()
+	defer m.operationMutex.Unlock()
+	if m.toolOperations != ch {
+		return
+	}
+	close(ch)
+	m.toolOperations = nil
+}
+
+func (m *Mods) sendToolOperationStatus(content string) {
+	m.operationMutex.Lock()
+	defer m.operationMutex.Unlock()
+	if m.toolOperations == nil {
+		return
+	}
+	select {
+	case m.toolOperations <- toolOperationStatusMsg{content: content}:
+	default:
 	}
 }
 
@@ -800,6 +907,150 @@ func (m *Mods) appendToOutput(s string) {
 		// the bottom.
 		m.glamViewport.GotoBottom()
 	}
+}
+
+func toolOperationLabel(name string, data []byte, width int) string {
+	args := toolOperationArgs(data)
+	switch name {
+	case "web_search":
+		if query := oneLinePreview(argString(args, "query")); query != "" {
+			return truncateOperationStatus("Searching web: "+query, width)
+		}
+	case "shell_run":
+		if command := oneLinePreview(argString(args, "command")); command != "" {
+			return truncateOperationStatus("Running command: "+command, width)
+		}
+	case "fs_read_file":
+		if path := oneLinePreview(argString(args, "path")); path != "" {
+			return truncateOperationStatus("Reading file: "+path, width)
+		}
+	case "fs_write_file":
+		if path := oneLinePreview(argString(args, "path")); path != "" {
+			return truncateOperationStatus("Writing file: "+path, width)
+		}
+	case "fs_list_dir":
+		if path := oneLinePreview(argString(args, "path")); path != "" {
+			return truncateOperationStatus("Listing directory: "+path, width)
+		}
+	case "fs_stat":
+		if path := oneLinePreview(argString(args, "path")); path != "" {
+			return truncateOperationStatus("Inspecting path: "+path, width)
+		}
+	case "fs_search":
+		query := oneLinePreview(argString(args, "query"))
+		path := oneLinePreview(argString(args, "path"))
+		switch {
+		case query != "" && path != "":
+			return truncateOperationStatus("Searching files: "+query+" in "+path, width)
+		case query != "":
+			return truncateOperationStatus("Searching files: "+query, width)
+		case path != "":
+			return truncateOperationStatus("Searching files in: "+path, width)
+		}
+	case "fs_apply_patch":
+		return truncateOperationStatus("Applying patch", width)
+	case "thinking_note":
+		if thought := oneLinePreview(argString(args, "thought")); thought != "" {
+			return truncateOperationStatus("Thinking: "+thought, width)
+		}
+		return truncateOperationStatus("Thinking note", width)
+	}
+	if summary := toolArgsSummary(args); summary != "" {
+		return truncateOperationStatus("Running tool: "+name+" ("+summary+")", width)
+	}
+	return truncateOperationStatus("Running tool: "+name, width)
+}
+
+func toolOperationArgs(data []byte) map[string]any {
+	var args map[string]any
+	if err := json.Unmarshal(data, &args); err != nil {
+		return nil
+	}
+	return args
+}
+
+func toolArgsSummary(args map[string]any) string {
+	if len(args) == 0 {
+		return ""
+	}
+	preferred := []string{"query", "command", "path", "url", "repo", "repository", "file", "filename", "name"}
+	parts := make([]string, 0, 3)
+	seen := map[string]bool{}
+	for _, key := range preferred {
+		if appendToolArgSummaryPart(&parts, seen, args, key) && len(parts) >= 3 {
+			return strings.Join(parts, ", ")
+		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, ", ")
+	}
+	for key := range args {
+		if appendToolArgSummaryPart(&parts, seen, args, key) && len(parts) >= 3 {
+			break
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func appendToolArgSummaryPart(parts *[]string, seen map[string]bool, args map[string]any, key string) bool {
+	if seen[key] {
+		return false
+	}
+	value := oneLinePreview(argString(args, key))
+	if value == "" {
+		return false
+	}
+	seen[key] = true
+	*parts = append(*parts, key+"="+value)
+	return true
+}
+
+func argString(args map[string]any, key string) string {
+	if args == nil {
+		return ""
+	}
+	value, ok := args[key]
+	if !ok {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	case float64, bool:
+		return fmt.Sprint(v)
+	case []any:
+		values := make([]string, 0, len(v))
+		for _, item := range v {
+			s := oneLinePreview(fmt.Sprint(item))
+			if s != "" {
+				values = append(values, s)
+			}
+		}
+		return strings.Join(values, ",")
+	default:
+		return ""
+	}
+}
+
+func oneLinePreview(s string) string {
+	s = strings.ReplaceAll(s, "\r", "\n")
+	s = firstLine(strings.TrimSpace(s))
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func truncateOperationStatus(s string, width int) string {
+	s = strings.TrimSpace(s)
+	if width <= 0 || width > 120 {
+		width = 120
+	}
+	runes := []rune(s)
+	if len(runes) <= width {
+		return s
+	}
+	if width <= 3 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-3]) + "..."
 }
 
 // if the input is whitespace only, make it empty.

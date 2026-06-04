@@ -178,7 +178,6 @@ Check the [`./features.md`](./features.md) for more details.
 - `--reset-settings`: Restore settings to default
 - `--theme`: Theme to use in the forms; valid choices are: `charm`, `catppuccin`, `dracula`, and `base16`
 - `--status-text`: Text to show while generating
-- `--show-tool-calls`: Show tool call messages like "Ran tool" in output
 
 #### Image Support
 

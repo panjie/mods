@@ -222,6 +222,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 		if msg.content != "" {
+			m.activeOperation = ""
 			m.appendToOutput(msg.content)
 			m.state = responseState
 		}
@@ -266,6 +267,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = msg.stream.Messages()
 			m.toolCallRounds = 0
 			m.totalRounds = 0
+			m.activeOperation = m.Config.StatusText
 			return m, msgCmd(completionOutput{errh: msg.errh})
 		}
 		m.totalRounds++

@@ -208,7 +208,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.Config.IncludePrompt > 0 {
-			parts := strings.Split(m.Input, "\n")
+			parts := strings.Split(strings.ReplaceAll(m.Input, "\r\n", "\n"), "\n")
 			if len(parts) > m.Config.IncludePrompt {
 				parts = parts[0:m.Config.IncludePrompt]
 			}
@@ -383,7 +383,7 @@ func (m *Mods) renderWithOperation(content string) string {
 	if content == "" {
 		return status
 	}
-	return strings.TrimRight(content, "\n") + "\n" + status
+	return strings.TrimRight(content, "\r\n") + "\n" + status
 }
 
 func (m *Mods) operationStatusLine() string {
@@ -1089,7 +1089,7 @@ func cutPrompt(msg, prompt string) string {
 }
 
 func increaseIndent(s string) string {
-	lines := strings.Split(s, "\n")
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 	for i := range lines {
 		lines[i] = "\t" + lines[i]
 	}

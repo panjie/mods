@@ -19,6 +19,9 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	cwd, _ := os.Getwd()
 	hostname, _ := os.Hostname()
 	user := os.Getenv("USER")
+	if user == "" {
+		user = os.Getenv("USERNAME")
+	}
 	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s",
 		cwd, user, hostname, runtime.GOOS, runtime.GOARCH)
 	m.messages = append(m.messages, proto.Message{

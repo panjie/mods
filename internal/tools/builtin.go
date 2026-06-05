@@ -278,7 +278,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := validatePatchPaths(root, args.Patch); err != nil {
 				return "", err
 			}
-			cmd := exec.CommandContext(ctx, "git", "apply", "--whitespace=nowarn")
+			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn")
 			cmd.Dir = root
 			cmd.Stdin = strings.NewReader(args.Patch)
 			out, err := cmd.CombinedOutput()
@@ -480,7 +480,7 @@ func workspaceRel(root, path string) string {
 	if err != nil {
 		return path
 	}
-	return rel
+	return filepath.ToSlash(rel)
 }
 
 func searchFiles(root, path, query string, limit int) (string, error) {
@@ -514,7 +514,7 @@ func searchFiles(root, path, query string, limit int) (string, error) {
 		if bytes.IndexByte(content, 0) >= 0 {
 			return nil
 		}
-		lines := strings.Split(string(content), "\n")
+		lines := strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n")
 		for i, line := range lines {
 			if strings.Contains(line, query) {
 				sb.WriteString(fmt.Sprintf("%s:%d:%s\n", workspaceRel(root, path), i+1, line))
@@ -536,7 +536,7 @@ func searchFiles(root, path, query string, limit int) (string, error) {
 }
 
 func validatePatchPaths(root, patch string) error {
-	for _, line := range strings.Split(patch, "\n") {
+	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
 		if !strings.HasPrefix(line, "+++ ") && !strings.HasPrefix(line, "--- ") {
 			continue
 		}

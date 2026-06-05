@@ -30,6 +30,6 @@ func lastAssistantContent(messages []proto.Message) string {
 }
 
 func firstLine(s string) string {
-	first, _, _ := strings.Cut(s, "\n")
+	first, _, _ := strings.Cut(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 	return first
 }

@@ -45,7 +45,7 @@ func readImageWayland() ([]byte, error) {
 }
 
 func readImageWLClipboard() ([]byte, error) {
-	data, err := execCmd("wl-copy", "-t", "image/png", "-o")
+	data, err := execCmd("wl-paste", "-t", "image/png")
 	if err != nil || len(data) == 0 {
 		return nil, fmt.Errorf("wl-copy not available")
 	}

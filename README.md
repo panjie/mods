@@ -111,6 +111,18 @@ Or, just install it with `go`:
 go install github.com/charmbracelet/mods@latest
 ```
 
+### Build from source
+
+For local development builds, use `make build`:
+
+```sh
+make build
+```
+
+This writes the binary to `bin/mods`. Use `make check` to verify the project
+compiles, and `make test` to run the test suite. The `dist/` directory is
+reserved for GoReleaser release and snapshot artifacts.
+
 <details>
 <summary>Shell Completions</summary>
 

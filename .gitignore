@@ -1,6 +1,7 @@
-mods
-mods.exe
+/mods
+/mods.exe
 .envrc
 completions/
 manpages/
-dist/
+/bin/
+/dist/

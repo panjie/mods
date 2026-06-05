@@ -15,11 +15,14 @@ import (
 	"github.com/openai/openai-go/shared"
 )
 
+const ReasoningEffortMedium = shared.ReasoningEffortMedium
+
 var _ stream.Client = &Client{}
 
 // Client is the openai client.
 type Client struct {
 	*openai.Client
+	config Config
 }
 
 // Config represents the configuration for the OpenAI API client.
@@ -29,7 +32,8 @@ type Config struct {
 	HTTPClient interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	APIType string
+	APIType        string
+	ReasoningEffort shared.ReasoningEffort
 }
 
 // DefaultConfig returns the default configuration for the OpenAI API client.
@@ -61,6 +65,7 @@ func New(config Config) *Client {
 	client := openai.NewClient(opts...)
 	return &Client{
 		Client: &client,
+		config: config,
 	}
 }
 
@@ -71,6 +76,10 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		User:     openai.String(request.User),
 		Messages: fromProtoMessages(request.Messages),
 		Tools:    fromToolSpecs(request.Tools),
+	}
+
+	if c.config.ReasoningEffort != "" {
+		body.ReasoningEffort = c.config.ReasoningEffort
 	}
 
 	if request.API != "perplexity" || !strings.Contains(request.Model, "online") {

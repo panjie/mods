@@ -44,6 +44,7 @@ func DefaultConfig(model, authToken string) Config {
 type Part struct {
 	Text       string `json:"text,omitempty"`
 	InlineData *Blob  `json:"inlineData,omitempty"`
+	Thought    string `json:"thought,omitempty"`
 }
 
 // Blob contains raw media bytes to be sent inline to the model.
@@ -296,10 +297,18 @@ func (s *Stream) Current() (proto.Chunk, error) {
 			return proto.Chunk{}, stream.ErrNoContent
 		}
 
-		text := chunk.Candidates[0].Content.Parts[0].Text
+		var text, thought string
+		for _, part := range parts {
+			if part.Text != "" {
+				text += part.Text
+			}
+			if part.Thought != "" {
+				thought += part.Thought
+			}
+		}
 		s.message += text
 
-		return proto.Chunk{Content: text}, nil
+		return proto.Chunk{Content: text, Thought: thought}, nil
 	}
 }
 

@@ -86,6 +86,9 @@ max-retries: 5
 # {{ index .Help "max-tool-rounds" }}
 max-tool-rounds: 30
 
+# {{ index .Help "reasoning" }}
+reasoning: off
+
 # ── Tool & MCP Configuration ──────────────────────────────────────
 
 # {{ index .Help "mcp-servers" }}

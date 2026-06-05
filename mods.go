@@ -69,6 +69,7 @@ type Mods struct {
 	cancelRequest       []context.CancelFunc
 	anim                tea.Model
 	activeOperation     string
+	reasoningActive     bool
 	width               int
 	height              int
 	showOperationStatus bool
@@ -222,7 +223,11 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 		if msg.content != "" {
-			m.activeOperation = ""
+			if m.reasoningActive {
+				m.activeOperation = "Deep reasoning..."
+			} else {
+				m.activeOperation = ""
+			}
 			m.appendToOutput(msg.content)
 			m.state = responseState
 		}
@@ -376,7 +381,10 @@ func (m *Mods) View() string {
 }
 
 func (m *Mods) renderWithOperation(content string) string {
-	if m.Config.Quiet || !m.showOperationStatus || strings.TrimSpace(m.activeOperation) == "" {
+	if m.Config.Quiet || !m.showOperationStatus {
+		return content
+	}
+	if strings.TrimSpace(m.activeOperation) == "" && !m.reasoningActive {
 		return content
 	}
 	status := m.operationStatusLine()
@@ -387,7 +395,15 @@ func (m *Mods) renderWithOperation(content string) string {
 }
 
 func (m *Mods) operationStatusLine() string {
-	text := truncateOperationStatus(m.activeOperation, m.width)
+	text := m.activeOperation
+	if text == "" && m.reasoningActive {
+		text = "Reasoning..."
+	}
+	if m.reasoningActive {
+		badge := m.Styles.InlineCode.Render("[R]")
+		return badge + " " + m.Styles.Comment.Render(truncateOperationStatus(text, m.width-4))
+	}
+	text = truncateOperationStatus(text, m.width)
 	return m.Styles.Comment.Render(text)
 }
 
@@ -422,6 +438,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	}
 
 	m.cancelRequest = nil
+	m.reasoningActive = false
 
 	return func() tea.Msg {
 		var mod Model
@@ -512,6 +529,11 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			}
 		}
 
+		m.reasoningActive = m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
+		if m.reasoningActive {
+			m.activeOperation = "Deep reasoning..."
+		}
+
 		if cfg.HTTPProxy != "" {
 			proxyURL, err := url.Parse(cfg.HTTPProxy)
 			if err != nil {
@@ -528,11 +550,9 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			mod.MaxChars = cfg.MaxInputChars
 		}
 
-		// Check if the model is an o1 model and unset the max_tokens parameter
-		// accordingly, as it's unsupported by o1.
-		// We do set max_completion_tokens instead, which is supported.
-		// Release won't have a prefix with a dash, so just putting o1 for match.
-		if strings.HasPrefix(mod.Name, "o1") {
+		// Check if the model is an o-series model and unset the max_tokens parameter
+		// accordingly, as it's unsupported by o-series.
+		if isOSeries(mod.Name) {
 			cfg.MaxTokens = 0
 		}
 
@@ -695,6 +715,9 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			if err != nil && !errors.Is(err, stream.ErrNoContent) {
 				_ = msg.stream.Close()
 				return msg.errh(err)
+			}
+			if chunk.Thought != "" {
+				debugPrintf("Thought: %s", chunk.Thought)
 			}
 			return completionOutput{
 				content: chunk.Content,
@@ -1096,6 +1119,125 @@ func increaseIndent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
+func (m *Mods) resolveReasoning(
+	mod *Model,
+	content string,
+	accfg *anthropic.Config,
+	gccfg *google.Config,
+	ccfg *openai.Config,
+	occfg ollama.Config,
+	cccfg cohere.Config,
+) bool {
+	cfg := m.Config
+	switch cfg.Reasoning {
+	case ReasoningOn:
+		applyReasoningConfigs(mod.API, gccfg, accfg, ccfg)
+		debugPrintf("Reasoning: enabled for %s/%s", mod.API, mod.Name)
+		return true
+	case ReasoningAuto:
+		if content == "" {
+			return false
+		}
+		if mod.API == "cohere" || mod.API == "ollama" {
+			return false
+		}
+		debugPrintf("Auto judge: evaluating task complexity for model=%s", mod.Name)
+		m.activeOperation = "Evaluating task complexity..."
+		judgeCtx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
+		defer cancel()
+		// Reset reasoning configs for the judge call
+		gccfgJ := *gccfg
+		gccfgJ.ThinkingBudget = 0
+		accfgJ := *accfg
+		accfgJ.ThinkingBudget = 0
+		ccfgJ := *ccfg
+		ccfgJ.ReasoningEffort = ""
+		shouldReason := judgeTaskComplexity(judgeCtx, mod, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
+		debugPrintf("Auto judge: reasoning=%v", shouldReason)
+		if shouldReason {
+			applyReasoningConfigs(mod.API, gccfg, accfg, ccfg)
+		}
+		return shouldReason
+	default:
+		return false
+	}
+}
+
+func applyReasoningConfigs(api string, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config) {
+	switch {
+	case api == "google":
+		if gccfg.ThinkingBudget == 0 {
+			gccfg.ThinkingBudget = 8192
+		}
+		debugPrintf("Reasoning: google thinking_budget=%d", gccfg.ThinkingBudget)
+	case api == "anthropic":
+		accfg.ThinkingBudget = 8192
+		debugPrintf("Reasoning: anthropic thinking_budget=%d", accfg.ThinkingBudget)
+	case api == "cohere" || api == "ollama":
+		debugPrintf("Reasoning: %s does not support reasoning, skipped", api)
+	default:
+		ccfg.ReasoningEffort = openai.ReasoningEffortMedium
+		debugPrintf("Reasoning: openai reasoning_effort=%s", ccfg.ReasoningEffort)
+	}
+}
+
+func judgeTaskComplexity(
+	ctx context.Context,
+	mod *Model,
+	prompt string,
+	accfg anthropic.Config,
+	gccfg google.Config,
+	ccfg openai.Config,
+	occfg ollama.Config,
+	cccfg cohere.Config,
+) bool {
+	system := "You are a task classifier. Determine if the following task requires deep reasoning (multi-step analysis, debugging, complex logic, math, code design, or creative writing). Answer only YES."
+	max3 := int64(3)
+	request := proto.Request{
+		Messages: []proto.Message{
+			{Role: proto.RoleSystem, Content: system},
+			{Role: proto.RoleUser, Content: prompt},
+		},
+		Model:       mod.Name,
+		MaxTokens:   &max3,
+		Temperature: ptrOrNil(float64(0)),
+	}
+
+	var client stream.Client
+	var err error
+	switch mod.API {
+	case "anthropic":
+		client = anthropic.New(accfg)
+	case "google":
+		client = google.New(gccfg)
+	case "cohere":
+		client = cohere.New(cccfg)
+	case "ollama":
+		client, err = ollama.New(occfg)
+	default:
+		client = openai.New(ccfg)
+	}
+	if err != nil {
+		return false
+	}
+
+	st := client.Request(ctx, request)
+	defer st.Close()
+
+	var sb strings.Builder
+	for st.Next() {
+		chunk, err := st.Current()
+		if err != nil && !errors.Is(err, stream.ErrNoContent) {
+			return false
+		}
+		sb.WriteString(chunk.Content)
+	}
+	if st.Err() != nil {
+		return false
+	}
+	return strings.Contains(strings.ToUpper(strings.TrimSpace(sb.String())), "YES")
+}
+
 func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 	for _, api := range cfg.APIs {
 		if api.Name != cfg.API && cfg.API != "" {
@@ -1142,6 +1284,16 @@ func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 }
 
 type number interface{ int64 | float64 }
+
+func isOSeries(model string) bool {
+	prefixes := []string{"o1", "o3", "o4", "o5"}
+	for _, p := range prefixes {
+		if strings.HasPrefix(model, p) {
+			return true
+		}
+	}
+	return false
+}
 
 func ptrOrNil[T number](t T) *T {
 	if t < 0 {

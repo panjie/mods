@@ -31,6 +31,15 @@ const (
 	minimalSystemPrompt       = "Return only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
 )
 
+// ReasoningMode controls whether the LLM should use deep reasoning.
+type ReasoningMode string
+
+const (
+	ReasoningOff  ReasoningMode = "off"
+	ReasoningOn   ReasoningMode = "on"
+	ReasoningAuto ReasoningMode = "auto"
+)
+
 var help = map[string]string{
 	"api":                 "OpenAI compatible REST API (openai, localai, anthropic, ...)",
 	"apis":                "Aliases and endpoints for OpenAI compatible REST API",
@@ -89,6 +98,7 @@ var help = map[string]string{
 	"clipboard-image":     "Attach the current image in the system clipboard to the prompt",
 	"debug":               "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":     "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
+	"reasoning":           "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
 }
 
 // Model represents the LLM model used in the API call.
@@ -217,8 +227,9 @@ type Config struct {
 	Images         []string `yaml:"images" env:"IMAGES"`
 	StdinImage     bool     `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage bool     `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
-	Debug          bool     `yaml:"debug" env:"DEBUG"`
-	MaxToolRounds  int      `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
+	Reasoning      ReasoningMode `yaml:"reasoning" env:"REASONING"`
+	Debug          bool           `yaml:"debug" env:"DEBUG"`
+	MaxToolRounds  int            `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	openEditor                                         bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string
@@ -393,6 +404,7 @@ func defaultConfig() Config {
 			"markdown": defaultMarkdownFormatText,
 			"json":     defaultJSONFormatText,
 		},
+		Reasoning: ReasoningOff,
 		MCPTimeout: 15 * time.Second,
 		BuiltinTools: BuiltinToolsConfig{
 			Filesystem:         FilesystemAuto,

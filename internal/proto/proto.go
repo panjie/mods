@@ -22,6 +22,7 @@ type Image struct {
 // Chunk is a streaming chunk of text.
 type Chunk struct {
 	Content string
+	Thought string // reasoning/thinking content from the model
 }
 
 // ToolCallStatus is the status of a tool call.

@@ -18,6 +18,7 @@ var _ stream.Client = &Client{}
 // Client is a client for the Anthropic API.
 type Client struct {
 	*anthropic.Client
+	config Config
 }
 
 // Request implements stream.Client.
@@ -45,6 +46,10 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		body.TopP = anthropic.Float(*request.TopP)
 	}
 
+	if c.config.ThinkingBudget > 0 {
+		body.Thinking = anthropic.ThinkingConfigParamOfEnabled(int64(c.config.ThinkingBudget))
+	}
+
 	s := &Stream{
 		stream:   c.Messages.NewStreaming(ctx, body),
 		request:  body,
@@ -64,6 +69,7 @@ type Config struct {
 	BaseURL            string
 	HTTPClient         *http.Client
 	EmptyMessagesLimit uint
+	ThinkingBudget     int
 }
 
 // DefaultConfig returns the default configuration for the Anthropic API client.
@@ -86,6 +92,7 @@ func New(config Config) *Client {
 	client := anthropic.NewClient(opts...)
 	return &Client{
 		Client: &client,
+		config: config,
 	}
 }
 
@@ -142,6 +149,10 @@ func (s *Stream) Current() (proto.Chunk, error) {
 		case anthropic.TextDelta:
 			return proto.Chunk{
 				Content: deltaVariant.Text,
+			}, nil
+		case anthropic.ThinkingDelta:
+			return proto.Chunk{
+				Thought: deltaVariant.Thinking,
 			}, nil
 		}
 	}

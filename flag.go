@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -86,4 +87,29 @@ func (d *durationFlag) String() string {
 
 func (*durationFlag) Type() string {
 	return "duration"
+}
+
+func newReasoningFlag(val ReasoningMode, p *ReasoningMode) *reasoningFlag {
+	*p = val
+	return (*reasoningFlag)(p)
+}
+
+type reasoningFlag ReasoningMode
+
+func (r *reasoningFlag) Set(s string) error {
+	switch s {
+	case "off", "on", "auto":
+		*r = reasoningFlag(s)
+		return nil
+	default:
+		return fmt.Errorf("invalid reasoning mode %q, must be off, on, or auto", s)
+	}
+}
+
+func (r *reasoningFlag) String() string {
+	return string(*r)
+}
+
+func (*reasoningFlag) Type() string {
+	return "reasoning"
 }

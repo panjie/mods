@@ -89,6 +89,179 @@ max-tool-rounds: 30
 # {{ index .Help "reasoning" }}
 reasoning: off
 
+# {{ index .Help "review" }}
+review-mode: mutable
+
+# Fine-grained control over tool execution review heuristics.
+# When review-mode is mutable or always, these lists determine which
+# shell commands are auto-approved (harmless) versus require confirmation
+# (matching a dangerous pattern).
+review:
+  shell:
+    # Commands that are always safe and bypass review.
+    harmless-commands:
+      - ack
+      - ag
+      - apropos
+      - bat
+      - cat
+      - cmp
+      - comm
+      - cut
+      - column
+      - date
+      - df
+      - diff
+      - dir
+      - du
+      - echo
+      - egrep
+      - env
+      - fgrep
+      - file
+      - find
+      - fuser
+      - grep
+      - groups
+      - head
+      - hostname
+      - id
+      - last
+      - less
+      - locate
+      - ls
+      - lsof
+      - man
+      - more
+      - ncdu
+      - od
+      - pgrep
+      - printenv
+      - printf
+      - ps
+      - pwd
+      - readlink
+      - realpath
+      - rev
+      - rg
+      - sdiff
+      - sort
+      - stat
+      - tail
+      - tree
+      - tr
+      - type
+      - uname
+      - uniq
+      - uptime
+      - vdir
+      - w
+      - wc
+      - whatis
+      - whereis
+      - which
+      - who
+      - whoami
+      - xxd
+    # Git subcommands that are read-only and bypass review.
+    harmless-git-commands:
+      - blame
+      - bisect
+      - branch
+      - config
+      - describe
+      - diff
+      - grep
+      - log
+      - ls-files
+      - ls-tree
+      - reflog
+      - remote
+      - rev-list
+      - rev-parse
+      - shortlog
+      - show
+      - status
+      - stash
+      - tag
+      - whatchanged
+      - worktree
+    # Shell command patterns that trigger review.
+    dangerous-patterns:
+      - ">"
+      - ">>"
+      - " rm "
+      - rmdir
+      - unlink
+      - " mv "
+      - "chmod "
+      - "chown "
+      - "mkdir "
+      - " kill"
+      - killall
+      - pkill
+      - "sudo "
+      - "| sh"
+      - "|sh"
+      - "| bash"
+      - "|bash"
+      - " dd "
+      - " cp "
+      - " ln -"
+      - "install "
+      - mount
+      - umount
+      - "tar "
+      - gzip
+      - bzip2
+      - "zip "
+      - compress
+      - apt-get
+      - "apt "
+      - "yum "
+      - "dnf "
+      - "brew "
+      - "pip "
+      - "pip3 "
+      - "npm "
+      - "cargo "
+      - "gem "
+      - go install
+      - go get
+      - go build
+      - go run
+      - go mod
+      - make
+      - ninja
+      - cmake
+      - git add
+      - git commit
+      - git push
+      - git pull
+      - git merge
+      - git rebase
+      - git checkout
+      - git reset
+      - git clean
+      - "git branch -d"
+      - "git tag -d"
+      - git remote add
+      - git remote remove
+      - "sed -i"
+      - "perl -i"
+      - "tee "
+      - "scp "
+      - "rsync "
+      - "ssh "
+      - "curl "
+      - "wget "
+      - "openssl "
+      - shutdown
+      - reboot
+      - halt
+      - poweroff
+      - "truncate "
+
 # ── Tool & MCP Configuration ──────────────────────────────────────
 
 # {{ index .Help "mcp-servers" }}

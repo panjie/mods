@@ -298,6 +298,7 @@ func initFlags() {
 	flags.BoolVarP(&config.Debug, "debug", "D", config.Debug, stdoutStyles().FlagDesc.Render(help["debug"]))
 	flags.IntVar(&config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds, stdoutStyles().FlagDesc.Render(help["max-tool-rounds"]))
 	flags.VarP(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", stdoutStyles().FlagDesc.Render(help["reasoning"]))
+	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", stdoutStyles().FlagDesc.Render(help["review"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
 	flags.SortFlags = false
 

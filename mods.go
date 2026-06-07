@@ -86,6 +86,16 @@ type Mods struct {
 	stdinImageData []byte
 
 	ctx context.Context
+
+	reviewChan    chan toolReviewItem
+	reviewMode    ReviewMode
+	approveAll    bool
+	reviewPending bool
+	reviewItem    *toolReviewItem
+
+	harmlessCmds    map[string]bool
+	harmlessGitCmds map[string]bool
+	dangerousTokens []string
 }
 
 func newMods(
@@ -112,8 +122,20 @@ func newMods(
 		db:                  db,
 		cache:               cache,
 		Config:              cfg,
+		reviewMode:          cfg.ReviewMode,
+		harmlessCmds:        toBoolMap(cfg.Review.Shell.HarmlessCommands),
+		harmlessGitCmds:     toBoolMap(cfg.Review.Shell.HarmlessGitCommands),
+		dangerousTokens:     cfg.Review.Shell.DangerousPatterns,
 		ctx:                 ctx,
 	}
+}
+
+func toBoolMap(slice []string) map[string]bool {
+	m := make(map[string]bool, len(slice))
+	for _, s := range slice {
+		m[s] = true
+	}
+	return m
 }
 
 // completionInput is a tea.Msg that wraps the content read from stdin.
@@ -143,6 +165,17 @@ type toolOperationStatusMsg struct {
 	content string
 	done    bool
 	ch      <-chan toolOperationStatusMsg
+}
+
+type toolReviewItem struct {
+	name  string
+	args  []byte
+	label string
+	resp  chan bool
+}
+
+type toolReviewStartMsg struct {
+	item toolReviewItem
 }
 
 // Init implements tea.Model.
@@ -240,7 +273,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setToolOperationChannel(ch)
 		m.activeOperation = "Running tools"
 		m.state = responseState
-		cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.callToolsCmd(msg, ch))
+		reviewCh := make(chan toolReviewItem, 4)
+		m.reviewChan = reviewCh
+		cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.pollReviewCmd(reviewCh), m.callToolsCmd(msg, ch))
 	case toolOperationStatusMsg:
 		if msg.done {
 			m.activeOperation = ""
@@ -250,8 +285,15 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ch != nil {
 			cmds = append(cmds, m.pollToolOperationStatusCmd(msg.ch))
 		}
+	case toolReviewStartMsg:
+		m.reviewPending = true
+		item := msg.item
+		m.reviewItem = &item
+		m.activeOperation = ""
 	case toolCallsOutput:
 		m.activeOperation = ""
+		m.approveAll = false
+		m.reviewChan = nil
 		toolMsg := completionOutput{
 			stream: msg.stream,
 			errh:   msg.errh,
@@ -317,6 +359,32 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.glamViewport.Height = m.height
 		return m, nil
 	case tea.KeyMsg:
+		if m.reviewPending && m.reviewItem != nil {
+			switch msg.String() {
+			case "y", "Y":
+				m.reviewItem.resp <- true
+				m.reviewPending = false
+				m.reviewItem = nil
+				return m, m.pollReviewCmd(m.reviewChan)
+			case "n", "N":
+				m.reviewItem.resp <- false
+				m.reviewPending = false
+				m.reviewItem = nil
+				return m, m.pollReviewCmd(m.reviewChan)
+			case "a", "A":
+				m.approveAll = true
+				m.reviewItem.resp <- true
+				m.reviewPending = false
+				m.reviewItem = nil
+				return m, m.pollReviewCmd(m.reviewChan)
+			case "ctrl+c":
+				m.reviewItem.resp <- false
+				m.reviewPending = false
+				m.reviewItem = nil
+				return m, nil
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.state = doneState
@@ -381,6 +449,9 @@ func (m *Mods) View() string {
 }
 
 func (m *Mods) renderWithOperation(content string) string {
+	if m.reviewPending && m.reviewItem != nil {
+		return m.renderReviewBanner(content)
+	}
 	if m.Config.Quiet || !m.showOperationStatus {
 		return content
 	}
@@ -392,6 +463,56 @@ func (m *Mods) renderWithOperation(content string) string {
 		return status
 	}
 	return strings.TrimRight(content, "\r\n") + "\n" + status
+}
+
+func (m *Mods) renderReviewBanner(content string) string {
+	w := m.width
+	if w <= 0 {
+		w = 80
+	}
+	label := formatReviewLabel(m.reviewItem.name, m.reviewItem.args)
+	promptLine := m.Styles.ReviewPrompt.Copy().Width(w).Render(
+		padRight("  Review: "+label, w-4),
+	)
+	choicesLine := m.Styles.ReviewChoices.Copy().Width(w).Render(
+		"  [Y] Approve  [N] Deny  [A] Approve All  [Ctrl+C] Cancel",
+	)
+	block := promptLine + "\n" + choicesLine
+	if strings.TrimSpace(content) == "" {
+		return block
+	}
+	return strings.TrimRight(content, "\r\n") + "\n" + block
+}
+
+func formatReviewLabel(name string, args []byte) string {
+	parsed := toolOperationArgs(args)
+	switch name {
+	case "fs_write_file":
+		path := oneLinePreview(argString(parsed, "path"))
+		content := argString(parsed, "content")
+		size := len(content)
+		return fmt.Sprintf("Write %s (%d bytes)", path, size)
+	case "fs_apply_patch":
+		return "Apply patch to workspace files"
+	case "shell_run":
+		cmd := oneLinePreview(argString(parsed, "command"))
+		return fmt.Sprintf("Run: %s", cmd)
+	default:
+		summary := toolArgsSummary(parsed)
+		if summary != "" {
+			return fmt.Sprintf("Execute %s (%s)", name, summary)
+		}
+		return fmt.Sprintf("Execute %s", name)
+	}
+}
+
+func padRight(s string, w int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-len(runes))
 }
 
 func (m *Mods) operationStatusLine() string {
@@ -606,6 +727,13 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 				ctx, cancel := context.WithTimeout(m.ctx, config.MCPTimeout)
 				m.cancelRequest = append(m.cancelRequest, cancel)
 				m.sendToolOperationStatus(toolOperationLabel(name, data, m.width))
+
+				if m.shouldReviewTool(name) && m.reviewChan != nil {
+					if !m.requestApproval(name, data) {
+						return "", fmt.Errorf("execution denied by user for: %s", name)
+					}
+				}
+
 				return registry.Call(ctx, name, data)
 			},
 		}
@@ -759,6 +887,121 @@ func (m *Mods) pollToolOperationStatusCmd(ch <-chan toolOperationStatusMsg) tea.
 		msg.ch = ch
 		return msg
 	}
+}
+
+func (m *Mods) pollReviewCmd(ch <-chan toolReviewItem) tea.Cmd {
+	return func() tea.Msg {
+		item, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return toolReviewStartMsg{item: item}
+	}
+}
+
+func (m *Mods) shouldReviewTool(name string) bool {
+	switch m.reviewMode {
+	case ReviewNever:
+		return false
+	case ReviewAlways:
+		return true
+	default:
+		return isMutableTool(name)
+	}
+}
+
+func (m *Mods) requestApproval(name string, data []byte) bool {
+	if m.approveAll {
+		return true
+	}
+	if name == "shell_run" && m.isHarmlessShellCommand(extractShellCommand(data)) {
+		return true
+	}
+	respCh := make(chan bool, 1)
+	item := toolReviewItem{
+		name:  name,
+		args:  data,
+		label: toolOperationLabel(name, data, m.width),
+		resp:  respCh,
+	}
+	select {
+	case m.reviewChan <- item:
+	case <-m.ctx.Done():
+		return false
+	}
+	select {
+	case approved := <-respCh:
+		return approved
+	case <-m.ctx.Done():
+		return false
+	}
+}
+
+func isMutableTool(name string) bool {
+	switch name {
+	case "fs_write_file", "fs_apply_patch", "shell_run":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractShellCommand(args []byte) string {
+	var parsed struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(args, &parsed); err != nil {
+		return ""
+	}
+	return parsed.Command
+}
+
+func (m *Mods) isHarmlessShellCommand(cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return false
+	}
+	lower := strings.ToLower(cmd)
+
+	if m.hasDangerousShellPattern(lower) {
+		return false
+	}
+
+	return m.hasHarmlessBaseCommand(lower)
+}
+
+func (m *Mods) hasHarmlessBaseCommand(cmd string) bool {
+	tokens := strings.Fields(cmd)
+	if len(tokens) == 0 {
+		return false
+	}
+
+	switch tokens[0] {
+	case "git":
+		if len(tokens) > 1 {
+			return m.harmlessGitCmds[tokens[1]]
+		}
+		return false
+	case "go":
+		if len(tokens) > 1 {
+			switch tokens[1] {
+			case "doc", "env", "list", "version", "vet":
+				return true
+			}
+		}
+		return false
+	default:
+		return m.harmlessCmds[tokens[0]]
+	}
+}
+
+func (m *Mods) hasDangerousShellPattern(cmd string) bool {
+	for _, tok := range m.dangerousTokens {
+		if strings.Contains(cmd, tok) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Mods) setToolOperationChannel(ch chan<- toolOperationStatusMsg) {

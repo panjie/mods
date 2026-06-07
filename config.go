@@ -40,6 +40,15 @@ const (
 	ReasoningAuto ReasoningMode = "auto"
 )
 
+// ReviewMode controls whether mods prompts for confirmation before executing tools.
+type ReviewMode string
+
+const (
+	ReviewNever   ReviewMode = "never"
+	ReviewMutable ReviewMode = "mutable"
+	ReviewAlways  ReviewMode = "always"
+)
+
 var help = map[string]string{
 	"api":                 "OpenAI compatible REST API (openai, localai, anthropic, ...)",
 	"apis":                "Aliases and endpoints for OpenAI compatible REST API",
@@ -99,6 +108,7 @@ var help = map[string]string{
 	"debug":               "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":     "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
 	"reasoning":           "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
+	"review":              "Review tool execution before running: never, mutable (default), or always",
 }
 
 // Model represents the LLM model used in the API call.
@@ -228,6 +238,8 @@ type Config struct {
 	StdinImage     bool     `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage bool     `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
 	Reasoning      ReasoningMode `yaml:"reasoning" env:"REASONING"`
+	ReviewMode     ReviewMode    `yaml:"review-mode" env:"REVIEW_MODE"`
+	Review         ReviewConfig  `yaml:"review"`
 	Debug          bool           `yaml:"debug" env:"DEBUG"`
 	MaxToolRounds  int            `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
@@ -242,6 +254,18 @@ type BuiltinToolsConfig struct {
 	SequentialThinking bool           `yaml:"sequential-thinking"`
 	ShellTimeout       time.Duration  `yaml:"shell-timeout"`
 	ShellMaxOutput     int            `yaml:"shell-max-output"`
+}
+
+// ReviewConfig configures the tool execution review behavior.
+type ReviewConfig struct {
+	Shell ReviewShellConfig `yaml:"shell"`
+}
+
+// ReviewShellConfig configures shell command review heuristics.
+type ReviewShellConfig struct {
+	HarmlessCommands    []string `yaml:"harmless-commands"`
+	HarmlessGitCommands []string `yaml:"harmless-git-commands"`
+	DangerousPatterns   []string `yaml:"dangerous-patterns"`
 }
 
 // FilesystemMode controls when native filesystem tools are exposed.
@@ -405,6 +429,74 @@ func defaultConfig() Config {
 			"json":     defaultJSONFormatText,
 		},
 		Reasoning: ReasoningOff,
+		ReviewMode: ReviewMutable,
+		Review: ReviewConfig{
+			Shell: ReviewShellConfig{
+				HarmlessCommands: []string{
+					"ack", "ag", "apropos",
+					"bat",
+					"cat", "cmp", "comm", "cut", "column",
+					"date", "df", "diff", "dir", "du",
+					"echo", "egrep", "env",
+					"fgrep", "file", "find", "fuser",
+					"grep", "groups",
+					"head", "hostname",
+					"id",
+					"last", "less", "locate", "ls", "lsof",
+					"man", "more",
+					"ncdu",
+					"od",
+					"pgrep", "printenv", "printf", "ps", "pwd",
+					"readlink", "realpath", "rev", "rg",
+					"sdiff", "sort", "stat",
+					"tail", "tree", "tr", "type",
+					"uname", "uniq", "uptime",
+					"vdir",
+					"w", "wc", "whatis", "whereis", "which", "who", "whoami",
+					"xxd",
+				},
+				HarmlessGitCommands: []string{
+					"blame", "bisect", "branch",
+					"config",
+					"describe", "diff",
+					"grep",
+					"log", "ls-files", "ls-tree",
+					"reflog", "remote", "rev-list", "rev-parse",
+					"shortlog", "show", "status", "stash",
+					"tag",
+					"whatchanged", "worktree",
+				},
+				DangerousPatterns: []string{
+					">", ">>",
+					" rm ", "rmdir", "unlink",
+					" mv ",
+					"chmod ", "chown ",
+					"mkdir ",
+					" kill", "killall", "pkill",
+					"sudo ",
+					"| sh", "|sh", "| bash", "|bash",
+					" dd ",
+					" cp ",
+					" ln -",
+					"install ",
+					"mount", "umount",
+					"tar ", "gzip", "bzip2", "zip ", "compress",
+					"apt-get", "apt ", "yum ", "dnf ", "brew ", "pip ", "pip3 ", "npm ", "cargo ", "gem ",
+					"go install", "go get", "go build", "go run", "go mod",
+					"make", "ninja", "cmake",
+					"git add", "git commit", "git push", "git pull", "git merge", "git rebase",
+					"git checkout", "git reset", "git clean",
+					"git branch -d", "git tag -d", "git remote add", "git remote remove",
+					"sed -i", "perl -i",
+					"tee ",
+					"scp ", "rsync ", "ssh ",
+					"curl ", "wget ",
+					"openssl ",
+					"shutdown", "reboot", "halt", "poweroff",
+					"truncate ",
+				},
+			},
+		},
 		MCPTimeout: 15 * time.Second,
 		BuiltinTools: BuiltinToolsConfig{
 			Filesystem:         FilesystemAuto,

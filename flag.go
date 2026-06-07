@@ -113,3 +113,28 @@ func (r *reasoningFlag) String() string {
 func (*reasoningFlag) Type() string {
 	return "reasoning"
 }
+
+func newReviewFlag(val ReviewMode, p *ReviewMode) *reviewFlag {
+	*p = val
+	return (*reviewFlag)(p)
+}
+
+type reviewFlag ReviewMode
+
+func (r *reviewFlag) Set(s string) error {
+	switch s {
+	case "never", "mutable", "always":
+		*r = reviewFlag(s)
+		return nil
+	default:
+		return fmt.Errorf("invalid review mode %q, must be never, mutable, or always", s)
+	}
+}
+
+func (r *reviewFlag) String() string {
+	return string(*r)
+}
+
+func (*reviewFlag) Type() string {
+	return "review"
+}

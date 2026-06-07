@@ -26,7 +26,9 @@ type styles struct {
 	Quote,
 	ConversationList,
 	SHA1,
-	Timeago lipgloss.Style
+	Timeago,
+	ReviewPrompt,
+	ReviewChoices lipgloss.Style
 }
 
 func makeStyles(r *lipgloss.Renderer) (s styles) {
@@ -50,6 +52,15 @@ func makeStyles(r *lipgloss.Renderer) (s styles) {
 	s.ConversationList = r.NewStyle().Padding(0, 1)
 	s.SHA1 = s.Flag
 	s.Timeago = r.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#999", Dark: "#555"})
+	s.ReviewPrompt = r.NewStyle().
+		Foreground(lipgloss.Color("#F1F1F1")).
+		Background(lipgloss.Color("#6C50FF")).
+		Bold(true).
+		Padding(0, 2)
+	s.ReviewChoices = r.NewStyle().
+		Foreground(lipgloss.Color("#E0DDFF")).
+		Background(lipgloss.Color("#4A3B9F")).
+		Padding(0, 2)
 	return s
 }
 

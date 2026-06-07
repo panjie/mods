@@ -50,7 +50,7 @@ func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config,
 		}
 	}
 
-	if err := registerMCPTools(ctx, registry); err != nil {
+	if err := registerMCPTools(ctx, cfg, registry); err != nil {
 		return nil, err
 	}
 

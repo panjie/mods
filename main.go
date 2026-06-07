@@ -201,14 +201,14 @@ var (
 			}
 
 			if config.MCPList {
-				mcpList()
+				mcpList(&config)
 				return nil
 			}
 
 			if config.MCPListTools {
 				ctx, cancel := context.WithTimeout(cmd.Context(), config.MCPTimeout)
 				defer cancel()
-				return mcpListTools(ctx)
+				return mcpListTools(ctx, &config)
 			}
 
 			if len(config.Delete) > 0 {
@@ -691,7 +691,7 @@ func makeOptions(conversations []Conversation) []huh.Option[string] {
 	opts := make([]huh.Option[string], 0, len(conversations))
 	for _, c := range conversations {
 		timea := stdoutStyles().Timeago.Render(timeago.Of(c.UpdatedAt))
-		left := stdoutStyles().SHA1.Render(c.ID[:sha1short])
+		left := stdoutStyles().ShaHash.Render(c.ID[:sha1short])
 		right := stdoutStyles().ConversationList.Render(c.Title, timea)
 		if c.Model != nil {
 			right += stdoutStyles().Comment.Render(*c.Model)
@@ -742,7 +742,7 @@ func printList(conversations []Conversation) {
 		_, _ = fmt.Fprintf(
 			os.Stdout,
 			"%s\t%s\t%s\n",
-			stdoutStyles().SHA1.Render(conversation.ID[:sha1short]),
+			stdoutStyles().ShaHash.Render(conversation.ID[:sha1short]),
 			conversation.Title,
 			stdoutStyles().Timeago.Render(timeago.Of(conversation.UpdatedAt)),
 		)

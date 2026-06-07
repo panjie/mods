@@ -21,41 +21,41 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func enabledMCPs() iter.Seq2[string, MCPServerConfig] {
+func enabledMCPs(cfg *Config) iter.Seq2[string, MCPServerConfig] {
 	return func(yield func(string, MCPServerConfig) bool) {
-		names := slices.Collect(maps.Keys(config.MCPServers))
+		names := slices.Collect(maps.Keys(cfg.MCPServers))
 		slices.Sort(names)
 		for _, name := range names {
-			if !isMCPEnabled(name) {
+			if !isMCPEnabled(cfg, name) {
 				continue
 			}
-			if !yield(name, config.MCPServers[name]) {
+			if !yield(name, cfg.MCPServers[name]) {
 				return
 			}
 		}
 	}
 }
 
-func isMCPEnabled(name string) bool {
-	if len(config.MCPEnable) > 0 {
-		return slices.Contains(config.MCPEnable, name)
+func isMCPEnabled(cfg *Config, name string) bool {
+	if len(cfg.MCPEnable) > 0 {
+		return slices.Contains(cfg.MCPEnable, name)
 	}
-	return !slices.Contains(config.MCPDisable, "*") &&
-		!slices.Contains(config.MCPDisable, name)
+	return !slices.Contains(cfg.MCPDisable, "*") &&
+		!slices.Contains(cfg.MCPDisable, name)
 }
 
-func mcpList() {
-	for name := range config.MCPServers {
+func mcpList(cfg *Config) {
+	for name := range cfg.MCPServers {
 		s := name
-		if isMCPEnabled(name) {
+		if isMCPEnabled(cfg, name) {
 			s += stdoutStyles().Timeago.Render(" (enabled)")
 		}
 		fmt.Println(s)
 	}
 }
 
-func mcpListTools(ctx context.Context) error {
-	servers, err := mcpTools(ctx)
+func mcpListTools(ctx context.Context, cfg *Config) error {
+	servers, err := mcpTools(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -68,11 +68,11 @@ func mcpListTools(ctx context.Context) error {
 	return nil
 }
 
-func mcpTools(ctx context.Context) (map[string][]mcp.Tool, error) {
+func mcpTools(ctx context.Context, cfg *Config) (map[string][]mcp.Tool, error) {
 	var mu sync.Mutex
 	var wg errgroup.Group
 	result := map[string][]mcp.Tool{}
-	for sname, server := range enabledMCPs() {
+	for sname, server := range enabledMCPs(cfg) {
 		wg.Go(func() error {
 			serverTools, err := mcpToolsFor(ctx, sname, server)
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -99,8 +99,8 @@ func mcpTools(ctx context.Context) (map[string][]mcp.Tool, error) {
 	return result, nil
 }
 
-func registerMCPTools(ctx context.Context, registry *toolregistry.Registry) error {
-	servers, err := mcpTools(ctx)
+func registerMCPTools(ctx context.Context, cfg *Config, registry *toolregistry.Registry) error {
+	servers, err := mcpTools(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func registerMCPTools(ctx context.Context, registry *toolregistry.Registry) erro
 			if err := registry.Register(toolregistry.Tool{
 				Spec: spec,
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
-					return toolCall(ctx, name, data)
+					return toolCall(ctx, cfg, name, data)
 				},
 			}); err != nil {
 				return err
@@ -198,16 +198,16 @@ func mcpToolsFor(ctx context.Context, name string, server MCPServerConfig) ([]mc
 	return tools.Tools, nil
 }
 
-func toolCall(ctx context.Context, name string, data []byte) (string, error) {
+func toolCall(ctx context.Context, cfg *Config, name string, data []byte) (string, error) {
 	sname, tool, ok := strings.Cut(name, "_")
 	if !ok {
 		return "", fmt.Errorf("mcp: invalid tool name: %q", name)
 	}
-	server, ok := config.MCPServers[sname]
+	server, ok := cfg.MCPServers[sname]
 	if !ok {
 		return "", fmt.Errorf("mcp: invalid server name: %q", sname)
 	}
-	if !isMCPEnabled(sname) {
+	if !isMCPEnabled(cfg, sname) {
 		return "", fmt.Errorf("mcp: server is disabled: %q", sname)
 	}
 

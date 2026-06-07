@@ -5,16 +5,24 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/charmbracelet/mods/internal/proto"
 )
 
-func debugEnabled() bool {
-	return config.Debug
+var debugEnabled atomic.Bool
+
+// SetDebugEnabled sets whether debug output is shown.
+func SetDebugEnabled(enabled bool) {
+	debugEnabled.Store(enabled)
+}
+
+func isDebugEnabled() bool {
+	return debugEnabled.Load()
 }
 
 func debugPrintf(format string, args ...any) {
-	if !config.Debug {
+	if !debugEnabled.Load() {
 		return
 	}
 	header := stderrStyles().DebugHeader.String()
@@ -23,7 +31,7 @@ func debugPrintf(format string, args ...any) {
 }
 
 func debugPrintJSON(label string, v any) {
-	if !config.Debug {
+	if !debugEnabled.Load() {
 		return
 	}
 	b, err := json.MarshalIndent(v, "", "  ")

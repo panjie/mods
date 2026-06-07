@@ -32,7 +32,7 @@ func (c *ExpiringCache[T]) Read(id string, readFn func(io.Reader) error) (err er
 	pattern := fmt.Sprintf("%s.*", id)
 	matches, err := filepath.Glob(filepath.Join(c.cache.dir(), pattern))
 	if err != nil {
-		return fmt.Errorf("failed to read read expiring cache: %w", err)
+		return fmt.Errorf("failed to read expiring cache: %w", err)
 	}
 
 	if len(matches) == 0 {

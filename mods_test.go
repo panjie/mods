@@ -371,6 +371,7 @@ func TestOperationStatusView(t *testing.T) {
 			state:               requestState,
 			showOperationStatus: true,
 			width:               80,
+			reviewer:            &toolReviewer{},
 		}
 	}
 

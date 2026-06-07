@@ -18,14 +18,14 @@ import (
 
 var _ stream.Client = &Client{}
 
-// Config represents the configuration for the Ollama API client.
+// Config represents the configuration for the Cohere API client.
 type Config struct {
 	AuthToken  string
 	BaseURL    string
 	HTTPClient *http.Client
 }
 
-// DefaultConfig returns the default configuration for the Ollama API client.
+// DefaultConfig returns the default configuration for the Cohere API client.
 func DefaultConfig(authToken string) Config {
 	return Config{
 		AuthToken:  authToken,

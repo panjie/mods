@@ -12,8 +12,8 @@ func TestIsMCPEnabled(t *testing.T) {
 
 	t.Run("no restrictions", func(t *testing.T) {
 		config = Config{}
-		require.True(t, isMCPEnabled("server-a"))
-		require.True(t, isMCPEnabled("server-b"))
+		require.True(t, isMCPEnabled(&config, "server-a"))
+		require.True(t, isMCPEnabled(&config, "server-b"))
 	})
 
 	t.Run("whitelist overrides all", func(t *testing.T) {
@@ -21,9 +21,9 @@ func TestIsMCPEnabled(t *testing.T) {
 			MCPEnable:  []string{"server-a"},
 			MCPDisable: []string{"server-a"},
 		}
-		require.True(t, isMCPEnabled("server-a"),
+		require.True(t, isMCPEnabled(&config, "server-a"),
 			"whitelisted server should be enabled even if also disabled")
-		require.False(t, isMCPEnabled("server-b"),
+		require.False(t, isMCPEnabled(&config, "server-b"),
 			"non-whitelisted server should be disabled")
 	})
 
@@ -31,26 +31,26 @@ func TestIsMCPEnabled(t *testing.T) {
 		config = Config{
 			MCPEnable: []string{"filesystem"},
 		}
-		require.True(t, isMCPEnabled("filesystem"))
-		require.False(t, isMCPEnabled("shell"))
-		require.False(t, isMCPEnabled("fetch"))
+		require.True(t, isMCPEnabled(&config, "filesystem"))
+		require.False(t, isMCPEnabled(&config, "shell"))
+		require.False(t, isMCPEnabled(&config, "fetch"))
 	})
 
 	t.Run("blacklist specific server", func(t *testing.T) {
 		config = Config{
 			MCPDisable: []string{"shell"},
 		}
-		require.True(t, isMCPEnabled("filesystem"))
-		require.True(t, isMCPEnabled("fetch"))
-		require.False(t, isMCPEnabled("shell"))
+		require.True(t, isMCPEnabled(&config, "filesystem"))
+		require.True(t, isMCPEnabled(&config, "fetch"))
+		require.False(t, isMCPEnabled(&config, "shell"))
 	})
 
 	t.Run("blacklist all with star", func(t *testing.T) {
 		config = Config{
 			MCPDisable: []string{"*"},
 		}
-		require.False(t, isMCPEnabled("filesystem"))
-		require.False(t, isMCPEnabled("shell"))
-		require.False(t, isMCPEnabled("fetch"))
+		require.False(t, isMCPEnabled(&config, "filesystem"))
+		require.False(t, isMCPEnabled(&config, "shell"))
+		require.False(t, isMCPEnabled(&config, "fetch"))
 	})
 }

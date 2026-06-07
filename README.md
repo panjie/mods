@@ -1,21 +1,10 @@
 > [!NOTE]
+> #### Actively Maintained Fork
 >
-> # Sunsetting Mods
+> The original Mods was [sunset by Charm](https://github.com/charmbracelet/mods) on
+> March 9, 2026. **This fork** is actively maintained with new features and fixes.
 >
-> On March 9, 2026 we sunset Mods and archive this repository to focus our
-> efforts on [Crush](https://charm.land/crush).
->
-> Much of the functionality in Mods can be found in Crush’s non-interactive
-> mode, `crush run`. We plan on continuing to invest into Crush’s
-> non-interactive mode, so if there are features in Mods does that you’d like
-> to see in Crush, [let us know](https://github.com/charmbracelet/crush/discussions).
->
-> Mods will remain be open source and publicly available. If you love this
-> project and would like to maintain a fork, please do.
->
-> Thanks for supporting this project and chat us up in
-> [Slack](https://charm.land/slack) or [Discord](https://charm.sh/chat) if
-> you have any questions.
+> See [What's New](#whats-new) for a list of additions since forking.
 
 # Mods
 
@@ -143,6 +132,61 @@ up automatically, given your shell is configured properly.
 
 </details>
 
+## What's New
+
+This fork adds the following features on top of the original Mods.
+
+### Tools & Agents
+
+- **Web Search** — `--web-search` enables real-time web search (DuckDuckGo default,
+  no API key required). Also supports Tavily and custom providers.
+- **Image Recognition** — `-i` / `--image` attaches images for vision-capable
+  models (GPT-4o, Claude, Gemini). `--clipboard-image` and `--stdin-image` for
+  clipboard and piped image input.
+- **Built-in Tools** — File system operations (`fs_read_file`, `fs_write_file`,
+  `fs_search`, `fs_apply_patch`), shell execution (`shell_run`), and sequential
+  thinking (`thinking_note`). Filesystem tools auto-activate when your prompt
+  mentions files.
+
+### Review & Safety
+
+- **Tool Execution Review** — Before modifying files or running shell commands,
+  Mods shows a colored confirmation banner. Press `Y` to approve, `N` to deny,
+  `A` to approve all future operations. `--review` controls the mode:
+  `mutable` (default), `always`, or `never`.
+- **Shell Safety Heuristics** — Harmless commands (`ls`, `cat`, `grep`, `find`,
+  `git status`) are auto-approved. Dangerous patterns (`rm`, `chmod`, `npm install`,
+  `git push`, `>`) always trigger review.
+- **Customizable Rules** — Configure harmless commands, git subcommands, and
+  dangerous patterns in `mods.yml` under `review.shell`.
+
+### Observability
+
+- **Debug Mode** — `--debug` / `-D` prints execution steps, tool calls, reasoning
+  thoughts, and API diagnostics to stderr.
+- **Status Line** — Live status bar shows what the model is doing: "Reading file:
+  ...", "Running command: ...", "Searching web: ...".
+- **Tool Call Display** — `--show-tool-calls` controls whether tool call details
+  appear in the output.
+
+### Quality of Life
+
+- **Reasoning Mode** — `--reasoning on|off|auto`: auto mode judges task complexity
+  before engaging deep reasoning (saves tokens for simple queries).
+- **Minimal Pipeline Output** — `--minimal` tells the model to skip explanations
+  and output one item per line, optimized for `|` pipelines.
+- **Tool Round Limits** — `--max-tool-rounds` caps total tool call rounds (default
+  30) with separate failed-round limiting to prevent infinite loops.
+- **Updated Models** — Model list refreshed to latest releases across OpenAI,
+  Anthropic, Google, Cohere, and DeepSeek.
+
+### Cross-Platform
+
+- **Windows** — Console popup suppression, clipboard support, platform-specific
+  command execution.
+- **Stability** — 413/token overflow prevention, MCP timeout handling, session
+  error recovery.
+
 ## What Can It Do?
 
 Mods works by reading standard in and prefacing it with a prompt supplied in
@@ -224,11 +268,22 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 - `--delete`: Deletes the saved conversations for the given titles or SHA-1s
 - `--no-cache`: Do not save conversations
 
+#### Review & Safety
+
+- `-V`, `--review`: Set review mode: `mutable` (default, reviews file writes and shell commands), `always` (reviews all tools), or `never` (disables review)
+- `--max-tool-rounds`: Maximum total tool call rounds before stopping (default 30)
+
+#### Reasoning & Debug
+
+- `-T`, `--reasoning`: Deep reasoning mode: `off`, `on`, or `auto` (judges task complexity before engaging, saves tokens on simple queries)
+- `-D`, `--debug`: Print execution steps, tool calls, and request diagnostics to stderr
+
 #### MCP
 
 - `--mcp-list`: List all available MCP servers
 - `--mcp-list-tools`: List all available tools from enabled MCP servers
 - `--mcp-disable`: Disable specific MCP servers
+- `--mcp-enable`: Enable only specific MCP servers (whitelist)
 
 #### Advanced
 
@@ -338,27 +393,8 @@ Supported formats: PNG, JPEG, GIF, WebP. Maximum total image size: 20MB. Cohere 
 
 ## Contributing
 
-See [contributing][contribute].
-
-[contribute]: https://github.com/charmbracelet/mods/contribute
-
-## Whatcha Think?
-
-We’d love to hear your thoughts on this project. Feel free to drop us a note.
-
-- [Twitter](https://twitter.com/charmcli)
-- [The Fediverse](https://mastodon.social/@charmcli)
-- [Discord](https://charm.sh/chat)
+Issues and pull requests are welcome on this fork.
 
 ## License
 
 [MIT](https://github.com/charmbracelet/mods/raw/main/LICENSE)
-
----
-
-Part of [Charm](https://charm.sh).
-
-<a href="https://charm.sh/"><img alt="The Charm logo" width="400" src="https://stuff.charm.sh/charm-badge.jpg" /></a>
-
-<!--prettier-ignore-->
-Charm热爱开源 • Charm loves open source

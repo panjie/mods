@@ -127,10 +127,12 @@ func TestRoleNames(t *testing.T) {
 	defer func() { config = saveConfig }()
 
 	config = Config{
-		Roles: map[string][]string{
-			"default": {"You are helpful."},
-			"shell":   {"You are a shell expert."},
-			"go-dev":  {"You write Go code."},
+		PersistentConfig: PersistentConfig{
+			Roles: map[string][]string{
+				"default": {"You are helpful."},
+				"shell":   {"You are a shell expert."},
+				"go-dev":  {"You write Go code."},
+			},
 		},
 	}
 

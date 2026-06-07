@@ -13,7 +13,6 @@ import (
 
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/stream"
-	"github.com/openai/openai-go"
 )
 
 var _ stream.Client = &Client{}
@@ -92,6 +91,16 @@ func NewRequestBuilder() *HTTPRequestBuilder {
 	return &HTTPRequestBuilder{
 		marshaller: &JSONMarshaller{},
 	}
+}
+
+// APIError represents an error response from the Google API.
+type APIError struct {
+	Message    string `json:"message"`
+	StatusCode int
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("google API error: %s (HTTP %d)", e.Message, e.StatusCode)
 }
 
 // Client is a client for the Google API.
@@ -173,10 +182,9 @@ func (c *Client) newRequest(ctx context.Context, method, url string, setters ...
 }
 
 func (c *Client) handleErrorResp(resp *http.Response) error {
-	// Print the response text
-	var errRes openai.Error
+	var errRes APIError
 	if err := json.NewDecoder(resp.Body).Decode(&errRes); err != nil {
-		return &openai.Error{
+		return &APIError{
 			StatusCode: resp.StatusCode,
 			Message:    err.Error(),
 		}

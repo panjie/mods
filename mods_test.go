@@ -333,13 +333,13 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 	})
 
 	t.Run("minimal adds system prompt", func(t *testing.T) {
-		m := newTestMods(Config{Minimal: true})
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
 		require.NoError(t, m.setupStreamContext("hello", model))
 		require.Contains(t, contents(m.messages), minimalSystemPrompt)
 	})
 
 	t.Run("minimal suppresses format prompt", func(t *testing.T) {
-		m := newTestMods(Config{Minimal: true, Format: true})
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true, Format: true}})
 		require.NoError(t, m.setupStreamContext("hello", model))
 		systemMessages := contents(m.messages)
 		require.Contains(t, systemMessages, minimalSystemPrompt)
@@ -348,9 +348,11 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 
 	t.Run("minimal follows role prompt", func(t *testing.T) {
 		m := newTestMods(Config{
-			Minimal: true,
-			Role:    "shell",
-			Roles:   map[string][]string{"shell": {"role prompt"}},
+			PersistentConfig: PersistentConfig{
+				Minimal: true,
+				Role:    "shell",
+				Roles:   map[string][]string{"shell": {"role prompt"}},
+			},
 		})
 		require.NoError(t, m.setupStreamContext("hello", model))
 		systemMessages := contents(m.messages)
@@ -454,7 +456,7 @@ func TestResolveModel(t *testing.T) {
 	m := testMods(t)
 
 	t.Run("exact model match", func(t *testing.T) {
-		cfg := &Config{API: "openai", Model: "gpt-4", APIs: apis}
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "openai", Model: "gpt-4", APIs: apis}}
 		api, mod, err := m.resolveModel(cfg)
 		require.NoError(t, err)
 		require.Equal(t, "openai", api.Name)
@@ -463,14 +465,14 @@ func TestResolveModel(t *testing.T) {
 	})
 
 	t.Run("alias match", func(t *testing.T) {
-		cfg := &Config{API: "openai", Model: "4o", APIs: apis}
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "openai", Model: "4o", APIs: apis}}
 		_, mod, err := m.resolveModel(cfg)
 		require.NoError(t, err)
 		require.Equal(t, "gpt-4o", mod.Name)
 	})
 
 	t.Run("model not in specified API", func(t *testing.T) {
-		cfg := &Config{API: "openai", Model: "nonexistent", APIs: apis}
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "openai", Model: "nonexistent", APIs: apis}}
 		_, _, err := m.resolveModel(cfg)
 		require.Error(t, err)
 		merr := err.(modsError)
@@ -478,7 +480,7 @@ func TestResolveModel(t *testing.T) {
 	})
 
 	t.Run("api not configured", func(t *testing.T) {
-		cfg := &Config{API: "unknown-api", Model: "gpt-4", APIs: apis}
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "unknown-api", Model: "gpt-4", APIs: apis}}
 		_, _, err := m.resolveModel(cfg)
 		require.Error(t, err)
 		merr := err.(modsError)
@@ -486,7 +488,7 @@ func TestResolveModel(t *testing.T) {
 	})
 
 	t.Run("empty api searches all", func(t *testing.T) {
-		cfg := &Config{API: "", Model: "claude-sonnet-4", APIs: apis}
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "", Model: "claude-sonnet-4", APIs: apis}}
 		api, mod, err := m.resolveModel(cfg)
 		require.NoError(t, err)
 		require.Equal(t, "anthropic", api.Name)

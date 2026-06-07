@@ -170,8 +170,10 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// Config holds the main configuration and is mapped to the YAML settings file.
-type Config struct {
+// PersistentConfig holds configuration that is persisted to the YAML settings
+// file and loaded from environment variables. It is embedded in Config so all
+// fields are promoted and accessible directly on Config.
+type PersistentConfig struct {
 	API                 string     `yaml:"default-api" env:"API"`
 	Model               string     `yaml:"default-model" env:"MODEL"`
 	Format              bool       `yaml:"format" env:"FORMAT"`
@@ -198,52 +200,61 @@ type Config struct {
 	StatusText          string     `yaml:"status-text" env:"STATUS_TEXT"`
 	HTTPProxy           string     `yaml:"http-proxy" env:"HTTP_PROXY"`
 	APIs                APIs       `yaml:"apis"`
-	System              string     `yaml:"system"`
 	Role                string     `yaml:"role" env:"ROLE"`
-	AskModel            bool
 	Roles               map[string][]string
-	ShowHelp            bool
-	ResetSettings       bool
-	Prefix              string
-	Version             bool
-	Settings            bool
-	Dirs                bool
 	Theme               string
-	SettingsPath        string
-	ContinueLast        bool
-	Continue            string
-	Title               string
-	ShowLast            bool
-	Show                string
-	List                bool
-	ListRoles           bool
-	Delete              []string
-	DeleteOlderThan     time.Duration
-	User                string
+	MCPServers          map[string]MCPServerConfig `yaml:"mcp-servers"`
+	MCPTimeout          time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
+	BuiltinTools        BuiltinToolsConfig         `yaml:"builtin-tools"`
+	WebSearch           bool                       `yaml:"web-search" env:"WEB_SEARCH"`
+	WebSearchProvider   string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
+	WebSearchAPIKey     string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+	Images              []string                   `yaml:"images" env:"IMAGES"`
+	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
+	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
+	Reasoning           ReasoningMode              `yaml:"reasoning" env:"REASONING"`
+	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	Review              ReviewConfig               `yaml:"review"`
+	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
-	MCPServers   map[string]MCPServerConfig `yaml:"mcp-servers"`
-	MCPList      bool
-	MCPListTools bool
-	MCPEnable    []string
-	MCPDisable   []string
-	MCPTimeout   time.Duration `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
+	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
+	System string `yaml:"system"`
+	// Deprecated: retained for YAML backward compatibility; prefer SetDebugEnabled().
+	Debug bool `yaml:"debug" env:"DEBUG"`
+}
 
-	BuiltinTools BuiltinToolsConfig `yaml:"builtin-tools"`
+// Config holds the full application configuration. PersistentConfig is embedded
+// so that all persisted fields are promoted and accessible directly on Config.
+// The remaining fields are CLI-only flags or computed runtime state.
+type Config struct {
+	PersistentConfig `yaml:",inline"`
 
-	WebSearch         bool   `yaml:"web-search" env:"WEB_SEARCH"`
-	WebSearchProvider string `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
-	WebSearchAPIKey   string `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+	// CLI-flag-only fields (one-shot operations, never persisted).
+	AskModel        bool
+	ShowHelp        bool
+	ResetSettings   bool
+	Version         bool
+	Settings        bool
+	Dirs            bool
+	ContinueLast    bool
+	Continue        string
+	Title           string
+	ShowLast        bool
+	Show            string
+	List            bool
+	ListRoles       bool
+	Delete          []string
+	DeleteOlderThan time.Duration
+	MCPList         bool
+	MCPListTools    bool
+	MCPEnable       []string
+	MCPDisable      []string
 
-	Images         []string `yaml:"images" env:"IMAGES"`
-	StdinImage     bool     `yaml:"stdin-image" env:"STDIN_IMAGE"`
-	ClipboardImage bool     `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
-	Reasoning      ReasoningMode `yaml:"reasoning" env:"REASONING"`
-	ReviewMode     ReviewMode    `yaml:"review-mode" env:"REVIEW_MODE"`
-	Review         ReviewConfig  `yaml:"review"`
-	Debug          bool           `yaml:"debug" env:"DEBUG"`
-	MaxToolRounds  int            `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
-
-	openEditor                                         bool
+	// Runtime state (computed internally, never persisted).
+	Prefix                                   string
+	SettingsPath                             string
+	User                                     string
+	openEditor                               bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string
 }
 
@@ -423,15 +434,16 @@ func createConfigFile(path string) error {
 
 func defaultConfig() Config {
 	return Config{
-		FormatAs: "markdown",
-		FormatText: FormatText{
-			"markdown": defaultMarkdownFormatText,
-			"json":     defaultJSONFormatText,
-		},
-		Reasoning: ReasoningOff,
-		ReviewMode: ReviewMutable,
-		Review: ReviewConfig{
-			Shell: ReviewShellConfig{
+		PersistentConfig: PersistentConfig{
+			FormatAs: "markdown",
+			FormatText: FormatText{
+				"markdown": defaultMarkdownFormatText,
+				"json":     defaultJSONFormatText,
+			},
+			Reasoning:  ReasoningOff,
+			ReviewMode: ReviewMutable,
+			Review: ReviewConfig{
+				Shell: ReviewShellConfig{
 				HarmlessCommands: []string{
 					"ack", "ag", "apropos",
 					"bat",
@@ -504,6 +516,7 @@ func defaultConfig() Config {
 			SequentialThinking: false,
 			ShellTimeout:       30 * time.Second,
 			ShellMaxOutput:     20000,
+		},
 		},
 	}
 }

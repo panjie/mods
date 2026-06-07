@@ -16,8 +16,10 @@ func testMods(t *testing.T) *Mods {
 	return &Mods{
 		Styles: makeStyles(r),
 		Config: &Config{
-			Model: "gpt-4",
-			API:   "openai",
+			PersistentConfig: PersistentConfig{
+				Model: "gpt-4",
+				API:   "openai",
+			},
 		},
 	}
 }

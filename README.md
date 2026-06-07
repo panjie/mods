@@ -154,11 +154,27 @@ This fork adds the following features on top of the original Mods.
   Mods shows a colored confirmation banner. Press `Y` to approve, `N` to deny,
   `A` to approve all future operations. `--review` controls the mode:
   `mutable` (default), `always`, or `never`.
+
+  ```
+  Review: Write src/main.go (1,234 bytes)  
+  [Y] Approve  [N] Deny  [A] Approve All  [Ctrl+C] Cancel
+  ```
+
 - **Shell Safety Heuristics** — Harmless commands (`ls`, `cat`, `grep`, `find`,
   `git status`) are auto-approved. Dangerous patterns (`rm`, `chmod`, `npm install`,
   `git push`, `>`) always trigger review.
 - **Customizable Rules** — Configure harmless commands, git subcommands, and
-  dangerous patterns in `mods.yml` under `review.shell`.
+  dangerous patterns in `mods.yml`:
+
+  ```yaml
+  # ~/.config/mods/mods.yml
+  review-mode: mutable
+  review:
+    shell:
+      harmless-commands: [ls, cat, grep, find, ...]    # auto-approved
+      harmless-git-commands: [status, log, diff, ...]   # auto-approved
+      dangerous-patterns: [" rm ", "chmod ", "npm ", ...]  # always review
+  ```
 
 ### Observability
 
@@ -270,8 +286,15 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 
 #### Review & Safety
 
-- `-V`, `--review`: Set review mode: `mutable` (default, reviews file writes and shell commands), `always` (reviews all tools), or `never` (disables review)
+- `-V`, `--review`: Set review mode: `mutable` (default, reviews file writes and shell commands), `always` (reviews all tools), or `never` (disables review). Also configurable via `MODS_REVIEW_MODE` env var or `review-mode` in `mods.yml`.
 - `--max-tool-rounds`: Maximum total tool call rounds before stopping (default 30)
+
+```bash
+# Review all tool executions
+mods --review always "rename the fn to calculateTotal"
+# Disable review entirely
+mods --review never "list go files"
+```
 
 #### Reasoning & Debug
 

@@ -903,6 +903,9 @@ func (m *Mods) pollReviewCmd(ch <-chan toolReviewItem) tea.Cmd {
 }
 
 func (m *Mods) shouldReviewTool(name string) bool {
+	if !isInputTTY() {
+		return false
+	}
 	switch m.reviewMode {
 	case ReviewNever:
 		return false

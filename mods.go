@@ -293,6 +293,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toolCallsOutput:
 		m.activeOperation = ""
 		m.approveAll = false
+		if m.reviewChan != nil {
+			close(m.reviewChan)
+		}
 		m.reviewChan = nil
 		toolMsg := completionOutput{
 			stream: msg.stream,
@@ -381,7 +384,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.reviewItem.resp <- false
 				m.reviewPending = false
 				m.reviewItem = nil
-				return m, nil
+				return m, m.pollReviewCmd(m.reviewChan)
 			}
 			return m, nil
 		}

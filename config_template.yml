@@ -182,7 +182,6 @@ review:
       - shortlog
       - show
       - status
-      - stash
       - tag
       - whatchanged
       - worktree

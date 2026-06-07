@@ -462,7 +462,7 @@ func defaultConfig() Config {
 					"grep",
 					"log", "ls-files", "ls-tree",
 					"reflog", "remote", "rev-list", "rev-parse",
-					"shortlog", "show", "status", "stash",
+					"shortlog", "show", "status",
 					"tag",
 					"whatchanged", "worktree",
 				},

@@ -12,7 +12,7 @@ import (
 func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 	var tools []openai.ChatCompletionToolParam
 	for _, spec := range specs {
-		params := stripSchema(spec.InputSchema)
+		params := proto.StripSchema(spec.InputSchema)
 		if params == nil {
 			params = map[string]any{"type": "object"}
 		}
@@ -27,63 +27,6 @@ func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 		})
 	}
 	return tools
-}
-
-var stripKeys = map[string]bool{
-	"description": true,
-	"title":       true,
-	"examples":    true,
-	"default":     true,
-}
-
-func stripSchema(props map[string]any) map[string]any {
-	if props == nil {
-		return nil
-	}
-	out := make(map[string]any, len(props))
-	for k, v := range props {
-		if stripKeys[k] {
-			continue
-		}
-		if k == "properties" {
-			if nested, ok := v.(map[string]any); ok {
-				out[k] = stripSchema(nested)
-				continue
-			}
-		}
-		if k == "items" {
-			if items, ok := v.(map[string]any); ok {
-				out[k] = stripSchema(items)
-				continue
-			}
-		}
-		m, ok := v.(map[string]any)
-		if !ok {
-			out[k] = v
-			continue
-		}
-		cleaned := make(map[string]any, len(m))
-		for mk, mv := range m {
-			if stripKeys[mk] {
-				continue
-			}
-			if mk == "properties" {
-				if nested, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripSchema(nested)
-					continue
-				}
-			}
-			if mk == "items" {
-				if items, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripSchema(items)
-					continue
-				}
-			}
-			cleaned[mk] = mv
-		}
-		out[k] = cleaned
-	}
-	return out
 }
 
 func fromProtoMessages(input []proto.Message) []openai.ChatCompletionMessageParamUnion {

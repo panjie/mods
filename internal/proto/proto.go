@@ -5,6 +5,54 @@ import (
 	"strings"
 )
 
+// StripSchema removes descriptive keys (description, title, examples, default)
+// from a JSON Schema properties map. Some LLM providers reject these keys in
+// tool input schemas, even though they are valid in JSON Schema.
+func StripSchema(props map[string]any) map[string]any {
+	if props == nil {
+		return nil
+	}
+	out := make(map[string]any, len(props))
+	for k, v := range props {
+		if stripSchemaKeys[k] {
+			continue
+		}
+		if k == "properties" || k == "items" {
+			if nested, ok := v.(map[string]any); ok {
+				out[k] = StripSchema(nested)
+				continue
+			}
+		}
+		m, ok := v.(map[string]any)
+		if !ok {
+			out[k] = v
+			continue
+		}
+		cleaned := make(map[string]any, len(m))
+		for mk, mv := range m {
+			if stripSchemaKeys[mk] {
+				continue
+			}
+			if mk == "properties" || mk == "items" {
+				if nested, ok := mv.(map[string]any); ok {
+					cleaned[mk] = StripSchema(nested)
+					continue
+				}
+			}
+			cleaned[mk] = mv
+		}
+		out[k] = cleaned
+	}
+	return out
+}
+
+var stripSchemaKeys = map[string]bool{
+	"description": true,
+	"title":       true,
+	"examples":    true,
+	"default":     true,
+}
+
 // Roles.
 const (
 	RoleSystem    = "system"

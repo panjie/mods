@@ -424,7 +424,9 @@ func main() {
 
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
-		_ = db.Close()
+		if db != nil {
+			_ = db.Close()
+		}
 		os.Exit(1)
 	}
 }

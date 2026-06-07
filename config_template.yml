@@ -328,6 +328,9 @@ apis:
     base-url: https://api.openai.com/v1
     api-key:
     api-key-env: OPENAI_API_KEY
+    # api-key-cmd executes a shell command to retrieve the API key at runtime.
+    # WARNING: Avoid using this with untrusted or shared config files, as the
+    # command is executed via the shell. Prefer api-key-env when possible.
     # api-key-cmd: rbw get -f OPENAI_API_KEY chat.openai.com
     models:
       gpt-5.2:

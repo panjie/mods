@@ -8,7 +8,7 @@ import (
 
 func TestStripSchema(t *testing.T) {
 	t.Run("nil returns nil", func(t *testing.T) {
-		if stripSchema(nil) != nil {
+		if proto.StripSchema(nil) != nil {
 			t.Error("expected nil for nil input")
 		}
 	})
@@ -23,7 +23,7 @@ func TestStripSchema(t *testing.T) {
 				"default":     "/tmp/default",
 			},
 		}
-		result := stripSchema(props)
+		result := proto.StripSchema(props)
 		path := result["path"].(map[string]any)
 		if _, ok := path["description"]; ok {
 			t.Error("expected description to be stripped")
@@ -55,7 +55,7 @@ func TestStripSchema(t *testing.T) {
 				},
 			},
 		}
-		result := stripSchema(props)
+		result := proto.StripSchema(props)
 		cfg := result["config"].(map[string]any)
 		if _, ok := cfg["description"]; ok {
 			t.Error("expected top-level description to be stripped")
@@ -75,7 +75,7 @@ func TestStripSchema(t *testing.T) {
 			"enum": []string{"a", "b"},
 			"type": "string",
 		}
-		result := stripSchema(props)
+		result := proto.StripSchema(props)
 		if result["enum"].([]string)[0] != "a" {
 			t.Error("expected enum to pass through (top-level key)")
 		}

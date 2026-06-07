@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -89,7 +90,7 @@ type Mods struct {
 
 	reviewChan    chan toolReviewItem
 	reviewMode    ReviewMode
-	approveAll    bool
+	approveAll    atomic.Bool
 	reviewPending bool
 	reviewItem    *toolReviewItem
 
@@ -292,7 +293,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeOperation = ""
 	case toolCallsOutput:
 		m.activeOperation = ""
-		m.approveAll = false
+		m.approveAll.Store(false)
 		if m.reviewChan != nil {
 			close(m.reviewChan)
 		}
@@ -375,7 +376,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.reviewItem = nil
 				return m, m.pollReviewCmd(m.reviewChan)
 			case "a", "A":
-				m.approveAll = true
+				m.approveAll.Store(true)
 				m.reviewItem.resp <- true
 				m.reviewPending = false
 				m.reviewItem = nil
@@ -917,7 +918,7 @@ func (m *Mods) shouldReviewTool(name string) bool {
 }
 
 func (m *Mods) requestApproval(name string, data []byte) bool {
-	if m.approveAll {
+	if m.approveAll.Load() {
 		return true
 	}
 	if name == "shell_run" && m.isHarmlessShellCommand(extractShellCommand(data)) {
@@ -1002,6 +1003,9 @@ func (m *Mods) hasHarmlessBaseCommand(cmd string) bool {
 }
 
 func (m *Mods) hasDangerousShellPattern(cmd string) bool {
+	// Prepend a space so patterns with a leading space (e.g. " rm ") also
+	// match when the dangerous command is the first token.
+	cmd = " " + cmd
 	for _, tok := range m.dangerousTokens {
 		if strings.Contains(cmd, tok) {
 			return true

@@ -54,7 +54,7 @@ func TestStripSchema(t *testing.T) {
 				"default":     "removed",
 			},
 		}
-		result := stripSchema(props)
+		result := proto.StripSchema(props)
 		inner := result["query"].(map[string]any)
 		require.Equal(t, "string", inner["type"])
 		require.NotContains(t, inner, "description")
@@ -63,7 +63,7 @@ func TestStripSchema(t *testing.T) {
 	})
 
 	t.Run("nil returns nil", func(t *testing.T) {
-		require.Nil(t, stripSchema(nil))
+		require.Nil(t, proto.StripSchema(nil))
 	})
 
 	t.Run("nested properties stripped", func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestStripSchema(t *testing.T) {
 				},
 			},
 		}
-		result := stripSchema(props)
+		result := proto.StripSchema(props)
 		top := result["top"].(map[string]any)
 		nested := top["properties"].(map[string]any)
 		inner := nested["inner"].(map[string]any)

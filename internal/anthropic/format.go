@@ -13,7 +13,7 @@ func fromToolSpecs(specs []proto.ToolSpec) []anthropic.ToolUnionParam {
 	for _, spec := range specs {
 		props := map[string]any{}
 		if schemaProps, ok := spec.InputSchema["properties"].(map[string]any); ok {
-			props = stripSchema(schemaProps)
+			props = proto.StripSchema(schemaProps)
 		}
 		tools = append(tools, anthropic.ToolUnionParam{
 			OfTool: &anthropic.ToolParam{
@@ -26,51 +26,6 @@ func fromToolSpecs(specs []proto.ToolSpec) []anthropic.ToolUnionParam {
 		})
 	}
 	return tools
-}
-
-var stripKeys = map[string]bool{
-	"description": true,
-	"title":       true,
-	"examples":    true,
-	"default":     true,
-}
-
-func stripSchema(props map[string]any) map[string]any {
-	if props == nil {
-		return nil
-	}
-	out := make(map[string]any, len(props))
-	for k, v := range props {
-		if stripKeys[k] {
-			continue
-		}
-		m, ok := v.(map[string]any)
-		if !ok {
-			out[k] = v
-			continue
-		}
-		cleaned := make(map[string]any, len(m))
-		for mk, mv := range m {
-			if stripKeys[mk] {
-				continue
-			}
-			if mk == "properties" {
-				if nested, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripSchema(nested)
-					continue
-				}
-			}
-			if mk == "items" {
-				if items, ok := mv.(map[string]any); ok {
-					cleaned[mk] = stripSchema(items)
-					continue
-				}
-			}
-			cleaned[mk] = mv
-		}
-		out[k] = cleaned
-	}
-	return out
 }
 
 func fromProtoMessages(input []proto.Message) (system []anthropic.TextBlockParam, messages []anthropic.MessageParam) {

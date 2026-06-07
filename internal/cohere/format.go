@@ -6,6 +6,9 @@ import (
 )
 
 func fromProtoMessages(input []proto.Message) (history []*cohere.Message, message string) {
+	if len(input) == 0 {
+		return nil, ""
+	}
 	var messages []*cohere.Message
 	for _, msg := range input {
 		role := fromProtoRole(msg.Role)

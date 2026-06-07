@@ -14,6 +14,9 @@ type modsError struct {
 }
 
 func (m modsError) Error() string {
+	if m.err == nil {
+		return m.reason
+	}
 	return m.err.Error()
 }
 

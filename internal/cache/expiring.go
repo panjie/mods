@@ -28,7 +28,7 @@ func (c *ExpiringCache[T]) getCacheFilename(id string, expiresAt int64) string {
 	return fmt.Sprintf("%s.%d", id, expiresAt)
 }
 
-func (c *ExpiringCache[T]) Read(id string, readFn func(io.Reader) error) error {
+func (c *ExpiringCache[T]) Read(id string, readFn func(io.Reader) error) (err error) {
 	pattern := fmt.Sprintf("%s.*", id)
 	matches, err := filepath.Glob(filepath.Join(c.cache.dir(), pattern))
 	if err != nil {

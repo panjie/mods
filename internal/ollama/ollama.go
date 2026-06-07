@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
 
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/stream"
@@ -80,7 +81,9 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		s.respCh = make(chan api.ChatResponse)
 		go func() {
 			if err := c.Chat(ctx, &s.request, s.fn); err != nil {
+				s.mu.Lock()
 				s.err = err
+				s.mu.Unlock()
 			}
 		}()
 	}
@@ -90,6 +93,8 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 // Stream ollama stream.
 type Stream struct {
+	mu       sync.Mutex
+	closed   bool
 	request  api.ChatRequest
 	err      error
 	done     bool
@@ -101,6 +106,13 @@ type Stream struct {
 }
 
 func (s *Stream) fn(resp api.ChatResponse) error {
+	defer func() { recover() }()
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
 	s.respCh <- resp
 	return nil
 }
@@ -124,8 +136,13 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 
 // Close implements stream.Stream.
 func (s *Stream) Close() error {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
 	close(s.respCh)
+	s.mu.Lock()
 	s.done = true
+	s.mu.Unlock()
 	return nil
 }
 
@@ -136,11 +153,13 @@ func (s *Stream) Current() (proto.Chunk, error) {
 		chunk := proto.Chunk{
 			Content: resp.Message.Content,
 		}
+		s.mu.Lock()
 		s.message.Content += resp.Message.Content
 		s.message.ToolCalls = append(s.message.ToolCalls, resp.Message.ToolCalls...)
 		if resp.Done {
 			s.done = true
 		}
+		s.mu.Unlock()
 		return chunk, nil
 	default:
 		return proto.Chunk{}, stream.ErrNoContent
@@ -148,13 +167,19 @@ func (s *Stream) Current() (proto.Chunk, error) {
 }
 
 // Err implements stream.Stream.
-func (s *Stream) Err() error { return s.err }
+func (s *Stream) Err() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err
+}
 
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message { return s.messages }
 
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.err != nil {
 		return false
 	}

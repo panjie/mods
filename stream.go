@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/mods/internal/clipboard"
 	"github.com/charmbracelet/mods/internal/proto"
@@ -71,7 +72,11 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 
 	origLen := int64(len(content))
 	if !cfg.NoLimit && origLen > mod.MaxChars {
-		content = content[:mod.MaxChars]
+		end := int(mod.MaxChars)
+		for end > 0 && !utf8.RuneStart(content[end]) {
+			end--
+		}
+		content = content[:end]
 	}
 
 	debugPrintf("Context: %d system message(s), %d existing message(s)", len(m.messages), 0)

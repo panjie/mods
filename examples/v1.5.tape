@@ -1,4 +1,4 @@
-Output mods.gif
+Output mods-v1.5.gif
 
 Set Height 900
 Set Width 1600

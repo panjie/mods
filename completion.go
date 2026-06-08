@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -214,6 +215,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			ToolCaller: func(name string, data []byte) (string, error) {
 				ctx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
 				m.cancelRequest = append(m.cancelRequest, cancel)
+				defer cancel()
 				m.sendToolOperationStatus(toolOperationLabel(name, data, m.width))
 
 				if m.reviewer.shouldReviewTool(name) {
@@ -441,14 +443,12 @@ func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 }
 
 
+// oSeriesRe matches OpenAI o-series model names: o + single digit + hyphen or end of string.
+// Examples: "o1", "o1-mini", "o3-2025-04-16". Does NOT match "o10-" or custom names like "o1-finetune-v2".
+var oSeriesRe = regexp.MustCompile(`^o[1-9](-|$)`)
+
 func isOSeries(model string) bool {
-	prefixes := []string{"o1", "o3", "o4", "o5"}
-	for _, p := range prefixes {
-		if strings.HasPrefix(model, p) {
-			return true
-		}
-	}
-	return false
+	return oSeriesRe.MatchString(model)
 }
 
 func ptrOrNil[T number](t T) *T {

@@ -112,10 +112,16 @@ func registerMCPTools(ctx context.Context, cfg *Config, registry *toolregistry.R
 				Description: tool.Description,
 				InputSchema: mcpInputSchema(tool),
 			}
+			// Capture sname and tool.Name explicitly so the closure does not
+			// rely on string splitting, which breaks when server names contain
+			// underscores.
+			capturedSname := sname
+			capturedToolName := tool.Name
+			capturedServer := cfg.MCPServers[sname]
 			if err := registry.Register(toolregistry.Tool{
 				Spec: spec,
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
-					return toolCall(ctx, cfg, name, data)
+					return toolCallDirect(ctx, cfg, capturedSname, capturedToolName, capturedServer, data)
 				},
 			}); err != nil {
 				return err
@@ -198,15 +204,9 @@ func mcpToolsFor(ctx context.Context, name string, server MCPServerConfig) ([]mc
 	return tools.Tools, nil
 }
 
-func toolCall(ctx context.Context, cfg *Config, name string, data []byte) (string, error) {
-	sname, tool, ok := strings.Cut(name, "_")
-	if !ok {
-		return "", fmt.Errorf("mcp: invalid tool name: %q", name)
-	}
-	server, ok := cfg.MCPServers[sname]
-	if !ok {
-		return "", fmt.Errorf("mcp: invalid server name: %q", sname)
-	}
+// toolCallDirect executes an MCP tool using pre-resolved server and tool names,
+// avoiding string splitting that breaks when server names contain underscores.
+func toolCallDirect(ctx context.Context, cfg *Config, sname, tool string, server MCPServerConfig, data []byte) (string, error) {
 	if !isMCPEnabled(cfg, sname) {
 		return "", fmt.Errorf("mcp: server is disabled: %q", sname)
 	}
@@ -218,6 +218,7 @@ func toolCall(ctx context.Context, cfg *Config, name string, data []byte) (strin
 		}
 	}
 
+	fullName := fmt.Sprintf("%s_%s", sname, tool)
 	var result *mcp.CallToolResult
 	var lastErr error
 	for attempt := range 2 {
@@ -237,7 +238,7 @@ func toolCall(ctx context.Context, cfg *Config, name string, data []byte) (strin
 			break
 		}
 		lastErr = err
-		debugPrintf("MCP retry %d/2 for %s: %v", attempt+1, name, err)
+		debugPrintf("MCP retry %d/2 for %s: %v", attempt+1, fullName, err)
 	}
 	if lastErr != nil {
 		return "", fmt.Errorf("mcp: %w", lastErr)

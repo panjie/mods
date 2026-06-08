@@ -49,8 +49,10 @@ func (r *toolReviewer) pollReviewCmd() tea.Cmd {
 }
 
 func (r *toolReviewer) startSession() tea.Cmd {
-	ch := make(chan toolReviewItem, 4)
-	r.reviewChan = ch
+	if r.reviewChan != nil {
+		close(r.reviewChan)
+	}
+	r.reviewChan = make(chan toolReviewItem, 4)
 	return r.pollReviewCmd()
 }
 

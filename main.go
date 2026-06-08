@@ -300,7 +300,6 @@ func initFlags() {
 	flags.VarP(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", stdoutStyles().FlagDesc.Render(help["reasoning"]))
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", stdoutStyles().FlagDesc.Render(help["review"]))
 	flags.Lookup("prompt").NoOptDefVal = "-1"
-	flags.SortFlags = false
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")

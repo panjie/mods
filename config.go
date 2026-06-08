@@ -214,7 +214,6 @@ type PersistentConfig struct {
 	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
 	Reasoning           ReasoningMode              `yaml:"reasoning" env:"REASONING"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
-	Review              ReviewConfig               `yaml:"review"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
@@ -265,18 +264,6 @@ type BuiltinToolsConfig struct {
 	SequentialThinking bool           `yaml:"sequential-thinking"`
 	ShellTimeout       time.Duration  `yaml:"shell-timeout"`
 	ShellMaxOutput     int            `yaml:"shell-max-output"`
-}
-
-// ReviewConfig configures the tool execution review behavior.
-type ReviewConfig struct {
-	Shell ReviewShellConfig `yaml:"shell"`
-}
-
-// ReviewShellConfig configures shell command review heuristics.
-type ReviewShellConfig struct {
-	HarmlessCommands    []string `yaml:"harmless-commands"`
-	HarmlessGitCommands []string `yaml:"harmless-git-commands"`
-	DangerousPatterns   []string `yaml:"dangerous-patterns"`
 }
 
 // FilesystemMode controls when native filesystem tools are exposed.
@@ -442,74 +429,7 @@ func defaultConfig() Config {
 			},
 			Reasoning:  ReasoningOff,
 			ReviewMode: ReviewMutable,
-			Review: ReviewConfig{
-				Shell: ReviewShellConfig{
-				HarmlessCommands: []string{
-					"ack", "ag", "apropos",
-					"bat",
-					"cat", "cmp", "comm", "cut", "column",
-					"date", "df", "diff", "dir", "du",
-					"echo", "egrep", "env",
-					"fgrep", "file", "find", "fuser",
-					"grep", "groups",
-					"head", "hostname",
-					"id",
-					"last", "less", "locate", "ls", "lsof",
-					"man", "more",
-					"ncdu",
-					"od",
-					"pgrep", "printenv", "printf", "ps", "pwd",
-					"readlink", "realpath", "rev", "rg",
-					"sdiff", "sort", "stat",
-					"tail", "tree", "tr", "type",
-					"uname", "uniq", "uptime",
-					"vdir",
-					"w", "wc", "whatis", "whereis", "which", "who", "whoami",
-					"xxd",
-				},
-				HarmlessGitCommands: []string{
-					"blame", "bisect", "branch",
-					"config",
-					"describe", "diff",
-					"grep",
-					"log", "ls-files", "ls-tree",
-					"reflog", "remote", "rev-list", "rev-parse",
-					"shortlog", "show", "status",
-					"tag",
-					"whatchanged", "worktree",
-				},
-				DangerousPatterns: []string{
-					">", ">>",
-					" rm ", "rmdir", "unlink",
-					" mv ",
-					"chmod ", "chown ",
-					"mkdir ",
-					" kill", "killall", "pkill",
-					"sudo ",
-					"| sh", "|sh", "| bash", "|bash",
-					" dd ",
-					" cp ",
-					" ln -",
-					"install ",
-					"mount", "umount",
-					"tar ", "gzip", "bzip2", "zip ", "compress",
-					"apt-get", "apt ", "yum ", "dnf ", "brew ", "pip ", "pip3 ", "npm ", "cargo ", "gem ",
-					"go install", "go get", "go build", "go run", "go mod",
-					"make", "ninja", "cmake",
-					"git add", "git commit", "git push", "git pull", "git merge", "git rebase",
-					"git checkout", "git reset", "git clean",
-					"git branch -d", "git tag -d", "git remote add", "git remote remove",
-					"sed -i", "perl -i",
-					"tee ",
-					"scp ", "rsync ", "ssh ",
-					"curl ", "wget ",
-					"openssl ",
-					"shutdown", "reboot", "halt", "poweroff",
-					"truncate ",
-				},
-			},
-		},
-		MCPTimeout: 15 * time.Second,
+			MCPTimeout: 15 * time.Second,
 		BuiltinTools: BuiltinToolsConfig{
 			Filesystem:         FilesystemAuto,
 			Shell:              false,

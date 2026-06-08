@@ -95,15 +95,6 @@ func newMods(
 	}
 }
 
-func toBoolMap(slice []string) map[string]bool {
-	m := make(map[string]bool, len(slice))
-	for _, s := range slice {
-		m[s] = true
-	}
-	return m
-}
-
-
 // Init implements tea.Model.
 func (m *Mods) Init() tea.Cmd {
 	return m.findCacheOpsDetails()

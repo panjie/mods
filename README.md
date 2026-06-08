@@ -160,22 +160,6 @@ This fork adds the following features on top of the original Mods.
   [Y] Approve  [N] Deny  [A] Approve All  [Ctrl+C] Cancel
   ```
 
-- **Shell Safety Heuristics** — Harmless commands (`ls`, `cat`, `grep`, `find`,
-  `git status`) are auto-approved. Dangerous patterns (`rm`, `chmod`, `npm install`,
-  `git push`, `>`) always trigger review.
-- **Customizable Rules** — Configure harmless commands, git subcommands, and
-  dangerous patterns in `mods.yml`:
-
-  ```yaml
-  # ~/.config/mods/mods.yml
-  review-mode: mutable
-  review:
-    shell:
-      harmless-commands: [ls, cat, grep, find, ...]    # auto-approved
-      harmless-git-commands: [status, log, diff, ...]   # auto-approved
-      dangerous-patterns: [" rm ", "chmod ", "npm ", ...]  # always review
-  ```
-
 ### Observability
 
 - **Debug Mode** — `--debug` / `-D` prints execution steps, tool calls, reasoning

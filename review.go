@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -20,17 +19,11 @@ type toolReviewer struct {
 	reviewPending bool
 	reviewItem    *toolReviewItem
 
-	harmlessCmds    map[string]bool
-	harmlessGitCmds map[string]bool
-	dangerousTokens []string
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
 	return &toolReviewer{
-		reviewMode:      cfg.ReviewMode,
-		harmlessCmds:    toBoolMap(cfg.Review.Shell.HarmlessCommands),
-		harmlessGitCmds: toBoolMap(cfg.Review.Shell.HarmlessGitCommands),
-		dangerousTokens: cfg.Review.Shell.DangerousPatterns,
+		reviewMode: cfg.ReviewMode,
 	}
 }
 
@@ -123,9 +116,6 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 	if r.approveAll.Load() {
 		return true
 	}
-	if name == "shell_run" && r.isHarmlessShellCommand(extractShellCommand(data)) {
-		return true
-	}
 	respCh := make(chan bool, 1)
 	item := toolReviewItem{
 		name:  name,
@@ -153,65 +143,6 @@ func isMutableTool(name string) bool {
 	default:
 		return false
 	}
-}
-
-func extractShellCommand(args []byte) string {
-	var parsed struct {
-		Command string `json:"command"`
-	}
-	if err := json.Unmarshal(args, &parsed); err != nil {
-		return ""
-	}
-	return parsed.Command
-}
-
-func (r *toolReviewer) isHarmlessShellCommand(cmd string) bool {
-	cmd = strings.TrimSpace(cmd)
-	if cmd == "" {
-		return false
-	}
-	lower := strings.ToLower(cmd)
-
-	if r.hasDangerousShellPattern(lower) {
-		return false
-	}
-
-	return r.hasHarmlessBaseCommand(lower)
-}
-
-func (r *toolReviewer) hasHarmlessBaseCommand(cmd string) bool {
-	tokens := strings.Fields(cmd)
-	if len(tokens) == 0 {
-		return false
-	}
-
-	switch tokens[0] {
-	case "git":
-		if len(tokens) > 1 {
-			return r.harmlessGitCmds[tokens[1]]
-		}
-		return false
-	case "go":
-		if len(tokens) > 1 {
-			switch tokens[1] {
-			case "doc", "env", "list", "version", "vet":
-				return true
-			}
-		}
-		return false
-	default:
-		return r.harmlessCmds[tokens[0]]
-	}
-}
-
-func (r *toolReviewer) hasDangerousShellPattern(cmd string) bool {
-	cmd = " " + cmd
-	for _, tok := range r.dangerousTokens {
-		if strings.Contains(cmd, tok) {
-			return true
-		}
-	}
-	return false
 }
 
 func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, reviewChoices lipgloss.Style) string {

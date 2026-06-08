@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -116,6 +117,12 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 	if r.approveAll.Load() {
 		return true
 	}
+	if name == "shell_run" {
+		cmd := extractShellCommand(data)
+		if cmd != "" && !ctx.classifyShellCommand(cmd) {
+			return true
+		}
+	}
 	respCh := make(chan bool, 1)
 	item := toolReviewItem{
 		name:  name,
@@ -134,6 +141,16 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 	case <-ctx.ctx.Done():
 		return false
 	}
+}
+
+func extractShellCommand(args []byte) string {
+	var parsed struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(args, &parsed); err != nil {
+		return ""
+	}
+	return parsed.Command
 }
 
 func isMutableTool(name string) bool {

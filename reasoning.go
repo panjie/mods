@@ -120,3 +120,96 @@ func judgeTaskComplexity(
 	}
 	return strings.Contains(strings.ToUpper(strings.TrimSpace(sb.String())), "YES")
 }
+
+func (m *Mods) classifyShellCommand(command string) bool {
+	cfg := m.Config
+	api, mod, err := m.resolveModel(cfg)
+	if err != nil {
+		return true
+	}
+
+	var (
+		accfg anthropic.Config
+		gccfg google.Config
+		ccfg  openai.Config
+		occfg ollama.Config
+		cccfg cohere.Config
+	)
+
+	switch mod.API {
+	case "ollama":
+		occfg = ollama.DefaultConfig()
+		if api.BaseURL != "" {
+			occfg.BaseURL = api.BaseURL
+		}
+	case "anthropic":
+		key, err := m.ensureKey(api, "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys")
+		if err != nil {
+			return true
+		}
+		accfg = anthropic.DefaultConfig(key)
+		if api.BaseURL != "" {
+			accfg.BaseURL = api.BaseURL
+		}
+	case "google":
+		key, err := m.ensureKey(api, "GOOGLE_API_KEY", "https://aistudio.google.com/app/apikey")
+		if err != nil {
+			return true
+		}
+		gccfg = google.DefaultConfig(mod.Name, key)
+	case "cohere":
+		key, err := m.ensureKey(api, "COHERE_API_KEY", "https://dashboard.cohere.com/api-keys")
+		if err != nil {
+			return true
+		}
+		cccfg = cohere.DefaultConfig(key)
+		if api.BaseURL != "" {
+			cccfg.BaseURL = api.BaseURL
+		}
+	default:
+		key, err := m.ensureKey(api, "OPENAI_API_KEY", "https://platform.openai.com/account/api-keys")
+		if err != nil {
+			return true
+		}
+		ccfg = openai.Config{
+			AuthToken: key,
+			BaseURL:   api.BaseURL,
+		}
+	}
+
+	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+	defer cancel()
+
+	system := "Classify this shell command. Does it potentially modify files, system settings, or external state? Answer only YES or NO."
+	max3 := int64(3)
+	request := proto.Request{
+		Messages: []proto.Message{
+			{Role: proto.RoleSystem, Content: system},
+			{Role: proto.RoleUser, Content: command},
+		},
+		Model:       mod.Name,
+		MaxTokens:   &max3,
+		Temperature: ptrOrNil(float64(0)),
+	}
+
+	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
+	if err != nil {
+		return true
+	}
+
+	st := client.Request(classifyCtx, request)
+	defer st.Close()
+
+	var sb strings.Builder
+	for st.Next() {
+		chunk, err := st.Current()
+		if err != nil && !errors.Is(err, stream.ErrNoContent) {
+			return true
+		}
+		sb.WriteString(chunk.Content)
+	}
+	if st.Err() != nil {
+		return true
+	}
+	return strings.Contains(strings.ToUpper(strings.TrimSpace(sb.String())), "YES")
+}

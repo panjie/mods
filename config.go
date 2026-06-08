@@ -183,7 +183,6 @@ type PersistentConfig struct {
 	Raw                 bool       `yaml:"raw" env:"RAW"`
 	Quiet               bool       `yaml:"quiet" env:"QUIET"`
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
-	MaxCompletionTokens int64      `yaml:"max-completion-tokens" env:"MAX_COMPLETION_TOKENS"`
 	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
 	Temperature         float64    `yaml:"temp" env:"TEMP"`
 	Stop                []string   `yaml:"stop" env:"STOP"`

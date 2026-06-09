@@ -93,7 +93,10 @@ func (m *Mods) appendToOutput(s string) {
 
 	wasAtBottom := m.glamViewport.ScrollPercent() == 1.0
 	oldHeight := m.glamHeight
-	m.glamOutput, _ = m.glam.Render(strings.ReplaceAll(m.Output, "\n", "\n\n"))
+	preprocessed := strings.ReplaceAll(m.Output, "\n\n", "\r")
+	preprocessed = strings.ReplaceAll(preprocessed, "\n", "  \n")
+	preprocessed = strings.ReplaceAll(preprocessed, "\r", "\n\n")
+	m.glamOutput, _ = m.glam.Render(preprocessed)
 	m.glamOutput = strings.TrimRightFunc(m.glamOutput, unicode.IsSpace)
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
 	m.glamHeight = lipgloss.Height(m.glamOutput)

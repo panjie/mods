@@ -10,7 +10,7 @@ RELEASE_BIN := $(BIN_DIR)/$(APP)-release$(GOEXE)
 
 build:
 	mkdir -p $(BIN_DIR)
-	go build -trimpath -o $(BIN) .
+	go build -trimpath -ldflags="-X main.Version=$(VERSION) -X main.CommitSHA=$(COMMIT)" -o $(BIN) .
 
 release:
 	mkdir -p $(BIN_DIR)

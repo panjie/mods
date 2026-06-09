@@ -405,6 +405,9 @@ func createConfigFile(path string) error {
 	if err != nil {
 		return modsError{err, "Could not create configuration file."}
 	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return modsError{err, "Could not set configuration file permissions."}
+	}
 	defer func() { _ = f.Close() }()
 
 	m := struct {

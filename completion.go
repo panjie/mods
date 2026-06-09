@@ -280,7 +280,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	}
 }
 
-func (m Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
+func (m *Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
 	key := api.APIKey
 	if key == "" && api.APIKeyEnv != "" && api.APIKeyCmd == "" {
 		key = os.Getenv(api.APIKeyEnv)

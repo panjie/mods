@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -72,11 +73,14 @@ func newMods(
 	cfg *Config,
 	db *convoDB,
 	cache *cache.Conversations,
-) *Mods {
-	gr, _ := glamour.NewTermRenderer(
+) (*Mods, error) {
+	gr, err := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
 		glamour.WithWordWrap(cfg.WordWrap),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("could not create glamour renderer: %w", err)
+	}
 	vp := viewport.New(0, 0)
 	vp.GotoBottom()
 	return &Mods{
@@ -92,7 +96,7 @@ func newMods(
 		Config:   cfg,
 		reviewer: newToolReviewer(cfg),
 		ctx:      ctx,
-	}
+	}, nil
 }
 
 // Init implements tea.Model.
@@ -294,11 +298,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, tea.Batch(cmds...)
 }
-
-
-
-
-
 
 func msgCmd(msg tea.Msg) tea.Cmd {
 	return func() tea.Msg {

@@ -10,7 +10,7 @@ import (
 
 const tabWidth = 4
 
-func (m Mods) viewportNeeded() bool {
+func (m *Mods) viewportNeeded() bool {
 	return m.glamHeight > m.height
 }
 

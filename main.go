@@ -121,7 +121,10 @@ var (
 			if err != nil {
 				return modsError{err, "Couldn't start Bubble Tea program."}
 			}
-			mods := newMods(cmd.Context(), stderrRenderer(), &config, db, cache)
+			mods, err := newMods(cmd.Context(), stderrRenderer(), &config, db, cache)
+			if err != nil {
+				return modsError{err, "Couldn't start Bubble Tea program."}
+			}
 			p := tea.NewProgram(mods, opts...)
 			m, err := p.Run()
 			if err != nil {
@@ -436,7 +439,10 @@ func maybeWriteMemProfile() {
 		return
 	}
 
-	closers := []func() error{db.Close}
+	var closers []func() error
+	if db != nil {
+		closers = append(closers, db.Close)
+	}
 	defer func() {
 		for _, cl := range closers {
 			_ = cl()

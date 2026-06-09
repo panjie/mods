@@ -200,14 +200,12 @@ func (m *Mods) classifyShellCommand(command string) bool {
 		system = "Classify this shell command. Does it create, delete, or modify any files, directories, system settings, or persistent state? Answer only YES or NO. If unsure, answer YES."
 	}
 	debugPrintf("classifyShellCommand: using model=%s api=%s, system=%q", mod.Name, mod.API, system)
-	max3 := int64(10)
 	request := proto.Request{
 		Messages: []proto.Message{
 			{Role: proto.RoleSystem, Content: system},
 			{Role: proto.RoleUser, Content: command},
 		},
 		Model:       mod.Name,
-		MaxTokens:   &max3,
 		Temperature: ptrOrNil(cfg.Temperature),
 	}
 

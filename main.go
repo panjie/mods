@@ -78,6 +78,7 @@ var (
 		SilenceErrors: true,
 		Example:       randomExample(),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			SetDebugEnabled(config.Debug)
 			config.Prefix = removeWhitespace(strings.Join(args, " "))
 
 			opts := []tea.ProgramOption{}

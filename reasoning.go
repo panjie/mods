@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -194,8 +195,12 @@ func (m *Mods) classifyShellCommand(command string) bool {
 	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
 
-	system := "Classify this shell command. Does it potentially modify files, system settings, or external state? Answer only YES or NO."
-	max3 := int64(3)
+	system := m.Config.ShellClassifyPrompt
+	if system == "" {
+		system = "Classify this shell command. Does it create, delete, or modify any files, directories, system settings, or persistent state? Answer only YES or NO. If unsure, answer YES."
+	}
+	debugPrintf("classifyShellCommand: using model=%s api=%s, system=%q", mod.Name, mod.API, system)
+	max3 := int64(10)
 	request := proto.Request{
 		Messages: []proto.Message{
 			{Role: proto.RoleSystem, Content: system},
@@ -203,7 +208,7 @@ func (m *Mods) classifyShellCommand(command string) bool {
 		},
 		Model:       mod.Name,
 		MaxTokens:   &max3,
-		Temperature: ptrOrNil(float64(0)),
+		Temperature: ptrOrNil(cfg.Temperature),
 	}
 
 	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
@@ -225,5 +230,15 @@ func (m *Mods) classifyShellCommand(command string) bool {
 	if st.Err() != nil {
 		return true
 	}
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(sb.String())), "YES")
+	rawResponse := strings.TrimSpace(sb.String())
+	upper := strings.ToUpper(rawResponse)
+	hasYes := reYes.MatchString(upper)
+	hasNo := reNo.MatchString(upper)
+	needsReview := !hasNo || hasYes
+	debugPrintf("classifyShellCommand: cmd=%q resp=%s hasYes=%v hasNo=%v -> needsReview=%v",
+		command, truncateStr(rawResponse, 80), hasYes, hasNo, needsReview)
+	return needsReview
 }
+
+var reYes = regexp.MustCompile(`\bYES\b`)
+var reNo = regexp.MustCompile(`\bNO\b`)

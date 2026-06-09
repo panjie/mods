@@ -108,7 +108,8 @@ var help = map[string]string{
 	"debug":               "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":     "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
 	"reasoning":           "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
-	"review":              "Review tool execution before running: never, mutable (default), or always",
+	"review":               "Review tool execution before running: never, mutable (default), or always",
+	"shell-classify-prompt": "Custom prompt for classifying whether a shell command needs review; defaults to built-in prompt when unset",
 }
 
 // Model represents the LLM model used in the API call.
@@ -212,8 +213,9 @@ type PersistentConfig struct {
 	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
 	Reasoning           ReasoningMode              `yaml:"reasoning" env:"REASONING"`
-	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
-	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
+	ReviewMode           ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	ShellClassifyPrompt  string                     `yaml:"shell-classify-prompt"`
+	MaxToolRounds        int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`

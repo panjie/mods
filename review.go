@@ -47,6 +47,7 @@ func (r *toolReviewer) startSession() tea.Cmd {
 		close(r.reviewChan)
 	}
 	r.reviewChan = make(chan toolReviewItem, 4)
+	debugPrintf("toolReviewer: session started, reviewChan created")
 	return r.pollReviewCmd()
 }
 
@@ -101,26 +102,42 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 
 func (r *toolReviewer) shouldReviewTool(name string) bool {
 	if !isInputTTY() {
+		debugPrintf("Review skipped: stdin is not a TTY (tool=%s)", name)
 		return false
 	}
 	switch r.reviewMode {
 	case ReviewNever:
+		debugPrintf("Review skipped: mode is never (tool=%s)", name)
 		return false
 	case ReviewAlways:
+		debugPrintf("Review required: mode is always (tool=%s)", name)
 		return true
 	default:
-		return isMutableTool(name)
+		mutable := isMutableTool(name)
+		if mutable {
+			debugPrintf("Review required: mutable tool '%s' with mode=%q", name, r.reviewMode)
+		} else {
+			debugPrintf("Review skipped: tool '%s' not in mutable whitelist", name)
+		}
+		return mutable
 	}
 }
 
 func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool {
+	debugPrintf("requestApproval called: name=%s", name)
 	if r.approveAll.Load() {
+		debugPrintf("requestApproval: approveAll is true, auto-approving")
 		return true
 	}
 	if name == "shell_run" {
 		cmd := extractShellCommand(data)
-		if cmd != "" && !ctx.classifyShellCommand(cmd) {
-			return true
+		if cmd != "" {
+			mutable := ctx.classifyShellCommand(cmd)
+			debugPrintf("shell classifier: cmd=%q mutable=%v", cmd, mutable)
+			if !mutable {
+				debugPrintf("shell classifier result: NOT mutable, auto-approving")
+				return true
+			}
 		}
 	}
 	respCh := make(chan bool, 1)
@@ -132,13 +149,17 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 	}
 	select {
 	case r.reviewChan <- item:
+		debugPrintf("requestApproval: review item sent to channel, waiting for user...")
 	case <-ctx.ctx.Done():
+		debugPrintf("requestApproval: context cancelled while sending review item")
 		return false
 	}
 	select {
 	case approved := <-respCh:
+		debugPrintf("requestApproval: user response received, approved=%v", approved)
 		return approved
 	case <-ctx.ctx.Done():
+		debugPrintf("requestApproval: context cancelled while waiting for user response")
 		return false
 	}
 }

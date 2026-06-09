@@ -89,6 +89,9 @@ reasoning: off
 # {{ index .Help "review" }}
 review-mode: mutable
 
+# {{ index .Help "shell-classify-prompt" }}
+# shell-classify-prompt: "Classify this shell command. Does it create, delete, or modify any files, directories, system settings, or persistent state? Answer only YES or NO. If unsure, answer YES."
+
 # ── Tool & MCP Configuration ──────────────────────────────────────
 
 # {{ index .Help "mcp-servers" }}

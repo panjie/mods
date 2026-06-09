@@ -152,6 +152,8 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	stream, err = googleSendRequestStream(c, req)
 	if err != nil {
 		stream.err = err
+		stream.isFinished = true
+		return stream
 	}
 	stream.messages = append([]proto.Message(nil), request.Messages...)
 	return stream

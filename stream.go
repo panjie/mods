@@ -8,9 +8,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/mods/internal/clipboard"
-	"github.com/charmbracelet/mods/internal/proto"
-
 	imageutil "github.com/charmbracelet/mods/internal/image"
+	"github.com/charmbracelet/mods/internal/proto"
 )
 
 func (m *Mods) setupStreamContext(content string, mod Model) error {
@@ -117,14 +116,10 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		if err != nil {
 			return modsError{err: err, reason: "Could not read image file"}
 		}
-		totalBytes += len(data)
-		if totalBytes > imageutil.MaxTotalImageBytes {
-			return modsError{
-				err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
-				reason: "Images too large",
-			}
+		images, err = m.appendImageWithMime(images, &totalBytes, data, mime)
+		if err != nil {
+			return err
 		}
-		images = append(images, proto.Image{Data: data, MimeType: mime})
 	}
 	// Attach stdin image data if present
 	if len(m.stdinImageData) > 0 {
@@ -132,14 +127,10 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		if err != nil {
 			return modsError{err: err, reason: "Could not detect stdin image format"}
 		}
-		totalBytes += len(m.stdinImageData)
-		if totalBytes > imageutil.MaxTotalImageBytes {
-			return modsError{
-				err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
-				reason: "Images too large",
-			}
+		images, err = m.appendImageWithMime(images, &totalBytes, m.stdinImageData, mime)
+		if err != nil {
+			return err
 		}
-		images = append(images, proto.Image{Data: m.stdinImageData, MimeType: mime})
 	}
 	// Attach clipboard image if requested
 	if cfg.ClipboardImage {
@@ -151,14 +142,10 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		if err != nil {
 			return modsError{err: err, reason: "Unsupported clipboard image format"}
 		}
-		totalBytes += len(data)
-		if totalBytes > imageutil.MaxTotalImageBytes {
-			return modsError{
-				err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
-				reason: "Images too large",
-			}
+		images, err = m.appendImageWithMime(images, &totalBytes, data, supportedMime)
+		if err != nil {
+			return err
 		}
-		images = append(images, proto.Image{Data: data, MimeType: supportedMime})
 	}
 	if len(images) > 0 {
 		lastIdx := len(m.messages) - 1
@@ -167,4 +154,15 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 
 	return nil
+}
+
+func (m *Mods) appendImageWithMime(images []proto.Image, totalBytes *int, data []byte, mime string) ([]proto.Image, error) {
+	*totalBytes += len(data)
+	if *totalBytes > imageutil.MaxTotalImageBytes {
+		return images, modsError{
+			err:    fmt.Errorf("total image size exceeds limit of %d bytes", imageutil.MaxTotalImageBytes),
+			reason: "Images too large",
+		}
+	}
+	return append(images, proto.Image{Data: data, MimeType: mime}), nil
 }

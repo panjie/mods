@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/mods/internal/cache"
 	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/charmbracelet/mods/internal/stream"
 )
 
 type state int
@@ -24,6 +25,11 @@ const (
 	responseState
 	doneState
 	errorState
+)
+
+const (
+	defaultMaxToolRounds   = 30
+	maxToolFailedRounds    = 3
 )
 
 // Mods is the Bubble Tea model that manages reading stdin and querying
@@ -242,28 +248,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		maxTotal := m.Config.MaxToolRounds
 		if maxTotal <= 0 {
-			maxTotal = 30
+			maxTotal = defaultMaxToolRounds
 		}
-		const maxFailedRounds = 3
-		if m.toolCallRounds > maxFailedRounds {
-			debugPrintf("Tool call failed rounds exceeded limit (%d), stopping", maxFailedRounds)
-			m.messages = msg.stream.Messages()
-			content := lastAssistantContent(m.messages)
-			if content != "" {
-				m.appendToOutput(content)
-			}
+		if m.toolRoundLimitExceeded(maxTotal, msg.stream) {
 			return m, msgCmd(completionOutput{errh: msg.errh})
 		}
-		if m.totalRounds > maxTotal {
-			debugPrintf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
-			m.messages = msg.stream.Messages()
-			content := lastAssistantContent(m.messages)
-			if content != "" {
-				m.appendToOutput(content)
-			}
-			return m, msgCmd(completionOutput{errh: msg.errh})
-		}
-		debugPrintf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxFailedRounds)
+		debugPrintf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
 		return m, msgCmd(toolMsg)
 	case modsError:
 		m.Error = &msg
@@ -310,6 +300,28 @@ func (m *Mods) quit() tea.Msg {
 		cancel()
 	}
 	return tea.Quit()
+}
+
+func (m *Mods) toolRoundLimitExceeded(maxTotal int, st stream.Stream) bool {
+	if m.toolCallRounds > maxToolFailedRounds {
+		debugPrintf("Tool call failed rounds exceeded limit (%d), stopping", maxToolFailedRounds)
+		m.resetAndOutput(st)
+		return true
+	}
+	if m.totalRounds > maxTotal {
+		debugPrintf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
+		m.resetAndOutput(st)
+		return true
+	}
+	return false
+}
+
+func (m *Mods) resetAndOutput(st stream.Stream) {
+	m.messages = st.Messages()
+	content := lastAssistantContent(m.messages)
+	if content != "" {
+		m.appendToOutput(content)
+	}
 }
 
 

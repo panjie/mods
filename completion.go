@@ -18,11 +18,6 @@ import (
 
 	"github.com/caarlos0/go-shellwords"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/mods/internal/anthropic"
-	"github.com/charmbracelet/mods/internal/cohere"
-	"github.com/charmbracelet/mods/internal/google"
-	"github.com/charmbracelet/mods/internal/ollama"
-	"github.com/charmbracelet/mods/internal/openai"
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/stream"
 	"github.com/charmbracelet/mods/internal/websearch"
@@ -53,12 +48,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	return func() tea.Msg {
 		var mod Model
 		var api API
-		var ccfg openai.Config
-		var accfg anthropic.Config
-		var cccfg cohere.Config
-		var occfg ollama.Config
-		var gccfg google.Config
-
 		cfg := m.Config
 		api, mod, err := m.resolveModel(cfg)
 		cfg.API = mod.API
@@ -82,63 +71,18 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			}
 		}
 
-		switch mod.API {
-		case "ollama":
-			occfg = ollama.DefaultConfig()
-			if api.BaseURL != "" {
-				occfg.BaseURL = api.BaseURL
-			}
-		case "anthropic":
-			key, err := m.ensureKey(api, "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys")
-			if err != nil {
-				return modsError{err, "Anthropic authentication failed"}
-			}
-			accfg = anthropic.DefaultConfig(key)
-			if api.BaseURL != "" {
-				accfg.BaseURL = api.BaseURL
-			}
-		case "google":
-			key, err := m.ensureKey(api, "GOOGLE_API_KEY", "https://aistudio.google.com/app/apikey")
-			if err != nil {
-				return modsError{err, "Google authentication failed"}
-			}
-			gccfg = google.DefaultConfig(mod.Name, key)
-			gccfg.ThinkingBudget = mod.ThinkingBudget
-		case "cohere":
-			key, err := m.ensureKey(api, "COHERE_API_KEY", "https://dashboard.cohere.com/api-keys")
-			if err != nil {
-				return modsError{err, "Cohere authentication failed"}
-			}
-			cccfg = cohere.DefaultConfig(key)
-			if api.BaseURL != "" {
-				cccfg.BaseURL = api.BaseURL
-			}
-		case "azure", "azure-ad": //nolint:goconst
-			key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
-			if err != nil {
-				return modsError{err, "Azure authentication failed"}
-			}
-			ccfg = openai.Config{
-				AuthToken: key,
-				BaseURL:   api.BaseURL,
-			}
-			if mod.API == "azure-ad" {
-				ccfg.APIType = "azure-ad"
-			} else {
-				ccfg.APIType = "azure"
-			}
-			if api.User != "" {
-				cfg.User = api.User
-			}
-		default:
-			key, err := m.ensureKey(api, "OPENAI_API_KEY", "https://platform.openai.com/account/api-keys")
-			if err != nil {
-				return modsError{err, "OpenAI authentication failed"}
-			}
-			ccfg = openai.Config{
-				AuthToken: key,
-				BaseURL:   api.BaseURL,
-			}
+		cfgs, err := m.buildProviderConfigs(mod, api)
+		if err != nil {
+			return err
+		}
+		accfg := cfgs.Anthropic
+		gccfg := cfgs.Google
+		cccfg := cfgs.Cohere
+		occfg := cfgs.Ollama
+		ccfg := cfgs.OpenAI
+
+		if (mod.API == "azure" || mod.API == "azure-ad") && api.User != "" {
+			cfg.User = api.User
 		}
 
 		m.reasoningActive = m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)

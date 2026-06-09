@@ -129,68 +129,15 @@ func (m *Mods) classifyShellCommand(command string) bool {
 		return true
 	}
 
-	var (
-		accfg anthropic.Config
-		gccfg google.Config
-		ccfg  openai.Config
-		occfg ollama.Config
-		cccfg cohere.Config
-	)
-
-	switch mod.API {
-	case "ollama":
-		occfg = ollama.DefaultConfig()
-		if api.BaseURL != "" {
-			occfg.BaseURL = api.BaseURL
-		}
-	case "anthropic":
-		key, err := m.ensureKey(api, "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys")
-		if err != nil {
-			return true
-		}
-		accfg = anthropic.DefaultConfig(key)
-		if api.BaseURL != "" {
-			accfg.BaseURL = api.BaseURL
-		}
-	case "google":
-		key, err := m.ensureKey(api, "GOOGLE_API_KEY", "https://aistudio.google.com/app/apikey")
-		if err != nil {
-			return true
-		}
-		gccfg = google.DefaultConfig(mod.Name, key)
-	case "cohere":
-		key, err := m.ensureKey(api, "COHERE_API_KEY", "https://dashboard.cohere.com/api-keys")
-		if err != nil {
-			return true
-		}
-		cccfg = cohere.DefaultConfig(key)
-		if api.BaseURL != "" {
-			cccfg.BaseURL = api.BaseURL
-		}
-	case "azure", "azure-ad":
-		key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
-		if err != nil {
-			return true
-		}
-		ccfg = openai.Config{
-			AuthToken: key,
-			BaseURL:   api.BaseURL,
-		}
-		if mod.API == "azure-ad" {
-			ccfg.APIType = "azure-ad"
-		} else {
-			ccfg.APIType = "azure"
-		}
-	default:
-		key, err := m.ensureKey(api, "OPENAI_API_KEY", "https://platform.openai.com/account/api-keys")
-		if err != nil {
-			return true
-		}
-		ccfg = openai.Config{
-			AuthToken: key,
-			BaseURL:   api.BaseURL,
-		}
+	cfgs, err := m.buildProviderConfigs(mod, api)
+	if err != nil {
+		return true
 	}
+	accfg := cfgs.Anthropic
+	gccfg := cfgs.Google
+	cccfg := cfgs.Cohere
+	occfg := cfgs.Ollama
+	ccfg := cfgs.OpenAI
 
 	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()

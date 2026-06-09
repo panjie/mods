@@ -166,6 +166,20 @@ func (m *Mods) classifyShellCommand(command string) bool {
 		if api.BaseURL != "" {
 			cccfg.BaseURL = api.BaseURL
 		}
+	case "azure", "azure-ad":
+		key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
+		if err != nil {
+			return true
+		}
+		ccfg = openai.Config{
+			AuthToken: key,
+			BaseURL:   api.BaseURL,
+		}
+		if mod.API == "azure-ad" {
+			ccfg.APIType = "azure-ad"
+		} else {
+			ccfg.APIType = "azure"
+		}
 	default:
 		key, err := m.ensureKey(api, "OPENAI_API_KEY", "https://platform.openai.com/account/api-keys")
 		if err != nil {

@@ -51,12 +51,13 @@ func New(config Config) *Client {
 		opts = append(opts, option.WithHTTPClient(config.HTTPClient))
 	}
 
-	if config.APIType == "azure-ad" {
+	switch config.APIType {
+	case "azure", "azure-ad":
 		opts = append(opts, azure.WithAPIKey(config.AuthToken))
 		if config.BaseURL != "" {
 			opts = append(opts, azure.WithEndpoint(config.BaseURL, "v1"))
 		}
-	} else {
+	default:
 		opts = append(opts, option.WithAPIKey(config.AuthToken))
 		if config.BaseURL != "" {
 			opts = append(opts, option.WithBaseURL(config.BaseURL))

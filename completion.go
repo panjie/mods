@@ -111,7 +111,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			}
 			cccfg = cohere.DefaultConfig(key)
 			if api.BaseURL != "" {
-				ccfg.BaseURL = api.BaseURL
+				cccfg.BaseURL = api.BaseURL
 			}
 		case "azure", "azure-ad": //nolint:goconst
 			key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
@@ -124,6 +124,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			}
 			if mod.API == "azure-ad" {
 				ccfg.APIType = "azure-ad"
+			} else {
+				ccfg.APIType = "azure"
 			}
 			if api.User != "" {
 				cfg.User = api.User

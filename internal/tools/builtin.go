@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	localereader "github.com/mattn/go-localereader"
+
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/websearch"
 )
@@ -350,6 +352,9 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			cmd := shellCommand(runCtx, args.Command)
 			cmd.Dir = root
 			out, err := cmd.CombinedOutput()
+			if decoded, decErr := localereader.UTF8(out); decErr == nil {
+				out = decoded
+			}
 			text := truncateOutput(string(out), cfg.MaxOutputChars)
 			if err != nil {
 				return text, err

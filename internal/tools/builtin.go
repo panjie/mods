@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -357,6 +358,15 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			}
 			text := truncateOutput(string(out), cfg.MaxOutputChars)
 			if err != nil {
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
+					if text != "" {
+						text += fmt.Sprintf("\n[exit status %d]", exitErr.ExitCode())
+					} else {
+						text = fmt.Sprintf("[exit status %d]", exitErr.ExitCode())
+					}
+					return text, nil
+				}
 				return text, err
 			}
 			return text, nil

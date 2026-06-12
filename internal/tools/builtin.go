@@ -330,10 +330,14 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 	if cfg.MaxOutputChars <= 0 {
 		cfg.MaxOutputChars = defaultShellOutput
 	}
+	desc := "Run a non-interactive shell command via sh and return its combined output."
+	if runtime.GOOS == "windows" {
+		desc = "Run a non-interactive shell command via cmd.exe and return its combined output. Use Windows path syntax (e.g. C:\\Users\\foo) and cmd.exe commands (dir, type, etc.), not Unix paths or bash syntax."
+	}
 	return registry.Register(Tool{
 		Spec: proto.ToolSpec{
 			Name:        "shell_run",
-			Description: "Run a non-interactive shell command in the workspace and return its combined output.",
+			Description: desc,
 			InputSchema: objectSchema(map[string]any{
 				"command": stringProp("Shell command to run."),
 			}, "command"),

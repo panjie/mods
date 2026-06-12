@@ -22,8 +22,12 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	if user == "" {
 		user = os.Getenv("USERNAME")
 	}
-	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s",
-		cwd, user, hostname, runtime.GOOS, runtime.GOARCH)
+	shell := "sh"
+	if runtime.GOOS == "windows" {
+		shell = "cmd.exe"
+	}
+	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s, shell=%s",
+		cwd, user, hostname, runtime.GOOS, runtime.GOARCH, shell)
 	m.messages = append(m.messages, proto.Message{
 		Role:    proto.RoleSystem,
 		Content: sysInfo,

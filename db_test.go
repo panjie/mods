@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 	"modernc.org/sqlite"
 )
@@ -183,5 +186,163 @@ func TestConvoDB(t *testing.T) {
 		require.Equal(t, []string{
 			fmt.Sprintf("%s\t%s", testid1, title1),
 		}, results)
+	})
+}
+
+func TestConversationData(t *testing.T) {
+	db := testDB(t)
+	id := newConversationID()
+	messages := []proto.Message{
+		{
+			Role:    proto.RoleUser,
+			Content: "inspect image",
+			Images: []proto.Image{{
+				Data:     []byte{1, 2, 3},
+				MimeType: "image/png",
+			}},
+		},
+		{
+			Role:    proto.RoleAssistant,
+			Content: "done",
+			ToolCalls: []proto.ToolCall{{
+				ID: "call-1",
+				Function: proto.Function{
+					Name:      "shell_run",
+					Arguments: []byte(`{"command":"git status"}`),
+				},
+			}},
+		},
+	}
+	rules := []ApprovalRule{
+		{Type: approvalShellPrefix, Tool: "shell_run", Pattern: "git commit *"},
+		{Type: approvalEditAll, Tool: "file_edit"},
+	}
+
+	require.NoError(t, db.SaveConversation(id, "conversation", "openai", "gpt-5", messages, rules))
+
+	var loaded []proto.Message
+	require.NoError(t, db.ReadMessages(id, &loaded))
+	require.Equal(t, messages, loaded)
+
+	loadedRules, err := db.ApprovalRules(id)
+	require.NoError(t, err)
+	require.ElementsMatch(t, rules, loadedRules)
+
+	branchID := newConversationID()
+	require.NoError(t, db.SaveConversation(branchID, "branch", "openai", "gpt-5", loaded, loadedRules))
+	branchRules, err := db.ApprovalRules(branchID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, rules, branchRules)
+
+	require.NoError(t, db.Delete(id))
+	require.Error(t, db.ReadMessages(id, &loaded))
+	deletedRules, err := db.ApprovalRules(id)
+	require.NoError(t, err)
+	require.Empty(t, deletedRules)
+}
+
+func TestSaveConversationRollsBackAtomically(t *testing.T) {
+	db := testDB(t)
+	id := newConversationID()
+	originalMessages := []proto.Message{{Role: proto.RoleUser, Content: "original"}}
+	originalRules := []ApprovalRule{{
+		Type: approvalShellPrefix,
+		Tool: "shell_run", Pattern: "git commit *",
+	}}
+	require.NoError(t, db.SaveConversation(
+		id, "original", "openai", "gpt-5", originalMessages, originalRules,
+	))
+
+	err := db.SaveConversation(
+		id,
+		"",
+		"openai",
+		"gpt-5",
+		[]proto.Message{{Role: proto.RoleUser, Content: "replacement"}},
+		[]ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}},
+	)
+	require.Error(t, err)
+
+	var loaded []proto.Message
+	require.NoError(t, db.ReadMessages(id, &loaded))
+	require.Equal(t, originalMessages, loaded)
+	loadedRules, err := db.ApprovalRules(id)
+	require.NoError(t, err)
+	require.Equal(t, originalRules, loadedRules)
+}
+
+func TestMigrateLegacyConversations(t *testing.T) {
+	t.Run("imports valid conversation and removes gob", func(t *testing.T) {
+		cachePath := t.TempDir()
+		dir := filepath.Join(cachePath, "conversations")
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		db, err := openDB(filepath.Join(dir, "mods.db"))
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+		id := newConversationID()
+		require.NoError(t, db.Save(id, "legacy", "openai", "gpt-4"))
+		messages := []proto.Message{{Role: proto.RoleUser, Content: "legacy message"}}
+		encoded, err := encodeConversation(messages)
+		require.NoError(t, err)
+		legacyPath := filepath.Join(dir, id+".gob")
+		require.NoError(t, os.WriteFile(legacyPath, encoded, 0o600))
+
+		require.NoError(t, db.MigrateLegacyConversations(cachePath))
+		require.NoFileExists(t, legacyPath)
+
+		var loaded []proto.Message
+		require.NoError(t, db.ReadMessages(id, &loaded))
+		require.Equal(t, messages, loaded)
+	})
+
+	t.Run("retains corrupt and orphan files", func(t *testing.T) {
+		cachePath := t.TempDir()
+		dir := filepath.Join(cachePath, "conversations")
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		db, err := openDB(filepath.Join(dir, "mods.db"))
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+		corruptID := newConversationID()
+		require.NoError(t, db.Save(corruptID, "corrupt", "openai", "gpt-4"))
+		corruptPath := filepath.Join(dir, corruptID+".gob")
+		require.NoError(t, os.WriteFile(corruptPath, []byte("not gob"), 0o600))
+
+		orphanID := newConversationID()
+		orphanPath := filepath.Join(dir, orphanID+".gob")
+		encoded, err := encodeConversation([]proto.Message{{Role: proto.RoleUser, Content: "orphan"}})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(orphanPath, encoded, 0o600))
+
+		require.Error(t, db.MigrateLegacyConversations(cachePath))
+		require.FileExists(t, corruptPath)
+		require.FileExists(t, orphanPath)
+	})
+
+	t.Run("does not overwrite newer sqlite messages", func(t *testing.T) {
+		cachePath := t.TempDir()
+		dir := filepath.Join(cachePath, "conversations")
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		db, err := openDB(filepath.Join(dir, "mods.db"))
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+		id := newConversationID()
+		newer := []proto.Message{{Role: proto.RoleUser, Content: "newer sqlite message"}}
+		require.NoError(t, db.SaveConversation(id, "conversation", "openai", "gpt-5", newer, nil))
+
+		older := []proto.Message{{Role: proto.RoleUser, Content: "older gob message"}}
+		encoded, err := encodeConversation(older)
+		require.NoError(t, err)
+		legacyPath := filepath.Join(dir, id+".gob")
+		require.NoError(t, os.WriteFile(legacyPath, encoded, 0o600))
+
+		require.NoError(t, db.MigrateLegacyConversations(cachePath))
+		require.NoFileExists(t, legacyPath)
+
+		var loaded []proto.Message
+		require.NoError(t, db.ReadMessages(id, &loaded))
+		require.Equal(t, newer, loaded)
 	})
 }

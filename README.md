@@ -151,13 +151,15 @@ This fork adds the following features on top of the original Mods.
 ### Review & Safety
 
 - **Tool Execution Review** — Before modifying files or running shell commands,
-  Mods shows a colored confirmation banner. Press `Y` to approve, `N` to deny,
-  `A` to approve all future operations. `--review` controls the mode:
+  Mods shows a colored confirmation banner. Press `Y` to approve once, `N` to
+  deny, or `A` to save the displayed rule for the current conversation. Shell
+  rules use command prefixes; file-edit rules cover future edits in that
+  conversation. Saved rules are restored with `--continue`. `--review` controls the mode:
   `mutable` (default), `always`, or `never`.
 
   ```
-  Review: Write src/main.go (1,234 bytes)  
-  [Y] Approve  [N] Deny  [A] Approve All  [Ctrl+C] Cancel
+  Review: Run: git commit -m "Update docs"
+  [Y] Approve  [N] Deny  [A] Always allow: shell_run(git commit *)  [Ctrl+C] Cancel
   ```
 
 ### Observability

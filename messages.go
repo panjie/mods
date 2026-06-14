@@ -66,10 +66,10 @@ type toolOperationStatusMsg struct {
 }
 
 type toolReviewItem struct {
-	name  string
-	args  []byte
-	label string
-	resp  chan bool
+	name        string
+	args        []byte
+	alwaysRules []ApprovalRule
+	resp        chan reviewResponse
 }
 
 type toolReviewStartMsg struct {
@@ -78,6 +78,12 @@ type toolReviewStartMsg struct {
 
 type cacheDetailsMsg struct {
 	WriteID, Title, ReadID, API, Model string
+	Rules                              []ApprovalRule
+}
+
+type reviewResponse struct {
+	approved bool
+	remember bool
 }
 
 type stdinImageInput struct {

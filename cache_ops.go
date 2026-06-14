@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/x/exp/ordered"
 )
 
-
 func (m *Mods) findCacheOpsDetails() tea.Cmd {
 	return func() tea.Msg {
 		continueLast := m.Config.ContinueLast || (m.Config.Continue != "" && m.Config.Title == "")
@@ -20,6 +19,7 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 		title := writeID
 		model := m.Config.Model
 		api := m.Config.API
+		var rules []ApprovalRule
 
 		if readID != "" || continueLast || m.Config.ShowLast {
 			found, err := m.findReadID(readID)
@@ -34,6 +34,15 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 				if found.Model != nil && found.API != nil {
 					model = *found.Model
 					api = *found.API
+				}
+				if !m.Config.NoCache {
+					rules, err = m.db.ApprovalRules(readID)
+					if err != nil {
+						return modsError{
+							err:    err,
+							reason: "Could not load conversation approval rules.",
+						}
+					}
 				}
 			}
 		}
@@ -64,6 +73,7 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 			ReadID:  readID,
 			API:     api,
 			Model:   model,
+			Rules:   rules,
 		}
 	}
 }
@@ -103,11 +113,10 @@ func (m *Mods) readStdinCmd() tea.Msg {
 	return completionInput{""}
 }
 
-
 func (m *Mods) readFromCache() tea.Cmd {
 	return func() tea.Msg {
 		var messages []proto.Message
-		if err := m.cache.Read(m.Config.cacheReadFromID, &messages); err != nil {
+		if err := m.db.ReadMessages(m.Config.cacheReadFromID, &messages); err != nil {
 			return modsError{err, "There was an error loading the conversation."}
 		}
 
@@ -119,4 +128,3 @@ func (m *Mods) readFromCache() tea.Cmd {
 		}
 	}
 }
-

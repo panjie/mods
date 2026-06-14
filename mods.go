@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/mods/internal/cache"
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/stream"
 )
@@ -28,8 +27,8 @@ const (
 )
 
 const (
-	defaultMaxToolRounds   = 30
-	maxToolFailedRounds    = 3
+	defaultMaxToolRounds = 30
+	maxToolFailedRounds  = 3
 )
 
 // Mods is the Bubble Tea model that manages reading stdin and querying
@@ -58,7 +57,6 @@ type Mods struct {
 	showOperationStatus bool
 
 	db     *convoDB
-	cache  *cache.Conversations
 	Config *Config
 
 	content        []string
@@ -78,7 +76,6 @@ func newMods(
 	r *lipgloss.Renderer,
 	cfg *Config,
 	db *convoDB,
-	cache *cache.Conversations,
 ) (*Mods, error) {
 	gr, err := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
@@ -98,10 +95,9 @@ func newMods(
 		contentMutex:        &sync.Mutex{},
 		showOperationStatus: isOutputTTY() && isErrorTTY() && !cfg.Raw,
 		db:                  db,
-		cache:               cache,
-		Config:   cfg,
-		reviewer: newToolReviewer(cfg),
-		ctx:      ctx,
+		Config:              cfg,
+		reviewer:            newToolReviewer(cfg),
+		ctx:                 ctx,
 	}, nil
 }
 
@@ -120,6 +116,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.cacheReadFromID = msg.ReadID
 		m.Config.API = msg.API
 		m.Config.Model = msg.Model
+		m.reviewer.rules.replace(msg.Rules)
 
 		if !m.Config.Quiet {
 			m.anim = newAnim(m.Config.Fanciness, m.Config.StatusText, m.renderer, m.Styles)
@@ -265,10 +262,10 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.glamViewport.Height = m.height
 		return m, nil
 	case tea.KeyMsg:
-	if handled, cmd := m.reviewer.handleKey(msg); handled {
-		return m, cmd
-	}
-	switch msg.String() {
+		if handled, cmd := m.reviewer.handleKey(msg); handled {
+			return m, cmd
+		}
+		switch msg.String() {
 		case "q", "ctrl+c":
 			m.state = doneState
 			return m, m.quit
@@ -323,5 +320,3 @@ func (m *Mods) resetAndOutput(st stream.Stream) {
 		m.appendToOutput(content)
 	}
 }
-
-

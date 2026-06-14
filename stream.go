@@ -95,17 +95,17 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 
 	if !cfg.NoCache && cfg.cacheReadFromID != "" {
-		if err := m.cache.Read(cfg.cacheReadFromID, &m.messages); err != nil {
+		if err := m.db.ReadMessages(cfg.cacheReadFromID, &m.messages); err != nil {
 			return modsError{
 				err: err,
 				reason: fmt.Sprintf(
-					"There was a problem reading the cache. Use %s / %s to disable it.",
+					"There was a problem reading the stored conversation. Use %s / %s to disable persistence.",
 					m.Styles.InlineCode.Render("--no-cache"),
 					m.Styles.InlineCode.Render("NO_CACHE"),
 				),
 			}
 		}
-		debugPrintf("Cache: read %d messages from %s", len(m.messages), cfg.cacheReadFromID[:min(sha1short, len(cfg.cacheReadFromID))])
+		debugPrintf("Conversation: read %d messages from %s", len(m.messages), cfg.cacheReadFromID[:min(sha1short, len(cfg.cacheReadFromID))])
 	}
 
 	m.messages = append(m.messages, proto.Message{

@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync/atomic"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // toolReviewer manages interactive approval of tool executions (file writes,
@@ -16,10 +15,9 @@ import (
 type toolReviewer struct {
 	reviewChan    chan toolReviewItem
 	reviewMode    ReviewMode
-	approveAll    atomic.Bool
 	reviewPending bool
 	reviewItem    *toolReviewItem
-
+	rules         approvalRuleSet
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
@@ -58,7 +56,6 @@ func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
 }
 
 func (r *toolReviewer) reset() {
-	r.approveAll.Store(false)
 	if r.reviewChan != nil {
 		close(r.reviewChan)
 	}
@@ -76,23 +73,23 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "y", "Y":
-		r.reviewItem.resp <- true
+		r.reviewItem.resp <- reviewResponse{approved: true}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "n", "N":
-		r.reviewItem.resp <- false
+		r.reviewItem.resp <- reviewResponse{}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "a", "A":
-		r.approveAll.Store(true)
-		r.reviewItem.resp <- true
+		r.rules.add(r.reviewItem.alwaysRules...)
+		r.reviewItem.resp <- reviewResponse{approved: true, remember: true}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "ctrl+c":
-		r.reviewItem.resp <- false
+		r.reviewItem.resp <- reviewResponse{}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
@@ -125,8 +122,8 @@ func (r *toolReviewer) shouldReviewTool(name string) bool {
 
 func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool {
 	debugPrintf("requestApproval called: name=%s", name)
-	if r.approveAll.Load() {
-		debugPrintf("requestApproval: approveAll is true, auto-approving")
+	if r.rules.allows(name, data) {
+		debugPrintf("requestApproval: matched conversation approval rule, auto-approving")
 		return true
 	}
 	if name == "shell_run" {
@@ -140,12 +137,13 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 			}
 		}
 	}
-	respCh := make(chan bool, 1)
+	respCh := make(chan reviewResponse, 1)
+	alwaysRules := approvalRulesFor(name, data)
 	item := toolReviewItem{
-		name:  name,
-		args:  data,
-		label: toolOperationLabel(name, data, ctx.width),
-		resp:  respCh,
+		name:        name,
+		args:        data,
+		alwaysRules: alwaysRules,
+		resp:        respCh,
 	}
 	select {
 	case r.reviewChan <- item:
@@ -155,9 +153,10 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 		return false
 	}
 	select {
-	case approved := <-respCh:
-		debugPrintf("requestApproval: user response received, approved=%v", approved)
-		return approved
+	case response := <-respCh:
+		debugPrintf("requestApproval: user response received, approved=%v remember=%v",
+			response.approved, response.remember)
+		return response.approved
 	case <-ctx.ctx.Done():
 		debugPrintf("requestApproval: context cancelled while waiting for user response")
 		return false
@@ -192,7 +191,10 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 		padRight("  Review: "+label, width-4),
 	)
 	choicesLine := reviewChoices.Copy().Width(width).Render(
-		"  [Y] Approve  [N] Deny  [A] Approve All  [Ctrl+C] Cancel",
+		fmt.Sprintf(
+			"  [Y] Approve  [N] Deny  [A] Always allow: %s  [Ctrl+C] Cancel",
+			approvalRulesLabel(r.reviewItem.alwaysRules),
+		),
 	)
 	block := promptLine + "\n" + choicesLine
 	if strings.TrimSpace(content) == "" {

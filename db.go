@@ -1,10 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/jmoiron/sqlx"
 	"modernc.org/sqlite"
 )
@@ -39,6 +44,10 @@ func openDB(ds string) (*convoDB, error) {
 			"could not ping db: %w",
 			handleSqliteErr(err),
 		)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return nil, fmt.Errorf("could not enable foreign keys: %w", err)
 	}
 	if _, err := db.Exec(`
 		CREATE TABLE
@@ -77,6 +86,28 @@ func openDB(ds string) (*convoDB, error) {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS conversation_messages (
+			conversation_id string NOT NULL PRIMARY KEY,
+			messages blob NOT NULL,
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS approval_rules (
+			conversation_id string NOT NULL,
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, rule_type, tool_name, pattern),
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
 
 	return &convoDB{db: db}, nil
 }
@@ -111,7 +142,16 @@ func (c *convoDB) Close() error {
 }
 
 func (c *convoDB) Save(id, title, api, model string) error {
-	res, err := c.db.Exec(c.db.Rebind(`
+	return c.saveMetadata(c.db, id, title, api, model)
+}
+
+type sqlExecutor interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Rebind(query string) string
+}
+
+func (c *convoDB) saveMetadata(exec sqlExecutor, id, title, api, model string) error {
+	res, err := exec.Exec(exec.Rebind(`
 		UPDATE conversations
 		SET
 		  title = ?,
@@ -134,7 +174,7 @@ func (c *convoDB) Save(id, title, api, model string) error {
 		return nil
 	}
 
-	if _, err := c.db.Exec(c.db.Rebind(`
+	if _, err := exec.Exec(exec.Rebind(`
 		INSERT INTO
 		  conversations (id, title, api, model)
 		VALUES
@@ -146,15 +186,199 @@ func (c *convoDB) Save(id, title, api, model string) error {
 	return nil
 }
 
+func (c *convoDB) SaveConversation(
+	id, title, api, model string,
+	messages []proto.Message,
+	rules []ApprovalRule,
+) error {
+	encoded, err := encodeConversation(messages)
+	if err != nil {
+		return err
+	}
+	tx, err := c.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("SaveConversation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := c.saveMetadata(tx, id, title, api, model); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		INSERT INTO conversation_messages (conversation_id, messages)
+		VALUES (?, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+	`), id, encoded); err != nil {
+		return fmt.Errorf("SaveConversation messages: %w", err)
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM approval_rules WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("SaveConversation rules: %w", err)
+	}
+	for _, rule := range dedupeApprovalRules(rules) {
+		if _, err := tx.Exec(tx.Rebind(`
+			INSERT INTO approval_rules (conversation_id, rule_type, tool_name, pattern)
+			VALUES (?, ?, ?, ?)
+		`), id, rule.Type, rule.Tool, rule.Pattern); err != nil {
+			return fmt.Errorf("SaveConversation rule: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("SaveConversation commit: %w", err)
+	}
+	return nil
+}
+
+func (c *convoDB) ReadMessages(id string, messages *[]proto.Message) error {
+	var encoded []byte
+	if err := c.db.Get(&encoded, c.db.Rebind(`
+		SELECT messages FROM conversation_messages WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("ReadMessages: %w", err)
+	}
+	if err := decodeConversationBytes(encoded, messages); err != nil {
+		return fmt.Errorf("ReadMessages: %w", err)
+	}
+	return nil
+}
+
+func (c *convoDB) ApprovalRules(id string) ([]ApprovalRule, error) {
+	var rules []ApprovalRule
+	if id == "" {
+		return rules, nil
+	}
+	if err := c.db.Select(&rules, c.db.Rebind(`
+		SELECT rule_type, tool_name, pattern
+		FROM approval_rules
+		WHERE conversation_id = ?
+		ORDER BY created_at, rule_type, tool_name, pattern
+	`), id); err != nil {
+		return nil, fmt.Errorf("ApprovalRules: %w", err)
+	}
+	return rules, nil
+}
+
 func (c *convoDB) Delete(id string) error {
-	if _, err := c.db.Exec(c.db.Rebind(`
+	tx, err := c.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("Delete: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM approval_rules WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("Delete rules: %w", err)
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM conversation_messages WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("Delete messages: %w", err)
+	}
+	if _, err := tx.Exec(tx.Rebind(`
 		DELETE FROM conversations
 		WHERE
 		  id = ?
 	`), id); err != nil {
 		return fmt.Errorf("Delete: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("Delete commit: %w", err)
+	}
 	return nil
+}
+
+func (c *convoDB) MigrateLegacyConversations(cachePath string) error {
+	dir := filepath.Join(cachePath, "conversations")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read legacy conversations: %w", err)
+	}
+	var migrationErrors []error
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".gob" {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".gob")
+		path := filepath.Join(dir, entry.Name())
+		if !sha1reg.MatchString(id) {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("legacy conversation %s has an invalid ID; file retained", path))
+			continue
+		}
+		var exists int
+		if err := c.db.Get(&exists, c.db.Rebind(`
+			SELECT count(*) FROM conversations WHERE id = ?
+		`), id); err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("check legacy conversation %s: %w", id, err))
+			continue
+		}
+		if exists == 0 {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("legacy conversation %s has no database metadata; file retained", id))
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("read legacy conversation %s: %w", id, err))
+			continue
+		}
+		var messages []proto.Message
+		if err := decodeConversationBytes(data, &messages); err != nil {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("decode legacy conversation %s: %w; file retained", id, err))
+			continue
+		}
+		encoded, err := encodeConversation(messages)
+		if err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("encode legacy conversation %s: %w", id, err))
+			continue
+		}
+		var existing []byte
+		existingErr := c.db.Get(&existing, c.db.Rebind(`
+			SELECT messages FROM conversation_messages WHERE conversation_id = ?
+		`), id)
+		if existingErr == nil {
+			var existingMessages []proto.Message
+			if err := decodeConversationBytes(existing, &existingMessages); err == nil {
+				if err := os.Remove(path); err != nil {
+					migrationErrors = append(migrationErrors,
+						fmt.Errorf("remove migrated legacy conversation %s: %w", id, err))
+				}
+				continue
+			}
+		} else if !errors.Is(existingErr, sql.ErrNoRows) {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("check migrated conversation %s: %w", id, existingErr))
+			continue
+		}
+		tx, err := c.db.Beginx()
+		if err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("begin legacy migration %s: %w", id, err))
+			continue
+		}
+		if _, err := tx.Exec(tx.Rebind(`
+			INSERT INTO conversation_messages (conversation_id, messages)
+			VALUES (?, ?)
+			ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+		`), id, encoded); err != nil {
+			_ = tx.Rollback()
+			migrationErrors = append(migrationErrors, fmt.Errorf("migrate legacy conversation %s: %w", id, err))
+			continue
+		}
+		if err := tx.Commit(); err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("commit legacy conversation %s: %w", id, err))
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("remove migrated legacy conversation %s: %w", id, err))
+		}
+	}
+	return errors.Join(migrationErrors...)
 }
 
 func (c *convoDB) ListOlderThan(t time.Duration) ([]Conversation, error) {

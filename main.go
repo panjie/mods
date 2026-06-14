@@ -18,7 +18,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	glamour "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/mods/internal/cache"
 	"github.com/charmbracelet/x/editor"
 	mcobra "github.com/muesli/mango-cobra"
 	"github.com/muesli/roff"
@@ -117,11 +116,7 @@ var (
 				}
 			}
 
-			cache, err := cache.NewConversations(config.CachePath)
-			if err != nil {
-				return modsError{err, "Couldn't start Bubble Tea program."}
-			}
-			mods, err := newMods(cmd.Context(), stderrRenderer(), &config, db, cache)
+			mods, err := newMods(cmd.Context(), stderrRenderer(), &config, db)
 			if err != nil {
 				return modsError{err, "Couldn't start Bubble Tea program."}
 			}
@@ -390,6 +385,10 @@ func main() {
 			os.Exit(1)
 		}
 		defer db.Close() //nolint:errcheck
+		if err := db.MigrateLegacyConversations(config.CachePath); err != nil {
+			fmt.Fprintln(os.Stderr, "Warning: some legacy conversations were not migrated:")
+			fmt.Fprintln(os.Stderr, err)
+		}
 	}
 
 	if isCompletionCmd(os.Args) {
@@ -599,17 +598,12 @@ func deleteConversationOlderThan() error {
 		}
 	}
 
-	cache, err := cache.NewConversations(config.CachePath)
-	if err != nil {
-		return modsError{err, "Couldn't delete conversation."}
-	}
 	for _, c := range conversations {
 		if err := db.Delete(c.ID); err != nil {
 			return modsError{err, "Couldn't delete conversation."}
 		}
-
-		if err := cache.Delete(c.ID); err != nil {
-			return modsError{err, "Couldn't delete conversation."}
+		if err := removeLegacyConversationFile(c.ID); err != nil {
+			return modsError{err, "Couldn't delete legacy conversation data."}
 		}
 
 		if !config.Quiet {
@@ -637,17 +631,20 @@ func deleteConversation(convo *Conversation) error {
 	if err := db.Delete(convo.ID); err != nil {
 		return modsError{err, "Couldn't delete conversation."}
 	}
-
-	cache, err := cache.NewConversations(config.CachePath)
-	if err != nil {
-		return modsError{err, "Couldn't delete conversation."}
-	}
-	if err := cache.Delete(convo.ID); err != nil {
-		return modsError{err, "Couldn't delete conversation."}
+	if err := removeLegacyConversationFile(convo.ID); err != nil {
+		return modsError{err, "Couldn't delete legacy conversation data."}
 	}
 
 	if !config.Quiet {
 		fmt.Fprintln(os.Stderr, "Conversation deleted:", convo.ID[:sha1minLen])
+	}
+	return nil
+}
+
+func removeLegacyConversationFile(id string) error {
+	path := filepath.Join(config.CachePath, "conversations", id+".gob")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }
@@ -777,20 +774,19 @@ func saveConversation(mods *Mods) error {
 	}
 
 	errReason := fmt.Sprintf(
-		"There was a problem writing %s to the cache. Use %s / %s to disable it.",
+		"There was a problem saving conversation %s. Use %s / %s to disable persistence.",
 		config.cacheWriteToID,
 		stderrStyles().InlineCode.Render("--no-cache"),
 		stderrStyles().InlineCode.Render("NO_CACHE"),
 	)
-	cache, err := cache.NewConversations(config.CachePath)
-	if err != nil {
-		return modsError{err, errReason}
-	}
-	if err := cache.Write(id, &mods.messages); err != nil {
-		return modsError{err, errReason}
-	}
-	if err := db.Save(id, title, config.API, config.Model); err != nil {
-		_ = cache.Delete(id) // remove leftovers
+	if err := db.SaveConversation(
+		id,
+		title,
+		config.API,
+		config.Model,
+		mods.messages,
+		mods.reviewer.rules.snapshot(),
+	); err != nil {
 		return modsError{err, errReason}
 	}
 

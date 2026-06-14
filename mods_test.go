@@ -60,13 +60,25 @@ func TestFindCacheOpsDetails(t *testing.T) {
 	t.Run("continue id", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
-		require.NoError(t, mods.db.Save(id, "message", "openai", "gpt-4"))
+		rules := []ApprovalRule{{
+			Type: approvalShellPrefix,
+			Tool: "shell_run", Pattern: "git commit *",
+		}}
+		require.NoError(t, mods.db.SaveConversation(
+			id,
+			"message",
+			"openai",
+			"gpt-4",
+			[]proto.Message{{Role: proto.RoleUser, Content: "message"}},
+			rules,
+		))
 		mods.Config.Continue = id[:5]
 		mods.Config.Prefix = "prompt"
 		msg := mods.findCacheOpsDetails()()
 		dets := msg.(cacheDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
+		require.Equal(t, rules, dets.Rules)
 	})
 
 	t.Run("continue with no prompt", func(t *testing.T) {
@@ -134,7 +146,15 @@ func TestFindCacheOpsDetails(t *testing.T) {
 	t.Run("continue id and write with title", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
-		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
+		rules := []ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}}
+		require.NoError(t, mods.db.SaveConversation(
+			id,
+			"message 1",
+			"openai",
+			"gpt-4",
+			[]proto.Message{{Role: proto.RoleUser, Content: "message"}},
+			rules,
+		))
 		mods.Config.Title = "some title"
 		mods.Config.Continue = id[:10]
 		msg := mods.findCacheOpsDetails()()
@@ -144,6 +164,26 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.NotEqual(t, id, dets.WriteID)
 		require.NotEqual(t, "some title", dets.WriteID)
 		require.Equal(t, "some title", dets.Title)
+		require.Equal(t, rules, dets.Rules)
+	})
+
+	t.Run("no cache does not restore rules", func(t *testing.T) {
+		mods := newMods(t)
+		id := newConversationID()
+		require.NoError(t, mods.db.SaveConversation(
+			id,
+			"message",
+			"openai",
+			"gpt-4",
+			[]proto.Message{{Role: proto.RoleUser, Content: "message"}},
+			[]ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}},
+		))
+		mods.Config.Continue = id
+		mods.Config.Prefix = "prompt"
+		mods.Config.NoCache = true
+		msg := mods.findCacheOpsDetails()()
+		dets := msg.(cacheDetailsMsg)
+		require.Empty(t, dets.Rules)
 	})
 
 	t.Run("continue title and write with title", func(t *testing.T) {

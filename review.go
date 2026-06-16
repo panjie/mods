@@ -2,12 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+var errReviewUnavailable = errors.New("tool execution requires review but interactive approval is unavailable")
 
 // toolReviewer manages interactive approval of tool executions (file writes,
 // shell commands, etc.) before they run. It owns the review channel, approval
@@ -98,10 +101,6 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 func (r *toolReviewer) shouldReviewTool(name string) bool {
-	if !isInputTTY() {
-		debugPrintf("Review skipped: stdin is not a TTY (tool=%s)", name)
-		return false
-	}
 	switch r.reviewMode {
 	case ReviewNever:
 		debugPrintf("Review skipped: mode is never (tool=%s)", name)
@@ -120,22 +119,30 @@ func (r *toolReviewer) shouldReviewTool(name string) bool {
 	}
 }
 
-func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool {
+func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) error {
 	debugPrintf("requestApproval called: name=%s", name)
 	if r.rules.allows(name, data) {
 		debugPrintf("requestApproval: matched conversation approval rule, auto-approving")
-		return true
+		return nil
 	}
-	if name == "shell_run" {
+	if r.reviewMode != ReviewAlways && name == "shell_run" {
 		cmd := extractShellCommand(data)
 		if cmd != "" {
 			mutable := ctx.classifyShellCommand(cmd)
 			debugPrintf("shell classifier: cmd=%q mutable=%v", cmd, mutable)
 			if !mutable {
 				debugPrintf("shell classifier result: NOT mutable, auto-approving")
-				return true
+				return nil
 			}
 		}
+	}
+	if !isInputTTY() {
+		debugPrintf("Review denied: stdin is not a TTY (tool=%s)", name)
+		return fmt.Errorf(
+			"%w: %s requires approval, but stdin is not a TTY; run interactively or use --review never if non-interactive execution is intentional",
+			errReviewUnavailable,
+			name,
+		)
 	}
 	respCh := make(chan reviewResponse, 1)
 	alwaysRules := approvalRulesFor(name, data)
@@ -150,16 +157,19 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) bool
 		debugPrintf("requestApproval: review item sent to channel, waiting for user...")
 	case <-ctx.ctx.Done():
 		debugPrintf("requestApproval: context cancelled while sending review item")
-		return false
+		return fmt.Errorf("execution denied by user for: %s", name)
 	}
 	select {
 	case response := <-respCh:
 		debugPrintf("requestApproval: user response received, approved=%v remember=%v",
 			response.approved, response.remember)
-		return response.approved
+		if response.approved {
+			return nil
+		}
+		return fmt.Errorf("execution denied by user for: %s", name)
 	case <-ctx.ctx.Done():
 		debugPrintf("requestApproval: context cancelled while waiting for user response")
-		return false
+		return fmt.Errorf("execution denied by user for: %s", name)
 	}
 }
 

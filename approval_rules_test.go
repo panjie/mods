@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,4 +206,74 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 	}
 	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "[A] Always allow: shell_run(git commit *)")
+}
+
+func TestReviewPolicyNonTTY(t *testing.T) {
+	oldIsInputTTY := isInputTTY
+	isInputTTY = func() bool { return false }
+	t.Cleanup(func() { isInputTTY = oldIsInputTTY })
+
+	mods := &Mods{
+		ctx:    context.Background(),
+		Config: &Config{},
+	}
+
+	t.Run("review never allows mutable tool", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewNever}
+		require.False(t, reviewer.shouldReviewTool("fs_write_file"))
+	})
+
+	t.Run("mutable denies write without interactive approval", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("fs_write_file"))
+		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("mutable allows read-only filesystem tool", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.False(t, reviewer.shouldReviewTool("fs_read_file"))
+	})
+
+	t.Run("mutable allows obviously read-only shell command", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("shell_run"))
+		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
+		require.NoError(t, err)
+	})
+
+	t.Run("always denies read-only tool without interactive approval", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAlways}
+		require.True(t, reviewer.shouldReviewTool("fs_read_file"))
+		err := reviewer.requestApproval(mods, "fs_read_file", []byte(`{"path":"README.md"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("saved rule allows matching tool", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAlways}
+		reviewer.rules.add(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})
+		require.True(t, reviewer.shouldReviewTool("fs_write_file"))
+		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+		require.NoError(t, err)
+	})
+}
+
+func TestReviewUnavailableIsFatal(t *testing.T) {
+	mods := &Mods{
+		Config:   &Config{},
+		reviewer: &toolReviewer{},
+		ctx:      context.Background(),
+	}
+	_, cmd := mods.Update(toolCallsOutput{
+		results: []proto.ToolCallStatus{{
+			Name: "fs_write_file",
+			Err:  fmt.Errorf("%w: fs_write_file requires approval", errReviewUnavailable),
+		}},
+	})
+
+	msg := cmd()
+	errMsg, ok := msg.(modsError)
+	require.True(t, ok)
+	require.Equal(t, "Tool execution requires review.", errMsg.reason)
+	require.True(t, errors.Is(errMsg.err, errReviewUnavailable))
 }

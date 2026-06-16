@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -224,6 +225,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, call := range msg.results {
 			if call.Err != nil {
 				debugPrintf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+				if errors.Is(call.Err, errReviewUnavailable) {
+					return m, msgCmd(modsError{
+						err:    call.Err,
+						reason: "Tool execution requires review.",
+					})
+				}
 			} else {
 				argPreview := truncateStr(string(call.Arguments), 120)
 				if argPreview != "" {

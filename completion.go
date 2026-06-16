@@ -165,8 +165,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 				m.sendToolOperationStatus(toolOperationLabel(name, data, m.width))
 
 				if m.reviewer.shouldReviewTool(name) {
-					if !m.reviewer.requestApproval(m, name, data) {
-						return "", fmt.Errorf("execution denied by user for: %s", name)
+					if err := m.reviewer.requestApproval(m, name, data); err != nil {
+						return "", err
 					}
 				}
 

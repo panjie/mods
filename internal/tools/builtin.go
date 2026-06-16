@@ -330,9 +330,9 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 	if cfg.MaxOutputChars <= 0 {
 		cfg.MaxOutputChars = defaultShellOutput
 	}
-	desc := "Run a non-interactive shell command via sh and return its combined output."
+	desc := "Run a shell command via sh and return its stdout+stderr. Output is returned to you directly — do NOT redirect to a file just to see results. Pipe commands together for filtering, counting, or text processing (e.g. find ... | wc -l)."
 	if runtime.GOOS == "windows" {
-		desc = "Run a non-interactive shell command via cmd /C and return its combined output. Use cmd.exe commands directly (dir, type, echo), or prefix PowerShell commands with powershell -Command \"...\". Use Windows paths (C:\\Users\\...). Use this tool to access any path outside the workspace root."
+		desc = "Run a shell command via cmd /C and return its stdout+stderr. Output is returned to you directly — do NOT pipe to Out-File or redirect to a file just to see results. For simple commands use cmd.exe builtins (dir, echo). For complex queries (filtering, counting, text processing), prefer powershell -Command with a script block, e.g. (Get-ChildItem ...).Count. Use Windows paths (C:\\Users\\...). This tool can access any path outside the workspace root."
 	}
 	return registry.Register(Tool{
 		Spec: proto.ToolSpec{

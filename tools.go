@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"regexp"
 	"strings"
 
@@ -15,14 +14,11 @@ var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[
 func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config, prompt string) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
+	root := cfg.resolveWorkspaceRoot()
 
 	if shouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
-			Root: cwd,
+			Root: root,
 		}); err != nil {
 			return nil, err
 		}
@@ -36,7 +32,7 @@ func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config,
 
 	if cfg.BuiltinTools.Shell {
 		if err := toolregistry.RegisterShell(registry, toolregistry.ShellConfig{
-			Root:           cwd,
+			Root:           root,
 			Timeout:        cfg.BuiltinTools.ShellTimeout,
 			MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
 		}); err != nil {

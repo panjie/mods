@@ -18,7 +18,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
 
-	cwd, _ := os.Getwd()
+	root := m.Config.resolveWorkspaceRoot()
 	hostname, _ := os.Hostname()
 	user := os.Getenv("USER")
 	if user == "" {
@@ -32,8 +32,8 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			shell = "cmd.exe"
 		}
 	}
-	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s, shell=%s, date=%s",
-		cwd, user, hostname, runtime.GOOS, runtime.GOARCH, shell, time.Now().Format("2006-01-02"))
+	sysInfo := fmt.Sprintf("System info: workspace_root=%s, user=%s, host=%s, os=%s/%s, shell=%s, date=%s",
+		root, user, hostname, runtime.GOOS, runtime.GOARCH, shell, time.Now().Format("2006-01-02"))
 	m.messages = append(m.messages, proto.Message{
 		Role:    proto.RoleSystem,
 		Content: sysInfo,

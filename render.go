@@ -102,7 +102,7 @@ func (m *Mods) appendToOutput(s string) {
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.glamOutput += "\n"
 	content := m.glamOutput
-	if m.Config.WordWrap > 0 && m.width > 0 {
+	if m.width > 0 {
 		content = m.renderer.NewStyle().
 			MaxWidth(m.width).
 			Render(m.glamOutput)

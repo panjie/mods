@@ -29,7 +29,7 @@ const (
 	defaultMarkdownFormatText = "Format the response as markdown without enclosing backticks."
 	defaultJSONFormatText     = "Format the response as json without enclosing backticks."
 	minimalSystemPrompt       = "Return only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
-	toolSelectionRules = "Tool selection: filesystem tools (fs_*) can only access files within the workspace root shown above. For paths outside the workspace root (e.g. system directories like Downloads, Desktop, /tmp), use shell_run directly. On Windows shell_run executes via cmd /C and supports both cmd.exe commands (dir, type, echo) and PowerShell commands (prefix with powershell -Command \"...\"). Minimize tool calls: prefer a single well-formed command over multiple retries with minor variations. Do not write temporary files or scripts to the workspace just to run a shell command."
+	toolSelectionRules = "Tool selection: filesystem tools (fs_*) can only access files within the workspace root shown above. For paths outside the workspace root (e.g. system directories like Downloads, Desktop, /tmp), use shell_run directly. On Windows shell_run executes via cmd /C and supports both cmd.exe commands (dir, type, echo) and PowerShell commands (prefix with powershell -Command \"...\"). Minimize tool calls: prefer a single well-formed command over multiple retries with minor variations. Shell output redirection (>, >>) writes files and triggers review. For filtering, counting, or querying, pipe commands together or use PowerShell -Command with a script block (e.g. Get-ChildItem | Where-Object | Measure-Object). Avoid shell redirect (> file && type file) to chain steps when a pipeline or PowerShell script block suffices. For complex multi-step tasks that do require intermediate files, write inside the workspace root so fs_read_file can access them directly without triggering shell_run review."
 )
 
 // ReasoningMode controls whether the LLM should use deep reasoning.
@@ -111,6 +111,7 @@ var help = map[string]string{
 	"reasoning":           "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
 	"review":               "Review tool execution before running: never, mutable (default), or always",
 	"shell-classify-prompt": "Custom prompt for classifying whether a shell command needs review; defaults to built-in prompt when unset",
+	"workspace":            "Set the workspace root for filesystem tools and shell, resolving relative paths from the current working directory",
 }
 
 // Model represents the LLM model used in the API call.
@@ -259,6 +260,16 @@ type Config struct {
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string
 }
 
+func (c Config) resolveWorkspaceRoot() string {
+	if c.BuiltinTools.WorkspaceRoot != "" {
+		if abs, err := filepath.Abs(c.BuiltinTools.WorkspaceRoot); err == nil {
+			return abs
+		}
+	}
+	cwd, _ := os.Getwd()
+	return cwd
+}
+
 // BuiltinToolsConfig controls native tools implemented by mods.
 type BuiltinToolsConfig struct {
 	Filesystem         FilesystemMode `yaml:"filesystem"`
@@ -266,6 +277,7 @@ type BuiltinToolsConfig struct {
 	SequentialThinking bool           `yaml:"sequential-thinking"`
 	ShellTimeout       time.Duration  `yaml:"shell-timeout"`
 	ShellMaxOutput     int            `yaml:"shell-max-output"`
+	WorkspaceRoot      string         `yaml:"workspace-root"`
 }
 
 // FilesystemMode controls when native filesystem tools are exposed.

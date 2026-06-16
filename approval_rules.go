@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -132,12 +134,16 @@ func approvalRulesLabel(rules []ApprovalRule) string {
 }
 
 func shellApprovalRules(command string) []ApprovalRule {
-	normalized := normalizeShellCommand(command)
+	return shellApprovalRulesWithMode(command, isUnixShell())
+}
+
+func shellApprovalRulesWithMode(command string, posix bool) []ApprovalRule {
+	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
 		return nil
 	}
-	if runtime.GOOS == "windows" {
-		return []ApprovalRule{shellExactRule(normalized)}
+	if !posix {
+		return shellApprovalRulesSimple(normalized)
 	}
 	leaves, ok := parseShellLeaves(command)
 	if !ok || len(leaves) == 0 || len(leaves) > 5 {
@@ -150,8 +156,36 @@ func shellApprovalRules(command string) []ApprovalRule {
 	return dedupeApprovalRules(rules)
 }
 
+func shellApprovalRulesSimple(normalized string) []ApprovalRule {
+	parts := splitSimpleCompound(normalized)
+	if len(parts) == 0 || len(parts) > 5 {
+		return []ApprovalRule{shellExactRule(normalized)}
+	}
+	var rules []ApprovalRule
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if hasShellRedirection(part) {
+			rules = append(rules, shellExactRule(part))
+			continue
+		}
+		tokens := tokenizeSimple(part)
+		if len(tokens) == 0 {
+			continue
+		}
+		rules = append(rules, ruleFromTokens(tokens, false, part))
+	}
+	return dedupeApprovalRules(rules)
+}
+
 func shellRulesAllow(command string, rules []ApprovalRule) bool {
-	normalized := normalizeShellCommand(command)
+	return shellRulesAllowWithMode(command, rules, isUnixShell())
+}
+
+func shellRulesAllowWithMode(command string, rules []ApprovalRule, posix bool) bool {
+	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
 		return false
 	}
@@ -160,8 +194,8 @@ func shellRulesAllow(command string, rules []ApprovalRule) bool {
 	}) {
 		return true
 	}
-	if runtime.GOOS == "windows" {
-		return false
+	if !posix {
+		return shellRulesAllowSimple(normalized, rules)
 	}
 	leaves, ok := parseShellLeaves(command)
 	if !ok || len(leaves) == 0 {
@@ -181,6 +215,39 @@ func shellRulesAllow(command string, rules []ApprovalRule) bool {
 				return false
 			}
 		}) {
+			return false
+		}
+	}
+	return true
+}
+
+func shellRulesAllowSimple(normalized string, rules []ApprovalRule) bool {
+	parts := splitSimpleCompound(normalized)
+	for _, part := range parts {
+		commandText := strings.TrimSpace(part)
+		if commandText == "" {
+			return false
+		}
+		found := false
+		for _, rule := range rules {
+			if rule.Tool != "shell_run" {
+				continue
+			}
+			switch rule.Type {
+			case approvalShellExact:
+				if rule.Pattern == commandText {
+					found = true
+				}
+			case approvalShellPrefix:
+				if matchShellPrefix(rule.Pattern, commandText) {
+					found = true
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
 			return false
 		}
 	}
@@ -253,8 +320,12 @@ func printShellNode(node syntax.Node) (string, bool) {
 }
 
 func normalizeShellCommand(command string) string {
+	return normalizeShellCommandWithMode(command, isUnixShell())
+}
+
+func normalizeShellCommandWithMode(command string, posix bool) string {
 	command = strings.TrimSpace(command)
-	if command == "" || runtime.GOOS == "windows" {
+	if command == "" || !posix {
 		return command
 	}
 	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
@@ -296,24 +367,120 @@ func ruleForShellLeaf(leaf shellLeaf) ApprovalRule {
 		}
 		args = append(args, value)
 	}
-	if len(args) == 0 || exactShellCommands[args[0]] {
-		return shellExactRule(leaf.text)
-	}
+	return ruleFromTokens(args, leaf.exact, leaf.text)
+}
 
+func ruleFromTokens(args []string, exact bool, originalText string) ApprovalRule {
+	if exact || len(args) == 0 {
+		return shellExactRule(originalText)
+	}
+	if exactShellCommands[args[0]] {
+		return shellExactRule(originalText)
+	}
 	prefixLen := shellPrefixLength(args)
 	if prefixLen <= 0 {
-		return shellExactRule(leaf.text)
+		return shellExactRule(originalText)
 	}
 	if prefixLen >= len(args) &&
 		!subcommandShellCommands[args[0]] &&
 		!flagPrefixShellCommands[args[0]] {
-		return shellExactRule(leaf.text)
+		return shellExactRule(originalText)
 	}
 	return ApprovalRule{
 		Type:    approvalShellPrefix,
 		Tool:    "shell_run",
 		Pattern: strings.Join(args[:prefixLen], " ") + " *",
 	}
+}
+
+func tokenizeSimple(s string) []string {
+	var tokens []string
+	var current strings.Builder
+	inQuotes := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch == '"' {
+			if inQuotes {
+				tokens = append(tokens, current.String())
+				current.Reset()
+				inQuotes = false
+			} else {
+				if current.Len() > 0 {
+					tokens = append(tokens, current.String())
+					current.Reset()
+				}
+				inQuotes = true
+			}
+			continue
+		}
+		if !inQuotes && (ch == ' ' || ch == '\t') {
+			if current.Len() > 0 {
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+			continue
+		}
+		current.WriteByte(ch)
+	}
+	if current.Len() > 0 {
+		tokens = append(tokens, current.String())
+	}
+	return tokens
+}
+
+func splitSimpleCompound(s string) []string {
+	var parts []string
+	start := 0
+	inQuotes := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '"' {
+			inQuotes = !inQuotes
+			continue
+		}
+		if inQuotes {
+			continue
+		}
+		if i+1 < len(s) && s[i] == '&' && s[i+1] == '&' {
+			parts = append(parts, strings.TrimSpace(s[start:i]))
+			start = i + 2
+			i++
+			continue
+		}
+		if i+1 < len(s) && s[i] == '|' && s[i+1] == '|' {
+			parts = append(parts, strings.TrimSpace(s[start:i]))
+			start = i + 2
+			i++
+			continue
+		}
+		if s[i] == '&' && (i == 0 || s[i-1] == ' ') {
+			parts = append(parts, strings.TrimSpace(s[start:i]))
+			start = i + 1
+		}
+	}
+	if rest := strings.TrimSpace(s[start:]); rest != "" || len(parts) == 0 {
+		parts = append(parts, strings.TrimSpace(s[start:]))
+	}
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func normalizeSimpleCommand(command string) string {
+	return strings.TrimSpace(command)
+}
+
+func hasShellRedirection(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '>' {
+			return true
+		}
+	}
+	return false
 }
 
 func staticShellWord(word *syntax.Word) (string, bool) {
@@ -356,6 +523,21 @@ var subcommandShellCommands = map[string]bool{
 var flagPrefixShellCommands = map[string]bool{
 	"chmod": true, "chown": true, "cp": true, "mkdir": true, "mv": true,
 	"rm": true, "rmdir": true, "touch": true,
+}
+
+var unixShellBases = map[string]bool{
+	"bash": true, "sh": true, "zsh": true, "dash": true,
+	"fish": true, "ksh": true, "tcsh": true, "csh": true,
+}
+
+func isUnixShell() bool {
+	if s := os.Getenv("SHELL"); s != "" {
+		base := strings.ToLower(filepath.Base(s))
+		if unixShellBases[base] {
+			return true
+		}
+	}
+	return runtime.GOOS != "windows"
 }
 
 func shellPrefixLength(args []string) int {

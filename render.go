@@ -101,10 +101,13 @@ func (m *Mods) appendToOutput(s string) {
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.glamOutput += "\n"
-	truncatedGlamOutput := m.renderer.NewStyle().
-		MaxWidth(m.width).
-		Render(m.glamOutput)
-	m.glamViewport.SetContent(truncatedGlamOutput)
+	content := m.glamOutput
+	if m.Config.WordWrap > 0 && m.width > 0 {
+		content = m.renderer.NewStyle().
+			MaxWidth(m.width).
+			Render(m.glamOutput)
+	}
+	m.glamViewport.SetContent(content)
 	if oldHeight < m.glamHeight && wasAtBottom {
 		// If the viewport's at the bottom and we've received a new
 		// line of content, follow the output by auto scrolling to

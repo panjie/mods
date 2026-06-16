@@ -332,7 +332,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 	}
 	desc := "Run a non-interactive shell command via sh and return its combined output."
 	if runtime.GOOS == "windows" {
-		desc = "Run a non-interactive shell command via cmd.exe and return its combined output. Use Windows path syntax (e.g. C:\\Users\\foo) and cmd.exe commands (dir, type, etc.), not Unix paths or bash syntax."
+		desc = "Run a non-interactive shell command via cmd /C and return its combined output. Use cmd.exe commands directly (dir, type, echo), or prefix PowerShell commands with powershell -Command \"...\". Use Windows paths (C:\\Users\\...). Use this tool to access any path outside the workspace root."
 	}
 	return registry.Register(Tool{
 		Spec: proto.ToolSpec{
@@ -491,7 +491,7 @@ func ensureInsideRoot(root, path string) error {
 	if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
 		return nil
 	}
-	return fmt.Errorf("path %q is outside workspace root", path)
+	return fmt.Errorf("path %q is outside workspace root; use shell_run to access paths outside the workspace", path)
 }
 
 func workspaceRel(root, path string) string {

@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/mods/internal/clipboard"
@@ -24,14 +26,24 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 	shell := "sh"
 	if runtime.GOOS == "windows" {
-		shell = "cmd.exe"
+		if s := os.Getenv("SHELL"); s != "" {
+			shell = filepath.Base(s)
+		} else {
+			shell = "cmd.exe"
+		}
 	}
-	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s, shell=%s",
-		cwd, user, hostname, runtime.GOOS, runtime.GOARCH, shell)
+	sysInfo := fmt.Sprintf("System info: cwd=%s, user=%s, host=%s, os=%s/%s, shell=%s, date=%s",
+		cwd, user, hostname, runtime.GOOS, runtime.GOARCH, shell, time.Now().Format("2006-01-02"))
 	m.messages = append(m.messages, proto.Message{
 		Role:    proto.RoleSystem,
 		Content: sysInfo,
 	})
+	if !cfg.Minimal {
+		m.messages = append(m.messages, proto.Message{
+			Role:    proto.RoleSystem,
+			Content: toolSelectionRules,
+		})
+	}
 	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && !cfg.Minimal && txt != "" {
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/mods/internal/anthropic"
@@ -123,6 +124,17 @@ func judgeTaskComplexity(
 }
 
 func (m *Mods) classifyShellCommand(command string) bool {
+	if isObviouslyReadOnly(command) {
+		debugPrintf("classifyShellCommand: cmd=%q classified as read-only by heuristic, auto-approving", truncateStr(command, 80))
+		return false
+	}
+
+	if cached, ok := shellClassifyCache.Load(command); ok {
+		needsReview := cached.(bool)
+		debugPrintf("classifyShellCommand: cmd=%q cached -> needsReview=%v", truncateStr(command, 80), needsReview)
+		return needsReview
+	}
+
 	cfg := m.Config
 	api, mod, err := m.resolveModel(cfg)
 	if err != nil {
@@ -182,8 +194,52 @@ func (m *Mods) classifyShellCommand(command string) bool {
 	needsReview := !hasNo || hasYes
 	debugPrintf("classifyShellCommand: cmd=%q resp=%s hasYes=%v hasNo=%v -> needsReview=%v",
 		command, truncateStr(rawResponse, 80), hasYes, hasNo, needsReview)
+
+	shellClassifyCache.Store(command, needsReview)
 	return needsReview
 }
 
 var reYes = regexp.MustCompile(`\bYES\b`)
 var reNo = regexp.MustCompile(`\bNO\b`)
+
+var shellClassifyCache sync.Map
+
+var reReadOnlyCmd = regexp.MustCompile(`^(echo|dir|type|whoami|hostname|ver|date|time|set|path|cd|chdir|where|pwd)\b`)
+
+var rePwshMutOp = regexp.MustCompile(`(?i)\b(Remove-Item|Delete|Set-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|mkdir|rmdir|del\s|rd\s|ren\s)\b`)
+
+var rePwshReadCmd = regexp.MustCompile(`(?i)\bpowershell\s+-`)
+
+func hasShellRedirect(cmd string) bool {
+	for i := 0; i < len(cmd); i++ {
+		if cmd[i] == '>' {
+			rest := strings.TrimSpace(cmd[i+1:])
+			lower := strings.ToLower(rest)
+			if strings.HasPrefix(lower, "nul") && (len(rest) == 3 || rest[3] == ' ' || rest[3] == '&' || rest[3] == '|') {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+func isObviouslyReadOnly(cmd string) bool {
+	trimmed := strings.TrimSpace(cmd)
+	lower := strings.ToLower(trimmed)
+
+	if reReadOnlyCmd.MatchString(lower) {
+		if hasShellRedirect(trimmed) {
+			return false
+		}
+		return true
+	}
+
+	if rePwshReadCmd.MatchString(lower) {
+		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) {
+			return false
+		}
+		return true
+	}
+
+	return false
+}

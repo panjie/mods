@@ -29,6 +29,7 @@ const (
 	defaultMarkdownFormatText = "Format the response as markdown without enclosing backticks."
 	defaultJSONFormatText     = "Format the response as json without enclosing backticks."
 	minimalSystemPrompt       = "Return only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
+	toolSelectionRules = "Tool selection: filesystem tools (fs_*) can only access files within the workspace root shown above. For paths outside the workspace root (e.g. system directories like Downloads, Desktop, /tmp), use shell_run directly. On Windows shell_run executes via cmd /C and supports both cmd.exe commands (dir, type, echo) and PowerShell commands (prefix with powershell -Command \"...\"). Minimize tool calls: prefer a single well-formed command over multiple retries with minor variations. Do not write temporary files or scripts to the workspace just to run a shell command."
 )
 
 // ReasoningMode controls whether the LLM should use deep reasoning.
@@ -365,7 +366,7 @@ func ensureConfig() (Config, error) {
 		return c, modsError{err, "Could not create cache directory."}
 	}
 
-	if c.WordWrap == 0 {
+	if c.WordWrap < 0 {
 		c.WordWrap = 80
 	}
 
@@ -433,6 +434,7 @@ func defaultConfig() Config {
 			},
 			Reasoning:  ReasoningOff,
 			ReviewMode: ReviewMutable,
+			WordWrap:   80,
 			MCPTimeout: 15 * time.Second,
 		BuiltinTools: BuiltinToolsConfig{
 			Filesystem:         FilesystemAuto,

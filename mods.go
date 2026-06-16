@@ -77,9 +77,13 @@ func newMods(
 	cfg *Config,
 	db *convoDB,
 ) (*Mods, error) {
+	wordWrap := cfg.WordWrap
+	if wordWrap == 0 {
+		wordWrap = 100000
+	}
 	gr, err := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(cfg.WordWrap),
+		glamour.WithWordWrap(wordWrap),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not create glamour renderer: %w", err)

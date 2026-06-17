@@ -35,82 +35,33 @@ It works great with LLMs running locally through [LocalAI]. You can also use
 
 ### Installation
 
-Use a package manager:
-
-```bash
-# macOS or Linux
-brew install charmbracelet/tap/mods
-
-# Windows (with Winget)
-winget install charmbracelet.mods
-
-# Arch Linux (btw)
-yay -S mods
-
-# Nix
-nix-shell -p mods
-```
-
-<details>
-<summary>Debian/Ubuntu</summary>
-
-```bash
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
-sudo apt update && sudo apt install mods
-```
-
-</details>
-
-<details>
-<summary>Fedora/RHEL</summary>
-
-```bash
-echo '[charm]
-name=Charm
-baseurl=https://repo.charm.sh/yum/
-enabled=1
-gpgcheck=1
-gpgkey=https://repo.charm.sh/yum/gpg.key' | sudo tee /etc/yum.repos.d/charm.repo
-sudo yum install mods
-```
-
-</details>
-
-### FreeBSD
-
-Install [from ports](https://www.freshports.org/sysutils/mods/):
+#### Build from source
 
 ```sh
-cd /usr/ports/sysutils/mods
-make install
-```
-
-Or, download it:
-
-- [Packages][releases] are available in Debian and RPM formats
-- [Binaries][releases] are available for Linux, macOS, and Windows
-
-[releases]: https://github.com/charmbracelet/mods/releases
-
-Or, just install it with `go`:
-
-```sh
-go install github.com/charmbracelet/mods@latest
-```
-
-### Build from source
-
-For local development builds, use `make build`:
-
-```sh
+git clone https://github.com/panjie/mods.git
+cd mods
 make build
 ```
 
-This writes the binary to `bin/mods`. Use `make check` to verify the project
-compiles, and `make test` to run the test suite. The `dist/` directory is
-reserved for GoReleaser release and snapshot artifacts.
+This writes the binary to `bin/mods`. Add it to your `PATH` for easy access:
+
+```sh
+export PATH="$PWD/bin:$PATH"
+```
+
+Use `make check` to verify the project compiles, and `make test` to run the test suite. The `dist/` directory is reserved for GoReleaser release and snapshot artifacts.
+
+#### Install with `go`
+
+```sh
+go install github.com/panjie/mods@latest
+```
+
+#### Download binaries
+
+Pre-built [packages][releases] (Debian, RPM) and [binaries][releases] (Linux, macOS, Windows) are also available.
+
+[releases]: https://github.com/panjie/mods/releases
 
 <details>
 <summary>Shell Completions</summary>

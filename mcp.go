@@ -119,7 +119,9 @@ func registerMCPTools(ctx context.Context, cfg *Config, registry *toolregistry.R
 			capturedToolName := tool.Name
 			capturedServer := cfg.MCPServers[sname]
 			if err := registry.Register(toolregistry.Tool{
-				Spec: spec,
+				Spec:          spec,
+				Kind:          toolregistry.ToolKindMCP,
+				TimeoutPolicy: toolregistry.TimeoutPolicyCaller,
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 					return toolCallDirect(ctx, cfg, capturedSname, capturedToolName, capturedServer, data)
 				},

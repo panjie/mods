@@ -20,6 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/mods/internal/proto"
 	"github.com/charmbracelet/mods/internal/stream"
+	toolregistry "github.com/charmbracelet/mods/internal/tools"
 	"github.com/charmbracelet/mods/internal/websearch"
 )
 
@@ -159,7 +160,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			Stop:        cfg.Stop,
 			Tools:       tools,
 			ToolCaller: func(name string, data []byte) (string, error) {
-				ctx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
+				ctx, cancel := m.toolCallContext(registry, name, cfg)
 				m.cancelRequest = append(m.cancelRequest, cancel)
 				defer cancel()
 				m.sendToolOperationStatus(toolOperationLabel(name, data, m.width))
@@ -222,6 +223,13 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			},
 		})()
 	}
+}
+
+func (m *Mods) toolCallContext(registry *toolregistry.Registry, name string, cfg *Config) (context.Context, context.CancelFunc) {
+	if registry.TimeoutPolicy(name) == toolregistry.TimeoutPolicySelf {
+		return context.WithCancel(m.ctx)
+	}
+	return context.WithTimeout(m.ctx, cfg.MCPTimeout)
 }
 
 func (m *Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
@@ -387,7 +395,6 @@ func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 		),
 	}
 }
-
 
 // oSeriesRe matches OpenAI o-series model names: o + single digit + hyphen or end of string.
 // Examples: "o1", "o1-mini", "o3-2025-04-16". Does NOT match "o10-" or custom names like "o1-finetune-v2".

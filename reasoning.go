@@ -204,13 +204,15 @@ var reNo = regexp.MustCompile(`\bNO\b`)
 
 var shellClassifyCache sync.Map
 
-var reReadOnlyCmd = regexp.MustCompile(`^(echo|dir|type|whoami|hostname|ver|date|time|set|path|cd|chdir|where|pwd)\b`)
+var reReadOnlyCmd = regexp.MustCompile(`^(echo|dir|type|whoami|hostname|ver|date|time|path|cd|chdir|where|pwd)\b|^set(\s|$)`)
 
-var rePwshMutOp = regexp.MustCompile(`(?i)\b(Remove-Item|Delete|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|Clear-Content|Stop-Process|Start-Process|Invoke-Item|mkdir|rmdir|del\s|rd\s|ren\s)\b`)
+var rePwshMutOp = regexp.MustCompile(`(?i)\b(Remove-Item|Delete|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|Clear-Content|Stop-Process|Start-Process|Invoke-Item|Set-|New-|Remove-|Clear-|mkdir|rmdir|del\s|rd\s|ren\s|rm\b|ri\b|erase\b|kill\b|sc\b|cp\b|copy\b|mv\b|move\b|ni\b|sp\b)\b`)
 
-var rePwshReadCmd = regexp.MustCompile(`(?i)\bpowershell\s+-`)
+var rePwshReadCmd = regexp.MustCompile(`(?i)\bpowershell(?:\.exe)?\s+-`)
 
-var reDirectPwshReadCmd = regexp.MustCompile(`(?i)^(&\s*\{\s*)?(\$PSVersionTable\b|Get-|Measure-Object\b|Select-Object\b|Where-Object\b|Sort-Object\b|Format-|ConvertTo-|Write-Output\b)`)
+var reDirectPwshReadCmd = regexp.MustCompile(`(?i)^(\$PSVersionTable\b|Get-|Measure-Object\b|Select-Object\b|Sort-Object\b|Format-|ConvertTo-|Write-Output\b)`)
+
+var rePwshComplexSyntax = regexp.MustCompile(`[|;{}&]`)
 
 func hasShellRedirect(cmd string) bool {
 	for i := 0; i < len(cmd); i++ {
@@ -225,6 +227,11 @@ func hasShellRedirect(cmd string) bool {
 	}
 	return false
 }
+
+func hasPowerShellComplexSyntax(cmd string) bool {
+	return rePwshComplexSyntax.MatchString(cmd)
+}
+
 func isObviouslyReadOnly(cmd string) bool {
 	trimmed := strings.TrimSpace(cmd)
 	lower := strings.ToLower(trimmed)
@@ -237,14 +244,14 @@ func isObviouslyReadOnly(cmd string) bool {
 	}
 
 	if rePwshReadCmd.MatchString(lower) {
-		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) {
+		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) || hasPowerShellComplexSyntax(trimmed) {
 			return false
 		}
 		return true
 	}
 
 	if reDirectPwshReadCmd.MatchString(trimmed) {
-		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) {
+		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) || hasPowerShellComplexSyntax(trimmed) {
 			return false
 		}
 		return true

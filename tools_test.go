@@ -4,7 +4,9 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"time"
 
+	toolregistry "github.com/charmbracelet/mods/internal/tools"
 	"github.com/charmbracelet/mods/internal/websearch"
 )
 
@@ -71,5 +73,46 @@ func TestBuildToolRegistryPowerShellRun(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && found {
 		t.Fatal("did not expect powershell_run outside Windows")
+	}
+}
+
+func TestToolCallContextTimeoutPolicy(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.MCPTimeout = 10 * time.Millisecond
+	cfg.BuiltinTools.Shell = true
+	cfg.BuiltinTools.SequentialThinking = true
+	cfg.WebSearch = false
+
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello")
+	if err != nil {
+		t.Fatalf("build registry: %v", err)
+	}
+
+	mods := &Mods{ctx: context.Background()}
+
+	if got := registry.TimeoutPolicy("shell_run"); got != toolregistry.TimeoutPolicySelf {
+		t.Fatalf("unexpected shell timeout policy: %q", got)
+	}
+	ctx, cancel := mods.toolCallContext(registry, "shell_run", &cfg)
+	defer cancel()
+	if _, ok := ctx.Deadline(); ok {
+		t.Fatal("shell_run context should not inherit mcp-timeout deadline")
+	}
+
+	if runtime.GOOS == "windows" {
+		if got := registry.TimeoutPolicy("powershell_run"); got != toolregistry.TimeoutPolicySelf {
+			t.Fatalf("unexpected powershell timeout policy: %q", got)
+		}
+		ctx, cancel := mods.toolCallContext(registry, "powershell_run", &cfg)
+		defer cancel()
+		if _, ok := ctx.Deadline(); ok {
+			t.Fatal("powershell_run context should not inherit mcp-timeout deadline")
+		}
+	}
+
+	ctx, cancel = mods.toolCallContext(registry, "thinking_note", &cfg)
+	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		t.Fatal("caller-timed tool context should use mcp-timeout deadline")
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/duration"
 	"github.com/caarlos0/env/v9"
+	toolregistry "github.com/charmbracelet/mods/internal/tools"
 	"github.com/charmbracelet/x/exp/strings"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
@@ -29,7 +30,7 @@ const (
 	defaultMarkdownFormatText = "Format the response as markdown without enclosing backticks."
 	defaultJSONFormatText     = "Format the response as json without enclosing backticks."
 	minimalSystemPrompt       = "Return only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
-	toolSelectionRules = "Tool selection: filesystem tools (fs_*) can only access files within the workspace root shown above. For paths outside the workspace root (e.g. system directories like Downloads, Desktop, /tmp), use shell tools directly. On Windows shell_run executes via cmd /C and supports cmd.exe commands (dir, type, echo). On Windows, prefer powershell_run for PowerShell pipelines, variables, script blocks, filtering, counting, or querying; pass only the PowerShell command and do not prefix it with powershell, powershell.exe, pwsh, or -Command. Minimize tool calls: prefer a single well-formed command over multiple retries with minor variations. Shell output redirection (>, >>) writes files and triggers review. For filtering, counting, or querying, pipe commands together or use powershell_run with a script block (e.g. Get-ChildItem | Where-Object | Measure-Object). Avoid shell redirect (> file && type file), Out-File, Set-Content, or temporary .ps1 files just to see results when a pipeline or PowerShell script block suffices. For complex multi-step tasks that do require intermediate files, write inside the workspace root so fs_read_file can access them directly without triggering shell_run review."
+	toolSelectionRules        = toolregistry.ToolSelectionRules
 )
 
 // ReasoningMode controls whether the LLM should use deep reasoning.
@@ -51,67 +52,67 @@ const (
 )
 
 var help = map[string]string{
-	"api":                 "OpenAI compatible REST API (openai, localai, anthropic, ...)",
-	"apis":                "Aliases and endpoints for OpenAI compatible REST API",
-	"http-proxy":          "HTTP proxy to use for API requests",
-	"model":               "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
-	"ask-model":           "Ask which model to use via interactive prompt",
-	"max-input-chars":     "Default character limit on input to model",
-	"format":              "Ask for the response to be formatted as markdown unless otherwise set",
-	"format-text":         "Text to append when using the -f flag",
-	"minimal":             "Output only the final result, optimized for pipelines",
-	"role":                "System role to use",
-	"roles":               "List of predefined system messages that can be used as roles",
-	"list-roles":          "List the roles defined in your configuration file",
-	"prompt":              "Include the prompt from the arguments and stdin, truncate stdin to specified number of lines",
-	"prompt-args":         "Include the prompt from the arguments in the response",
-	"raw":                 "Render output as raw text when connected to a TTY",
-	"quiet":               "Quiet mode (hide the spinner while loading and stderr messages for success)",
-	"help":                "Show help and exit",
-	"version":             "Show version and exit",
-	"max-retries":         "Maximum number of times to retry API calls",
-	"no-limit":            "Turn off the client-side limit on the size of the input into the model",
-	"word-wrap":           "Wrap formatted output at specific width (default is 80)",
-	"max-tokens":          "Maximum number of tokens in response",
-	"temp":                "Temperature (randomness) of results, from 0.0 to 2.0, -1.0 to disable",
-	"stop":                "Up to 4 sequences where the API will stop generating further tokens",
-	"topp":                "TopP, an alternative to temperature that narrows response, from 0.0 to 1.0, -1.0 to disable",
-	"topk":                "TopK, only sample from the top K options for each subsequent token, -1 to disable",
-	"fanciness":           "Your desired level of fanciness",
-	"status-text":         "Text to show while generating",
-	"settings":            "Open settings in your $EDITOR",
-	"dirs":                "Print the directories in which mods store its data",
-	"reset-settings":      "Backup your old settings file and reset everything to the defaults",
-	"continue":            "Continue from the last response or a given save title",
-	"continue-last":       "Continue from the last response",
-	"no-cache":            "Disables caching of the prompt/response",
-	"title":               "Saves the current conversation with the given title",
-	"list":                "Lists saved conversations",
-	"delete":              "Deletes one or more saved conversations with the given titles or IDs",
-	"delete-older-than":   "Deletes all saved conversations older than the specified duration; valid values are " + strings.EnglishJoin(duration.ValidUnits(), true),
-	"show":                "Show a saved conversation with the given title or ID",
-	"theme":               "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
-	"show-last":           "Show the last saved conversation",
-	"editor":              "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
-	"mcp-servers":         "MCP Servers configurations",
-	"mcp-enable":          "Enable only specific MCP servers (whitelist, overrides disable list)",
-	"mcp-disable":         "Disable specific MCP servers",
-	"mcp-list":            "List all available MCP servers",
-	"mcp-list-tools":      "List all available tools from enabled MCP servers",
-	"mcp-timeout":         "Timeout for MCP server calls, defaults to 15 seconds",
-	"builtin-tools":       "Native tool configuration for filesystem, shell, and sequential thinking tools",
-	"web-search":          "Enable web search for up-to-date information (uses DuckDuckGo by default)",
-	"web-search-provider": "Web search provider: duckduckgo (default), tavily, or custom",
-	"web-search-api-key":  "API key for the web search provider (required for tavily)",
-	"image":               "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
-	"stdin-image":         "Treat piped stdin input as raw image data instead of text",
-	"clipboard-image":     "Attach the current image in the system clipboard to the prompt",
-	"debug":               "Enable debug mode to print execution steps, tool calls, and request details",
-	"max-tool-rounds":     "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
-	"reasoning":           "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
-	"review":               "Review tool execution before running: never, mutable (default), or always",
+	"api":                   "OpenAI compatible REST API (openai, localai, anthropic, ...)",
+	"apis":                  "Aliases and endpoints for OpenAI compatible REST API",
+	"http-proxy":            "HTTP proxy to use for API requests",
+	"model":                 "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
+	"ask-model":             "Ask which model to use via interactive prompt",
+	"max-input-chars":       "Default character limit on input to model",
+	"format":                "Ask for the response to be formatted as markdown unless otherwise set",
+	"format-text":           "Text to append when using the -f flag",
+	"minimal":               "Output only the final result, optimized for pipelines",
+	"role":                  "System role to use",
+	"roles":                 "List of predefined system messages that can be used as roles",
+	"list-roles":            "List the roles defined in your configuration file",
+	"prompt":                "Include the prompt from the arguments and stdin, truncate stdin to specified number of lines",
+	"prompt-args":           "Include the prompt from the arguments in the response",
+	"raw":                   "Render output as raw text when connected to a TTY",
+	"quiet":                 "Quiet mode (hide the spinner while loading and stderr messages for success)",
+	"help":                  "Show help and exit",
+	"version":               "Show version and exit",
+	"max-retries":           "Maximum number of times to retry API calls",
+	"no-limit":              "Turn off the client-side limit on the size of the input into the model",
+	"word-wrap":             "Wrap formatted output at specific width (default is 80)",
+	"max-tokens":            "Maximum number of tokens in response",
+	"temp":                  "Temperature (randomness) of results, from 0.0 to 2.0, -1.0 to disable",
+	"stop":                  "Up to 4 sequences where the API will stop generating further tokens",
+	"topp":                  "TopP, an alternative to temperature that narrows response, from 0.0 to 1.0, -1.0 to disable",
+	"topk":                  "TopK, only sample from the top K options for each subsequent token, -1 to disable",
+	"fanciness":             "Your desired level of fanciness",
+	"status-text":           "Text to show while generating",
+	"settings":              "Open settings in your $EDITOR",
+	"dirs":                  "Print the directories in which mods store its data",
+	"reset-settings":        "Backup your old settings file and reset everything to the defaults",
+	"continue":              "Continue from the last response or a given save title",
+	"continue-last":         "Continue from the last response",
+	"no-cache":              "Disables caching of the prompt/response",
+	"title":                 "Saves the current conversation with the given title",
+	"list":                  "Lists saved conversations",
+	"delete":                "Deletes one or more saved conversations with the given titles or IDs",
+	"delete-older-than":     "Deletes all saved conversations older than the specified duration; valid values are " + strings.EnglishJoin(duration.ValidUnits(), true),
+	"show":                  "Show a saved conversation with the given title or ID",
+	"theme":                 "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
+	"show-last":             "Show the last saved conversation",
+	"editor":                "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
+	"mcp-servers":           "MCP Servers configurations",
+	"mcp-enable":            "Enable only specific MCP servers (whitelist, overrides disable list)",
+	"mcp-disable":           "Disable specific MCP servers",
+	"mcp-list":              "List all available MCP servers",
+	"mcp-list-tools":        "List all available tools from enabled MCP servers",
+	"mcp-timeout":           "Timeout for MCP server calls, defaults to 15 seconds",
+	"builtin-tools":         "Native tool configuration for filesystem, shell, and sequential thinking tools",
+	"web-search":            "Enable web search for up-to-date information (uses DuckDuckGo by default)",
+	"web-search-provider":   "Web search provider: duckduckgo (default), tavily, or custom",
+	"web-search-api-key":    "API key for the web search provider (required for tavily)",
+	"image":                 "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
+	"stdin-image":           "Treat piped stdin input as raw image data instead of text",
+	"clipboard-image":       "Attach the current image in the system clipboard to the prompt",
+	"debug":                 "Enable debug mode to print execution steps, tool calls, and request details",
+	"max-tool-rounds":       "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
+	"reasoning":             "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
+	"review":                "Review tool execution before running: never, mutable (default), or always",
 	"shell-classify-prompt": "Custom prompt for classifying whether a shell command needs review; defaults to built-in prompt when unset",
-	"workspace":            "Set the workspace root for filesystem tools and shell, resolving relative paths from the current working directory",
+	"workspace":             "Set the workspace root for filesystem tools and shell, resolving relative paths from the current working directory",
 }
 
 // Model represents the LLM model used in the API call.
@@ -215,9 +216,9 @@ type PersistentConfig struct {
 	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
 	Reasoning           ReasoningMode              `yaml:"reasoning" env:"REASONING"`
-	ReviewMode           ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
-	ShellClassifyPrompt  string                     `yaml:"shell-classify-prompt"`
-	MaxToolRounds        int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
+	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
+	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
@@ -253,10 +254,10 @@ type Config struct {
 	MCPDisable      []string
 
 	// Runtime state (computed internally, never persisted).
-	Prefix                                   string
-	SettingsPath                             string
-	User                                     string
-	openEditor                               bool
+	Prefix                                             string
+	SettingsPath                                       string
+	User                                               string
+	openEditor                                         bool
 	cacheReadFromID, cacheWriteToID, cacheWriteToTitle string
 }
 
@@ -448,13 +449,13 @@ func defaultConfig() Config {
 			ReviewMode: ReviewMutable,
 			WordWrap:   80,
 			MCPTimeout: 15 * time.Second,
-		BuiltinTools: BuiltinToolsConfig{
-			Filesystem:         FilesystemAuto,
-			Shell:              false,
-			SequentialThinking: false,
-			ShellTimeout:       30 * time.Second,
-			ShellMaxOutput:     20000,
-		},
+			BuiltinTools: BuiltinToolsConfig{
+				Filesystem:         FilesystemAuto,
+				Shell:              false,
+				SequentialThinking: false,
+				ShellTimeout:       30 * time.Second,
+				ShellMaxOutput:     20000,
+			},
 		},
 	}
 }

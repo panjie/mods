@@ -64,6 +64,21 @@ func TestCallTool_truncatesLongResults(t *testing.T) {
 		}
 	})
 
+	t.Run("error result preserves returned content", func(t *testing.T) {
+		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
+			return "stdout\nstderr\n[exit status 7]", errors.New("command exited with status 7")
+		})
+		if msg.Content != "stdout\nstderr\n[exit status 7]" {
+			t.Errorf("expected returned content to be preserved, got %q", msg.Content)
+		}
+		if len(msg.ToolCalls) != 1 || !msg.ToolCalls[0].IsError {
+			t.Errorf("expected tool call to be marked as error: %#v", msg.ToolCalls)
+		}
+		if status.Err == nil {
+			t.Error("expected status to have error")
+		}
+	})
+
 	t.Run("arguments are stored in status", func(t *testing.T) {
 		args := []byte(`{"query":"test"}`)
 		_, status := CallTool("tid", "tool", args, func(name string, data []byte) (string, error) {

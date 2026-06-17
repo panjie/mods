@@ -259,8 +259,15 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Run("mutable allows obviously read-only powershell command", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable}
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
 		require.NoError(t, err)
+	})
+
+	t.Run("mutable routes powershell pipelines to review", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {
@@ -292,6 +299,26 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.NoError(t, err)
 	})
+}
+
+func TestPowerShellReadOnlyHeuristic(t *testing.T) {
+	tests := map[string]bool{
+		`Get-ChildItem C:\Users`:                    true,
+		`$PSVersionTable.PSVersion`:                 true,
+		`Write-Output ok`:                           true,
+		`set`:                                       true,
+		`Set-Content out.txt ok`:                    false,
+		`Get-Process | kill`:                        false,
+		`Get-ChildItem | % { rm $_ }`:               false,
+		`Get-Content in.txt | sc out.txt`:           false,
+		`Get-ChildItem; Remove-Item old.txt`:        false,
+		`powershell -Command Get-ChildItem`:         true,
+		`powershell.exe -Command Get-ChildItem`:     true,
+		`powershell -Command "& { Get-ChildItem }"`: false,
+	}
+	for command, want := range tests {
+		require.Equal(t, want, isObviouslyReadOnly(command), command)
+	}
 }
 
 func TestReviewUnavailableIsFatal(t *testing.T) {

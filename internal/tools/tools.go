@@ -12,10 +12,29 @@ import (
 // Caller executes a tool call.
 type Caller func(context.Context, json.RawMessage) (string, error)
 
+// ToolKind identifies a tool's execution backend.
+type ToolKind string
+
+const (
+	ToolKindBuiltin ToolKind = "builtin"
+	ToolKindShell   ToolKind = "shell"
+	ToolKindMCP     ToolKind = "mcp"
+)
+
+// TimeoutPolicy describes who owns the tool call timeout.
+type TimeoutPolicy string
+
+const (
+	TimeoutPolicyCaller TimeoutPolicy = "caller"
+	TimeoutPolicySelf   TimeoutPolicy = "self"
+)
+
 // Tool is a registered executable tool.
 type Tool struct {
-	Spec proto.ToolSpec
-	Call Caller
+	Spec          proto.ToolSpec
+	Call          Caller
+	Kind          ToolKind
+	TimeoutPolicy TimeoutPolicy
 }
 
 // Registry stores tools by name and exposes a provider-neutral call router.
@@ -40,6 +59,12 @@ func (r *Registry) Register(tool Tool) error {
 	}
 	if _, ok := r.tools[tool.Spec.Name]; ok {
 		return fmt.Errorf("tool %q: already registered", tool.Spec.Name)
+	}
+	if tool.Kind == "" {
+		tool.Kind = ToolKindBuiltin
+	}
+	if tool.TimeoutPolicy == "" {
+		tool.TimeoutPolicy = TimeoutPolicyCaller
 	}
 	r.tools[tool.Spec.Name] = tool
 	return nil
@@ -70,6 +95,21 @@ func (r *Registry) Call(ctx context.Context, name string, data []byte) (string, 
 		return "", fmt.Errorf("tool: unknown tool %q", name)
 	}
 	return tool.Call(ctx, json.RawMessage(data))
+}
+
+// Tool returns registered metadata for a tool.
+func (r *Registry) Tool(name string) (Tool, bool) {
+	tool, ok := r.tools[name]
+	return tool, ok
+}
+
+// TimeoutPolicy returns the timeout policy for a registered tool.
+func (r *Registry) TimeoutPolicy(name string) TimeoutPolicy {
+	tool, ok := r.Tool(name)
+	if !ok || tool.TimeoutPolicy == "" {
+		return TimeoutPolicyCaller
+	}
+	return tool.TimeoutPolicy
 }
 
 // Len returns the number of registered tools.

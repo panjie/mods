@@ -81,7 +81,7 @@ func (s *approvalRuleSet) allows(name string, data []byte) bool {
 		if command == "" {
 			return false
 		}
-		return shellRulesAllowForTool(name, command, rules)
+		return shellRulesAllowForToolWithMode(name, command, rules, isUnixShell())
 	default:
 		return slices.ContainsFunc(rules, func(rule ApprovalRule) bool {
 			return rule.Type == approvalToolAll && rule.Tool == name
@@ -113,7 +113,7 @@ func approvalRulesFor(name string, data []byte) []ApprovalRule {
 			Tool: "file_edit",
 		}}
 	case "shell_run", "powershell_run":
-		return shellApprovalRulesForTool(name, extractShellCommand(data))
+		return shellApprovalRulesForToolWithMode(name, extractShellCommand(data), isUnixShell())
 	default:
 		return []ApprovalRule{{
 			Type: approvalToolAll,
@@ -133,16 +133,8 @@ func approvalRulesLabel(rules []ApprovalRule) string {
 	return strings.Join(labels, ", ")
 }
 
-func shellApprovalRules(command string) []ApprovalRule {
-	return shellApprovalRulesWithMode(command, isUnixShell())
-}
-
 func shellApprovalRulesWithMode(command string, posix bool) []ApprovalRule {
 	return shellApprovalRulesForToolWithMode("shell_run", command, posix)
-}
-
-func shellApprovalRulesForTool(tool, command string) []ApprovalRule {
-	return shellApprovalRulesForToolWithMode(tool, command, isUnixShell())
 }
 
 func shellApprovalRulesForToolWithMode(tool, command string, posix bool) []ApprovalRule {
@@ -188,16 +180,8 @@ func shellApprovalRulesSimple(tool, normalized string) []ApprovalRule {
 	return dedupeApprovalRules(rules)
 }
 
-func shellRulesAllow(command string, rules []ApprovalRule) bool {
-	return shellRulesAllowWithMode(command, rules, isUnixShell())
-}
-
 func shellRulesAllowWithMode(command string, rules []ApprovalRule, posix bool) bool {
 	return shellRulesAllowForToolWithMode("shell_run", command, rules, posix)
-}
-
-func shellRulesAllowForTool(tool, command string, rules []ApprovalRule) bool {
-	return shellRulesAllowForToolWithMode(tool, command, rules, isUnixShell())
 }
 
 func shellRulesAllowForToolWithMode(tool, command string, rules []ApprovalRule, posix bool) bool {
@@ -468,7 +452,7 @@ func splitSimpleCompound(s string) []string {
 			i++
 			continue
 		}
-		if s[i] == '&' && (i == 0 || s[i-1] == ' ') {
+		if s[i] == '&' && (i == 0 || s[i-1] != '>') {
 			parts = append(parts, strings.TrimSpace(s[start:i]))
 			start = i + 1
 		}

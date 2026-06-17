@@ -43,7 +43,9 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		return m.readFromCache()
 	}
 
+	m.cancelMu.Lock()
 	m.cancelRequest = nil
+	m.cancelMu.Unlock()
 	m.reasoningActive = false
 
 	return func() tea.Msg {
@@ -88,7 +90,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 
 		m.reasoningActive = m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
 		if m.reasoningActive {
-			m.activeOperation = "Deep reasoning..."
+			m.setActiveOperation("Deep reasoning...")
 		}
 
 		if cfg.HTTPProxy != "" {
@@ -121,7 +123,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		}
 
 		ctx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
-		m.cancelRequest = append(m.cancelRequest, cancel)
+		m.addCancel(cancel)
 		registry, err := buildToolRegistry(ctx, cfg, wscfg, cfg.Prefix+"\n"+content)
 		if err != nil {
 			return err
@@ -161,7 +163,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			Tools:       tools,
 			ToolCaller: func(name string, data []byte) (string, error) {
 				ctx, cancel := m.toolCallContext(registry, name, cfg)
-				m.cancelRequest = append(m.cancelRequest, cancel)
+				m.addCancel(cancel)
 				defer cancel()
 				m.sendToolOperationStatus(toolOperationLabel(name, data, m.width))
 
@@ -188,32 +190,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 			}
 		}
 
-		if isDebugEnabled() {
-			debugPrintf("API request -> model=%s, api=%s", mod.Name, mod.API)
-			debugPrintf("Request: %d message(s), %d tool definition(s)", len(m.messages), countTools(tools))
-			tempStr := "unset"
-			if request.Temperature != nil {
-				tempStr = fmt.Sprintf("%.2f", *request.Temperature)
-			}
-			toppStr := "unset"
-			if request.TopP != nil {
-				toppStr = fmt.Sprintf("%.2f", *request.TopP)
-			}
-			maxTokStr := "unset"
-			if request.MaxTokens != nil {
-				maxTokStr = fmt.Sprintf("%d", *request.MaxTokens)
-			}
-			debugPrintf("Request: temp=%s, topp=%s, max_tokens=%s", tempStr, toppStr, maxTokStr)
-			debugPrintf("Request: no-limit=%v, max-input-chars=%d", cfg.NoLimit, mod.MaxChars)
-			if cfg.HTTPProxy != "" {
-				debugPrintf("HTTP proxy: %s", cfg.HTTPProxy)
-			}
-			if b, err := json.Marshal(request.Messages); err == nil {
-				toolBody, _ := json.Marshal(request.Tools)
-				debugPrintf("Request: ~%dKB body (%dKB messages + %dKB tools)",
-					(len(b)+len(toolBody))/1024, len(b)/1024, len(toolBody)/1024)
-			}
-		}
+		debugRequest(cfg, &mod, &m.messages, tools, &request)
 
 		stream := client.Request(m.ctx, request)
 		return m.receiveCompletionStreamCmd(completionOutput{
@@ -293,6 +270,8 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			return msg.errh(err)
 		}
 
+		msg.stream.Close()
+
 		return toolCallsStartMsg{
 			stream: msg.stream,
 			errh:   msg.errh,
@@ -321,6 +300,18 @@ func (m *Mods) pollToolOperationStatusCmd(ch <-chan toolOperationStatusMsg) tea.
 		msg.ch = ch
 		return msg
 	}
+}
+
+func (m *Mods) setActiveOperation(op string) {
+	m.operationMutex.Lock()
+	defer m.operationMutex.Unlock()
+	m.activeOperation = op
+}
+
+func (m *Mods) getActiveOperation() string {
+	m.operationMutex.Lock()
+	defer m.operationMutex.Unlock()
+	return m.activeOperation
 }
 
 func (m *Mods) setToolOperationChannel(ch chan<- toolOperationStatusMsg) {
@@ -402,6 +393,36 @@ var oSeriesRe = regexp.MustCompile(`^o[1-9](-|$)`)
 
 func isOSeries(model string) bool {
 	return oSeriesRe.MatchString(model)
+}
+
+func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []proto.ToolSpec, request *proto.Request) {
+	if !isDebugEnabled() {
+		return
+	}
+	debugPrintf("API request -> model=%s, api=%s", mod.Name, mod.API)
+	debugPrintf("Request: %d message(s), %d tool definition(s)", len(*messages), len(tools))
+	tempStr := "unset"
+	if request.Temperature != nil {
+		tempStr = fmt.Sprintf("%.2f", *request.Temperature)
+	}
+	toppStr := "unset"
+	if request.TopP != nil {
+		toppStr = fmt.Sprintf("%.2f", *request.TopP)
+	}
+	maxTokStr := "unset"
+	if request.MaxTokens != nil {
+		maxTokStr = fmt.Sprintf("%d", *request.MaxTokens)
+	}
+	debugPrintf("Request: temp=%s, topp=%s, max_tokens=%s", tempStr, toppStr, maxTokStr)
+	debugPrintf("Request: no-limit=%v, max-input-chars=%d", cfg.NoLimit, mod.MaxChars)
+	if cfg.HTTPProxy != "" {
+		debugPrintf("HTTP proxy: %s", cfg.HTTPProxy)
+	}
+	if b, err := json.Marshal(request.Messages); err == nil {
+		toolBody, _ := json.Marshal(request.Tools)
+		debugPrintf("Request: ~%dKB body (%dKB messages + %dKB tools)",
+			(len(b)+len(toolBody))/1024, len(b)/1024, len(toolBody)/1024)
+	}
 }
 
 func ptrOrNil[T number](t T) *T {

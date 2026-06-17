@@ -289,6 +289,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				return "", err
 			}
 			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn")
+			hideCommandWindow(cmd)
 			cmd.Dir = root
 			cmd.Stdin = strings.NewReader(args.Patch)
 			out, err := cmd.CombinedOutput()
@@ -671,11 +672,8 @@ func (w *cappedOutput) String() string {
 		out = decoded
 	}
 	text := string(out)
-	if len(text) > w.limit {
-		return truncateOutput(text, w.limit)
-	}
 	if w.truncated {
-		return text + fmt.Sprintf("\n\n[Output truncated at %d chars.]", w.limit)
+		return truncateOutput(text, w.limit)
 	}
 	return text
 }
@@ -716,13 +714,17 @@ func validatePatchPaths(root, patch string) error {
 
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
-		return exec.CommandContext(ctx, "cmd", "/C", command)
+		cmd := exec.CommandContext(ctx, "cmd", "/C", command)
+		hideCommandWindow(cmd)
+		return cmd
 	}
 	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
 func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
-	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command)
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command)
+	hideCommandWindow(cmd)
+	return cmd
 }
 
 func truncateOutput(out string, limit int) string {

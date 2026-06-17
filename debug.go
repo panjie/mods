@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
-
-	"github.com/charmbracelet/mods/internal/proto"
 )
 
 var debugEnabled atomic.Bool
@@ -61,6 +59,3 @@ func truncateStr(s string, max int) string {
 	return s
 }
 
-func countTools(tools []proto.ToolSpec) int {
-	return len(tools)
-}

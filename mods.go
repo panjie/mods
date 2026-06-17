@@ -50,6 +50,7 @@ type Mods struct {
 	glamHeight          int
 	messages            []proto.Message
 	cancelRequest       []context.CancelFunc
+	cancelMu            sync.Mutex
 	anim                tea.Model
 	activeOperation     string
 	reasoningActive     bool
@@ -186,9 +187,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.content != "" {
 			if m.reasoningActive {
-				m.activeOperation = "Deep reasoning..."
+				m.setActiveOperation("Deep reasoning...")
 			} else {
-				m.activeOperation = ""
+				m.setActiveOperation("")
 			}
 			m.appendToOutput(msg.content)
 			m.state = responseState
@@ -200,23 +201,23 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toolCallsStartMsg:
 		ch := make(chan toolOperationStatusMsg, 8)
 		m.setToolOperationChannel(ch)
-		m.activeOperation = "Running tools"
+		m.setActiveOperation("Running tools")
 		m.state = responseState
 		cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.reviewer.startSession(), m.callToolsCmd(msg, ch))
 	case toolOperationStatusMsg:
 		if msg.done {
-			m.activeOperation = ""
+			m.setActiveOperation("")
 			break
 		}
-		m.activeOperation = msg.content
+		m.setActiveOperation(msg.content)
 		if msg.ch != nil {
 			cmds = append(cmds, m.pollToolOperationStatusCmd(msg.ch))
 		}
 	case toolReviewStartMsg:
 		m.reviewer.handleStartMsg(msg)
-		m.activeOperation = ""
+		m.setActiveOperation("")
 	case toolCallsOutput:
-		m.activeOperation = ""
+		m.setActiveOperation("")
 		m.reviewer.reset()
 		toolMsg := completionOutput{
 			stream: msg.stream,
@@ -244,7 +245,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = msg.stream.Messages()
 			m.toolCallRounds = 0
 			m.totalRounds = 0
-			m.activeOperation = m.Config.StatusText
+			m.setActiveOperation(m.Config.StatusText)
 			return m, msgCmd(completionOutput{errh: msg.errh})
 		}
 		m.totalRounds++
@@ -303,7 +304,15 @@ func msgCmd(msg tea.Msg) tea.Cmd {
 	}
 }
 
+func (m *Mods) addCancel(cancel context.CancelFunc) {
+	m.cancelMu.Lock()
+	defer m.cancelMu.Unlock()
+	m.cancelRequest = append(m.cancelRequest, cancel)
+}
+
 func (m *Mods) quit() tea.Msg {
+	m.cancelMu.Lock()
+	defer m.cancelMu.Unlock()
 	for _, cancel := range m.cancelRequest {
 		cancel()
 	}

@@ -59,7 +59,7 @@ func (m *Mods) renderWithOperation(content string) string {
 	if m.Config.Quiet || !m.showOperationStatus {
 		return content
 	}
-	if strings.TrimSpace(m.activeOperation) == "" && !m.reasoningActive {
+	if strings.TrimSpace(m.getActiveOperation()) == "" && !m.reasoningActive {
 		return content
 	}
 	status := m.operationStatusLine()
@@ -70,7 +70,7 @@ func (m *Mods) renderWithOperation(content string) string {
 }
 
 func (m *Mods) operationStatusLine() string {
-	text := m.activeOperation
+	text := m.getActiveOperation()
 	if text == "" && m.reasoningActive {
 		text = "Reasoning..."
 	}

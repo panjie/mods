@@ -30,7 +30,7 @@ func newToolReviewer(cfg *Config) *toolReviewer {
 }
 
 func (r *toolReviewer) isPending() bool {
-	return r.reviewPending && r.reviewItem != nil
+	return r.reviewPending && r.reviewItem != nil && r.reviewItem.resp != nil
 }
 
 func (r *toolReviewer) pollReviewCmd() tea.Cmd {

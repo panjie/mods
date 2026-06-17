@@ -13,6 +13,9 @@ format-text:
 # {{ index .Help "format" }}
 format: false
 
+# {{ index .Help "format-as" }}
+# format-as: ""  # empty = let mods decide based on format-text keys
+
 # {{ index .Help "minimal" }}
 minimal: false
 
@@ -68,6 +71,9 @@ topp: 1.0
 # {{ index .Help "topk" }}
 topk: 50
 
+# {{ index .Help "stop" }}
+# stop: []
+
 # {{ index .Help "max-input-chars" }}
 max-input-chars: 12250
 
@@ -76,6 +82,15 @@ max-input-chars: 12250
 
 # {{ index .Help "no-limit" }}
 no-limit: false
+
+# {{ index .Help "no-cache" }}
+no-cache: false
+
+# {{ index .Help "cache-path" }}
+# cache-path: ""  # automatically set to XDG_DATA_HOME/mods if empty
+
+# {{ index .Help "http-proxy" }}
+# http-proxy: ""  # HTTP proxy for API requests
 
 # {{ index .Help "max-retries" }}
 max-retries: 5
@@ -119,6 +134,7 @@ builtin-tools:
   sequential-thinking: false
   shell-timeout: 30s
   shell-max-output: 20000
+  workspace-root: ""  # root directory for filesystem/shell tools, defaults to CWD
 
 # {{ index .Help "web-search" }}
 web-search: false

@@ -11,7 +11,6 @@
 <p>
     <img src="https://github.com/charmbracelet/mods/assets/25087/5442bf46-b908-47af-bf4e-60f7c38951c4" width="630" alt="Mods product art and type treatment"/>
     <br>
-    <a href="https://github.com/panjie/mods/releases"><img src="https://img.shields.io/github/release/panjie/mods.svg" alt="Latest Release"></a>
     <a href="https://github.com/panjie/mods/actions"><img src="https://github.com/panjie/mods/workflows/build/badge.svg" alt="Build Status"></a>
 </p>
 
@@ -24,18 +23,26 @@ format results in Markdown, JSON, and other text based formats. Mods is a
 tool to add a sprinkle of AI in your command line and make your pipelines
 artificially intelligent.
 
-It works great with LLMs running locally through [LocalAI]. You can also use
-[OpenAI], [Cohere], [Groq], or [Azure OpenAI].
+It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
+[DeepSeek], [OpenRouter], and local [Ollama] models. You can also add
+[LocalAI], [Groq], or any OpenAI-compatible endpoint in `mods.yml`.
 
-[LocalAI]: https://github.com/go-skynet/LocalAI
 [OpenAI]: https://platform.openai.com/account/api-keys
+[Anthropic]: https://console.anthropic.com/settings/keys
+[Gemini]: https://aistudio.google.com/apikey
 [Cohere]: https://dashboard.cohere.com/api-keys
-[Groq]: https://console.groq.com/keys
 [Azure OpenAI]: https://azure.microsoft.com/en-us/products/cognitive-services/openai-service
+[DeepSeek]: https://platform.deepseek.com/api_keys
+[OpenRouter]: https://openrouter.ai/settings/keys
+[Ollama]: https://ollama.com
+[LocalAI]: https://github.com/mudler/LocalAI
+[Groq]: https://console.groq.com/keys
 
 ### Installation
 
 #### Build from source
+
+Requires Go 1.25 or newer.
 
 ```sh
 git clone https://github.com/panjie/mods.git
@@ -53,33 +60,32 @@ Use `make check` to verify the project compiles, and `make test` to run the test
 
 #### Install with `go`
 
-```sh
-go install github.com/panjie/mods@latest
-```
+Direct `go install` is not currently documented for this fork because `go.mod`
+still uses the upstream module path (`github.com/charmbracelet/mods`). Use the
+source build above until the fork's module path is moved or release binaries are
+published.
 
 #### Download binaries
 
-Pre-built [packages][releases] (Debian, RPM) and [binaries][releases] (Linux, macOS, Windows) are also available.
+Pre-built packages and binaries are not published for this fork yet. When
+release artifacts are available, they will appear on the [releases] page.
 
 [releases]: https://github.com/panjie/mods/releases
 
 <details>
 <summary>Shell Completions</summary>
 
-All the packages and archives come with pre-generated completion files for Bash,
-ZSH, Fish, and PowerShell.
+Release archives, when published, may include pre-generated completion files for
+Bash, ZSH, Fish, and PowerShell.
 
-If you built it from source, you can generate them with:
+If you built from source, you can generate completion scripts with:
 
 ```bash
-mods completion bash -h
-mods completion zsh -h
-mods completion fish -h
-mods completion powershell -h
+mods completion bash > mods.bash
+mods completion zsh > _mods
+mods completion fish > mods.fish
+mods completion powershell > mods.ps1
 ```
-
-If you installed via a binary package, the completions should be set
-up automatically, given your shell is configured properly.
 
 </details>
 
@@ -92,12 +98,14 @@ This fork adds the following features on top of the original Mods.
 - **Web Search** — `--web-search` enables real-time web search (DuckDuckGo default,
   no API key required). Also supports Tavily and custom providers.
 - **Image Recognition** — `-i` / `--image` attaches images for vision-capable
-  models (GPT-4o, Claude, Gemini). `--clipboard-image` and `--stdin-image` for
-  clipboard and piped image input.
+  models. `--clipboard-image` and `--stdin-image` attach clipboard and piped
+  image input.
 - **Built-in Tools** — File system operations (`fs_read_file`, `fs_write_file`,
-  `fs_search`, `fs_apply_patch`), shell execution (`shell_run`), and sequential
-  thinking (`thinking_note`). Filesystem tools auto-activate when your prompt
-  mentions files.
+  `fs_search`, `fs_apply_patch`), shell execution (`shell_run`, plus
+  `powershell_run` on Windows), and sequential thinking (`thinking_note`).
+  Filesystem tools auto-activate when your prompt mentions files; shell and
+  sequential thinking tools are disabled by default and can be enabled in
+  `builtin-tools` in `mods.yml`.
 
 ### Review & Safety
 
@@ -119,8 +127,6 @@ This fork adds the following features on top of the original Mods.
   thoughts, and API diagnostics to stderr.
 - **Status Line** — Live status bar shows what the model is doing: "Reading file:
   ...", "Running command: ...", "Searching web: ...".
-- **Tool Call Display** — `--show-tool-calls` controls whether tool call details
-  appear in the output.
 
 ### Quality of Life
 
@@ -130,8 +136,8 @@ This fork adds the following features on top of the original Mods.
   and output one item per line, optimized for `|` pipelines.
 - **Tool Round Limits** — `--max-tool-rounds` caps total tool call rounds (default
   30) with separate failed-round limiting to prevent infinite loops.
-- **Updated Models** — Model list refreshed to latest releases across OpenAI,
-  Anthropic, Google, Cohere, and DeepSeek.
+- **Updated Models** — Model list refreshed across OpenAI, Anthropic, Google,
+  Cohere, DeepSeek, OpenRouter, and Ollama.
 
 ### Cross-Platform
 
@@ -151,9 +157,9 @@ standard in or an argument supplied prompt individually.
 Be sure to check out the [examples](examples.md) and a list of all the
 [features](features.md).
 
-Mods works with OpenAI compatible endpoints. By default, Mods is configured to
-support OpenAI's official API and a LocalAI installation running on port 8080.
-You can configure additional endpoints in your settings file by running
+Mods ships with configuration for OpenAI, Anthropic, Google Gemini, Cohere,
+Azure OpenAI, DeepSeek, OpenRouter, and Ollama. You can configure LocalAI, Groq,
+or any other OpenAI-compatible endpoint in your settings file by running
 `mods --settings`.
 
 ## Saved Conversations
@@ -177,25 +183,50 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 
 ## Usage
 
-- `-m`, `--model`: Specify Large Language Model to use
+Run `mods --help` for generated help. Current options include:
+
+#### Model & API
+
+- `-a`, `--api`: API profile to use (`openai`, `anthropic`, `google`, `cohere`, `ollama`, custom profiles, etc.)
+- `-m`, `--model`: Model to use
 - `-M`, `--ask-model`: Ask which model to use via interactive prompt
-- `-f`, `--format`: Ask the LLM to format the response in a given format
-- `--format-as`: Specify the format for the output (used with `--format`)
+- `-x`, `--http-proxy`: HTTP proxy for API requests
+- `--max-retries`: Maximum number of API call retries
+- `--max-tokens`: Maximum number of response tokens
+- `--no-limit`: Disable the client-side input size limit
+- `--stop`: Stop sequence; can be specified multiple times
+- `--temp`: Sampling temperature (`-1.0` disables when supported)
+- `--topp`: Top P sampling value (`-1.0` disables when supported)
+- `--topk`: Top K sampling value (`-1` disables when supported)
+
+#### Input & Output
+
+- `-f`, `--format`: Ask for formatted output, Markdown by default
+- `--format-as`: Inline format prompt to use with `--format`
 - `--minimal`: Output only the final result, optimized for pipelines
-- `-P`, `--prompt` Include the prompt from the arguments and stdin, truncate stdin to specified number of lines
-- `-p`, `--prompt-args`: Include the prompt from the arguments in the response
-- `-q`, `--quiet`: Only output errors to standard err
-- `-r`, `--raw`: Print raw response without syntax highlighting
-- `--settings`: Open settings
-- `-x`, `--http-proxy`: Use HTTP proxy to connect to the API endpoints
-- `--max-retries`: Maximum number of retries
-- `--max-tokens`: Specify maximum tokens with which to respond
-- `--no-limit`: Do not limit the response tokens
-- `--role`: Specify the role to use (See [custom roles](#custom-roles))
-- `--word-wrap`: Wrap output at width (defaults to 80)
-- `--reset-settings`: Restore settings to default
-- `--theme`: Theme to use in the forms; valid choices are: `charm`, `catppuccin`, `dracula`, and `base16`
+- `-P`, `--prompt`: Include the prompt from arguments and stdin; optionally truncate stdin to the specified number of lines
+- `-p`, `--prompt-args`: Include prompt arguments in the response
+- `-q`, `--quiet`: Hide the spinner and success messages on stderr
+- `-r`, `--raw`: Render raw text when connected to a TTY
+- `--word-wrap`: Wrap formatted output at a width, default `80`
 - `--status-text`: Text to show while generating
+- `--workspace`: Workspace root for filesystem and shell tools
+
+#### Configuration & UI
+
+- `--settings`: Open settings in `$EDITOR`
+- `--dirs`: Print data/config directories used by Mods
+- `--reset-settings`: Back up the old settings file and reset to defaults
+- `--theme`: Form theme; valid choices are `charm`, `catppuccin`, `dracula`, and `base16`
+- `--fanciness`: Desired level of fanciness
+- `-e`, `--editor`: Edit the prompt in `$EDITOR` when there are no args and stdin is a TTY
+- `-h`, `--help`: Show help and exit
+- `-v`, `--version`: Show version and exit
+
+#### Roles
+
+- `-R`, `--role`: System role to use; see [custom roles](#custom-roles)
+- `--list-roles`: List roles defined in your configuration file
 
 #### Image Support
 
@@ -206,7 +237,7 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 #### Web Search
 
 - `--web-search`: Enable web search for up-to-date information (uses DuckDuckGo by default)
-- `--web-search-provider`: Web search provider (`duckduckgo`, `tavily`, or `custom`)
+- `--web-search-provider`: Web search provider (`duckduckgo`, `tavily`, or a custom provider URL)
 - `--web-search-api-key`: API key for the web search provider (required for Tavily)
 
 #### Conversations
@@ -217,9 +248,24 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 - `-C`, `--continue-last`: Continue the last conversation.
 - `-s`, `--show`: Show saved conversation for the given title or SHA-1
 - `-S`, `--show-last`: Show previous conversation
-- `--delete-older-than=<duration>`: Deletes conversations older than given duration (`10d`, `1mo`).
-- `--delete`: Deletes the saved conversations for the given titles or SHA-1s
+- `-d`, `--delete`: Deletes saved conversations for the given titles or SHA-1s
+- `--delete-older-than=<duration>`: Deletes conversations older than given duration (`10d`, `1mo`)
 - `--no-cache`: Do not save conversations
+
+#### Built-In Tools
+
+Filesystem tools are `auto` by default. Shell and sequential thinking tools must
+be enabled explicitly in `mods.yml`:
+
+```yaml
+builtin-tools:
+  filesystem: auto  # auto, true, or false
+  shell: true
+  sequential-thinking: true
+  shell-timeout: 30s
+  shell-max-output: 20000
+  workspace-root: ""
+```
 
 #### Review & Safety
 
@@ -243,14 +289,7 @@ mods --review never "list go files"
 - `--mcp-list`: List all available MCP servers
 - `--mcp-list-tools`: List all available tools from enabled MCP servers
 - `--mcp-disable`: Disable specific MCP servers
-- `--mcp-enable`: Enable only specific MCP servers (whitelist)
-
-#### Advanced
-
-- `--fanciness`: Level of fanciness
-- `--temp`: Sampling temperature
-- `--topp`: Top P value
-- `--topk`: Top K value
+- `--mcp-enable`: Enable only specific MCP servers (whitelist, overrides disable list)
 
 ## Custom Roles
 
@@ -273,15 +312,44 @@ mods --role shell list files in the current directory
 
 ## Setup
 
-### Open AI
+Run `mods --settings` to create or edit `mods.yml`. The default configuration
+uses the OpenAI API with `gpt-5`:
 
-Mods uses GPT-4 by default. It will fall back to GPT-3.5 Turbo.
+```yaml
+default-api: openai
+default-model: gpt-5
+```
 
-Set the `OPENAI_API_KEY` environment variable. If you don't have one yet, you
-can grab it the [OpenAI website](https://platform.openai.com/account/api-keys).
+### OpenAI
 
-Alternatively, set the [`AZURE_OPENAI_KEY`] environment variable to use Azure
-OpenAI. Grab a key from [Azure](https://azure.microsoft.com/en-us/products/cognitive-services/openai-service).
+Set the `OPENAI_API_KEY` environment variable. If you don't have one yet, get it
+from the [OpenAI website](https://platform.openai.com/account/api-keys).
+
+### Anthropic
+
+Anthropic models are configured under the `anthropic` API profile. Set the
+`ANTHROPIC_API_KEY` environment variable. If you don't have one yet, get it from
+the [Anthropic console](https://console.anthropic.com/settings/keys).
+
+```sh
+mods --api anthropic --model claude-sonnet-4-20250514 "explain this error"
+```
+
+### Google Gemini
+
+Gemini models are configured under the `google` API profile. Set the
+`GOOGLE_API_KEY` environment variable. If you don't have one yet, get it from
+[Google AI Studio](https://aistudio.google.com/apikey).
+
+```sh
+mods --api google --model gemini-2.5-pro "summarize this"
+```
+
+### Azure OpenAI
+
+Set the `AZURE_OPENAI_KEY` environment variable and update the `azure` profile in
+`mods.yml` with your Azure OpenAI resource URL and deployed model names. Grab a
+key from [Azure](https://azure.microsoft.com/en-us/products/cognitive-services/openai-service).
 
 ### Cohere
 
@@ -290,24 +358,51 @@ Cohere provides enterprise optimized models.
 Set the `COHERE_API_KEY` environment variable. If you don't have one yet, you can
 get it from the [Cohere dashboard](https://dashboard.cohere.com/api-keys).
 
-### Local AI
+### DeepSeek
 
-Local AI allows you to run models locally. Mods works with the GPT4ALL-J model
-as setup in [this tutorial](https://github.com/go-skynet/LocalAI#example-use-gpt4all-j-model).
+DeepSeek is configured as an OpenAI-compatible endpoint under the `deepseek` API
+profile. Set `DEEPSEEK_API_KEY` and choose one of the configured DeepSeek models
+or aliases.
 
-### Groq
+```sh
+mods --api deepseek --model deepseek-chat "write release notes"
+```
 
-Groq provides models powered by their LPU inference engine.
+### OpenRouter
 
-Set the `GROQ_API_KEY` environment variable. If you don't have one yet, you can
-get it from the [Groq console](https://console.groq.com/keys).
+OpenRouter is configured under the `openrouter` API profile. Set
+`OPENROUTER_API_KEY` and select one of the configured OpenRouter model IDs or
+aliases.
 
-### Gemini
+```sh
+mods --api openrouter --model or-sonnet-4 "review this diff"
+```
 
-Mods supports using Gemini models from Google.
+### Ollama
 
-Set the `GOOGLE_API_KEY` environment variable. If you don't have one yet,
-you can get it from the [Google AI Studio](https://aistudio.google.com/apikey).
+Ollama is configured under the `ollama` API profile with `http://localhost:11434`
+as the default base URL. Start Ollama locally and use one of the configured model
+names or aliases.
+
+```sh
+mods --api ollama --model llama3.3 "summarize this log"
+```
+
+### LocalAI, Groq, And Other OpenAI-Compatible APIs
+
+LocalAI, Groq, and other OpenAI-compatible providers can be added as custom API
+profiles in `mods.yml`:
+
+```yaml
+apis:
+  groq:
+    base-url: https://api.groq.com/openai/v1
+    api-key-env: GROQ_API_KEY
+    models:
+      llama-3.3-70b-versatile:
+        aliases: ["groq-llama"]
+        max-input-chars: 120000
+```
 
 ### Web Search
 

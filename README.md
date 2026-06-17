@@ -9,14 +9,14 @@
 # Mods
 
 <p>
-    <img src="https://github.com/charmbracelet/mods/assets/25087/5442bf46-b908-47af-bf4e-60f7c38951c4" width="630" alt="Mods product art and type treatment"/>
+    <img src="examples/gifs/mods-product.png" width="630" alt="Mods product art and type treatment"/>
     <br>
     <a href="https://github.com/panjie/mods/actions"><img src="https://github.com/panjie/mods/workflows/build/badge.svg" alt="Build Status"></a>
 </p>
 
 AI for the command line, built for pipelines.
 
-<p><img src="https://vhs.charm.sh/vhs-5Uyj0U6Hlqi1LVIIRyYKM5.gif" width="900" alt="a GIF of mods running"></p>
+<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods running"></p>
 
 Large Language Models (LLM) based AI is useful to ingest command output and
 format results in Markdown, JSON, and other text based formats. Mods is a
@@ -168,7 +168,7 @@ Conversations are saved locally by default. Each conversation has a SHA-1
 identifier and a title (like `git`!).
 
 <p>
-  <img src="https://vhs.charm.sh/vhs-6MMscpZwgzohYYMfTrHErF.gif" width="900" alt="a GIF listing and showing saved conversations.">
+  <img src="examples/gifs/conversations.gif" width="900" alt="a GIF listing and showing saved conversations.">
 </p>
 
 Check the [`./features.md`](./features.md) for more details.

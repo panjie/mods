@@ -1,75 +1,69 @@
 # Mods Examples
 
-### Improve Your Code
+### Summarize Command Output
 
-Piping source code to Mods and giving it an instruction on what to do with it
-gives you a lot of options for refactoring, enhancing or debugging code.
+Pipe command output into Mods and ask for a formatted response.
 
-`mods -f "what are your thoughts on improving this code?" < main.go | glow`
+`printf '%s\n' '[{"name":"bubbletea"},{"name":"lipgloss"},{"name":"gum"},{"name":"vhs"}]' | mods -f "rate this github org and summarize each repository"`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/738fe969-1c9f-4849-af8a-cde38156ce92" width="900" alt="a GIF of mods offering code refactoring suggestions"></p>
+<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods summarizing command output"></p>
 
-### Come Up With Product Features
+### Choose A Model
 
-Mods can also come up with entirely new features based on source code (or a
-README file).
+Use `--ask-model` (`-M`) to select a configured model interactively before
+running a prompt.
 
-`mods -f "come up with 10 new features for this tool." < main.go | glow`
+`mods -M "Hello world"`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/025de860-798a-4ab2-b1cf-a0b32dbdbe4d" width="900" alt="a GIF of mods suggesting feature improvements"></p>
+<p><img src="examples/gifs/mods-v1.5.gif" width="900" alt="a GIF of mods selecting a model"></p>
 
-### Help Write Docs
+### Continue Saved Conversations
 
-Mods can quickly give you a first draft for new documentation.
+List local conversations and show a previous response by ID.
 
-`mods "write a new section to this readme for a feature that sends you a free rabbit if you hit r" < README.md | glow`
+`mods --list`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/c26a17a9-c772-40cc-b3f1-9189ac682730" width="900" alt="a GIF of mods contributing to a product README"></p>
+`mods --show 8a0d428`
 
-### Organize Your Videos
+<p><img src="examples/gifs/conversations.gif" width="900" alt="a GIF listing and showing saved conversations"></p>
 
-The file system can be an amazing source of input for Mods. If you have music
-or video files, Mods can parse the output of `ls` and offer really good
-editorialization of your content.
+### Pipeline-Friendly Output
 
-`ls ~/vids | mods -f "organize these by decade and summarize each" | glow`
+Use `--minimal` when another command needs to consume the answer directly.
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/8204d06a-8cf1-401d-802f-2b94345dec5d" width="900" alt="a GIF of mods oraganizing and summarizing video from a shell ls statement"></p>
+`find . -maxdepth 1 -type f | sed 's#^./##' | sort | mods --minimal "pick the five files most relevant to built-in tools"`
 
-### Make Recommendations
+<p><img src="examples/gifs/minimal-pipeline.gif" width="900" alt="a GIF of mods returning minimal pipeline output"></p>
 
-Mods is really good at generating recommendations based on what you have as
-well, both for similar content but also content in an entirely different media
-(like getting music recommendations based on movies you have).
+### Search The Web
 
-`ls ~/vids | mods -f "recommend me 10 shows based on these, make them obscure" | glow`
+Enable web search when the answer needs current information.
 
-`ls ~/vids | mods -f "recommend me 10 albums based on these shows, do not include any soundtrack music or music from the show" | glow`
+`mods --web-search "What changed in the latest Go release?"`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/48159b19-5cae-413b-9677-dce8c6dfb6b8" width="900" alt="a GIF of mods generating television show recommendations based on a file listing from a directory of videos"></p>
+<p><img src="examples/gifs/web-search.gif" width="900" alt="a GIF of mods searching the web"></p>
 
-### Read Your Fortune
+### Understand Images
 
-It's easy to let your downloads folder grow into a chaotic never-ending pit of
-files, but with Mods you can use that to your advantage!
+Attach images to prompts with `-i` or `--image`.
 
-`ls ~/Downloads | mods -f "tell my fortune based on these files" | glow`
+`mods -i examples/gifs/mods-product.png "Describe this image and suggest README alt text"`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/da2206a8-799f-4c92-b75e-bac66c56ea88" width="900" alt="a GIF of mods generating a fortune from the contents of a downloads directory"></p>
+<p><img src="examples/gifs/image-vision.gif" width="900" alt="a GIF of mods describing an image"></p>
 
-### Understand APIs
+### Review Tool Execution
 
-Mods can parse and understand the output of an API call with `curl` and convert
-it to something human readable.
+Built-in tools can read, write, search, patch, and run shell commands. Review
+mode asks before mutable tool execution.
 
-`curl "https://api.open-meteo.com/v1/forecast?latitude=29.00&longitude=-90.00&current_weather=true&hourly=temperature_2m,relativehumidity_2m,windspeed_10m" 2>/dev/null | mods -f "summarize this weather data for a human." | glow`
+`mods --review mutable --workspace . "Read README.md and write docs/cli-notes.md with a short usage guide"`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/3af13876-46a3-4bab-986e-50d9f54d2921" width="900" alt="a GIF of mods summarizing the weather from JSON API output"></p>
+<p><img src="examples/gifs/builtin-tools-review.gif" width="900" alt="a GIF of mods asking for tool execution review"></p>
 
-### Read The Comments (so you don't have to)
+### Debug Reasoning
 
-Just like with APIs, Mods can read through raw HTML and summarize the contents.
+Use reasoning and debug output to inspect how Mods approaches a task.
 
-`curl "https://news.ycombinator.com/item?id=30048332" 2>/dev/null | mods -f "what are the authors of these comments saying?" | glow`
+`mods --reasoning auto --debug "When should I use each review mode?"`
 
-<p><img src="https://github.com/charmbracelet/mods/assets/25087/e4d94ef8-43aa-45ea-9be5-fe13e53d5203" width="900" alt="a GIF of mods summarizing the comments on hacker news"></p>
+<p><img src="examples/gifs/reasoning-debug.gif" width="900" alt="a GIF of mods showing reasoning and debug output"></p>

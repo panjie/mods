@@ -1,13 +1,12 @@
 Output examples/gifs/reasoning-debug.gif
 
-Set Shell cmd
 Set Height 760
 Set Width 1450
 Set Framerate 18
 Set FontSize 26
 
 Hide
-  Type `set PATH=%CD%\examples\demo-bin;%PATH% && cls`
+  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
   Enter
   Sleep 300ms
 Show

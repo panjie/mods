@@ -1,47 +1,17 @@
-Output mods-v1.5.gif
+Output examples/gifs/mods-v1.5.gif
 
 Set Height 900
 Set Width 1600
 Set Framerate 24
 
-Type@150ms `mods -M`
+Hide
+  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
+  Enter
+  Sleep 300ms
+Show
+
 Sleep 500ms
-Enter
-Sleep 250ms
-
-Down
-Sleep 150ms
-Down
-Sleep 150ms
-Down
-Sleep 150ms
-Up
-Sleep 150ms
-Down
-Sleep 150ms
-Down
-Sleep 150ms
-Up
-Sleep 150ms
-Up
-Sleep 150ms
-
-Sleep 150ms
-Type@150ms `/`
-Sleep 250ms
-Type@150ms `gro`
-Sleep 500ms
-Enter
-Sleep 250ms
-
-Down
-Sleep 150ms
-Down
-Sleep 150ms
-Enter
-Sleep 250ms
-
-Type@150ms `Hello world`
+Type@75ms `mods -M "Hello world"`
 Sleep 500ms
 Enter
 

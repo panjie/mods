@@ -1,13 +1,12 @@
 Output examples/gifs/builtin-tools-review.gif
 
-Set Shell cmd
 Set Height 820
 Set Width 1500
 Set Framerate 18
 Set FontSize 26
 
 Hide
-  Type `set PATH=%CD%\examples\demo-bin;%PATH% && cls`
+  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
   Enter
   Sleep 300ms
 Show

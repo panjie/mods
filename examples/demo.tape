@@ -1,26 +1,18 @@
-Output mods.gif
+Output examples/gifs/mods.gif
 
 Set Height 900
 Set Width 1600
 Set Framerate 24
 
 Hide
-  Type `export OPENAI_API_KEY=$(pass OPENAI_API_KEY)`
+  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
   Enter
-  Ctrl+L
   Sleep 500ms
 Show
 
 Sleep 500ms
 
-Type@25ms `curl -s `
-
-Sleep 500ms
-
-# Simulate pasting link.
-Hide
-  Type@5ms `https://api.github.com/orgs/charmbracelet/repos`
-Show
+Type@25ms `printf '%s\n' '[{"name":"bubbletea"},{"name":"lipgloss"},{"name":"gum"},{"name":"vhs"}]'`
 
 Sleep 500ms
 
@@ -28,4 +20,4 @@ Type@25ms ` | mods -f "rate this github org and summarize each repository"`
 
 Enter
 
-Sleep 30s
+Sleep 6s

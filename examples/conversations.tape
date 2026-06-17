@@ -1,9 +1,15 @@
-Output conversations.gif
+Output examples/gifs/conversations.gif
 
 Set Height 900
 Set Width 1600
 Set Framerate 24
 Set FontSize 28
+
+Hide
+  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
+  Enter
+  Sleep 300ms
+Show
 
 Sleep 500ms
 Type "mods --list"

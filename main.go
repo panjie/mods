@@ -16,6 +16,7 @@ import (
 	"github.com/atotto/clipboard"
 	timeago "github.com/caarlos0/timea.go"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/key"
 	glamour "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/editor"
@@ -849,6 +850,12 @@ func askInfo() error {
 		}
 	}
 
+	keymap := huh.NewDefaultKeyMap()
+	keymap.Text.NewLine = key.NewBinding(
+		key.WithKeys("ctrl+j"),
+		key.WithHelp("ctrl+j", "new line"),
+	)
+
 	// wrapping is done by the caller
 	//nolint:wrapcheck
 	return huh.NewForm(
@@ -885,6 +892,7 @@ func askInfo() error {
 		}),
 	).
 		WithTheme(themeFrom(config.Theme)).
+		WithKeyMap(keymap).
 		Run()
 }
 

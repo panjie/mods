@@ -16,7 +16,7 @@
 
 AI for the command line, built for pipelines.
 
-<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods running"></p>
+<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
 
 Large Language Models (LLM) based AI is useful to ingest command output and
 format results in Markdown, JSON, and other text based formats. Mods is a

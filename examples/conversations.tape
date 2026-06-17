@@ -6,7 +6,7 @@ Set Framerate 24
 Set FontSize 28
 
 Hide
-  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
+  Type `clear`
   Enter
   Sleep 300ms
 Show

@@ -5,7 +5,7 @@ Set Width 1600
 Set Framerate 24
 
 Hide
-  Type `export PATH="$PWD/examples/demo-bin:$PATH"; clear`
+  Type `clear`
   Enter
   Sleep 300ms
 Show

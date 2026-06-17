@@ -1,12 +1,20 @@
 # Mods Examples
 
-### Summarize Command Output
+### Mods At A Glance
 
-Pipe command output into Mods and ask for a formatted response.
+The README demo shows Mods handling common command-line AI workflows in one
+short session: summarizing piped input, searching the web, describing an image,
+and producing minimal output for another pipeline step.
 
-`printf '%s\n' '[{"name":"bubbletea"},{"name":"lipgloss"},{"name":"gum"},{"name":"vhs"}]' | mods -f "rate this github org and summarize each repository"`
+`printf '%s\n' '[{"name":"bubbletea"},{"name":"lipgloss"},{"name":"gum"},{"name":"vhs"}]' | mods -f "summarize these repositories"`
 
-<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods summarizing command output"></p>
+`mods --web-search "What changed in the latest Go release?"`
+
+`mods -i examples/gifs/mods-product.png "Describe this image and suggest README alt text"`
+
+`find . -maxdepth 1 -type f | sed 's#^./##' | sort | mods --minimal "pick the five files most relevant to built-in tools"`
+
+<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
 
 ### Choose A Model
 

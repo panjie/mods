@@ -128,7 +128,7 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 	if r.reviewMode != ReviewAlways && isShellExecutionTool(name) {
 		cmd := extractShellCommand(data)
 		if cmd != "" {
-			mutable := ctx.classifyShellCommand(cmd)
+			mutable := ctx.classifyShellCommand(name, cmd)
 			debugPrintf("shell classifier: cmd=%q mutable=%v", cmd, mutable)
 			if !mutable {
 				debugPrintf("shell classifier result: NOT mutable, auto-approving")

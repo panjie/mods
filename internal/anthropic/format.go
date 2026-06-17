@@ -15,10 +15,12 @@ func fromToolSpecs(specs []proto.ToolSpec) []anthropic.ToolUnionParam {
 		if schemaProps, ok := spec.InputSchema["properties"].(map[string]any); ok {
 			props = proto.StripSchema(schemaProps)
 		}
+		required := schemaRequired(spec.InputSchema)
 		tools = append(tools, anthropic.ToolUnionParam{
 			OfTool: &anthropic.ToolParam{
 				InputSchema: anthropic.ToolInputSchemaParam{
 					Properties: props,
+					Required:   required,
 				},
 				Name:        spec.Name,
 				Description: anthropic.String(spec.Description),
@@ -26,6 +28,26 @@ func fromToolSpecs(specs []proto.ToolSpec) []anthropic.ToolUnionParam {
 		})
 	}
 	return tools
+}
+
+func schemaRequired(schema map[string]any) []string {
+	if schema == nil {
+		return nil
+	}
+	switch required := schema["required"].(type) {
+	case []string:
+		return append([]string(nil), required...)
+	case []any:
+		out := make([]string, 0, len(required))
+		for _, item := range required {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func fromProtoMessages(input []proto.Message) (system []anthropic.TextBlockParam, messages []anthropic.MessageParam) {

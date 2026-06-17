@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -81,7 +79,7 @@ func (s *approvalRuleSet) allows(name string, data []byte) bool {
 		if command == "" {
 			return false
 		}
-		return shellRulesAllowForToolWithMode(name, command, rules, isUnixShell())
+		return shellRulesAllowForToolWithMode(name, command, rules, shellToolUsesPOSIX(name))
 	default:
 		return slices.ContainsFunc(rules, func(rule ApprovalRule) bool {
 			return rule.Type == approvalToolAll && rule.Tool == name
@@ -113,7 +111,7 @@ func approvalRulesFor(name string, data []byte) []ApprovalRule {
 			Tool: "file_edit",
 		}}
 	case "shell_run", "powershell_run":
-		return shellApprovalRulesForToolWithMode(name, extractShellCommand(data), isUnixShell())
+		return shellApprovalRulesForToolWithMode(name, extractShellCommand(data), shellToolUsesPOSIX(name))
 	default:
 		return []ApprovalRule{{
 			Type: approvalToolAll,
@@ -141,6 +139,9 @@ func shellApprovalRulesForToolWithMode(tool, command string, posix bool) []Appro
 	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
 		return nil
+	}
+	if tool == "powershell_run" && commandHasPowerShellCompoundSyntax(normalized) {
+		return []ApprovalRule{shellExactRule(tool, normalized)}
 	}
 	if !posix {
 		return shellApprovalRulesSimple(tool, normalized)
@@ -193,6 +194,9 @@ func shellRulesAllowForToolWithMode(tool, command string, rules []ApprovalRule, 
 		return rule.Type == approvalShellExact && rule.Tool == tool && rule.Pattern == normalized
 	}) {
 		return true
+	}
+	if tool == "powershell_run" && commandHasPowerShellCompoundSyntax(normalized) {
+		return false
 	}
 	if !posix {
 		return shellRulesAllowSimple(tool, normalized, rules)
@@ -320,7 +324,7 @@ func printShellNode(node syntax.Node) (string, bool) {
 }
 
 func normalizeShellCommand(command string) string {
-	return normalizeShellCommandWithMode(command, isUnixShell())
+	return normalizeShellCommandWithMode(command, shellToolUsesPOSIX("shell_run"))
 }
 
 func normalizeShellCommandWithMode(command string, posix bool) string {
@@ -359,15 +363,26 @@ func ruleForShellLeaf(tool string, leaf shellLeaf) ApprovalRule {
 	if leaf.exact || leaf.call == nil || len(leaf.call.Args) == 0 {
 		return shellExactRule(tool, leaf.text)
 	}
+	args := shellLeafArgs(leaf)
+	if len(args) == 0 {
+		return shellExactRule(tool, leaf.text)
+	}
+	return ruleFromTokens(tool, args, leaf.exact, leaf.text)
+}
+
+func shellLeafArgs(leaf shellLeaf) []string {
+	if leaf.call == nil || len(leaf.call.Args) == 0 {
+		return nil
+	}
 	args := make([]string, 0, len(leaf.call.Args))
 	for _, word := range leaf.call.Args {
 		value, ok := staticShellWord(word)
 		if !ok {
-			return shellExactRule(tool, leaf.text)
+			return nil
 		}
 		args = append(args, value)
 	}
-	return ruleFromTokens(tool, args, leaf.exact, leaf.text)
+	return args
 }
 
 func ruleFromTokens(tool string, args []string, exact bool, originalText string) ApprovalRule {
@@ -470,6 +485,28 @@ func splitSimpleCompound(s string) []string {
 	return result
 }
 
+func commandHasPowerShellCompoundSyntax(s string) bool {
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case ';', '|', '&', '{', '}', '\r', '\n':
+			if !inSingle && !inDouble {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func normalizeSimpleCommand(command string) string {
 	return strings.TrimSpace(command)
 }
@@ -525,17 +562,9 @@ var flagPrefixShellCommands = map[string]bool{
 	"rm": true, "rmdir": true, "touch": true,
 }
 
-var unixShellBases = map[string]bool{
-	"bash": true, "sh": true, "zsh": true, "dash": true,
-	"fish": true, "ksh": true, "tcsh": true, "csh": true,
-}
-
-func isUnixShell() bool {
-	if s := os.Getenv("SHELL"); s != "" {
-		base := strings.ToLower(filepath.Base(s))
-		if unixShellBases[base] {
-			return true
-		}
+func shellToolUsesPOSIX(tool string) bool {
+	if tool == "powershell_run" {
+		return false
 	}
 	return runtime.GOOS != "windows"
 }

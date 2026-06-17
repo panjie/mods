@@ -78,6 +78,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	s.factory = func() {
 		s.done = false
 		s.err = nil
+		s.closed = false
 		s.respCh = make(chan api.ChatResponse)
 		go func() {
 			if err := c.Chat(ctx, &s.request, s.fn); err != nil {
@@ -131,16 +132,22 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 		s.messages = append(s.messages, msg)
 		statuses = append(statuses, status)
 	}
+	if len(statuses) > 0 {
+		s.message = api.Message{}
+		s.factory()
+	}
 	return statuses
 }
 
 // Close implements stream.Stream.
 func (s *Stream) Close() error {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
 	s.closed = true
-	s.mu.Unlock()
 	close(s.respCh)
-	s.mu.Lock()
 	s.done = true
 	s.mu.Unlock()
 	return nil
@@ -149,7 +156,10 @@ func (s *Stream) Close() error {
 // Current implements stream.Stream.
 func (s *Stream) Current() (proto.Chunk, error) {
 	select {
-	case resp := <-s.respCh:
+	case resp, ok := <-s.respCh:
+		if !ok {
+			return proto.Chunk{}, stream.ErrNoContent
+		}
 		chunk := proto.Chunk{
 			Content: resp.Message.Content,
 		}
@@ -184,11 +194,9 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
-		s.done = false
-		s.factory()
 		s.messages = append(s.messages, toProtoMessage(s.message))
 		s.request.Messages = append(s.request.Messages, s.message)
-		s.message = api.Message{}
+		return false
 	}
 	return true
 }

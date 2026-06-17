@@ -152,6 +152,12 @@ func TestPowerShellApprovalRules(t *testing.T) {
 	require.Equal(t, "Get-ChildItem *", rules[0].Pattern)
 	require.True(t, shellRulesAllowForToolWithMode("powershell_run", "Get-ChildItem C:\\Windows", rules, false))
 	require.False(t, shellRulesAllowForToolWithMode("shell_run", "Get-ChildItem C:\\Windows", rules, false))
+	require.False(t, shellRulesAllowForToolWithMode("powershell_run", "Get-ChildItem C:\\Windows | Remove-Item -Recurse", rules, false))
+	require.False(t, shellRulesAllowForToolWithMode("powershell_run", "Get-ChildItem C:\\Windows; Remove-Item old.txt", rules, false))
+
+	compoundRules := shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users | Where-Object Name", false)
+	require.Len(t, compoundRules, 1)
+	require.Equal(t, approvalShellExact, compoundRules[0].Type)
 }
 
 func TestApprovalRuleSet(t *testing.T) {
@@ -249,18 +255,32 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.False(t, reviewer.shouldReviewTool("fs_read_file"))
 	})
 
-	t.Run("mutable allows obviously read-only shell command", func(t *testing.T) {
+	t.Run("mutable requires review for shell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable}
 		require.True(t, reviewer.shouldReviewTool("shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable allows obviously read-only powershell command", func(t *testing.T) {
+	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("shell_run"))
+		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("mutable requires review for powershell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable}
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("mutable denies nested powershell", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable routes powershell pipelines to review", func(t *testing.T) {
@@ -285,6 +305,14 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("saved powershell prefix does not allow pipeline mutation", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAlways}
+		reviewer.rules.add(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)...)
+		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows | Remove-Item -Recurse"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
 	t.Run("always denies read-only tool without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways}
 		require.True(t, reviewer.shouldReviewTool("fs_read_file"))
@@ -299,26 +327,6 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.NoError(t, err)
 	})
-}
-
-func TestPowerShellReadOnlyHeuristic(t *testing.T) {
-	tests := map[string]bool{
-		`Get-ChildItem C:\Users`:                    true,
-		`$PSVersionTable.PSVersion`:                 true,
-		`Write-Output ok`:                           true,
-		`set`:                                       true,
-		`Set-Content out.txt ok`:                    false,
-		`Get-Process | kill`:                        false,
-		`Get-ChildItem | % { rm $_ }`:               false,
-		`Get-Content in.txt | sc out.txt`:           false,
-		`Get-ChildItem; Remove-Item old.txt`:        false,
-		`powershell -Command Get-ChildItem`:         true,
-		`powershell.exe -Command Get-ChildItem`:     true,
-		`powershell -Command "& { Get-ChildItem }"`: false,
-	}
-	for command, want := range tests {
-		require.Equal(t, want, isObviouslyReadOnly(command), command)
-	}
 }
 
 func TestReviewUnavailableIsFatal(t *testing.T) {

@@ -105,6 +105,7 @@ func (s *Stream) Close() error {
 func (s *Stream) Current() (proto.Chunk, error) {
 	resp, err := s.stream.Recv()
 	if errors.Is(err, io.EOF) {
+		s.done = true
 		return proto.Chunk{}, stream.ErrNoContent
 	}
 	if err != nil {

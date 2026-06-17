@@ -14,6 +14,7 @@ func TestFromToolSpecs(t *testing.T) {
 			Name:        "search_repos",
 			Description: "Search GitHub repositories",
 			InputSchema: map[string]any{
+				"required": []any{"query"},
 				"properties": map[string]any{
 					"query": map[string]any{
 						"type":        "string",
@@ -27,6 +28,7 @@ func TestFromToolSpecs(t *testing.T) {
 		require.NotNil(t, tools[0].OfTool)
 		require.Equal(t, "search_repos", tools[0].OfTool.Name)
 		require.True(t, tools[0].OfTool.Description.Valid())
+		require.Equal(t, []string{"query"}, tools[0].OfTool.InputSchema.Required)
 	})
 
 	t.Run("multiple tools", func(t *testing.T) {

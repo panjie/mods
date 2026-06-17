@@ -673,7 +673,7 @@ func (w *cappedOutput) String() string {
 	}
 	text := string(out)
 	if w.truncated {
-		return truncateOutput(text, w.limit)
+		return text + fmt.Sprintf("\n\n[Output truncated at %d chars.]", w.limit)
 	}
 	return text
 }
@@ -714,7 +714,7 @@ func validatePatchPaths(root, patch string) error {
 
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
-		cmd := exec.CommandContext(ctx, "cmd", "/C", command)
+		cmd := exec.CommandContext(ctx, "cmd", "/D", "/C", command)
 		hideCommandWindow(cmd)
 		return cmd
 	}
@@ -722,7 +722,7 @@ func shellCommand(ctx context.Context, command string) *exec.Cmd {
 }
 
 func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command)
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command)
 	hideCommandWindow(cmd)
 	return cmd
 }

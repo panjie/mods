@@ -32,7 +32,7 @@ type Config struct {
 	HTTPClient interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	APIType        string
+	APIType         string
 	ReasoningEffort shared.ReasoningEffort
 }
 
@@ -126,9 +126,16 @@ type Stream struct {
 	toolCall func(name string, data []byte) (string, error)
 }
 
+func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
+	if len(s.message.Choices) == 0 {
+		return nil
+	}
+	return s.message.Choices[0].Message.ToolCalls
+}
+
 // CallTools implements stream.Stream.
 func (s *Stream) CallTools() []proto.ToolCallStatus {
-	calls := s.message.Choices[0].Message.ToolCalls
+	calls := s.pendingToolCalls()
 	statuses := make([]proto.ToolCallStatus, 0, len(calls))
 	for _, call := range calls {
 		msg, status := stream.CallTool(

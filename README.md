@@ -11,8 +11,8 @@
 <p>
     <img src="https://github.com/charmbracelet/mods/assets/25087/5442bf46-b908-47af-bf4e-60f7c38951c4" width="630" alt="Mods product art and type treatment"/>
     <br>
-    <a href="https://github.com/charmbracelet/mods/releases"><img src="https://img.shields.io/github/release/charmbracelet/mods.svg" alt="Latest Release"></a>
-    <a href="https://github.com/charmbracelet/mods/actions"><img src="https://github.com/charmbracelet/mods/workflows/build/badge.svg" alt="Build Status"></a>
+    <a href="https://github.com/panjie/mods/releases"><img src="https://img.shields.io/github/release/panjie/mods.svg" alt="Latest Release"></a>
+    <a href="https://github.com/panjie/mods/actions"><img src="https://github.com/panjie/mods/workflows/build/badge.svg" alt="Build Status"></a>
 </p>
 
 AI for the command line, built for pipelines.
@@ -78,7 +78,7 @@ mods completion fish -h
 mods completion powershell -h
 ```
 
-If you use a package (like Homebrew, Debs, etc), the completions should be set
+If you installed via a binary package, the completions should be set
 up automatically, given your shell is configured properly.
 
 </details>
@@ -306,7 +306,7 @@ get it from the [Groq console](https://console.groq.com/keys).
 
 Mods supports using Gemini models from Google.
 
-Set the `GOOGLE_API_KEY` enviroment variable. If you don't have one yet,
+Set the `GOOGLE_API_KEY` environment variable. If you don't have one yet,
 you can get it from the [Google AI Studio](https://aistudio.google.com/apikey).
 
 ### Web Search
@@ -331,30 +331,10 @@ export MODS_WEB_SEARCH_API_KEY=tvly-xxxxxxxxxxxxx
 mods --web-search --web-search-provider=https://your-search-api.example.com "query"
 ```
 
-### Image Support
-
-Mods can analyze images using vision-capable models (GPT-4o, Claude, Gemini, Ollama vision models).
-
-```bash
-# Analyze a single image
-mods -i screenshot.png "What does this screenshot show?"
-
-# Compare multiple images
-mods -i chart.png -i diagram.jpg "Compare these two images"
-
-# Image from stdin (useful with curl or program-generated images)
-cat photo.jpg | mods --stdin-image "Describe this photo"
-
-# Image from clipboard
-mods --clipboard-image "Describe this screenshot"
-```
-
-Supported formats: PNG, JPEG, GIF, WebP. Maximum total image size: 20MB. Cohere models do not support image input.
-
 ## Contributing
 
 Issues and pull requests are welcome on this fork.
 
 ## License
 
-[MIT](https://github.com/charmbracelet/mods/raw/main/LICENSE)
+[MIT](https://github.com/panjie/mods/raw/main/LICENSE)

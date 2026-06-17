@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,4 +114,36 @@ func TestFilesystemApplyPatch(t *testing.T) {
 	if string(content) != "new\n" {
 		t.Fatalf("unexpected patched content: %q", content)
 	}
+}
+
+func TestPowerShellRun(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell tool is Windows-only")
+	}
+
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterPowerShell(registry, ShellConfig{Root: root}); err != nil {
+		t.Fatalf("register powershell: %v", err)
+	}
+
+	t.Run("runs basic command", func(t *testing.T) {
+		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"Write-Output ok"}`))
+		if err != nil {
+			t.Fatalf("call: %v", err)
+		}
+		if strings.TrimSpace(out) != "ok" {
+			t.Fatalf("unexpected output: %q", out)
+		}
+	})
+
+	t.Run("runs variables and pipelines without nested quoting", func(t *testing.T) {
+		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"1,2,3 | Where-Object { $_ -gt 1 } | Measure-Object | Select-Object -ExpandProperty Count"}`))
+		if err != nil {
+			t.Fatalf("call: %v", err)
+		}
+		if strings.TrimSpace(out) != "2" {
+			t.Fatalf("unexpected output: %q", out)
+		}
+	})
 }

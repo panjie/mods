@@ -144,6 +144,16 @@ func TestShellApprovalRulesSimple(t *testing.T) {
 	})
 }
 
+func TestPowerShellApprovalRules(t *testing.T) {
+	rules := shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)
+	require.Len(t, rules, 1)
+	require.Equal(t, approvalShellPrefix, rules[0].Type)
+	require.Equal(t, "powershell_run", rules[0].Tool)
+	require.Equal(t, "Get-ChildItem *", rules[0].Pattern)
+	require.True(t, shellRulesAllowForToolWithMode("powershell_run", "Get-ChildItem C:\\Windows", rules, false))
+	require.False(t, shellRulesAllowForToolWithMode("shell_run", "Get-ChildItem C:\\Windows", rules, false))
+}
+
 func TestApprovalRuleSet(t *testing.T) {
 	var rules approvalRuleSet
 
@@ -151,6 +161,10 @@ func TestApprovalRuleSet(t *testing.T) {
 	require.True(t, rules.allows("fs_write_file", []byte(`{"path":"a.txt"}`)))
 	require.True(t, rules.allows("fs_apply_patch", []byte(`{"patch":"..."}`)))
 	require.False(t, rules.allows("shell_run", []byte(`{"command":"rm a.txt"}`)))
+
+	rules.add(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)...)
+	require.True(t, rules.allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`)))
+	require.False(t, rules.allows("shell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`)))
 
 	rules.add(ApprovalRule{Type: approvalToolAll, Tool: "mcp_tool"})
 	require.True(t, rules.allows("mcp_tool", []byte(`{"value":1}`)))
@@ -239,6 +253,28 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable}
 		require.True(t, reviewer.shouldReviewTool("shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
+		require.NoError(t, err)
+	})
+
+	t.Run("mutable allows obviously read-only powershell command", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
+		require.NoError(t, err)
+	})
+
+	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("saved rule allows matching powershell command", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAlways}
+		reviewer.rules.add(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)...)
+		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`))
 		require.NoError(t, err)
 	})
 

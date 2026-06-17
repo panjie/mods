@@ -76,12 +76,12 @@ func (s *approvalRuleSet) allows(name string, data []byte) bool {
 		return slices.ContainsFunc(rules, func(rule ApprovalRule) bool {
 			return rule.Type == approvalEditAll
 		})
-	case "shell_run":
+	case "shell_run", "powershell_run":
 		command := extractShellCommand(data)
 		if command == "" {
 			return false
 		}
-		return shellRulesAllow(command, rules)
+		return shellRulesAllowForTool(name, command, rules)
 	default:
 		return slices.ContainsFunc(rules, func(rule ApprovalRule) bool {
 			return rule.Type == approvalToolAll && rule.Tool == name
@@ -112,8 +112,8 @@ func approvalRulesFor(name string, data []byte) []ApprovalRule {
 			Type: approvalEditAll,
 			Tool: "file_edit",
 		}}
-	case "shell_run":
-		return shellApprovalRules(extractShellCommand(data))
+	case "shell_run", "powershell_run":
+		return shellApprovalRulesForTool(name, extractShellCommand(data))
 	default:
 		return []ApprovalRule{{
 			Type: approvalToolAll,
@@ -138,28 +138,36 @@ func shellApprovalRules(command string) []ApprovalRule {
 }
 
 func shellApprovalRulesWithMode(command string, posix bool) []ApprovalRule {
+	return shellApprovalRulesForToolWithMode("shell_run", command, posix)
+}
+
+func shellApprovalRulesForTool(tool, command string) []ApprovalRule {
+	return shellApprovalRulesForToolWithMode(tool, command, isUnixShell())
+}
+
+func shellApprovalRulesForToolWithMode(tool, command string, posix bool) []ApprovalRule {
 	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
 		return nil
 	}
 	if !posix {
-		return shellApprovalRulesSimple(normalized)
+		return shellApprovalRulesSimple(tool, normalized)
 	}
 	leaves, ok := parseShellLeaves(command)
 	if !ok || len(leaves) == 0 || len(leaves) > 5 {
-		return []ApprovalRule{shellExactRule(normalized)}
+		return []ApprovalRule{shellExactRule(tool, normalized)}
 	}
 	rules := make([]ApprovalRule, 0, len(leaves))
 	for _, leaf := range leaves {
-		rules = append(rules, ruleForShellLeaf(leaf))
+		rules = append(rules, ruleForShellLeaf(tool, leaf))
 	}
 	return dedupeApprovalRules(rules)
 }
 
-func shellApprovalRulesSimple(normalized string) []ApprovalRule {
+func shellApprovalRulesSimple(tool, normalized string) []ApprovalRule {
 	parts := splitSimpleCompound(normalized)
 	if len(parts) == 0 || len(parts) > 5 {
-		return []ApprovalRule{shellExactRule(normalized)}
+		return []ApprovalRule{shellExactRule(tool, normalized)}
 	}
 	var rules []ApprovalRule
 	for _, part := range parts {
@@ -168,14 +176,14 @@ func shellApprovalRulesSimple(normalized string) []ApprovalRule {
 			continue
 		}
 		if hasShellRedirection(part) {
-			rules = append(rules, shellExactRule(part))
+			rules = append(rules, shellExactRule(tool, part))
 			continue
 		}
 		tokens := tokenizeSimple(part)
 		if len(tokens) == 0 {
 			continue
 		}
-		rules = append(rules, ruleFromTokens(tokens, false, part))
+		rules = append(rules, ruleFromTokens(tool, tokens, false, part))
 	}
 	return dedupeApprovalRules(rules)
 }
@@ -185,17 +193,25 @@ func shellRulesAllow(command string, rules []ApprovalRule) bool {
 }
 
 func shellRulesAllowWithMode(command string, rules []ApprovalRule, posix bool) bool {
+	return shellRulesAllowForToolWithMode("shell_run", command, rules, posix)
+}
+
+func shellRulesAllowForTool(tool, command string, rules []ApprovalRule) bool {
+	return shellRulesAllowForToolWithMode(tool, command, rules, isUnixShell())
+}
+
+func shellRulesAllowForToolWithMode(tool, command string, rules []ApprovalRule, posix bool) bool {
 	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
 		return false
 	}
 	if slices.ContainsFunc(rules, func(rule ApprovalRule) bool {
-		return rule.Type == approvalShellExact && rule.Tool == "shell_run" && rule.Pattern == normalized
+		return rule.Type == approvalShellExact && rule.Tool == tool && rule.Pattern == normalized
 	}) {
 		return true
 	}
 	if !posix {
-		return shellRulesAllowSimple(normalized, rules)
+		return shellRulesAllowSimple(tool, normalized, rules)
 	}
 	leaves, ok := parseShellLeaves(command)
 	if !ok || len(leaves) == 0 {
@@ -203,7 +219,7 @@ func shellRulesAllowWithMode(command string, rules []ApprovalRule, posix bool) b
 	}
 	for _, leaf := range leaves {
 		if !slices.ContainsFunc(rules, func(rule ApprovalRule) bool {
-			if rule.Tool != "shell_run" {
+			if rule.Tool != tool {
 				return false
 			}
 			switch rule.Type {
@@ -221,7 +237,7 @@ func shellRulesAllowWithMode(command string, rules []ApprovalRule, posix bool) b
 	return true
 }
 
-func shellRulesAllowSimple(normalized string, rules []ApprovalRule) bool {
+func shellRulesAllowSimple(tool, normalized string, rules []ApprovalRule) bool {
 	parts := splitSimpleCompound(normalized)
 	for _, part := range parts {
 		commandText := strings.TrimSpace(part)
@@ -230,7 +246,7 @@ func shellRulesAllowSimple(normalized string, rules []ApprovalRule) bool {
 		}
 		found := false
 		for _, rule := range rules {
-			if rule.Tool != "shell_run" {
+			if rule.Tool != tool {
 				continue
 			}
 			switch rule.Type {
@@ -355,40 +371,40 @@ func shellNodeHasDynamicParts(node syntax.Node) bool {
 	return dynamic
 }
 
-func ruleForShellLeaf(leaf shellLeaf) ApprovalRule {
+func ruleForShellLeaf(tool string, leaf shellLeaf) ApprovalRule {
 	if leaf.exact || leaf.call == nil || len(leaf.call.Args) == 0 {
-		return shellExactRule(leaf.text)
+		return shellExactRule(tool, leaf.text)
 	}
 	args := make([]string, 0, len(leaf.call.Args))
 	for _, word := range leaf.call.Args {
 		value, ok := staticShellWord(word)
 		if !ok {
-			return shellExactRule(leaf.text)
+			return shellExactRule(tool, leaf.text)
 		}
 		args = append(args, value)
 	}
-	return ruleFromTokens(args, leaf.exact, leaf.text)
+	return ruleFromTokens(tool, args, leaf.exact, leaf.text)
 }
 
-func ruleFromTokens(args []string, exact bool, originalText string) ApprovalRule {
+func ruleFromTokens(tool string, args []string, exact bool, originalText string) ApprovalRule {
 	if exact || len(args) == 0 {
-		return shellExactRule(originalText)
+		return shellExactRule(tool, originalText)
 	}
 	if exactShellCommands[args[0]] {
-		return shellExactRule(originalText)
+		return shellExactRule(tool, originalText)
 	}
 	prefixLen := shellPrefixLength(args)
 	if prefixLen <= 0 {
-		return shellExactRule(originalText)
+		return shellExactRule(tool, originalText)
 	}
 	if prefixLen >= len(args) &&
 		!subcommandShellCommands[args[0]] &&
 		!flagPrefixShellCommands[args[0]] {
-		return shellExactRule(originalText)
+		return shellExactRule(tool, originalText)
 	}
 	return ApprovalRule{
 		Type:    approvalShellPrefix,
-		Tool:    "shell_run",
+		Tool:    tool,
 		Pattern: strings.Join(args[:prefixLen], " ") + " *",
 	}
 }
@@ -566,10 +582,10 @@ func shellPrefixLength(args []string) int {
 	return 1
 }
 
-func shellExactRule(command string) ApprovalRule {
+func shellExactRule(tool, command string) ApprovalRule {
 	return ApprovalRule{
 		Type:    approvalShellExact,
-		Tool:    "shell_run",
+		Tool:    tool,
 		Pattern: command,
 	}
 }

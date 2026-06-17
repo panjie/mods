@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"regexp"
+	"runtime"
 	"strings"
 
 	toolregistry "github.com/charmbracelet/mods/internal/tools"
@@ -37,6 +38,15 @@ func buildToolRegistry(ctx context.Context, cfg *Config, wscfg websearch.Config,
 			MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
 		}); err != nil {
 			return nil, err
+		}
+		if runtime.GOOS == "windows" {
+			if err := toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{
+				Root:           root,
+				Timeout:        cfg.BuiltinTools.ShellTimeout,
+				MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 

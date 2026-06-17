@@ -125,7 +125,7 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 		debugPrintf("requestApproval: matched conversation approval rule, auto-approving")
 		return nil
 	}
-	if r.reviewMode != ReviewAlways && name == "shell_run" {
+	if r.reviewMode != ReviewAlways && isShellExecutionTool(name) {
 		cmd := extractShellCommand(data)
 		if cmd != "" {
 			mutable := ctx.classifyShellCommand(cmd)
@@ -185,11 +185,15 @@ func extractShellCommand(args []byte) string {
 
 func isMutableTool(name string) bool {
 	switch name {
-	case "fs_write_file", "fs_apply_patch", "shell_run":
+	case "fs_write_file", "fs_apply_patch", "shell_run", "powershell_run":
 		return true
 	default:
 		return false
 	}
+}
+
+func isShellExecutionTool(name string) bool {
+	return name == "shell_run" || name == "powershell_run"
 }
 
 func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, reviewChoices lipgloss.Style) string {
@@ -235,6 +239,9 @@ func formatReviewLabel(name string, args []byte) string {
 	case "shell_run":
 		cmd := oneLinePreview(argString(parsed, "command"))
 		return fmt.Sprintf("Run: %s", cmd)
+	case "powershell_run":
+		cmd := oneLinePreview(argString(parsed, "command"))
+		return fmt.Sprintf("Run PowerShell: %s", cmd)
 	default:
 		summary := toolArgsSummary(parsed)
 		if summary != "" {

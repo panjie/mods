@@ -349,31 +349,39 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			if strings.TrimSpace(args.Command) == "" {
-				return "", fmt.Errorf("command is required")
+			return runShellCommand(ctx, cfg, root, args.Command, shellCommand)
+		},
+	})
+}
+
+// RegisterPowerShell registers the native PowerShell tool.
+func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
+	root, err := filepath.Abs(cfg.Root)
+	if err != nil {
+		return err
+	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaultShellTimeout
+	}
+	if cfg.MaxOutputChars <= 0 {
+		cfg.MaxOutputChars = defaultShellOutput
+	}
+	return registry.Register(Tool{
+		Spec: proto.ToolSpec{
+			Name:        "powershell_run",
+			Description: "Run a PowerShell command directly via powershell.exe -NoProfile -ExecutionPolicy Bypass -Command and return stdout+stderr. Pass only the PowerShell pipeline or script block; do NOT prefix with powershell, powershell.exe, pwsh, or -Command. Use this on Windows for filtering, counting, querying, and PowerShell variables such as $PSVersionTable or $_ without cmd /C quoting. Output is returned directly — do NOT use Out-File, Set-Content, shell redirection, or temporary .ps1 files just to see results.",
+			InputSchema: objectSchema(map[string]any{
+				"command": stringProp("PowerShell command to run directly."),
+			}, "command"),
+		},
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
+			var args struct {
+				Command string `json:"command"`
 			}
-			runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-			defer cancel()
-			cmd := shellCommand(runCtx, args.Command)
-			cmd.Dir = root
-			out, err := cmd.CombinedOutput()
-			if decoded, decErr := localereader.UTF8(out); decErr == nil {
-				out = decoded
+			if err := decodeArgs(data, &args); err != nil {
+				return "", err
 			}
-			text := truncateOutput(string(out), cfg.MaxOutputChars)
-			if err != nil {
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					if text != "" {
-						text += fmt.Sprintf("\n[exit status %d]", exitErr.ExitCode())
-					} else {
-						text = fmt.Sprintf("[exit status %d]", exitErr.ExitCode())
-					}
-					return text, nil
-				}
-				return text, err
-			}
-			return text, nil
+			return runShellCommand(ctx, cfg, root, args.Command, powerShellCommand)
 		},
 	})
 }
@@ -554,6 +562,34 @@ func searchFiles(root, path, query string, limit int) (string, error) {
 	return strings.TrimRight(sb.String(), "\n"), nil
 }
 
+func runShellCommand(ctx context.Context, cfg ShellConfig, root, command string, buildCmd func(context.Context, string) *exec.Cmd) (string, error) {
+	if strings.TrimSpace(command) == "" {
+		return "", fmt.Errorf("command is required")
+	}
+	runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	cmd := buildCmd(runCtx, command)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if decoded, decErr := localereader.UTF8(out); decErr == nil {
+		out = decoded
+	}
+	text := truncateOutput(string(out), cfg.MaxOutputChars)
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if text != "" {
+				text += fmt.Sprintf("\n[exit status %d]", exitErr.ExitCode())
+			} else {
+				text = fmt.Sprintf("[exit status %d]", exitErr.ExitCode())
+			}
+			return text, nil
+		}
+		return text, err
+	}
+	return text, nil
+}
+
 func validatePatchPaths(root, patch string) error {
 	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
 		if !strings.HasPrefix(line, "+++ ") && !strings.HasPrefix(line, "--- ") {
@@ -586,6 +622,10 @@ func shellCommand(ctx context.Context, command string) *exec.Cmd {
 		return exec.CommandContext(ctx, "cmd", "/C", command)
 	}
 	return exec.CommandContext(ctx, "sh", "-c", command)
+}
+
+func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
+	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command)
 }
 
 func truncateOutput(out string, limit int) string {

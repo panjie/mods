@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -402,6 +405,51 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 		require.NotEqual(t, -1, minimalIndex)
 		require.Less(t, roleIndex, minimalIndex)
 	})
+}
+
+func TestProbeWindowsPowerShellCapabilities(t *testing.T) {
+	t.Run("reports versions and missing shells", func(t *testing.T) {
+		probe := func(_ context.Context, name string) (string, error) {
+			switch name {
+			case "powershell":
+				return "5.1.26100.8655", nil
+			case "pwsh":
+				return "", exec.ErrNotFound
+			default:
+				return "", errors.New("unexpected shell")
+			}
+		}
+
+		require.Equal(t, "powershell=5.1.26100.8655, pwsh=not-found", probeWindowsPowerShellCapabilities(probe))
+	})
+
+	t.Run("reports unknown on probe errors", func(t *testing.T) {
+		probe := func(_ context.Context, _ string) (string, error) {
+			return "", errors.New("probe failed")
+		}
+
+		require.Equal(t, "powershell=unknown, pwsh=unknown", probeWindowsPowerShellCapabilities(probe))
+	})
+}
+
+func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only system info")
+	}
+
+	cfg := Config{}
+	cfg.Roles = map[string][]string{}
+	cfg.FormatText = defaultConfig().FormatText
+	cfg.FormatAs = "markdown"
+	m := &Mods{
+		Config: &cfg,
+		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		ctx:    context.Background(),
+	}
+	require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NotEmpty(t, m.messages)
+	require.Contains(t, m.messages[0].Content, "powershell=")
+	require.Contains(t, m.messages[0].Content, "pwsh=")
 }
 
 func TestOperationStatusView(t *testing.T) {

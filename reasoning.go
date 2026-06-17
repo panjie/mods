@@ -206,9 +206,11 @@ var shellClassifyCache sync.Map
 
 var reReadOnlyCmd = regexp.MustCompile(`^(echo|dir|type|whoami|hostname|ver|date|time|set|path|cd|chdir|where|pwd)\b`)
 
-var rePwshMutOp = regexp.MustCompile(`(?i)\b(Remove-Item|Delete|Set-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|mkdir|rmdir|del\s|rd\s|ren\s)\b`)
+var rePwshMutOp = regexp.MustCompile(`(?i)\b(Remove-Item|Delete|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|Clear-Content|Stop-Process|Start-Process|Invoke-Item|mkdir|rmdir|del\s|rd\s|ren\s)\b`)
 
 var rePwshReadCmd = regexp.MustCompile(`(?i)\bpowershell\s+-`)
+
+var reDirectPwshReadCmd = regexp.MustCompile(`(?i)^(&\s*\{\s*)?(\$PSVersionTable\b|Get-|Measure-Object\b|Select-Object\b|Where-Object\b|Sort-Object\b|Format-|ConvertTo-|Write-Output\b)`)
 
 func hasShellRedirect(cmd string) bool {
 	for i := 0; i < len(cmd); i++ {
@@ -235,6 +237,13 @@ func isObviouslyReadOnly(cmd string) bool {
 	}
 
 	if rePwshReadCmd.MatchString(lower) {
+		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) {
+			return false
+		}
+		return true
+	}
+
+	if reDirectPwshReadCmd.MatchString(trimmed) {
 		if rePwshMutOp.MatchString(trimmed) || hasShellRedirect(trimmed) {
 			return false
 		}

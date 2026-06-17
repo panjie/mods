@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -32,8 +36,18 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			shell = "cmd.exe"
 		}
 	}
-	sysInfo := fmt.Sprintf("System info: workspace_root=%s, user=%s, host=%s, os=%s/%s, shell=%s, date=%s",
-		root, user, hostname, runtime.GOOS, runtime.GOARCH, shell, time.Now().Format("2006-01-02"))
+	sysParts := []string{
+		fmt.Sprintf("workspace_root=%s", root),
+		fmt.Sprintf("user=%s", user),
+		fmt.Sprintf("host=%s", hostname),
+		fmt.Sprintf("os=%s/%s", runtime.GOOS, runtime.GOARCH),
+		fmt.Sprintf("shell=%s", shell),
+	}
+	if runtime.GOOS == "windows" {
+		sysParts = append(sysParts, windowsPowerShellCapabilities())
+	}
+	sysParts = append(sysParts, fmt.Sprintf("date=%s", time.Now().Format("2006-01-02")))
+	sysInfo := "System info: " + strings.Join(sysParts, ", ")
 	m.messages = append(m.messages, proto.Message{
 		Role:    proto.RoleSystem,
 		Content: sysInfo,
@@ -170,6 +184,58 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 
 	return nil
+}
+
+type shellVersionProbe func(context.Context, string) (string, error)
+
+var (
+	windowsPowerShellCapabilitiesOnce  sync.Once
+	windowsPowerShellCapabilitiesValue string
+)
+
+func windowsPowerShellCapabilities() string {
+	windowsPowerShellCapabilitiesOnce.Do(func() {
+		windowsPowerShellCapabilitiesValue = probeWindowsPowerShellCapabilities(defaultShellVersionProbe)
+	})
+	return windowsPowerShellCapabilitiesValue
+}
+
+func probeWindowsPowerShellCapabilities(probe shellVersionProbe) string {
+	return fmt.Sprintf("powershell=%s, pwsh=%s",
+		probeShellVersionStatus(probe, "powershell"),
+		probeShellVersionStatus(probe, "pwsh"),
+	)
+}
+
+func probeShellVersionStatus(probe shellVersionProbe, name string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	version, err := probe(ctx, name)
+	if err == nil {
+		return version
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return "not-found"
+	}
+	return "unknown"
+}
+
+func defaultShellVersionProbe(ctx context.Context, name string) (string, error) {
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(string(out))
+	if version == "" {
+		return "", fmt.Errorf("%s returned empty version output", name)
+	}
+	return version, nil
 }
 
 func (m *Mods) appendImageWithMime(images []proto.Image, totalBytes *int, data []byte, mime string) ([]proto.Image, error) {

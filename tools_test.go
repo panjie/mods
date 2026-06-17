@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"runtime"
+	"testing"
+
+	"github.com/charmbracelet/mods/internal/websearch"
+)
 
 func TestShouldEnableFilesystemTools(t *testing.T) {
 	t.Run("auto skips general ollama question", func(t *testing.T) {
@@ -42,4 +48,28 @@ func TestShouldEnableFilesystemTools(t *testing.T) {
 			t.Fatal("expected filesystem tools disabled when explicitly disabled")
 		}
 	})
+}
+
+func TestBuildToolRegistryPowerShellRun(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Shell = true
+	cfg.WebSearch = false
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello")
+	if err != nil {
+		t.Fatalf("build registry: %v", err)
+	}
+
+	found := false
+	for _, spec := range registry.Specs() {
+		if spec.Name == "powershell_run" {
+			found = true
+			break
+		}
+	}
+	if runtime.GOOS == "windows" && !found {
+		t.Fatal("expected powershell_run on Windows")
+	}
+	if runtime.GOOS != "windows" && found {
+		t.Fatal("did not expect powershell_run outside Windows")
+	}
 }

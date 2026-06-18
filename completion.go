@@ -47,6 +47,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.cancelRequest = nil
 	m.cancelMu.Unlock()
 	m.reasoningActive = false
+	m.responseOutputStarted = false
 
 	return func() tea.Msg {
 		var mod Model

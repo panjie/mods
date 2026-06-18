@@ -35,28 +35,29 @@ const (
 // Mods is the Bubble Tea model that manages reading stdin and querying
 // LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
 type Mods struct {
-	Output              string
-	Input               string
-	Styles              styles
-	Error               *modsError
-	state               state
-	retries             int
-	toolCallRounds      int
-	totalRounds         int
-	renderer            *lipgloss.Renderer
-	glam                *glamour.TermRenderer
-	glamViewport        viewport.Model
-	glamOutput          string
-	glamHeight          int
-	messages            []proto.Message
-	cancelRequest       []context.CancelFunc
-	cancelMu            sync.Mutex
-	anim                tea.Model
-	activeOperation     string
-	reasoningActive     bool
-	width               int
-	height              int
-	showOperationStatus bool
+	Output                string
+	Input                 string
+	Styles                styles
+	Error                 *modsError
+	state                 state
+	retries               int
+	toolCallRounds        int
+	totalRounds           int
+	renderer              *lipgloss.Renderer
+	glam                  *glamour.TermRenderer
+	glamViewport          viewport.Model
+	glamOutput            string
+	glamHeight            int
+	messages              []proto.Message
+	cancelRequest         []context.CancelFunc
+	cancelMu              sync.Mutex
+	anim                  tea.Model
+	activeOperation       string
+	reasoningActive       bool
+	responseOutputStarted bool
+	width                 int
+	height                int
+	showOperationStatus   bool
 
 	db     *convoDB
 	Config *Config
@@ -186,6 +187,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 		if msg.content != "" {
+			m.responseOutputStarted = true
 			if m.reasoningActive {
 				m.setActiveOperation("Deep reasoning...")
 			} else {
@@ -283,7 +285,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 	}
-	if !m.Config.Quiet && (m.state == configLoadedState || m.state == requestState) && m.anim != nil {
+	if m.shouldUpdateAnimation() {
 		var cmd tea.Cmd
 		m.anim, cmd = m.anim.Update(msg)
 		cmds = append(cmds, cmd)
@@ -296,6 +298,14 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
+}
+
+func (m *Mods) shouldUpdateAnimation() bool {
+	return !m.Config.Quiet &&
+		m.anim != nil &&
+		(m.state == configLoadedState ||
+			m.state == requestState ||
+			(m.state == responseState && !m.responseOutputStarted))
 }
 
 func msgCmd(msg tea.Msg) tea.Cmd {

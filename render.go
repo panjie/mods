@@ -25,6 +25,9 @@ func (m *Mods) View() string {
 			return m.renderWithOperation(m.anim.View())
 		}
 	case responseState:
+		if !m.Config.Quiet && !m.responseOutputStarted && m.anim != nil {
+			return m.renderWithOperation(m.anim.View())
+		}
 		if !m.Config.Raw && isOutputTTY() {
 			if m.viewportNeeded() {
 				return m.renderWithOperation(m.glamViewport.View())

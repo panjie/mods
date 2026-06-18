@@ -452,6 +452,8 @@ func defaultConfig() Config {
 			Reasoning:  ReasoningOff,
 			ReviewMode: ReviewMutable,
 			WordWrap:   80,
+			Fanciness:  10,
+			StatusText: "Generating",
 			MCPTimeout: 15 * time.Second,
 			BuiltinTools: BuiltinToolsConfig{
 				Filesystem:         FilesystemAuto,

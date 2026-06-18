@@ -7,7 +7,10 @@ import (
 	"os/exec"
 	"runtime"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,6 +25,20 @@ func (s staticModel) Init() tea.Cmd { return nil }
 func (s staticModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return s, nil }
 
 func (s staticModel) View() string { return string(s) }
+
+type staticStream struct{}
+
+func (staticStream) Next() bool { return false }
+
+func (staticStream) Current() (proto.Chunk, error) { return proto.Chunk{}, nil }
+
+func (staticStream) Close() error { return nil }
+
+func (staticStream) Err() error { return nil }
+
+func (staticStream) Messages() []proto.Message { return nil }
+
+func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 
 func TestFindCacheOpsDetails(t *testing.T) {
 	newMods := func(t *testing.T) *Mods {
@@ -490,6 +507,79 @@ func TestOperationStatusView(t *testing.T) {
 		m.Config.HideToolStatus = true
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
 		require.NotContains(t, m.View(), "Running command: go test ./...")
+	})
+}
+
+func TestGeneratingViewBeforeOutput(t *testing.T) {
+	newTestMods := func() *Mods {
+		return &Mods{
+			Config:              &Config{},
+			Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+			anim:                staticModel("Generating"),
+			state:               requestState,
+			showOperationStatus: true,
+			width:               80,
+			reviewer:            &toolReviewer{},
+			contentMutex:        &sync.Mutex{},
+		}
+	}
+
+	t.Run("request state shows generating", func(t *testing.T) {
+		m := newTestMods()
+		require.Contains(t, m.View(), "Generating")
+	})
+
+	t.Run("response state before output shows generating", func(t *testing.T) {
+		m := newTestMods()
+		m.state = responseState
+		require.Contains(t, m.View(), "Generating")
+	})
+
+	t.Run("response state before output shows generating and operation", func(t *testing.T) {
+		m := newTestMods()
+		m.state = responseState
+		m.setActiveOperation("Searching web: Go latest release")
+		view := m.View()
+		require.Contains(t, view, "Generating")
+		require.Contains(t, view, "Searching web: Go latest release")
+	})
+
+	t.Run("response state before output renders fancy animation prefix", func(t *testing.T) {
+		renderer := lipgloss.NewRenderer(nil)
+		m := newTestMods()
+		m.Config = &Config{PersistentConfig: PersistentConfig{Fanciness: 10, StatusText: "Generating"}}
+		m.Styles = makeStyles(renderer)
+		a := newAnim(m.Config.Fanciness, m.Config.StatusText, renderer, m.Styles)
+		a.start = time.Now().Add(-time.Second)
+		updated, _ := a.Update(stepCharsMsg{})
+		m.anim = updated
+		m.state = responseState
+
+		view := m.View()
+		idx := strings.Index(view, "Generating")
+		require.Greater(t, idx, 0)
+		require.NotEmpty(t, strings.TrimSpace(view[:idx]))
+	})
+
+	t.Run("first output hides generating", func(t *testing.T) {
+		m := newTestMods()
+		m.Config.Raw = true
+		_, _ = m.Update(completionOutput{
+			content: "hello",
+			stream:  staticStream{},
+			errh: func(err error) tea.Msg {
+				return modsError{err: err}
+			},
+		})
+		require.True(t, m.responseOutputStarted)
+		require.Contains(t, m.Output, "hello")
+		require.NotContains(t, m.renderWithOperation(m.Output), "Generating")
+	})
+
+	t.Run("quiet hides generating", func(t *testing.T) {
+		m := newTestMods()
+		m.Config.Quiet = true
+		require.NotContains(t, m.View(), "Generating")
 	})
 }
 

@@ -99,7 +99,7 @@ func newMods(
 		renderer:            r,
 		glamViewport:        vp,
 		contentMutex:        &sync.Mutex{},
-		showOperationStatus: isOutputTTY() && isErrorTTY() && !cfg.Raw,
+		showOperationStatus: isOutputTTY() && isErrorTTY() && !cfg.Raw && !cfg.HideToolStatus,
 		db:                  db,
 		Config:              cfg,
 		reviewer:            newToolReviewer(cfg),

@@ -484,6 +484,13 @@ func TestOperationStatusView(t *testing.T) {
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
 		require.NotContains(t, m.View(), "Running command: go test ./...")
 	})
+
+	t.Run("hide tool status hides active operation", func(t *testing.T) {
+		m := newTestMods()
+		m.Config.HideToolStatus = true
+		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
+		require.NotContains(t, m.View(), "Running command: go test ./...")
+	})
 }
 
 func TestViewportNeeded(t *testing.T) {

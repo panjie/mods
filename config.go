@@ -69,6 +69,7 @@ var help = map[string]string{
 	"prompt-args":           "Include the prompt from the arguments in the response",
 	"raw":                   "Render output as raw text when connected to a TTY",
 	"quiet":                 "Quiet mode (hide the spinner while loading and stderr messages for success)",
+	"hide-tool-status":      "Hide the bottom status line while tools are running",
 	"help":                  "Show help and exit",
 	"version":               "Show version and exit",
 	"max-retries":           "Maximum number of times to retry API calls",
@@ -188,6 +189,7 @@ type PersistentConfig struct {
 	Minimal             bool       `yaml:"minimal" env:"MINIMAL"`
 	Raw                 bool       `yaml:"raw" env:"RAW"`
 	Quiet               bool       `yaml:"quiet" env:"QUIET"`
+	HideToolStatus      bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
 	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
 	Temperature         float64    `yaml:"temp" env:"TEMP"`

@@ -207,6 +207,7 @@ Run `mods --help` for generated help. Current options include:
 - `-P`, `--prompt`: Include the prompt from arguments and stdin; optionally truncate stdin to the specified number of lines
 - `-p`, `--prompt-args`: Include prompt arguments in the response
 - `-q`, `--quiet`: Hide the spinner and success messages on stderr
+- `--hide-tool-status`: Hide the bottom status line while tools are running
 - `-r`, `--raw`: Render raw text when connected to a TTY
 - `--word-wrap`: Wrap formatted output at a width, default `80`
 - `--status-text`: Text to show while generating

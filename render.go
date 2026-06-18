@@ -56,7 +56,7 @@ func (m *Mods) renderWithOperation(content string) string {
 	if m.reviewer.isPending() {
 		return m.reviewer.renderBanner(content, m.width, m.Styles.ReviewPrompt, m.Styles.ReviewChoices)
 	}
-	if m.Config.Quiet || !m.showOperationStatus {
+	if m.Config.Quiet || m.Config.HideToolStatus || !m.showOperationStatus {
 		return content
 	}
 	if strings.TrimSpace(m.getActiveOperation()) == "" && !m.reasoningActive {

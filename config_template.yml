@@ -42,6 +42,9 @@ raw: false
 # {{ index .Help "quiet" }}
 quiet: false
 
+# {{ index .Help "hide-tool-status" }}
+hide-tool-status: false
+
 # {{ index .Help "word-wrap" }}
 word-wrap: 80
 

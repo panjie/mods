@@ -56,6 +56,52 @@ This writes the binary to `bin/mods`. Add it to your `PATH` for easy access:
 export PATH="$PWD/bin:$PATH"
 ```
 
+To install the compiled binary and manpage into system locations, run:
+
+```sh
+make install
+```
+
+On macOS and Linux this installs to `/usr/local/bin/mods` and
+`/usr/local/share/man/man1/mods.1.gz`. On Windows, the default location is
+`C:\Program Files\mods\bin\mods.exe` and
+`C:\Program Files\mods\share\man\man1\mods.1`.
+
+You can override the install prefix or package into a staging directory:
+
+```sh
+make install PREFIX=/opt/local
+make install DESTDIR=/tmp/pkgroot PREFIX=/usr/local
+```
+
+For user-local installs that follow XDG-style paths on macOS and Linux, use:
+
+```sh
+make install XDG=1
+```
+
+This installs to `${HOME}/.local/bin/mods` and
+`${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/mods.1.gz`. Because XDG does not
+define a binary directory, Mods also honors `XDG_BIN_HOME`:
+
+```sh
+make install XDG=1 XDG_BIN_HOME="$HOME/.local/bin" XDG_DATA_HOME="$HOME/.local/share"
+```
+
+On Windows, `XDG=1` is strict: both `XDG_BIN_HOME` and `XDG_DATA_HOME` must be
+set explicitly, otherwise `make install` fails with a clear error.
+
+```powershell
+make install XDG=1 XDG_BIN_HOME="C:/Users/Alice/.local/bin" XDG_DATA_HOME="C:/Users/Alice/.local/share"
+```
+
+Remove installed files with:
+
+```sh
+make uninstall
+make uninstall XDG=1
+```
+
 Use `make check` to verify the project compiles, and `make test` to run the test suite. The `dist/` directory is reserved for GoReleaser release and snapshot artifacts.
 
 #### Install with `go`

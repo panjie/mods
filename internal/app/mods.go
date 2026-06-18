@@ -1,0 +1,368 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/charmbracelet/mods/internal/stream"
+)
+
+type state int
+
+const (
+	startState state = iota
+	configLoadedState
+	requestState
+	responseState
+	doneState
+	errorState
+)
+
+const (
+	defaultMaxToolRounds = 30
+	maxToolFailedRounds  = 3
+)
+
+// Mods is the Bubble Tea model that manages reading stdin and querying
+// LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
+type Mods struct {
+	Output                string
+	Input                 string
+	Styles                Styles
+	Error                 *modsError
+	state                 state
+	retries               int
+	toolCallRounds        int
+	totalRounds           int
+	renderer              *lipgloss.Renderer
+	glam                  *glamour.TermRenderer
+	glamViewport          viewport.Model
+	glamOutput            string
+	glamHeight            int
+	messages              []proto.Message
+	cancelRequest         []context.CancelFunc
+	cancelMu              sync.Mutex
+	anim                  tea.Model
+	activeOperation       string
+	reasoningActive       bool
+	responseOutputStarted bool
+	width                 int
+	height                int
+	showOperationStatus   bool
+
+	db     *DB
+	Config *Config
+
+	content        []string
+	contentMutex   *sync.Mutex
+	operationMutex sync.Mutex
+	toolOperations chan<- toolOperationStatusMsg
+
+	stdinImageData []byte
+
+	ctx context.Context
+
+	reviewer *toolReviewer
+}
+
+func New(
+	ctx context.Context,
+	r *lipgloss.Renderer,
+	cfg *Config,
+	db *DB,
+) (*Mods, error) {
+	wordWrap := cfg.WordWrap
+	opts := []glamour.TermRendererOption{
+		glamour.WithEnvironmentConfig(),
+	}
+	if wordWrap > 0 {
+		opts = append(opts, glamour.WithWordWrap(wordWrap))
+	}
+	gr, err := glamour.NewTermRenderer(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("could not create glamour renderer: %w", err)
+	}
+	vp := viewport.New(0, 0)
+	vp.GotoBottom()
+	return &Mods{
+		Styles:              MakeStyles(r),
+		glam:                gr,
+		state:               startState,
+		renderer:            r,
+		glamViewport:        vp,
+		contentMutex:        &sync.Mutex{},
+		showOperationStatus: IsOutputTTY() && IsErrorTTY() && !cfg.Raw && !cfg.HideToolStatus,
+		db:                  db,
+		Config:              cfg,
+		reviewer:            newToolReviewer(cfg),
+		ctx:                 ctx,
+	}, nil
+}
+
+func (m *Mods) Err() *modsError {
+	return m.Error
+}
+
+func (m *Mods) RenderedOutput() string {
+	return m.glamOutput
+}
+
+func (m *Mods) Messages() []proto.Message {
+	return append([]proto.Message(nil), m.messages...)
+}
+
+func (m *Mods) ApprovalRules() []Rule {
+	return m.reviewer.rules.Snapshot()
+}
+
+// Init implements tea.Model.
+func (m *Mods) Init() tea.Cmd {
+	return m.findCacheOpsDetails()
+}
+
+// Update implements tea.Model.
+func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	switch msg := msg.(type) {
+	case cacheDetailsMsg:
+		m.Config.CacheWriteToID = msg.WriteID
+		m.Config.CacheWriteToTitle = msg.Title
+		m.Config.CacheReadFromID = msg.ReadID
+		m.Config.API = msg.API
+		m.Config.Model = msg.Model
+		m.reviewer.rules.Replace(msg.Rules)
+
+		if !m.Config.Quiet {
+			m.anim = NewAnim(m.Config.Fanciness, m.Config.StatusText, m.renderer, m.Styles)
+			cmds = append(cmds, m.anim.Init())
+		}
+		m.state = configLoadedState
+		cmds = append(cmds, m.readStdinCmd)
+
+	case stdinImageInput:
+		m.stdinImageData = msg.data
+		if m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
+			return m, m.quit
+		}
+		if m.Config.Dirs ||
+			len(m.Config.Delete) > 0 ||
+			m.Config.DeleteOlderThan != 0 ||
+			m.Config.ShowHelp ||
+			m.Config.List ||
+			m.Config.ListRoles ||
+			m.Config.Settings ||
+			m.Config.ResetSettings {
+			return m, m.quit
+		}
+		m.state = requestState
+		cmds = append(cmds, m.startCompletionCmd(""))
+
+	case completionInput:
+		if msg.content != "" {
+			m.Input = RemoveWhitespace(msg.content)
+		}
+		if m.Input == "" && m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
+			return m, m.quit
+		}
+		if m.Config.Dirs ||
+			len(m.Config.Delete) > 0 ||
+			m.Config.DeleteOlderThan != 0 ||
+			m.Config.ShowHelp ||
+			m.Config.List ||
+			m.Config.ListRoles ||
+			m.Config.Settings ||
+			m.Config.ResetSettings {
+			return m, m.quit
+		}
+
+		if m.Config.IncludePromptArgs {
+			m.appendToOutput(m.Config.Prefix + "\n\n")
+		}
+
+		if m.Config.IncludePrompt > 0 {
+			parts := strings.Split(strings.ReplaceAll(m.Input, "\r\n", "\n"), "\n")
+			if len(parts) > m.Config.IncludePrompt {
+				parts = parts[0:m.Config.IncludePrompt]
+			}
+			m.appendToOutput(strings.Join(parts, "\n") + "\n")
+		}
+		m.state = requestState
+		cmds = append(cmds, m.startCompletionCmd(msg.content))
+	case completionOutput:
+		if msg.stream == nil {
+			m.state = doneState
+			return m, m.quit
+		}
+		if msg.content != "" {
+			m.responseOutputStarted = true
+			if m.reasoningActive {
+				m.setActiveOperation("Deep reasoning...")
+			} else {
+				m.setActiveOperation("")
+			}
+			m.appendToOutput(msg.content)
+			m.state = responseState
+		}
+		cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
+			stream: msg.stream,
+			errh:   msg.errh,
+		}))
+	case toolCallsStartMsg:
+		ch := make(chan toolOperationStatusMsg, 8)
+		m.setToolOperationChannel(ch)
+		m.setActiveOperation("Running tools")
+		m.state = responseState
+		cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.reviewer.startSession(), m.callToolsCmd(msg, ch))
+	case toolOperationStatusMsg:
+		if msg.done {
+			m.setActiveOperation("")
+			break
+		}
+		m.setActiveOperation(msg.content)
+		if msg.ch != nil {
+			cmds = append(cmds, m.pollToolOperationStatusCmd(msg.ch))
+		}
+	case toolReviewStartMsg:
+		m.reviewer.handleStartMsg(msg)
+		m.setActiveOperation("")
+	case toolCallsOutput:
+		m.setActiveOperation("")
+		m.reviewer.reset()
+		toolMsg := completionOutput{
+			stream: msg.stream,
+			errh:   msg.errh,
+		}
+		for _, call := range msg.results {
+			if call.Err != nil {
+				debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+				if errors.Is(call.Err, errReviewUnavailable) {
+					return m, msgCmd(modsError{
+						Err:        call.Err,
+						ReasonText: "Tool execution requires review.",
+					})
+				}
+			} else {
+				argPreview := debug.Truncate(string(call.Arguments), 120)
+				if argPreview != "" {
+					debug.Printf("Tool call: %s(%s)", call.Name, argPreview)
+				} else {
+					debug.Printf("Tool call: %s", call.Name)
+				}
+			}
+		}
+		if len(msg.results) == 0 {
+			m.messages = msg.stream.Messages()
+			m.toolCallRounds = 0
+			m.totalRounds = 0
+			m.setActiveOperation(m.Config.StatusText)
+			return m, msgCmd(completionOutput{errh: msg.errh})
+		}
+		m.totalRounds++
+		hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
+			return c.Err != nil
+		})
+		if hasFailed {
+			m.toolCallRounds++
+		}
+		maxTotal := m.Config.MaxToolRounds
+		if maxTotal <= 0 {
+			maxTotal = defaultMaxToolRounds
+		}
+		if m.toolRoundLimitExceeded(maxTotal, msg.stream) {
+			return m, msgCmd(completionOutput{errh: msg.errh})
+		}
+		debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
+		return m, msgCmd(toolMsg)
+	case modsError:
+		m.Error = &msg
+		m.state = errorState
+		return m, m.quit
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.glamViewport.Width = m.width
+		m.glamViewport.Height = m.height
+		return m, nil
+	case tea.KeyMsg:
+		if handled, cmd := m.reviewer.handleKey(msg); handled {
+			return m, cmd
+		}
+		switch msg.String() {
+		case "q", "ctrl+c":
+			m.state = doneState
+			return m, m.quit
+		}
+	}
+	if m.shouldUpdateAnimation() {
+		var cmd tea.Cmd
+		m.anim, cmd = m.anim.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	if m.viewportNeeded() {
+		// Only respond to keypresses when the viewport (i.e. the content) is
+		// taller than the window.
+		var cmd tea.Cmd
+		m.glamViewport, cmd = m.glamViewport.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+func (m *Mods) shouldUpdateAnimation() bool {
+	return !m.Config.Quiet &&
+		m.anim != nil &&
+		(m.state == configLoadedState ||
+			m.state == requestState ||
+			(m.state == responseState && !m.responseOutputStarted))
+}
+
+func msgCmd(msg tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		return msg
+	}
+}
+
+func (m *Mods) addCancel(cancel context.CancelFunc) {
+	m.cancelMu.Lock()
+	defer m.cancelMu.Unlock()
+	m.cancelRequest = append(m.cancelRequest, cancel)
+}
+
+func (m *Mods) quit() tea.Msg {
+	m.cancelMu.Lock()
+	defer m.cancelMu.Unlock()
+	for _, cancel := range m.cancelRequest {
+		cancel()
+	}
+	return tea.Quit()
+}
+
+func (m *Mods) toolRoundLimitExceeded(maxTotal int, st stream.Stream) bool {
+	if m.toolCallRounds > maxToolFailedRounds {
+		debug.Printf("Tool call failed rounds exceeded limit (%d), stopping", maxToolFailedRounds)
+		m.resetAndOutput(st)
+		return true
+	}
+	if m.totalRounds > maxTotal {
+		debug.Printf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
+		m.resetAndOutput(st)
+		return true
+	}
+	return false
+}
+
+func (m *Mods) resetAndOutput(st stream.Stream) {
+	m.messages = st.Messages()
+	content := lastAssistantContent(m.messages)
+	if content != "" {
+		m.appendToOutput(content)
+	}
+}

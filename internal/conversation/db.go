@@ -1,0 +1,511 @@
+package conversation
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/mods/internal/approval"
+	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/jmoiron/sqlx"
+	"modernc.org/sqlite"
+)
+
+var (
+	ErrNoMatches   = errors.New("no conversations found")
+	ErrManyMatches = errors.New("multiple conversations matched the input")
+)
+
+func handleSqliteErr(err error) error {
+	sqerr := &sqlite.Error{}
+	if errors.As(err, &sqerr) {
+		return fmt.Errorf(
+			"%w: %s",
+			sqerr,
+			sqlite.ErrorCodeString[sqerr.Code()],
+		)
+	}
+	return err
+}
+
+func Open(ds string) (*DB, error) {
+	db, err := sqlx.Open("sqlite", ds)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not create db: %w",
+			handleSqliteErr(err),
+		)
+	}
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf(
+			"could not ping db: %w",
+			handleSqliteErr(err),
+		)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return nil, fmt.Errorf("could not enable foreign keys: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE
+		  IF NOT EXISTS conversations (
+		    id string NOT NULL PRIMARY KEY,
+		    title string NOT NULL,
+		    updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+		    CHECK (id <> ''),
+		    CHECK (title <> '')
+		  )
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_conv_id ON conversations (id)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_conv_title ON conversations (title)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+
+	if !hasColumn(db, "model") {
+		if _, err := db.Exec(`
+			ALTER TABLE conversations ADD COLUMN model string
+		`); err != nil {
+			return nil, fmt.Errorf("could not migrate db: %w", err)
+		}
+	}
+	if !hasColumn(db, "api") {
+		if _, err := db.Exec(`
+			ALTER TABLE conversations ADD COLUMN api string
+		`); err != nil {
+			return nil, fmt.Errorf("could not migrate db: %w", err)
+		}
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS conversation_messages (
+			conversation_id string NOT NULL PRIMARY KEY,
+			messages blob NOT NULL,
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS approval_rules (
+			conversation_id string NOT NULL,
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, rule_type, tool_name, pattern),
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+
+	return &DB{db: db}, nil
+}
+
+func hasColumn(db *sqlx.DB, col string) bool {
+	var count int
+	if err := db.Get(&count, `
+		SELECT count(*)
+		FROM pragma_table_info('conversations') c
+		WHERE c.name = $1
+	`, col); err != nil {
+		return false
+	}
+	return count > 0
+}
+
+type DB struct {
+	db *sqlx.DB
+}
+
+// Conversation in the database.
+type Conversation struct {
+	ID        string    `db:"id"`
+	Title     string    `db:"title"`
+	UpdatedAt time.Time `db:"updated_at"`
+	API       *string   `db:"api"`
+	Model     *string   `db:"model"`
+}
+
+func (c *DB) Close() error {
+	return c.db.Close() //nolint: wrapcheck
+}
+
+func (c *DB) Save(id, title, api, model string) error {
+	return c.saveMetadata(c.db, id, title, api, model)
+}
+
+type sqlExecutor interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Rebind(query string) string
+}
+
+func (c *DB) saveMetadata(exec sqlExecutor, id, title, api, model string) error {
+	res, err := exec.Exec(exec.Rebind(`
+		UPDATE conversations
+		SET
+		  title = ?,
+		  api = ?,
+		  model = ?,
+		  updated_at = CURRENT_TIMESTAMP
+		WHERE
+		  id = ?
+	`), title, api, model, id)
+	if err != nil {
+		return fmt.Errorf("Save: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("Save: %w", err)
+	}
+
+	if rows > 0 {
+		return nil
+	}
+
+	if _, err := exec.Exec(exec.Rebind(`
+		INSERT INTO
+		  conversations (id, title, api, model)
+		VALUES
+		  (?, ?, ?, ?)
+	`), id, title, api, model); err != nil {
+		return fmt.Errorf("Save: %w", err)
+	}
+
+	return nil
+}
+
+func (c *DB) SaveConversation(
+	id, title, api, model string,
+	messages []proto.Message,
+	rules []approval.Rule,
+) error {
+	encoded, err := encodeConversation(messages)
+	if err != nil {
+		return err
+	}
+	tx, err := c.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("SaveConversation: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := c.saveMetadata(tx, id, title, api, model); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		INSERT INTO conversation_messages (conversation_id, messages)
+		VALUES (?, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+	`), id, encoded); err != nil {
+		return fmt.Errorf("SaveConversation messages: %w", err)
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM approval_rules WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("SaveConversation rules: %w", err)
+	}
+	for _, rule := range approval.Dedupe(rules) {
+		if _, err := tx.Exec(tx.Rebind(`
+			INSERT INTO approval_rules (conversation_id, rule_type, tool_name, pattern)
+			VALUES (?, ?, ?, ?)
+		`), id, rule.Type, rule.Tool, rule.Pattern); err != nil {
+			return fmt.Errorf("SaveConversation rule: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("SaveConversation commit: %w", err)
+	}
+	return nil
+}
+
+func (c *DB) ReadMessages(id string, messages *[]proto.Message) error {
+	var encoded []byte
+	if err := c.db.Get(&encoded, c.db.Rebind(`
+		SELECT messages FROM conversation_messages WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("ReadMessages: %w", err)
+	}
+	if err := decodeConversationBytes(encoded, messages); err != nil {
+		return fmt.Errorf("ReadMessages: %w", err)
+	}
+	return nil
+}
+
+func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
+	var rules []approval.Rule
+	if id == "" {
+		return rules, nil
+	}
+	if err := c.db.Select(&rules, c.db.Rebind(`
+		SELECT rule_type, tool_name, pattern
+		FROM approval_rules
+		WHERE conversation_id = ?
+		ORDER BY created_at, rule_type, tool_name, pattern
+	`), id); err != nil {
+		return nil, fmt.Errorf("ApprovalRules: %w", err)
+	}
+	return rules, nil
+}
+
+func (c *DB) Delete(id string) error {
+	tx, err := c.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("Delete: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM approval_rules WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("Delete rules: %w", err)
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM conversation_messages WHERE conversation_id = ?
+	`), id); err != nil {
+		return fmt.Errorf("Delete messages: %w", err)
+	}
+	if _, err := tx.Exec(tx.Rebind(`
+		DELETE FROM conversations
+		WHERE
+		  id = ?
+	`), id); err != nil {
+		return fmt.Errorf("Delete: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("Delete commit: %w", err)
+	}
+	return nil
+}
+
+func (c *DB) MigrateLegacyConversations(cachePath string) error {
+	dir := filepath.Join(cachePath, "conversations")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read legacy conversations: %w", err)
+	}
+	var migrationErrors []error
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".gob" {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), ".gob")
+		path := filepath.Join(dir, entry.Name())
+		if !IDPattern.MatchString(id) {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("legacy conversation %s has an invalid ID; file retained", path))
+			continue
+		}
+		var exists int
+		if err := c.db.Get(&exists, c.db.Rebind(`
+			SELECT count(*) FROM conversations WHERE id = ?
+		`), id); err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("check legacy conversation %s: %w", id, err))
+			continue
+		}
+		if exists == 0 {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("legacy conversation %s has no database metadata; file retained", id))
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("read legacy conversation %s: %w", id, err))
+			continue
+		}
+		var messages []proto.Message
+		if err := decodeConversationBytes(data, &messages); err != nil {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("decode legacy conversation %s: %w; file retained", id, err))
+			continue
+		}
+		encoded, err := encodeConversation(messages)
+		if err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("encode legacy conversation %s: %w", id, err))
+			continue
+		}
+		var existing []byte
+		existingErr := c.db.Get(&existing, c.db.Rebind(`
+			SELECT messages FROM conversation_messages WHERE conversation_id = ?
+		`), id)
+		if existingErr == nil {
+			var existingMessages []proto.Message
+			if err := decodeConversationBytes(existing, &existingMessages); err == nil {
+				if err := os.Remove(path); err != nil {
+					migrationErrors = append(migrationErrors,
+						fmt.Errorf("remove migrated legacy conversation %s: %w", id, err))
+				}
+				continue
+			}
+		} else if !errors.Is(existingErr, sql.ErrNoRows) {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("check migrated conversation %s: %w", id, existingErr))
+			continue
+		}
+		tx, err := c.db.Beginx()
+		if err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("begin legacy migration %s: %w", id, err))
+			continue
+		}
+		if _, err := tx.Exec(tx.Rebind(`
+			INSERT INTO conversation_messages (conversation_id, messages)
+			VALUES (?, ?)
+			ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+		`), id, encoded); err != nil {
+			_ = tx.Rollback()
+			migrationErrors = append(migrationErrors, fmt.Errorf("migrate legacy conversation %s: %w", id, err))
+			continue
+		}
+		if err := tx.Commit(); err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("commit legacy conversation %s: %w", id, err))
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			migrationErrors = append(migrationErrors,
+				fmt.Errorf("remove migrated legacy conversation %s: %w", id, err))
+		}
+	}
+	return errors.Join(migrationErrors...)
+}
+
+func (c *DB) ListOlderThan(t time.Duration) ([]Conversation, error) {
+	var convos []Conversation
+	if err := c.db.Select(&convos, c.db.Rebind(`
+		SELECT
+		  *
+		FROM
+		  conversations
+		WHERE
+		  updated_at < ?
+		`), time.Now().Add(-t)); err != nil {
+		return nil, fmt.Errorf("ListOlderThan: %w", err)
+	}
+	return convos, nil
+}
+
+func (c *DB) FindHEAD() (*Conversation, error) {
+	var convo Conversation
+	if err := c.db.Get(&convo, `
+		SELECT
+		  *
+		FROM
+		  conversations
+		ORDER BY
+		  updated_at DESC
+		LIMIT
+		  1
+	`); err != nil {
+		return nil, fmt.Errorf("FindHead: %w", err)
+	}
+	return &convo, nil
+}
+
+func (c *DB) findByExactTitle(result *[]Conversation, in string) error {
+	if err := c.db.Select(result, c.db.Rebind(`
+		SELECT
+		  *
+		FROM
+		  conversations
+		WHERE
+		  title = ?
+	`), in); err != nil {
+		return fmt.Errorf("findByExactTitle: %w", err)
+	}
+	return nil
+}
+
+func (c *DB) findByIDOrTitle(result *[]Conversation, in string) error {
+	if err := c.db.Select(result, c.db.Rebind(`
+		SELECT
+		  *
+		FROM
+		  conversations
+		WHERE
+		  id glob ?
+		  OR title = ?
+	`), in+"*", in); err != nil {
+		return fmt.Errorf("findByIDOrTitle: %w", err)
+	}
+	return nil
+}
+
+func (c *DB) Completions(in string) ([]string, error) {
+	var result []string
+	if err := c.db.Select(&result, c.db.Rebind(`
+		SELECT
+		  printf (
+		    '%s%c%s',
+		    CASE
+		      WHEN length (?) < ? THEN substr (id, 1, ?)
+		      ELSE id
+		    END,
+		    char(9),
+		    title
+		  )
+		FROM
+		  conversations
+		WHERE
+		  id glob ?
+		UNION
+		SELECT
+		  printf ("%s%c%s", title, char(9), substr (id, 1, ?))
+		FROM
+		  conversations
+		WHERE
+		  title glob ?
+	`), in, ShortIDLength, ShortIDLength, in+"*", ShortIDLength, in+"*"); err != nil {
+		return result, fmt.Errorf("Completions: %w", err)
+	}
+	return result, nil
+}
+
+func (c *DB) Find(in string) (*Conversation, error) {
+	var conversations []Conversation
+	var err error
+
+	if len(in) < MinIDLength {
+		err = c.findByExactTitle(&conversations, in)
+	} else {
+		err = c.findByIDOrTitle(&conversations, in)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("Find %q: %w", in, err)
+	}
+
+	if len(conversations) > 1 {
+		return nil, fmt.Errorf("%w: %s", ErrManyMatches, in)
+	}
+	if len(conversations) == 1 {
+		return &conversations[0], nil
+	}
+	return nil, fmt.Errorf("%w: %s", ErrNoMatches, in)
+}
+
+func (c *DB) List() ([]Conversation, error) {
+	var convos []Conversation
+	if err := c.db.Select(&convos, `
+		SELECT
+		  *
+		FROM
+		  conversations
+		ORDER BY
+		  updated_at DESC
+	`); err != nil {
+		return convos, fmt.Errorf("List: %w", err)
+	}
+	return convos, nil
+}

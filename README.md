@@ -60,16 +60,14 @@ This writes the binary to `bin/mods` or `bin/mods.exe`. Add it to your `PATH` fo
 export PATH="$PWD/bin:$PATH"
 ```
 
-To install the compiled binary and manpage, run:
+To install the compiled binary, run:
 
 ```sh
 mage install
 ```
 
-On macOS and Linux this installs to `/usr/local/bin/mods` and
-`/usr/local/share/man/man1/mods.1.gz`. On Windows, the default location is
-`%USERPROFILE%\.local\bin\mods.exe` and
-`%USERPROFILE%\.local\share\man\man1\mods.1`.
+On macOS and Linux this installs to `/usr/local/bin/mods`. On Windows, the
+default location is `%USERPROFILE%\.local\bin\mods.exe`.
 
 You can override the install prefix or package into a staging directory:
 
@@ -78,27 +76,18 @@ PREFIX=/opt/local mage install
 DESTDIR=/tmp/pkgroot PREFIX=/usr/local mage install
 ```
 
-For user-local installs that follow XDG-style paths on macOS and Linux, use:
+If any common XDG environment variable is set, `mage install` uses an
+XDG-style user-local path and installs to `${HOME}/.local/bin/mods`. Because XDG
+does not define a binary directory, Mods also honors `XDG_BIN_HOME`:
 
 ```sh
-XDG=1 mage install
+XDG_BIN_HOME="$HOME/.local/bin" mage install
 ```
 
-This installs to `${HOME}/.local/bin/mods` and
-`${XDG_DATA_HOME:-$HOME/.local/share}/man/man1/mods.1.gz`. Because XDG does not
-define a binary directory, Mods also honors `XDG_BIN_HOME`:
-
-```sh
-XDG=1 XDG_BIN_HOME="$HOME/.local/bin" XDG_DATA_HOME="$HOME/.local/share" mage install
-```
-
-On Windows, `XDG=1` is strict: both `XDG_BIN_HOME` and `XDG_DATA_HOME` must be
-set explicitly, otherwise `mage install` fails with a clear error.
+The legacy `XDG=1` switch is also supported.
 
 ```powershell
-$env:XDG = "1"
 $env:XDG_BIN_HOME = "C:/Users/Alice/.local/bin"
-$env:XDG_DATA_HOME = "C:/Users/Alice/.local/share"
 mage install
 ```
 
@@ -106,7 +95,6 @@ Remove installed files with:
 
 ```sh
 mage uninstall
-XDG=1 mage uninstall
 ```
 
 Use `mage check` to verify the project compiles, and `mage test` to run the test suite. The `dist/` directory is reserved for GoReleaser release and snapshot artifacts.

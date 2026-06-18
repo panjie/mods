@@ -20,8 +20,6 @@ import (
 	glamour "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/editor"
-	mcobra "github.com/muesli/mango-cobra"
-	"github.com/muesli/roff"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 )
@@ -389,7 +387,7 @@ func execute() {
 	// XXX: this must come after creating the config.
 	initFlags()
 
-	if !isCompletionCmd(os.Args) && !isManCmd(os.Args) && !isVersionOrHelpCmd(os.Args) {
+	if !isCompletionCmd(os.Args) && !isVersionOrHelpCmd(os.Args) {
 		db, err = Open(filepath.Join(config.CachePath, "conversations", "mods.db"))
 		if err != nil {
 			handleError(modsError{err, "Could not open database."})
@@ -412,27 +410,6 @@ func execute() {
 			Hidden: true,
 		})
 		rootCmd.InitDefaultCompletionCmd()
-	}
-
-	if isManCmd(os.Args) {
-		rootCmd.AddCommand(&cobra.Command{
-			Use:                   "man",
-			Short:                 "Generates manpages",
-			SilenceUsage:          true,
-			DisableFlagsInUseLine: true,
-			Hidden:                true,
-			Args:                  cobra.NoArgs,
-			RunE: func(*cobra.Command, []string) error {
-				manPage, err := mcobra.NewManPage(1, rootCmd)
-				if err != nil {
-					//nolint:wrapcheck
-					return err
-				}
-				_, err = fmt.Fprint(os.Stdout, manPage.Build(roff.NewDocument()))
-				//nolint:wrapcheck
-				return err
-			},
-		})
 	}
 
 	if err := rootCmd.Execute(); err != nil {
@@ -903,17 +880,6 @@ func askInfo() error {
 		WithTheme(themeFrom(config.Theme)).
 		WithKeyMap(keymap).
 		Run()
-}
-
-//nolint:mnd
-func isManCmd(args []string) bool {
-	if len(args) == 2 {
-		return args[1] == "man"
-	}
-	if len(args) == 3 && args[1] == "man" {
-		return args[2] == "-h" || args[2] == "--help"
-	}
-	return false
 }
 
 //nolint:mnd

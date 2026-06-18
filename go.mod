@@ -24,8 +24,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.3.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/mattn/go-isatty v0.0.20
-	github.com/muesli/mango-cobra v1.3.0
-	github.com/muesli/roff v0.1.0
+	github.com/mattn/go-localereader v0.0.1
 	github.com/muesli/termenv v0.16.0
 	github.com/ollama/ollama v0.17.7
 	github.com/openai/openai-go v1.12.0
@@ -67,14 +66,11 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/muesli/mango v0.2.0 // indirect
-	github.com/muesli/mango-pflag v0.1.0 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

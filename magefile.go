@@ -3,8 +3,6 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -18,14 +16,9 @@ import (
 const (
 	app    = "mods"
 	binDir = "bin"
-	manDir = "manpages"
 )
 
 var Default = Build
-
-var Aliases = map[string]interface{}{
-	"clean-man": CleanMan,
-}
 
 // Build compiles the CLI with version metadata.
 func Build() error {
@@ -47,39 +40,9 @@ func Test() error {
 	return run("go", "test", "./...")
 }
 
-// Man generates the local manpage artifact.
-func Man() error {
-	if err := os.MkdirAll(manDir, 0o755); err != nil {
-		return err
-	}
-
-	out, err := output("go", "run", ".", "man")
-	if err != nil {
-		return err
-	}
-
-	if runtime.GOOS == "windows" {
-		return os.WriteFile(manPagePath(), out, 0o644)
-	}
-
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	if _, err := gz.Write(out); err != nil {
-		_ = gz.Close()
-		return err
-	}
-	if err := gz.Close(); err != nil {
-		return err
-	}
-	return os.WriteFile(manPagePath(), buf.Bytes(), 0o644)
-}
-
-// Install builds and installs the binary and manpage.
+// Install builds and installs the binary.
 func Install() error {
 	if err := Build(); err != nil {
-		return err
-	}
-	if err := Man(); err != nil {
 		return err
 	}
 
@@ -90,13 +53,7 @@ func Install() error {
 	if err := os.MkdirAll(paths.binDir, 0o755); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(paths.man1Dir, 0o755); err != nil {
-		return err
-	}
-	if err := copyFile(binaryPath(), filepath.Join(paths.binDir, app+goExe()), 0o755); err != nil {
-		return err
-	}
-	return copyFile(manPagePath(), filepath.Join(paths.man1Dir, filepath.Base(manPagePath())), 0o644)
+	return copyFile(binaryPath(), filepath.Join(paths.binDir, app+goExe()), 0o755)
 }
 
 // Uninstall removes installed files.
@@ -105,15 +62,7 @@ func Uninstall() error {
 	if err != nil {
 		return err
 	}
-	if err := removeFile(filepath.Join(paths.binDir, app+goExe())); err != nil {
-		return err
-	}
-	return removeFile(filepath.Join(paths.man1Dir, filepath.Base(manPagePath())))
-}
-
-// CleanMan removes the generated manpage artifact.
-func CleanMan() error {
-	return removeFile(manPagePath())
+	return removeFile(filepath.Join(paths.binDir, app+goExe()))
 }
 
 // Clean removes build artifacts.
@@ -136,14 +85,6 @@ func build(out string, release bool) error {
 
 func binaryPath() string {
 	return filepath.Join(binDir, app+goExe())
-}
-
-func manPagePath() string {
-	name := app + ".1"
-	if runtime.GOOS != "windows" {
-		name += ".gz"
-	}
-	return filepath.Join(manDir, name)
 }
 
 func goExe() string {
@@ -178,75 +119,75 @@ func gitValue(args ...string) string {
 }
 
 type installConfig struct {
-	binDir  string
-	man1Dir string
+	binDir string
 }
 
 func installPaths() (installConfig, error) {
-	bin, man, err := defaultInstallDirs()
+	bin, err := installDir()
 	if err != nil {
 		return installConfig{}, err
-	}
-	if v := os.Getenv("BINDIR"); v != "" {
-		bin = v
-	}
-	if v := os.Getenv("MANDIR"); v != "" {
-		man = v
 	}
 
 	destdir := os.Getenv("DESTDIR")
 	return installConfig{
-		binDir:  withDestDir(destdir, bin),
-		man1Dir: withDestDir(destdir, filepath.Join(man, "man1")),
+		binDir: withDestDir(destdir, bin),
 	}, nil
 }
 
-func defaultInstallDirs() (string, string, error) {
-	if os.Getenv("XDG") == "1" {
-		return xdgInstallDirs()
+func installDir() (string, error) {
+	if v := os.Getenv("BINDIR"); v != "" {
+		return v, nil
 	}
-
-	prefix := os.Getenv("PREFIX")
-	if prefix == "" {
-		if runtime.GOOS == "windows" {
-			home, err := userHome()
-			if err != nil {
-				return "", "", err
-			}
-			prefix = filepath.Join(home, ".local")
-		} else {
-			prefix = "/usr/local"
-		}
+	if v := os.Getenv("PREFIX"); v != "" {
+		return filepath.Join(v, "bin"), nil
 	}
-
-	return filepath.Join(prefix, "bin"), filepath.Join(prefix, "share", "man"), nil
+	if hasXDGEnv() {
+		return xdgInstallDir()
+	}
+	return defaultInstallDir()
 }
 
-func xdgInstallDirs() (string, string, error) {
-	bin := os.Getenv("XDG_BIN_HOME")
-	data := os.Getenv("XDG_DATA_HOME")
-
+func defaultInstallDir() (string, error) {
+	prefix := "/usr/local"
 	if runtime.GOOS == "windows" {
-		if bin == "" {
-			return "", "", errors.New("XDG=1 on Windows requires XDG_BIN_HOME")
+		home, err := userHome()
+		if err != nil {
+			return "", err
 		}
-		if data == "" {
-			return "", "", errors.New("XDG=1 on Windows requires XDG_DATA_HOME")
+		prefix = filepath.Join(home, ".local")
+	}
+	return filepath.Join(prefix, "bin"), nil
+}
+
+func hasXDGEnv() bool {
+	if os.Getenv("XDG") == "1" {
+		return true
+	}
+	for _, name := range []string{
+		"XDG_BIN_HOME",
+		"XDG_CONFIG_HOME",
+		"XDG_DATA_HOME",
+		"XDG_CACHE_HOME",
+		"XDG_STATE_HOME",
+		"XDG_RUNTIME_DIR",
+	} {
+		if os.Getenv(name) != "" {
+			return true
 		}
-		return bin, filepath.Join(data, "man"), nil
+	}
+	return false
+}
+
+func xdgInstallDir() (string, error) {
+	if bin := os.Getenv("XDG_BIN_HOME"); bin != "" {
+		return bin, nil
 	}
 
 	home, err := userHome()
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	if bin == "" {
-		bin = filepath.Join(home, ".local", "bin")
-	}
-	if data == "" {
-		data = filepath.Join(home, ".local", "share")
-	}
-	return bin, filepath.Join(data, "man"), nil
+	return filepath.Join(home, ".local", "bin"), nil
 }
 
 func userHome() (string, error) {
@@ -305,15 +246,4 @@ func run(name string, args ...string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
-}
-
-func output(name string, args ...string) ([]byte, error) {
-	cmd := exec.Command(name, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
-	}
-	return out, nil
 }

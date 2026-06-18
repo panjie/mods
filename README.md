@@ -108,18 +108,26 @@ published.
 
 #### Download binaries
 
-Pre-built packages and binaries are not published for this fork yet. When
-release artifacts are available, they will appear on the [releases] page.
+Windows portable ZIP archives are published on the [releases] page for x64 and
+arm64. These archives are shaped for WinGet portable manifests:
+
+- `mods_<version>_Windows_x86_64.zip`
+- `mods_<version>_Windows_arm64.zip`
+
+After the `panjie.mods` manifest is accepted into the public Windows Package
+Manager repository, install with:
+
+```powershell
+winget install -e --id panjie.mods
+```
 
 [releases]: https://github.com/panjie/mods/releases
 
 <details>
 <summary>Shell Completions</summary>
 
-Release archives, when published, may include pre-generated completion files for
-Bash, ZSH, Fish, and PowerShell.
-
-If you built from source, you can generate completion scripts with:
+Release archives do not include pre-generated completion files. Generate
+completion scripts with:
 
 ```bash
 mods completion bash > mods.bash

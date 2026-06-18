@@ -1,8 +1,46 @@
-# The lines beneath this are called `modelines`. See `:help modeline`
-# Feel free to remove those if you don't want/use them.
-# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
-# vim: set ts=2 sw=2 tw=0 fo=cnqoj
 version: 2
-includes:
-  - from_url:
-      url: charmbracelet/meta/main/goreleaser-mods.yaml
+
+project_name: mods
+
+builds:
+  - id: mods
+    main: .
+    binary: mods
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.Version=v{{ .Version }} -X main.CommitSHA={{ .FullCommit }}
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: windows
+    ids:
+      - mods
+    formats:
+      - zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    wrap_in_directory: true
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+source:
+  enabled: false
+
+release:
+  github:
+    owner: panjie
+    name: mods

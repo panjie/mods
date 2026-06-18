@@ -1,5 +1,6 @@
 APP := mods
 BIN_DIR := bin
+MAN_DIR := manpages
 
 ifeq ($(OS),Windows_NT)
 DEVNULL := NUL
@@ -16,8 +17,9 @@ COMMIT  := $(shell git rev-parse --short HEAD 2>$(DEVNULL) || echo unknown)
 GOEXE := $(shell go env GOEXE)
 BIN := $(BIN_DIR)/$(APP)$(GOEXE)
 RELEASE_BIN := $(BIN_DIR)/$(APP)-release$(GOEXE)
+MANPAGE := $(MAN_DIR)/$(APP).1.gz
 
-.PHONY: build check test clean release
+.PHONY: build check test clean release man clean-man
 
 build:
 	$(MKDIR_P)
@@ -32,6 +34,13 @@ check:
 
 test:
 	go test ./...
+
+man:
+	mkdir -p "$(MAN_DIR)"
+	go run . man | gzip -c > "$(MANPAGE)"
+
+clean-man:
+	rm -f "$(MANPAGE)"
 
 clean:
 	$(RM_RF)

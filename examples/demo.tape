@@ -1,4 +1,4 @@
-Output examples/gifs/mods.gif
+Output examples/gifs/demo.gif
 
 Set Height 900
 Set Width 1600
@@ -18,7 +18,12 @@ Sleep 300ms
 Enter
 Sleep 2800ms
 
-Ctrl+L
+Hide
+  Type `clear`
+  Enter
+  Sleep 300ms
+Show
+
 Sleep 500ms
 
 Type@25ms `mods --web-search "What changed in the latest Go release?"`
@@ -26,7 +31,12 @@ Sleep 300ms
 Enter
 Sleep 2800ms
 
-Ctrl+L
+Hide
+  Type `clear`
+  Enter
+  Sleep 300ms
+Show
+
 Sleep 500ms
 
 Type@25ms `mods -i examples/gifs/mods-product.png "Describe this image and suggest README alt text"`
@@ -34,7 +44,12 @@ Sleep 300ms
 Enter
 Sleep 2800ms
 
-Ctrl+L
+Hide
+  Type `clear`
+  Enter
+  Sleep 300ms
+Show
+
 Sleep 500ms
 
 Type@25ms `find . -maxdepth 1 -type f | sed 's#^./##' | sort | mods --minimal "pick the five files most relevant to built-in tools"`

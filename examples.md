@@ -14,7 +14,7 @@ and producing minimal output for another pipeline step.
 
 `find . -maxdepth 1 -type f | sed 's#^./##' | sort | mods --minimal "pick the five files most relevant to built-in tools"`
 
-<p><img src="examples/gifs/mods.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
+<p><img src="examples/gifs/demo.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
 
 ### Choose A Model
 

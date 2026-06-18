@@ -17,6 +17,13 @@ Sleep 500ms
 Enter
 Sleep 3s
 
+Hide
+  Type `clear`
+  Enter
+  Sleep 300ms
+Show
+
+Sleep 500ms
 Type "mods --show "
 Sleep 500ms
 

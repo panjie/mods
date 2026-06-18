@@ -9,5 +9,3 @@ manpages/
 # macOS
 .DS_Store
 
-# Demo gifs (too large for git)
-*.gif

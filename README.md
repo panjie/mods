@@ -42,42 +42,46 @@ It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
 
 #### Build from source
 
-Requires Go 1.25 or newer.
+Requires Go 1.25 or newer and Mage:
+
+```sh
+go install github.com/magefile/mage@latest
+```
 
 ```sh
 git clone https://github.com/panjie/mods.git
 cd mods
-make build
+mage build
 ```
 
-This writes the binary to `bin/mods`. Add it to your `PATH` for easy access:
+This writes the binary to `bin/mods` or `bin/mods.exe`. Add it to your `PATH` for easy access:
 
 ```sh
 export PATH="$PWD/bin:$PATH"
 ```
 
-To install the compiled binary and manpage into system locations, run:
+To install the compiled binary and manpage, run:
 
 ```sh
-make install
+mage install
 ```
 
 On macOS and Linux this installs to `/usr/local/bin/mods` and
 `/usr/local/share/man/man1/mods.1.gz`. On Windows, the default location is
-`C:\Program Files\mods\bin\mods.exe` and
-`C:\Program Files\mods\share\man\man1\mods.1`.
+`%USERPROFILE%\.local\bin\mods.exe` and
+`%USERPROFILE%\.local\share\man\man1\mods.1`.
 
 You can override the install prefix or package into a staging directory:
 
 ```sh
-make install PREFIX=/opt/local
-make install DESTDIR=/tmp/pkgroot PREFIX=/usr/local
+PREFIX=/opt/local mage install
+DESTDIR=/tmp/pkgroot PREFIX=/usr/local mage install
 ```
 
 For user-local installs that follow XDG-style paths on macOS and Linux, use:
 
 ```sh
-make install XDG=1
+XDG=1 mage install
 ```
 
 This installs to `${HOME}/.local/bin/mods` and
@@ -85,24 +89,27 @@ This installs to `${HOME}/.local/bin/mods` and
 define a binary directory, Mods also honors `XDG_BIN_HOME`:
 
 ```sh
-make install XDG=1 XDG_BIN_HOME="$HOME/.local/bin" XDG_DATA_HOME="$HOME/.local/share"
+XDG=1 XDG_BIN_HOME="$HOME/.local/bin" XDG_DATA_HOME="$HOME/.local/share" mage install
 ```
 
 On Windows, `XDG=1` is strict: both `XDG_BIN_HOME` and `XDG_DATA_HOME` must be
-set explicitly, otherwise `make install` fails with a clear error.
+set explicitly, otherwise `mage install` fails with a clear error.
 
 ```powershell
-make install XDG=1 XDG_BIN_HOME="C:/Users/Alice/.local/bin" XDG_DATA_HOME="C:/Users/Alice/.local/share"
+$env:XDG = "1"
+$env:XDG_BIN_HOME = "C:/Users/Alice/.local/bin"
+$env:XDG_DATA_HOME = "C:/Users/Alice/.local/share"
+mage install
 ```
 
 Remove installed files with:
 
 ```sh
-make uninstall
-make uninstall XDG=1
+mage uninstall
+XDG=1 mage uninstall
 ```
 
-Use `make check` to verify the project compiles, and `make test` to run the test suite. The `dist/` directory is reserved for GoReleaser release and snapshot artifacts.
+Use `mage check` to verify the project compiles, and `mage test` to run the test suite. The `dist/` directory is reserved for GoReleaser release and snapshot artifacts.
 
 #### Install with `go`
 

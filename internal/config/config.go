@@ -62,8 +62,6 @@ var Help = map[string]string{
 	"role":                  "System role to use",
 	"roles":                 "List of predefined system messages that can be used as roles",
 	"list-roles":            "List the roles defined in your configuration file",
-	"prompt":                "Include the prompt from the arguments and stdin, truncate stdin to specified number of lines",
-	"prompt-args":           "Include the prompt from the arguments in the response",
 	"raw":                   "Render output as raw text when connected to a TTY",
 	"quiet":                 "Quiet mode (hide the spinner while loading and stderr messages for success)",
 	"hide-tool-status":      "Hide the bottom status line while tools are running",
@@ -197,8 +195,6 @@ type PersistentConfig struct {
 	NoLimit             bool       `yaml:"no-limit" env:"NO_LIMIT"`
 	CachePath           string     `yaml:"cache-path" env:"CACHE_PATH"`
 	NoCache             bool       `yaml:"no-cache" env:"NO_CACHE"`
-	IncludePromptArgs   bool       `yaml:"include-prompt-args" env:"INCLUDE_PROMPT_ARGS"`
-	IncludePrompt       int        `yaml:"include-prompt" env:"INCLUDE_PROMPT"`
 	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
 	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
 	Fanciness           uint       `yaml:"fanciness" env:"FANCINESS"`

@@ -260,8 +260,6 @@ func initFlags() {
 	flags.StringVar(&config.FormatAs, "format-as", config.FormatAs, StdoutStyles().FlagDesc.Render(Help["format-as"]))
 	flags.BoolVar(&config.Minimal, "minimal", config.Minimal, StdoutStyles().FlagDesc.Render(Help["minimal"]))
 	flags.BoolVarP(&config.Raw, "raw", "r", config.Raw, StdoutStyles().FlagDesc.Render(Help["raw"]))
-	flags.IntVarP(&config.IncludePrompt, "prompt", "P", config.IncludePrompt, StdoutStyles().FlagDesc.Render(Help["prompt"]))
-	flags.BoolVarP(&config.IncludePromptArgs, "prompt-args", "p", config.IncludePromptArgs, StdoutStyles().FlagDesc.Render(Help["prompt-args"]))
 	flags.StringVarP(&config.Continue, "continue", "c", "", StdoutStyles().FlagDesc.Render(Help["continue"]))
 	flags.BoolVarP(&config.ContinueLast, "continue-last", "C", false, StdoutStyles().FlagDesc.Render(Help["continue-last"]))
 	flags.BoolVarP(&config.List, "list", "l", config.List, StdoutStyles().FlagDesc.Render(Help["list"]))
@@ -308,7 +306,6 @@ func initFlags() {
 	flags.IntVar(&config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds, StdoutStyles().FlagDesc.Render(Help["max-tool-rounds"]))
 	flags.VarP(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", StdoutStyles().FlagDesc.Render(Help["reasoning"]))
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", StdoutStyles().FlagDesc.Render(Help["review"]))
-	flags.Lookup("prompt").NoOptDefVal = "-1"
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")

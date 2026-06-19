@@ -222,18 +222,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 
-		if m.Config.IncludePromptArgs {
-			m.appendToOutput(m.Config.Prefix + "\n\n")
-		}
-
-		if m.Config.IncludePrompt > 0 {
-			parts := strings.Split(strings.ReplaceAll(m.Input, "\r\n", "\n"), "\n")
-			if len(parts) > m.Config.IncludePrompt {
-				parts = parts[0:m.Config.IncludePrompt]
-			}
-			m.appendToOutput(strings.Join(parts, "\n") + "\n")
-		}
-
 		if m.Config.Plan {
 			m.state = planState
 			m.planRetries = 0

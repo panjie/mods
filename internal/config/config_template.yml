@@ -48,12 +48,6 @@ hide-tool-status: false
 # {{ index .Help "word-wrap" }}
 word-wrap: 80
 
-# {{ index .Help "prompt-args" }}
-include-prompt-args: false
-
-# {{ index .Help "prompt" }}
-include-prompt: 0
-
 # {{ index .Help "theme" }}
 theme: charm
 

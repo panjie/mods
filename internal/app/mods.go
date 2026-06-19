@@ -35,6 +35,8 @@ const (
 	maxToolFailedRounds  = 3
 )
 
+const numPlanReviewOptions = 4
+
 // Mods is the Bubble Tea model that manages reading stdin and querying
 // LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
 type Mods struct {
@@ -76,8 +78,9 @@ type Mods struct {
 
 	reviewer *toolReviewer
 
-	planContent string
-	planRetries int
+	planContent  string
+	planRetries  int
+	planSelected int
 
 	feedbackInput textinput.Model
 	feedbackMode  bool
@@ -338,6 +341,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.planContent = msg.plan
 		m.setActiveOperation("")
 		m.state = planState
+		m.planSelected = 0
 		return m, nil
 	case planApprovedMsg:
 		transcript := m.approvedPlanTranscript()
@@ -397,6 +401,35 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+c":
 				m.state = doneState
 				return m, m.quit
+			case "left":
+				m.planSelected--
+				if m.planSelected < 0 {
+					m.planSelected = numPlanReviewOptions - 1
+				}
+				return m, nil
+			case "right":
+				m.planSelected++
+				if m.planSelected >= numPlanReviewOptions {
+					m.planSelected = 0
+				}
+				return m, nil
+			case "enter":
+				switch m.planSelected {
+				case 0:
+					return m, msgCmd(planApprovedMsg{plan: m.planContent})
+				case 1:
+					return m, msgCmd(planDeniedMsg{content: m.Config.Prefix})
+				case 2:
+					ti := textinput.New()
+					ti.Placeholder = "Describe changes you want to make to the plan..."
+					ti.Width = max(m.width-4, 20)
+					m.feedbackInput = ti
+					m.feedbackMode = true
+					return m, m.feedbackInput.Focus()
+				case 3:
+					m.state = doneState
+					return m, m.quit
+				}
 			}
 		}
 		if handled, cmd := m.reviewer.handleKey(msg); handled {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/websearch"
 )
@@ -198,9 +199,25 @@ func (m *Mods) renderPlanReviewBanner(content string) string {
 	promptLine := m.Styles.ReviewPrompt.Copy().Width(m.width).Render(
 		padRight("  Plan Review", m.width-4),
 	)
-	choicesLine := m.Styles.ReviewChoices.Copy().Width(m.width).Render(
-		"  [Y] Approve  [N] Try again  [M] Modify  [Ctrl+C] Cancel",
-	)
+	baseStyle := m.Styles.ReviewChoices.Copy().Padding(0, 0)
+	selectedStyle := baseStyle.Copy().
+		Foreground(lipgloss.Color("#4A3B9F")).
+		Background(lipgloss.Color("#E0DDFF"))
+	options := []string{
+		"[Y] Approve",
+		"[N] Try again",
+		"[M] Modify",
+		"[Ctrl+C] Cancel",
+	}
+	var parts []string
+	for i, opt := range options {
+		if i == m.planSelected {
+			parts = append(parts, selectedStyle.Render(opt))
+		} else {
+			parts = append(parts, baseStyle.Render(opt))
+		}
+	}
+	choicesLine := m.Styles.ReviewChoices.Copy().Width(m.width).Render(strings.Join(parts, "  "))
 	block := promptLine + "\n" + choicesLine
 	if strings.TrimSpace(content) == "" {
 		return block

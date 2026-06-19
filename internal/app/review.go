@@ -12,6 +12,8 @@ import (
 
 var errReviewUnavailable = errors.New("tool execution requires review but interactive approval is unavailable")
 
+const numToolReviewOptions = 4
+
 // toolReviewer manages interactive approval of tool executions (file writes,
 // shell commands, etc.) before they run. It owns the review channel, approval
 // state, and safety heuristics, isolating this concern from the main Mods model.
@@ -21,6 +23,7 @@ type toolReviewer struct {
 	reviewPending bool
 	reviewItem    *toolReviewItem
 	rules         RuleSet
+	selected      int
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
@@ -56,6 +59,7 @@ func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
 	r.reviewPending = true
 	item := msg.item
 	r.reviewItem = &item
+	r.selected = 0
 }
 
 func (r *toolReviewer) reset() {
@@ -65,6 +69,7 @@ func (r *toolReviewer) reset() {
 	r.reviewChan = nil
 	r.reviewPending = false
 	r.reviewItem = nil
+	r.selected = 0
 }
 
 // handleKey processes a key press during review. Returns (handled, cmd).
@@ -93,6 +98,33 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return true, r.pollReviewCmd()
 	case "ctrl+c":
 		r.reviewItem.resp <- reviewResponse{}
+		r.reviewPending = false
+		r.reviewItem = nil
+		return true, r.pollReviewCmd()
+	case "left":
+		r.selected--
+		if r.selected < 0 {
+			r.selected = numToolReviewOptions - 1
+		}
+		return true, nil
+	case "right":
+		r.selected++
+		if r.selected >= numToolReviewOptions {
+			r.selected = 0
+		}
+		return true, nil
+	case "enter":
+		switch r.selected {
+		case 0:
+			r.reviewItem.resp <- reviewResponse{approved: true}
+		case 1:
+			r.reviewItem.resp <- reviewResponse{}
+		case 2:
+			r.rules.Add(r.reviewItem.alwaysRules...)
+			r.reviewItem.resp <- reviewResponse{approved: true, remember: true}
+		case 3:
+			r.reviewItem.resp <- reviewResponse{}
+		}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
@@ -204,12 +236,25 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	promptLine := reviewPrompt.Copy().Width(width).Render(
 		padRight("  Review: "+label, width-4),
 	)
-	choicesLine := reviewChoices.Copy().Width(width).Render(
-		fmt.Sprintf(
-			"  [Y] Approve  [N] Deny  [A] Always allow: %s  [Ctrl+C] Cancel",
-			RulesLabel(r.reviewItem.alwaysRules),
-		),
-	)
+	baseStyle := reviewChoices.Copy().Padding(0, 0)
+	selectedStyle := baseStyle.Copy().
+		Foreground(lipgloss.Color("#4A3B9F")).
+		Background(lipgloss.Color("#E0DDFF"))
+	options := []string{
+		"[Y] Approve",
+		"[N] Deny",
+		fmt.Sprintf("[A] Always allow: %s", RulesLabel(r.reviewItem.alwaysRules)),
+		"[Ctrl+C] Cancel",
+	}
+	var parts []string
+	for i, opt := range options {
+		if i == r.selected {
+			parts = append(parts, selectedStyle.Render(opt))
+		} else {
+			parts = append(parts, baseStyle.Render(opt))
+		}
+	}
+	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, "  "))
 	block := promptLine + "\n" + choicesLine
 	if strings.TrimSpace(content) == "" {
 		return block

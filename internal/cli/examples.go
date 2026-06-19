@@ -6,9 +6,24 @@ import (
 )
 
 var examples = map[string]string{
-	"Write new sections for a readme": `cat README.md | mods "write a new section to this README documenting a pdf sharing feature"`,
-	"Editorialize your video files":   `ls ~/vids | mods -f "summarize each of these titles, group them by decade" | glow`,
-	"Let GPT pick something to watch": `ls ~/vids | mods "Pick 5 action packed shows from the 80s from this list" | gum choose | xargs vlc`,
+	"Summarize piped JSON":             `printf '%s\n' '[{"name":"bubbletea"},{"name":"lipgloss"},{"name":"gum"}]' | mods -f "summarize these projects"`,
+	"Return pipeline-friendly output":  `find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important files"`,
+	"Format as JSON":                   `git log --oneline -5 | mods --format --format-as json "convert these commits to objects with sha and title"`,
+	"Choose a configured model":        `mods --ask-model "Explain this project in one paragraph"`,
+	"Use a specific API and model":     `mods --api openai --model gpt-5.4 "Draft a concise release note"`,
+	"Search the web":                   `mods --web-search "What changed in the latest Go release?"`,
+	"Describe an image":                `mods --image assets/mods-product.png "Describe this image and suggest alt text"`,
+	"Describe an image from stdin":     `cat assets/mods-product.png | mods --stdin-image "Describe this image"`,
+	"Describe an image from clipboard": `mods --clipboard-image "Describe the image on my clipboard"`,
+	"Save a conversation":              `mods --title project-summary "Summarize this repository"`,
+	"Continue a conversation":          `mods --continue project-summary "Turn that summary into release notes"`,
+	"Show recent conversations":        `mods --list`,
+	"Use a custom role":                `mods --role shell "list the largest files in the current directory"`,
+	"Review file edits":                `mods --review mutable --workspace . "Read README.md and write docs/cli-notes.md with a short usage guide"`,
+	"Plan before acting":               `mods --plan --workspace . "Refactor the CLI examples to cover more features"`,
+	"Inspect MCP servers":              `mods --mcp-list`,
+	"Inspect MCP tools":                `mods --mcp-list-tools`,
+	"Debug reasoning":                  `mods --reasoning auto --debug "When should I use each review mode?"`,
 }
 
 func randomExample() string {

@@ -93,6 +93,15 @@ func NewRequestBuilder() *HTTPRequestBuilder {
 	}
 }
 
+// googleErrorResponse represents the nested error JSON structure returned by the Gemini API.
+type googleErrorResponse struct {
+	Error struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	} `json:"error"`
+}
+
 // APIError represents an error response from the Google API.
 type APIError struct {
 	Message    string `json:"message"`
@@ -184,15 +193,21 @@ func (c *Client) newRequest(ctx context.Context, method, url string, setters ...
 }
 
 func (c *Client) handleErrorResp(resp *http.Response) error {
-	var errRes APIError
+	var errRes googleErrorResponse
 	if err := json.NewDecoder(resp.Body).Decode(&errRes); err != nil {
 		return &APIError{
 			StatusCode: resp.StatusCode,
 			Message:    err.Error(),
 		}
 	}
-	errRes.StatusCode = resp.StatusCode
-	return &errRes
+	message := errRes.Error.Message
+	if message == "" {
+		message = http.StatusText(resp.StatusCode)
+	}
+	return &APIError{
+		StatusCode: resp.StatusCode,
+		Message:    message,
+	}
 }
 
 // Candidate represents a response candidate generated from the model.

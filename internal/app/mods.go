@@ -340,10 +340,15 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = planState
 		return m, nil
 	case planApprovedMsg:
+		transcript := m.approvedPlanTranscript()
 		m.planContent = msg.plan
 		m.Config.Plan = false
-		m.Output = ""
-		m.responseOutputStarted = false
+		return m, tea.Sequence(
+			m.approvedPlanPrintCmd(transcript),
+			msgCmd(planExecutionStartMsg{}),
+		)
+	case planExecutionStartMsg:
+		m.resetExecutionOutput()
 		m.state = requestState
 		return m, m.startCompletionCmd(m.Input)
 	case planDeniedMsg:

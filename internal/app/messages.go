@@ -98,6 +98,8 @@ type planApprovedMsg struct {
 	plan string
 }
 
+type planExecutionStartMsg struct{}
+
 type planDeniedMsg struct {
 	content string
 }

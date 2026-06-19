@@ -224,3 +224,30 @@ func (m *Mods) renderPlanFeedbackInput(content string) string {
 	}
 	return strings.TrimRight(content, "\r\n") + "\n" + block
 }
+
+func (m *Mods) approvedPlanTranscript() string {
+	content := m.glamOutput
+	if content == "" {
+		content = m.Output
+	}
+	content = strings.TrimRight(content, "\r\n")
+	if strings.TrimSpace(content) == "" {
+		return ""
+	}
+	return content + "\n"
+}
+
+func (m *Mods) approvedPlanPrintCmd(transcript string) tea.Cmd {
+	if transcript == "" || m.Config.Raw || !isOutputTTY() {
+		return nil
+	}
+	return tea.Println(transcript)
+}
+
+func (m *Mods) resetExecutionOutput() {
+	m.Output = ""
+	m.glamOutput = ""
+	m.glamHeight = 0
+	m.glamViewport.SetContent("")
+	m.responseOutputStarted = false
+}

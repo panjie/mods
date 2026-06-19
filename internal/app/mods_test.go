@@ -531,6 +531,77 @@ func TestOperationStatusView(t *testing.T) {
 	})
 }
 
+func TestApprovedPlanTranscript(t *testing.T) {
+	t.Run("uses full rendered output", func(t *testing.T) {
+		m := &Mods{
+			Output:     "raw plan",
+			glamOutput: "rendered plan\n\n",
+		}
+
+		require.Equal(t, "rendered plan\n", m.approvedPlanTranscript())
+	})
+
+	t.Run("falls back to raw output", func(t *testing.T) {
+		m := &Mods{Output: "raw plan\n\n"}
+
+		require.Equal(t, "raw plan\n", m.approvedPlanTranscript())
+	})
+
+	t.Run("empty plan stays empty", func(t *testing.T) {
+		m := &Mods{glamOutput: "\n\n"}
+
+		require.Empty(t, m.approvedPlanTranscript())
+	})
+}
+
+func TestPlanApprovalPreservesTranscriptBeforeExecution(t *testing.T) {
+	oldIsOutputTTY := isOutputTTY
+	isOutputTTY = func() bool { return true }
+	defer func() { isOutputTTY = oldIsOutputTTY }()
+
+	m := &Mods{
+		Config:     &Config{Plan: true},
+		Styles:     makeStyles(lipgloss.NewRenderer(nil)),
+		state:      planState,
+		Output:     "raw plan",
+		glamOutput: "rendered plan\n",
+		reviewer:   &toolReviewer{},
+		width:      80,
+	}
+
+	model, cmd := m.Update(planApprovedMsg{plan: "approved plan"})
+
+	require.Same(t, m, model)
+	require.False(t, m.Config.Plan)
+	require.Equal(t, planState, m.state)
+	require.Equal(t, "rendered plan\n", m.glamOutput)
+	require.NotNil(t, cmd)
+	require.Contains(t, fmt.Sprintf("%T", cmd()), "sequenceMsg")
+}
+
+func TestPlanExecutionStartResetsOutput(t *testing.T) {
+	m := &Mods{
+		Config:                &Config{},
+		Styles:                makeStyles(lipgloss.NewRenderer(nil)),
+		state:                 planState,
+		Output:                "approved plan",
+		glamOutput:            "rendered approved plan",
+		glamHeight:            3,
+		responseOutputStarted: true,
+		reviewer:              &toolReviewer{},
+		contentMutex:          &sync.Mutex{},
+	}
+
+	_, cmd := m.Update(planExecutionStartMsg{})
+
+	require.Equal(t, requestState, m.state)
+	require.Empty(t, m.Output)
+	require.Empty(t, m.glamOutput)
+	require.Zero(t, m.glamHeight)
+	require.False(t, m.responseOutputStarted)
+	require.NotNil(t, cmd)
+}
+
 func TestGeneratingViewBeforeOutput(t *testing.T) {
 	newTestMods := func() *Mods {
 		return &Mods{
@@ -548,6 +619,16 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	t.Run("request state shows generating", func(t *testing.T) {
 		m := newTestMods()
 		require.Contains(t, m.View(), "Generating")
+	})
+
+	t.Run("request state does not show approved plan", func(t *testing.T) {
+		m := newTestMods()
+		m.Output = "approved plan"
+		m.glamOutput = "rendered approved plan"
+		view := m.View()
+		require.Contains(t, view, "Generating")
+		require.NotContains(t, view, "approved plan")
+		require.NotContains(t, view, "rendered approved plan")
 	})
 
 	t.Run("response state before output shows generating", func(t *testing.T) {

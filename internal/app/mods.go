@@ -31,6 +31,7 @@ const (
 
 const (
 	defaultMaxToolRounds = 30
+	defaultFanciness     = 10
 	maxToolFailedRounds  = 3
 )
 
@@ -180,7 +181,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reviewer.rules.Replace(msg.Rules)
 
 		if !m.Config.Quiet {
-			m.anim = NewAnim(m.Config.Fanciness, m.Config.StatusText, m.renderer, m.Styles)
+			m.anim = NewAnim(defaultFanciness, m.Config.StatusText, m.renderer, m.Styles)
 			cmds = append(cmds, m.anim.Init())
 		}
 		m.state = configLoadedState

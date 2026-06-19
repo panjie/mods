@@ -101,6 +101,13 @@ func TestMinimalFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
 
+func TestFancinessFlagRemoved(t *testing.T) {
+	if rootCmd.Flags().Lookup("minimal") == nil {
+		initFlags()
+	}
+	require.Nil(t, rootCmd.Flags().Lookup("fanciness"))
+}
+
 func TestRoleNames(t *testing.T) {
 	saveConfig := config
 	defer func() { config = saveConfig }()

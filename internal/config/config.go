@@ -75,7 +75,6 @@ var Help = map[string]string{
 	"stop":                  "Up to 4 sequences where the API will stop generating further tokens",
 	"topp":                  "TopP, an alternative to temperature that narrows response, from 0.0 to 1.0, -1.0 to disable",
 	"topk":                  "TopK, only sample from the top K options for each subsequent token, -1 to disable",
-	"fanciness":             "Your desired level of fanciness",
 	"status-text":           "Text to show while generating",
 	"settings":              "Open settings in your $EDITOR",
 	"dirs":                  "Print the directories in which mods store its data",
@@ -197,7 +196,6 @@ type PersistentConfig struct {
 	NoCache             bool       `yaml:"no-cache" env:"NO_CACHE"`
 	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
 	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
-	Fanciness           uint       `yaml:"fanciness" env:"FANCINESS"`
 	StatusText          string     `yaml:"status-text" env:"STATUS_TEXT"`
 	HTTPProxy           string     `yaml:"http-proxy" env:"HTTP_PROXY"`
 	APIs                APIs       `yaml:"apis"`
@@ -447,7 +445,6 @@ func Default() Config {
 			Reasoning:  ReasoningOff,
 			ReviewMode: ReviewMutable,
 			WordWrap:   80,
-			Fanciness:  10,
 			StatusText: "Generating",
 			MCPTimeout: 15 * time.Second,
 			BuiltinTools: BuiltinToolsConfig{

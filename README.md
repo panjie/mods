@@ -282,7 +282,6 @@ Run `mods --help` for generated help. Current options include:
 - `--dirs`: Print data/config directories used by Mods
 - `--reset-settings`: Back up the old settings file and reset to defaults
 - `--theme`: Form theme; valid choices are `charm`, `catppuccin`, `dracula`, and `base16`
-- `--fanciness`: Desired level of fanciness
 - `-e`, `--editor`: Edit the prompt in `$EDITOR` when there are no args and stdin is a TTY
 - `-h`, `--help`: Show help and exit
 - `-v`, `--version`: Show version and exit

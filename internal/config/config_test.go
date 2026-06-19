@@ -32,13 +32,11 @@ func TestConfig(t *testing.T) {
 
 func TestDefaultConfigDisplay(t *testing.T) {
 	cfg := defaultConfig()
-	require.Equal(t, uint(10), cfg.Fanciness)
 	require.Equal(t, "Generating", cfg.StatusText)
 
 	var fromYAML Config
 	fromYAML.PersistentConfig = defaultConfig().PersistentConfig
 	require.NoError(t, yaml.Unmarshal([]byte("minimal: true"), &fromYAML))
-	require.Equal(t, uint(10), fromYAML.Fanciness)
 	require.Equal(t, "Generating", fromYAML.StatusText)
 }
 

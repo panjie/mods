@@ -284,7 +284,6 @@ func initFlags() {
 	flags.StringArrayVar(&config.Stop, "stop", config.Stop, StdoutStyles().FlagDesc.Render(Help["stop"]))
 	flags.Float64Var(&config.TopP, "topp", config.TopP, StdoutStyles().FlagDesc.Render(Help["topp"]))
 	flags.Int64Var(&config.TopK, "topk", config.TopK, StdoutStyles().FlagDesc.Render(Help["topk"]))
-	flags.UintVar(&config.Fanciness, "fanciness", config.Fanciness, StdoutStyles().FlagDesc.Render(Help["fanciness"]))
 	flags.StringVar(&config.StatusText, "status-text", config.StatusText, StdoutStyles().FlagDesc.Render(Help["status-text"]))
 	flags.BoolVar(&config.NoCache, "no-cache", config.NoCache, StdoutStyles().FlagDesc.Render(Help["no-cache"]))
 	flags.BoolVar(&config.ResetSettings, "reset-settings", config.ResetSettings, StdoutStyles().FlagDesc.Render(Help["reset-settings"]))

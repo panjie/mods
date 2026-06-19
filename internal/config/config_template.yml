@@ -51,9 +51,6 @@ word-wrap: 80
 # {{ index .Help "theme" }}
 theme: charm
 
-# {{ index .Help "fanciness" }}
-fanciness: 10
-
 # {{ index .Help "status-text" }}
 status-text: Generating
 

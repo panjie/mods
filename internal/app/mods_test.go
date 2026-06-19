@@ -567,7 +567,7 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 
 	t.Run("response state before output renders fancy animation prefix", func(t *testing.T) {
 		m := newTestMods()
-		m.Config = &Config{PersistentConfig: PersistentConfig{Fanciness: 10, StatusText: "Generating"}}
+		m.Config = &Config{PersistentConfig: PersistentConfig{StatusText: "Generating"}}
 		m.anim = staticModel("***** Generating")
 		m.state = responseState
 

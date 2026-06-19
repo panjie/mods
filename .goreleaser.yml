@@ -13,17 +13,21 @@ builds:
     ldflags:
       - -s -w -X main.Version=v{{ .Version }} -X main.CommitSHA={{ .FullCommit }}
     goos:
+      - linux
+      - darwin
       - windows
     goarch:
       - amd64
       - arm64
 
 archives:
-  - id: windows
+  - id: binaries
     ids:
       - mods
-    formats:
-      - zip
+    formats: tar.gz
+    format_overrides:
+      - goos: windows
+        formats: zip
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_

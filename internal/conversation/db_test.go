@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 	"modernc.org/sqlite"
 )

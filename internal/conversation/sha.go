@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/charmbracelet/mods/internal/debug"
+	"github.com/panjie/mods/internal/debug"
 )
 
 const (

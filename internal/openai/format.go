@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared/constant"
 )

@@ -15,7 +15,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/duration"
 	"github.com/caarlos0/env/v9"
-	toolregistry "github.com/charmbracelet/mods/internal/tools"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/charmbracelet/x/exp/strings"
 	"gopkg.in/yaml.v3"
 )

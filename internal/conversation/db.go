@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/mods/internal/approval"
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/jmoiron/sqlx"
 	"modernc.org/sqlite"
 )

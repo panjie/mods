@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/charmbracelet/mods/internal/stream"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 )
 
 func (m *Mods) classifyShellCommand(tool, command string) bool {

@@ -3,7 +3,7 @@ package google
 import (
 	"encoding/base64"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func fromProtoMessages(input []proto.Message) []Content {

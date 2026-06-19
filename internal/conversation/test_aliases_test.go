@@ -1,6 +1,6 @@
 package conversation
 
-import "github.com/charmbracelet/mods/internal/approval"
+import "github.com/panjie/mods/internal/approval"
 
 type convoDB = DB
 type ApprovalRule = approval.Rule

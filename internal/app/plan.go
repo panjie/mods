@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/charmbracelet/mods/internal/websearch"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/websearch"
 )
 
 const planSystemPrompt = `You are in PLAN mode. Before executing anything, you must first create a detailed, step-by-step plan for the user to review.

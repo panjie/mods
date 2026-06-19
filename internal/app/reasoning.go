@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/mods/internal/anthropic"
-	"github.com/charmbracelet/mods/internal/cohere"
-	"github.com/charmbracelet/mods/internal/google"
-	"github.com/charmbracelet/mods/internal/ollama"
-	"github.com/charmbracelet/mods/internal/openai"
-	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/charmbracelet/mods/internal/stream"
+	"github.com/panjie/mods/internal/anthropic"
+	"github.com/panjie/mods/internal/cohere"
+	"github.com/panjie/mods/internal/google"
+	"github.com/panjie/mods/internal/ollama"
+	"github.com/panjie/mods/internal/openai"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 )
 
 func (m *Mods) resolveReasoning(

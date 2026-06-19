@@ -1,8 +1,8 @@
 package cli
 
 import (
-	cfgpkg "github.com/charmbracelet/mods/internal/config"
-	"github.com/charmbracelet/mods/internal/conversation"
+	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/conversation"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

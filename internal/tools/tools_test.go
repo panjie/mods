@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func TestRegistry(t *testing.T) {

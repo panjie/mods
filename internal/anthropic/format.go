@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func fromToolSpecs(specs []proto.ToolSpec) []anthropic.ToolUnionParam {

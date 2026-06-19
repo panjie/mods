@@ -17,8 +17,8 @@ import (
 
 	localereader "github.com/mattn/go-localereader"
 
-	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/charmbracelet/mods/internal/websearch"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/websearch"
 )
 
 const (

@@ -11,8 +11,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/charmbracelet/mods/internal/stream"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 )
 
 var _ stream.Client = &Client{}

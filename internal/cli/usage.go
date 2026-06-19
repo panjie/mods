@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/mods/internal/ui"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"

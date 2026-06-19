@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func encodeConversation(messages []proto.Message) ([]byte, error) {

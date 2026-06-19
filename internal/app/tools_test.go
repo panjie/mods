@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	toolregistry "github.com/charmbracelet/mods/internal/tools"
-	"github.com/charmbracelet/mods/internal/websearch"
+	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/websearch"
 )
 
 func TestShouldEnableFilesystemTools(t *testing.T) {

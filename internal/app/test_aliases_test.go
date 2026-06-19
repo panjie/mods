@@ -3,11 +3,11 @@ package app
 import (
 	"testing"
 
-	"github.com/charmbracelet/mods/internal/approval"
-	cfgpkg "github.com/charmbracelet/mods/internal/config"
-	"github.com/charmbracelet/mods/internal/conversation"
-	"github.com/charmbracelet/mods/internal/tooling"
-	"github.com/charmbracelet/mods/internal/ui"
+	"github.com/panjie/mods/internal/approval"
+	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/conversation"
+	"github.com/panjie/mods/internal/tooling"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
 

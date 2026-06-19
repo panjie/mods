@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/charmbracelet/mods/internal/ui"
+	"github.com/panjie/mods/internal/ui"
 )
 
 var debugEnabled atomic.Bool

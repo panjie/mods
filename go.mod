@@ -1,4 +1,4 @@
-module github.com/charmbracelet/mods
+module github.com/panjie/mods
 
 go 1.25.0
 

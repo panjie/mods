@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 )
 
 // Caller executes a tool call.

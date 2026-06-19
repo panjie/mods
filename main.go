@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/charmbracelet/mods/internal/cli"
+	"github.com/panjie/mods/internal/cli"
 )
 
 // Build vars.

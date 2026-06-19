@@ -28,13 +28,13 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("http url", func(t *testing.T) {
-		msg, err := loadMsg(ctx, "http://raw.githubusercontent.com/charmbracelet/mods/main/LICENSE")
+		msg, err := loadMsg(ctx, "http://raw.githubusercontent.com/panjie/mods/main/LICENSE")
 		require.NoError(t, err)
 		require.Contains(t, msg, "MIT License")
 	})
 
 	t.Run("https url", func(t *testing.T) {
-		msg, err := loadMsg(ctx, "https://raw.githubusercontent.com/charmbracelet/mods/main/LICENSE")
+		msg, err := loadMsg(ctx, "https://raw.githubusercontent.com/panjie/mods/main/LICENSE")
 		require.NoError(t, err)
 		require.Contains(t, msg, "MIT License")
 	})

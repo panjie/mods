@@ -18,10 +18,10 @@ import (
 
 	"github.com/caarlos0/go-shellwords"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/mods/internal/proto"
-	"github.com/charmbracelet/mods/internal/stream"
-	toolregistry "github.com/charmbracelet/mods/internal/tools"
-	"github.com/charmbracelet/mods/internal/websearch"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
+	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/websearch"
 )
 
 type number interface{ int64 | float64 }

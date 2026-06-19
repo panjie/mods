@@ -3,7 +3,7 @@ package openai
 import (
 	"testing"
 
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func TestStripSchema(t *testing.T) {

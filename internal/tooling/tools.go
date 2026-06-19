@@ -6,10 +6,10 @@ import (
 	"runtime"
 	"strings"
 
-	cfgpkg "github.com/charmbracelet/mods/internal/config"
-	"github.com/charmbracelet/mods/internal/mcpclient"
-	toolregistry "github.com/charmbracelet/mods/internal/tools"
-	"github.com/charmbracelet/mods/internal/websearch"
+	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/mcpclient"
+	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/websearch"
 )
 
 var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[\w./-]+|[\w.-]+\.(go|ts|tsx|js|jsx|py|rs|java|c|cc|cpp|h|hpp|md|txt|json|yaml|yml|toml|mod|sum|sh|sql))($|\s|[,.，。:：;；])`)

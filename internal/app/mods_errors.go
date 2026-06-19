@@ -8,7 +8,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/mods/internal/google"
+	"github.com/panjie/mods/internal/google"
 	"github.com/cohere-ai/cohere-go/v2/core"
 	"github.com/ollama/ollama/api"
 	"github.com/openai/openai-go"

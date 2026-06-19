@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/mods/internal/clipboard"
-	imageutil "github.com/charmbracelet/mods/internal/image"
-	"github.com/charmbracelet/mods/internal/proto"
+	"github.com/panjie/mods/internal/clipboard"
+	imageutil "github.com/panjie/mods/internal/image"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func (m *Mods) setupStreamContext(content string, mod Model) error {

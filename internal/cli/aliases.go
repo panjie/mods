@@ -1,13 +1,13 @@
 package cli
 
-import "github.com/charmbracelet/mods/internal/apperr"
-import "github.com/charmbracelet/mods/internal/app"
-import cfgpkg "github.com/charmbracelet/mods/internal/config"
-import "github.com/charmbracelet/mods/internal/conversation"
-import debugpkg "github.com/charmbracelet/mods/internal/debug"
-import "github.com/charmbracelet/mods/internal/mcpclient"
-import "github.com/charmbracelet/mods/internal/platform"
-import "github.com/charmbracelet/mods/internal/ui"
+import "github.com/panjie/mods/internal/apperr"
+import "github.com/panjie/mods/internal/app"
+import cfgpkg "github.com/panjie/mods/internal/config"
+import "github.com/panjie/mods/internal/conversation"
+import debugpkg "github.com/panjie/mods/internal/debug"
+import "github.com/panjie/mods/internal/mcpclient"
+import "github.com/panjie/mods/internal/platform"
+import "github.com/panjie/mods/internal/ui"
 
 type modsError = apperr.Error
 type Config = cfgpkg.Config

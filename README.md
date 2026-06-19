@@ -45,19 +45,18 @@ It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
 This fork is available from its own Homebrew tap:
 
 ```sh
-brew install panjie/mods/mods
+brew install panjie/tap/mods
 ```
 
 Or tap the repository first:
 
 ```sh
-brew tap panjie/mods
-brew install panjie/mods/mods
+brew tap panjie/tap
+brew install mods
 ```
 
 `homebrew/core` already has a `mods` formula for `charmbracelet/mods`, so use the
-fully qualified `panjie/mods/mods` name to install this actively maintained
-fork.
+fully qualified `panjie/tap/mods` name if you want to avoid ambiguity.
 
 #### Build from source
 

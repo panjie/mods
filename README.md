@@ -40,6 +40,25 @@ It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
 
 ### Installation
 
+#### Homebrew
+
+This fork is available from its own Homebrew tap:
+
+```sh
+brew install panjie/mods/mods
+```
+
+Or tap the repository first:
+
+```sh
+brew tap panjie/mods
+brew install panjie/mods/mods
+```
+
+`homebrew/core` already has a `mods` formula for `charmbracelet/mods`, so use the
+fully qualified `panjie/mods/mods` name to install this actively maintained
+fork.
+
 #### Build from source
 
 Requires Go 1.25 or newer and Mage:

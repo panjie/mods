@@ -222,9 +222,6 @@ result, optionally asking the LLM to format the response as Markdown. This
 gives you a way to "question" the output of a command. Mods will also work on
 standard in or an argument supplied prompt individually.
 
-Be sure to check out the [examples](examples.md) and a list of all the
-[features](features.md).
-
 Mods ships with configuration for OpenAI, Anthropic, Google Gemini, Cohere,
 Azure OpenAI, DeepSeek, OpenRouter, and Ollama. You can configure LocalAI, Groq,
 or any other OpenAI-compatible endpoint in your settings file by running
@@ -238,8 +235,6 @@ identifier and a title (like `git`!).
 <p>
   <img src="assets/conversations.gif" width="900" alt="a GIF listing and showing saved conversations.">
 </p>
-
-Check the [`./features.md`](./features.md) for more details.
 
 ## Pipeline-Friendly Output
 

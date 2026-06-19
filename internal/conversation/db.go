@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/jmoiron/sqlx"
 	"modernc.org/sqlite"
 )
 

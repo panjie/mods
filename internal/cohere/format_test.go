@@ -3,8 +3,8 @@ package cohere
 import (
 	"testing"
 
-	"github.com/panjie/mods/internal/proto"
 	cohere "github.com/cohere-ai/cohere-go/v2"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
 

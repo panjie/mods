@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/ollama/ollama/api"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
-	"github.com/ollama/ollama/api"
 )
 
 var _ stream.Client = &Client{}
@@ -49,30 +49,10 @@ func New(config Config) (*Client, error) {
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
-	b := true
 	s := &Stream{
 		toolCall: request.ToolCaller,
 	}
-	body := api.ChatRequest{
-		Model:    request.Model,
-		Messages: fromProtoMessages(request.Messages),
-		Stream:   &b,
-		Tools:    fromToolSpecs(request.Tools),
-		Options:  map[string]any{},
-	}
-
-	if len(request.Stop) > 0 {
-		body.Options["stop"] = request.Stop[0]
-	}
-	if request.MaxTokens != nil {
-		body.Options["num_ctx"] = *request.MaxTokens
-	}
-	if request.Temperature != nil {
-		body.Options["temperature"] = *request.Temperature
-	}
-	if request.TopP != nil {
-		body.Options["top_p"] = *request.TopP
-	}
+	body := newChatRequest(request)
 	s.request = body
 	s.messages = request.Messages
 	s.factory = func() {
@@ -90,6 +70,31 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	}
 	s.factory()
 	return s
+}
+
+func newChatRequest(request proto.Request) api.ChatRequest {
+	b := true
+	body := api.ChatRequest{
+		Model:    request.Model,
+		Messages: fromProtoMessages(request.Messages),
+		Stream:   &b,
+		Tools:    fromToolSpecs(request.Tools),
+		Options:  map[string]any{},
+	}
+
+	if len(request.Stop) > 0 {
+		body.Options["stop"] = request.Stop
+	}
+	if request.MaxTokens != nil {
+		body.Options["num_predict"] = *request.MaxTokens
+	}
+	if request.Temperature != nil {
+		body.Options["temperature"] = *request.Temperature
+	}
+	if request.TopP != nil {
+		body.Options["top_p"] = *request.TopP
+	}
+	return body
 }
 
 // Stream ollama stream.

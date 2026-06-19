@@ -16,10 +16,10 @@ import (
 )
 
 type providerTest struct {
-	api      string
-	model    string
-	envKey   string
-	baseURL  string
+	api     string
+	model   string
+	envKey  string
+	baseURL string
 }
 
 var providerTests = []providerTest{

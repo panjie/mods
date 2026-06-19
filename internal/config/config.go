@@ -15,8 +15,8 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/duration"
 	"github.com/caarlos0/env/v9"
-	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/charmbracelet/x/exp/strings"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -343,13 +343,13 @@ func Ensure() (Config, error) {
 	c := Default()
 	sp, err := settingsFilePath()
 	if err != nil {
-		return c, modsError{err, "Could not find settings path."}
+		return c, modsError{Err: err, ReasonText: "Could not find settings path."}
 	}
 	c.SettingsPath = sp
 
 	dir := filepath.Dir(sp)
 	if dirErr := os.MkdirAll(dir, 0o700); dirErr != nil { //nolint:mnd
-		return c, modsError{dirErr, "Could not create cache directory."}
+		return c, modsError{Err: dirErr, ReasonText: "Could not create cache directory."}
 	}
 
 	if dirErr := WriteDefaultFile(sp); dirErr != nil {
@@ -357,14 +357,14 @@ func Ensure() (Config, error) {
 	}
 	content, err := os.ReadFile(sp)
 	if err != nil {
-		return c, modsError{err, "Could not read settings file."}
+		return c, modsError{Err: err, ReasonText: "Could not read settings file."}
 	}
 	if err := yaml.Unmarshal(content, &c); err != nil {
-		return c, modsError{err, "Could not parse settings file."}
+		return c, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
 
 	if err := env.ParseWithOptions(&c, env.Options{Prefix: "MODS_"}); err != nil {
-		return c, modsError{err, "Could not parse environment into settings file."}
+		return c, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
 	}
 
 	if c.CachePath == "" {
@@ -375,7 +375,7 @@ func Ensure() (Config, error) {
 		filepath.Join(c.CachePath, "conversations"),
 		0o700,
 	); err != nil { //nolint:mnd
-		return c, modsError{err, "Could not create cache directory."}
+		return c, modsError{Err: err, ReasonText: "Could not create cache directory."}
 	}
 
 	if c.WordWrap < 0 {
@@ -406,7 +406,7 @@ func WriteDefaultFile(path string) error {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return createConfigFile(path)
 	} else if err != nil {
-		return modsError{err, "Could not stat path."}
+		return modsError{Err: err, ReasonText: "Could not stat path."}
 	}
 	return nil
 }
@@ -416,10 +416,10 @@ func createConfigFile(path string) error {
 
 	f, err := os.Create(path)
 	if err != nil {
-		return modsError{err, "Could not create configuration file."}
+		return modsError{Err: err, ReasonText: "Could not create configuration file."}
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
-		return modsError{err, "Could not set configuration file permissions."}
+		return modsError{Err: err, ReasonText: "Could not set configuration file permissions."}
 	}
 	defer func() { _ = f.Close() }()
 
@@ -431,7 +431,7 @@ func createConfigFile(path string) error {
 		Help:   Help,
 	}
 	if err := tmpl.Execute(f, m); err != nil {
-		return modsError{err, "Could not render template."}
+		return modsError{Err: err, ReasonText: "Could not render template."}
 	}
 	return nil
 }

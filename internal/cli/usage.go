@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/panjie/mods/internal/ui"
 	"github.com/muesli/termenv"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
 )

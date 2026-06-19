@@ -4,9 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/panjie/mods/internal/proto"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared/constant"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {

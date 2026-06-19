@@ -8,12 +8,12 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/stream"
 	cohere "github.com/cohere-ai/cohere-go/v2"
 	"github.com/cohere-ai/cohere-go/v2/client"
 	"github.com/cohere-ai/cohere-go/v2/core"
 	"github.com/cohere-ai/cohere-go/v2/option"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 )
 
 var _ stream.Client = &Client{}

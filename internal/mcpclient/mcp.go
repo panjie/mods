@@ -13,14 +13,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
-	"github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
 	"golang.org/x/sync/errgroup"
 )
 

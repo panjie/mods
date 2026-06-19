@@ -119,10 +119,11 @@ Use `mage check` to verify the project compiles, and `mage test` to run the test
 
 #### Install with `go`
 
-Direct `go install` is not currently documented for this fork because `go.mod`
-still uses the upstream module path (`github.com/charmbracelet/mods`). Use the
-source build above until the fork's module path is moved or release binaries are
-published.
+Install the latest version directly:
+
+```sh
+go install github.com/panjie/mods@latest
+```
 
 #### Download binaries
 
@@ -385,7 +386,7 @@ uses the OpenAI API with `gpt-5`:
 
 ```yaml
 default-api: openai
-default-model: gpt-5
+default-model: gpt-5.4
 ```
 
 ### OpenAI

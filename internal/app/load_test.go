@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,14 +31,45 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("http url", func(t *testing.T) {
-		msg, err := loadMsg(ctx, "http://raw.githubusercontent.com/panjie/mods/main/LICENSE")
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("MIT License"))
+		}))
+		defer srv.Close()
+		msg, err := loadMsg(ctx, srv.URL)
 		require.NoError(t, err)
 		require.Contains(t, msg, "MIT License")
 	})
 
 	t.Run("https url", func(t *testing.T) {
-		msg, err := loadMsg(ctx, "https://raw.githubusercontent.com/panjie/mods/main/LICENSE")
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("MIT License"))
+		}))
+		defer srv.Close()
+		oldTransport := http.DefaultTransport
+		http.DefaultTransport = srv.Client().Transport
+		t.Cleanup(func() { http.DefaultTransport = oldTransport })
+		msg, err := loadMsg(ctx, srv.URL)
 		require.NoError(t, err)
 		require.Contains(t, msg, "MIT License")
+	})
+
+	t.Run("http error status", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "missing", http.StatusNotFound)
+		}))
+		defer srv.Close()
+		_, err := loadMsg(ctx, srv.URL)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "HTTP 404")
+	})
+
+	t.Run("http response too large", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("x", maxLoadMsgBytes+1)))
+		}))
+		defer srv.Close()
+		_, err := loadMsg(ctx, srv.URL)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeds")
 	})
 }

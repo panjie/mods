@@ -100,7 +100,7 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 		if cfg.HTTPProxy != "" {
 			proxyURL, err := url.Parse(cfg.HTTPProxy)
 			if err != nil {
-				return modsError{err, "There was an error parsing your proxy URL."}
+				return modsError{Err: err, ReasonText: "There was an error parsing your proxy URL."}
 			}
 			httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 			ccfg.HTTPClient = httpClient
@@ -126,7 +126,7 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 
 		ctx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
 		m.addCancel(cancel)
-		registry, err := BuildRegistry(ctx, cfg, wscfg, cfg.Prefix+"\n"+content)
+		registry, err := m.buildToolRegistryForProvider(ctx, cfg, wscfg, cfg.Prefix+"\n"+content, mod.API)
 		if err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 
 		client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
 		if err != nil {
-			return modsError{err, "Could not setup client"}
+			return modsError{Err: err, ReasonText: "Could not setup client"}
 		}
 
 		debugRequest(cfg, &mod, &m.messages, tools, &request)

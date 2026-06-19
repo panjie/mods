@@ -117,12 +117,12 @@ var (
 
 			mods, err := newMods(cmd.Context(), StderrRenderer(), &config, db)
 			if err != nil {
-				return modsError{err, "Couldn't start Bubble Tea program."}
+				return modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 			}
 			p := tea.NewProgram(mods, opts...)
 			m, err := p.Run()
 			if err != nil {
-				return modsError{err, "Couldn't start Bubble Tea program."}
+				return modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 			}
 
 			mods = m.(*Mods)
@@ -160,10 +160,13 @@ var (
 				c.Stdout = os.Stdout
 				c.Stderr = os.Stderr
 				if err := c.Run(); err != nil {
-					return modsError{err, fmt.Sprintf(
-						"Missing %s.",
-						StderrStyles().InlineCode.Render("$EDITOR"),
-					)}
+					return modsError{
+						Err: err,
+						ReasonText: fmt.Sprintf(
+							"Missing %s.",
+							StderrStyles().InlineCode.Render("$EDITOR"),
+						),
+					}
 				}
 
 				if !config.Quiet {
@@ -371,7 +374,7 @@ func execute() {
 	var err error
 	config, err = Ensure()
 	if err != nil {
-		handleError(modsError{err, "Could not load your configuration file."})
+		handleError(modsError{Err: err, ReasonText: "Could not load your configuration file."})
 		if !slices.Contains(os.Args, "--settings") {
 			os.Exit(1)
 		}
@@ -388,7 +391,7 @@ func execute() {
 	if !isCompletionCmd(os.Args) && !isVersionOrHelpCmd(os.Args) {
 		db, err = Open(filepath.Join(config.CachePath, "conversations", "mods.db"))
 		if err != nil {
-			handleError(modsError{err, "Could not open database."})
+			handleError(modsError{Err: err, ReasonText: "Could not open database."})
 			os.Exit(1)
 		}
 		defer db.Close() //nolint:errcheck
@@ -508,32 +511,32 @@ func handleError(err error) {
 func resetSettings() error {
 	_, err := os.Stat(config.SettingsPath)
 	if err != nil {
-		return modsError{err, "Couldn't read config file."}
+		return modsError{Err: err, ReasonText: "Couldn't read config file."}
 	}
 	inputFile, err := os.Open(config.SettingsPath)
 	if err != nil {
-		return modsError{err, "Couldn't open config file."}
+		return modsError{Err: err, ReasonText: "Couldn't open config file."}
 	}
 	defer inputFile.Close() //nolint:errcheck
 	outputFile, err := os.Create(config.SettingsPath + ".bak")
 	if err != nil {
-		return modsError{err, "Couldn't backup config file."}
+		return modsError{Err: err, ReasonText: "Couldn't backup config file."}
 	}
 	defer outputFile.Close() //nolint:errcheck
 	_, err = io.Copy(outputFile, inputFile)
 	if err != nil {
-		return modsError{err, "Couldn't write config file."}
+		return modsError{Err: err, ReasonText: "Couldn't write config file."}
 	}
 	// The copy was successful, so now delete the original file
 	inputFile.Close()
 	outputFile.Close()
 	err = os.Remove(config.SettingsPath)
 	if err != nil {
-		return modsError{err, "Couldn't remove config file."}
+		return modsError{Err: err, ReasonText: "Couldn't remove config file."}
 	}
 	err = WriteDefaultFile(config.SettingsPath)
 	if err != nil {
-		return modsError{err, "Couldn't write new config file."}
+		return modsError{Err: err, ReasonText: "Couldn't write new config file."}
 	}
 	if !config.Quiet {
 		fmt.Fprintln(os.Stderr, "\nSettings restored to defaults!")
@@ -549,7 +552,7 @@ func resetSettings() error {
 func deleteConversationOlderThan() error {
 	conversations, err := db.ListOlderThan(config.DeleteOlderThan)
 	if err != nil {
-		return modsError{err, "Couldn't find conversation to delete."}
+		return modsError{Err: err, ReasonText: "Couldn't find conversation to delete."}
 	}
 
 	if len(conversations) == 0 {
@@ -577,7 +580,7 @@ func deleteConversationOlderThan() error {
 				Description(fmt.Sprintf("This will delete all the %d conversations listed above.", len(conversations))).
 				Value(&confirm),
 		); err != nil {
-			return modsError{err, "Couldn't delete old conversations."}
+			return modsError{Err: err, ReasonText: "Couldn't delete old conversations."}
 		}
 		if !confirm {
 			return newUserErrorf("Aborted by user")
@@ -586,10 +589,10 @@ func deleteConversationOlderThan() error {
 
 	for _, c := range conversations {
 		if err := db.Delete(c.ID); err != nil {
-			return modsError{err, "Couldn't delete conversation."}
+			return modsError{Err: err, ReasonText: "Couldn't delete conversation."}
 		}
 		if err := removeLegacyConversationFile(c.ID); err != nil {
-			return modsError{err, "Couldn't delete legacy conversation data."}
+			return modsError{Err: err, ReasonText: "Couldn't delete legacy conversation data."}
 		}
 
 		if !config.Quiet {
@@ -604,7 +607,7 @@ func deleteConversations() error {
 	for _, del := range config.Delete {
 		convo, err := db.Find(del)
 		if err != nil {
-			return modsError{err, "Couldn't find conversation to delete."}
+			return modsError{Err: err, ReasonText: "Couldn't find conversation to delete."}
 		}
 		if err := deleteConversation(convo); err != nil {
 			return err
@@ -615,10 +618,10 @@ func deleteConversations() error {
 
 func deleteConversation(convo *Conversation) error {
 	if err := db.Delete(convo.ID); err != nil {
-		return modsError{err, "Couldn't delete conversation."}
+		return modsError{Err: err, ReasonText: "Couldn't delete conversation."}
 	}
 	if err := removeLegacyConversationFile(convo.ID); err != nil {
-		return modsError{err, "Couldn't delete legacy conversation data."}
+		return modsError{Err: err, ReasonText: "Couldn't delete legacy conversation data."}
 	}
 
 	if !config.Quiet {
@@ -638,7 +641,7 @@ func removeLegacyConversationFile(id string) error {
 func listConversations(raw bool) error {
 	conversations, err := db.List()
 	if err != nil {
-		return modsError{err, "Couldn't list saves."}
+		return modsError{Err: err, ReasonText: "Couldn't list saves."}
 	}
 
 	if len(conversations) == 0 {
@@ -773,7 +776,7 @@ func saveConversation(mods *Mods) error {
 		mods.Messages(),
 		mods.ApprovalRules(),
 	); err != nil {
-		return modsError{err, errReason}
+		return modsError{Err: err, ReasonText: errReason}
 	}
 
 	if !config.Quiet {

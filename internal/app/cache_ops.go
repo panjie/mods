@@ -2,13 +2,12 @@ package app
 
 import (
 	"bufio"
-	"errors"
 	"io"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/panjie/mods/internal/proto"
 	"github.com/charmbracelet/x/exp/ordered"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func (m *Mods) findCacheOpsDetails() tea.Cmd {
@@ -79,18 +78,17 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 }
 
 func (m *Mods) findReadID(in string) (*Conversation, error) {
-	convo, err := m.db.Find(in)
-	if err == nil {
-		return convo, nil
+	if in != "" {
+		return m.db.Find(in)
 	}
-	if errors.Is(err, ErrNoMatches) && m.Config.Show == "" {
+	if (m.Config.ContinueLast || m.Config.ShowLast || m.Config.Continue != "") && m.Config.Show == "" {
 		convo, err := m.db.FindHEAD()
 		if err != nil {
 			return nil, err
 		}
 		return convo, nil
 	}
-	return nil, err
+	return nil, ErrNoMatches
 }
 
 func (m *Mods) readStdinCmd() tea.Msg {
@@ -98,7 +96,7 @@ func (m *Mods) readStdinCmd() tea.Msg {
 		reader := bufio.NewReader(os.Stdin)
 		stdinBytes, err := io.ReadAll(reader)
 		if err != nil {
-			return modsError{err, "Unable to read stdin."}
+			return modsError{Err: err, ReasonText: "Unable to read stdin."}
 		}
 
 		debug.Printf("Stdin: pipe mode, %d bytes read", len(stdinBytes))
@@ -117,7 +115,7 @@ func (m *Mods) readFromCache() tea.Cmd {
 	return func() tea.Msg {
 		var messages []proto.Message
 		if err := m.db.ReadMessages(m.Config.CacheReadFromID, &messages); err != nil {
-			return modsError{err, "There was an error loading the conversation."}
+			return modsError{Err: err, ReasonText: "There was an error loading the conversation."}
 		}
 
 		m.appendToOutput(proto.Conversation(messages).String())

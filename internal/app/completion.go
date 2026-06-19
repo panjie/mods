@@ -26,6 +26,8 @@ import (
 
 type number interface{ int64 | float64 }
 
+var apiKeyCmdTimeout = 10 * time.Second
+
 func (m *Mods) retry(content string, err modsError) tea.Msg {
 	m.retries++
 	if m.retries >= m.Config.MaxRetries {
@@ -97,7 +99,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		if cfg.HTTPProxy != "" {
 			proxyURL, err := url.Parse(cfg.HTTPProxy)
 			if err != nil {
-				return modsError{err, "There was an error parsing your proxy URL."}
+				return modsError{Err: err, ReasonText: "There was an error parsing your proxy URL."}
 			}
 			httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 			ccfg.HTTPClient = httpClient
@@ -125,7 +127,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 
 		ctx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
 		m.addCancel(cancel)
-		registry, err := BuildRegistry(ctx, cfg, wscfg, cfg.Prefix+"\n"+content)
+		registry, err := m.buildToolRegistryForProvider(ctx, cfg, wscfg, cfg.Prefix+"\n"+content, mod.API)
 		if err != nil {
 			return err
 		}
@@ -198,7 +200,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 
 		client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
 		if err != nil {
-			return modsError{err, "Could not setup client"}
+			return modsError{Err: err, ReasonText: "Could not setup client"}
 		}
 		if mod.API != "anthropic" && mod.API != "google" && mod.API != "cohere" && mod.API != "ollama" {
 			if cfg.Format && cfg.FormatAs == "json" {
@@ -233,13 +235,30 @@ func (m *Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
 	if key == "" && api.APIKeyCmd != "" {
 		args, err := shellwords.Parse(api.APIKeyCmd)
 		if err != nil {
-			return "", modsError{err, "Failed to parse api-key-cmd"}
+			return "", modsError{Err: err, ReasonText: "Failed to parse api-key-cmd"}
 		}
-		cmd := exec.Command(args[0], args[1:]...) //nolint:gosec
+		if len(args) == 0 {
+			return "", modsError{
+				Err:        newUserErrorf("api-key-cmd cannot be empty"),
+				ReasonText: "Failed to parse api-key-cmd",
+			}
+		}
+		cmdCtx, cancel := context.WithTimeout(m.ctx, apiKeyCmdTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(cmdCtx, args[0], args[1:]...) //nolint:gosec
 		HideCommandWindow(cmd)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return "", modsError{err, "Cannot exec api-key-cmd"}
+			if errors.Is(cmdCtx.Err(), context.DeadlineExceeded) {
+				return "", modsError{
+					Err:        fmt.Errorf("api-key-cmd timed out after %s", apiKeyCmdTimeout),
+					ReasonText: "Cannot exec api-key-cmd",
+				}
+			}
+			return "", modsError{
+				Err:        fmt.Errorf("api-key-cmd failed: %w", err),
+				ReasonText: "Cannot exec api-key-cmd",
+			}
 		}
 		key = strings.TrimSpace(string(out))
 	}

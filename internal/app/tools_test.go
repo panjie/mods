@@ -116,3 +116,45 @@ func TestToolCallContextTimeoutPolicy(t *testing.T) {
 		t.Fatal("caller-timed tool context should use mcp-timeout deadline")
 	}
 }
+
+func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
+	t.Run("implicit auto filesystem is skipped", func(t *testing.T) {
+		cfg := defaultConfig()
+		cfg.BuiltinTools.Filesystem = FilesystemAuto
+		mods := &Mods{ctx: context.Background()}
+		registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "read README.md", "google")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if registry.Len() != 0 {
+			t.Fatalf("expected no tools for unsupported provider, got %d", registry.Len())
+		}
+	})
+
+	t.Run("explicit tools error", func(t *testing.T) {
+		cfg := defaultConfig()
+		cfg.WebSearch = true
+		mods := &Mods{ctx: context.Background()}
+		_, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{Enabled: true}, "hello", "cohere")
+		if err == nil {
+			t.Fatal("expected explicit tools to fail for unsupported provider")
+		}
+	})
+
+	t.Run("supported providers keep tools", func(t *testing.T) {
+		for _, provider := range []string{"openai", "anthropic", "ollama"} {
+			t.Run(provider, func(t *testing.T) {
+				cfg := defaultConfig()
+				cfg.BuiltinTools.Filesystem = FilesystemAlways
+				mods := &Mods{ctx: context.Background()}
+				registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "hello", provider)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if registry.Len() == 0 {
+					t.Fatal("expected tools for supported provider")
+				}
+			})
+		}
+	})
+}

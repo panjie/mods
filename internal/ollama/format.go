@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/panjie/mods/internal/proto"
 	"github.com/ollama/ollama/api"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func fromToolSpecs(specs []proto.ToolSpec) []api.Tool {

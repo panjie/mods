@@ -1,8 +1,8 @@
 package cohere
 
 import (
-	"github.com/panjie/mods/internal/proto"
 	cohere "github.com/cohere-ai/cohere-go/v2"
+	"github.com/panjie/mods/internal/proto"
 )
 
 func fromProtoMessages(input []proto.Message) (history []*cohere.Message, message string) {

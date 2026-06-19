@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/stream"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/azure"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/shared"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 )
 
 const ReasoningEffortMedium = shared.ReasoningEffortMedium

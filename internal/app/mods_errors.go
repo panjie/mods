@@ -8,10 +8,10 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/panjie/mods/internal/google"
 	"github.com/cohere-ai/cohere-go/v2/core"
 	"github.com/ollama/ollama/api"
 	"github.com/openai/openai-go"
+	"github.com/panjie/mods/internal/google"
 )
 
 func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg {
@@ -46,10 +46,13 @@ func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg 
 		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
 	}
 	debug.Printf("Request error (non-API): %v", err)
-	return modsError{err, fmt.Sprintf(
-		"There was a problem with the %s API request.",
-		mod.API,
-	)}
+	return modsError{
+		Err: err,
+		ReasonText: fmt.Sprintf(
+			"There was a problem with the %s API request.",
+			mod.API,
+		),
+	}
 }
 
 func (m *Mods) handleAPIError(err *openai.Error, mod Model, content string) tea.Msg {

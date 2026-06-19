@@ -100,7 +100,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 
 	origLen := int64(len(content))
-	if !cfg.NoLimit && origLen > mod.MaxChars {
+	if !cfg.NoLimit && mod.MaxChars > 0 && origLen > mod.MaxChars {
 		end := int(mod.MaxChars)
 		for end > 0 && !utf8.RuneStart(content[end]) {
 			end--
@@ -114,7 +114,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 	if origLen > 0 {
 		truncNote := ""
-		if !cfg.NoLimit && origLen > mod.MaxChars {
+		if !cfg.NoLimit && mod.MaxChars > 0 && origLen > mod.MaxChars {
 			truncNote = fmt.Sprintf(" (truncated from %d to %d chars, max-input-chars=%d)", origLen, len(content), mod.MaxChars)
 		}
 		debug.Printf("  User message (%d chars): %s%s", len(content), debug.Truncate(strings.ReplaceAll(content, "\n", "\\n"), 300), truncNote)

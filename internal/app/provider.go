@@ -30,7 +30,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 	case "anthropic":
 		key, err := m.ensureKey(api, "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys")
 		if err != nil {
-			return cfgs, modsError{err, "Anthropic authentication failed"}
+			return cfgs, modsError{Err: err, ReasonText: "Anthropic authentication failed"}
 		}
 		cfgs.Anthropic = anthropic.DefaultConfig(key)
 		if api.BaseURL != "" {
@@ -39,14 +39,14 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 	case "google":
 		key, err := m.ensureKey(api, "GOOGLE_API_KEY", "https://aistudio.google.com/app/apikey")
 		if err != nil {
-			return cfgs, modsError{err, "Google authentication failed"}
+			return cfgs, modsError{Err: err, ReasonText: "Google authentication failed"}
 		}
 		cfgs.Google = google.DefaultConfig(mod.Name, key)
 		cfgs.Google.ThinkingBudget = mod.ThinkingBudget
 	case "cohere":
 		key, err := m.ensureKey(api, "COHERE_API_KEY", "https://dashboard.cohere.com/api-keys")
 		if err != nil {
-			return cfgs, modsError{err, "Cohere authentication failed"}
+			return cfgs, modsError{Err: err, ReasonText: "Cohere authentication failed"}
 		}
 		cfgs.Cohere = cohere.DefaultConfig(key)
 		if api.BaseURL != "" {
@@ -55,7 +55,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 	case "azure", "azure-ad":
 		key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
 		if err != nil {
-			return cfgs, modsError{err, "Azure authentication failed"}
+			return cfgs, modsError{Err: err, ReasonText: "Azure authentication failed"}
 		}
 		cfgs.OpenAI = openai.Config{
 			AuthToken: key,
@@ -69,7 +69,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 	default:
 		key, err := m.ensureKey(api, "OPENAI_API_KEY", "https://platform.openai.com/account/api-keys")
 		if err != nil {
-			return cfgs, modsError{err, "OpenAI authentication failed"}
+			return cfgs, modsError{Err: err, ReasonText: "OpenAI authentication failed"}
 		}
 		cfgs.OpenAI = openai.Config{
 			AuthToken: key,

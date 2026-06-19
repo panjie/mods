@@ -374,7 +374,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.glamViewport.Width = m.width
 		m.glamViewport.Height = m.height
 		return m, nil
-		case tea.KeyMsg:
+	case tea.KeyMsg:
 		if m.state == planState && strings.TrimSpace(m.planContent) != "" {
 			switch msg.String() {
 			case "y", "Y":

@@ -112,6 +112,17 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Empty(t, dets.Title)
 	})
 
+	t.Run("continue explicit missing target does not fall back to head", func(t *testing.T) {
+		mods := newMods(t)
+		id := newConversationID()
+		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
+		mods.Config.Continue = "missing-title"
+		mods.Config.Prefix = "prompt"
+		msg := mods.findCacheOpsDetails()()
+		_, ok := msg.(modsError)
+		require.True(t, ok, "expected missing explicit continue target to fail")
+	})
+
 	t.Run("continue title", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
@@ -137,18 +148,15 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Empty(t, dets.Title)
 	})
 
-	t.Run("continue last with name", func(t *testing.T) {
+	t.Run("continue missing name fails", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "message 2"
 		mods.Config.Prefix = "prompt"
 		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
-		require.Equal(t, id, dets.ReadID)
-		require.Equal(t, "message 2", dets.Title)
-		require.NotEmpty(t, dets.WriteID)
-		require.Equal(t, id, dets.WriteID)
+		_, ok := msg.(modsError)
+		require.True(t, ok, "expected missing explicit continue target to fail")
 	})
 
 	t.Run("write", func(t *testing.T) {
@@ -242,6 +250,20 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Empty(t, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
 	})
+}
+
+func TestSetupStreamContextDoesNotTruncateWhenMaxCharsUnset(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.MaxInputChars = 0
+	cfg.FormatText = defaultConfig().FormatText
+	mods := &Mods{
+		ctx:    context.Background(),
+		db:     testDB(t),
+		Config: &cfg,
+	}
+	require.NoError(t, mods.setupStreamContext("hello world", Model{}))
+	require.NotEmpty(t, mods.messages)
+	require.Equal(t, "hello world", mods.messages[len(mods.messages)-1].Content)
 }
 
 func TestRemoveWhitespace(t *testing.T) {

@@ -141,6 +141,21 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		if err := m.setupStreamContext(content, mod); err != nil {
 			return err
 		}
+
+		if m.planContent != "" {
+			planMsg := proto.Message{
+				Role:    proto.RoleSystem,
+				Content: "The user has approved the following plan for execution:\n\n" + m.planContent,
+			}
+			if len(m.messages) > 0 {
+				last := m.messages[len(m.messages)-1]
+				m.messages = append(m.messages[:len(m.messages)-1], planMsg, last)
+			} else {
+				m.messages = append(m.messages, planMsg)
+			}
+			m.planContent = ""
+		}
+
 		if mod.API == "cohere" {
 			for _, msg := range m.messages {
 				if len(msg.Images) > 0 {

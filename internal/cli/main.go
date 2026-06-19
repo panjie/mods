@@ -293,6 +293,7 @@ func initFlags() {
 	flags.BoolVar(&config.ListRoles, "list-roles", config.ListRoles, StdoutStyles().FlagDesc.Render(Help["list-roles"]))
 	flags.StringVar(&config.Theme, "theme", config.Theme, StdoutStyles().FlagDesc.Render(Help["theme"]))
 	flags.BoolVarP(&config.OpenEditor, "editor", "e", false, StdoutStyles().FlagDesc.Render(Help["editor"]))
+	flags.BoolVar(&config.Plan, "plan", config.Plan, StdoutStyles().FlagDesc.Render(Help["plan"]))
 	flags.BoolVar(&config.MCPList, "mcp-list", false, StdoutStyles().FlagDesc.Render(Help["mcp-list"]))
 	flags.BoolVar(&config.MCPListTools, "mcp-list-tools", false, StdoutStyles().FlagDesc.Render(Help["mcp-list-tools"]))
 	flags.StringArrayVar(&config.MCPDisable, "mcp-disable", nil, StdoutStyles().FlagDesc.Render(Help["mcp-disable"]))

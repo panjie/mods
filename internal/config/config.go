@@ -113,6 +113,7 @@ var Help = map[string]string{
 	"review":                "Review tool execution before running: never, mutable (default), or always",
 	"shell-classify-prompt": "Custom prompt for classifying whether a shell command needs review; defaults to built-in prompt when unset",
 	"workspace":             "Set the workspace root for filesystem tools and shell, resolving relative paths from the current working directory",
+	"plan":                  "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
 
 // Model represents the LLM model used in the API call.
@@ -235,6 +236,7 @@ type Config struct {
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
 	AskModel        bool
+	Plan            bool
 	ShowHelp        bool
 	ResetSettings   bool
 	Version         bool

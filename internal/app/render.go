@@ -20,6 +20,27 @@ func (m *Mods) View() string {
 	switch m.state {
 	case errorState:
 		return ""
+	case planState:
+		if m.feedbackMode {
+			content := m.glamOutput
+			if content == "" {
+				content = m.Output
+			}
+			return m.renderPlanFeedbackInput(content)
+		}
+		if strings.TrimSpace(m.planContent) != "" {
+			content := m.glamOutput
+			if content == "" {
+				content = m.Output
+			}
+			if m.viewportNeeded() {
+				return m.renderPlanReviewBanner(m.glamViewport.View())
+			}
+			return m.renderPlanReviewBanner(content)
+		}
+		if !m.Config.Quiet {
+			return m.renderWithOperation(m.anim.View())
+		}
 	case requestState:
 		if !m.Config.Quiet {
 			return m.renderWithOperation(m.anim.View())

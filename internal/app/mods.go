@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -21,6 +22,7 @@ type state int
 const (
 	startState state = iota
 	configLoadedState
+	planState
 	requestState
 	responseState
 	doneState
@@ -72,6 +74,12 @@ type Mods struct {
 	ctx context.Context
 
 	reviewer *toolReviewer
+
+	planContent string
+	planRetries int
+
+	feedbackInput textinput.Model
+	feedbackMode  bool
 }
 
 func New(
@@ -132,6 +140,36 @@ func (m *Mods) Init() tea.Cmd {
 // Update implements tea.Model.
 func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	if m.feedbackMode {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "enter":
+				m.feedbackMode = false
+				feedback := strings.TrimSpace(m.feedbackInput.Value())
+				if feedback == "" {
+					return m, nil
+				}
+				return m, msgCmd(planModifyMsg{
+					feedback: feedback,
+					plan:     m.planContent,
+				})
+			case "esc":
+				m.feedbackMode = false
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.feedbackInput, cmd = m.feedbackInput.Update(msg)
+				return m, cmd
+			}
+		default:
+			var cmd tea.Cmd
+			m.feedbackInput, cmd = m.feedbackInput.Update(msg)
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case cacheDetailsMsg:
 		m.Config.CacheWriteToID = msg.WriteID
@@ -195,22 +233,38 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.appendToOutput(strings.Join(parts, "\n") + "\n")
 		}
-		m.state = requestState
-		cmds = append(cmds, m.startCompletionCmd(msg.content))
+
+		if m.Config.Plan {
+			m.state = planState
+			m.planRetries = 0
+			cmds = append(cmds, m.startPlanCmd(msg.content))
+		} else {
+			m.state = requestState
+			cmds = append(cmds, m.startCompletionCmd(msg.content))
+		}
 	case completionOutput:
 		if msg.stream == nil {
+			if m.Config.Plan {
+				return m, msgCmd(planCompleteMsg{plan: m.Output})
+			}
 			m.state = doneState
 			return m, m.quit
 		}
 		if msg.content != "" {
 			m.responseOutputStarted = true
-			if m.reasoningActive {
+			if m.Config.Plan {
+				m.setActiveOperation("Planning...")
+			} else if m.reasoningActive {
 				m.setActiveOperation("Deep reasoning...")
 			} else {
 				m.setActiveOperation("")
 			}
 			m.appendToOutput(msg.content)
-			m.state = responseState
+			if m.Config.Plan {
+				m.state = planState
+			} else {
+				m.state = responseState
+			}
 		}
 		cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
 			stream: msg.stream,
@@ -221,7 +275,11 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setToolOperationChannel(ch)
 		m.setActiveOperation("Running tools")
 		m.state = responseState
-		cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.reviewer.startSession(), m.callToolsCmd(msg, ch))
+		if m.Config.Plan {
+			cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.callToolsCmd(msg, ch))
+		} else {
+			cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.reviewer.startSession(), m.callToolsCmd(msg, ch))
+		}
 	case toolOperationStatusMsg:
 		if msg.done {
 			m.setActiveOperation("")
@@ -236,7 +294,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setActiveOperation("")
 	case toolCallsOutput:
 		m.setActiveOperation("")
-		m.reviewer.reset()
+		if !m.Config.Plan {
+			m.reviewer.reset()
+		}
 		toolMsg := completionOutput{
 			stream: msg.stream,
 			errh:   msg.errh,
@@ -264,6 +324,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toolCallRounds = 0
 			m.totalRounds = 0
 			m.setActiveOperation(m.Config.StatusText)
+			if m.Config.Plan {
+				return m, msgCmd(planCompleteMsg{plan: m.Output})
+			}
 			return m, msgCmd(completionOutput{errh: msg.errh})
 		}
 		m.totalRounds++
@@ -282,6 +345,38 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
 		return m, msgCmd(toolMsg)
+	case planCompleteMsg:
+		m.planContent = msg.plan
+		m.setActiveOperation("")
+		m.state = planState
+		return m, nil
+	case planApprovedMsg:
+		m.planContent = msg.plan
+		m.Config.Plan = false
+		m.Output = ""
+		m.responseOutputStarted = false
+		m.state = requestState
+		return m, m.startCompletionCmd(m.Input)
+	case planDeniedMsg:
+		m.planRetries++
+		if m.planRetries >= maxPlanRetries {
+			m.state = doneState
+			return m, m.quit
+		}
+		m.Output = ""
+		m.planContent = ""
+		m.state = planState
+		return m, m.startPlanCmd("The previous plan was rejected. Please create a completely different plan.")
+	case planModifyMsg:
+		m.Output = ""
+		m.planContent = ""
+		m.planRetries = 0
+		m.state = planState
+		reviseContent := fmt.Sprintf(
+			"Revise the plan based on this feedback: %s\n\nFor reference, the previous plan was:\n%s",
+			msg.feedback, msg.plan,
+		)
+		return m, m.startPlanCmd(reviseContent)
 	case modsError:
 		m.Error = &msg
 		m.state = errorState
@@ -291,7 +386,25 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.glamViewport.Width = m.width
 		m.glamViewport.Height = m.height
 		return m, nil
-	case tea.KeyMsg:
+		case tea.KeyMsg:
+		if m.state == planState && strings.TrimSpace(m.planContent) != "" {
+			switch msg.String() {
+			case "y", "Y":
+				return m, msgCmd(planApprovedMsg{plan: m.planContent})
+			case "n", "N":
+				return m, msgCmd(planDeniedMsg{content: m.Config.Prefix})
+			case "m", "M":
+				ti := textinput.New()
+				ti.Placeholder = "Describe changes you want to make to the plan..."
+				ti.Width = max(m.width-4, 20)
+				m.feedbackInput = ti
+				m.feedbackMode = true
+				return m, m.feedbackInput.Focus()
+			case "ctrl+c":
+				m.state = doneState
+				return m, m.quit
+			}
+		}
 		if handled, cmd := m.reviewer.handleKey(msg); handled {
 			return m, cmd
 		}
@@ -320,6 +433,7 @@ func (m *Mods) shouldUpdateAnimation() bool {
 	return !m.Config.Quiet &&
 		m.anim != nil &&
 		(m.state == configLoadedState ||
+			(m.state == planState && m.planContent == "") ||
 			m.state == requestState ||
 			(m.state == responseState && !m.responseOutputStarted))
 }

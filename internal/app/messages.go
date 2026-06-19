@@ -89,3 +89,20 @@ type reviewResponse struct {
 type stdinImageInput struct {
 	data []byte
 }
+
+type planCompleteMsg struct {
+	plan string
+}
+
+type planApprovedMsg struct {
+	plan string
+}
+
+type planDeniedMsg struct {
+	content string
+}
+
+type planModifyMsg struct {
+	feedback string
+	plan     string
+}

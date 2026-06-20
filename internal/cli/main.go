@@ -306,7 +306,8 @@ func initFlags() {
 	flags.BoolVar(&config.ClipboardImage, "clipboard-image", config.ClipboardImage, StdoutStyles().FlagDesc.Render(Help["clipboard-image"]))
 	flags.BoolVarP(&config.Debug, "debug", "D", config.Debug, StdoutStyles().FlagDesc.Render(Help["debug"]))
 	flags.IntVar(&config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds, StdoutStyles().FlagDesc.Render(Help["max-tool-rounds"]))
-	flags.VarP(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", StdoutStyles().FlagDesc.Render(Help["reasoning"]))
+	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", StdoutStyles().FlagDesc.Render(Help["reasoning"]))
+	f.NoOptDefVal = "on"
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", StdoutStyles().FlagDesc.Render(Help["review"]))
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")

@@ -58,8 +58,9 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			return cfgs, modsError{Err: err, ReasonText: "Azure authentication failed"}
 		}
 		cfgs.OpenAI = openai.Config{
-			AuthToken: key,
-			BaseURL:   api.BaseURL,
+			AuthToken:   key,
+			BaseURL:     api.BaseURL,
+			ExtraParams: mod.ExtraParams,
 		}
 		if mod.API == "azure-ad" {
 			cfgs.OpenAI.APIType = "azure-ad"
@@ -72,8 +73,9 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			return cfgs, modsError{Err: err, ReasonText: "OpenAI authentication failed"}
 		}
 		cfgs.OpenAI = openai.Config{
-			AuthToken: key,
-			BaseURL:   api.BaseURL,
+			AuthToken:   key,
+			BaseURL:     api.BaseURL,
+			ExtraParams: mod.ExtraParams,
 		}
 	}
 	return cfgs, nil

@@ -278,4 +278,7 @@ apis:
   #   models:
   #     your-model:
   #       aliases: ["ym"]
+  #       extra-params:   # pass arbitrary fields to the API request body
+  #         thinking:
+  #           type: disabled
   #       max-input-chars: 100000

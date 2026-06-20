@@ -120,7 +120,8 @@ type Model struct {
 	MaxChars       int64    `yaml:"max-input-chars"`
 	Aliases        []string `yaml:"aliases"`
 	Fallback       string   `yaml:"fallback"`
-	ThinkingBudget int      `yaml:"thinking-budget,omitempty"`
+	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
+	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
 }
 
 // API represents an API endpoint and its models.

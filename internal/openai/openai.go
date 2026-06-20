@@ -34,6 +34,7 @@ type Config struct {
 	}
 	APIType         string
 	ReasoningEffort shared.ReasoningEffort
+	ExtraParams     map[string]any
 }
 
 // DefaultConfig returns the default configuration for the OpenAI API client.
@@ -103,14 +104,19 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		}
 	}
 
+	opts := make([]option.RequestOption, 0, len(c.config.ExtraParams)*2)
+	flattenMap("", c.config.ExtraParams, func(k string, v any) {
+		opts = append(opts, option.WithJSONSet(k, v))
+	})
+
 	s := &Stream{
-		stream:   c.Chat.Completions.NewStreaming(ctx, body),
+		stream:   c.Chat.Completions.NewStreaming(ctx, body, opts...),
 		request:  body,
 		toolCall: request.ToolCaller,
 		messages: request.Messages,
 	}
 	s.factory = func() *ssestream.Stream[openai.ChatCompletionChunk] {
-		return c.Chat.Completions.NewStreaming(ctx, s.request)
+		return c.Chat.Completions.NewStreaming(ctx, s.request, opts...)
 	}
 	return s
 }
@@ -196,4 +202,19 @@ func (s *Stream) Next() bool {
 	}
 
 	return false
+}
+
+func flattenMap(prefix string, m map[string]any, fn func(k string, v any)) {
+	for k, v := range m {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+		switch val := v.(type) {
+		case map[string]any:
+			flattenMap(key, val, fn)
+		default:
+			fn(key, val)
+		}
+	}
 }

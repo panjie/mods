@@ -1,0 +1,97 @@
+// Package cli flag registration helpers and shared flag-name constants.
+package cli
+
+import "github.com/spf13/pflag"
+
+// Names of session-action flags. These are the flags that select a single
+// side-effect (open settings, list/delete/show conversations, MCP listing,
+// reset settings) instead of starting a chat. They are mutually exclusive with
+// each other and several of them share completion/suggestion logic, so the
+// canonical lists live here to avoid the four-way duplication that previously
+// existed between initFlags, MarkFlagsMutuallyExclusive, isNoArgs and
+// selectFromList.
+const (
+	flagSettings      = "settings"
+	flagShow          = "show"
+	flagShowLast      = "show-last"
+	flagDelete        = "delete"
+	flagDeleteOlder   = "delete-older-than"
+	flagList          = "list"
+	flagContinue      = "continue"
+	flagContinueLast  = "continue-last"
+	flagResetSettings = "reset-settings"
+	flagMCPList       = "mcp-list"
+	flagMCPListTools  = "mcp-list-tools"
+)
+
+// sessionActionFlags are mutually exclusive: at most one may be passed per
+// invocation. MarkFlagsMutuallyExclusive consumes this slice verbatim.
+var sessionActionFlags = []string{
+	flagSettings,
+	flagShow,
+	flagShowLast,
+	flagDelete,
+	flagDeleteOlder,
+	flagList,
+	flagContinue,
+	flagContinueLast,
+	flagResetSettings,
+	flagMCPList,
+	flagMCPListTools,
+}
+
+// conversationCompleteFlags take a conversation id or title as their value and
+// therefore participate in shell completion and the selectFromList follow-up
+// suggestions.
+var conversationCompleteFlags = []string{
+	flagShow,
+	flagDelete,
+	flagContinue,
+}
+
+// flagDesc renders the help text for a flag from the shared Help map.
+func flagDesc(name string) string {
+	return StdoutStyles().FlagDesc.Render(Help[name])
+}
+
+// regStr registers a string flag with auto-rendered help, optional shorthand.
+func regStr(flags *pflag.FlagSet, p *string, name, short, def string) {
+	if short != "" {
+		flags.StringVarP(p, name, short, def, flagDesc(name))
+		return
+	}
+	flags.StringVar(p, name, def, flagDesc(name))
+}
+
+// regBool registers a bool flag with auto-rendered help, optional shorthand.
+func regBool(flags *pflag.FlagSet, p *bool, name, short string, def bool) {
+	if short != "" {
+		flags.BoolVarP(p, name, short, def, flagDesc(name))
+		return
+	}
+	flags.BoolVar(p, name, def, flagDesc(name))
+}
+
+// regInt registers an int flag with auto-rendered help.
+func regInt(flags *pflag.FlagSet, p *int, name string, def int) {
+	flags.IntVar(p, name, def, flagDesc(name))
+}
+
+// regInt64 registers an int64 flag with auto-rendered help.
+func regInt64(flags *pflag.FlagSet, p *int64, name string, def int64) {
+	flags.Int64Var(p, name, def, flagDesc(name))
+}
+
+// regFloat64 registers a float64 flag with auto-rendered help.
+func regFloat64(flags *pflag.FlagSet, p *float64, name string, def float64) {
+	flags.Float64Var(p, name, def, flagDesc(name))
+}
+
+// regStrArr registers a []string flag with auto-rendered help, optional shorthand.
+func regStrArr(flags *pflag.FlagSet, p *[]string, name, short string, def []string) {
+	if short != "" {
+		flags.StringArrayVarP(p, name, short, def, flagDesc(name))
+		return
+	}
+	flags.StringArrayVar(p, name, def, flagDesc(name))
+}

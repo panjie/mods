@@ -255,65 +255,65 @@ func Run(version, commit string) int {
 
 func initFlags() {
 	flags := rootCmd.Flags()
-	flags.StringVarP(&config.Model, "model", "m", config.Model, StdoutStyles().FlagDesc.Render(Help["model"]))
-	flags.BoolVarP(&config.AskModel, "ask-model", "M", config.AskModel, StdoutStyles().FlagDesc.Render(Help["ask-model"]))
-	flags.StringVarP(&config.API, "api", "a", config.API, StdoutStyles().FlagDesc.Render(Help["api"]))
-	flags.StringVarP(&config.HTTPProxy, "http-proxy", "x", config.HTTPProxy, StdoutStyles().FlagDesc.Render(Help["http-proxy"]))
-	flags.BoolVarP(&config.Format, "format", "f", config.Format, StdoutStyles().FlagDesc.Render(Help["format"]))
-	flags.StringVar(&config.FormatAs, "format-as", config.FormatAs, StdoutStyles().FlagDesc.Render(Help["format-as"]))
-	flags.BoolVar(&config.Minimal, "minimal", config.Minimal, StdoutStyles().FlagDesc.Render(Help["minimal"]))
-	flags.BoolVarP(&config.Raw, "raw", "r", config.Raw, StdoutStyles().FlagDesc.Render(Help["raw"]))
-	flags.StringVarP(&config.Continue, "continue", "c", "", StdoutStyles().FlagDesc.Render(Help["continue"]))
-	flags.BoolVarP(&config.ContinueLast, "continue-last", "C", false, StdoutStyles().FlagDesc.Render(Help["continue-last"]))
-	flags.BoolVarP(&config.List, "list", "l", config.List, StdoutStyles().FlagDesc.Render(Help["list"]))
-	flags.StringVarP(&config.Title, "title", "t", config.Title, StdoutStyles().FlagDesc.Render(Help["title"]))
-	flags.StringArrayVarP(&config.Delete, "delete", "d", config.Delete, StdoutStyles().FlagDesc.Render(Help["delete"]))
-	flags.Var(newDurationFlag(config.DeleteOlderThan, &config.DeleteOlderThan), "delete-older-than", StdoutStyles().FlagDesc.Render(Help["delete-older-than"]))
-	flags.StringVarP(&config.Show, "show", "s", config.Show, StdoutStyles().FlagDesc.Render(Help["show"]))
-	flags.BoolVarP(&config.ShowLast, "show-last", "S", false, StdoutStyles().FlagDesc.Render(Help["show-last"]))
-	flags.BoolVarP(&config.Quiet, "quiet", "q", config.Quiet, StdoutStyles().FlagDesc.Render(Help["quiet"]))
-	flags.BoolVar(&config.HideToolStatus, "hide-tool-status", config.HideToolStatus, StdoutStyles().FlagDesc.Render(Help["hide-tool-status"]))
-	flags.BoolVarP(&config.ShowHelp, "help", "h", false, StdoutStyles().FlagDesc.Render(Help["help"]))
-	flags.BoolVarP(&config.Version, "version", "v", false, StdoutStyles().FlagDesc.Render(Help["version"]))
-	flags.IntVar(&config.MaxRetries, "max-retries", config.MaxRetries, StdoutStyles().FlagDesc.Render(Help["max-retries"]))
-	flags.BoolVar(&config.NoLimit, "no-limit", config.NoLimit, StdoutStyles().FlagDesc.Render(Help["no-limit"]))
-	flags.Int64Var(&config.MaxTokens, "max-tokens", config.MaxTokens, StdoutStyles().FlagDesc.Render(Help["max-tokens"]))
-	flags.IntVar(&config.WordWrap, "word-wrap", config.WordWrap, StdoutStyles().FlagDesc.Render(Help["word-wrap"]))
-	flags.StringVar(&config.BuiltinTools.WorkspaceRoot, "workspace", config.BuiltinTools.WorkspaceRoot, StdoutStyles().FlagDesc.Render(Help["workspace"]))
-	flags.Float64Var(&config.Temperature, "temp", config.Temperature, StdoutStyles().FlagDesc.Render(Help["temp"]))
-	flags.StringArrayVar(&config.Stop, "stop", config.Stop, StdoutStyles().FlagDesc.Render(Help["stop"]))
-	flags.Float64Var(&config.TopP, "topp", config.TopP, StdoutStyles().FlagDesc.Render(Help["topp"]))
-	flags.Int64Var(&config.TopK, "topk", config.TopK, StdoutStyles().FlagDesc.Render(Help["topk"]))
-	flags.StringVar(&config.StatusText, "status-text", config.StatusText, StdoutStyles().FlagDesc.Render(Help["status-text"]))
-	flags.BoolVar(&config.NoCache, "no-cache", config.NoCache, StdoutStyles().FlagDesc.Render(Help["no-cache"]))
-	flags.BoolVar(&config.ResetSettings, "reset-settings", config.ResetSettings, StdoutStyles().FlagDesc.Render(Help["reset-settings"]))
-	flags.BoolVar(&config.Settings, "settings", false, StdoutStyles().FlagDesc.Render(Help["settings"]))
-	flags.BoolVar(&config.Dirs, "dirs", false, StdoutStyles().FlagDesc.Render(Help["dirs"]))
-	flags.StringVarP(&config.Role, "role", "R", config.Role, StdoutStyles().FlagDesc.Render(Help["role"]))
-	flags.BoolVar(&config.ListRoles, "list-roles", config.ListRoles, StdoutStyles().FlagDesc.Render(Help["list-roles"]))
-	flags.StringVar(&config.Theme, "theme", config.Theme, StdoutStyles().FlagDesc.Render(Help["theme"]))
-	flags.BoolVarP(&config.OpenEditor, "editor", "e", false, StdoutStyles().FlagDesc.Render(Help["editor"]))
-	flags.BoolVarP(&config.Plan, "plan", "p", config.Plan, StdoutStyles().FlagDesc.Render(Help["plan"]))
-	flags.BoolVar(&config.MCPList, "mcp-list", false, StdoutStyles().FlagDesc.Render(Help["mcp-list"]))
-	flags.BoolVar(&config.MCPListTools, "mcp-list-tools", false, StdoutStyles().FlagDesc.Render(Help["mcp-list-tools"]))
-	flags.StringArrayVar(&config.MCPDisable, "mcp-disable", nil, StdoutStyles().FlagDesc.Render(Help["mcp-disable"]))
-	flags.StringArrayVar(&config.MCPEnable, "mcp-enable", nil, StdoutStyles().FlagDesc.Render(Help["mcp-enable"]))
-	flags.BoolVar(&config.WebSearch, "web-search", config.WebSearch, StdoutStyles().FlagDesc.Render(Help["web-search"]))
-	flags.StringVar(&config.WebSearchProvider, "web-search-provider", config.WebSearchProvider, StdoutStyles().FlagDesc.Render(Help["web-search-provider"]))
-	flags.StringVar(&config.WebSearchAPIKey, "web-search-api-key", config.WebSearchAPIKey, StdoutStyles().FlagDesc.Render(Help["web-search-api-key"]))
-	flags.StringArrayVarP(&config.Images, "image", "i", config.Images, StdoutStyles().FlagDesc.Render(Help["image"]))
-	flags.BoolVar(&config.StdinImage, "stdin-image", config.StdinImage, StdoutStyles().FlagDesc.Render(Help["stdin-image"]))
-	flags.BoolVar(&config.ClipboardImage, "clipboard-image", config.ClipboardImage, StdoutStyles().FlagDesc.Render(Help["clipboard-image"]))
-	flags.BoolVarP(&config.Debug, "debug", "D", config.Debug, StdoutStyles().FlagDesc.Render(Help["debug"]))
-	flags.IntVar(&config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds, StdoutStyles().FlagDesc.Render(Help["max-tool-rounds"]))
-	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", StdoutStyles().FlagDesc.Render(Help["reasoning"]))
+	regStr(flags, &config.Model, "model", "m", config.Model)
+	regBool(flags, &config.AskModel, "ask-model", "M", config.AskModel)
+	regStr(flags, &config.API, "api", "a", config.API)
+	regStr(flags, &config.HTTPProxy, "http-proxy", "x", config.HTTPProxy)
+	regBool(flags, &config.Format, "format", "f", config.Format)
+	regStr(flags, &config.FormatAs, "format-as", "", config.FormatAs)
+	regBool(flags, &config.Minimal, "minimal", "", config.Minimal)
+	regBool(flags, &config.Raw, "raw", "r", config.Raw)
+	regStr(flags, &config.Continue, "continue", "c", "")
+	regBool(flags, &config.ContinueLast, "continue-last", "C", false)
+	regBool(flags, &config.List, "list", "l", config.List)
+	regStr(flags, &config.Title, "title", "t", config.Title)
+	regStrArr(flags, &config.Delete, "delete", "d", config.Delete)
+	flags.Var(newDurationFlag(config.DeleteOlderThan, &config.DeleteOlderThan), flagDeleteOlder, flagDesc(flagDeleteOlder))
+	regStr(flags, &config.Show, "show", "s", config.Show)
+	regBool(flags, &config.ShowLast, "show-last", "S", false)
+	regBool(flags, &config.Quiet, "quiet", "q", config.Quiet)
+	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
+	regBool(flags, &config.ShowHelp, "help", "h", false)
+	regBool(flags, &config.Version, "version", "v", false)
+	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)
+	regBool(flags, &config.NoLimit, "no-limit", "", config.NoLimit)
+	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
+	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
+	regStr(flags, &config.BuiltinTools.WorkspaceRoot, "workspace", "", config.BuiltinTools.WorkspaceRoot)
+	regFloat64(flags, &config.Temperature, "temp", config.Temperature)
+	regStrArr(flags, &config.Stop, "stop", "", config.Stop)
+	regFloat64(flags, &config.TopP, "topp", config.TopP)
+	regInt64(flags, &config.TopK, "topk", config.TopK)
+	regStr(flags, &config.StatusText, "status-text", "", config.StatusText)
+	regBool(flags, &config.NoCache, "no-cache", "", config.NoCache)
+	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
+	regBool(flags, &config.Settings, "settings", "", false)
+	regBool(flags, &config.Dirs, "dirs", "", false)
+	regStr(flags, &config.Role, "role", "R", config.Role)
+	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
+	regStr(flags, &config.Theme, "theme", "", config.Theme)
+	regBool(flags, &config.OpenEditor, "editor", "e", false)
+	regBool(flags, &config.Plan, "plan", "p", config.Plan)
+	regBool(flags, &config.MCPList, "mcp-list", "", false)
+	regBool(flags, &config.MCPListTools, "mcp-list-tools", "", false)
+	regStrArr(flags, &config.MCPDisable, "mcp-disable", "", nil)
+	regStrArr(flags, &config.MCPEnable, "mcp-enable", "", nil)
+	regBool(flags, &config.WebSearch, "web-search", "", config.WebSearch)
+	regStr(flags, &config.WebSearchProvider, "web-search-provider", "", config.WebSearchProvider)
+	regStr(flags, &config.WebSearchAPIKey, "web-search-api-key", "", config.WebSearchAPIKey)
+	regStrArr(flags, &config.Images, "image", "i", config.Images)
+	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
+	regBool(flags, &config.ClipboardImage, "clipboard-image", "", config.ClipboardImage)
+	regBool(flags, &config.Debug, "debug", "D", config.Debug)
+	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
+	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", flagDesc("reasoning"))
 	f.NoOptDefVal = "on"
-	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", StdoutStyles().FlagDesc.Render(Help["review"]))
+	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", flagDesc("review"))
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")
 
-	for _, name := range []string{"show", "delete", "continue"} {
+	for _, name := range conversationCompleteFlags {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return conversationCompletions(toComplete), cobra.ShellCompDirectiveDefault
 		})
@@ -338,19 +338,7 @@ func initFlags() {
 		config.MCPTimeout = Default().MCPTimeout
 	}
 
-	rootCmd.MarkFlagsMutuallyExclusive(
-		"settings",
-		"show",
-		"show-last",
-		"delete",
-		"delete-older-than",
-		"list",
-		"continue",
-		"continue-last",
-		"reset-settings",
-		"mcp-list",
-		"mcp-list-tools",
-	)
+	rootCmd.MarkFlagsMutuallyExclusive(sessionActionFlags...)
 }
 
 func conversationCompletions(toComplete string) []string {
@@ -719,8 +707,7 @@ func selectFromList(conversations []Conversation) {
 	fmt.Println(StdoutStyles().Comment.Render(
 		"You can use this conversation ID with the following commands:",
 	))
-	suggestions := []string{"show", "continue", "delete"}
-	for _, flag := range suggestions {
+	for _, flag := range conversationCompleteFlags {
 		fmt.Printf(
 			"  %-44s %s\n",
 			StdoutStyles().Flag.Render("--"+flag),
@@ -790,6 +777,11 @@ func saveConversation(mods *Mods) error {
 	return nil
 }
 
+// isNoArgs reports whether the invocation is effectively empty (no prompt and
+// no side-effect action). It deliberately checks Config fields directly rather
+// than scanning sessionActionFlags: it must also consider ListRoles, Dirs and
+// ShowHelp, which are NOT part of the mutually-exclusive action set. Keep this
+// in sync with sessionActionFlags when adding a new session action.
 func isNoArgs() bool {
 	return config.Prefix == "" &&
 		config.Show == "" &&

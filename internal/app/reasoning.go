@@ -48,6 +48,7 @@ func (m *Mods) resolveReasoning(
 		accfgJ.ThinkingBudget = 0
 		ccfgJ := *ccfg
 		ccfgJ.ReasoningEffort = ""
+		clearThinkingFromExtraParams(ccfgJ.ExtraParams)
 		shouldReason := judgeTaskComplexity(judgeCtx, mod, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
 		debug.Printf("Auto judge: reasoning=%v", shouldReason)
 		if shouldReason {
@@ -72,9 +73,48 @@ func applyReasoningConfigs(api string, gccfg *google.Config, accfg *anthropic.Co
 	case api == "cohere" || api == "ollama":
 		debug.Printf("Reasoning: %s does not support reasoning, skipped", api)
 	default:
+		// OpenAI-compatible providers (e.g. MiniMax) inline their reasoning
+		// inside <think>...</think> blocks in the content stream; enable tag
+		// parsing so it gets separated from the answer for distinct styling.
+		ccfg.ThinkTags = true
+		// Anthropic-compatible APIs exposed via OpenAI-compatible interface
+		// (e.g. MiniMax) honor `thinking.type` and ignore OpenAI's
+		// `reasoning_effort`. MiniMax's allowed types are `adaptive` /
+		// `disabled` (Anthropic's `enabled` is rejected), and the
+		// `adaptive` schema does not take `budget_tokens`. If the user has
+		// pre-set `thinking` in extra-params to disable it, flip it to
+		// `adaptive` so that -T / --reasoning on actually turns thinking
+		// on.
+		if thinking, ok := ccfg.ExtraParams["thinking"].(map[string]any); ok {
+			thinking["type"] = "adaptive"
+			delete(thinking, "budget_tokens")
+			ccfg.ExtraParams["thinking"] = thinking
+			debug.Printf("Reasoning: anthropic-style thinking enabled via extra-params, type=adaptive")
+			return
+		}
+		// If the user pinned `reasoning_effort` in extra-params, upgrade it
+		// in-place. extra-params are applied via WithJSONSet *after* the
+		// body is serialized, so they would otherwise override the body
+		// field and silently win.
+		if _, ok := ccfg.ExtraParams["reasoning_effort"]; ok {
+			ccfg.ExtraParams["reasoning_effort"] = string(openai.ReasoningEffortMedium)
+			debug.Printf("Reasoning: extra-params.reasoning_effort upgraded to medium")
+			return
+		}
 		ccfg.ReasoningEffort = openai.ReasoningEffortMedium
 		debug.Printf("Reasoning: openai reasoning_effort=%s", ccfg.ReasoningEffort)
 	}
+}
+
+// clearThinkingFromExtraParams removes anthropic-style `thinking` and any
+// pre-set `reasoning_effort` from extra-params so the auto-judge call does
+// not accidentally inherit the user's reasoning configuration.
+func clearThinkingFromExtraParams(extra map[string]any) {
+	if extra == nil {
+		return
+	}
+	delete(extra, "thinking")
+	delete(extra, "reasoning_effort")
 }
 
 func judgeTaskComplexity(

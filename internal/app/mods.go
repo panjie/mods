@@ -63,6 +63,8 @@ type Mods struct {
 	width                 int
 	height                int
 	showOperationStatus   bool
+	Thought               string
+	thoughtFlushed        bool
 
 	db     *DB
 	Config *Config
@@ -242,7 +244,23 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = doneState
 			return m, m.quit
 		}
+		if msg.thought != "" {
+			m.Thought += msg.thought
+		}
 		if msg.content != "" {
+			// Trim leading whitespace from the very first answer chunk so a
+			// newline left over after a stripped </think> block does not
+			// render as a blank line above the answer.
+			if !m.responseOutputStarted && m.Output == "" {
+				msg.content = strings.TrimLeft(msg.content, "\r\n")
+			}
+			if msg.content == "" {
+				cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
+					stream: msg.stream,
+					errh:   msg.errh,
+				}))
+				break
+			}
 			m.responseOutputStarted = true
 			if m.Config.Plan {
 				m.setActiveOperation("Planning...")
@@ -250,6 +268,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setActiveOperation("Deep reasoning...")
 			} else {
 				m.setActiveOperation("")
+			}
+			if m.reasoningActive && !m.thoughtFlushed {
+				m.flushThought()
 			}
 			m.appendToOutput(msg.content)
 			if m.Config.Plan {
@@ -263,6 +284,11 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			errh:   msg.errh,
 		}))
 	case toolCallsStartMsg:
+		// The model may reason and then immediately call a tool without
+		// emitting any answer text; flush the thought so it is still shown.
+		if m.reasoningActive && !m.thoughtFlushed {
+			m.flushThought()
+		}
 		ch := make(chan toolOperationStatusMsg, 8)
 		m.setToolOperationChannel(ch)
 		m.setActiveOperation("Running tools")

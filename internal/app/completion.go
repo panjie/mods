@@ -50,6 +50,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.cancelMu.Unlock()
 	m.reasoningActive = false
 	m.responseOutputStarted = false
+	m.Thought = ""
+	m.thoughtFlushed = false
 
 	return func() tea.Msg {
 		var mod Model
@@ -295,6 +297,7 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			}
 			return completionOutput{
 				content: chunk.Content,
+				thought: chunk.Thought,
 				stream:  msg.stream,
 				errh:    msg.errh,
 			}

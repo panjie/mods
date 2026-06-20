@@ -3,6 +3,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -35,6 +36,11 @@ type Config struct {
 	APIType         string
 	ReasoningEffort shared.ReasoningEffort
 	ExtraParams     map[string]any
+	// ThinkTags enables splitting <think>...</think> blocks out of the
+	// content stream into the chunk's Thought field. Some OpenAI-compatible
+	// providers (e.g. MiniMax) inline reasoning this way rather than using a
+	// dedicated field.
+	ThinkTags bool
 }
 
 // DefaultConfig returns the default configuration for the OpenAI API client.
@@ -110,10 +116,11 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	})
 
 	s := &Stream{
-		stream:   c.Chat.Completions.NewStreaming(ctx, body, opts...),
-		request:  body,
-		toolCall: request.ToolCaller,
-		messages: request.Messages,
+		stream:     c.Chat.Completions.NewStreaming(ctx, body, opts...),
+		request:    body,
+		toolCall:   request.ToolCaller,
+		messages:   request.Messages,
+		parseThink: c.config.ThinkTags,
 	}
 	s.factory = func() *ssestream.Stream[openai.ChatCompletionChunk] {
 		return c.Chat.Completions.NewStreaming(ctx, s.request, opts...)
@@ -123,13 +130,15 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 // Stream openai stream.
 type Stream struct {
-	done     bool
-	request  openai.ChatCompletionNewParams
-	stream   *ssestream.Stream[openai.ChatCompletionChunk]
-	factory  func() *ssestream.Stream[openai.ChatCompletionChunk]
-	message  openai.ChatCompletionAccumulator
-	messages []proto.Message
-	toolCall func(name string, data []byte) (string, error)
+	done       bool
+	request    openai.ChatCompletionNewParams
+	stream     *ssestream.Stream[openai.ChatCompletionChunk]
+	factory    func() *ssestream.Stream[openai.ChatCompletionChunk]
+	message    openai.ChatCompletionAccumulator
+	messages   []proto.Message
+	toolCall   func(name string, data []byte) (string, error)
+	parseThink bool
+	think      thinkParser
 }
 
 func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
@@ -168,12 +177,124 @@ func (s *Stream) Close() error { return s.stream.Close() } //nolint:wrapcheck
 func (s *Stream) Current() (proto.Chunk, error) {
 	event := s.stream.Current()
 	s.message.AddChunk(event)
-	if len(event.Choices) > 0 {
-		return proto.Chunk{
-			Content: event.Choices[0].Delta.Content,
-		}, nil
+	if len(event.Choices) == 0 {
+		return proto.Chunk{}, stream.ErrNoContent
 	}
-	return proto.Chunk{}, stream.ErrNoContent
+	choice := event.Choices[0]
+	content := choice.Delta.Content
+	thought := extractThought(choice.Delta)
+	if s.parseThink {
+		c, t := s.think.feed(content)
+		content = c
+		thought += t
+	}
+	return proto.Chunk{
+		Content: content,
+		Thought: thought,
+	}, nil
+}
+
+// thoughtFields is the priority-ordered list of non-standard chunk delta
+// fields that OpenAI-compatible providers use to stream reasoning or
+// thinking content. The first field that is present and non-null wins.
+var thoughtFields = []string{"reasoning_content", "reasoning", "thinking", "thinking_content"}
+
+// extractThought reads reasoning/thinking content from a chunk delta's
+// raw JSON. OpenAI's native API does not surface this, but DeepSeek-style
+// providers expose it under `reasoning_content` or similar non-standard
+// keys. (MiniMax instead inlines <think> blocks in content; see thinkParser.)
+//
+// We use Delta.RawJSON() rather than Delta.JSON.ExtraFields because the
+// openai-go SDK cannot decode non-typed JSON values into respjson.Field
+// and marks them as invalid.
+func extractThought(delta openai.ChatCompletionChunkChoiceDelta) string {
+	raw := delta.RawJSON()
+	if raw == "" {
+		return ""
+	}
+	var extra map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &extra); err != nil {
+		return ""
+	}
+	for _, field := range thoughtFields {
+		v, ok := extra[field]
+		if !ok {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(v, &s); err != nil {
+			continue
+		}
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+const (
+	openThinkTag  = "<think>"
+	closeThinkTag = "</think>"
+)
+
+// thinkParser is a streaming splitter that separates <think>...</think>
+// blocks (used by MiniMax and other Anthropic-style OpenAI-compatible
+// providers to inline reasoning) from the regular answer content. It
+// tolerates tags that are split across streamed chunks by holding back a
+// small tail that could be the start of a tag.
+type thinkParser struct {
+	inThink bool
+	buf     string
+}
+
+// feed processes a content delta and returns the portion that is regular
+// answer content and the portion that is reasoning/thinking content.
+func (p *thinkParser) feed(text string) (content, thought string) {
+	p.buf += text
+	var cb, tb strings.Builder
+	for {
+		if !p.inThink {
+			idx := strings.Index(p.buf, openThinkTag)
+			if idx >= 0 {
+				cb.WriteString(p.buf[:idx])
+				p.buf = p.buf[idx+len(openThinkTag):]
+				p.inThink = true
+				continue
+			}
+			keep := partialTagSuffixLen(p.buf, openThinkTag)
+			cb.WriteString(p.buf[:len(p.buf)-keep])
+			p.buf = p.buf[len(p.buf)-keep:]
+			return cb.String(), tb.String()
+		}
+		idx := strings.Index(p.buf, closeThinkTag)
+		if idx >= 0 {
+			tb.WriteString(p.buf[:idx])
+			p.buf = p.buf[idx+len(closeThinkTag):]
+			p.inThink = false
+			continue
+		}
+		keep := partialTagSuffixLen(p.buf, closeThinkTag)
+		tb.WriteString(p.buf[:len(p.buf)-keep])
+		p.buf = p.buf[len(p.buf)-keep:]
+		return cb.String(), tb.String()
+	}
+}
+
+// partialTagSuffixLen returns the length of the longest suffix of s that is
+// also a proper prefix of tag. This is the amount of trailing text that must
+// be held back because it might be the beginning of a tag completed by the
+// next streamed chunk.
+func partialTagSuffixLen(s, tag string) int {
+	maxLen := len(tag) - 1
+	if maxLen > len(s) {
+		maxLen = len(s)
+	}
+	for n := maxLen; n > 0; n-- {
+		if strings.HasSuffix(s, tag[:n]) {
+			return n
+		}
+	}
+	return 0
 }
 
 // Err implements stream.Stream.

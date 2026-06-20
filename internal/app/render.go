@@ -139,3 +139,36 @@ func (m *Mods) appendToOutput(s string) {
 		m.glamViewport.GotoBottom()
 	}
 }
+
+// flushThought renders the accumulated reasoning/thinking content as a
+// markdown blockquote followed by a horizontal rule and prepends it to the
+// output. Rendering it as markdown means it flows through the same glamour
+// pipeline and viewport as the answer: glamour styles blockquotes with a
+// left bar and dimmed text, and the rule clearly separates the thinking
+// from the answer below.
+func (m *Mods) flushThought() {
+	m.thoughtFlushed = true
+	thought := strings.TrimSpace(m.Thought)
+	if thought == "" {
+		return
+	}
+	m.appendToOutput(thoughtMarkdown(thought))
+}
+
+// thoughtMarkdown formats reasoning content as a labelled markdown
+// blockquote followed by a horizontal rule.
+func thoughtMarkdown(thought string) string {
+	var b strings.Builder
+	b.WriteString("> **💭 thinking**\n>\n")
+	for _, line := range strings.Split(thought, "\n") {
+		if strings.TrimSpace(line) == "" {
+			b.WriteString(">\n")
+			continue
+		}
+		b.WriteString("> ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n---\n\n")
+	return b.String()
+}

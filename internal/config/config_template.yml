@@ -282,3 +282,9 @@ apis:
   #         thinking:
   #           type: disabled
   #       max-input-chars: 100000
+  # Note: --reasoning / -T (and `reasoning: on|auto` in YAML) will override
+  # `extra-params.thinking.type` from `disabled` to `adaptive` (the only
+  # 'on' value accepted by MiniMax and similar Anthropic-style endpoints),
+  # stripping any `budget_tokens`. It will also upgrade
+  # `extra-params.reasoning_effort` to `medium`. So the values above only
+  # apply when reasoning is off.

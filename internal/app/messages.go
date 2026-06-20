@@ -44,6 +44,7 @@ type completionInput struct {
 // completionOutput a tea.Msg that wraps the content returned from openai.
 type completionOutput struct {
 	content string
+	thought string
 	stream  stream.Stream
 	errh    func(error) tea.Msg
 }

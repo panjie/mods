@@ -117,9 +117,9 @@ var Help = map[string]string{
 type Model struct {
 	Name           string
 	API            string
-	MaxChars       int64    `yaml:"max-input-chars"`
-	Aliases        []string `yaml:"aliases"`
-	Fallback       string   `yaml:"fallback"`
+	MaxChars       int64          `yaml:"max-input-chars"`
+	Aliases        []string       `yaml:"aliases"`
+	Fallback       string         `yaml:"fallback"`
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
 }

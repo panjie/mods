@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openai/openai-go/shared"
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/cohere"
 	"github.com/panjie/mods/internal/google"
@@ -27,7 +28,7 @@ func (m *Mods) resolveReasoning(
 	cfg := m.Config
 	switch cfg.Reasoning {
 	case ReasoningOn:
-		applyReasoningConfigs(mod.API, gccfg, accfg, ccfg)
+		applyReasoningConfigs(*mod, gccfg, accfg, ccfg)
 		debug.Printf("Reasoning: enabled for %s/%s", mod.API, mod.Name)
 		return true
 	case ReasoningAuto:
@@ -52,7 +53,7 @@ func (m *Mods) resolveReasoning(
 		shouldReason := judgeTaskComplexity(judgeCtx, mod, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
 		debug.Printf("Auto judge: reasoning=%v", shouldReason)
 		if shouldReason {
-			applyReasoningConfigs(mod.API, gccfg, accfg, ccfg)
+			applyReasoningConfigs(*mod, gccfg, accfg, ccfg)
 		}
 		return shouldReason
 	default:
@@ -60,49 +61,68 @@ func (m *Mods) resolveReasoning(
 	}
 }
 
-func applyReasoningConfigs(api string, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config) {
+func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config) {
 	switch {
-	case api == "google":
+	case mod.API == "google":
 		if gccfg.ThinkingBudget == 0 {
 			gccfg.ThinkingBudget = 8192
 		}
 		debug.Printf("Reasoning: google thinking_budget=%d", gccfg.ThinkingBudget)
-	case api == "anthropic":
+	case mod.API == "anthropic":
 		accfg.ThinkingBudget = 8192
 		debug.Printf("Reasoning: anthropic thinking_budget=%d", accfg.ThinkingBudget)
-	case api == "cohere" || api == "ollama":
-		debug.Printf("Reasoning: %s does not support reasoning, skipped", api)
+	case mod.API == "cohere" || mod.API == "ollama":
+		debug.Printf("Reasoning: %s does not support reasoning, skipped", mod.API)
 	default:
-		// OpenAI-compatible providers (e.g. MiniMax) inline their reasoning
-		// inside <think>...</think> blocks in the content stream; enable tag
-		// parsing so it gets separated from the answer for distinct styling.
+		// OpenAI-compatible providers (e.g. MiniMax, GLM) may inline their
+		// reasoning inside <think>...</think> blocks in the content stream;
+		// enable tag parsing so it gets separated from the answer.
 		ccfg.ThinkTags = true
-		// Anthropic-compatible APIs exposed via OpenAI-compatible interface
-		// (e.g. MiniMax) honor `thinking.type` and ignore OpenAI's
-		// `reasoning_effort`. MiniMax's allowed types are `adaptive` /
-		// `disabled` (Anthropic's `enabled` is rejected), and the
-		// `adaptive` schema does not take `budget_tokens`. If the user has
-		// pre-set `thinking` in extra-params to disable it, flip it to
-		// `adaptive` so that -T / --reasoning on actually turns thinking
-		// on.
-		if thinking, ok := ccfg.ExtraParams["thinking"].(map[string]any); ok {
-			thinking["type"] = "adaptive"
-			delete(thinking, "budget_tokens")
+
+		thinkingType := mod.ThinkingType
+
+		// Determine whether this provider uses thinking.type for reasoning
+		// control, and resolve the "on" value.
+		thinking, hasThinking := ccfg.ExtraParams["thinking"].(map[string]any)
+		if !hasThinking && thinkingType != "" {
+			// User explicitly set thinking-type but has no thinking block in
+			// extra-params; auto-create one so -T turns thinking on without
+			// requiring a redundant extra-params.thinking.type: disabled.
+			thinking = map[string]any{}
+			if ccfg.ExtraParams == nil {
+				ccfg.ExtraParams = map[string]any{}
+			}
 			ccfg.ExtraParams["thinking"] = thinking
-			debug.Printf("Reasoning: anthropic-style thinking enabled via extra-params, type=adaptive")
+			hasThinking = true
+		}
+
+		if hasThinking {
+			if thinkingType == "" {
+				thinkingType = "adaptive" // backward compat for existing MiniMax configs
+			}
+			thinking["type"] = thinkingType
+			// MiniMax's "adaptive" rejects budget_tokens; strip it. For
+			// other values (e.g. GLM's "enabled"), leave budget_tokens as-is
+			// — the user controls it via extra-params or thinking-budget.
+			if thinkingType == "adaptive" {
+				delete(thinking, "budget_tokens")
+			}
+			debug.Printf("Reasoning: thinking.type=%s", thinkingType)
 			return
 		}
-		// If the user pinned `reasoning_effort` in extra-params, upgrade it
-		// in-place. extra-params are applied via WithJSONSet *after* the
-		// body is serialized, so they would otherwise override the body
-		// field and silently win.
+
+		// Fall back to OpenAI-style reasoning_effort.
+		effort := mod.ReasoningEffort
+		if effort == "" {
+			effort = string(openai.ReasoningEffortMedium)
+		}
 		if _, ok := ccfg.ExtraParams["reasoning_effort"]; ok {
-			ccfg.ExtraParams["reasoning_effort"] = string(openai.ReasoningEffortMedium)
-			debug.Printf("Reasoning: extra-params.reasoning_effort upgraded to medium")
+			ccfg.ExtraParams["reasoning_effort"] = effort
+			debug.Printf("Reasoning: extra-params.reasoning_effort=%s", effort)
 			return
 		}
-		ccfg.ReasoningEffort = openai.ReasoningEffortMedium
-		debug.Printf("Reasoning: openai reasoning_effort=%s", ccfg.ReasoningEffort)
+		ccfg.ReasoningEffort = shared.ReasoningEffort(effort)
+		debug.Printf("Reasoning: reasoning_effort=%s", effort)
 	}
 }
 

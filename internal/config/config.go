@@ -122,6 +122,21 @@ type Model struct {
 	Fallback       string         `yaml:"fallback"`
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
+	// ThinkingType is the value to set thinking.type to when reasoning is
+	// enabled via -T / --reasoning. Defaults to "adaptive" (MiniMax) when
+	// extra-params.thinking already exists; use "enabled" for GLM and
+	// Anthropic-compatible APIs.
+	ThinkingType string `yaml:"thinking-type,omitempty"`
+	// ThinkFields overrides the list of delta fields consulted for
+	// reasoning/thinking content extraction. Defaults to
+	// [reasoning_content, reasoning, thinking, thinking_content].
+	ThinkFields []string `yaml:"thought-fields,omitempty"`
+	// ThinkTag overrides the inline reasoning tag name. Defaults to "think"
+	// (rendered as <think>...</think>). Only consulted when reasoning is on.
+	ThinkTag string `yaml:"think-tag,omitempty"`
+	// ReasoningEffort is the target reasoning_effort value when reasoning
+	// is enabled. Defaults to "medium".
+	ReasoningEffort string `yaml:"reasoning-effort,omitempty"`
 }
 
 // API represents an API endpoint and its models.

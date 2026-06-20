@@ -30,74 +30,106 @@ func deltaWithRawJSON(t *testing.T, raw string) openai.ChatCompletionChunkChoice
 }
 
 func TestExtractThought(t *testing.T) {
-	t.Run("reasoning_content (DeepSeek / MiniMax)", func(t *testing.T) {
+	// defaultStream creates a Stream with the default thought fields.
+	defaultStream := func() *Stream { return &Stream{} }
+
+	t.Run("reasoning_content (DeepSeek / GLM)", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"reasoning_content":"the user is asking about X"}`)
-		if got := extractThought(d); got != "the user is asking about X" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "the user is asking about X" {
 			t.Fatalf("expected the thought content, got %q", got)
 		}
 	})
 
 	t.Run("reasoning (Qwen-style)", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"reasoning":"reasoning payload"}`)
-		if got := extractThought(d); got != "reasoning payload" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "reasoning payload" {
 			t.Fatalf("expected reasoning payload, got %q", got)
 		}
 	})
 
 	t.Run("thinking (Anthropic-compat)", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"thinking":"thinking payload"}`)
-		if got := extractThought(d); got != "thinking payload" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "thinking payload" {
 			t.Fatalf("expected thinking payload, got %q", got)
 		}
 	})
 
 	t.Run("thinking_content (alt Anthropic-style)", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"thinking_content":"alt payload"}`)
-		if got := extractThought(d); got != "alt payload" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "alt payload" {
 			t.Fatalf("expected alt payload, got %q", got)
 		}
 	})
 
 	t.Run("content-only delta (OpenAI native) returns empty", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"content":"hello"}`)
-		if got := extractThought(d); got != "" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
 	})
 
 	t.Run("null reasoning_content is skipped", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"reasoning_content":null}`)
-		if got := extractThought(d); got != "" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
 	})
 
 	t.Run("priority: reasoning_content wins over reasoning", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"reasoning_content":"primary","reasoning":"secondary"}`)
-		if got := extractThought(d); got != "primary" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "primary" {
 			t.Fatalf("expected primary, got %q", got)
 		}
 	})
 
 	t.Run("priority: reasoning wins over thinking", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"reasoning":"second","thinking":"third"}`)
-		if got := extractThought(d); got != "second" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "second" {
 			t.Fatalf("expected second, got %q", got)
 		}
 	})
 
 	t.Run("JSON-quoted string is unescaped", func(t *testing.T) {
 		d := deltaWithRawJSON(t, `{"reasoning_content":"line1\nline2"}`)
-		if got := extractThought(d); got != "line1\nline2" {
+		s := defaultStream()
+		if got := s.extractThought(d); got != "line1\nline2" {
 			t.Fatalf("expected unescaped string, got %q", got)
+		}
+	})
+
+	t.Run("custom thought-fields override defaults", func(t *testing.T) {
+		d := deltaWithRawJSON(t, `{"reasoning_content":"default","my_custom_field":"custom"}`)
+		s := &Stream{thoughtFields: []string{"my_custom_field"}}
+		if got := s.extractThought(d); got != "custom" {
+			t.Fatalf("expected custom field value, got %q", got)
+		}
+	})
+
+	t.Run("custom thought-fields ignore default fields not in list", func(t *testing.T) {
+		d := deltaWithRawJSON(t, `{"reasoning_content":"should-be-ignored"}`)
+		s := &Stream{thoughtFields: []string{"my_custom_field"}}
+		if got := s.extractThought(d); got != "" {
+			t.Fatalf("expected empty (custom field absent, default field ignored), got %q", got)
 		}
 	})
 }
 
 func TestThinkParser(t *testing.T) {
+	// newDefaultParser creates a thinkParser with the default <think> tag.
+	newDefaultParser := func() thinkParser {
+		return thinkParser{openTag: "<think>", closeTag: "</think>"}
+	}
 	// feedAll runs each chunk through one parser and concatenates results.
 	feedAll := func(chunks ...string) (content, thought string) {
-		var p thinkParser
+		p := newDefaultParser()
 		for _, c := range chunks {
 			gotC, gotT := p.feed(c)
 			content += gotC
@@ -154,7 +186,7 @@ func TestThinkParser(t *testing.T) {
 	})
 
 	t.Run("single character at a time", func(t *testing.T) {
-		var p thinkParser
+		p := newDefaultParser()
 		var content, thought string
 		for _, r := range "ab<think>cd</think>ef" {
 			c, th := p.feed(string(r))
@@ -165,6 +197,22 @@ func TestThinkParser(t *testing.T) {
 			t.Fatalf("content: got %q", content)
 		}
 		if thought != "cd" {
+			t.Fatalf("thought: got %q", thought)
+		}
+	})
+
+	t.Run("custom tag name (e.g. <reasoning>)", func(t *testing.T) {
+		p := thinkParser{openTag: "<reasoning>", closeTag: "</reasoning>"}
+		var content, thought string
+		for _, chunk := range []string{"before<reasoning>", "inner", "</reasoning>after"} {
+			c, th := p.feed(chunk)
+			content += c
+			thought += th
+		}
+		if content != "beforeafter" {
+			t.Fatalf("content: got %q", content)
+		}
+		if thought != "inner" {
 			t.Fatalf("thought: got %q", thought)
 		}
 	})

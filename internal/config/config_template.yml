@@ -230,13 +230,76 @@ apis:
     api-key:
     api-key-env: DEEPSEEK_API_KEY
     models:
-      deepseek-v4-flash:
-        aliases: ["v4-flash", "flash", "deepseek-chat", "chat"]
+      # deepseek-reasoner is a dedicated reasoning model that always thinks;
+      # no thinking-type needed. Its reasoning_content is auto-captured.
+      deepseek-reasoner:
+        aliases: ["r1", "reasoner"]
         max-input-chars: 1000000
-        fallback: deepseek-v4-pro
-      deepseek-v4-pro:
-        aliases: ["v4-pro", "pro", "deepseek-reasoner", "r1"]
+      deepseek-chat:
+        aliases: ["chat", "v3"]
         max-input-chars: 1000000
+
+  # ── Chinese AI Providers (国内大模型) ──────────────────────────
+
+  # 智谱 GLM (ZhipuAI)
+  # GLM-5.2 uses thinking.type: "enabled" (Anthropic-style) and returns
+  # reasoning via the reasoning_content delta field (auto-captured).
+  glm:
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    api-key:
+    api-key-env: ZAI_API_KEY
+    models:
+      glm-5.2:
+        aliases: ["glm", "glm5"]
+        max-input-chars: 128000
+        thinking-type: enabled
+
+  # MiniMax
+  # Uses thinking.type: "adaptive" (NOT "enabled") and inlines reasoning
+  # in <think>...</think> tags within the content stream.
+  minimax:
+    base-url: https://api.minimaxi.com/v1
+    api-key:
+    api-key-env: MINIMAX_API_KEY
+    models:
+      MiniMax-M3:
+        aliases: ["m3", "minimax"]
+        max-input-chars: 1000000
+        thinking-type: adaptive
+        extra-params:
+          thinking:
+            type: disabled
+
+  # 通义千问 Qwen (Alibaba DashScope)
+  # Two thinking modes: qwq (dedicated reasoning model, always thinks)
+  # and qwen3 (toggle via enable_thinking).
+  qwen:
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api-key:
+    api-key-env: DASHSCOPE_API_KEY
+    models:
+      qwq-plus:
+        aliases: ["qwq", "qwen-reasoner"]
+        max-input-chars: 131072
+      qwen3-plus:
+        aliases: ["qwen", "qp"]
+        max-input-chars: 131072
+        # enable_thinking is always-on; -T does not toggle it.
+        # Switch to qwq-plus for a model that only thinks on demand.
+        extra-params:
+          enable_thinking: true
+
+  # Kimi (Moonshot AI)
+  # K2 supports thinking via thinking.type: "enabled".
+  kimi:
+    base-url: https://api.moonshot.cn/v1
+    api-key:
+    api-key-env: MOONSHOT_API_KEY
+    models:
+      kimi-k2:
+        aliases: ["k2", "kimi"]
+        max-input-chars: 131072
+        thinking-type: enabled
 
   # ── Multi-provider Aggregator ─────────────────────────────────
 
@@ -278,13 +341,31 @@ apis:
   #   models:
   #     your-model:
   #       aliases: ["ym"]
-  #       extra-params:   # pass arbitrary fields to the API request body
+  #       max-input-chars: 100000
+  #
+  #       # ── Reasoning / Thinking configuration ──
+  #       # These fields control how -T / --reasoning on interacts with
+  #       # the provider. All are optional with sensible defaults.
+  #
+  #       # thinking-type: the value to set thinking.type to when -T is on.
+  #       # Default "adaptive" (MiniMax). Use "enabled" for GLM/Anthropic.
+  #       thinking-type: enabled
+  #
+  #       # extra-params: arbitrary fields merged into the request body.
+  #       # Set thinking.type: disabled here for "off by default, -T turns on".
+  #       extra-params:
   #         thinking:
   #           type: disabled
-  #       max-input-chars: 100000
-  # Note: --reasoning / -T (and `reasoning: on|auto` in YAML) will override
-  # `extra-params.thinking.type` from `disabled` to `adaptive` (the only
-  # 'on' value accepted by MiniMax and similar Anthropic-style endpoints),
-  # stripping any `budget_tokens`. It will also upgrade
-  # `extra-params.reasoning_effort` to `medium`. So the values above only
-  # apply when reasoning is off.
+  #
+  #       # thought-fields: override the delta fields consulted for reasoning
+  #       # content extraction. Default: [reasoning_content, reasoning,
+  #       # thinking, thinking_content].
+  #       # thought-fields: [my_custom_field]
+  #
+  #       # think-tag: override the inline reasoning tag name.
+  #       # Default "think" → <think>...</think>. Only parsed when -T is on.
+  #       # think-tag: reasoning
+  #
+  #       # reasoning-effort: target reasoning_effort value for -T.
+  #       # Default "medium". Options: low, medium, high.
+  #       # reasoning-effort: high

@@ -10,26 +10,25 @@ import (
 )
 
 func TestApplyReasoningConfigs(t *testing.T) {
-	t.Run("anthropic-style thinking disabled in extra-params gets flipped to adaptive (no budget_tokens)", func(t *testing.T) {
+	// ── thinking.type providers (MiniMax / GLM / Anthropic-compat) ──
+
+	t.Run("MiniMax: thinking disabled in extra-params gets flipped to adaptive (default thinking-type)", func(t *testing.T) {
 		ccfg := openai.Config{
 			ExtraParams: map[string]any{
-				"thinking": map[string]any{
-					"type": "disabled",
-				},
+				"thinking": map[string]any{"type": "disabled"},
 			},
 		}
 
-		applyReasoningConfigs("minimax", nil, nil, &ccfg)
+		applyReasoningConfigs(Model{API: "minimax"}, nil, nil, &ccfg)
 
-		thinking, ok := ccfg.ExtraParams["thinking"].(map[string]any)
-		require.True(t, ok, "thinking should remain in extra-params")
-		require.Equal(t, "adaptive", thinking["type"], "thinking.type should be flipped to adaptive (MiniMax's only 'on' value)")
+		thinking := ccfg.ExtraParams["thinking"].(map[string]any)
+		require.Equal(t, "adaptive", thinking["type"])
 		_, hasBudget := thinking["budget_tokens"]
-		require.False(t, hasBudget, "budget_tokens must not be added — MiniMax's adaptive schema rejects it")
-		require.Empty(t, ccfg.ReasoningEffort, "ReasoningEffort body field should stay empty so it does not conflict with extra-params")
+		require.False(t, hasBudget, "MiniMax adaptive must not have budget_tokens")
+		require.Empty(t, ccfg.ReasoningEffort)
 	})
 
-	t.Run("anthropic-style thinking with user-set budget_tokens has budget_tokens stripped", func(t *testing.T) {
+	t.Run("MiniMax: thinking with user-set budget_tokens has budget_tokens stripped for adaptive", func(t *testing.T) {
 		ccfg := openai.Config{
 			ExtraParams: map[string]any{
 				"thinking": map[string]any{
@@ -39,35 +38,75 @@ func TestApplyReasoningConfigs(t *testing.T) {
 			},
 		}
 
-		applyReasoningConfigs("minimax", nil, nil, &ccfg)
+		applyReasoningConfigs(Model{API: "minimax"}, nil, nil, &ccfg)
 
 		thinking := ccfg.ExtraParams["thinking"].(map[string]any)
 		require.Equal(t, "adaptive", thinking["type"])
 		_, hasBudget := thinking["budget_tokens"]
-		require.False(t, hasBudget, "user-set budget_tokens must be stripped when flipping to adaptive")
+		require.False(t, hasBudget)
 	})
 
-	t.Run("reasoning_effort pinned in extra-params gets upgraded to medium in place", func(t *testing.T) {
+	t.Run("GLM: thinking-type=enabled auto-creates thinking block when extra-params.thinking is absent", func(t *testing.T) {
+		ccfg := openai.Config{}
+
+		applyReasoningConfigs(Model{API: "glm", ThinkingType: "enabled"}, nil, nil, &ccfg)
+
+		thinking, ok := ccfg.ExtraParams["thinking"].(map[string]any)
+		require.True(t, ok, "thinking block should be auto-created")
+		require.Equal(t, "enabled", thinking["type"])
+		require.True(t, ccfg.ThinkTags, "ThinkTags should be enabled for inline tag parsing")
+	})
+
+	t.Run("GLM: thinking-type=enabled flips existing thinking.type to enabled and preserves budget_tokens", func(t *testing.T) {
+		ccfg := openai.Config{
+			ExtraParams: map[string]any{
+				"thinking": map[string]any{
+					"type":          "disabled",
+					"budget_tokens": 4096,
+				},
+			},
+		}
+
+		applyReasoningConfigs(Model{API: "glm", ThinkingType: "enabled"}, nil, nil, &ccfg)
+
+		thinking := ccfg.ExtraParams["thinking"].(map[string]any)
+		require.Equal(t, "enabled", thinking["type"])
+		require.Equal(t, 4096, thinking["budget_tokens"], "budget_tokens must be preserved for non-adaptive types")
+	})
+
+	// ── reasoning_effort providers (OpenAI / DeepSeek) ──
+
+	t.Run("reasoning_effort pinned in extra-params gets upgraded to configured effort", func(t *testing.T) {
 		ccfg := openai.Config{
 			ExtraParams: map[string]any{
 				"reasoning_effort": "low",
 			},
 		}
 
-		applyReasoningConfigs("custom", nil, nil, &ccfg)
+		applyReasoningConfigs(Model{API: "custom", ReasoningEffort: "high"}, nil, nil, &ccfg)
 
-		require.Equal(t, "medium", ccfg.ExtraParams["reasoning_effort"], "extra-params.reasoning_effort should be upgraded to medium")
-		require.Empty(t, ccfg.ReasoningEffort, "body ReasoningEffort must stay empty; extra-params would otherwise be silently overridden by WithJSONSet ordering")
+		require.Equal(t, "high", ccfg.ExtraParams["reasoning_effort"])
+		require.Empty(t, ccfg.ReasoningEffort)
 	})
 
-	t.Run("no extra-params falls back to OpenAI body field", func(t *testing.T) {
+	t.Run("no extra-params falls back to OpenAI body field with default medium effort", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		applyReasoningConfigs("openai", nil, nil, &ccfg)
+		applyReasoningConfigs(Model{API: "openai"}, nil, nil, &ccfg)
 
 		require.Equal(t, openai.ReasoningEffortMedium, ccfg.ReasoningEffort)
-		require.Nil(t, ccfg.ExtraParams, "extra-params should not be touched when not present")
+		require.Nil(t, ccfg.ExtraParams)
 	})
+
+	t.Run("no extra-params uses model-level reasoning-effort when set", func(t *testing.T) {
+		ccfg := openai.Config{}
+
+		applyReasoningConfigs(Model{API: "openai", ReasoningEffort: "high"}, nil, nil, &ccfg)
+
+		require.Equal(t, "high", string(ccfg.ReasoningEffort))
+	})
+
+	// ── native anthropic / google / cohere / ollama ──
 
 	t.Run("anthropic api path uses ThinkingBudget and ignores extra-params", func(t *testing.T) {
 		accfg := anthropic.Config{}
@@ -77,38 +116,28 @@ func TestApplyReasoningConfigs(t *testing.T) {
 			},
 		}
 
-		applyReasoningConfigs("anthropic", nil, &accfg, &ccfg)
+		applyReasoningConfigs(Model{API: "anthropic"}, nil, &accfg, &ccfg)
 
 		require.Equal(t, 8192, accfg.ThinkingBudget)
-		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"], "anthropic path must not touch extra-params")
-	})
-
-	t.Run("does not add budget_tokens even if user previously had thinking.enabled in extra-params", func(t *testing.T) {
-		ccfg := openai.Config{
-			ExtraParams: map[string]any{
-				"thinking": map[string]any{
-					"type":          "enabled",
-					"budget_tokens": 8192,
-				},
-			},
-		}
-
-		applyReasoningConfigs("minimax", nil, nil, &ccfg)
-
-		thinking := ccfg.ExtraParams["thinking"].(map[string]any)
-		require.Equal(t, "adaptive", thinking["type"], "should be normalized to adaptive")
-		_, hasBudget := thinking["budget_tokens"]
-		require.False(t, hasBudget, "legacy budget_tokens from a previous 'enabled' config must be stripped")
+		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
 	})
 
 	t.Run("google api path uses ThinkingBudget", func(t *testing.T) {
 		gccfg := google.Config{}
 		ccfg := openai.Config{}
 
-		applyReasoningConfigs("google", &gccfg, nil, &ccfg)
+		applyReasoningConfigs(Model{API: "google"}, &gccfg, nil, &ccfg)
 
 		require.Equal(t, 8192, gccfg.ThinkingBudget)
 		require.Empty(t, ccfg.ReasoningEffort)
+	})
+
+	t.Run("google ThinkingBudget set at model level is preserved", func(t *testing.T) {
+		gccfg := google.Config{ThinkingBudget: 2048}
+
+		applyReasoningConfigs(Model{API: "google"}, &gccfg, nil, &openai.Config{})
+
+		require.Equal(t, 2048, gccfg.ThinkingBudget)
 	})
 
 	t.Run("cohere and ollama skip reasoning entirely", func(t *testing.T) {
@@ -119,19 +148,21 @@ func TestApplyReasoningConfigs(t *testing.T) {
 				},
 			}
 
-			applyReasoningConfigs(api, nil, nil, &ccfg)
+			applyReasoningConfigs(Model{API: api}, nil, nil, &ccfg)
 
-			require.Empty(t, ccfg.ReasoningEffort, api+": ReasoningEffort should not be set")
-			require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"], api+": extra-params.thinking should not be touched")
+			require.Empty(t, ccfg.ReasoningEffort)
+			require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
 		}
 	})
 
-	t.Run("google ThinkingBudget set at model level is preserved when reasoning is on", func(t *testing.T) {
-		gccfg := google.Config{ThinkingBudget: 2048}
+	// ── ThinkTags always enabled for openai-compatible providers ──
 
-		applyReasoningConfigs("google", &gccfg, nil, &openai.Config{})
-
-		require.Equal(t, 2048, gccfg.ThinkingBudget, "pre-existing model-level thinking-budget must not be overwritten")
+	t.Run("ThinkTags enabled for all openai-compatible providers in default branch", func(t *testing.T) {
+		for _, api := range []string{"openai", "minimax", "glm", "custom"} {
+			ccfg := openai.Config{}
+			applyReasoningConfigs(Model{API: api}, nil, nil, &ccfg)
+			require.True(t, ccfg.ThinkTags, api+": ThinkTags should be enabled")
+		}
 	})
 }
 

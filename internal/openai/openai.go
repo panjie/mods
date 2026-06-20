@@ -41,6 +41,12 @@ type Config struct {
 	// providers (e.g. MiniMax) inline reasoning this way rather than using a
 	// dedicated field.
 	ThinkTags bool
+	// ThoughtFields overrides the list of delta fields consulted for
+	// reasoning/thinking content. Empty = use defaultThoughtFields.
+	ThoughtFields []string
+	// ThinkTag overrides the inline reasoning tag name (without brackets).
+	// Empty = "think" (rendered as <think>...</think>).
+	ThinkTag string
 }
 
 // DefaultConfig returns the default configuration for the OpenAI API client.
@@ -115,12 +121,22 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		opts = append(opts, option.WithJSONSet(k, v))
 	})
 
+	tag := c.config.ThinkTag
+	if tag == "" {
+		tag = defaultThinkTag
+	}
+
 	s := &Stream{
-		stream:     c.Chat.Completions.NewStreaming(ctx, body, opts...),
-		request:    body,
-		toolCall:   request.ToolCaller,
-		messages:   request.Messages,
-		parseThink: c.config.ThinkTags,
+		stream:        c.Chat.Completions.NewStreaming(ctx, body, opts...),
+		request:       body,
+		toolCall:      request.ToolCaller,
+		messages:      request.Messages,
+		parseThink:    c.config.ThinkTags,
+		thoughtFields: c.config.ThoughtFields,
+		think: thinkParser{
+			openTag:  "<" + tag + ">",
+			closeTag: "</" + tag + ">",
+		},
 	}
 	s.factory = func() *ssestream.Stream[openai.ChatCompletionChunk] {
 		return c.Chat.Completions.NewStreaming(ctx, s.request, opts...)
@@ -130,15 +146,16 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 // Stream openai stream.
 type Stream struct {
-	done       bool
-	request    openai.ChatCompletionNewParams
-	stream     *ssestream.Stream[openai.ChatCompletionChunk]
-	factory    func() *ssestream.Stream[openai.ChatCompletionChunk]
-	message    openai.ChatCompletionAccumulator
-	messages   []proto.Message
-	toolCall   func(name string, data []byte) (string, error)
-	parseThink bool
-	think      thinkParser
+	done          bool
+	request       openai.ChatCompletionNewParams
+	stream        *ssestream.Stream[openai.ChatCompletionChunk]
+	factory       func() *ssestream.Stream[openai.ChatCompletionChunk]
+	message       openai.ChatCompletionAccumulator
+	messages      []proto.Message
+	toolCall      func(name string, data []byte) (string, error)
+	parseThink    bool
+	think         thinkParser
+	thoughtFields []string
 }
 
 func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
@@ -182,7 +199,7 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	}
 	choice := event.Choices[0]
 	content := choice.Delta.Content
-	thought := extractThought(choice.Delta)
+	thought := s.extractThought(choice.Delta)
 	if s.parseThink {
 		c, t := s.think.feed(content)
 		content = c
@@ -194,10 +211,12 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	}, nil
 }
 
-// thoughtFields is the priority-ordered list of non-standard chunk delta
-// fields that OpenAI-compatible providers use to stream reasoning or
+// defaultThoughtFields is the priority-ordered list of non-standard chunk
+// delta fields that OpenAI-compatible providers use to stream reasoning or
 // thinking content. The first field that is present and non-null wins.
-var thoughtFields = []string{"reasoning_content", "reasoning", "thinking", "thinking_content"}
+var defaultThoughtFields = []string{"reasoning_content", "reasoning", "thinking", "thinking_content"}
+
+const defaultThinkTag = "think"
 
 // extractThought reads reasoning/thinking content from a chunk delta's
 // raw JSON. OpenAI's native API does not surface this, but DeepSeek-style
@@ -207,7 +226,7 @@ var thoughtFields = []string{"reasoning_content", "reasoning", "thinking", "thin
 // We use Delta.RawJSON() rather than Delta.JSON.ExtraFields because the
 // openai-go SDK cannot decode non-typed JSON values into respjson.Field
 // and marks them as invalid.
-func extractThought(delta openai.ChatCompletionChunkChoiceDelta) string {
+func (s *Stream) extractThought(delta openai.ChatCompletionChunkChoiceDelta) string {
 	raw := delta.RawJSON()
 	if raw == "" {
 		return ""
@@ -216,35 +235,36 @@ func extractThought(delta openai.ChatCompletionChunkChoiceDelta) string {
 	if err := json.Unmarshal([]byte(raw), &extra); err != nil {
 		return ""
 	}
-	for _, field := range thoughtFields {
+	fields := s.thoughtFields
+	if len(fields) == 0 {
+		fields = defaultThoughtFields
+	}
+	for _, field := range fields {
 		v, ok := extra[field]
 		if !ok {
 			continue
 		}
-		var s string
-		if err := json.Unmarshal(v, &s); err != nil {
+		var str string
+		if err := json.Unmarshal(v, &str); err != nil {
 			continue
 		}
-		if s != "" {
-			return s
+		if str != "" {
+			return str
 		}
 	}
 	return ""
 }
 
-const (
-	openThinkTag  = "<think>"
-	closeThinkTag = "</think>"
-)
-
-// thinkParser is a streaming splitter that separates <think>...</think>
-// blocks (used by MiniMax and other Anthropic-style OpenAI-compatible
-// providers to inline reasoning) from the regular answer content. It
-// tolerates tags that are split across streamed chunks by holding back a
-// small tail that could be the start of a tag.
+// thinkParser is a streaming splitter that separates reasoning blocks
+// (e.g. <think>...</think>) from the regular answer content. The tag is
+// configurable to support providers that use non-standard tag names.
+// It tolerates tags that are split across streamed chunks by holding back
+// a small tail that could be the start of a tag.
 type thinkParser struct {
-	inThink bool
-	buf     string
+	inThink  bool
+	buf      string
+	openTag  string
+	closeTag string
 }
 
 // feed processes a content delta and returns the portion that is regular
@@ -254,26 +274,26 @@ func (p *thinkParser) feed(text string) (content, thought string) {
 	var cb, tb strings.Builder
 	for {
 		if !p.inThink {
-			idx := strings.Index(p.buf, openThinkTag)
+			idx := strings.Index(p.buf, p.openTag)
 			if idx >= 0 {
 				cb.WriteString(p.buf[:idx])
-				p.buf = p.buf[idx+len(openThinkTag):]
+				p.buf = p.buf[idx+len(p.openTag):]
 				p.inThink = true
 				continue
 			}
-			keep := partialTagSuffixLen(p.buf, openThinkTag)
+			keep := partialTagSuffixLen(p.buf, p.openTag)
 			cb.WriteString(p.buf[:len(p.buf)-keep])
 			p.buf = p.buf[len(p.buf)-keep:]
 			return cb.String(), tb.String()
 		}
-		idx := strings.Index(p.buf, closeThinkTag)
+		idx := strings.Index(p.buf, p.closeTag)
 		if idx >= 0 {
 			tb.WriteString(p.buf[:idx])
-			p.buf = p.buf[idx+len(closeThinkTag):]
+			p.buf = p.buf[idx+len(p.closeTag):]
 			p.inThink = false
 			continue
 		}
-		keep := partialTagSuffixLen(p.buf, closeThinkTag)
+		keep := partialTagSuffixLen(p.buf, p.closeTag)
 		tb.WriteString(p.buf[:len(p.buf)-keep])
 		p.buf = p.buf[len(p.buf)-keep:]
 		return cb.String(), tb.String()

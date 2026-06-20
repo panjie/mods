@@ -128,6 +128,55 @@ func TestFilesystemApplyPatch(t *testing.T) {
 	}
 }
 
+func TestFilesystemApplyPatchRefusesSymlink(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	symlinkPatches := map[string]string{
+		"new file": "diff --git a/escape b/escape\nnew file mode 120000\nindex 0000000..abc1234\n--- /dev/null\n+++ b/escape\n@@ -0,0 +1 @@\n+/etc\n",
+		"old mode": "diff --git a/link b/link\nold mode 100644\nnew mode 120000\nindex 1111111..2222222\n--- a/link\n+++ b/link\n@@ -1 +1 @@\n-old\n+/etc\n",
+	}
+	for name, patch := range symlinkPatches {
+		t.Run(name, func(t *testing.T) {
+			_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			if err == nil {
+				t.Fatal("expected symlink patch to be refused")
+			}
+			if !strings.Contains(err.Error(), "symlink") {
+				t.Fatalf("expected symlink error, got: %v", err)
+			}
+			// Ensure the symlink was actually NOT created.
+			if _, statErr := os.Lstat(filepath.Join(root, "escape")); statErr == nil {
+				t.Fatal("symlink escape was created despite rejection")
+			}
+			if _, statErr := os.Lstat(filepath.Join(root, "link")); statErr == nil {
+				t.Fatal("symlink link was created despite rejection")
+			}
+		})
+	}
+}
+
+func TestFilesystemApplyPatchRejectsTraversal(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	// A patch that tries to write outside the workspace via a literal `..` path.
+	patch := "--- a/../outside.txt\n+++ b/../outside.txt\n@@ -0,0 +1 @@\n+pwned\n"
+	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	if err == nil {
+		t.Fatal("expected traversal patch to be rejected")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "..", "outside.txt")); statErr == nil {
+		t.Fatal("file was created outside the workspace root")
+	}
+}
+
 func TestPowerShellRun(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell tool is Windows-only")

@@ -687,6 +687,18 @@ func appendExitStatus(text string, code int) string {
 
 func validatePatchPaths(root, patch string) error {
 	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
+		// Refuse symlink creation. A single patch can first create a symlink
+		// inside the workspace (e.g. `escape -> /etc`) and then write through
+		// it in a later diff. Because validation runs before `git apply`,
+		// such a patch would pass the path checks below and escape the
+		// workspace root at apply time. There is no safe way to allow
+		// mode 120000 via fs_apply_patch.
+		if strings.HasSuffix(line, "mode 120000") &&
+			(strings.HasPrefix(line, "new file mode ") ||
+				strings.HasPrefix(line, "old mode ") ||
+				strings.HasPrefix(line, "new mode ")) {
+			return fmt.Errorf("patch refused: symlink creation is not allowed")
+		}
 		if !strings.HasPrefix(line, "+++ ") && !strings.HasPrefix(line, "--- ") {
 			continue
 		}

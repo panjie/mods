@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -114,7 +116,89 @@ func providerBaseURL(value string) string {
 }
 
 func httpClient() *http.Client {
-	return &http.Client{Timeout: SearchTimeout}
+	return &http.Client{
+		Timeout:   SearchTimeout,
+		Transport: safeSearchTransport(),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if privateSearchAllowed() {
+				return nil
+			}
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return validateProviderURL(req.URL.String())
+		},
+	}
+}
+
+// privateSearchAllowed reports whether the user has explicitly opted in to
+// allowing web search providers that resolve to private or loopback addresses
+// (useful for local development against a self-hosted search API). Read on
+// every call so tests and long-lived processes pick up env changes.
+func privateSearchAllowed() bool {
+	return os.Getenv("MODS_WEB_SEARCH_ALLOW_PRIVATE") == "1"
+}
+
+// isBlockedAddress reports whether an IP is internal/loopback/link-local,
+// i.e. must never be reachable from a user-controlled search provider URL.
+func isBlockedAddress(ip net.IP) bool {
+	return ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified()
+}
+
+// validateProviderURL rejects URLs whose host is a private/loopback IP literal.
+// Hostnames are checked again at dial time (see safeDialContext) to defeat
+// DNS rebinding between validation and connect.
+func validateProviderURL(rawURL string) error {
+	if privateSearchAllowed() {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("web search: invalid provider URL: %w", err)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("web search: provider URL is missing a host")
+	}
+	if ip := net.ParseIP(host); ip != nil && isBlockedAddress(ip) {
+		return fmt.Errorf("web search: provider URL host %s is a private or loopback address; set MODS_WEB_SEARCH_ALLOW_PRIVATE=1 to allow", host)
+	}
+	return nil
+}
+
+// safeSearchTransport returns an http.Transport whose DialContext refuses to
+// connect to any resolved private/loopback/link-local address. This is the
+// authoritative SSRF defence: even if a hostname resolves to a public IP at
+// validation time and to 127.0.0.1 a millisecond later (DNS rebinding), the
+// dial is refused.
+func safeSearchTransport() *http.Transport {
+	dialer := &net.Dialer{}
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if privateSearchAllowed() {
+				return dialer.DialContext(ctx, network, addr)
+			}
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, err
+			}
+			for _, resolved := range ips {
+				if isBlockedAddress(resolved.IP) {
+					return nil, fmt.Errorf("web search: refused to dial private or loopback address %s for %q", resolved.IP, host)
+				}
+			}
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+		},
+	}
 }
 
 func newRequest(ctx context.Context, method, urlStr string) (*http.Request, error) {
@@ -331,6 +415,9 @@ func searchTavily(ctx context.Context, apiKey, query string, maxResults int) ([]
 }
 
 func searchCustom(ctx context.Context, baseURL, apiKey, query string, maxResults int) ([]Result, error) {
+	if err := validateProviderURL(baseURL); err != nil {
+		return nil, err
+	}
 	params := url.Values{}
 	params.Set("q", query)
 	params.Set("limit", fmt.Sprintf("%d", maxResults))

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
@@ -28,14 +29,19 @@ var (
 type Config struct {
 	BaseURL        string
 	HTTPClient     *http.Client
+	AuthToken      string
 	ThinkingBudget int
 }
 
 // DefaultConfig returns the default configuration for the Google API client.
 func DefaultConfig(model, authToken string) Config {
 	return Config{
-		BaseURL:    fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse&key=%s", model, authToken),
+		BaseURL: fmt.Sprintf(
+			"https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse",
+			url.PathEscape(model),
+		),
 		HTTPClient: &http.Client{},
+		AuthToken:  authToken,
 	}
 }
 
@@ -342,6 +348,9 @@ func (s *Stream) Current() (proto.Chunk, error) {
 
 func googleSendRequestStream(client *Client, req *http.Request) (*Stream, error) {
 	req.Header.Set("content-type", "application/json")
+	if client.config.AuthToken != "" {
+		req.Header.Set("x-goog-api-key", client.config.AuthToken)
+	}
 
 	resp, err := client.config.HTTPClient.Do(req) //nolint:bodyclose // body is closed in stream.Close()
 	if err != nil {

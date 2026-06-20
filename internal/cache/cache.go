@@ -60,21 +60,44 @@ func (c *Cache[T]) Read(id string, readFn func(io.Reader) error) error {
 	return nil
 }
 
-func (c *Cache[T]) Write(id string, writeFn func(io.Writer) error) error {
+func (c *Cache[T]) Write(id string, writeFn func(io.Writer) error) (err error) {
 	if id == "" {
 		return fmt.Errorf("write: %w", errInvalidID)
 	}
 
-	file, err := os.Create(filepath.Join(c.dir(), id+cacheExt))
+	// Write to a sibling temp file, fsync, then atomically rename it over the
+	// target. This guarantees a crash mid-write cannot corrupt or truncate an
+	// existing valid cache entry (previously os.Create truncated the file to
+	// zero before the new content was written).
+	final := filepath.Join(c.dir(), id+cacheExt)
+	tmp := final + ".tmp"
+
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
-	defer file.Close() //nolint:errcheck
+	defer func() {
+		_ = f.Close()
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
 
-	if err := writeFn(file); err != nil {
+	if err = writeFn(f); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
-
+	if err = f.Sync(); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
+	// Explicit close to surface deferred write errors (ENOSPC/EIO) before
+	// committing the rename. The deferred Close above becomes a no-op double
+	// close on this path.
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
+	if err = os.Rename(tmp, final); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
 	return nil
 }
 

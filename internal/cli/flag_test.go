@@ -18,8 +18,34 @@ var flagParseErrorTests = []struct {
 		"Flag %s is missing.",
 	},
 	{
+		// Shorthand cluster: pflag reports the unknown character quoted. The
+		// previous regex `(-\w)` captured the first cluster char (-x), misreporting
+		// the wrong flag. We now capture the quoted character.
+		`unknown shorthand flag: 'z' in -xz`,
+		"-z",
+		"Short flag %s is missing.",
+	},
+	{
+		`unknown shorthand flag: 'q' in -q`,
+		"-q",
+		"Short flag %s is missing.",
+	},
+	{
 		"flag needs an argument: --delete",
 		"--delete",
+		"Flag %s needs an argument.",
+	},
+	{
+		// Multi-hyphen long flag: the previous strings.Split(s, "-") approach
+		// produced >3 parts and left `flag` empty, yielding "Flag  is missing."
+		// in the UI. TrimPrefix handles arbitrary hyphens.
+		"flag needs an argument: --delete-older-than",
+		"--delete-older-than",
+		"Flag %s needs an argument.",
+	},
+	{
+		"flag needs an argument: --format-as",
+		"--format-as",
 		"Flag %s needs an argument.",
 	},
 	{

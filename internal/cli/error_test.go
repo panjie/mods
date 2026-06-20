@@ -35,7 +35,9 @@ func TestNewFlagParseError(t *testing.T) {
 	t.Run("unknown shorthand", func(t *testing.T) {
 		fpe := newFlagParseError(errors.New("unknown shorthand flag: 'z' in -xz"))
 		require.Equal(t, "Short flag %s is missing.", fpe.ReasonText)
-		require.Equal(t, "-x", fpe.flag)
+		// The unknown character is 'z' (the quoted char), not 'x' (the cluster
+		// start). Previously the regex captured -x, misreporting the flag.
+		require.Equal(t, "-z", fpe.flag)
 	})
 
 	t.Run("invalid argument", func(t *testing.T) {

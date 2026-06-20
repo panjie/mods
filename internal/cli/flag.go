@@ -15,22 +15,29 @@ func newFlagParseError(err error) flagParseError {
 	switch {
 	case strings.HasPrefix(s, "flag needs an argument:"):
 		reason = "Flag %s needs an argument."
-		ps := strings.Split(s, "-")
-		switch len(ps) {
-		case 2: //nolint:mnd
-			flag = "-" + ps[len(ps)-1]
-		case 3: //nolint:mnd
-			flag = "--" + ps[len(ps)-1]
+		// pflag emits two shapes:
+		//   "flag needs an argument: --delete-older-than"  (long flag)
+		//   "flag needs an argument: 'd' in -d"            (short flag in a cluster)
+		// TrimPrefix handles arbitrary multi-hyphen long flag names; the previous
+		// strings.Split(s, "-") approach broke on any flag containing a hyphen.
+		rest := strings.TrimSpace(strings.TrimPrefix(s, "flag needs an argument:"))
+		if idx := strings.Index(rest, " in -"); idx >= 0 {
+			flag = rest[idx+len(" in "):] // short cluster, e.g. "-d"
+		} else {
+			flag = rest // long flag, e.g. "--delete-older-than"
 		}
 	case strings.HasPrefix(s, "unknown flag:"):
 		reason = "Flag %s is missing."
 		flag = strings.TrimPrefix(s, "unknown flag: ")
 	case strings.HasPrefix(s, "unknown shorthand flag:"):
 		reason = "Short flag %s is missing."
-		re := regexp.MustCompile(`unknown shorthand flag: '.*' in (-\w)`)
+		// pflag format: "unknown shorthand flag: 'z' in -xz". Capture the quoted
+		// character (the actual unknown flag) rather than the first character of
+		// the cluster — the previous `(-\w)` regex reported -x for input -xz.
+		re := regexp.MustCompile(`unknown shorthand flag: '(\w)'`)
 		parts := re.FindStringSubmatch(s)
 		if len(parts) > 1 {
-			flag = parts[1]
+			flag = "-" + parts[1]
 		}
 	case strings.HasPrefix(s, "invalid argument"):
 		reason = "Flag %s have an invalid argument."

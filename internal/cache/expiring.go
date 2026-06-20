@@ -72,27 +72,52 @@ func (c *ExpiringCache[T]) Read(id string, readFn func(io.Reader) error) (err er
 	return readFn(file)
 }
 
-func (c *ExpiringCache[T]) Write(id string, expiresAt int64, writeFn func(io.Writer) error) error {
-	pattern := fmt.Sprintf("%s.*", id)
-	oldFiles, _ := filepath.Glob(filepath.Join(c.cache.dir(), pattern))
-	for _, file := range oldFiles {
-		if err := os.Remove(file); err != nil {
-			return fmt.Errorf("failed to remove old cache file: %w", err)
-		}
-	}
+func (c *ExpiringCache[T]) Write(id string, expiresAt int64, writeFn func(io.Writer) error) (err error) {
+	dir := c.cache.dir()
+	final := filepath.Join(dir, c.getCacheFilename(id, expiresAt))
+	tmp := final + ".tmp"
 
-	filename := c.getCacheFilename(id, expiresAt)
-	file, err := os.Create(filepath.Join(c.cache.dir(), filename))
+	// Write to a temp file first so a crash or writeFn error cannot destroy an
+	// existing entry; only commit (rename) once the new content is on disk.
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create expiring cache file: %w", err)
 	}
 	defer func() {
-		if cerr := file.Close(); cerr != nil {
-			err = cerr
+		_ = f.Close()
+		if err != nil {
+			_ = os.Remove(tmp)
 		}
 	}()
 
-	return writeFn(file)
+	if err = writeFn(f); err != nil {
+		return fmt.Errorf("failed to write expiring cache file: %w", err)
+	}
+	if err = f.Sync(); err != nil {
+		return fmt.Errorf("failed to sync expiring cache file: %w", err)
+	}
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("failed to close expiring cache file: %w", err)
+	}
+
+	// Remove prior entries for this id (different expiry timestamps) only
+	// after the new entry is safely on disk. The new temp file matches the
+	// "<id>.*" glob, so skip it.
+	pattern := fmt.Sprintf("%s.*", id)
+	oldFiles, _ := filepath.Glob(filepath.Join(dir, pattern))
+	for _, file := range oldFiles {
+		if file == tmp {
+			continue
+		}
+		if err = os.Remove(file); err != nil {
+			return fmt.Errorf("failed to remove old cache file: %w", err)
+		}
+	}
+
+	if err = os.Rename(tmp, final); err != nil {
+		return fmt.Errorf("failed to commit expiring cache file: %w", err)
+	}
+	return nil
 }
 
 // Delete removes an expired cached item by its ID.

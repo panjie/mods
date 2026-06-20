@@ -1,8 +1,11 @@
 package cache
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -149,5 +152,93 @@ func TestExpiringCache(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, data2, result)
+	})
+}
+
+// TestCacheWriteAtomic verifies the tmp+fsync+rename write strategy. The key
+// invariant: a write that fails mid-stream must NOT corrupt or truncate an
+// existing valid entry, and must not leave a stale .tmp file behind.
+func TestCacheWriteAtomic(t *testing.T) {
+	t.Run("preserves existing entry on writeFn failure", func(t *testing.T) {
+		cache, err := New[[]byte](t.TempDir(), ConversationCache)
+		require.NoError(t, err)
+
+		// Seed a valid entry.
+		require.NoError(t, cache.Write("id1", func(w io.Writer) error {
+			_, err := w.Write([]byte("original"))
+			return err
+		}))
+
+		// Attempt a write that fails partway. Under the previous non-atomic
+		// os.Create implementation this would have truncated "id1" to zero
+		// bytes before the failure; the atomic strategy must leave it intact.
+		writeErr := cache.Write("id1", func(w io.Writer) error {
+			_, _ = w.Write([]byte("partial-junk"))
+			return errors.New("simulated write failure")
+		})
+		require.Error(t, writeErr)
+
+		// Original content survives.
+		var content bytes.Buffer
+		require.NoError(t, cache.Read("id1", func(r io.Reader) error {
+			_, err := content.ReadFrom(r)
+			return err
+		}))
+		require.Equal(t, "original", content.String(), "existing entry must be untouched")
+
+		// No stale temp file left behind.
+		matches, _ := filepath.Glob(filepath.Join(cache.dir(), "*.tmp"))
+		require.Empty(t, matches, "no .tmp files should remain after a failed write")
+	})
+
+	t.Run("successful write replaces content and leaves no tmp", func(t *testing.T) {
+		cache, err := New[[]byte](t.TempDir(), ConversationCache)
+		require.NoError(t, err)
+
+		require.NoError(t, cache.Write("id1", func(w io.Writer) error {
+			_, err := w.Write([]byte("v1"))
+			return err
+		}))
+		require.NoError(t, cache.Write("id1", func(w io.Writer) error {
+			_, err := w.Write([]byte("v2"))
+			return err
+		}))
+
+		var content bytes.Buffer
+		require.NoError(t, cache.Read("id1", func(r io.Reader) error {
+			_, err := content.ReadFrom(r)
+			return err
+		}))
+		require.Equal(t, "v2", content.String())
+
+		matches, _ := filepath.Glob(filepath.Join(cache.dir(), "*.tmp"))
+		require.Empty(t, matches)
+	})
+
+	t.Run("ExpiringCache preserves existing entry on writeFn failure", func(t *testing.T) {
+		cache, err := NewExpiring[[]byte](t.TempDir())
+		require.NoError(t, err)
+		expires := time.Now().Add(time.Hour).Unix()
+
+		require.NoError(t, cache.Write("tok", expires, func(w io.Writer) error {
+			_, err := w.Write([]byte("original-token"))
+			return err
+		}))
+
+		writeErr := cache.Write("tok", expires, func(w io.Writer) error {
+			_, _ = w.Write([]byte("partial"))
+			return errors.New("simulated write failure")
+		})
+		require.Error(t, writeErr)
+
+		var content bytes.Buffer
+		require.NoError(t, cache.Read("tok", func(r io.Reader) error {
+			_, err := content.ReadFrom(r)
+			return err
+		}))
+		require.Equal(t, "original-token", content.String())
+
+		matches, _ := filepath.Glob(filepath.Join(cache.cache.dir(), "*.tmp"))
+		require.Empty(t, matches)
 	})
 }

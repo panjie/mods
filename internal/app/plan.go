@@ -61,7 +61,6 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 	m.cancelMu.Lock()
 	m.cancelRequest = nil
 	m.cancelMu.Unlock()
-	m.reasoningActive = false
 	m.responseOutputStarted = false
 	m.Output = ""
 
@@ -97,6 +96,8 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 		cccfg := cfgs.Cohere
 		occfg := cfgs.Ollama
 		ccfg := cfgs.OpenAI
+
+		m.reasoningActive = m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
 
 		if cfg.HTTPProxy != "" {
 			proxyURL, err := url.Parse(cfg.HTTPProxy)

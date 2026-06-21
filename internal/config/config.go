@@ -78,6 +78,7 @@ var Help = map[string]string{
 	"topk":                  "TopK, only sample from the top K options for each subsequent token, -1 to disable",
 	"status-text":           "Text to show while generating",
 	"settings":              "Open settings in your $EDITOR",
+	"config":                "Interactive setup wizard for provider, model, API key, and tools",
 	"dirs":                  "Print the directories in which mods store its data",
 	"reset-settings":        "Backup your old settings file and reset everything to the defaults",
 	"continue":              "Continue from the last response or a given save title",
@@ -253,6 +254,7 @@ type Config struct {
 	ResetSettings   bool
 	Version         bool
 	Settings        bool
+	ConfigSetup     bool
 	Dirs            bool
 	ContinueLast    bool
 	Continue        string

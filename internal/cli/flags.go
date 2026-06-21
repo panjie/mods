@@ -54,6 +54,7 @@ const (
 	flagContinue      = "continue"
 	flagContinueLast  = "continue-last"
 	flagResetSettings = "reset-settings"
+	flagConfig        = "config"
 	flagMCPList       = "mcp-list"
 	flagMCPListTools  = "mcp-list-tools"
 )
@@ -70,6 +71,7 @@ var sessionActionFlags = []string{
 	flagContinue,
 	flagContinueLast,
 	flagResetSettings,
+	flagConfig,
 	flagMCPList,
 	flagMCPListTools,
 }

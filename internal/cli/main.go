@@ -122,6 +122,18 @@ var (
 				}
 			}
 
+			if config.ConfigSetup {
+				if err := RunConfigWizard(); err != nil {
+					return modsError{Err: err, ReasonText: "Configuration wizard failed."}
+				}
+				return nil
+			}
+
+			if isNoArgs() && !HasAPIKey(&config) && config.API != "ollama" && IsErrorTTY() {
+				fmt.Fprintf(os.Stderr, "\n  No API key detected for %s.\n  Run %s to configure your provider.\n\n",
+					config.API, StderrStyles().InlineCode.Render("mods --config"))
+			}
+
 			mods, err := newMods(cmd.Context(), StderrRenderer(), &config, db)
 			if err != nil {
 				return modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
@@ -292,6 +304,7 @@ func initFlags() {
 	regBool(flags, &config.NoCache, "no-cache", "", config.NoCache)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
 	regBool(flags, &config.Settings, "settings", "", false)
+	regBool(flags, &config.ConfigSetup, "config", "", false)
 	regBool(flags, &config.Dirs, "dirs", "", false)
 	regStr(flags, &config.Role, "role", "R", config.Role)
 	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
@@ -374,7 +387,7 @@ func initFlags() {
 		"stdin-image",
 		"clipboard-image",
 	)
-	markCategory(flags, flagCategoryConfigUI, "settings", "dirs", "reset-settings", "theme", "help", "help-all", "version")
+	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "theme", "help", "help-all", "version")
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key")
 	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review", "max-tool-rounds")
@@ -443,7 +456,7 @@ func execute() {
 	config, err = Ensure()
 	if err != nil {
 		handleError(modsError{Err: err, ReasonText: "Could not load your configuration file."})
-		if !slices.Contains(os.Args, "--settings") {
+		if !slices.Contains(os.Args, "--settings") && !slices.Contains(os.Args, "--config") {
 			os.Exit(1)
 		}
 	}
@@ -876,6 +889,7 @@ func isNoArgs() bool {
 		!config.MCPListTools &&
 		!config.Dirs &&
 		!config.Settings &&
+		!config.ConfigSetup &&
 		!config.ResetSettings
 }
 

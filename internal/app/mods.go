@@ -204,6 +204,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Config.List ||
 			m.Config.ListRoles ||
 			m.Config.Settings ||
+			m.Config.ConfigSetup ||
 			m.Config.ResetSettings {
 			return m, m.quit
 		}
@@ -224,6 +225,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Config.List ||
 			m.Config.ListRoles ||
 			m.Config.Settings ||
+			m.Config.ConfigSetup ||
 			m.Config.ResetSettings {
 			return m, m.quit
 		}

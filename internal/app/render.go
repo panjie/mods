@@ -83,7 +83,7 @@ func (m *Mods) renderWithOperation(content string) string {
 	if m.Config.Quiet || m.Config.HideToolStatus || !m.showOperationStatus {
 		return content
 	}
-	if strings.TrimSpace(m.getActiveOperation()) == "" && !m.reasoningActive {
+	if strings.TrimSpace(m.getActiveOperation()) == "" {
 		return content
 	}
 	status := m.operationStatusLine()
@@ -95,13 +95,6 @@ func (m *Mods) renderWithOperation(content string) string {
 
 func (m *Mods) operationStatusLine() string {
 	text := m.getActiveOperation()
-	if text == "" && m.reasoningActive {
-		text = "Reasoning..."
-	}
-	if m.reasoningActive {
-		badge := m.Styles.InlineCode.Render("[R]")
-		return badge + " " + m.Styles.Comment.Render(TruncateOperationStatus(text, m.width-4))
-	}
 	text = TruncateOperationStatus(text, m.width)
 	return m.Styles.Comment.Render(text)
 }

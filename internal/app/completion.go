@@ -94,9 +94,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		}
 
 		m.reasoningActive = m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
-		if m.reasoningActive {
-			m.setActiveOperation("Deep reasoning...")
-		}
 
 		if cfg.HTTPProxy != "" {
 			proxyURL, err := url.Parse(cfg.HTTPProxy)

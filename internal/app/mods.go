@@ -266,8 +266,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.responseOutputStarted = true
 			if m.Config.Plan {
 				m.setActiveOperation("Planning...")
-			} else if m.reasoningActive {
-				m.setActiveOperation("Deep reasoning...")
 			} else {
 				m.setActiveOperation("")
 			}

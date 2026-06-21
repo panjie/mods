@@ -529,6 +529,25 @@ func TestOperationStatusView(t *testing.T) {
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
 		require.NotContains(t, m.View(), "Running command: go test ./...")
 	})
+
+	t.Run("reasoning alone does not show status", func(t *testing.T) {
+		m := newTestMods()
+		m.reasoningActive = true
+		view := m.renderWithOperation("answer")
+		require.Equal(t, "answer", view)
+		require.NotContains(t, view, "[R]")
+		require.NotContains(t, view, "Reasoning")
+	})
+
+	t.Run("active operation while reasoning renders without reasoning badge", func(t *testing.T) {
+		m := newTestMods()
+		m.reasoningActive = true
+		m.setActiveOperation("Running command: go test ./...")
+		view := m.renderWithOperation("answer")
+		require.Contains(t, view, "Running command: go test ./...")
+		require.NotContains(t, view, "[R]")
+		require.NotContains(t, view, "Reasoning")
+	})
 }
 
 func TestApprovedPlanTranscript(t *testing.T) {

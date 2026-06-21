@@ -217,12 +217,13 @@ always see exactly what will execute, and you choose what happens next:
 
 ```
 Review: Run: git commit -m "Update docs"
-[Y] Approve  [N] Deny  [A] Always allow: shell_run(git commit *)  [Ctrl+C] Cancel
+[Y] Approve  [N] Deny  [A] Always allow  [Ctrl+C] Cancel
+Always saves in /path/to/workspace: shell_run(git commit *)
 ```
 
 - `Y` — approve this one call
 - `N` — deny; Mods gets the failure and can react
-- `A` — save a per-conversation rule so similar calls skip the prompt from now on
+- `A` — save a per-conversation rule for the current workspace so similar calls skip the prompt from now on
 - `Ctrl+C` — cancel the whole run
 
 Pick the mode that fits the task with `-V` / `--review` (or `review-mode` in

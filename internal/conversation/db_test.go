@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,13 @@ func testDB(tb testing.TB) *convoDB {
 		require.NoError(tb, db.Close())
 	})
 	return db
+}
+
+func testScopedRule(rule ApprovalRule) ApprovalRule {
+	scope := workspaceScope("/workspace")
+	rule.ScopeKind = scope.Kind
+	rule.ScopeValue = scope.Value
+	return rule
 }
 
 func TestHandleSqliteErr(t *testing.T) {
@@ -214,8 +222,8 @@ func TestConversationData(t *testing.T) {
 		},
 	}
 	rules := []ApprovalRule{
-		{Type: approvalShellPrefix, Tool: "shell_run", Pattern: "git commit *"},
-		{Type: approvalEditAll, Tool: "file_edit"},
+		testScopedRule(ApprovalRule{Type: approvalShellPrefix, Tool: "shell_run", Pattern: "git commit *"}),
+		testScopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}),
 	}
 
 	require.NoError(t, db.SaveConversation(id, "conversation", "openai", "gpt-5", messages, rules))
@@ -245,10 +253,10 @@ func TestSaveConversationRollsBackAtomically(t *testing.T) {
 	db := testDB(t)
 	id := newConversationID()
 	originalMessages := []proto.Message{{Role: proto.RoleUser, Content: "original"}}
-	originalRules := []ApprovalRule{{
+	originalRules := []ApprovalRule{testScopedRule(ApprovalRule{
 		Type: approvalShellPrefix,
 		Tool: "shell_run", Pattern: "git commit *",
-	}}
+	})}
 	require.NoError(t, db.SaveConversation(
 		id, "original", "openai", "gpt-5", originalMessages, originalRules,
 	))
@@ -259,7 +267,7 @@ func TestSaveConversationRollsBackAtomically(t *testing.T) {
 		"openai",
 		"gpt-5",
 		[]proto.Message{{Role: proto.RoleUser, Content: "replacement"}},
-		[]ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}},
+		[]ApprovalRule{testScopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})},
 	)
 	require.Error(t, err)
 
@@ -269,6 +277,48 @@ func TestSaveConversationRollsBackAtomically(t *testing.T) {
 	loadedRules, err := db.ApprovalRules(id)
 	require.NoError(t, err)
 	require.Equal(t, originalRules, loadedRules)
+}
+
+func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.db")
+	raw, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	_, err = raw.Exec(`
+		CREATE TABLE conversations (
+			id string NOT NULL PRIMARY KEY,
+			title string NOT NULL,
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			CHECK (id <> ''),
+			CHECK (title <> '')
+		);
+		CREATE TABLE approval_rules (
+			conversation_id string NOT NULL,
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, rule_type, tool_name, pattern),
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		);
+		INSERT INTO conversations (id, title) VALUES ('abc', 'legacy');
+		INSERT INTO approval_rules (conversation_id, rule_type, tool_name, pattern)
+		VALUES ('abc', 'edit_all', 'file_edit', '');
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	db, err := openDB(path)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+	rules, err := db.ApprovalRules("abc")
+	require.NoError(t, err)
+	require.Equal(t, []ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}}, rules)
+
+	var ruleSet approvalRuleSet
+	ruleSet.Replace(rules)
+	require.False(t, ruleSet.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), workspaceScope("/workspace")))
 }
 
 func TestMigrateLegacyConversations(t *testing.T) {

@@ -19,6 +19,7 @@ type DB = conversation.DB
 type Conversation = conversation.Conversation
 type Rule = approval.Rule
 type RuleSet = approval.RuleSet
+type Scope = approval.Scope
 type Styles = ui.Styles
 
 var newUserErrorf = apperr.NewUserErrorf
@@ -45,6 +46,7 @@ var HideCommandWindow = platform.HideCommandWindow
 var BuildRegistry = tooling.BuildRegistry
 var RulesFor = approval.RulesFor
 var RulesLabel = approval.RulesLabel
+var WorkspaceScope = approval.WorkspaceScope
 var ExtractShellCommand = approval.ExtractShellCommand
 var ErrNoMatches = conversation.ErrNoMatches
 

@@ -23,12 +23,14 @@ type toolReviewer struct {
 	reviewPending bool
 	reviewItem    *toolReviewItem
 	rules         RuleSet
+	scope         Scope
 	selected      int
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
 	return &toolReviewer{
 		reviewMode: cfg.ReviewMode,
+		scope:      WorkspaceScope(cfg.ResolveWorkspaceRoot()),
 	}
 }
 
@@ -91,8 +93,8 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "a", "A":
-		r.rules.Add(r.reviewItem.alwaysRules...)
-		r.reviewItem.resp <- reviewResponse{approved: true, remember: true}
+		r.rules.Add(r.reviewItem.candidateRules...)
+		r.reviewItem.resp <- reviewResponse{approved: true}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
@@ -120,8 +122,8 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		case 1:
 			r.reviewItem.resp <- reviewResponse{}
 		case 2:
-			r.rules.Add(r.reviewItem.alwaysRules...)
-			r.reviewItem.resp <- reviewResponse{approved: true, remember: true}
+			r.rules.Add(r.reviewItem.candidateRules...)
+			r.reviewItem.resp <- reviewResponse{approved: true}
 		case 3:
 			r.reviewItem.resp <- reviewResponse{}
 		}
@@ -153,7 +155,7 @@ func (r *toolReviewer) shouldReviewTool(name string) bool {
 
 func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) error {
 	debug.Printf("requestApproval called: name=%s", name)
-	if r.rules.Allows(name, data) {
+	if r.rules.Allows(name, data, r.scope) {
 		debug.Printf("requestApproval: matched conversation approval rule, auto-approving")
 		return nil
 	}
@@ -177,12 +179,12 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 		)
 	}
 	respCh := make(chan reviewResponse, 1)
-	alwaysRules := RulesFor(name, data)
+	candidateRules := RulesFor(name, data, r.scope)
 	item := toolReviewItem{
-		name:        name,
-		args:        data,
-		alwaysRules: alwaysRules,
-		resp:        respCh,
+		name:           name,
+		args:           data,
+		candidateRules: candidateRules,
+		resp:           respCh,
 	}
 	select {
 	case r.reviewChan <- item:
@@ -193,8 +195,7 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 	}
 	select {
 	case response := <-respCh:
-		debug.Printf("requestApproval: user response received, approved=%v remember=%v",
-			response.approved, response.remember)
+		debug.Printf("requestApproval: user response received, approved=%v", response.approved)
 		if response.approved {
 			return nil
 		}
@@ -243,7 +244,7 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	options := []string{
 		"[Y] Approve",
 		"[N] Deny",
-		fmt.Sprintf("[A] Always allow: %s", RulesLabel(r.reviewItem.alwaysRules)),
+		"[A] Always allow",
 		"[Ctrl+C] Cancel",
 	}
 	var parts []string
@@ -255,11 +256,19 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 		}
 	}
 	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, "  "))
-	block := promptLine + "\n" + choicesLine
+	alwaysLine := reviewChoices.Copy().Width(width).Render(formatAlwaysAllowSummary(r.reviewItem.candidateRules, r.scope, width))
+	block := promptLine + "\n" + choicesLine + "\n" + alwaysLine
 	if strings.TrimSpace(content) == "" {
 		return block
 	}
 	return strings.TrimRight(content, "\r\n") + "\n" + block
+}
+
+func formatAlwaysAllowSummary(rules []Rule, scope Scope, width int) string {
+	if scope.Kind == "" || scope.Value == "" {
+		return TruncateOperationStatus("Always saves: "+RulesLabel(rules), width)
+	}
+	return TruncateOperationStatus(fmt.Sprintf("Always saves in %s: %s", scope.Value, RulesLabel(rules)), width)
 }
 
 func padRight(s string, w int) string {

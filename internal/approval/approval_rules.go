@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -13,23 +14,49 @@ import (
 )
 
 type RuleType string
+type ScopeKind string
 
 const (
 	ShellPrefix RuleType = "shell_prefix"
 	ShellExact  RuleType = "shell_exact"
 	EditAll     RuleType = "edit_all"
 	ToolAll     RuleType = "tool_all"
+
+	ScopeWorkspace ScopeKind = "workspace"
 )
 
-// Rule is a conversation-scoped permission granted through the review UI.
+// Scope identifies the boundary within which an approval rule applies.
+type Scope struct {
+	Kind  ScopeKind
+	Value string
+}
+
+// Rule is a scoped permission granted through the review UI.
 type Rule struct {
-	Type    RuleType `db:"rule_type"`
-	Tool    string   `db:"tool_name"`
-	Pattern string   `db:"pattern"`
+	ScopeKind  ScopeKind `db:"scope_kind"`
+	ScopeValue string    `db:"scope_value"`
+	Type       RuleType  `db:"rule_type"`
+	Tool       string    `db:"tool_name"`
+	Pattern    string    `db:"pattern"`
+}
+
+func WorkspaceScope(root string) Scope {
+	return Scope{
+		Kind:  ScopeWorkspace,
+		Value: filepath.Clean(root),
+	}
 }
 
 func (r Rule) key() string {
-	return string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern
+	return string(r.ScopeKind) + "\x00" + r.ScopeValue + "\x00" +
+		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern
+}
+
+func (r Rule) matchesScope(scope Scope) bool {
+	if scope.Kind == "" || scope.Value == "" {
+		return false
+	}
+	return r.ScopeKind == scope.Kind && r.ScopeValue == scope.Value
 }
 
 func (r Rule) String() string {
@@ -68,8 +95,8 @@ func (s *RuleSet) Snapshot() []Rule {
 	return append([]Rule(nil), s.rules...)
 }
 
-func (s *RuleSet) Allows(name string, data []byte) bool {
-	rules := s.Snapshot()
+func (s *RuleSet) Allows(name string, data []byte, scope Scope) bool {
+	rules := rulesForScope(s.Snapshot(), scope)
 	switch name {
 	case "fs_write_file", "fs_apply_patch":
 		return slices.ContainsFunc(rules, func(rule Rule) bool {
@@ -104,7 +131,11 @@ func Dedupe(rules []Rule) []Rule {
 	return result
 }
 
-func RulesFor(name string, data []byte) []Rule {
+func RulesFor(name string, data []byte, scope Scope) []Rule {
+	return scopeRules(rulesForTool(name, data), scope)
+}
+
+func rulesForTool(name string, data []byte) []Rule {
 	switch name {
 	case "fs_write_file", "fs_apply_patch":
 		return []Rule{{
@@ -119,6 +150,29 @@ func RulesFor(name string, data []byte) []Rule {
 			Tool: name,
 		}}
 	}
+}
+
+func scopeRules(rules []Rule, scope Scope) []Rule {
+	if scope.Kind == "" || scope.Value == "" {
+		return nil
+	}
+	result := make([]Rule, 0, len(rules))
+	for _, rule := range rules {
+		rule.ScopeKind = scope.Kind
+		rule.ScopeValue = scope.Value
+		result = append(result, rule)
+	}
+	return result
+}
+
+func rulesForScope(rules []Rule, scope Scope) []Rule {
+	result := make([]Rule, 0, len(rules))
+	for _, rule := range rules {
+		if rule.matchesScope(scope) {
+			result = append(result, rule)
+		}
+	}
+	return result
 }
 
 func RulesLabel(rules []Rule) string {

@@ -79,10 +79,10 @@ func TestFindCacheOpsDetails(t *testing.T) {
 	t.Run("continue id", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
-		rules := []ApprovalRule{{
+		rules := []ApprovalRule{scopedRule(ApprovalRule{
 			Type: approvalShellPrefix,
 			Tool: "shell_run", Pattern: "git commit *",
-		}}
+		})}
 		require.NoError(t, mods.db.SaveConversation(
 			id,
 			"message",
@@ -173,7 +173,7 @@ func TestFindCacheOpsDetails(t *testing.T) {
 	t.Run("continue id and write with title", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
-		rules := []ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}}
+		rules := []ApprovalRule{scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})}
 		require.NoError(t, mods.db.SaveConversation(
 			id,
 			"message 1",
@@ -203,7 +203,7 @@ func TestFindCacheOpsDetails(t *testing.T) {
 			"openai",
 			"gpt-4",
 			[]proto.Message{{Role: proto.RoleUser, Content: "message"}},
-			[]ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}},
+			[]ApprovalRule{scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})},
 		))
 		mods.Config.Continue = id
 		mods.Config.Prefix = "prompt"

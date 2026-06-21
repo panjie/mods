@@ -15,6 +15,7 @@ var shellApprovalRulesWithMode = approval.ShellRulesWithMode
 var shellApprovalRulesForToolWithMode = approval.ShellRulesForToolWithMode
 var shellRulesAllowWithMode = approval.ShellAllowWithMode
 var shellRulesAllowForToolWithMode = approval.ShellAllowForToolWithMode
+var dedupeApprovalRules = approval.Dedupe
 var newConversationID = conversation.NewID
 var sha1reg = conversation.IDPattern
 var newAnim = ui.NewAnim

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +12,22 @@ import (
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
+
+var testApprovalScope = WorkspaceScope("/workspace")
+
+func scopedRule(rule ApprovalRule) ApprovalRule {
+	rule.ScopeKind = testApprovalScope.Kind
+	rule.ScopeValue = testApprovalScope.Value
+	return rule
+}
+
+func scopedRules(rules []ApprovalRule) []ApprovalRule {
+	result := make([]ApprovalRule, 0, len(rules))
+	for _, rule := range rules {
+		result = append(result, scopedRule(rule))
+	}
+	return result
+}
 
 func TestShellApprovalRules(t *testing.T) {
 	t.Run("command prefixes", func(t *testing.T) {
@@ -163,30 +180,46 @@ func TestPowerShellApprovalRules(t *testing.T) {
 func TestApprovalRuleSet(t *testing.T) {
 	var rules approvalRuleSet
 
-	rules.Add(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})
-	require.True(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`)))
-	require.True(t, rules.Allows("fs_apply_patch", []byte(`{"patch":"..."}`)))
-	require.False(t, rules.Allows("shell_run", []byte(`{"command":"rm a.txt"}`)))
+	rules.Add(scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}))
+	require.True(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), testApprovalScope))
+	require.True(t, rules.Allows("fs_apply_patch", []byte(`{"patch":"..."}`), testApprovalScope))
+	require.False(t, rules.Allows("shell_run", []byte(`{"command":"rm a.txt"}`), testApprovalScope))
+	require.False(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), WorkspaceScope("/other")))
 
-	rules.Add(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)...)
-	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`)))
-	require.False(t, rules.Allows("shell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`)))
+	rules.Add(scopedRules(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false))...)
+	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`), testApprovalScope))
+	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`), WorkspaceScope("/other")))
+	require.False(t, rules.Allows("shell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`), testApprovalScope))
 
-	rules.Add(ApprovalRule{Type: approvalToolAll, Tool: "mcp_tool"})
-	require.True(t, rules.Allows("mcp_tool", []byte(`{"value":1}`)))
-	require.False(t, rules.Allows("other_tool", nil))
+	rules.Add(scopedRule(ApprovalRule{Type: approvalToolAll, Tool: "mcp_tool"}))
+	require.True(t, rules.Allows("mcp_tool", []byte(`{"value":1}`), testApprovalScope))
+	require.False(t, rules.Allows("other_tool", nil, testApprovalScope))
+
+	var legacyRules approvalRuleSet
+	legacyRules.Add(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})
+	require.False(t, legacyRules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), testApprovalScope))
+
+	workspaceRule := scopedRule(ApprovalRule{Type: approvalShellPrefix, Tool: "shell_run", Pattern: "git commit *"})
+	otherWorkspaceRule := workspaceRule
+	otherWorkspaceRule.ScopeValue = "/other"
+	require.ElementsMatch(t, []ApprovalRule{workspaceRule, otherWorkspaceRule}, dedupeApprovalRules([]ApprovalRule{
+		workspaceRule,
+		workspaceRule,
+		otherWorkspaceRule,
+	}))
 }
 
 func TestReviewKeys(t *testing.T) {
 	t.Run("yes does not remember", func(t *testing.T) {
 		reviewer := &toolReviewer{
 			reviewPending: true,
+			scope:         testApprovalScope,
 			reviewItem: &toolReviewItem{
 				resp: make(chan reviewResponse, 1),
-				alwaysRules: []ApprovalRule{{
+				candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
 					Type: approvalShellPrefix,
 					Tool: "shell_run", Pattern: "git commit *",
-				}},
+				})},
 			},
 		}
 		handled, _ := reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
@@ -199,11 +232,13 @@ func TestReviewKeys(t *testing.T) {
 			Type: approvalShellPrefix,
 			Tool: "shell_run", Pattern: "git commit *",
 		}
+		rule = scopedRule(rule)
 		reviewer := &toolReviewer{
 			reviewPending: true,
+			scope:         testApprovalScope,
 			reviewItem: &toolReviewItem{
-				resp:        make(chan reviewResponse, 1),
-				alwaysRules: []ApprovalRule{rule},
+				resp:           make(chan reviewResponse, 1),
+				candidateRules: []ApprovalRule{rule},
 			},
 		}
 		handled, _ := reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
@@ -215,17 +250,43 @@ func TestReviewKeys(t *testing.T) {
 func TestReviewBannerShowsSavedRule(t *testing.T) {
 	reviewer := &toolReviewer{
 		reviewPending: true,
+		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
 			name: "shell_run",
 			args: []byte(`{"command":"git commit -m message"}`),
-			alwaysRules: []ApprovalRule{{
+			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
 				Type: approvalShellPrefix,
 				Tool: "shell_run", Pattern: "git commit *",
-			}},
+			})},
 		},
 	}
 	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.Contains(t, rendered, "[A] Always allow: shell_run(git commit *)")
+	require.Contains(t, rendered, "[A] Always allow")
+	require.NotContains(t, rendered, "[A] Always allow: shell_run(git commit *)")
+	require.Contains(t, rendered, "Always saves in /workspace: shell_run(git commit *)")
+}
+
+func TestReviewBannerTruncatesSavedRule(t *testing.T) {
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			name: "shell_run",
+			args: []byte(`{"command":"cat >> ~/.config/ghostty/config.ghostty << 'EOF'\nfont-family = JetBrainsMono Nerd Font\nfont-family-bold = JetBrainsMono Nerd Font\nfont-family-italic = JetBrainsMono Nerd Font\nfont-family-bold-italic = JetBrainsMono Nerd Font\nEOF"}`),
+			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
+				Type:    approvalShellExact,
+				Tool:    "shell_run",
+				Pattern: "cat >> ~/.config/ghostty/config.ghostty << 'EOF' font-family = JetBrainsMono Nerd Font font-family-bold = JetBrainsMono Nerd Font font-family-italic = JetBrainsMono Nerd Font font-family-bold-italic = JetBrainsMono Nerd Font EOF",
+			})},
+		},
+	}
+	rendered := reviewer.renderBanner("", 80, lipgloss.NewStyle(), lipgloss.NewStyle())
+	lines := strings.Split(rendered, "\n")
+	for _, line := range lines {
+		require.LessOrEqual(t, len([]rune(line)), 80, line)
+	}
+	require.Contains(t, rendered, "Always saves in /workspace: shell_run(")
+	require.Contains(t, rendered, "...")
 }
 
 func TestReviewPolicyNonTTY(t *testing.T) {
@@ -239,90 +300,90 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	}
 
 	t.Run("review never allows mutable tool", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewNever}
+		reviewer := &toolReviewer{reviewMode: ReviewNever, scope: testApprovalScope}
 		require.False(t, reviewer.shouldReviewTool("fs_write_file"))
 	})
 
 	t.Run("mutable denies write without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("fs_write_file"))
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable allows read-only filesystem tool", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.False(t, reviewer.shouldReviewTool("fs_read_file"))
 	})
 
 	t.Run("mutable requires review for shell command when classifier unavailable", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable requires review for powershell command when classifier unavailable", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies nested powershell", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable routes powershell pipelines to review", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("saved rule allows matching powershell command", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways}
-		reviewer.rules.Add(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)...)
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRules(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false))...)
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`))
 		require.NoError(t, err)
 	})
 
 	t.Run("saved powershell prefix does not allow pipeline mutation", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways}
-		reviewer.rules.Add(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false)...)
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRules(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false))...)
 		require.True(t, reviewer.shouldReviewTool("powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows | Remove-Item -Recurse"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("always denies read-only tool without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways}
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool("fs_read_file"))
 		err := reviewer.requestApproval(mods, "fs_read_file", []byte(`{"path":"README.md"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("saved rule allows matching tool", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways}
-		reviewer.rules.Add(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}))
 		require.True(t, reviewer.shouldReviewTool("fs_write_file"))
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.NoError(t, err)

@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -207,6 +209,37 @@ func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
 	require.False(t, flagVisibleInUsage(flags.Lookup("memprofile"), true))
 }
 
+func TestUsageIntroAndPromptSyntax(t *testing.T) {
+	ensureTestFlags()
+	saveConfig := config
+	defer func() { config = saveConfig }()
+	config.HelpAll = false
+
+	output := captureStdout(t, func() {
+		require.NoError(t, usageFunc(rootCmd))
+	})
+
+	require.Contains(t, output, helpIntroSummary)
+	require.Contains(t, output, "inspect and edit files")
+	require.Contains(t, output, "run shell commands")
+	require.Contains(t, output, "[PROMPT...]")
+	require.NotContains(t, output, "[PREFIX TERM]")
+	require.Equal(t, helpIntroSummary, rootCmd.Short)
+}
+
+func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
+	ensureTestFlags()
+
+	groups := groupedUsageFlags(rootCmd.Flags(), true)
+	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
+	require.True(t, groupHasFlag(groups, flagCategoryMCP, "mcp-list"))
+	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "temp"))
+
+	for category, flags := range groups {
+		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))
+	}
+}
+
 func TestAdvancedFlagsStillParse(t *testing.T) {
 	saveConfig := config
 	defer func() { config = saveConfig }()
@@ -226,6 +259,12 @@ func TestReadmeDoesNotListRemovedPromptFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	readme := string(content)
+	require.Contains(t, readme, "[PROMPT...]")
+	require.Contains(t, readme, "grouped by purpose")
+	require.Contains(t, readme, "inspect and edit files")
+	require.Contains(t, readme, "run shell")
+	require.Contains(t, readme, "Review controls")
+	require.NotContains(t, readme, "[PREFIX TERM]")
 	require.NotContains(t, readme, "`--prompt`")
 	require.NotContains(t, readme, "`--prompt-args`")
 	require.NotContains(t, readme, "`-P`, `--prompt`")
@@ -236,4 +275,33 @@ func ensureTestFlags() {
 	if rootCmd.Flags().Lookup("minimal") == nil {
 		initFlags()
 	}
+}
+
+func groupHasFlag(groups map[string][]*pflag.Flag, category, name string) bool {
+	for _, f := range groups[category] {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func captureStdout(tb testing.TB, fn func()) string {
+	tb.Helper()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(tb, err)
+	os.Stdout = w
+	defer func() {
+		os.Stdout = old
+	}()
+
+	fn()
+
+	require.NoError(tb, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(tb, err)
+	require.NoError(tb, r.Close())
+	return string(out)
 }

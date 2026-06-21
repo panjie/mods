@@ -216,11 +216,16 @@ This fork adds the following features on top of the original Mods.
 
 ## What Can It Do?
 
-Mods works by reading standard in and prefacing it with a prompt supplied in
-the `mods` arguments. It sends the input text to an LLM and prints out the
-result, optionally asking the LLM to format the response as Markdown. This
-gives you a way to "question" the output of a command. Mods will also work on
-standard in or an argument supplied prompt individually.
+Mods is an AI command-line assistant for prompts, pipelines, and local work.
+It works by reading standard in and combining it with a prompt supplied in the
+`mods` arguments, then sending that context to an LLM and printing the result.
+This gives you a way to "question" the output of a command, or to use a prompt
+on its own when no standard input is provided.
+
+With built-in tools enabled, Mods can inspect and edit files, run shell
+commands, search the web, and keep conversations. Review controls protect risky
+actions such as file writes and shell commands, so you can approve, deny, or
+save per-conversation rules before changes happen.
 
 Mods ships with configuration for OpenAI, Anthropic, Google Gemini, Cohere,
 Azure OpenAI, DeepSeek, OpenRouter, and Ollama. You can configure LocalAI, Groq,
@@ -246,8 +251,13 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 
 ## Usage
 
-Run `mods --help` for the common day-to-day options, or `mods --help-all` for
-advanced and configuration-first options. Most advanced defaults can be set with
+```text
+mods [OPTIONS] [PROMPT...]
+```
+
+Run `mods --help` for the common day-to-day options. Run `mods --help-all` for
+the complete option list grouped by purpose, including advanced and
+configuration-first options. Most advanced defaults can be set with
 `mods --settings`.
 
 #### Model & API
@@ -255,6 +265,17 @@ advanced and configuration-first options. Most advanced defaults can be set with
 - `-a`, `--api`: API profile to use (`openai`, `anthropic`, `google`, `cohere`, `ollama`, custom profiles, etc.)
 - `-m`, `--model`: Model to use
 - `-M`, `--ask-model`: Ask which model to use via interactive prompt
+
+#### Session
+
+- `-t`, `--title`: Set the title for the conversation.
+- `-l`, `--list`: List saved conversations.
+- `-c`, `--continue`: Continue from last response or specific title or SHA-1.
+- `-C`, `--continue-last`: Continue the last conversation.
+- `-s`, `--show`: Show saved conversation for the given title or SHA-1
+- `-S`, `--show-last`: Show previous conversation
+- `-d`, `--delete`: Deletes saved conversations for the given titles or SHA-1s
+- `--delete-older-than=<duration>`: Deletes conversations older than given duration (`10d`, `1mo`)
 
 #### Input & Output
 
@@ -288,18 +309,7 @@ advanced and configuration-first options. Most advanced defaults can be set with
 
 - `--web-search`: Enable web search for up-to-date information (uses DuckDuckGo by default)
 
-#### Conversations
-
-- `-t`, `--title`: Set the title for the conversation.
-- `-l`, `--list`: List saved conversations.
-- `-c`, `--continue`: Continue from last response or specific title or SHA-1.
-- `-C`, `--continue-last`: Continue the last conversation.
-- `-s`, `--show`: Show saved conversation for the given title or SHA-1
-- `-S`, `--show-last`: Show previous conversation
-- `-d`, `--delete`: Deletes saved conversations for the given titles or SHA-1s
-- `--delete-older-than=<duration>`: Deletes conversations older than given duration (`10d`, `1mo`)
-
-#### Built-In Tools
+#### Tools, Review & Reasoning
 
 Filesystem tools are `auto` by default. Shell and sequential thinking tools must
 be enabled explicitly in `mods.yml`:
@@ -314,9 +324,9 @@ builtin-tools:
   workspace-root: ""
 ```
 
-#### Review & Safety
-
 - `-V`, `--review`: Set review mode: `mutable` (default, reviews file writes and shell commands), `always` (reviews all tools), or `never` (disables review). Also configurable via `MODS_REVIEW_MODE` env var or `review-mode` in `mods.yml`.
+- `-T`, `--reasoning`: Deep reasoning mode: `off`, `on`, or `auto` (judges task complexity before engaging, saves tokens on simple queries)
+- `-p`, `--plan`: Generate a plan for review before executing changes
 
 ```bash
 # Review all tool executions
@@ -325,9 +335,21 @@ mods --review always "rename the fn to calculateTotal"
 mods --review never "list go files"
 ```
 
-#### Reasoning
+#### MCP
 
-- `-T`, `--reasoning`: Deep reasoning mode: `off`, `on`, or `auto` (judges task complexity before engaging, saves tokens on simple queries)
+MCP options are shown in `mods --help-all`. Use `--mcp-list` and
+`--mcp-list-tools` to inspect configured servers and tools; use `--mcp-enable`
+or `--mcp-disable` for one-off server selection.
+
+#### Model Parameters
+
+Model parameter flags such as `--temp`, `--topp`, `--topk`, `--stop`,
+`--max-tokens`, `--max-retries`, and `--no-limit` are available in
+`mods --help-all`. Prefer `mods --settings` for stable defaults.
+
+#### Debug
+
+Debug options such as `--debug` / `-D` are shown in `mods --help-all`.
 
 #### Advanced & Configuration-First Options
 

@@ -57,6 +57,9 @@ func init() {
 
 	buildVersion()
 	rootCmd.SetUsageFunc(usageFunc)
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		_ = usageFunc(cmd)
+	})
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return newFlagParseError(err)
 	})
@@ -71,7 +74,7 @@ var (
 
 	rootCmd = &cobra.Command{
 		Use:           "mods",
-		Short:         "GPT on the command line. Built for pipelines.",
+		Short:         helpIntroSummary,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Example:       randomExample(),
@@ -188,7 +191,7 @@ var (
 					ReasonText: "You haven't provided any prompt input.",
 					Err: newUserErrorf(
 						"You can give your prompt as arguments and/or pipe it from STDIN.\nExample: %s",
-						StdoutStyles().InlineCode.Render("mods [prompt]"),
+						StdoutStyles().InlineCode.Render("mods [PROMPT...]"),
 					),
 				}
 			}
@@ -340,6 +343,55 @@ func initFlags() {
 		"format-as",
 		"no-cache",
 	)
+	markCategory(flags, flagCategoryModelAPI, "api", "model", "ask-model", "http-proxy")
+	markCategory(
+		flags,
+		flagCategorySession,
+		"title",
+		"list",
+		"continue",
+		"continue-last",
+		"show",
+		"show-last",
+		"delete",
+		flagDeleteOlder,
+		"no-cache",
+	)
+	markCategory(
+		flags,
+		flagCategoryInputOutput,
+		"format",
+		"format-as",
+		"minimal",
+		"raw",
+		"quiet",
+		"hide-tool-status",
+		"word-wrap",
+		"status-text",
+		"workspace",
+		"editor",
+		"image",
+		"stdin-image",
+		"clipboard-image",
+	)
+	markCategory(flags, flagCategoryConfigUI, "settings", "dirs", "reset-settings", "theme", "help", "help-all", "version")
+	markCategory(flags, flagCategoryRoles, "role", "list-roles")
+	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key")
+	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review", "max-tool-rounds")
+	markCategory(flags, flagCategoryMCP, "mcp-list", "mcp-list-tools", "mcp-enable", "mcp-disable")
+	markCategory(
+		flags,
+		flagCategoryModelParams,
+		"max-retries",
+		"max-tokens",
+		"max-input-chars",
+		"no-limit",
+		"temp",
+		"topp",
+		"topk",
+		"stop",
+	)
+	markCategory(flags, flagCategoryDebug, "debug")
 
 	for _, name := range conversationCompleteFlags {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {

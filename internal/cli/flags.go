@@ -4,9 +4,38 @@ package cli
 import "github.com/spf13/pflag"
 
 const (
-	flagTierAnnotation = "mods/tier"
-	flagTierAdvanced   = "advanced"
+	flagTierAnnotation     = "mods/tier"
+	flagCategoryAnnotation = "mods/category"
+	flagTierAdvanced       = "advanced"
 )
+
+const (
+	flagCategoryModelAPI    = "Model & API"
+	flagCategorySession     = "Session"
+	flagCategoryInputOutput = "Input & Output"
+	flagCategoryConfigUI    = "Configuration & UI"
+	flagCategoryRoles       = "Roles"
+	flagCategoryWebSearch   = "Web Search"
+	flagCategoryToolsReview = "Tools, Review & Reasoning"
+	flagCategoryMCP         = "MCP"
+	flagCategoryModelParams = "Model Parameters"
+	flagCategoryDebug       = "Debug"
+	flagCategoryOther       = "Other"
+)
+
+var flagCategoryOrder = []string{
+	flagCategoryModelAPI,
+	flagCategorySession,
+	flagCategoryInputOutput,
+	flagCategoryConfigUI,
+	flagCategoryRoles,
+	flagCategoryWebSearch,
+	flagCategoryToolsReview,
+	flagCategoryMCP,
+	flagCategoryModelParams,
+	flagCategoryDebug,
+	flagCategoryOther,
+}
 
 // Names of session-action flags. These are the flags that select a single
 // side-effect (open settings, list/delete/show conversations, MCP listing,
@@ -114,6 +143,19 @@ func markAdvanced(flags *pflag.FlagSet, names ...string) {
 	}
 }
 
+func markCategory(flags *pflag.FlagSet, category string, names ...string) {
+	for _, name := range names {
+		flag := flags.Lookup(name)
+		if flag == nil {
+			continue
+		}
+		if flag.Annotations == nil {
+			flag.Annotations = map[string][]string{}
+		}
+		flag.Annotations[flagCategoryAnnotation] = []string{category}
+	}
+}
+
 func flagVisibleInUsage(f *pflag.Flag, showAll bool) bool {
 	if f.Hidden {
 		return false
@@ -123,4 +165,24 @@ func flagVisibleInUsage(f *pflag.Flag, showAll bool) bool {
 	}
 	return len(f.Annotations[flagTierAnnotation]) == 0 ||
 		f.Annotations[flagTierAnnotation][0] != flagTierAdvanced
+}
+
+func flagCategory(f *pflag.Flag) string {
+	values := f.Annotations[flagCategoryAnnotation]
+	if len(values) == 0 || values[0] == "" {
+		return flagCategoryOther
+	}
+	return values[0]
+}
+
+func groupedUsageFlags(flags *pflag.FlagSet, showAll bool) map[string][]*pflag.Flag {
+	groups := make(map[string][]*pflag.Flag)
+	flags.VisitAll(func(f *pflag.Flag) {
+		if !flagVisibleInUsage(f, showAll) {
+			return
+		}
+		category := flagCategory(f)
+		groups[category] = append(groups[category], f)
+	})
+	return groups
 }

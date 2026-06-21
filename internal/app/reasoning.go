@@ -183,7 +183,7 @@ func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 		return
 	}
 
-	debug.Printf("Reasoning: cannot disable for %s/%s (-T off, no known mechanism)", mod.API, mod.Name)
+	debug.Printf("Reasoning: no built-in disable for %s/%s (-T off); relying on extra-params or provider default", mod.API, mod.Name)
 }
 
 // clearThinkingFromExtraParams removes anthropic-style `thinking`, Qwen-style

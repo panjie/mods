@@ -18,9 +18,8 @@ tool calls to actually finish a task. A built-in review step keeps you in charge
 of anything risky before it happens.
 
 It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
-[DeepSeek], [OpenRouter], local [Ollama] models, and popular Chinese providers
-([GLM], [Qwen], [Kimi], [MiniMax]). Any OpenAI-compatible endpoint can be added
-in `mods.yml`.
+[DeepSeek], [GLM], [Qwen], [Kimi], [MiniMax], [OpenRouter], and local
+[Ollama] models. Any OpenAI-compatible endpoint can be added in `mods.yml`.
 
 [OpenAI]: https://platform.openai.com/account/api-keys
 [Anthropic]: https://console.anthropic.com/settings/keys
@@ -303,9 +302,9 @@ with `--api` and `--model`.
 | DeepSeek     | `deepseek`     | `DEEPSEEK_API_KEY`           | [platform.deepseek.com][DeepSeek]             |
 | OpenRouter   | `openrouter`   | `OPENROUTER_API_KEY`         | [openrouter.ai][OpenRouter]                   |
 | Ollama       | `ollama`       | — (local)                    | [ollama.com][Ollama]                          |
-| GLM (智谱)   | `glm`          | `ZAI_API_KEY`                | [open.bigmodel.cn][GLM]                       |
-| Qwen (通义)  | `qwen`         | `DASHSCOPE_API_KEY`          | [dashscope.console.aliyun.com][Qwen]          |
-| Kimi (月之暗面) | `kimi`       | `MOONSHOT_API_KEY`           | [platform.moonshot.cn][Kimi]                  |
+| GLM          | `glm`          | `ZAI_API_KEY`                | [open.bigmodel.cn][GLM]                       |
+| Qwen         | `qwen`         | `DASHSCOPE_API_KEY`          | [dashscope.console.aliyun.com][Qwen]          |
+| Kimi         | `kimi`         | `MOONSHOT_API_KEY`           | [platform.moonshot.cn][Kimi]                  |
 | MiniMax      | `minimax`      | `MINIMAX_API_KEY`            | [www.minimaxi.com][MiniMax]                   |
 
 ```sh

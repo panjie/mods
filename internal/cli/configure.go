@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // RunConfigWizard launches an interactive TUI that guides the user through
@@ -50,24 +51,28 @@ func RunConfigWizard() error {
 		// Page 1: Provider + Model
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Choose your AI provider").
-				Description("Pick the provider whose API you want to use.").
+				Title("Provider").
+				Description("Choose the API backend mods should use by default.").
 				Options(providerOpts...).
 				Value(&chosenAPI),
 			huh.NewSelect[string]().
 				TitleFunc(func() string {
-					return fmt.Sprintf("Default model for %s", chosenAPI)
+					return fmt.Sprintf("Model for %s", chosenAPI)
 				}, &chosenAPI).
+				Description("This becomes your default model for normal prompts.").
 				OptionsFunc(func() []huh.Option[string] {
 					return buildModelOptions(chosenAPI)
 				}, &chosenAPI).
 				Value(&chosenModel),
-		),
+		).
+			Title("mods setup").
+			Description("Connect a provider and pick the model you want to start with."),
 
 		// Page 2: API key storage method (skip for ollama)
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("How do you want to provide your API key?").
+				Title("API key").
+				Description("Environment variables keep secrets out of the YAML file.").
 				OptionsFunc(func() []huh.Option[string] {
 					envVar := resolveEnvVar(chosenAPI)
 					return []huh.Option[string]{
@@ -76,7 +81,10 @@ func RunConfigWizard() error {
 					}
 				}, &chosenAPI).
 				Value(&keyStorage),
-		).WithHideFunc(func() bool { return chosenAPI == "ollama" }),
+		).
+			Title("credentials").
+			Description("Tell mods where to read the API key from.").
+			WithHideFunc(func() bool { return chosenAPI == "ollama" }),
 
 		// Page 3: API key input (skip for ollama or env-var storage)
 		huh.NewGroup(
@@ -86,7 +94,10 @@ func RunConfigWizard() error {
 				Placeholder("sk-...").
 				Password(true).
 				Value(&apiKey),
-		).WithHideFunc(func() bool { return chosenAPI == "ollama" || keyStorage != "config" }),
+		).
+			Title("saved key").
+			Description("Only use this on a machine and config file you control.").
+			WithHideFunc(func() bool { return chosenAPI == "ollama" || keyStorage != "config" }),
 
 		// Page 4: Base URL (only for custom provider)
 		huh.NewGroup(
@@ -95,12 +106,16 @@ func RunConfigWizard() error {
 				Description("Any OpenAI-compatible endpoint.").
 				Placeholder("https://your-server.com/v1").
 				Value(&baseURL),
-		).WithHideFunc(func() bool { return chosenAPI != "custom" }),
+		).
+			Title("custom endpoint").
+			Description("Point mods at an OpenAI-compatible server.").
+			WithHideFunc(func() bool { return chosenAPI != "custom" }),
 
 		// Page 5: Built-in tools
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Filesystem tools (read/write files)").
+				Title("Filesystem").
+				Description("Controls whether mods can read and write local files.").
 				Options(
 					huh.NewOption("Auto — activate when prompt mentions files", "auto"),
 					huh.NewOption("Always on", "true"),
@@ -115,21 +130,26 @@ func RunConfigWizard() error {
 				Title("Enable sequential thinking?").
 				Description("A scratchpad tool for complex multi-step reasoning.").
 				Value(&thinkingOn),
-		),
+		).
+			Title("built-in tools").
+			Description("Decide which local capabilities mods can use."),
 
 		// Page 6: Review mode
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Review mode for tool execution").
+				Title("Tool review").
+				Description("Choose how often mods asks before running tools.").
 				Options(
 					huh.NewOption("Mutable — review risky actions (default)", "mutable"),
 					huh.NewOption("Always — review every tool call", "always"),
 					huh.NewOption("Never — no review (automation only)", "never"),
 				).
 				Value(&reviewMode),
-		),
+		).
+			Title("review").
+			Description("Tune the approval behavior for tool execution."),
 	).
-		WithTheme(themeFrom(config.Theme)).
+		WithTheme(configWizardTheme(config.Theme)).
 		WithKeyMap(keymap)
 
 	if err := form.Run(); err != nil {
@@ -167,25 +187,25 @@ func RunConfigWizard() error {
 
 	// Build the summary.
 	printConfigSummary(summaryData{
-		api:            chosenAPI,
-		model:          chosenModel,
-		keyStorage:     keyStorage,
-		envVarName:     envVarName,
-		baseURL:        baseURL,
-		fsMode:         fsMode,
-		shellOn:        shellOn,
-		thinkingOn:     thinkingOn,
-		reviewMode:     reviewMode,
-		settingsPath:   config.SettingsPath,
+		api:          chosenAPI,
+		model:        chosenModel,
+		keyStorage:   keyStorage,
+		envVarName:   envVarName,
+		baseURL:      baseURL,
+		fsMode:       fsMode,
+		shellOn:      shellOn,
+		thinkingOn:   thinkingOn,
+		reviewMode:   reviewMode,
+		settingsPath: config.SettingsPath,
 	})
 
 	// Build updates and save.
 	updates := map[string]any{
-		"default-api":                     chosenAPI,
-		"default-model":                   chosenModel,
-		"review-mode":                     reviewMode,
-		"builtin-tools.filesystem":        fsMode,
-		"builtin-tools.shell":             shellOn,
+		"default-api":                       chosenAPI,
+		"default-model":                     chosenModel,
+		"review-mode":                       reviewMode,
+		"builtin-tools.filesystem":          fsMode,
+		"builtin-tools.shell":               shellOn,
 		"builtin-tools.sequential-thinking": thinkingOn,
 	}
 
@@ -242,6 +262,77 @@ func buildProviderOptions() []huh.Option[string] {
 		opts = append(opts, huh.NewOption(label, api.Name))
 	}
 	return opts
+}
+
+func configWizardTheme(theme string) *huh.Theme {
+	t := themeFrom(theme)
+	accent := lipgloss.AdaptiveColor{Light: "#5A56E0", Dark: "#8B7CFF"}
+	accentSoft := lipgloss.AdaptiveColor{Light: "#E7E5FF", Dark: "#312B63"}
+	text := lipgloss.AdaptiveColor{Light: "#202124", Dark: "#F2F2F7"}
+	muted := lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
+	success := lipgloss.AdaptiveColor{Light: "#00875A", Dark: "#4ADE80"}
+	border := lipgloss.AdaptiveColor{Light: "#D9D7FF", Dark: "#48406F"}
+
+	t.Form.Base = t.Form.Base.Padding(1, 2)
+	t.Group.Title = lipgloss.NewStyle().
+		Foreground(accent).
+		Bold(true).
+		MarginBottom(1)
+	t.Group.Description = lipgloss.NewStyle().
+		Foreground(muted).
+		MarginBottom(1)
+	t.Focused.Base = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder(), true).
+		BorderForeground(border).
+		Padding(1, 2)
+	t.Focused.Card = t.Focused.Base
+	t.Focused.Title = lipgloss.NewStyle().
+		Foreground(text).
+		Bold(true)
+	t.Focused.Description = lipgloss.NewStyle().
+		Foreground(muted)
+	t.Focused.SelectSelector = lipgloss.NewStyle().
+		Foreground(accent).
+		Bold(true).
+		SetString("▸ ")
+	t.Focused.Option = lipgloss.NewStyle().Foreground(text)
+	t.Focused.SelectedOption = lipgloss.NewStyle().
+		Foreground(success).
+		Bold(true)
+	t.Focused.SelectedPrefix = lipgloss.NewStyle().
+		Foreground(success).
+		SetString("✓ ")
+	t.Focused.UnselectedPrefix = lipgloss.NewStyle().
+		Foreground(muted).
+		SetString("  ")
+	t.Focused.FocusedButton = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(accent).
+		Bold(true).
+		Padding(0, 2).
+		MarginRight(1)
+	t.Focused.BlurredButton = lipgloss.NewStyle().
+		Foreground(text).
+		Background(accentSoft).
+		Padding(0, 2).
+		MarginRight(1)
+	t.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(accent)
+	t.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(muted)
+	t.Focused.TextInput.Cursor = lipgloss.NewStyle().Foreground(accent)
+
+	t.Blurred = t.Focused
+	t.Blurred.Base = lipgloss.NewStyle().
+		Border(lipgloss.HiddenBorder(), true).
+		Padding(1, 2)
+	t.Blurred.Card = t.Blurred.Base
+	t.Blurred.Title = lipgloss.NewStyle().Foreground(muted)
+	t.Blurred.Description = lipgloss.NewStyle().Foreground(muted)
+	t.Blurred.SelectSelector = lipgloss.NewStyle().SetString("  ")
+	t.Blurred.NextIndicator = lipgloss.NewStyle()
+	t.Blurred.PrevIndicator = lipgloss.NewStyle()
+
+	t.FieldSeparator = lipgloss.NewStyle().SetString("\n")
+	return t
 }
 
 // buildModelOptions returns sorted model options for the given provider.
@@ -303,10 +394,10 @@ func isOpenAICompatible(apiName string) bool {
 // API key and endpoint work. Only meaningful for OpenAI-compatible providers.
 func testConnection(model, baseURL, apiKey string) error {
 	body := map[string]any{
-		"model":       model,
-		"messages":    []map[string]string{{"role": "user", "content": "hi"}},
-		"max_tokens":  5,
-		"stream":      false,
+		"model":      model,
+		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
+		"max_tokens": 5,
+		"stream":     false,
 	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -346,26 +437,64 @@ type summaryData struct {
 }
 
 func printConfigSummary(d summaryData) {
-	var b strings.Builder
-	b.WriteString("\n  Configuration summary:\n")
-	fmt.Fprintf(&b, "    Provider:    %s\n", d.api)
-	fmt.Fprintf(&b, "    Model:       %s\n", d.model)
+	r := StderrRenderer()
+	accent := lipgloss.AdaptiveColor{Light: "#5A56E0", Dark: "#8B7CFF"}
+	muted := lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
+	border := lipgloss.AdaptiveColor{Light: "#D9D7FF", Dark: "#48406F"}
+
+	title := r.NewStyle().
+		Foreground(accent).
+		Bold(true).
+		Render("Configuration summary")
+	labelStyle := r.NewStyle().
+		Foreground(muted).
+		Width(12)
+	valueStyle := r.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "#202124", Dark: "#F2F2F7"})
+
+	rows := []string{
+		summaryRow(labelStyle, valueStyle, "Provider", d.api),
+		summaryRow(labelStyle, valueStyle, "Model", d.model),
+	}
 
 	if d.api != "ollama" {
 		if d.keyStorage == "config" {
-			b.WriteString("    API key:     saved in config\n")
+			rows = append(rows, summaryRow(labelStyle, valueStyle, "API key", "saved in config"))
 		} else {
-			fmt.Fprintf(&b, "    API key:     env var %s\n", d.envVarName)
+			rows = append(rows, summaryRow(labelStyle, valueStyle, "API key", "env var "+d.envVarName))
 		}
 	}
 	if d.baseURL != "" {
-		fmt.Fprintf(&b, "    Base URL:    %s\n", d.baseURL)
+		rows = append(rows, summaryRow(labelStyle, valueStyle, "Base URL", d.baseURL))
 	}
 
-	fmt.Fprintf(&b, "    Filesystem:  %s\n", d.fsMode)
-	fmt.Fprintf(&b, "    Shell:       %v\n", d.shellOn)
-	fmt.Fprintf(&b, "    Thinking:    %v\n", d.thinkingOn)
-	fmt.Fprintf(&b, "    Review:      %s\n", d.reviewMode)
+	rows = append(rows,
+		summaryRow(labelStyle, valueStyle, "Filesystem", d.fsMode),
+		summaryRow(labelStyle, valueStyle, "Shell", boolLabel(d.shellOn)),
+		summaryRow(labelStyle, valueStyle, "Thinking", boolLabel(d.thinkingOn)),
+		summaryRow(labelStyle, valueStyle, "Review", d.reviewMode),
+		summaryRow(labelStyle, valueStyle, "Config file", d.settingsPath),
+	)
 
-	fmt.Fprint(os.Stderr, b.String())
+	body := strings.Join(rows, "\n")
+	card := r.NewStyle().
+		Border(lipgloss.RoundedBorder(), true).
+		BorderForeground(border).
+		Padding(1, 2).
+		MarginTop(1).
+		MarginBottom(1).
+		Render(title + "\n" + r.NewStyle().Foreground(accent).Render(strings.Repeat("─", 24)) + "\n" + body)
+
+	fmt.Fprintln(os.Stderr, card)
+}
+
+func summaryRow(labelStyle, valueStyle lipgloss.Style, label, value string) string {
+	return labelStyle.Render(label) + valueStyle.Render(value)
+}
+
+func boolLabel(v bool) string {
+	if v {
+		return "enabled"
+	}
+	return "disabled"
 }

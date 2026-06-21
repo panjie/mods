@@ -3,8 +3,6 @@
 >
 > The original Mods was [sunset by Charm](https://github.com/charmbracelet/mods) on
 > March 9, 2026. **This fork** is actively maintained with new features and fixes.
->
-> See [What's New](#whats-new) for a list of additions since forking.
 
 # Mods
 
@@ -14,18 +12,15 @@
     <a href="https://github.com/panjie/mods/actions"><img src="https://github.com/panjie/mods/workflows/build/badge.svg" alt="Build Status"></a>
 </p>
 
-AI for the command line, built for pipelines.
-
-<p><img src="assets/demo.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
-
-Large Language Models (LLM) based AI is useful to ingest command output and
-format results in Markdown, JSON, and other text based formats. Mods is a
-tool to add a sprinkle of AI in your command line and make your pipelines
-artificially intelligent.
+An AI agent for your terminal. Mods doesn't just answer questions — it can read
+and edit your files, run shell commands, search the web, and iterate across many
+tool calls to actually finish a task. A built-in review step keeps you in charge
+of anything risky before it happens.
 
 It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
-[DeepSeek], [OpenRouter], and local [Ollama] models. You can also add
-[LocalAI], [Groq], or any OpenAI-compatible endpoint in `mods.yml`.
+[DeepSeek], [OpenRouter], local [Ollama] models, and popular Chinese providers
+([GLM], [Qwen], [Kimi], [MiniMax]). Any OpenAI-compatible endpoint can be added
+in `mods.yml`.
 
 [OpenAI]: https://platform.openai.com/account/api-keys
 [Anthropic]: https://console.anthropic.com/settings/keys
@@ -35,120 +30,71 @@ It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
 [DeepSeek]: https://platform.deepseek.com/api_keys
 [OpenRouter]: https://openrouter.ai/settings/keys
 [Ollama]: https://ollama.com
-[LocalAI]: https://github.com/mudler/LocalAI
-[Groq]: https://console.groq.com/keys
+[GLM]: https://open.bigmodel.cn/
+[Qwen]: https://dashscope.console.aliyun.com/
+[Kimi]: https://platform.moonshot.cn/
+[MiniMax]: https://www.minimaxi.com/
 
-### Installation
+<p><img src="assets/demo.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
 
-#### Homebrew
+## What Mods Can Do
 
-This fork is available from its own Homebrew tap:
+- **Act, don't just talk.** With built-in tools enabled, Mods inspects and edits
+  files, runs shell commands, and chains multiple tool calls together to complete
+  a task end-to-end.
+- **Safety first.** Every file write and shell command passes through a review
+  prompt. Approve once, deny, or save a per-conversation rule. Prefer to see a
+  plan before anything runs? Use `--plan`.
+- **Stays in your pipeline.** Pipe command output in, get structured answers out.
+  `--minimal` prints one item per line — perfect for `| gum choose` and friends.
+- **Knows the live web.** `--web-search` pulls fresh results (DuckDuckGo by
+  default, no API key needed; Tavily and custom providers also supported).
+- **Sees images.** Attach pictures via `--image`, `--clipboard-image`, or piped
+  stdin for any vision-capable model.
+- **Remembers.** Every conversation is saved locally with a title and a SHA-1 —
+  list, resume, show, or delete with simple flags.
+- **Plays well with others.** Connect external capabilities through [MCP] servers,
+  or define reusable system prompts as [custom roles].
+
+[MCP]: https://modelcontextprotocol.io
+
+## Quick Start
+
+### Install
 
 ```sh
 brew install panjie/tap/mods
 ```
 
-Or tap the repository first:
-
-```sh
-brew tap panjie/tap
-brew install mods
-```
-
-`homebrew/core` already has a `mods` formula for `charmbracelet/mods`, so use the
-fully qualified `panjie/tap/mods` name if you want to avoid ambiguity.
-
-#### Build from source
-
-Requires Go 1.25 or newer and Mage:
-
-```sh
-go install github.com/magefile/mage@latest
-```
-
-```sh
-git clone https://github.com/panjie/mods.git
-cd mods
-mage build
-```
-
-This writes the binary to `bin/mods` or `bin/mods.exe`. Add it to your `PATH` for easy access:
-
-```sh
-export PATH="$PWD/bin:$PATH"
-```
-
-To install the compiled binary, run:
-
-```sh
-mage install
-```
-
-On macOS and Linux this installs to `/usr/local/bin/mods`. On Windows, the
-default location is `%USERPROFILE%\.local\bin\mods.exe`.
-
-You can override the install prefix or package into a staging directory:
-
-```sh
-PREFIX=/opt/local mage install
-DESTDIR=/tmp/pkgroot PREFIX=/usr/local mage install
-```
-
-If any common XDG environment variable is set, `mage install` uses an
-XDG-style user-local path and installs to `${HOME}/.local/bin/mods`. Because XDG
-does not define a binary directory, Mods also honors `XDG_BIN_HOME`:
-
-```sh
-XDG_BIN_HOME="$HOME/.local/bin" mage install
-```
-
-The legacy `XDG=1` switch is also supported.
-
-```powershell
-$env:XDG_BIN_HOME = "C:/Users/Alice/.local/bin"
-mage install
-```
-
-Remove installed files with:
-
-```sh
-mage uninstall
-```
-
-Use `mage check` to verify the project compiles, and `mage test` to run the test suite. The `dist/` directory is reserved for GoReleaser release and snapshot artifacts.
-
-#### Install with `go`
-
-Install the latest version directly:
+Or, with Go 1.25+:
 
 ```sh
 go install github.com/panjie/mods@latest
 ```
 
-#### Download binaries
+<details>
+<summary>Other ways to install</summary>
 
-Windows portable ZIP archives are published on the [releases] page for x64 and
-arm64. These archives are shaped for WinGet portable manifests:
+Build from source with [Mage](https://magefile.org):
 
-- `mods_<version>_Windows_x86_64.zip`
-- `mods_<version>_Windows_arm64.zip`
-
-After the `panjie.mods` manifest is accepted into the public Windows Package
-Manager repository, install with:
-
-```powershell
-winget install -e --id panjie.mods
+```sh
+go install github.com/magefile/mage@latest
+git clone https://github.com/panjie/mods.git
+cd mods
+mage build        # binary lands in bin/mods
+mage install      # installs to /usr/local/bin/mods (or $XDG_BIN_HOME)
 ```
+
+`mage install` honors `PREFIX`, `BINDIR`, `DESTDIR`, and any `XDG_*` env var.
+On Windows the default install path is `%USERPROFILE%\.local\bin\mods.exe`.
+
+Prebuilt Windows portable ZIPs are published on the [releases] page.
 
 [releases]: https://github.com/panjie/mods/releases
 
-<details>
-<summary>Shell Completions</summary>
+Generate shell completions:
 
-Release archives do not include pre-generated completion files. Generate
-completion scripts with:
-
-```bash
+```sh
 mods completion bash > mods.bash
 mods completion zsh > _mods
 mods completion fish > mods.fish
@@ -157,312 +103,218 @@ mods completion powershell > mods.ps1
 
 </details>
 
-## What's New
+### Configure
 
-This fork adds the following features on top of the original Mods.
-
-### Tools & Agents
-
-- **Web Search** — `--web-search` enables real-time web search (DuckDuckGo default,
-  no API key required). Also supports Tavily and custom providers.
-- **Image Recognition** — `-i` / `--image` attaches images for vision-capable
-  models. `--clipboard-image` and `--stdin-image` attach clipboard and piped
-  image input.
-- **Built-in Tools** — File system operations (`fs_read_file`, `fs_write_file`,
-  `fs_search`, `fs_apply_patch`), shell execution (`shell_run`, plus
-  `powershell_run` on Windows), and sequential thinking (`thinking_note`).
-  Filesystem tools auto-activate when your prompt mentions files; shell and
-  sequential thinking tools are disabled by default and can be enabled in
-  `builtin-tools` in `mods.yml`.
-
-### Review & Safety
-
-- **Tool Execution Review** — Before modifying files or running shell commands,
-  Mods shows a colored confirmation banner. Press `Y` to approve once, `N` to
-  deny, or `A` to save the displayed rule for the current conversation. Shell
-  rules use command prefixes; file-edit rules cover future edits in that
-  conversation. Saved rules are restored with `--continue`. `--review` controls the mode:
-  `mutable` (default), `always`, or `never`.
-
-  ```
-  Review: Run: git commit -m "Update docs"
-  [Y] Approve  [N] Deny  [A] Always allow: shell_run(git commit *)  [Ctrl+C] Cancel
-  ```
-
-### Observability
-
-- **Debug Mode** — `--debug` / `-D` prints execution steps, tool calls, reasoning
-  thoughts, and API diagnostics to stderr.
-- **Status Line** — Live status bar shows what the model is doing: "Reading file:
-  ...", "Running command: ...", "Searching web: ...".
-
-### Quality of Life
-
-- **Reasoning Mode** — `--reasoning on|off|auto`: auto mode judges task complexity
-  before engaging deep reasoning (saves tokens for simple queries).
-- **Minimal Pipeline Output** — `--minimal` tells the model to skip explanations
-  and output one item per line, optimized for `|` pipelines.
-- **Tool Round Limits** — `--max-tool-rounds` caps total tool call rounds (default
-  30) with separate failed-round limiting to prevent infinite loops.
-- **Updated Models** — Model list refreshed across OpenAI, Anthropic, Google,
-  Cohere, DeepSeek, OpenRouter, and Ollama.
-
-### Cross-Platform
-
-- **Windows** — Console popup suppression, clipboard support, platform-specific
-  command execution.
-- **Stability** — 413/token overflow prevention, MCP timeout handling, session
-  error recovery.
-
-## What Can It Do?
-
-Mods is an AI command-line assistant for prompts, pipelines, and local work.
-It works by reading standard in and combining it with a prompt supplied in the
-`mods` arguments, then sending that context to an LLM and printing the result.
-This gives you a way to "question" the output of a command, or to use a prompt
-on its own when no standard input is provided.
-
-With built-in tools enabled, Mods can inspect and edit files, run shell
-commands, search the web, and keep conversations. Review controls protect risky
-actions such as file writes and shell commands, so you can approve, deny, or
-save per-conversation rules before changes happen.
-
-Mods ships with configuration for OpenAI, Anthropic, Google Gemini, Cohere,
-Azure OpenAI, DeepSeek, OpenRouter, and Ollama. You can configure LocalAI, Groq,
-or any other OpenAI-compatible endpoint in your settings file by running
-`mods --settings`.
-
-## Saved Conversations
-
-Conversations are saved locally by default. Each conversation has a SHA-1
-identifier and a title (like `git`!).
-
-<p>
-  <img src="assets/conversations.gif" width="900" alt="a GIF listing and showing saved conversations.">
-</p>
-
-## Pipeline-Friendly Output
-
-Use `--minimal` when another command needs to consume the answer directly. It tells the model to skip explanations and print list results one item per line.
+Open the config in your `$EDITOR` and drop in an API key:
 
 ```sh
-ls -l | mods --minimal "pick the biggest five file names" | gum choose
+mods --settings
 ```
 
-## Usage
-
-```text
-mods [OPTIONS] [PROMPT...]
-```
-
-Run `mods --help` for the common day-to-day options. Run `mods --help-all` for
-the complete option list grouped by purpose, including advanced and
-configuration-first options. Most advanced defaults can be set with
-`mods --settings`.
-
-#### Model & API
-
-- `-a`, `--api`: API profile to use (`openai`, `anthropic`, `google`, `cohere`, `ollama`, custom profiles, etc.)
-- `-m`, `--model`: Model to use
-- `-M`, `--ask-model`: Ask which model to use via interactive prompt
-
-#### Session
-
-- `-t`, `--title`: Set the title for the conversation.
-- `-l`, `--list`: List saved conversations.
-- `-c`, `--continue`: Continue from last response or specific title or SHA-1.
-- `-C`, `--continue-last`: Continue the last conversation.
-- `-s`, `--show`: Show saved conversation for the given title or SHA-1
-- `-S`, `--show-last`: Show previous conversation
-- `-d`, `--delete`: Deletes saved conversations for the given titles or SHA-1s
-- `--delete-older-than=<duration>`: Deletes conversations older than given duration (`10d`, `1mo`)
-
-#### Input & Output
-
-- `-f`, `--format`: Ask for formatted output, Markdown by default
-- `--minimal`: Output only the final result, optimized for pipelines
-- `-q`, `--quiet`: Hide the spinner and success messages on stderr
-- `-r`, `--raw`: Render raw text when connected to a TTY
-- `--workspace`: Workspace root for filesystem and shell tools
-- `-p`, `--plan`: Generate a plan for review before executing changes
-
-#### Configuration & UI
-
-- `--settings`: Open settings in `$EDITOR`
-- `--dirs`: Print data/config directories used by Mods
-- `--reset-settings`: Back up the old settings file and reset to defaults
-- `-e`, `--editor`: Edit the prompt in `$EDITOR` when there are no args and stdin is a TTY
-- `-h`, `--help`: Show help and exit
-- `--help-all`: Show advanced and configuration-first options
-- `-v`, `--version`: Show version and exit
-
-#### Roles
-
-- `-R`, `--role`: System role to use; see [custom roles](#custom-roles)
-- `--list-roles`: List roles defined in your configuration file
-
-#### Image Support
-
-- `-i`, `--image`: Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths
-
-#### Web Search
-
-- `--web-search`: Enable web search for up-to-date information (uses DuckDuckGo by default)
-
-#### Tools, Review & Reasoning
-
-Filesystem tools are `auto` by default. Shell and sequential thinking tools must
-be enabled explicitly in `mods.yml`:
-
-```yaml
-builtin-tools:
-  filesystem: auto  # auto, true, or false
-  shell: true
-  sequential-thinking: true
-  shell-timeout: 30s
-  shell-max-output: 20000
-  workspace-root: ""
-```
-
-- `-V`, `--review`: Set review mode: `mutable` (default, reviews file writes and shell commands), `always` (reviews all tools), or `never` (disables review). Also configurable via `MODS_REVIEW_MODE` env var or `review-mode` in `mods.yml`.
-- `-T`, `--reasoning`: Deep reasoning mode: `off`, `on`, or `auto` (judges task complexity before engaging, saves tokens on simple queries)
-- `-p`, `--plan`: Generate a plan for review before executing changes
-
-```bash
-# Review all tool executions
-mods --review always "rename the fn to calculateTotal"
-# Disable review entirely
-mods --review never "list go files"
-```
-
-#### MCP
-
-MCP options are shown in `mods --help-all`. Use `--mcp-list` and
-`--mcp-list-tools` to inspect configured servers and tools; use `--mcp-enable`
-or `--mcp-disable` for one-off server selection.
-
-#### Model Parameters
-
-Model parameter flags such as `--temp`, `--topp`, `--topk`, `--stop`,
-`--max-tokens`, `--max-retries`, and `--no-limit` are available in
-`mods --help-all`. Prefer `mods --settings` for stable defaults.
-
-#### Debug
-
-Debug options such as `--debug` / `-D` are shown in `mods --help-all`.
-
-#### Advanced & Configuration-First Options
-
-These options remain available for scripts and one-off overrides, but are hidden
-from the default help to keep the CLI easier to scan. Prefer `mods --settings`
-for stable defaults:
-
-- Model/runtime tuning: `--max-retries`, `--max-tokens`, `--no-limit`, `--temp`, `--topp`, `--topk`, `--stop`, `--max-tool-rounds`
-- Display defaults: `--format-as`, `--word-wrap`, `--status-text`, `--theme`, `--hide-tool-status`
-- Provider configuration: `--http-proxy`, `--web-search-provider`, `--web-search-api-key`
-- One-off diagnostics and integrations: `--debug`, `--stdin-image`, `--clipboard-image`, `--no-cache`, `--mcp-list`, `--mcp-list-tools`, `--mcp-disable`, `--mcp-enable`
-
-## Custom Roles
-
-Roles allow you to set system prompts. Here is an example of a `shell` role:
-
-```yaml
-roles:
-  shell:
-    - you are a shell expert
-    - you do not explain anything
-    - you simply output one liners to solve the problems you're asked
-    - you do not provide any explanation whatsoever, ONLY the command
-```
-
-Then, use the custom role in `mods`:
-
-```sh
-mods --role shell list files in the current directory
-```
-
-## Setup
-
-Run `mods --settings` to create or edit `mods.yml`. The default configuration
-uses the OpenAI API with `gpt-5`:
+The defaults are ready to go with OpenAI:
 
 ```yaml
 default-api: openai
 default-model: gpt-5.4
 ```
 
-### OpenAI
-
-Set the `OPENAI_API_KEY` environment variable. If you don't have one yet, get it
-from the [OpenAI website](https://platform.openai.com/account/api-keys).
-
-### Anthropic
-
-Anthropic models are configured under the `anthropic` API profile. Set the
-`ANTHROPIC_API_KEY` environment variable. If you don't have one yet, get it from
-the [Anthropic console](https://console.anthropic.com/settings/keys).
-
 ```sh
-mods --api anthropic --model claude-sonnet-4-20250514 "explain this error"
+export OPENAI_API_KEY=sk-...
 ```
 
-### Google Gemini
-
-Gemini models are configured under the `google` API profile. Set the
-`GOOGLE_API_KEY` environment variable. If you don't have one yet, get it from
-[Google AI Studio](https://aistudio.google.com/apikey).
+### First run
 
 ```sh
-mods --api google --model gemini-2.5-pro "summarize this"
+# Summarize piped output
+git log --oneline -20 | mods -f "group these commits by theme"
+
+# Let Mods read and edit files in the current directory
+mods --workspace . "read README.md and suggest three improvements"
+
+# See a plan before any change is applied
+mods --plan --workspace . "extract the CLI examples into a separate doc"
 ```
 
-### Azure OpenAI
+## See It In Action
 
-Set the `AZURE_OPENAI_KEY` environment variable and update the `azure` profile in
-`mods.yml` with your Azure OpenAI resource URL and deployed model names. Grab a
-key from [Azure](https://azure.microsoft.com/en-us/products/cognitive-services/openai-service).
-
-### Cohere
-
-Cohere provides enterprise optimized models.
-
-Set the `COHERE_API_KEY` environment variable. If you don't have one yet, you can
-get it from the [Cohere dashboard](https://dashboard.cohere.com/api-keys).
-
-### DeepSeek
-
-DeepSeek is configured as an OpenAI-compatible endpoint under the `deepseek` API
-profile. Set `DEEPSEEK_API_KEY` and choose one of the configured DeepSeek models
-or aliases.
+### Review code
 
 ```sh
-mods --api deepseek --model deepseek-chat "write release notes"
+# Review uncommitted changes before pushing
+git diff | mods -f "review this diff — flag bugs, security issues, and naming problems"
 ```
 
-### OpenRouter
-
-OpenRouter is configured under the `openrouter` API profile. Set
-`OPENROUTER_API_KEY` and select one of the configured OpenRouter model IDs or
-aliases.
+### Modernize & refactor
 
 ```sh
-mods --api openrouter --model or-sonnet-4 "review this diff"
+# Bring your vim config in line with current community best practices
+mods --workspace "$HOME" --plan "modernize my .vimrc to the most popular 2026 setup, but preserve my keybindings"
+
+# Migrate a codebase from one library to another
+mods "replace all requests usage with httpx, keep behavior identical"
+
+# Sweep the repo for stale patterns
+mods "find every console.log and replace it with the structured logger"
 ```
 
-### Ollama
-
-Ollama is configured under the `ollama` API profile with `http://localhost:11434`
-as the default base URL. Start Ollama locally and use one of the configured model
-names or aliases.
+### Debug & understand
 
 ```sh
-mods --api ollama --model llama3.3 "summarize this log"
+# Diagnose why tests are failing
+go test ./... 2>&1 | mods "explain each failure and suggest the likely fix"
+
+# Make sense of a messy log tail
+journalctl -u myapp --since "1h ago" | mods "what went wrong in the last hour?"
+
+# Get up to speed on an unfamiliar codebase
+mods "read internal/tools and explain how a tool call flows end-to-end"
 ```
 
-### LocalAI, Groq, And Other OpenAI-Compatible APIs
+### Generate & scaffold
 
-LocalAI, Groq, and other OpenAI-compatible providers can be added as custom API
-profiles in `mods.yml`:
+```sh
+# Draft a changelog from recent commits
+git log v1.0.0..HEAD --oneline | mods "write a user-facing changelog grouped by theme"
+
+# Add tests for the most important untested functions
+mods "find Go functions without tests and add table-driven tests for the top 5"
+
+# Collect every TODO into a prioritized report
+mods "scan for TODO/FIXME comments and write prioritized TODO-report.md"
+```
+
+### Pipelines & quick answers
+
+```sh
+# Pick from a list using pipeline-friendly output
+find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important files" | gum choose
+
+# Ask the live web, then act on the answer
+mods --web-search "what changed in the latest Go release? update go.mod if relevant"
+
+# Ask a vision-capable model about an image
+mods --image assets/mods-product.png "suggest alt text for this image"
+
+# Save and resume conversations
+mods --title release-notes "draft v1.1 release notes from CHANGELOG.md"
+mods --continue release-notes "turn those into a Twitter thread"
+mods --list
+```
+
+## Safety & Review
+
+Mods asks for confirmation before any file write or shell command runs. You
+always see exactly what will execute, and you choose what happens next:
+
+```
+Review: Run: git commit -m "Update docs"
+[Y] Approve  [N] Deny  [A] Always allow: shell_run(git commit *)  [Ctrl+C] Cancel
+```
+
+- `Y` — approve this one call
+- `N` — deny; Mods gets the failure and can react
+- `A` — save a per-conversation rule so similar calls skip the prompt from now on
+- `Ctrl+C` — cancel the whole run
+
+Pick the mode that fits the task with `-V` / `--review` (or `review-mode` in
+`mods.yml`, or the `MODS_REVIEW_MODE` env var):
+
+| Mode       | Behavior                                                          |
+|------------|-------------------------------------------------------------------|
+| `mutable`  | Default. Reviews file writes and shell commands flagged as risky. |
+| `always`   | Reviews **every** tool call, including reads and searches.        |
+| `never`    | Disables review entirely. Use only for trusted, automated runs.   |
+
+Want a heads-up before any tool fires at all? `--plan` makes Mods draft a
+step-by-step plan for your approval first, then executes once you accept.
+
+```sh
+mods --review always "rename the fn to calculateTotal across the repo"
+mods --plan "refactor the examples to cover more features"
+```
+
+## Built-in Tools & MCP
+
+Mods ships with native tools that auto-activate when your prompt needs them:
+
+| Tool                 | What it does                                              |
+|----------------------|-----------------------------------------------------------|
+| `fs_read_file`       | Read UTF-8 files (with offset/limit for large files).     |
+| `fs_write_file`      | Create or overwrite files in the workspace.               |
+| `fs_search`          | Search file contents across the workspace.                |
+| `fs_apply_patch`     | Apply targeted edits to existing files.                   |
+| `shell_run`          | Execute shell commands (prefix-allowable through review). |
+| `thinking_note`      | Sequential-thinking scratchpad for complex tasks.         |
+
+Filesystem tools are on by default (`auto`); shell and sequential-thinking are
+opt-in. Toggle them in `mods.yml`:
+
+```yaml
+builtin-tools:
+  filesystem: auto          # auto, true, or false
+  shell: true
+  sequential-thinking: true
+  shell-timeout: 30s
+  shell-max-output: 20000
+  workspace-root: ""        # defaults to the current working directory
+```
+
+Pass `--workspace` to scope filesystem and shell tools to a project root. The
+status line at the bottom shows what Mods is doing between tool calls
+("Reading file: ...", "Running command: ...", "Searching web: ..."). Hide it
+with `--hide-tool-status`.
+
+### MCP
+
+Connect external tools and data sources through Model Context Protocol servers
+configured under `mcp-servers` in `mods.yml`:
+
+```yaml
+mcp-servers:
+  github:
+    command: docker
+    env:
+      - GITHUB_PERSONAL_ACCESS_TOKEN=xxxyyy
+    args:
+      - run
+      - "-i"
+      - "--rm"
+      - "-e"
+      - GITHUB_PERSONAL_ACCESS_TOKEN
+      - "ghcr.io/github/github-mcp-server"
+```
+
+Inspect what's available with `mods --mcp-list` and `mods --mcp-list-tools`, and
+scope a run with `--mcp-enable` / `--mcp-disable`.
+
+## Supported Providers
+
+Mods is configured for the providers below out of the box. Set the matching
+environment variable (or paste a key straight into `mods.yml`) and pick a model
+with `--api` and `--model`.
+
+| Provider     | `--api` value  | Env var                      | Get a key                                     |
+|--------------|----------------|------------------------------|-----------------------------------------------|
+| OpenAI       | `openai`       | `OPENAI_API_KEY`             | [platform.openai.com][OpenAI]                 |
+| Anthropic    | `anthropic`    | `ANTHROPIC_API_KEY`          | [console.anthropic.com][Anthropic]            |
+| Google       | `google`       | `GOOGLE_API_KEY`             | [aistudio.google.com][Gemini]                 |
+| Azure OpenAI | `azure`        | `AZURE_OPENAI_KEY`           | [azure.microsoft.com][Azure OpenAI]           |
+| Cohere       | `cohere`       | `COHERE_API_KEY`             | [dashboard.cohere.com][Cohere]                |
+| DeepSeek     | `deepseek`     | `DEEPSEEK_API_KEY`           | [platform.deepseek.com][DeepSeek]             |
+| OpenRouter   | `openrouter`   | `OPENROUTER_API_KEY`         | [openrouter.ai][OpenRouter]                   |
+| Ollama       | `ollama`       | — (local)                    | [ollama.com][Ollama]                          |
+| GLM (智谱)   | `glm`          | `ZAI_API_KEY`                | [open.bigmodel.cn][GLM]                       |
+| Qwen (通义)  | `qwen`         | `DASHSCOPE_API_KEY`          | [dashscope.console.aliyun.com][Qwen]          |
+| Kimi (月之暗面) | `kimi`       | `MOONSHOT_API_KEY`           | [platform.moonshot.cn][Kimi]                  |
+| MiniMax      | `minimax`      | `MINIMAX_API_KEY`            | [www.minimaxi.com][MiniMax]                   |
+
+```sh
+mods --api anthropic --model claude-sonnet-4-6 "explain this error"
+mods --api glm --model glm-5.2 "把这个日志总结成中文要点"
+mods --api ollama --model llama4 "summarize this log"
+```
+
+Any other OpenAI-compatible endpoint can be added as a custom profile:
 
 ```yaml
 apis:
@@ -475,31 +327,43 @@ apis:
         max-input-chars: 120000
 ```
 
-### Web Search
+## CLI & Configuration
 
-Mods can search the web to provide up-to-date information in responses. DuckDuckGo is the default provider and requires no API key.
-
-```bash
-# Enable web search
-mods --web-search "What's the latest Go version?"
+```sh
+mods --help        # everyday options
+mods --help-all    # advanced and configuration-first options, grouped by purpose
+mods --settings    # open mods.yml in $EDITOR
+mods --dirs        # show where mods stores its data
 ```
 
-**Tavily** provides AI-optimized search results. Set your API key:
+Most advanced defaults (model parameters, themes, MCP, debug, format hints)
+live in `mods.yml` and are documented inline. Run `mods --reset-settings` to
+back up the current file and restore the defaults.
 
-```bash
-export MODS_WEB_SEARCH_PROVIDER=tavily
-export MODS_WEB_SEARCH_API_KEY=tvly-xxxxxxxxxxxxx
+### Custom Roles
+
+Roles are reusable system prompts. Define one in `mods.yml`:
+
+```yaml
+roles:
+  shell:
+    - you are a shell expert
+    - you do not explain anything
+    - you simply output one liners to solve the problems you're asked
+    - you do not provide any explanation whatsoever, ONLY the command
 ```
 
-**Custom providers** are supported via a base URL pointing to a compatible search API:
+Then use it:
 
-```bash
-mods --web-search --web-search-provider=https://your-search-api.example.com "query"
+```sh
+mods --role shell "list the largest files in the current directory"
+mods --list-roles
 ```
 
 ## Contributing
 
-Issues and pull requests are welcome on this fork.
+Issues and pull requests are welcome on this fork. Use `mage check` to verify
+the project compiles and `mage test` to run the test suite before opening a PR.
 
 ## License
 

@@ -271,6 +271,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.reasoningActive && !m.thoughtFlushed {
 				m.flushThought()
+			} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
+				debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
+				m.thoughtFlushed = true
 			}
 			m.appendToOutput(msg.content)
 			if m.Config.Plan {
@@ -288,6 +291,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// emitting any answer text; flush the thought so it is still shown.
 		if m.reasoningActive && !m.thoughtFlushed {
 			m.flushThought()
+		} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
+			debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
+			m.thoughtFlushed = true
 		}
 		ch := make(chan toolOperationStatusMsg, 8)
 		m.setToolOperationChannel(ch)
@@ -483,7 +489,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Mods) shouldUpdateAnimation() bool {
-	return !m.Config.Quiet &&
+	return !m.Config.Quiet && !debug.Enabled() &&
 		m.anim != nil &&
 		(m.state == configLoadedState ||
 			(m.state == planState && m.planContent == "") ||

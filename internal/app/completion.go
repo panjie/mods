@@ -292,7 +292,7 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 				_ = msg.stream.Close()
 				return msg.errh(err)
 			}
-			if chunk.Thought != "" {
+			if chunk.Thought != "" && m.reasoningActive {
 				debug.Printf("Thought: %s", chunk.Thought)
 			}
 			return completionOutput{

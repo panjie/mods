@@ -38,15 +38,15 @@ func (m *Mods) View() string {
 			}
 			return m.renderPlanReviewBanner(content)
 		}
-		if !m.Config.Quiet {
+		if !m.Config.Quiet && !debug.Enabled() {
 			return m.renderWithOperation(m.anim.View())
 		}
 	case requestState:
-		if !m.Config.Quiet {
+		if !m.Config.Quiet && !debug.Enabled() {
 			return m.renderWithOperation(m.anim.View())
 		}
 	case responseState:
-		if !m.Config.Quiet && !m.responseOutputStarted && m.anim != nil {
+		if !m.Config.Quiet && !debug.Enabled() && !m.responseOutputStarted && m.anim != nil {
 			return m.renderWithOperation(m.anim.View())
 		}
 		if !m.Config.Raw && IsOutputTTY() {

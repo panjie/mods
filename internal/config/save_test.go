@@ -198,3 +198,78 @@ func TestHasAPIKey(t *testing.T) {
 		require.True(t, HasAPIKey(c))
 	})
 }
+
+func TestApplyEnvCustomProvider(t *testing.T) {
+	t.Setenv("MODS_BASE_URL", "")
+	t.Setenv("MODS_API_KEY", "")
+
+	t.Run("noop when env vars not set", func(t *testing.T) {
+		c := &Config{}
+		c.API = "openai"
+		applyEnvCustomProvider(c)
+		require.NotContains(t, providerNames(c.APIs), "custom")
+		require.Equal(t, "openai", c.API)
+	})
+
+	t.Run("adds custom provider and switches default when no key", func(t *testing.T) {
+		t.Setenv("MODS_BASE_URL", "https://my-proxy.example.com/v1")
+		t.Setenv("MODS_API_KEY", "sk-proxy-123")
+
+		c := &Config{}
+		c.API = "openai"
+		c.APIs = []API{{Name: "openai", APIKeyEnv: "DEFINITELY_NOT_SET"}}
+		applyEnvCustomProvider(c)
+
+		require.Contains(t, providerNames(c.APIs), "custom")
+		require.Equal(t, "custom", c.API, "default should switch to custom when no key resolvable")
+	})
+
+	t.Run("adds custom provider but keeps default when key exists", func(t *testing.T) {
+		t.Setenv("MODS_BASE_URL", "https://my-proxy.example.com/v1")
+		t.Setenv("MODS_API_KEY", "sk-proxy-123")
+
+		c := &Config{}
+		c.API = "openai"
+		c.APIs = []API{{Name: "openai", APIKey: "sk-existing"}}
+		applyEnvCustomProvider(c)
+
+		require.Contains(t, providerNames(c.APIs), "custom")
+		require.Equal(t, "openai", c.API, "default should NOT switch when existing key works")
+	})
+
+	t.Run("updates existing custom provider in place", func(t *testing.T) {
+		t.Setenv("MODS_BASE_URL", "https://new-proxy.example.com/v1")
+		t.Setenv("MODS_API_KEY", "sk-new-456")
+
+		c := &Config{}
+		c.API = "custom"
+		c.APIs = []API{{
+			Name:    "custom",
+			BaseURL: "https://old-proxy.example.com/v1",
+			APIKey:  "sk-old",
+		}}
+		applyEnvCustomProvider(c)
+
+		require.Len(t, c.APIs, 1, "should not duplicate custom provider")
+		require.Equal(t, "https://new-proxy.example.com/v1", c.APIs[0].BaseURL)
+		require.Equal(t, "sk-new-456", c.APIs[0].APIKey)
+	})
+
+	t.Run("only one env var set is noop", func(t *testing.T) {
+		t.Setenv("MODS_BASE_URL", "https://my-proxy.example.com/v1")
+		t.Setenv("MODS_API_KEY", "")
+
+		c := &Config{}
+		c.API = "openai"
+		applyEnvCustomProvider(c)
+		require.NotContains(t, providerNames(c.APIs), "custom")
+	})
+}
+
+func providerNames(apis []API) []string {
+	names := make([]string, len(apis))
+	for i, a := range apis {
+		names[i] = a.Name
+	}
+	return names
+}

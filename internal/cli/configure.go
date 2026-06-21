@@ -68,10 +68,13 @@ func RunConfigWizard() error {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("How do you want to provide your API key?").
-				Options(
-					huh.NewOption("Use environment variable (recommended)", "env"),
-					huh.NewOption("Save in config file", "config"),
-				).
+				OptionsFunc(func() []huh.Option[string] {
+					envVar := resolveEnvVar(chosenAPI)
+					return []huh.Option[string]{
+						huh.NewOption(fmt.Sprintf("Use environment variable (%s)", envVar), "env"),
+						huh.NewOption("Save in config file", "config"),
+					}
+				}, &chosenAPI).
 				Value(&keyStorage),
 		).WithHideFunc(func() bool { return chosenAPI == "ollama" }),
 

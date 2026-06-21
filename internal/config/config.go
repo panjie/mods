@@ -377,13 +377,18 @@ func Ensure() (Config, error) {
 	if err != nil {
 		return c, modsError{Err: err, ReasonText: "Could not read settings file."}
 	}
+	// Parse env vars first so that the config file takes priority over
+	// environment overrides (priority: CLI flags > config file > env > defaults).
+	if err := env.ParseWithOptions(&c, env.Options{Prefix: "MODS_"}); err != nil {
+		return c, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
+	}
+
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return c, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
 
-	if err := env.ParseWithOptions(&c, env.Options{Prefix: "MODS_"}); err != nil {
-		return c, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
-	}
+	// Auto-configure a custom provider from MODS_BASE_URL + MODS_API_KEY.
+	applyEnvCustomProvider(&c)
 
 	if c.CachePath == "" {
 		c.CachePath = filepath.Join(xdg.DataHome, "mods")

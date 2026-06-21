@@ -203,6 +203,7 @@ mods --web-search "what changed in the latest Go release? update go.mod if relev
 
 # Ask a vision-capable model about an image
 mods --image assets/mods-product.png "suggest alt text for this image"
+mods -I "describe the image on my clipboard"
 
 # Save and resume conversations
 mods --title release-notes "draft v1.1 release notes from CHANGELOG.md"

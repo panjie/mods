@@ -320,7 +320,7 @@ func initFlags() {
 	regStr(flags, &config.WebSearchAPIKey, "web-search-api-key", "", config.WebSearchAPIKey)
 	regStrArr(flags, &config.Images, "image", "i", config.Images)
 	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
-	regBool(flags, &config.ClipboardImage, "clipboard-image", "", config.ClipboardImage)
+	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
 	regBool(flags, &config.Debug, "debug", "D", config.Debug)
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
 	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", flagDesc("reasoning"))

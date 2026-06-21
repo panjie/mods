@@ -14,7 +14,7 @@ var examples = map[string]string{
 	"Search the web":                   `mods --web-search "What changed in the latest Go release?"`,
 	"Describe an image":                `mods --image assets/mods-product.png "Describe this image and suggest alt text"`,
 	"Describe an image from stdin":     `cat assets/mods-product.png | mods --stdin-image "Describe this image"`,
-	"Describe an image from clipboard": `mods --clipboard-image "Describe the image on my clipboard"`,
+	"Describe an image from clipboard": `mods -I "Describe the image on my clipboard"`,
 	"Save a conversation":              `mods --title project-summary "Summarize this repository"`,
 	"Continue a conversation":          `mods --continue project-summary "Turn that summary into release notes"`,
 	"Show recent conversations":        `mods --list`,

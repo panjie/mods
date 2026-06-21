@@ -106,6 +106,33 @@ func TestMinimalFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
 
+func TestClipboardImageShortFlag(t *testing.T) {
+	saveConfig := config
+	defer func() { config = saveConfig }()
+
+	config = Config{}
+	ensureTestFlags()
+
+	flag := rootCmd.Flags().Lookup("clipboard-image")
+	require.NotNil(t, flag)
+	require.Equal(t, "I", flag.Shorthand)
+
+	require.NoError(t, rootCmd.Flags().Parse([]string{"-I"}))
+	require.True(t, config.ClipboardImage)
+}
+
+func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
+	saveConfig := config
+	defer func() { config = saveConfig }()
+
+	config = Config{}
+	ensureTestFlags()
+
+	require.NoError(t, rootCmd.Flags().Parse([]string{"-i", "assets/mods-product.png"}))
+	require.Equal(t, []string{"assets/mods-product.png"}, config.Images)
+	require.False(t, config.ClipboardImage)
+}
+
 func TestFancinessFlagRemoved(t *testing.T) {
 	if rootCmd.Flags().Lookup("minimal") == nil {
 		initFlags()

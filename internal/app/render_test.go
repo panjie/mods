@@ -5,7 +5,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +39,26 @@ func TestThoughtMarkdown(t *testing.T) {
 		require.Contains(t, got, ">\n", "blank thought lines should be rendered as bare > markers")
 		require.Contains(t, got, "> line one")
 		require.Contains(t, got, "> line three")
+	})
+}
+
+func TestThoughtDisplayMarkdown(t *testing.T) {
+	t.Run("renders a quiet blockquote without the raw thinking marker", func(t *testing.T) {
+		got := thoughtDisplayMarkdown("The user is asking about X.\nI should consider Y.")
+		require.Contains(t, got, "> _thinking_", "should include the quieter display header")
+		require.Contains(t, got, "> The user is asking about X.")
+		require.Contains(t, got, "> I should consider Y.")
+		require.NotContains(t, got, "💭")
+		require.NotContains(t, got, "**")
+		require.NotContains(t, got, "\n---\n")
+	})
+
+	t.Run("blank lines become bare quote markers", func(t *testing.T) {
+		got := thoughtDisplayMarkdown("line one\n\nline three")
+		require.Contains(t, got, ">\n", "blank thought lines should be rendered as bare > markers")
+		require.Contains(t, got, "> line one")
+		require.Contains(t, got, "> line three")
+		require.NotContains(t, got, "\n---\n")
 	})
 }
 
@@ -82,6 +104,39 @@ func TestFlushThought(t *testing.T) {
 		m.flushThought()
 
 		require.Contains(t, m.Output, "> actual thought")
+	})
+
+	t.Run("tty display uses quieter thinking markdown while raw output stays stable", func(t *testing.T) {
+		oldIsOutputTTY := isOutputTTY
+		oldExportedIsOutputTTY := IsOutputTTY
+		isOutputTTY = func() bool { return true }
+		IsOutputTTY = func() bool { return true }
+		defer func() {
+			isOutputTTY = oldIsOutputTTY
+			IsOutputTTY = oldExportedIsOutputTTY
+		}()
+
+		r := lipgloss.NewRenderer(nil)
+		gr, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"))
+		require.NoError(t, err)
+
+		m := newRenderTestMods(t, "deep thought\nsecond line")
+		m.renderer = r
+		m.glam = gr
+		m.glamViewport = viewport.New(80, 20)
+		m.width = 80
+
+		m.flushThought()
+
+		require.True(t, m.thoughtFlushed)
+		require.Contains(t, m.Output, "> **💭 thinking**")
+		require.Contains(t, m.Output, "\n---\n")
+		require.Contains(t, m.displayOutput, "> _thinking_")
+		require.NotContains(t, m.displayOutput, "💭")
+		require.NotContains(t, m.displayOutput, "**")
+		require.NotContains(t, m.displayOutput, "\n---\n")
+		require.Contains(t, m.glamOutput, "thinking")
+		require.NotContains(t, m.glamOutput, "💭")
 	})
 }
 

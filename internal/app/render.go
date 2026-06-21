@@ -100,17 +100,22 @@ func (m *Mods) operationStatusLine() string {
 }
 
 func (m *Mods) appendToOutput(s string) {
-	m.Output += s
+	m.appendToOutputWithDisplay(s, s)
+}
+
+func (m *Mods) appendToOutputWithDisplay(raw, display string) {
+	m.Output += raw
+	m.displayOutput += display
 	if !IsOutputTTY() || m.Config.Raw {
 		m.contentMutex.Lock()
-		m.content = append(m.content, s)
+		m.content = append(m.content, raw)
 		m.contentMutex.Unlock()
 		return
 	}
 
 	wasAtBottom := m.glamViewport.ScrollPercent() == 1.0
 	oldHeight := m.glamHeight
-	preprocessed := strings.ReplaceAll(m.Output, "\n\n", "\r")
+	preprocessed := strings.ReplaceAll(m.displayOutput, "\n\n", "\r")
 	preprocessed = strings.ReplaceAll(preprocessed, "\n", "  \n")
 	preprocessed = strings.ReplaceAll(preprocessed, "\r", "\n\n")
 	m.glamOutput, _ = m.glam.Render(preprocessed)
@@ -133,19 +138,16 @@ func (m *Mods) appendToOutput(s string) {
 	}
 }
 
-// flushThought renders the accumulated reasoning/thinking content as a
-// markdown blockquote followed by a horizontal rule and prepends it to the
-// output. Rendering it as markdown means it flows through the same glamour
-// pipeline and viewport as the answer: glamour styles blockquotes with a
-// left bar and dimmed text, and the rule clearly separates the thinking
-// from the answer below.
+// flushThought renders the accumulated reasoning/thinking content before the
+// answer. Raw output keeps the explicit markdown separator for compatibility,
+// while the TTY display uses a quieter block.
 func (m *Mods) flushThought() {
 	m.thoughtFlushed = true
 	thought := strings.TrimSpace(m.Thought)
 	if thought == "" {
 		return
 	}
-	m.appendToOutput(thoughtMarkdown(thought))
+	m.appendToOutputWithDisplay(thoughtMarkdown(thought), thoughtDisplayMarkdown(thought))
 }
 
 // thoughtMarkdown formats reasoning content as a labelled markdown
@@ -163,5 +165,24 @@ func thoughtMarkdown(thought string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n---\n\n")
+	return b.String()
+}
+
+// thoughtDisplayMarkdown formats reasoning content for interactive terminals.
+// It stays in markdown so glamour can apply the user's theme, but keeps the
+// block visually quiet and leaves the final answer as the main event.
+func thoughtDisplayMarkdown(thought string) string {
+	var b strings.Builder
+	b.WriteString("> _thinking_\n>\n")
+	for _, line := range strings.Split(thought, "\n") {
+		if strings.TrimSpace(line) == "" {
+			b.WriteString(">\n")
+			continue
+		}
+		b.WriteString("> ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 	return b.String()
 }

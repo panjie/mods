@@ -52,6 +52,7 @@ type Mods struct {
 	glam                  *glamour.TermRenderer
 	glamViewport          viewport.Model
 	glamOutput            string
+	displayOutput         string
 	glamHeight            int
 	messages              []proto.Message
 	cancelRequest         []context.CancelFunc
@@ -394,11 +395,13 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 		m.Output = ""
+		m.displayOutput = ""
 		m.planContent = ""
 		m.state = planState
 		return m, m.startPlanCmd("The previous plan was rejected. Please create a completely different plan.")
 	case planModifyMsg:
 		m.Output = ""
+		m.displayOutput = ""
 		m.planContent = ""
 		m.planRetries = 0
 		m.state = planState

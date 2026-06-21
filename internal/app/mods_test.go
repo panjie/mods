@@ -604,6 +604,7 @@ func TestPlanExecutionStartResetsOutput(t *testing.T) {
 		Styles:                makeStyles(lipgloss.NewRenderer(nil)),
 		state:                 planState,
 		Output:                "approved plan",
+		displayOutput:         "approved plan display",
 		glamOutput:            "rendered approved plan",
 		glamHeight:            3,
 		responseOutputStarted: true,
@@ -615,6 +616,7 @@ func TestPlanExecutionStartResetsOutput(t *testing.T) {
 
 	require.Equal(t, requestState, m.state)
 	require.Empty(t, m.Output)
+	require.Empty(t, m.displayOutput)
 	require.Empty(t, m.glamOutput)
 	require.Zero(t, m.glamHeight)
 	require.False(t, m.responseOutputStarted)

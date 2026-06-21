@@ -63,6 +63,7 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 	m.cancelMu.Unlock()
 	m.responseOutputStarted = false
 	m.Output = ""
+	m.displayOutput = ""
 
 	return func() tea.Msg {
 		var mod Model
@@ -264,6 +265,7 @@ func (m *Mods) approvedPlanPrintCmd(transcript string) tea.Cmd {
 
 func (m *Mods) resetExecutionOutput() {
 	m.Output = ""
+	m.displayOutput = ""
 	m.glamOutput = ""
 	m.glamHeight = 0
 	m.glamViewport.SetContent("")

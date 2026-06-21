@@ -329,6 +329,8 @@ apis:
 ## CLI & Configuration
 
 ```sh
+mods [OPTIONS] [PROMPT...]
+
 mods --help        # everyday options
 mods --help-all    # advanced and configuration-first options, grouped by purpose
 mods --settings    # open mods.yml in $EDITOR

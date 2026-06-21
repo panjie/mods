@@ -31,6 +31,10 @@ type Config struct {
 	HTTPClient     *http.Client
 	AuthToken      string
 	ThinkingBudget int
+	// ThinkingBudgetExplicit forces ThinkingBudget to be sent even when it is
+	// zero, so callers can explicitly disable Gemini's thinking (which is on
+	// by default) by setting budget=0 + Explicit=true.
+	ThinkingBudgetExplicit bool
 }
 
 // DefaultConfig returns the default configuration for the Google API client.
@@ -152,7 +156,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		body.GenerationConfig.MaxOutputTokens = uint(*request.MaxTokens) //nolint:gosec
 	}
 
-	if c.config.ThinkingBudget != 0 {
+	if c.config.ThinkingBudget != 0 || c.config.ThinkingBudgetExplicit {
 		body.GenerationConfig.ThinkingConfig = &ThinkingConfig{
 			ThinkingBudget: c.config.ThinkingBudget,
 		}

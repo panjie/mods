@@ -28,11 +28,12 @@ func (m *Mods) resolveReasoning(
 	cfg := m.Config
 	switch cfg.Reasoning {
 	case ReasoningOn:
-		applyReasoningConfigs(*mod, gccfg, accfg, ccfg)
+		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, true)
 		debug.Printf("Reasoning: enabled for %s/%s", mod.API, mod.Name)
 		return true
 	case ReasoningAuto:
 		if content == "" {
+			applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
 			return false
 		}
 		if mod.API == "cohere" || mod.API == "ollama" {
@@ -52,32 +53,48 @@ func (m *Mods) resolveReasoning(
 		clearThinkingFromExtraParams(ccfgJ.ExtraParams)
 		shouldReason := judgeTaskComplexity(judgeCtx, mod, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
 		debug.Printf("Auto judge: reasoning=%v", shouldReason)
-		if shouldReason {
-			applyReasoningConfigs(*mod, gccfg, accfg, ccfg)
-		}
+		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, shouldReason)
 		return shouldReason
 	default:
+		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
 		return false
 	}
 }
 
-func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config) {
+func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config, enabled bool) {
 	switch {
 	case mod.API == "google":
-		if gccfg.ThinkingBudget == 0 {
-			gccfg.ThinkingBudget = 8192
+		if enabled {
+			if gccfg.ThinkingBudget == 0 {
+				gccfg.ThinkingBudget = 8192
+			}
+			debug.Printf("Reasoning: google thinking_budget=%d", gccfg.ThinkingBudget)
+		} else {
+			// Gemini defaults to thinking ENABLED; explicitly send budget=0
+			// to turn it off and save tokens.
+			gccfg.ThinkingBudget = 0
+			gccfg.ThinkingBudgetExplicit = true
+			debug.Printf("Reasoning: google thinking_budget=0 (-T off)")
 		}
-		debug.Printf("Reasoning: google thinking_budget=%d", gccfg.ThinkingBudget)
 	case mod.API == "anthropic":
-		accfg.ThinkingBudget = 8192
-		debug.Printf("Reasoning: anthropic thinking_budget=%d", accfg.ThinkingBudget)
+		if enabled {
+			accfg.ThinkingBudget = 8192
+			debug.Printf("Reasoning: anthropic thinking_budget=%d", accfg.ThinkingBudget)
+		}
+		// off: Anthropic defaults to thinking OFF, so no-op.
 	case mod.API == "cohere" || mod.API == "ollama":
 		debug.Printf("Reasoning: %s does not support reasoning, skipped", mod.API)
 	default:
 		// OpenAI-compatible providers (e.g. MiniMax, GLM) may inline their
 		// reasoning inside <think>...</think> blocks in the content stream;
-		// enable tag parsing so it gets separated from the answer.
-		ccfg.ThinkTags = true
+		// enable tag parsing only when reasoning is on so it gets separated
+		// from the answer.
+		ccfg.ThinkTags = enabled
+
+		if !enabled {
+			disableOpenAICompatibleReasoning(mod, ccfg)
+			return
+		}
 
 		thinkingType := mod.ThinkingType
 
@@ -126,15 +143,60 @@ func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Con
 	}
 }
 
-// clearThinkingFromExtraParams removes anthropic-style `thinking` and any
-// pre-set `reasoning_effort` from extra-params so the auto-judge call does
-// not accidentally inherit the user's reasoning configuration.
+// disableOpenAICompatibleReasoning sends the provider-appropriate "off"
+// signal so that thinking-enabled-by-default providers (DeepSeek, GLM, Kimi,
+// MiniMax, Qwen) do not silently consume reasoning tokens when -T is off.
+// The mechanism is auto-detected from the model's configured reasoning style.
+func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
+	if ccfg.ExtraParams == nil {
+		ccfg.ExtraParams = map[string]any{}
+	}
+
+	// 1. thinking.type style (DeepSeek, GLM, Kimi, MiniMax, Anthropic-compat).
+	//    Triggered when the model declares thinking-type OR already has a
+	//    thinking block in extra-params.
+	if _, hasThinking := ccfg.ExtraParams["thinking"].(map[string]any); hasThinking || mod.ThinkingType != "" {
+		thinking, _ := ccfg.ExtraParams["thinking"].(map[string]any)
+		if thinking == nil {
+			thinking = map[string]any{}
+		}
+		thinking["type"] = "disabled"
+		ccfg.ExtraParams["thinking"] = thinking
+		debug.Printf("Reasoning: thinking.type=disabled (-T off)")
+		return
+	}
+
+	// 2. enable_thinking style (Qwen DashScope). The config carries
+	//    enable_thinking: true as both the toggle marker and the on-value;
+	//    flip to false here.
+	if _, has := ccfg.ExtraParams["enable_thinking"]; has {
+		ccfg.ExtraParams["enable_thinking"] = false
+		debug.Printf("Reasoning: enable_thinking=false (-T off)")
+		return
+	}
+
+	// 3. reasoning_effort style (OpenAI gpt-5.x, o-series). These cannot be
+	//    cleanly disabled — send the lowest effort as the closest equivalent.
+	if mod.API == "openai" || mod.API == "azure" {
+		ccfg.ExtraParams["reasoning_effort"] = "minimal"
+		debug.Printf("Reasoning: reasoning_effort=minimal (-T off, cannot fully disable for %s)", mod.API)
+		return
+	}
+
+	debug.Printf("Reasoning: cannot disable for %s/%s (-T off, no known mechanism)", mod.API, mod.Name)
+}
+
+// clearThinkingFromExtraParams removes anthropic-style `thinking`, Qwen-style
+// `enable_thinking`, and any pre-set `reasoning_effort` from extra-params so
+// the auto-judge call does not accidentally inherit the user's reasoning
+// configuration.
 func clearThinkingFromExtraParams(extra map[string]any) {
 	if extra == nil {
 		return
 	}
 	delete(extra, "thinking")
 	delete(extra, "reasoning_effort")
+	delete(extra, "enable_thinking")
 }
 
 func judgeTaskComplexity(

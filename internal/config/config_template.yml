@@ -230,25 +230,18 @@ apis:
     api-key:
     api-key-env: DEEPSEEK_API_KEY
     models:
-      # DeepSeek models default to thinking ENABLED. To make -T actually
-      # control it, we send thinking.type: disabled as the off-default and
-      # flip to enabled when -T is on. reasoning_content is auto-captured
-      # via the default thought-fields.
+      # DeepSeek models default to thinking ENABLED. mods actively sends
+      # thinking.type: disabled when -T is off, and thinking.type: enabled
+      # (the value below) when -T is on. No extra-params boilerplate needed.
       # See: https://api-docs.deepseek.com/guides/thinking_mode
       deepseek-reasoner:
         aliases: ["r1", "reasoner"]
         max-input-chars: 1000000
         thinking-type: enabled
-        extra-params:
-          thinking:
-            type: disabled
       deepseek-v4-flash:
         aliases: ["flash", "v4-flash"]
         max-input-chars: 1000000
         thinking-type: enabled
-        extra-params:
-          thinking:
-            type: disabled
       deepseek-chat:
         aliases: ["chat", "v3"]
         max-input-chars: 1000000
@@ -280,9 +273,6 @@ apis:
         aliases: ["m3", "minimax"]
         max-input-chars: 1000000
         thinking-type: adaptive
-        extra-params:
-          thinking:
-            type: disabled
 
   # 通义千问 Qwen (Alibaba DashScope)
   # Two thinking modes: qwq (dedicated reasoning model, always thinks)

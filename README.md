@@ -104,7 +104,17 @@ mods completion powershell > mods.ps1
 
 ### Configure
 
-Open the config in your `$EDITOR` and drop in an API key:
+Run the interactive setup wizard to pick a provider, model, and API key:
+
+```sh
+mods --config
+```
+
+The wizard walks you through provider and model selection, API key entry,
+built-in tools, and review mode — then saves everything to `mods.yml`
+automatically.
+
+Prefer to edit the raw YAML? Open it in your `$EDITOR`:
 
 ```sh
 mods --settings
@@ -288,9 +298,10 @@ scope a run with `--mcp-enable` / `--mcp-disable`.
 
 ## Supported Providers
 
-Mods is configured for the providers below out of the box. Set the matching
-environment variable (or paste a key straight into `mods.yml`) and pick a model
-with `--api` and `--model`.
+Mods is configured for the providers below out of the box. The easiest way to
+get started is `mods --config` — it walks you through picking a provider, model,
+and API key interactively. You can also set the matching environment variable
+manually and select a model with `--api` and `--model`.
 
 | Provider     | `--api` value  | Env var                      | Get a key                                     |
 |--------------|----------------|------------------------------|-----------------------------------------------|
@@ -333,6 +344,7 @@ mods [OPTIONS] [PROMPT...]
 
 mods --help        # everyday options
 mods --help-all    # advanced and configuration-first options, grouped by purpose
+mods --config      # interactive setup wizard (recommended for new users)
 mods --settings    # open mods.yml in $EDITOR
 mods --dirs        # show where mods stores its data
 ```

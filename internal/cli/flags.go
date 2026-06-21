@@ -3,6 +3,11 @@ package cli
 
 import "github.com/spf13/pflag"
 
+const (
+	flagTierAnnotation = "mods/tier"
+	flagTierAdvanced   = "advanced"
+)
+
 // Names of session-action flags. These are the flags that select a single
 // side-effect (open settings, list/delete/show conversations, MCP listing,
 // reset settings) instead of starting a chat. They are mutually exclusive with
@@ -94,4 +99,28 @@ func regStrArr(flags *pflag.FlagSet, p *[]string, name, short string, def []stri
 		return
 	}
 	flags.StringArrayVar(p, name, def, flagDesc(name))
+}
+
+func markAdvanced(flags *pflag.FlagSet, names ...string) {
+	for _, name := range names {
+		flag := flags.Lookup(name)
+		if flag == nil {
+			continue
+		}
+		if flag.Annotations == nil {
+			flag.Annotations = map[string][]string{}
+		}
+		flag.Annotations[flagTierAnnotation] = []string{flagTierAdvanced}
+	}
+}
+
+func flagVisibleInUsage(f *pflag.Flag, showAll bool) bool {
+	if f.Hidden {
+		return false
+	}
+	if showAll {
+		return true
+	}
+	return len(f.Annotations[flagTierAnnotation]) == 0 ||
+		f.Annotations[flagTierAnnotation][0] != flagTierAdvanced
 }

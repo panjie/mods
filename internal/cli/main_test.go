@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,6 +65,7 @@ func TestIsVersionOrHelpCmd(t *testing.T) {
 		"mods -v":                 true,
 		"mods --help":             true,
 		"mods -h":                 true,
+		"mods --help-all":         true,
 		"mods --model gpt-4":      false,
 		"mods -v -m gpt-4":        true,
 		"mods -m gpt-4 --version": true,
@@ -163,6 +166,10 @@ func TestIsNoArgs(t *testing.T) {
 		cfg := Config{ShowHelp: true}
 		require.False(t, isNoArgsCfg(cfg))
 	})
+	t.Run("with help all", func(t *testing.T) {
+		cfg := Config{HelpAll: true}
+		require.False(t, isNoArgsCfg(cfg))
+	})
 }
 
 func isNoArgsCfg(cfg Config) bool {
@@ -172,6 +179,7 @@ func isNoArgsCfg(cfg Config) bool {
 		len(cfg.Delete) == 0 &&
 		cfg.DeleteOlderThan == 0 &&
 		!cfg.ShowHelp &&
+		!cfg.HelpAll &&
 		!cfg.List &&
 		!cfg.ListRoles &&
 		!cfg.MCPList &&
@@ -179,4 +187,53 @@ func isNoArgsCfg(cfg Config) bool {
 		!cfg.Dirs &&
 		!cfg.Settings &&
 		!cfg.ResetSettings
+}
+
+func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
+	ensureTestFlags()
+
+	flags := rootCmd.Flags()
+	require.True(t, flagVisibleInUsage(flags.Lookup("model"), false))
+	require.True(t, flagVisibleInUsage(flags.Lookup("help-all"), false))
+	require.True(t, flagVisibleInUsage(flags.Lookup("workspace"), false))
+
+	for _, name := range []string{"temp", "max-tool-rounds", "web-search-provider"} {
+		flag := flags.Lookup(name)
+		require.NotNil(t, flag)
+		require.False(t, flagVisibleInUsage(flag, false), name)
+		require.True(t, flagVisibleInUsage(flag, true), name)
+	}
+
+	require.False(t, flagVisibleInUsage(flags.Lookup("memprofile"), true))
+}
+
+func TestAdvancedFlagsStillParse(t *testing.T) {
+	saveConfig := config
+	defer func() { config = saveConfig }()
+	ensureTestFlags()
+
+	require.NoError(t, rootCmd.Flags().Set("temp", "0.2"))
+	require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
+	require.NoError(t, rootCmd.Flags().Set("web-search-provider", "tavily"))
+
+	require.Equal(t, 0.2, config.Temperature)
+	require.Equal(t, 12, config.MaxToolRounds)
+	require.Equal(t, "tavily", config.WebSearchProvider)
+}
+
+func TestReadmeDoesNotListRemovedPromptFlags(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	require.NoError(t, err)
+
+	readme := string(content)
+	require.NotContains(t, readme, "`--prompt`")
+	require.NotContains(t, readme, "`--prompt-args`")
+	require.NotContains(t, readme, "`-P`, `--prompt`")
+	require.NotContains(t, readme, "`-p`, `--prompt-args`")
+}
+
+func ensureTestFlags() {
+	if rootCmd.Flags().Lookup("minimal") == nil {
+		initFlags()
+	}
 }

@@ -246,44 +246,33 @@ ls -l | mods --minimal "pick the biggest five file names" | gum choose
 
 ## Usage
 
-Run `mods --help` for generated help. Current options include:
+Run `mods --help` for the common day-to-day options, or `mods --help-all` for
+advanced and configuration-first options. Most advanced defaults can be set with
+`mods --settings`.
 
 #### Model & API
 
 - `-a`, `--api`: API profile to use (`openai`, `anthropic`, `google`, `cohere`, `ollama`, custom profiles, etc.)
 - `-m`, `--model`: Model to use
 - `-M`, `--ask-model`: Ask which model to use via interactive prompt
-- `-x`, `--http-proxy`: HTTP proxy for API requests
-- `--max-retries`: Maximum number of API call retries
-- `--max-tokens`: Maximum number of response tokens
-- `--no-limit`: Disable the client-side input size limit
-- `--stop`: Stop sequence; can be specified multiple times
-- `--temp`: Sampling temperature (`-1.0` disables when supported)
-- `--topp`: Top P sampling value (`-1.0` disables when supported)
-- `--topk`: Top K sampling value (`-1` disables when supported)
 
 #### Input & Output
 
 - `-f`, `--format`: Ask for formatted output, Markdown by default
-- `--format-as`: Inline format prompt to use with `--format`
 - `--minimal`: Output only the final result, optimized for pipelines
-- `-P`, `--prompt`: Include the prompt from arguments and stdin; optionally truncate stdin to the specified number of lines
-- `-p`, `--prompt-args`: Include prompt arguments in the response
 - `-q`, `--quiet`: Hide the spinner and success messages on stderr
-- `--hide-tool-status`: Hide the bottom status line while tools are running
 - `-r`, `--raw`: Render raw text when connected to a TTY
-- `--word-wrap`: Wrap formatted output at a width, default `80`
-- `--status-text`: Text to show while generating
 - `--workspace`: Workspace root for filesystem and shell tools
+- `-p`, `--plan`: Generate a plan for review before executing changes
 
 #### Configuration & UI
 
 - `--settings`: Open settings in `$EDITOR`
 - `--dirs`: Print data/config directories used by Mods
 - `--reset-settings`: Back up the old settings file and reset to defaults
-- `--theme`: Form theme; valid choices are `charm`, `catppuccin`, `dracula`, and `base16`
 - `-e`, `--editor`: Edit the prompt in `$EDITOR` when there are no args and stdin is a TTY
 - `-h`, `--help`: Show help and exit
+- `--help-all`: Show advanced and configuration-first options
 - `-v`, `--version`: Show version and exit
 
 #### Roles
@@ -294,14 +283,10 @@ Run `mods --help` for generated help. Current options include:
 #### Image Support
 
 - `-i`, `--image`: Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths
-- `--stdin-image`: Treat piped stdin input as raw image data instead of text
-- `--clipboard-image`: Attach the current image in the system clipboard to the prompt
 
 #### Web Search
 
 - `--web-search`: Enable web search for up-to-date information (uses DuckDuckGo by default)
-- `--web-search-provider`: Web search provider (`duckduckgo`, `tavily`, or a custom provider URL)
-- `--web-search-api-key`: API key for the web search provider (required for Tavily)
 
 #### Conversations
 
@@ -313,7 +298,6 @@ Run `mods --help` for generated help. Current options include:
 - `-S`, `--show-last`: Show previous conversation
 - `-d`, `--delete`: Deletes saved conversations for the given titles or SHA-1s
 - `--delete-older-than=<duration>`: Deletes conversations older than given duration (`10d`, `1mo`)
-- `--no-cache`: Do not save conversations
 
 #### Built-In Tools
 
@@ -333,7 +317,6 @@ builtin-tools:
 #### Review & Safety
 
 - `-V`, `--review`: Set review mode: `mutable` (default, reviews file writes and shell commands), `always` (reviews all tools), or `never` (disables review). Also configurable via `MODS_REVIEW_MODE` env var or `review-mode` in `mods.yml`.
-- `--max-tool-rounds`: Maximum total tool call rounds before stopping (default 30)
 
 ```bash
 # Review all tool executions
@@ -342,17 +325,20 @@ mods --review always "rename the fn to calculateTotal"
 mods --review never "list go files"
 ```
 
-#### Reasoning & Debug
+#### Reasoning
 
 - `-T`, `--reasoning`: Deep reasoning mode: `off`, `on`, or `auto` (judges task complexity before engaging, saves tokens on simple queries)
-- `-D`, `--debug`: Print execution steps, tool calls, and request diagnostics to stderr
 
-#### MCP
+#### Advanced & Configuration-First Options
 
-- `--mcp-list`: List all available MCP servers
-- `--mcp-list-tools`: List all available tools from enabled MCP servers
-- `--mcp-disable`: Disable specific MCP servers
-- `--mcp-enable`: Enable only specific MCP servers (whitelist, overrides disable list)
+These options remain available for scripts and one-off overrides, but are hidden
+from the default help to keep the CLI easier to scan. Prefer `mods --settings`
+for stable defaults:
+
+- Model/runtime tuning: `--max-retries`, `--max-tokens`, `--no-limit`, `--temp`, `--topp`, `--topk`, `--stop`, `--max-tool-rounds`
+- Display defaults: `--format-as`, `--word-wrap`, `--status-text`, `--theme`, `--hide-tool-status`
+- Provider configuration: `--http-proxy`, `--web-search-provider`, `--web-search-api-key`
+- One-off diagnostics and integrations: `--debug`, `--stdin-image`, `--clipboard-image`, `--no-cache`, `--mcp-list`, `--mcp-list-tools`, `--mcp-disable`, `--mcp-enable`
 
 ## Custom Roles
 

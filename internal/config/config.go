@@ -66,6 +66,7 @@ var Help = map[string]string{
 	"quiet":                 "Quiet mode (hide the spinner while loading and stderr messages for success)",
 	"hide-tool-status":      "Hide the bottom status line while tools are running",
 	"help":                  "Show Help and exit",
+	"help-all":              "Show Help with advanced and configuration-first options",
 	"version":               "Show version and exit",
 	"max-retries":           "Maximum number of times to retry API calls",
 	"no-limit":              "Turn off the client-side limit on the size of the input into the model",
@@ -248,6 +249,7 @@ type Config struct {
 	AskModel        bool
 	Plan            bool
 	ShowHelp        bool
+	HelpAll         bool
 	ResetSettings   bool
 	Version         bool
 	Settings        bool

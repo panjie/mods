@@ -31,8 +31,9 @@ func usageFunc(cmd *cobra.Command) error {
 		useLine(),
 	)
 	fmt.Println("Options:")
+	showAll := config.HelpAll
 	cmd.Flags().VisitAll(func(f *flag.Flag) {
-		if f.Hidden {
+		if !flagVisibleInUsage(f, showAll) {
 			return
 		}
 		if f.Shorthand == "" {
@@ -51,6 +52,12 @@ func usageFunc(cmd *cobra.Command) error {
 			)
 		}
 	})
+	if !showAll {
+		fmt.Printf(
+			"\nUse %s to show advanced and configuration-first options.\n",
+			ui.StdoutStyles().InlineCode.Render("--help-all"),
+		)
+	}
 	if cmd.HasExample() {
 		fmt.Printf(
 			"\nExample:\n  %s\n  %s\n",

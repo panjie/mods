@@ -79,6 +79,10 @@ var (
 			debug.SetEnabled(config.Debug)
 			config.Prefix = RemoveWhitespace(strings.Join(args, " "))
 
+			if config.ShowHelp || config.HelpAll {
+				return cmd.Usage()
+			}
+
 			opts := []tea.ProgramOption{}
 
 			if !IsInputTTY() || config.Raw {
@@ -189,10 +193,6 @@ var (
 				}
 			}
 
-			if config.ShowHelp {
-				return cmd.Usage()
-			}
-
 			if config.ListRoles {
 				listRoles()
 				return nil
@@ -274,6 +274,7 @@ func initFlags() {
 	regBool(flags, &config.Quiet, "quiet", "q", config.Quiet)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
 	regBool(flags, &config.ShowHelp, "help", "h", false)
+	regBool(flags, &config.HelpAll, "help-all", "", false)
 	regBool(flags, &config.Version, "version", "v", false)
 	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)
 	regBool(flags, &config.NoLimit, "no-limit", "", config.NoLimit)
@@ -312,6 +313,33 @@ func initFlags() {
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")
+	markAdvanced(
+		flags,
+		"http-proxy",
+		"max-retries",
+		"max-tokens",
+		"no-limit",
+		"temp",
+		"topp",
+		"topk",
+		"stop",
+		"word-wrap",
+		"status-text",
+		"theme",
+		"hide-tool-status",
+		"web-search-provider",
+		"web-search-api-key",
+		"max-tool-rounds",
+		"mcp-enable",
+		"mcp-disable",
+		"mcp-list",
+		"mcp-list-tools",
+		"debug",
+		"stdin-image",
+		"clipboard-image",
+		"format-as",
+		"no-cache",
+	)
 
 	for _, name := range conversationCompleteFlags {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -789,6 +817,7 @@ func isNoArgs() bool {
 		len(config.Delete) == 0 &&
 		config.DeleteOlderThan == 0 &&
 		!config.ShowHelp &&
+		!config.HelpAll &&
 		!config.List &&
 		!config.ListRoles &&
 		!config.MCPList &&
@@ -914,7 +943,7 @@ func isVersionOrHelpCmd(args []string) bool {
 		return false
 	}
 	for _, arg := range args[1:] {
-		if arg == "--version" || arg == "-v" || arg == "--help" || arg == "-h" {
+		if arg == "--version" || arg == "-v" || arg == "--help" || arg == "-h" || arg == "--help-all" {
 			return true
 		}
 	}

@@ -255,7 +255,8 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 			parts = append(parts, baseStyle.Render(opt))
 		}
 	}
-	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, "  "))
+	separator := baseStyle.Render("  ")
+	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, separator))
 	alwaysLine := reviewChoices.Copy().Width(width).Render(formatAlwaysAllowSummary(r.reviewItem.candidateRules, r.scope, width))
 	block := promptLine + "\n" + choicesLine + "\n" + alwaysLine
 	if strings.TrimSpace(content) == "" {

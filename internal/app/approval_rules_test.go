@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -264,6 +265,35 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 	require.Contains(t, rendered, "[A] Always allow")
 	require.NotContains(t, rendered, "[A] Always allow: shell_run(git commit *)")
 	require.Contains(t, rendered, "Always saves in /workspace: shell_run(git commit *)")
+}
+
+func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
+	renderer := lipgloss.NewRenderer(nil)
+	renderer.SetColorProfile(termenv.TrueColor)
+	reviewChoices := renderer.NewStyle().
+		Foreground(lipgloss.Color("#E0DDFF")).
+		Background(lipgloss.Color("#4A3B9F")).
+		Padding(0, 2)
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			name: "shell_run",
+			args: []byte(`{"command":"git commit -m message"}`),
+			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
+				Type: approvalShellPrefix,
+				Tool: "shell_run", Pattern: "git commit *",
+			})},
+		},
+	}
+	rendered := reviewer.renderBanner("", 120, renderer.NewStyle(), reviewChoices)
+
+	baseStyle := reviewChoices.Copy().Padding(0, 0)
+	selectedStyle := baseStyle.Copy().
+		Foreground(lipgloss.Color("#4A3B9F")).
+		Background(lipgloss.Color("#E0DDFF"))
+	require.Contains(t, rendered, selectedStyle.Render("[Y] Approve")+baseStyle.Render("  ")+baseStyle.Render("[N] Deny"))
+	require.NotContains(t, rendered, selectedStyle.Render("[Y] Approve")+"  "+baseStyle.Render("[N] Deny"))
 }
 
 func TestReviewBannerTruncatesSavedRule(t *testing.T) {

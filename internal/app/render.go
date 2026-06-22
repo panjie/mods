@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
@@ -21,6 +22,7 @@ func (m *Mods) View() string {
 	case errorState:
 		return ""
 	case planState:
+		m.flushRender()
 		if m.feedbackMode {
 			content := m.glamOutput
 			if content == "" {
@@ -46,6 +48,7 @@ func (m *Mods) View() string {
 			return m.renderWithOperation(m.anim.View())
 		}
 	case responseState:
+		m.flushRender()
 		if !m.Config.Quiet && !debug.Enabled() && !m.responseOutputStarted && m.anim != nil {
 			return m.renderWithOperation(m.anim.View())
 		}
@@ -111,8 +114,10 @@ func (m *Mods) appendResponseBoundary() {
 }
 
 func (m *Mods) appendToOutputWithDisplay(raw, display string) {
-	m.Output += raw
-	m.displayOutput += display
+	m.outputBuilder.WriteString(raw)
+	m.Output = m.outputBuilder.String()
+	m.displayOutputBuilder.WriteString(display)
+	m.displayOutput = m.displayOutputBuilder.String()
 	if !IsOutputTTY() || m.Config.Raw {
 		m.contentMutex.Lock()
 		m.content = append(m.content, raw)
@@ -120,6 +125,27 @@ func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 		return
 	}
 
+	m.renderDirty = true
+	if !m.shouldFlushRender(display) {
+		return
+	}
+	m.flushRender()
+}
+
+func (m *Mods) shouldFlushRender(display string) bool {
+	if strings.ContainsAny(display, "\n\r") {
+		return true
+	}
+	if m.lastRenderFlush.IsZero() {
+		return true
+	}
+	return time.Since(m.lastRenderFlush) >= renderFrameInterval
+}
+
+func (m *Mods) flushRender() {
+	if !m.renderDirty || !IsOutputTTY() || m.Config.Raw {
+		return
+	}
 	wasAtBottom := m.glamViewport.ScrollPercent() == 1.0
 	oldHeight := m.glamHeight
 	preprocessed := strings.ReplaceAll(m.displayOutput, "\n\n", "\r")
@@ -143,6 +169,17 @@ func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 		// the bottom.
 		m.glamViewport.GotoBottom()
 	}
+	m.renderDirty = false
+	m.lastRenderFlush = time.Now()
+}
+
+func (m *Mods) resetOutputBuffers() {
+	m.Output = ""
+	m.displayOutput = ""
+	m.outputBuilder.Reset()
+	m.displayOutputBuilder.Reset()
+	m.renderDirty = false
+	m.lastRenderFlush = time.Time{}
 }
 
 // flushThought renders the accumulated reasoning/thinking content before the

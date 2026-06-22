@@ -197,6 +197,16 @@ func TestConvoDB(t *testing.T) {
 	})
 }
 
+func TestUpdatedAtIndexExists(t *testing.T) {
+	db := testDB(t)
+	var count int
+	require.NoError(t, db.db.Get(&count, `
+		SELECT count(*) FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_conv_updated_at'
+	`))
+	require.Equal(t, 1, count)
+}
+
 func TestConversationData(t *testing.T) {
 	db := testDB(t)
 	id := newConversationID()

@@ -212,7 +212,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 
 		stream := client.Request(m.ctx, request)
 		return m.receiveCompletionStreamCmd(completionOutput{
-			stream: stream,
+			stream:  stream,
+			cleanup: registry,
 			errh: func(err error) tea.Msg {
 				return m.handleRequestError(err, mod, m.Input)
 			},
@@ -288,6 +289,9 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 			chunk, err := msg.stream.Current()
 			if err != nil && !errors.Is(err, stream.ErrNoContent) {
 				_ = msg.stream.Close()
+				if msg.cleanup != nil {
+					_ = msg.cleanup.Close()
+				}
 				return msg.errh(err)
 			}
 			if chunk.Thought != "" && m.reasoningActive {
@@ -298,19 +302,25 @@ func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
 				thought: chunk.Thought,
 				stream:  msg.stream,
 				errh:    msg.errh,
+				cleanup: msg.cleanup,
 			}
 		}
 
 		// stream is done, check for errors
 		if err := msg.stream.Err(); err != nil {
+			_ = msg.stream.Close()
+			if msg.cleanup != nil {
+				_ = msg.cleanup.Close()
+			}
 			return msg.errh(err)
 		}
 
 		msg.stream.Close()
 
 		return toolCallsStartMsg{
-			stream: msg.stream,
-			errh:   msg.errh,
+			stream:  msg.stream,
+			errh:    msg.errh,
+			cleanup: msg.cleanup,
 		}
 	}
 }
@@ -323,6 +333,7 @@ func (m *Mods) callToolsCmd(msg toolCallsStartMsg, ch chan toolOperationStatusMs
 			results: results,
 			stream:  msg.stream,
 			errh:    msg.errh,
+			cleanup: msg.cleanup,
 		}
 	}
 }

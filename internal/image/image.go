@@ -3,6 +3,7 @@ package image
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 )
@@ -32,12 +33,20 @@ func DetectMimeType(data []byte) (string, error) {
 
 // ReadImage reads an image file from disk and returns its raw bytes and MIME type.
 func ReadImage(path string) ([]byte, string, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", fmt.Errorf("image file not found: %s", path)
 		}
 		return nil, "", fmt.Errorf("reading image file %s: %w", path, err)
+	}
+	defer file.Close() //nolint:errcheck
+	data, err := io.ReadAll(io.LimitReader(file, MaxTotalImageBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("reading image file %s: %w", path, err)
+	}
+	if len(data) > MaxTotalImageBytes {
+		return nil, "", fmt.Errorf("image file exceeds limit of %d bytes: %s", MaxTotalImageBytes, path)
 	}
 	mime, err := DetectMimeType(data)
 	if err != nil {

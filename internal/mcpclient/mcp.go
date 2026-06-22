@@ -103,11 +103,13 @@ func Tools(ctx context.Context, cfg *Config) (map[string][]mcp.Tool, error) {
 }
 
 func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Registry) error {
-	servers, err := Tools(ctx, cfg)
+	session, err := NewToolSession(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	for sname, serverTools := range servers {
+	registry.AddCloser(session.Close)
+	for sname, serverSession := range session.servers {
+		serverTools := serverSession.tools
 		for _, tool := range serverTools {
 			name := fmt.Sprintf("%s_%s", sname, tool.Name)
 			spec := proto.ToolSpec{
@@ -120,20 +122,119 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 			// underscores.
 			capturedSname := sname
 			capturedToolName := tool.Name
-			capturedServer := cfg.MCPServers[sname]
 			if err := registry.Register(toolregistry.Tool{
 				Spec:          spec,
 				Kind:          toolregistry.ToolKindMCP,
 				TimeoutPolicy: toolregistry.TimeoutPolicyCaller,
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
-					return ToolCallDirect(ctx, cfg, capturedSname, capturedToolName, capturedServer, data)
+					return session.ToolCall(ctx, capturedSname, capturedToolName, data)
 				},
 			}); err != nil {
+				_ = session.Close()
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+type ToolSession struct {
+	servers map[string]*toolServerSession
+}
+
+type toolServerSession struct {
+	client *client.Client
+	tools  []mcp.Tool
+	mu     sync.Mutex
+}
+
+func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
+	var mu sync.Mutex
+	var wg errgroup.Group
+	session := &ToolSession{servers: map[string]*toolServerSession{}}
+	for sname, server := range EnabledServers(cfg) {
+		sname, server := sname, server
+		wg.Go(func() error {
+			cli, err := InitClient(ctx, server)
+			if errors.Is(err, context.DeadlineExceeded) {
+				return modsError{
+					Err:        fmt.Errorf("timeout while listing tools for %q - make sure the configuration is correct. If your server requires a docker container, make sure it's running", sname),
+					ReasonText: "Could not list tools",
+				}
+			}
+			if err != nil {
+				return modsError{
+					Err:        fmt.Errorf("could not setup %s: %w", sname, err),
+					ReasonText: "Could not list tools",
+				}
+			}
+			tools, err := cli.ListTools(ctx, mcp.ListToolsRequest{})
+			if err != nil {
+				cli.Close() //nolint:errcheck
+				return modsError{
+					Err:        fmt.Errorf("could not setup %s: %w", sname, err),
+					ReasonText: "Could not list tools",
+				}
+			}
+			mu.Lock()
+			session.servers[sname] = &toolServerSession{client: cli, tools: tools.Tools}
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := wg.Wait(); err != nil {
+		_ = session.Close()
+		return nil, err //nolint:wrapcheck
+	}
+	return session, nil
+}
+
+func (s *ToolSession) Close() error {
+	if s == nil {
+		return nil
+	}
+	var errs []error
+	for name, server := range s.servers {
+		server.mu.Lock()
+		if server.client != nil {
+			if err := server.client.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close MCP %s: %w", name, err))
+			}
+			server.client = nil
+		}
+		server.mu.Unlock()
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+func (s *ToolSession) ToolCall(ctx context.Context, sname, tool string, data []byte) (string, error) {
+	server, ok := s.servers[sname]
+	if !ok {
+		return "", fmt.Errorf("mcp: server is not available: %q", sname)
+	}
+	var args map[string]any
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &args); err != nil {
+			return "", fmt.Errorf("mcp: %w: %s", err, string(data))
+		}
+	}
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if server.client == nil {
+		return "", fmt.Errorf("mcp: server is closed: %q", sname)
+	}
+	request := mcp.CallToolRequest{}
+	request.Params.Name = tool
+	request.Params.Arguments = args
+	result, err := server.client.CallTool(ctx, request)
+	if err != nil {
+		return "", fmt.Errorf("mcp: %w", err)
+	}
+	return toolResultText(result)
 }
 
 func InputSchema(tool mcp.Tool) map[string]any {
@@ -249,6 +350,10 @@ func ToolCallDirect(ctx context.Context, cfg *Config, sname, tool string, server
 		return "", fmt.Errorf("mcp: %w", lastErr)
 	}
 
+	return toolResultText(result)
+}
+
+func toolResultText(result *mcp.CallToolResult) (string, error) {
 	var sb strings.Builder
 	for _, content := range result.Content {
 		switch content := content.(type) {
@@ -258,7 +363,6 @@ func ToolCallDirect(ctx context.Context, cfg *Config, sname, tool string, server
 			sb.WriteString("[Non-text content]")
 		}
 	}
-
 	if result.IsError {
 		return "", errors.New(sb.String())
 	}

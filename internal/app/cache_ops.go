@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 
@@ -94,7 +95,7 @@ func (m *Mods) findReadID(in string) (*Conversation, error) {
 func (m *Mods) readStdinCmd() tea.Msg {
 	if !IsInputTTY() {
 		reader := bufio.NewReader(os.Stdin)
-		stdinBytes, err := io.ReadAll(reader)
+		stdinBytes, err := m.readLimitedStdin(reader)
 		if err != nil {
 			return modsError{Err: err, ReasonText: "Unable to read stdin."}
 		}
@@ -109,6 +110,27 @@ func (m *Mods) readStdinCmd() tea.Msg {
 	}
 	debug.Printf("Stdin: TTY mode, no piped input")
 	return completionInput{""}
+}
+
+func (m *Mods) readLimitedStdin(reader io.Reader) ([]byte, error) {
+	if m.Config.StdinImage || m.Config.NoLimit || m.Config.MaxInputChars <= 0 {
+		return io.ReadAll(reader)
+	}
+	limit := m.Config.MaxInputChars
+	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) <= limit {
+		return data, nil
+	}
+	end := int(limit)
+	for end > 0 && (data[end]&0xc0) == 0x80 {
+		end--
+	}
+	data = data[:end]
+	data = append(data, []byte(fmt.Sprintf("\n\n[Input truncated at %d chars. Use --no-limit to disable truncation.]", limit))...)
+	return data, nil
 }
 
 func (m *Mods) readFromCache() tea.Cmd {

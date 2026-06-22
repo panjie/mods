@@ -63,8 +63,7 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 	m.cancelMu.Unlock()
 	m.responseOutputStarted = false
 	m.responseBoundaryPending = false
-	m.Output = ""
-	m.displayOutput = ""
+	m.resetOutputBuffers()
 
 	return func() tea.Msg {
 		var mod Model
@@ -187,7 +186,8 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 
 		stream := client.Request(m.ctx, request)
 		return m.receiveCompletionStreamCmd(completionOutput{
-			stream: stream,
+			stream:  stream,
+			cleanup: registry,
 			errh: func(err error) tea.Msg {
 				return m.handleRequestError(err, mod, m.Input)
 			},
@@ -265,8 +265,7 @@ func (m *Mods) approvedPlanPrintCmd(transcript string) tea.Cmd {
 }
 
 func (m *Mods) resetExecutionOutput() {
-	m.Output = ""
-	m.displayOutput = ""
+	m.resetOutputBuffers()
 	m.glamOutput = ""
 	m.glamHeight = 0
 	m.glamViewport.SetContent("")

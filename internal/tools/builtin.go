@@ -1,11 +1,13 @@
 package tools
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -82,15 +84,15 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err != nil {
 				return "", err
 			}
-			content, err := os.ReadFile(path)
+			info, err := os.Stat(path)
 			if err != nil {
 				return "", err
 			}
 			if args.Offset < 0 {
 				return "", fmt.Errorf("offset must be non-negative")
 			}
-			if args.Offset > len(content) {
-				return "", fmt.Errorf("offset %d is beyond file size %d", args.Offset, len(content))
+			if int64(args.Offset) > info.Size() {
+				return "", fmt.Errorf("offset %d is beyond file size %d", args.Offset, info.Size())
 			}
 			limit := args.Limit
 			if limit <= 0 {
@@ -99,12 +101,21 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if limit > maxReadLimit {
 				limit = maxReadLimit
 			}
-			end := args.Offset + limit
-			if end > len(content) {
-				end = len(content)
+			file, err := os.Open(path)
+			if err != nil {
+				return "", err
 			}
-			out := string(content[args.Offset:end])
-			if end < len(content) {
+			defer file.Close() //nolint:errcheck
+			if _, err := file.Seek(int64(args.Offset), io.SeekStart); err != nil {
+				return "", err
+			}
+			content, err := io.ReadAll(io.LimitReader(file, int64(limit)))
+			if err != nil {
+				return "", err
+			}
+			end := args.Offset + len(content)
+			out := string(content)
+			if int64(end) < info.Size() {
 				out += fmt.Sprintf("\n\n[Output truncated. Read from offset %d to continue.]", end)
 			}
 			return out, nil
@@ -237,7 +248,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				"max_results": integerProp("Maximum matching lines to return."),
 			}, "path", "query"),
 		},
-		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Path       string `json:"path"`
 				Query      string `json:"query"`
@@ -260,7 +271,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if limit > maxSearchResults {
 				limit = maxSearchResults
 			}
-			return searchFiles(root, path, args.Query, limit)
+			return searchFiles(ctx, root, path, args.Query, limit)
 		},
 	}); err != nil {
 		return err
@@ -524,10 +535,13 @@ func workspaceRel(root, path string) string {
 	return filepath.ToSlash(rel)
 }
 
-func searchFiles(root, path, query string, limit int) (string, error) {
+func searchFiles(ctx context.Context, root, path, query string, limit int) (string, error) {
 	var sb strings.Builder
 	matches := 0
 	err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			return err
 		}
@@ -548,21 +562,37 @@ func searchFiles(root, path, query string, limit int) (string, error) {
 		if info.Size() > maxSearchFileBytes {
 			return nil
 		}
-		content, err := os.ReadFile(path)
+		file, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		if bytes.IndexByte(content, 0) >= 0 {
-			return nil
-		}
-		lines := strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n")
-		for i, line := range lines {
-			if strings.Contains(line, query) {
-				sb.WriteString(fmt.Sprintf("%s:%d:%s\n", workspaceRel(root, path), i+1, line))
-				matches++
-				if matches >= limit {
-					return fs.SkipAll
+		defer file.Close() //nolint:errcheck
+		reader := bufio.NewReader(file)
+		lineNo := 0
+		for {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			line, readErr := reader.ReadString('\n')
+			if len(line) > 0 {
+				lineNo++
+				if strings.Contains(line, "\x00") {
+					return nil
 				}
+				line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+				if strings.Contains(line, query) {
+					sb.WriteString(fmt.Sprintf("%s:%d:%s\n", workspaceRel(root, path), lineNo, line))
+					matches++
+					if matches >= limit {
+						return fs.SkipAll
+					}
+				}
+			}
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			if readErr != nil {
+				return readErr
 			}
 		}
 		return nil

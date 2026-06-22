@@ -72,6 +72,11 @@ func Open(ds string) (*DB, error) {
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
+	if _, err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_conv_updated_at ON conversations (updated_at DESC)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
 
 	if !hasColumn(db, "conversations", "model") {
 		if _, err := db.Exec(`

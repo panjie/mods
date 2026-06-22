@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/ollama/ollama/api"
@@ -56,16 +57,19 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	s.request = body
 	s.messages = request.Messages
 	s.factory = func() {
+		s.mu.Lock()
+		s.run++
+		run := s.run
 		s.done = false
 		s.err = nil
 		s.closed = false
-		s.respCh = make(chan api.ChatResponse)
+		s.respCh = make(chan api.ChatResponse, 1)
+		ch := s.respCh
+		s.mu.Unlock()
 		go func() {
-			if err := c.Chat(ctx, &s.request, s.fn); err != nil {
-				s.mu.Lock()
-				s.err = err
-				s.mu.Unlock()
-			}
+			s.finish(run, ch, c.Chat(ctx, &s.request, func(resp api.ChatResponse) error {
+				return s.fn(run, ch, resp)
+			}))
 		}()
 	}
 	s.factory()
@@ -104,23 +108,41 @@ type Stream struct {
 	request  api.ChatRequest
 	err      error
 	done     bool
+	run      uint64
 	factory  func()
 	respCh   chan api.ChatResponse
 	message  api.Message
+	content  strings.Builder
 	toolCall func(name string, data []byte) (string, error)
 	messages []proto.Message
 }
 
-func (s *Stream) fn(resp api.ChatResponse) error {
+func (s *Stream) fn(run uint64, ch chan api.ChatResponse, resp api.ChatResponse) error {
 	defer func() { recover() }()
 	s.mu.Lock()
-	if s.closed {
+	if s.closed || s.run != run {
 		s.mu.Unlock()
 		return nil
 	}
 	s.mu.Unlock()
-	s.respCh <- resp
+	ch <- resp
 	return nil
+}
+
+func (s *Stream) finish(run uint64, ch chan api.ChatResponse, err error) {
+	s.mu.Lock()
+	if s.run != run {
+		s.mu.Unlock()
+		return
+	}
+	if err != nil {
+		s.err = err
+	}
+	if !s.closed {
+		s.closed = true
+		close(ch)
+	}
+	s.mu.Unlock()
 }
 
 // CallTools implements stream.Stream.
@@ -139,6 +161,7 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 	}
 	if len(statuses) > 0 {
 		s.message = api.Message{}
+		s.content.Reset()
 		s.factory()
 	}
 	return statuses
@@ -160,25 +183,25 @@ func (s *Stream) Close() error {
 
 // Current implements stream.Stream.
 func (s *Stream) Current() (proto.Chunk, error) {
-	select {
-	case resp, ok := <-s.respCh:
-		if !ok {
-			return proto.Chunk{}, stream.ErrNoContent
-		}
-		chunk := proto.Chunk{
-			Content: resp.Message.Content,
-		}
+	resp, ok := <-s.respCh
+	if !ok {
 		s.mu.Lock()
-		s.message.Content += resp.Message.Content
-		s.message.ToolCalls = append(s.message.ToolCalls, resp.Message.ToolCalls...)
-		if resp.Done {
-			s.done = true
-		}
+		s.done = true
 		s.mu.Unlock()
-		return chunk, nil
-	default:
 		return proto.Chunk{}, stream.ErrNoContent
 	}
+	chunk := proto.Chunk{
+		Content: resp.Message.Content,
+	}
+	s.mu.Lock()
+	s.content.WriteString(resp.Message.Content)
+	s.message.Content = s.content.String()
+	s.message.ToolCalls = append(s.message.ToolCalls, resp.Message.ToolCalls...)
+	if resp.Done {
+		s.done = true
+	}
+	s.mu.Unlock()
+	return chunk, nil
 }
 
 // Err implements stream.Stream.

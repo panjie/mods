@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -264,6 +265,42 @@ func TestSetupStreamContextDoesNotTruncateWhenMaxCharsUnset(t *testing.T) {
 	require.NoError(t, mods.setupStreamContext("hello world", Model{}))
 	require.NotEmpty(t, mods.messages)
 	require.Equal(t, "hello world", mods.messages[len(mods.messages)-1].Content)
+}
+
+func TestReadLimitedStdinTruncatesBeforeReadAll(t *testing.T) {
+	m := &Mods{Config: &Config{}}
+	m.Config.MaxInputChars = 5
+	data, err := m.readLimitedStdin(bytes.NewBufferString("hello world"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "hello")
+	require.Contains(t, string(data), "Input truncated")
+}
+
+func TestPruneHistoryForBudgetKeepsRecentMessages(t *testing.T) {
+	messages := []proto.Message{
+		{Role: proto.RoleSystem, Content: "sys"},
+		{Role: proto.RoleUser, Content: strings.Repeat("old", 20)},
+		{Role: proto.RoleAssistant, Content: strings.Repeat("older", 20)},
+		{Role: proto.RoleUser, Content: "recent question"},
+		{Role: proto.RoleAssistant, Content: "recent answer"},
+	}
+	got := pruneHistoryForBudget(messages, "new", 40, false)
+	require.Equal(t, proto.RoleSystem, got[0].Role)
+	require.Equal(t, "recent question", got[1].Content)
+	require.Equal(t, "recent answer", got[2].Content)
+	require.Len(t, got, 3)
+}
+
+func TestPruneHistoryForBudgetDropsLeadingToolResults(t *testing.T) {
+	messages := []proto.Message{
+		{Role: proto.RoleSystem, Content: "sys"},
+		{Role: proto.RoleAssistant, Content: strings.Repeat("tool call", 20), ToolCalls: []proto.ToolCall{{ID: "call-1"}}},
+		{Role: proto.RoleTool, Content: "small result", ToolCalls: []proto.ToolCall{{ID: "call-1"}}},
+		{Role: proto.RoleAssistant, Content: "final answer"},
+	}
+	got := pruneHistoryForBudget(messages, "new", 40, false)
+	require.Equal(t, []string{proto.RoleSystem, proto.RoleAssistant}, []string{got[0].Role, got[1].Role})
+	require.Equal(t, "final answer", got[1].Content)
 }
 
 func TestRemoveWhitespace(t *testing.T) {

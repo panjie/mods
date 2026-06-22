@@ -3,7 +3,9 @@ package ollama
 import (
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/ollama/ollama/api"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -49,5 +51,34 @@ func TestNewChatRequestOptions(t *testing.T) {
 	}
 	if got := req.Options["top_p"]; got != topP {
 		t.Fatalf("expected top_p=%v, got %#v", topP, got)
+	}
+}
+
+func TestCurrentBlocksUntilResponse(t *testing.T) {
+	s := &Stream{respCh: make(chan api.ChatResponse, 1)}
+	done := make(chan proto.Chunk, 1)
+	go func() {
+		chunk, err := s.Current()
+		if err != nil {
+			t.Errorf("Current returned error before response: %v", err)
+			return
+		}
+		done <- chunk
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("Current returned before a response was available")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	s.respCh <- api.ChatResponse{Message: api.Message{Content: "hello"}}
+	select {
+	case chunk := <-done:
+		if chunk.Content != "hello" {
+			t.Fatalf("unexpected chunk: %#v", chunk)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Current did not return after response")
 	}
 }

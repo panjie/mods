@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -39,7 +40,8 @@ type Tool struct {
 
 // Registry stores tools by name and exposes a provider-neutral call router.
 type Registry struct {
-	tools map[string]Tool
+	tools   map[string]Tool
+	closers []func() error
 }
 
 // NewRegistry creates an empty tool registry.
@@ -115,4 +117,26 @@ func (r *Registry) TimeoutPolicy(name string) TimeoutPolicy {
 // Len returns the number of registered tools.
 func (r *Registry) Len() int {
 	return len(r.tools)
+}
+
+// AddCloser registers cleanup work owned by the registry.
+func (r *Registry) AddCloser(close func() error) {
+	if close != nil {
+		r.closers = append(r.closers, close)
+	}
+}
+
+// Close releases resources owned by registered tools.
+func (r *Registry) Close() error {
+	var errs []error
+	for i := len(r.closers) - 1; i >= 0; i-- {
+		if err := r.closers[i](); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	r.closers = nil
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }

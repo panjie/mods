@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
+	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
 func LastPrompt(messages []proto.Message) string {
@@ -47,17 +48,20 @@ type completionOutput struct {
 	thought string
 	stream  stream.Stream
 	errh    func(error) tea.Msg
+	cleanup *toolregistry.Registry
 }
 
 type toolCallsStartMsg struct {
-	stream stream.Stream
-	errh   func(error) tea.Msg
+	stream  stream.Stream
+	errh    func(error) tea.Msg
+	cleanup *toolregistry.Registry
 }
 
 type toolCallsOutput struct {
 	results []proto.ToolCallStatus
 	stream  stream.Stream
 	errh    func(error) tea.Msg
+	cleanup *toolregistry.Registry
 }
 
 type toolOperationStatusMsg struct {

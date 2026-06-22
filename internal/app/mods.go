@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -33,6 +34,7 @@ const (
 	defaultMaxToolRounds = 30
 	defaultFanciness     = 10
 	maxToolFailedRounds  = 3
+	renderFrameInterval  = time.Second / 30
 )
 
 const numPlanReviewOptions = 4
@@ -53,7 +55,11 @@ type Mods struct {
 	glamViewport            viewport.Model
 	glamOutput              string
 	displayOutput           string
+	outputBuilder           strings.Builder
+	displayOutputBuilder    strings.Builder
 	glamHeight              int
+	renderDirty             bool
+	lastRenderFlush         time.Time
 	messages                []proto.Message
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
@@ -267,8 +273,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if msg.content == "" {
 				cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
-					stream: msg.stream,
-					errh:   msg.errh,
+					stream:  msg.stream,
+					errh:    msg.errh,
+					cleanup: msg.cleanup,
 				}))
 				break
 			}
@@ -292,8 +299,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
-			stream: msg.stream,
-			errh:   msg.errh,
+			stream:  msg.stream,
+			errh:    msg.errh,
+			cleanup: msg.cleanup,
 		}))
 	case toolCallsStartMsg:
 		// The model may reason and then immediately call a tool without
@@ -331,13 +339,17 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewer.reset()
 		}
 		toolMsg := completionOutput{
-			stream: msg.stream,
-			errh:   msg.errh,
+			stream:  msg.stream,
+			errh:    msg.errh,
+			cleanup: msg.cleanup,
 		}
 		for _, call := range msg.results {
 			if call.Err != nil {
 				debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
 				if errors.Is(call.Err, errReviewUnavailable) {
+					if msg.cleanup != nil {
+						_ = msg.cleanup.Close()
+					}
 					return m, msgCmd(modsError{
 						Err:        call.Err,
 						ReasonText: "Tool execution requires review.",
@@ -353,6 +365,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if len(msg.results) == 0 {
+			if msg.cleanup != nil {
+				_ = msg.cleanup.Close()
+			}
 			m.messages = msg.stream.Messages()
 			m.toolCallRounds = 0
 			m.totalRounds = 0
@@ -374,6 +389,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			maxTotal = defaultMaxToolRounds
 		}
 		if m.toolRoundLimitExceeded(maxTotal, msg.stream) {
+			if msg.cleanup != nil {
+				_ = msg.cleanup.Close()
+			}
 			return m, msgCmd(completionOutput{errh: msg.errh})
 		}
 		debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
@@ -403,14 +421,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = doneState
 			return m, m.quit
 		}
-		m.Output = ""
-		m.displayOutput = ""
+		m.resetOutputBuffers()
 		m.planContent = ""
 		m.state = planState
 		return m, m.startPlanCmd("The previous plan was rejected. Please create a completely different plan.")
 	case planModifyMsg:
-		m.Output = ""
-		m.displayOutput = ""
+		m.resetOutputBuffers()
 		m.planContent = ""
 		m.planRetries = 0
 		m.state = planState

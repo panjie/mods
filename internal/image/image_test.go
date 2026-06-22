@@ -69,6 +69,15 @@ func TestReadImage(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unsupported")
 	})
+
+	t.Run("too large", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "large.png")
+		data := append(pngHeader(), make([]byte, MaxTotalImageBytes+1)...)
+		require.NoError(t, os.WriteFile(path, data, 0o644))
+		_, _, err := ReadImage(path)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exceeds limit")
+	})
 }
 
 func pngHeader() []byte {

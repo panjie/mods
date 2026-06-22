@@ -37,7 +37,12 @@ func loadMsg(ctx context.Context, msg string) (string, error) {
 	}
 
 	if strings.HasPrefix(msg, "file://") {
-		bts, err := os.ReadFile(strings.TrimPrefix(msg, "file://"))
+		file, err := os.Open(strings.TrimPrefix(msg, "file://"))
+		if err != nil {
+			return "", fmt.Errorf("load msg: %w", err)
+		}
+		defer func() { _ = file.Close() }()
+		bts, err := readLimited(file, maxLoadMsgBytes)
 		if err != nil {
 			return "", fmt.Errorf("load msg: %w", err)
 		}

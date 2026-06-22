@@ -52,6 +52,25 @@ func TestRegistry(t *testing.T) {
 	}
 }
 
+func TestRegistryCloseRunsClosersReverseOrder(t *testing.T) {
+	registry := NewRegistry()
+	var calls []string
+	registry.AddCloser(func() error {
+		calls = append(calls, "first")
+		return nil
+	})
+	registry.AddCloser(func() error {
+		calls = append(calls, "second")
+		return nil
+	})
+	if err := registry.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if strings.Join(calls, ",") != "second,first" {
+		t.Fatalf("unexpected close order: %v", calls)
+	}
+}
+
 func TestFilesystemToolsStayInsideRoot(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

@@ -132,6 +132,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			}
 		}
 		debug.Printf("Conversation: read %d messages from %s", len(m.messages), cfg.CacheReadFromID[:min(ShortIDLength, len(cfg.CacheReadFromID))])
+		m.messages = pruneHistoryForBudget(m.messages, content, mod.MaxChars, cfg.NoLimit)
 	}
 
 	m.messages = append(m.messages, proto.Message{
@@ -247,4 +248,69 @@ func (m *Mods) appendImageWithMime(images []proto.Image, totalBytes *int, data [
 		}
 	}
 	return append(images, proto.Image{Data: data, MimeType: mime}), nil
+}
+
+func pruneHistoryForBudget(messages []proto.Message, newContent string, maxChars int64, noLimit bool) []proto.Message {
+	if noLimit || maxChars <= 0 || len(messages) == 0 {
+		return messages
+	}
+	budget := int(maxChars)
+	used := len(newContent)
+	var systems []proto.Message
+	for _, msg := range messages {
+		if msg.Role != proto.RoleSystem {
+			continue
+		}
+		used += messageSize(msg)
+		systems = append(systems, msg)
+	}
+	out := append([]proto.Message(nil), systems...)
+	var tail []proto.Message
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.Role == proto.RoleSystem {
+			continue
+		}
+		size := messageSize(msg)
+		if used+size > budget {
+			break
+		}
+		used += size
+		tail = append(tail, msg)
+	}
+	for i := len(tail) - 1; i >= 0; i-- {
+		out = append(out, tail[i])
+	}
+	out = dropLeadingToolResults(out)
+	if len(out) < len(messages) {
+		debug.Printf("Conversation: pruned history from %d to %d messages (budget=%d chars)", len(messages), len(out), budget)
+	}
+	return out
+}
+
+func dropLeadingToolResults(messages []proto.Message) []proto.Message {
+	firstNonSystem := 0
+	for firstNonSystem < len(messages) && messages[firstNonSystem].Role == proto.RoleSystem {
+		firstNonSystem++
+	}
+	first := firstNonSystem
+	for first < len(messages) && messages[first].Role == proto.RoleTool {
+		first++
+	}
+	if first == firstNonSystem {
+		return messages
+	}
+	out := append([]proto.Message(nil), messages[:firstNonSystem]...)
+	return append(out, messages[first:]...)
+}
+
+func messageSize(msg proto.Message) int {
+	size := len(msg.Content)
+	for _, img := range msg.Images {
+		size += len(img.Data)
+	}
+	for _, call := range msg.ToolCalls {
+		size += len(call.ID) + len(call.Function.Name) + len(call.Function.Arguments)
+	}
+	return size
 }

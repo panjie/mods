@@ -3,10 +3,7 @@ package app
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/stream"
-	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
 func LastPrompt(messages []proto.Message) string {
@@ -40,28 +37,6 @@ func FirstLine(s string) string {
 // completionInput is a tea.Msg that wraps the content read from stdin.
 type completionInput struct {
 	content string
-}
-
-// completionOutput a tea.Msg that wraps the content returned from openai.
-type completionOutput struct {
-	content string
-	thought string
-	stream  stream.Stream
-	errh    func(error) tea.Msg
-	cleanup *toolregistry.Registry
-}
-
-type toolCallsStartMsg struct {
-	stream  stream.Stream
-	errh    func(error) tea.Msg
-	cleanup *toolregistry.Registry
-}
-
-type toolCallsOutput struct {
-	results []proto.ToolCallStatus
-	stream  stream.Stream
-	errh    func(error) tea.Msg
-	cleanup *toolregistry.Registry
 }
 
 type toolOperationStatusMsg struct {

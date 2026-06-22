@@ -426,7 +426,9 @@ func TestReviewUnavailableIsFatal(t *testing.T) {
 		reviewer: &toolReviewer{},
 		ctx:      context.Background(),
 	}
-	_, cmd := mods.Update(toolCallsOutput{
+	_, cmd := mods.Update(streamEventMsg{
+		kind:   streamEventToolCalls,
+		runner: newStreamRunner(staticStream{}, nil, func(err error) tea.Msg { return modsError{Err: err} }),
 		results: []proto.ToolCallStatus{{
 			Name: "fs_write_file",
 			Err:  fmt.Errorf("%w: fs_write_file requires approval", errReviewUnavailable),

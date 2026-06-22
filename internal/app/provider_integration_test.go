@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -117,7 +119,7 @@ func runIntegrationPrompt(t *testing.T, m *Mods, prompt string) {
 	m.Input = prompt
 
 	msg := m.startCompletionCmd(prompt)()
-	output, ok := msg.(completionOutput)
+	output, ok := msg.(streamEventMsg)
 	if !ok {
 		merr, isErr := msg.(modsError)
 		if isErr {
@@ -125,30 +127,32 @@ func runIntegrationPrompt(t *testing.T, m *Mods, prompt string) {
 			if merr.Err != nil {
 				reason = merr.Err.Error()
 			}
-			t.Fatalf("expected completionOutput, got modsError: %s", reason)
+			t.Fatalf("expected streamEventMsg, got modsError: %s", reason)
 		}
-		t.Fatalf("expected completionOutput, got %T: %v", msg, msg)
+		t.Fatalf("expected streamEventMsg, got %T: %v", msg, msg)
 	}
-	require.NotEmpty(t, output.content, "expected non-empty first chunk from %s API", m.Config.API)
+	require.Equal(t, streamEventChunk, output.kind)
+	require.NotEmpty(t, output.chunk.Content, "expected non-empty first chunk from %s API", m.Config.API)
 
 	var fullText strings.Builder
-	fullText.WriteString(output.content)
-	stream := output.stream
-	for stream.Next() {
-		chunk, err := stream.Current()
-		if err != nil {
+	fullText.WriteString(output.chunk.Content)
+	runner := output.runner
+	for {
+		msg := runner.receiveCmd()()
+		event, ok := msg.(streamEventMsg)
+		if !ok || event.kind != streamEventChunk {
 			break
 		}
-		if chunk.Content != "" {
-			fullText.WriteString(chunk.Content)
+		if event.chunk.Content != "" {
+			fullText.WriteString(event.chunk.Content)
 		}
 	}
-	if err := stream.Err(); err != nil {
+	if err := runner.stream.Err(); err != nil && !errors.Is(err, stream.ErrNoContent) {
 		t.Logf("stream ended with error: %v", err)
 	}
-	_ = stream.Close()
+	runner.close()
 
-	messages := stream.Messages()
+	messages := runner.messages()
 	hasAssistant := false
 	for _, msg := range messages {
 		if msg.Role == proto.RoleAssistant && msg.Content != "" {

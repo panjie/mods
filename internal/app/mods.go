@@ -246,80 +246,32 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = requestState
 			cmds = append(cmds, m.startCompletionCmd(msg.content))
 		}
-	case completionOutput:
-		if msg.stream == nil {
+	case streamEventMsg:
+		switch msg.kind {
+		case streamEventChunk:
+			if msg.chunk.Thought != "" {
+				m.Thought += msg.chunk.Thought
+				if m.reasoningActive {
+					debug.Printf("Thought: %s", msg.chunk.Thought)
+				}
+			}
+			if msg.chunk.Content != "" {
+				cmds = append(cmds, m.handleStreamChunk(msg))
+			} else {
+				cmds = append(cmds, msg.runner.receiveCmd())
+			}
+		case streamEventToolCallsStart:
+			cmds = append(cmds, m.startToolCalls(msg.runner)...)
+		case streamEventToolCalls:
+			return m, m.handleToolCallsDone(msg)
+		case streamEventDone:
 			if m.Config.Plan {
 				return m, msgCmd(planCompleteMsg{plan: m.Output})
 			}
 			m.state = doneState
 			return m, m.quit
-		}
-		if msg.thought != "" {
-			m.Thought += msg.thought
-		}
-		if msg.content != "" {
-			// Trim leading whitespace from the very first answer chunk so a
-			// newline left over after a stripped </think> block does not
-			// render as a blank line above the answer.
-			if !m.responseOutputStarted && m.Output == "" {
-				msg.content = strings.TrimLeft(msg.content, "\r\n")
-			}
-			if m.responseBoundaryPending {
-				msg.content = strings.TrimLeft(msg.content, "\r\n")
-				if msg.content != "" {
-					m.appendResponseBoundary()
-					m.responseBoundaryPending = false
-				}
-			}
-			if msg.content == "" {
-				cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
-					stream:  msg.stream,
-					errh:    msg.errh,
-					cleanup: msg.cleanup,
-				}))
-				break
-			}
-			m.responseOutputStarted = true
-			if m.Config.Plan {
-				m.setActiveOperation("Planning...")
-			} else {
-				m.setActiveOperation("")
-			}
-			if m.reasoningActive && !m.thoughtFlushed {
-				m.flushThought()
-			} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-				debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
-				m.thoughtFlushed = true
-			}
-			m.appendToOutput(msg.content)
-			if m.Config.Plan {
-				m.state = planState
-			} else {
-				m.state = responseState
-			}
-		}
-		cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
-			stream:  msg.stream,
-			errh:    msg.errh,
-			cleanup: msg.cleanup,
-		}))
-	case toolCallsStartMsg:
-		// The model may reason and then immediately call a tool without
-		// emitting any answer text; flush the thought so it is still shown.
-		if m.reasoningActive && !m.thoughtFlushed {
-			m.flushThought()
-		} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-			debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
-			m.thoughtFlushed = true
-		}
-		ch := make(chan toolOperationStatusMsg, 8)
-		m.setToolOperationChannel(ch)
-		m.setActiveOperation("Running tools")
-		m.state = responseState
-		if m.Config.Plan {
-			cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.callToolsCmd(msg, ch))
-		} else {
-			cmds = append(cmds, m.pollToolOperationStatusCmd(ch), m.reviewer.startSession(), m.callToolsCmd(msg, ch))
+		case streamEventError:
+			return m, msgCmd(msg.runner.errh(msg.err))
 		}
 	case toolOperationStatusMsg:
 		if msg.done {
@@ -333,70 +285,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toolReviewStartMsg:
 		m.reviewer.handleStartMsg(msg)
 		m.setActiveOperation("")
-	case toolCallsOutput:
-		m.setActiveOperation("")
-		if !m.Config.Plan {
-			m.reviewer.reset()
-		}
-		toolMsg := completionOutput{
-			stream:  msg.stream,
-			errh:    msg.errh,
-			cleanup: msg.cleanup,
-		}
-		for _, call := range msg.results {
-			if call.Err != nil {
-				debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
-				if errors.Is(call.Err, errReviewUnavailable) {
-					if msg.cleanup != nil {
-						_ = msg.cleanup.Close()
-					}
-					return m, msgCmd(modsError{
-						Err:        call.Err,
-						ReasonText: "Tool execution requires review.",
-					})
-				}
-			} else {
-				argPreview := debug.Truncate(string(call.Arguments), 120)
-				if argPreview != "" {
-					debug.Printf("Tool call: %s(%s)", call.Name, argPreview)
-				} else {
-					debug.Printf("Tool call: %s", call.Name)
-				}
-			}
-		}
-		if len(msg.results) == 0 {
-			if msg.cleanup != nil {
-				_ = msg.cleanup.Close()
-			}
-			m.messages = msg.stream.Messages()
-			m.toolCallRounds = 0
-			m.totalRounds = 0
-			m.setActiveOperation(m.Config.StatusText)
-			if m.Config.Plan {
-				return m, msgCmd(planCompleteMsg{plan: m.Output})
-			}
-			return m, msgCmd(completionOutput{errh: msg.errh})
-		}
-		m.totalRounds++
-		hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
-			return c.Err != nil
-		})
-		if hasFailed {
-			m.toolCallRounds++
-		}
-		maxTotal := m.Config.MaxToolRounds
-		if maxTotal <= 0 {
-			maxTotal = defaultMaxToolRounds
-		}
-		if m.toolRoundLimitExceeded(maxTotal, msg.stream) {
-			if msg.cleanup != nil {
-				_ = msg.cleanup.Close()
-			}
-			return m, msgCmd(completionOutput{errh: msg.errh})
-		}
-		debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
-		m.responseBoundaryPending = true
-		return m, msgCmd(toolMsg)
 	case planCompleteMsg:
 		m.planContent = msg.plan
 		m.setActiveOperation("")
@@ -566,4 +454,115 @@ func (m *Mods) resetAndOutput(st stream.Stream) {
 	if content != "" {
 		m.appendToOutput(content)
 	}
+}
+
+func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
+	content := msg.chunk.Content
+	// Trim leading whitespace from the very first answer chunk so a newline left
+	// over after a stripped </think> block does not render as a blank line above
+	// the answer.
+	if !m.responseOutputStarted && m.Output == "" {
+		content = strings.TrimLeft(content, "\r\n")
+	}
+	if m.responseBoundaryPending {
+		content = strings.TrimLeft(content, "\r\n")
+		if content != "" {
+			m.appendResponseBoundary()
+			m.responseBoundaryPending = false
+		}
+	}
+	if content == "" {
+		return msg.runner.receiveCmd()
+	}
+	m.responseOutputStarted = true
+	if m.Config.Plan {
+		m.setActiveOperation("Planning...")
+	} else {
+		m.setActiveOperation("")
+	}
+	if m.reasoningActive && !m.thoughtFlushed {
+		m.flushThought()
+	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
+		debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
+		m.thoughtFlushed = true
+	}
+	m.appendToOutput(content)
+	if m.Config.Plan {
+		m.state = planState
+	} else {
+		m.state = responseState
+	}
+	return msg.runner.receiveCmd()
+}
+
+func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
+	// The model may reason and then immediately call a tool without emitting any
+	// answer text; flush the thought so it is still shown.
+	if m.reasoningActive && !m.thoughtFlushed {
+		m.flushThought()
+	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
+		debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
+		m.thoughtFlushed = true
+	}
+	ch := make(chan toolOperationStatusMsg, 8)
+	m.setToolOperationChannel(ch)
+	m.setActiveOperation("Running tools")
+	m.state = responseState
+	cmds := []tea.Cmd{m.pollToolOperationStatusCmd(ch), m.callToolsCmd(runner, ch)}
+	if !m.Config.Plan {
+		cmds = append(cmds[:1], append([]tea.Cmd{m.reviewer.startSession()}, cmds[1:]...)...)
+	}
+	return cmds
+}
+
+func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
+	m.setActiveOperation("")
+	if !m.Config.Plan {
+		m.reviewer.reset()
+	}
+	for _, call := range msg.results {
+		if call.Err != nil {
+			debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+			if errors.Is(call.Err, errReviewUnavailable) {
+				msg.runner.close()
+				return msgCmd(modsError{
+					Err:        call.Err,
+					ReasonText: "Tool execution requires review.",
+				})
+			}
+			continue
+		}
+		argPreview := debug.Truncate(string(call.Arguments), 120)
+		if argPreview != "" {
+			debug.Printf("Tool call: %s(%s)", call.Name, argPreview)
+		} else {
+			debug.Printf("Tool call: %s", call.Name)
+		}
+	}
+	if len(msg.results) == 0 {
+		msg.runner.close()
+		m.messages = msg.runner.messages()
+		m.toolCallRounds = 0
+		m.totalRounds = 0
+		m.setActiveOperation(m.Config.StatusText)
+		return msgCmd(msg.runner.doneMsg())
+	}
+	m.totalRounds++
+	hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
+		return c.Err != nil
+	})
+	if hasFailed {
+		m.toolCallRounds++
+	}
+	maxTotal := m.Config.MaxToolRounds
+	if maxTotal <= 0 {
+		maxTotal = defaultMaxToolRounds
+	}
+	if m.toolRoundLimitExceeded(maxTotal, msg.runner.stream) {
+		msg.runner.close()
+		return msgCmd(msg.runner.doneMsg())
+	}
+	debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
+	m.responseBoundaryPending = true
+	return msg.runner.receiveCmd()
 }

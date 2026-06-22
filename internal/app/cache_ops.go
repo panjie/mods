@@ -141,10 +141,6 @@ func (m *Mods) readFromCache() tea.Cmd {
 		}
 
 		m.appendToOutput(proto.Conversation(messages).String())
-		return completionOutput{
-			errh: func(err error) tea.Msg {
-				return modsError{Err: err}
-			},
-		}
+		return streamEventMsg{kind: streamEventDone}
 	}
 }

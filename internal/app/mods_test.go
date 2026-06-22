@@ -719,12 +719,10 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	t.Run("first output hides generating", func(t *testing.T) {
 		m := newTestMods()
 		m.Config.Raw = true
-		_, _ = m.Update(completionOutput{
-			content: "hello",
-			stream:  staticStream{},
-			errh: func(err error) tea.Msg {
-				return modsError{Err: err}
-			},
+		_, _ = m.Update(streamEventMsg{
+			kind:   streamEventChunk,
+			chunk:  proto.Chunk{Content: "hello"},
+			runner: newStreamRunner(staticStream{}, nil, func(err error) tea.Msg { return modsError{Err: err} }),
 		})
 		require.True(t, m.responseOutputStarted)
 		require.Contains(t, m.Output, "hello")

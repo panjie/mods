@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -19,9 +17,7 @@ import (
 	"github.com/caarlos0/go-shellwords"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
-	"github.com/panjie/mods/internal/websearch"
 )
 
 type number interface{ int64 | float64 }
@@ -55,169 +51,11 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.thoughtFlushed = false
 
 	return func() tea.Msg {
-		var mod Model
-		var api API
-		cfg := m.Config
-		api, mod, err := m.resolveModel(cfg)
-		cfg.API = mod.API
+		session, err := m.buildRequestSession(content, requestModeCompletion)
 		if err != nil {
 			return err
 		}
-		if api.Name == "" {
-			eps := make([]string, 0)
-			for _, a := range cfg.APIs {
-				eps = append(eps, m.Styles.InlineCode.Render(a.Name))
-			}
-			return modsError{
-				Err: newUserErrorf(
-					"Your configured API endpoints are: %s",
-					eps,
-				),
-				ReasonText: fmt.Sprintf(
-					"The API endpoint %s is not configured.",
-					m.Styles.InlineCode.Render(cfg.API),
-				),
-			}
-		}
-
-		cfgs, err := m.buildProviderConfigs(mod, api)
-		if err != nil {
-			return err
-		}
-		accfg := cfgs.Anthropic
-		gccfg := cfgs.Google
-		cccfg := cfgs.Cohere
-		occfg := cfgs.Ollama
-		ccfg := cfgs.OpenAI
-
-		if (mod.API == "azure" || mod.API == "azure-ad") && api.User != "" {
-			cfg.User = api.User
-		}
-
-		m.reasoningActive = m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
-
-		if cfg.HTTPProxy != "" {
-			proxyURL, err := url.Parse(cfg.HTTPProxy)
-			if err != nil {
-				return modsError{Err: err, ReasonText: "There was an error parsing your proxy URL."}
-			}
-			httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
-			ccfg.HTTPClient = httpClient
-			accfg.HTTPClient = httpClient
-			cccfg.HTTPClient = httpClient
-			occfg.HTTPClient = httpClient
-		}
-
-		if mod.MaxChars == 0 {
-			mod.MaxChars = cfg.MaxInputChars
-		}
-
-		// Check if the model is an o-series model and unset the max_tokens parameter
-		// accordingly, as it's unsupported by o-series.
-		if isOSeries(mod.Name) {
-			cfg.MaxTokens = 0
-		}
-
-		wscfg := websearch.Config{
-			Enabled:    cfg.WebSearch,
-			Provider:   cfg.WebSearchProvider,
-			APIKey:     cfg.WebSearchAPIKey,
-			MaxResults: 5,
-		}
-
-		ctx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
-		m.addCancel(cancel)
-		registry, err := m.buildToolRegistryForProvider(ctx, cfg, wscfg, cfg.Prefix+"\n"+content, mod.API)
-		if err != nil {
-			return err
-		}
-		tools := registry.Specs()
-
-		if debug.Enabled() {
-			debug.Printf("Tools: %d total tool(s)", len(tools))
-			for _, t := range tools {
-				debug.Printf("  Tool: %s", t.Name)
-			}
-		}
-
-		if err := m.setupStreamContext(content, mod); err != nil {
-			return err
-		}
-
-		if m.planContent != "" {
-			planMsg := proto.Message{
-				Role:    proto.RoleSystem,
-				Content: "The user has approved the following plan for execution:\n\n" + m.planContent,
-			}
-			if len(m.messages) > 0 {
-				last := m.messages[len(m.messages)-1]
-				m.messages = append(m.messages[:len(m.messages)-1], planMsg, last)
-			} else {
-				m.messages = append(m.messages, planMsg)
-			}
-			m.planContent = ""
-		}
-
-		if mod.API == "cohere" {
-			for _, msg := range m.messages {
-				if len(msg.Images) > 0 {
-					return modsError{
-						Err:        fmt.Errorf("image attachments are not supported for Cohere models"),
-						ReasonText: "Image attachments are not supported for this provider",
-					}
-				}
-			}
-		}
-
-		request := proto.Request{
-			Messages:    m.messages,
-			API:         mod.API,
-			Model:       mod.Name,
-			User:        cfg.User,
-			Temperature: ptrOrNil(cfg.Temperature),
-			TopP:        ptrOrNil(cfg.TopP),
-			TopK:        ptrOrNil(cfg.TopK),
-			Stop:        cfg.Stop,
-			Tools:       tools,
-			ToolCaller: func(name string, data []byte) (string, error) {
-				ctx, cancel := m.toolCallContext(registry, name, cfg)
-				m.addCancel(cancel)
-				defer cancel()
-				m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
-
-				if m.reviewer.shouldReviewTool(name) {
-					if err := m.reviewer.requestApproval(m, name, data); err != nil {
-						return "", err
-					}
-				}
-
-				return registry.Call(ctx, name, data)
-			},
-		}
-		if cfg.MaxTokens > 0 {
-			request.MaxTokens = &cfg.MaxTokens
-		}
-
-		client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
-		if err != nil {
-			return modsError{Err: err, ReasonText: "Could not setup client"}
-		}
-		if mod.API != "anthropic" && mod.API != "google" && mod.API != "cohere" && mod.API != "ollama" {
-			if cfg.Format && cfg.FormatAs == "json" {
-				request.ResponseFormat = &cfg.FormatAs
-			}
-		}
-
-		debugRequest(cfg, &mod, &m.messages, tools, &request)
-
-		stream := client.Request(m.ctx, request)
-		return m.receiveCompletionStreamCmd(completionOutput{
-			stream:  stream,
-			cleanup: registry,
-			errh: func(err error) tea.Msg {
-				return m.handleRequestError(err, mod, m.Input)
-			},
-		})()
+		return session.runner.receiveCmd()()
 	}
 }
 
@@ -283,58 +121,11 @@ func (m *Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
 	}
 }
 
-func (m *Mods) receiveCompletionStreamCmd(msg completionOutput) tea.Cmd {
+func (m *Mods) callToolsCmd(runner *streamRunner, ch chan toolOperationStatusMsg) tea.Cmd {
 	return func() tea.Msg {
-		if msg.stream.Next() {
-			chunk, err := msg.stream.Current()
-			if err != nil && !errors.Is(err, stream.ErrNoContent) {
-				_ = msg.stream.Close()
-				if msg.cleanup != nil {
-					_ = msg.cleanup.Close()
-				}
-				return msg.errh(err)
-			}
-			if chunk.Thought != "" && m.reasoningActive {
-				debug.Printf("Thought: %s", chunk.Thought)
-			}
-			return completionOutput{
-				content: chunk.Content,
-				thought: chunk.Thought,
-				stream:  msg.stream,
-				errh:    msg.errh,
-				cleanup: msg.cleanup,
-			}
-		}
-
-		// stream is done, check for errors
-		if err := msg.stream.Err(); err != nil {
-			_ = msg.stream.Close()
-			if msg.cleanup != nil {
-				_ = msg.cleanup.Close()
-			}
-			return msg.errh(err)
-		}
-
-		msg.stream.Close()
-
-		return toolCallsStartMsg{
-			stream:  msg.stream,
-			errh:    msg.errh,
-			cleanup: msg.cleanup,
-		}
-	}
-}
-
-func (m *Mods) callToolsCmd(msg toolCallsStartMsg, ch chan toolOperationStatusMsg) tea.Cmd {
-	return func() tea.Msg {
-		results := msg.stream.CallTools()
+		msg := runner.toolCallsCmd()().(streamEventMsg)
 		m.clearToolOperationChannel(ch)
-		return toolCallsOutput{
-			results: results,
-			stream:  msg.stream,
-			errh:    msg.errh,
-			cleanup: msg.cleanup,
-		}
+		return msg
 	}
 }
 

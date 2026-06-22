@@ -11,6 +11,17 @@ import (
 
 const tabWidth = 4
 
+type outputRenderer struct {
+	Output               string
+	glamOutput           string
+	displayOutput        string
+	outputBuilder        strings.Builder
+	displayOutputBuilder strings.Builder
+	glamHeight           int
+	renderDirty          bool
+	lastRenderFlush      time.Time
+}
+
 func (m *Mods) viewportNeeded() bool {
 	return m.glamHeight > m.height
 }

@@ -117,6 +117,32 @@ func TestToolCallContextTimeoutPolicy(t *testing.T) {
 	}
 }
 
+func TestToolCapabilities(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Filesystem = FilesystemAlways
+	cfg.BuiltinTools.Shell = true
+	cfg.BuiltinTools.SequentialThinking = true
+	cfg.WebSearch = true
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello")
+	if err != nil {
+		t.Fatalf("build registry: %v", err)
+	}
+
+	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "web_search", "thinking_note"} {
+		if !registry.ReadOnly(name) {
+			t.Fatalf("expected %s to be read-only", name)
+		}
+	}
+	for _, name := range []string{"fs_write_file", "fs_apply_patch", "shell_run"} {
+		if !registry.Mutable(name) {
+			t.Fatalf("expected %s to be mutable", name)
+		}
+	}
+	if !registry.ShellExecution("shell_run") {
+		t.Fatal("expected shell_run to be shell execution")
+	}
+}
+
 func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 	t.Run("implicit auto filesystem is skipped", func(t *testing.T) {
 		cfg := defaultConfig()

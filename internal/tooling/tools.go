@@ -17,7 +17,8 @@ var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[
 func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
 
-	root := cfg.ResolveWorkspaceRoot()
+	workspace := cfg.ResolveWorkspace()
+	root := workspace.Canonical
 
 	if ShouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{

@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
 var errReviewUnavailable = errors.New("tool execution requires review but interactive approval is unavailable")
@@ -29,9 +30,10 @@ type toolReviewer struct {
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
+	workspace := cfg.ResolveWorkspace()
 	return &toolReviewer{
 		reviewMode: cfg.ReviewMode,
-		scope:      WorkspaceScope(cfg.ResolveWorkspaceRoot()),
+		scope:      WorkspaceScope(workspace.Canonical),
 	}
 }
 
@@ -135,7 +137,7 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	return true, nil
 }
 
-func (r *toolReviewer) shouldReviewTool(name string) bool {
+func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name string) bool {
 	switch r.reviewMode {
 	case ReviewNever:
 		debug.Printf("Review skipped: mode is never (tool=%s)", name)
@@ -144,7 +146,10 @@ func (r *toolReviewer) shouldReviewTool(name string) bool {
 		debug.Printf("Review required: mode is always (tool=%s)", name)
 		return true
 	default:
-		mutable := isMutableTool(name)
+		mutable := false
+		if registry != nil {
+			mutable = registry.Mutable(name)
+		}
 		if mutable {
 			debug.Printf("Review required: mutable tool '%s' with mode=%q", name, r.reviewMode)
 		} else {
@@ -160,7 +165,7 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 		debug.Printf("requestApproval: matched conversation approval rule, auto-approving")
 		return nil
 	}
-	if r.reviewMode != ReviewAlways && isShellExecutionTool(name) {
+	if r.reviewMode != ReviewAlways && ctx.currentToolRegistry != nil && ctx.currentToolRegistry.ShellExecution(name) {
 		cmd := extractShellCommand(data)
 		if cmd != "" {
 			mutable := ctx.classifyShellCommand(name, cmd)
@@ -215,19 +220,6 @@ func extractShellCommand(args []byte) string {
 		return ""
 	}
 	return parsed.Command
-}
-
-func isMutableTool(name string) bool {
-	switch name {
-	case "fs_write_file", "fs_apply_patch", "shell_run", "powershell_run":
-		return true
-	default:
-		return false
-	}
-}
-
-func isShellExecutionTool(name string) bool {
-	return name == "shell_run" || name == "powershell_run"
 }
 
 func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, reviewChoices lipgloss.Style) string {

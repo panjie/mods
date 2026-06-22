@@ -590,21 +590,20 @@ func TestOperationStatusView(t *testing.T) {
 func TestApprovedPlanTranscript(t *testing.T) {
 	t.Run("uses full rendered output", func(t *testing.T) {
 		m := &Mods{
-			Output:     "raw plan",
-			glamOutput: "rendered plan\n\n",
+			outputRenderer: outputRenderer{Output: "raw plan", glamOutput: "rendered plan\n\n"},
 		}
 
 		require.Equal(t, "rendered plan\n", m.approvedPlanTranscript())
 	})
 
 	t.Run("falls back to raw output", func(t *testing.T) {
-		m := &Mods{Output: "raw plan\n\n"}
+		m := &Mods{outputRenderer: outputRenderer{Output: "raw plan\n\n"}}
 
 		require.Equal(t, "raw plan\n", m.approvedPlanTranscript())
 	})
 
 	t.Run("empty plan stays empty", func(t *testing.T) {
-		m := &Mods{glamOutput: "\n\n"}
+		m := &Mods{outputRenderer: outputRenderer{glamOutput: "\n\n"}}
 
 		require.Empty(t, m.approvedPlanTranscript())
 	})
@@ -616,13 +615,12 @@ func TestPlanApprovalPreservesTranscriptBeforeExecution(t *testing.T) {
 	defer func() { isOutputTTY = oldIsOutputTTY }()
 
 	m := &Mods{
-		Config:     &Config{Plan: true},
-		Styles:     makeStyles(lipgloss.NewRenderer(nil)),
-		state:      planState,
-		Output:     "raw plan",
-		glamOutput: "rendered plan\n",
-		reviewer:   &toolReviewer{},
-		width:      80,
+		Config:         &Config{Plan: true},
+		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		state:          planState,
+		outputRenderer: outputRenderer{Output: "raw plan", glamOutput: "rendered plan\n"},
+		reviewer:       &toolReviewer{},
+		width:          80,
 	}
 
 	model, cmd := m.Update(planApprovedMsg{plan: "approved plan"})
@@ -640,10 +638,7 @@ func TestPlanExecutionStartResetsOutput(t *testing.T) {
 		Config:                &Config{},
 		Styles:                makeStyles(lipgloss.NewRenderer(nil)),
 		state:                 planState,
-		Output:                "approved plan",
-		displayOutput:         "approved plan display",
-		glamOutput:            "rendered approved plan",
-		glamHeight:            3,
+		outputRenderer:        outputRenderer{Output: "approved plan", displayOutput: "approved plan display", glamOutput: "rendered approved plan", glamHeight: 3},
 		responseOutputStarted: true,
 		reviewer:              &toolReviewer{},
 		contentMutex:          &sync.Mutex{},
@@ -738,15 +733,15 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 
 func TestViewportNeeded(t *testing.T) {
 	t.Run("viewport taller than window", func(t *testing.T) {
-		m := &Mods{glamHeight: 100, height: 50}
+		m := &Mods{outputRenderer: outputRenderer{glamHeight: 100}, height: 50}
 		require.True(t, m.viewportNeeded())
 	})
 	t.Run("viewport shorter than window", func(t *testing.T) {
-		m := &Mods{glamHeight: 10, height: 50}
+		m := &Mods{outputRenderer: outputRenderer{glamHeight: 10}, height: 50}
 		require.False(t, m.viewportNeeded())
 	})
 	t.Run("equal", func(t *testing.T) {
-		m := &Mods{glamHeight: 50, height: 50}
+		m := &Mods{outputRenderer: outputRenderer{glamHeight: 50}, height: 50}
 		require.False(t, m.viewportNeeded())
 	})
 }

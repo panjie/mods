@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/panjie/mods/internal/proto"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
 
@@ -328,62 +330,64 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		ctx:    context.Background(),
 		Config: &Config{},
 	}
+	registry := testReviewRegistry(t)
+	mods.currentToolRegistry = registry
 
 	t.Run("review never allows mutable tool", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewNever, scope: testApprovalScope}
-		require.False(t, reviewer.shouldReviewTool("fs_write_file"))
+		require.False(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
 	})
 
 	t.Run("mutable denies write without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("fs_write_file"))
+		require.True(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable allows read-only filesystem tool", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.False(t, reviewer.shouldReviewTool("fs_read_file"))
+		require.False(t, reviewer.shouldReviewTool(registry, "fs_read_file"))
 	})
 
 	t.Run("mutable requires review for shell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("shell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("shell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable requires review for powershell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies nested powershell", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable routes powershell pipelines to review", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
@@ -391,7 +395,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Run("saved rule allows matching powershell command", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRules(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false))...)
-		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`))
 		require.NoError(t, err)
 	})
@@ -399,14 +403,14 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Run("saved powershell prefix does not allow pipeline mutation", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRules(shellApprovalRulesForToolWithMode("powershell_run", "Get-ChildItem C:\\Users", false))...)
-		require.True(t, reviewer.shouldReviewTool("powershell_run"))
+		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows | Remove-Item -Recurse"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("always denies read-only tool without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		require.True(t, reviewer.shouldReviewTool("fs_read_file"))
+		require.True(t, reviewer.shouldReviewTool(registry, "fs_read_file"))
 		err := reviewer.requestApproval(mods, "fs_read_file", []byte(`{"path":"README.md"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
@@ -414,7 +418,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Run("saved rule allows matching tool", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}))
-		require.True(t, reviewer.shouldReviewTool("fs_write_file"))
+		require.True(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.NoError(t, err)
 	})
@@ -441,3 +445,19 @@ func TestReviewUnavailableIsFatal(t *testing.T) {
 	require.Equal(t, "Tool execution requires review.", errMsg.ReasonText)
 	require.True(t, errors.Is(errMsg.Err, errReviewUnavailable))
 }
+
+func testReviewRegistry(t *testing.T) *toolregistry.Registry {
+	t.Helper()
+	registry := toolregistry.NewRegistry()
+	for _, tool := range []toolregistry.Tool{
+		{Spec: proto.ToolSpec{Name: "fs_read_file"}, Capabilities: toolregistry.ToolCapabilities{ReadOnly: true}, Call: noopToolCall},
+		{Spec: proto.ToolSpec{Name: "fs_write_file"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true}, Call: noopToolCall},
+		{Spec: proto.ToolSpec{Name: "shell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true}, Call: noopToolCall},
+		{Spec: proto.ToolSpec{Name: "powershell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true}, Call: noopToolCall},
+	} {
+		require.NoError(t, registry.Register(tool))
+	}
+	return registry
+}
+
+func noopToolCall(context.Context, json.RawMessage) (string, error) { return "", nil }

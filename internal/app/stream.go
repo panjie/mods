@@ -22,7 +22,8 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
 
-	root := m.Config.ResolveWorkspaceRoot()
+	workspace := m.Config.ResolveWorkspace()
+	root := workspace.Display
 	hostname, _ := os.Hostname()
 	user := os.Getenv("USER")
 	if user == "" {

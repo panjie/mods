@@ -126,6 +126,7 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 				Spec:          spec,
 				Kind:          toolregistry.ToolKindMCP,
 				TimeoutPolicy: toolregistry.TimeoutPolicyCaller,
+				Capabilities:  toolregistry.ToolCapabilities{ReadOnly: false, Mutable: true},
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 					return session.ToolCall(ctx, capturedSname, capturedToolName, data)
 				},

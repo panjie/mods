@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
+	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
 type state int
@@ -42,7 +43,7 @@ const numPlanReviewOptions = 4
 // Mods is the Bubble Tea model that manages reading stdin and querying
 // LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
 type Mods struct {
-	Output                  string
+	outputRenderer
 	Input                   string
 	Styles                  Styles
 	Error                   *modsError
@@ -53,13 +54,6 @@ type Mods struct {
 	renderer                *lipgloss.Renderer
 	glam                    *glamour.TermRenderer
 	glamViewport            viewport.Model
-	glamOutput              string
-	displayOutput           string
-	outputBuilder           strings.Builder
-	displayOutputBuilder    strings.Builder
-	glamHeight              int
-	renderDirty             bool
-	lastRenderFlush         time.Time
 	messages                []proto.Message
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
@@ -77,10 +71,11 @@ type Mods struct {
 	db     *DB
 	Config *Config
 
-	content        []string
-	contentMutex   *sync.Mutex
-	operationMutex sync.Mutex
-	toolOperations chan<- toolOperationStatusMsg
+	content             []string
+	contentMutex        *sync.Mutex
+	operationMutex      sync.Mutex
+	toolOperations      chan<- toolOperationStatusMsg
+	currentToolRegistry *toolregistry.Registry
 
 	stdinImageData []byte
 
@@ -525,6 +520,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
 			if errors.Is(call.Err, errReviewUnavailable) {
 				msg.runner.close()
+				m.currentToolRegistry = nil
 				return msgCmd(modsError{
 					Err:        call.Err,
 					ReasonText: "Tool execution requires review.",

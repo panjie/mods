@@ -83,10 +83,11 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 		cancel()
 		return requestSession{}, err
 	}
+	m.currentToolRegistry = registry
 
 	tools := registry.Specs()
 	if mode == requestModePlan {
-		tools = filterPlanTools(tools)
+		tools = filterPlanTools(registry, tools)
 	}
 	debugTools(mode, tools, registry.Len())
 
@@ -97,6 +98,7 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 	}
 	if err != nil {
 		_ = registry.Close()
+		m.currentToolRegistry = nil
 		return requestSession{}, err
 	}
 	if mode == requestModeCompletion {
@@ -104,6 +106,7 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 	}
 	if err := rejectUnsupportedImages(mod.API, m.messages); err != nil {
 		_ = registry.Close()
+		m.currentToolRegistry = nil
 		return requestSession{}, err
 	}
 
@@ -129,6 +132,7 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
 	if err != nil {
 		_ = registry.Close()
+		m.currentToolRegistry = nil
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
 
@@ -179,10 +183,10 @@ func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, 
 	return nil
 }
 
-func filterPlanTools(tools []proto.ToolSpec) []proto.ToolSpec {
+func filterPlanTools(registry *toolregistry.Registry, tools []proto.ToolSpec) []proto.ToolSpec {
 	out := make([]proto.ToolSpec, 0, len(tools))
 	for _, t := range tools {
-		if planReadOnlyTools[t.Name] {
+		if registry.ReadOnly(t.Name) {
 			out = append(out, t)
 		}
 	}
@@ -249,7 +253,7 @@ func supportsJSONResponseFormat(api string) bool {
 
 func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, mode requestMode) func(name string, data []byte) (string, error) {
 	return func(name string, data []byte) (string, error) {
-		if mode == requestModePlan && !planReadOnlyTools[name] {
+		if mode == requestModePlan && !registry.ReadOnly(name) {
 			return "", fmt.Errorf("tool %q is not available during planning phase", name)
 		}
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
@@ -257,7 +261,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, mode req
 		defer cancel()
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 
-		if mode == requestModeCompletion && m.reviewer.shouldReviewTool(name) {
+		if mode == requestModeCompletion && m.reviewer.shouldReviewTool(registry, name) {
 			if err := m.reviewer.requestApproval(m, name, data); err != nil {
 				return "", err
 			}

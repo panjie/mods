@@ -30,12 +30,20 @@ const (
 	TimeoutPolicySelf   TimeoutPolicy = "self"
 )
 
+// ToolCapabilities describe safety and policy-relevant behavior.
+type ToolCapabilities struct {
+	ReadOnly       bool
+	Mutable        bool
+	ShellExecution bool
+}
+
 // Tool is a registered executable tool.
 type Tool struct {
 	Spec          proto.ToolSpec
 	Call          Caller
 	Kind          ToolKind
 	TimeoutPolicy TimeoutPolicy
+	Capabilities  ToolCapabilities
 }
 
 // Registry stores tools by name and exposes a provider-neutral call router.
@@ -112,6 +120,30 @@ func (r *Registry) TimeoutPolicy(name string) TimeoutPolicy {
 		return TimeoutPolicyCaller
 	}
 	return tool.TimeoutPolicy
+}
+
+// Capabilities returns policy metadata for a registered tool.
+func (r *Registry) Capabilities(name string) ToolCapabilities {
+	tool, ok := r.Tool(name)
+	if !ok {
+		return ToolCapabilities{}
+	}
+	return tool.Capabilities
+}
+
+// ReadOnly reports whether a tool is safe for read-only contexts like plan mode.
+func (r *Registry) ReadOnly(name string) bool {
+	return r.Capabilities(name).ReadOnly
+}
+
+// Mutable reports whether a tool may mutate external state and should be reviewed.
+func (r *Registry) Mutable(name string) bool {
+	return r.Capabilities(name).Mutable
+}
+
+// ShellExecution reports whether a tool executes shell commands.
+func (r *Registry) ShellExecution(name string) bool {
+	return r.Capabilities(name).ShellExecution
 }
 
 // Len returns the number of registered tools.

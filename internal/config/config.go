@@ -278,14 +278,43 @@ type Config struct {
 	CacheReadFromID, CacheWriteToID, CacheWriteToTitle string
 }
 
+// Workspace describes the configured workspace root in normalized forms.
+type Workspace struct {
+	Input     string
+	Abs       string
+	Canonical string
+	Display   string
+}
+
 func (c Config) ResolveWorkspaceRoot() string {
+	workspace := c.ResolveWorkspace()
+	return workspace.Canonical
+}
+
+func (c Config) ResolveWorkspace() Workspace {
+	input := c.BuiltinTools.WorkspaceRoot
+	abs := ""
 	if c.BuiltinTools.WorkspaceRoot != "" {
-		if abs, err := filepath.Abs(c.BuiltinTools.WorkspaceRoot); err == nil {
-			return abs
+		if resolved, err := filepath.Abs(c.BuiltinTools.WorkspaceRoot); err == nil {
+			abs = resolved
 		}
+	} else if cwd, err := os.Getwd(); err == nil {
+		input = cwd
+		abs = cwd
 	}
-	cwd, _ := os.Getwd()
-	return cwd
+	if abs == "" {
+		abs = input
+	}
+	canonical := filepath.Clean(abs)
+	if eval, err := filepath.EvalSymlinks(canonical); err == nil {
+		canonical = eval
+	}
+	return Workspace{
+		Input:     input,
+		Abs:       filepath.Clean(abs),
+		Canonical: canonical,
+		Display:   filepath.Clean(abs),
+	}
 }
 
 // BuiltinToolsConfig controls native tools implemented by mods.

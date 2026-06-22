@@ -24,15 +24,6 @@ The user will review your plan and approve or deny it before execution begins.`
 
 const maxPlanRetries = 3
 
-var planReadOnlyTools = map[string]bool{
-	"fs_read_file":  true,
-	"fs_list_dir":   true,
-	"fs_stat":       true,
-	"fs_search":     true,
-	"web_search":    true,
-	"thinking_note": true,
-}
-
 func (m *Mods) setupPlanContext(content string, mod Model) error {
 	if err := m.setupStreamContext(content, mod); err != nil {
 		return err

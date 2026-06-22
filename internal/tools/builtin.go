@@ -61,7 +61,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "fs_read_file",
 			Description: "Read a UTF-8 text file from the workspace. Use offset and limit to read large files in chunks.",
@@ -125,7 +126,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{Mutable: true},
 		Spec: proto.ToolSpec{
 			Name:        "fs_write_file",
 			Description: "Write a UTF-8 text file inside the workspace, replacing existing content.",
@@ -159,7 +161,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "fs_list_dir",
 			Description: "List files and directories in a workspace directory.",
@@ -207,7 +210,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "fs_stat",
 			Description: "Get metadata for a workspace file or directory.",
@@ -238,7 +242,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "fs_search",
 			Description: "Search text files in the workspace for a literal query string.",
@@ -278,7 +283,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	return register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{Mutable: true},
 		Spec: proto.ToolSpec{
 			Name:        "fs_apply_patch",
 			Description: "Apply a unified diff patch to files inside the workspace.",
@@ -315,7 +321,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 // RegisterWebSearch registers the native web search tool.
 func RegisterWebSearch(registry *Registry, cfg websearch.Config) error {
 	return registry.Register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "web_search",
 			Description: "Search the web for current, up-to-date information. Returns formatted search results with titles, URLs, and snippets.",
@@ -357,6 +364,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 	return registry.Register(Tool{
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
+		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
 		Spec: proto.ToolSpec{
 			Name:        "shell_run",
 			Description: desc,
@@ -391,6 +399,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 	return registry.Register(Tool{
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
+		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
 		Spec: proto.ToolSpec{
 			Name:        "powershell_run",
 			Description: PowerShellRunDescription,
@@ -413,7 +422,8 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 // RegisterThinking registers a lightweight sequential thinking note tool.
 func RegisterThinking(registry *Registry) error {
 	return registry.Register(Tool{
-		Kind: ToolKindBuiltin,
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "thinking_note",
 			Description: "Record one concise reasoning step, next step, and whether the task is complete.",

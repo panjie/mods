@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -269,7 +270,7 @@ func formatAlwaysAllowSummary(rules []Rule, scope Scope, width int) string {
 	if scope.Kind == "" || scope.Value == "" {
 		return TruncateOperationStatus("Always saves: "+RulesLabel(rules), width)
 	}
-	return TruncateOperationStatus(fmt.Sprintf("Always saves in %s: %s", scope.Value, RulesLabel(rules)), width)
+	return TruncateOperationStatus(fmt.Sprintf("Always saves in %s: %s", filepath.ToSlash(scope.Value), RulesLabel(rules)), width)
 }
 
 func padRight(s string, w int) string {

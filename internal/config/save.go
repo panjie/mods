@@ -12,7 +12,8 @@ import (
 // preserving comments and formatting by round-tripping through yaml.Node.
 //
 // updates maps dotted key paths to values (string/bool/int). Nested paths
-// navigate mapping nodes; missing intermediate mappings are created.
+// navigate mapping nodes; missing intermediate mappings are created. A nil
+// value deletes the field when present.
 //
 // Example:
 //
@@ -39,6 +40,10 @@ func SaveFields(path string, updates map[string]any) error {
 
 	for keyPath, value := range updates {
 		parts := strings.Split(keyPath, ".")
+		if value == nil {
+			deleteNestedValue(mapping, parts)
+			continue
+		}
 		setNestedValue(mapping, parts, value)
 	}
 
@@ -55,6 +60,27 @@ func SaveFields(path string, updates map[string]any) error {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil
+}
+
+// deleteNestedValue walks the mapping tree by path parts and removes the leaf
+// key when present. Missing paths are ignored.
+func deleteNestedValue(mapping *yaml.Node, parts []string) {
+	if len(parts) == 0 || mapping == nil || mapping.Kind != yaml.MappingNode {
+		return
+	}
+
+	key := parts[0]
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != key {
+			continue
+		}
+		if len(parts) == 1 {
+			mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+			return
+		}
+		deleteNestedValue(mapping.Content[i+1], parts[1:])
+		return
+	}
 }
 
 // HasAPIKey reports whether the default provider has a resolvable API key.

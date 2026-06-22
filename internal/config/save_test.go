@@ -125,8 +125,8 @@ func TestSaveFields_CreatesMissingDeepPath(t *testing.T) {
 `)
 
 	require.NoError(t, SaveFields(path, map[string]any{
-		"apis.groq.base-url":     "https://api.groq.com/openai/v1",
-		"apis.groq.api-key-env":  "GROQ_API_KEY",
+		"apis.groq.base-url":    "https://api.groq.com/openai/v1",
+		"apis.groq.api-key-env": "GROQ_API_KEY",
 	}))
 
 	m := loadAsMap(t, path)
@@ -150,6 +150,22 @@ func TestSaveFields_BoolSerialization(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), "shell: true")
 	require.NotContains(t, string(data), `"true"`)
+}
+
+func TestSaveFields_DeleteField(t *testing.T) {
+	path := writeTestConfig(t, `web-search: true
+web-search-provider: tavily
+web-search-api-key: tvly-test
+`)
+
+	require.NoError(t, SaveFields(path, map[string]any{
+		"web-search-api-key": nil,
+	}))
+
+	m := loadAsMap(t, path)
+	require.Equal(t, true, m["web-search"])
+	require.Equal(t, "tavily", m["web-search-provider"])
+	require.NotContains(t, m, "web-search-api-key")
 }
 
 func TestHasAPIKey(t *testing.T) {

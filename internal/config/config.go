@@ -404,6 +404,9 @@ func Ensure() (Config, error) {
 	if c.WordWrap < 0 {
 		c.WordWrap = 80
 	}
+	if c.WebSearchAPIKey == "" {
+		c.WebSearchAPIKey = os.Getenv("MODS_WEB_SEARCH_API_KEY")
+	}
 
 	return c, nil
 }

@@ -31,6 +31,15 @@ func RunConfigWizard() error {
 	}
 	shellOn := config.BuiltinTools.Shell
 	thinkingOn := config.BuiltinTools.SequentialThinking
+	webSearchOn := config.WebSearch
+	webSearchProvider := normalizeWebSearchProviderForWizard(config.WebSearchProvider)
+	webSearchCustomURL := webSearchCustomURLForWizard(config.WebSearchProvider)
+	webSearchKeyStorage := "env"
+	webSearchAPIKey := ""
+	if config.WebSearchAPIKey != "" && os.Getenv("MODS_WEB_SEARCH_API_KEY") == "" {
+		webSearchKeyStorage = "config"
+		webSearchAPIKey = config.WebSearchAPIKey
+	}
 	reviewMode := string(config.ReviewMode)
 	if reviewMode == "" {
 		reviewMode = "mutable"
@@ -134,7 +143,85 @@ func RunConfigWizard() error {
 			Title("built-in tools").
 			Description("Decide which local capabilities mods can use."),
 
-		// Page 6: Review mode
+		// Page 6: Web search on/off
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Enable web search?").
+				Description("Adds a web_search tool for current information when the provider supports tools.").
+				Value(&webSearchOn),
+		).
+			Title("web search").
+			Description("Let mods search the web during prompts when needed."),
+
+		// Page 7: Web search provider
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Web search provider").
+				Description("DuckDuckGo needs no key. Tavily requires an API key.").
+				Options(
+					huh.NewOption("DuckDuckGo - no API key", "duckduckgo"),
+					huh.NewOption("Tavily - API key required", "tavily"),
+					huh.NewOption("Custom URL - JSON search endpoint", "custom"),
+				).
+				Value(&webSearchProvider),
+		).
+			Title("search provider").
+			Description("Choose where web_search sends queries.").
+			WithHideFunc(func() bool { return !webSearchOn }),
+
+		// Page 8: Custom web search URL
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Custom search URL").
+				Description("Base URL for a search API that responds to /search?q=...&limit=... .").
+				Placeholder("https://search.example.com").
+				Value(&webSearchCustomURL).
+				Validate(func(value string) error {
+					value = strings.TrimSpace(value)
+					if value == "" {
+						return fmt.Errorf("custom search URL is required")
+					}
+					if !isHTTPURL(value) {
+						return fmt.Errorf("custom search URL must start with http:// or https://")
+					}
+					return nil
+				}),
+		).
+			Title("custom search").
+			Description("Use a self-hosted or third-party search endpoint.").
+			WithHideFunc(func() bool { return !webSearchOn || webSearchProvider != "custom" }),
+
+		// Page 9: Web search API key storage
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Web search API key").
+				Description("Environment variables keep secrets out of the YAML file.").
+				Options(
+					huh.NewOption("Use environment variable (MODS_WEB_SEARCH_API_KEY)", "env"),
+					huh.NewOption("Save in config file", "config"),
+				).
+				Value(&webSearchKeyStorage),
+		).
+			Title("search credentials").
+			Description("Tell mods where to read the web search API key from.").
+			WithHideFunc(func() bool { return !webSearchOn || !webSearchProviderUsesKey(webSearchProvider) }),
+
+		// Page 10: Web search API key input
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Enter your web search API key").
+				Description("The key is stored in plaintext in your config file.").
+				Placeholder("tvly-...").
+				Password(true).
+				Value(&webSearchAPIKey),
+		).
+			Title("saved search key").
+			Description("Only use this on a machine and config file you control.").
+			WithHideFunc(func() bool {
+				return !webSearchOn || !webSearchProviderUsesKey(webSearchProvider) || webSearchKeyStorage != "config"
+			}),
+
+		// Page 11: Review mode
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Tool review").
@@ -166,6 +253,7 @@ func RunConfigWizard() error {
 	if baseURL != "" {
 		providerBaseURL = baseURL
 	}
+	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
 
 	// Connection test (OpenAI-compatible providers only, with a key to test).
 	if apiKey != "" && isOpenAICompatible(chosenAPI) && providerBaseURL != "" {
@@ -187,16 +275,19 @@ func RunConfigWizard() error {
 
 	// Build the summary.
 	printConfigSummary(summaryData{
-		api:          chosenAPI,
-		model:        chosenModel,
-		keyStorage:   keyStorage,
-		envVarName:   envVarName,
-		baseURL:      baseURL,
-		fsMode:       fsMode,
-		shellOn:      shellOn,
-		thinkingOn:   thinkingOn,
-		reviewMode:   reviewMode,
-		settingsPath: config.SettingsPath,
+		api:                 chosenAPI,
+		model:               chosenModel,
+		keyStorage:          keyStorage,
+		envVarName:          envVarName,
+		baseURL:             baseURL,
+		fsMode:              fsMode,
+		shellOn:             shellOn,
+		thinkingOn:          thinkingOn,
+		webSearchOn:         webSearchOn,
+		webSearchProvider:   webSearchProviderValue,
+		webSearchKeyStorage: webSearchKeyStorage,
+		reviewMode:          reviewMode,
+		settingsPath:        config.SettingsPath,
 	})
 
 	// Build updates and save.
@@ -207,6 +298,15 @@ func RunConfigWizard() error {
 		"builtin-tools.filesystem":          fsMode,
 		"builtin-tools.shell":               shellOn,
 		"builtin-tools.sequential-thinking": thinkingOn,
+		"web-search":                        webSearchOn,
+		"web-search-provider":               webSearchProviderValue,
+	}
+	if webSearchOn && webSearchProviderUsesKey(webSearchProvider) {
+		if webSearchKeyStorage == "config" {
+			updates["web-search-api-key"] = strings.TrimSpace(webSearchAPIKey)
+		} else {
+			updates["web-search-api-key"] = nil
+		}
 	}
 
 	if chosenAPI != "ollama" {
@@ -230,6 +330,9 @@ func RunConfigWizard() error {
 	if keyStorage == "env" && chosenAPI != "ollama" {
 		fmt.Fprintf(os.Stderr, "\nRemember to export your key:\n  export %s=sk-...\n",
 			envVarName)
+	}
+	if webSearchOn && webSearchProviderUsesKey(webSearchProvider) && webSearchKeyStorage == "env" {
+		fmt.Fprintln(os.Stderr, "\nRemember to export your web search key:\n  export MODS_WEB_SEARCH_API_KEY=...")
 	}
 
 	return nil
@@ -379,6 +482,47 @@ func findBaseURL(apiName string) string {
 	return ""
 }
 
+func normalizeWebSearchProviderForWizard(provider string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if isHTTPURL(provider) {
+		return "custom"
+	}
+	switch provider {
+	case "", "duckduckgo", "ddg", "google", "bing":
+		return "duckduckgo"
+	case "tavily":
+		return "tavily"
+	case "custom":
+		return "custom"
+	default:
+		return "duckduckgo"
+	}
+}
+
+func webSearchCustomURLForWizard(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if isHTTPURL(provider) {
+		return provider
+	}
+	return ""
+}
+
+func webSearchProviderForConfig(provider, customURL string) string {
+	if provider == "custom" {
+		return strings.TrimSpace(customURL)
+	}
+	return provider
+}
+
+func webSearchProviderUsesKey(provider string) bool {
+	return provider == "tavily"
+}
+
+func isHTTPURL(value string) bool {
+	value = strings.TrimSpace(value)
+	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
+}
+
 // isOpenAICompatible reports whether the provider uses the standard
 // OpenAI-compatible /chat/completions endpoint.
 func isOpenAICompatible(apiName string) bool {
@@ -432,7 +576,8 @@ func testConnection(model, baseURL, apiKey string) error {
 type summaryData struct {
 	api, model, keyStorage, envVarName, baseURL string
 	fsMode                                      string
-	shellOn, thinkingOn                         bool
+	shellOn, thinkingOn, webSearchOn            bool
+	webSearchProvider, webSearchKeyStorage      string
 	reviewMode, settingsPath                    string
 }
 
@@ -472,6 +617,20 @@ func printConfigSummary(d summaryData) {
 		summaryRow(labelStyle, valueStyle, "Filesystem", d.fsMode),
 		summaryRow(labelStyle, valueStyle, "Shell", boolLabel(d.shellOn)),
 		summaryRow(labelStyle, valueStyle, "Thinking", boolLabel(d.thinkingOn)),
+		summaryRow(labelStyle, valueStyle, "Web search", boolLabel(d.webSearchOn)),
+	)
+	if d.webSearchOn {
+		rows = append(rows, summaryRow(labelStyle, valueStyle, "Search API", d.webSearchProvider))
+		if webSearchProviderUsesKey(normalizeWebSearchProviderForWizard(d.webSearchProvider)) {
+			if d.webSearchKeyStorage == "config" {
+				rows = append(rows, summaryRow(labelStyle, valueStyle, "Search key", "saved in config"))
+			} else {
+				rows = append(rows, summaryRow(labelStyle, valueStyle, "Search key", "env var MODS_WEB_SEARCH_API_KEY"))
+			}
+		}
+	}
+
+	rows = append(rows,
 		summaryRow(labelStyle, valueStyle, "Review", d.reviewMode),
 		summaryRow(labelStyle, valueStyle, "Config file", d.settingsPath),
 	)

@@ -8,6 +8,10 @@ on:
 jobs:
   nightly:
     uses: charmbracelet/meta/.github/workflows/nightly.yml@main
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
     secrets:
       docker_username: ${{ secrets.DOCKERHUB_USERNAME }}
       docker_token: ${{ secrets.DOCKERHUB_TOKEN }}

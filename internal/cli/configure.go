@@ -16,6 +16,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	addProviderOption         = "__mods_add_provider__"
+	addModelOption            = "__mods_add_model__"
+	defaultNewModelInputChars = 1000000
+)
+
 // RunConfigWizard launches an interactive TUI that guides the user through
 // the essential mods setup: provider, model, API key, built-in tools, and
 // review mode. Results are saved to the config file via yaml.Node round-trip,
@@ -24,7 +30,7 @@ func RunConfigWizard() error {
 	// Pre-fill with current config values.
 	chosenAPI := config.API
 	chosenModel := config.Model
-	var apiKey, keyStorage, baseURL string
+	var apiKey, keyStorage, baseURL, newProviderName, newModelName string
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -57,13 +63,32 @@ func RunConfigWizard() error {
 	)
 
 	form := huh.NewForm(
-		// Page 1: Provider + Model
+		// Page 1: Provider
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Provider").
 				Description("Choose the API backend mods should use by default.").
 				Options(providerOpts...).
 				Value(&chosenAPI),
+		).
+			Title("mods setup").
+			Description("Connect a provider and pick the model you want to start with."),
+
+		// Page 2: New provider name
+		huh.NewGroup(
+			huh.NewInput().
+				Title("New provider name").
+				Description("OpenAI-compatible provider key to write under apis.").
+				Placeholder("groq").
+				Value(&newProviderName).
+				Validate(validateNewProviderName),
+		).
+			Title("new provider").
+			Description("Use lowercase letters, digits, '-' or '_'.").
+			WithHideFunc(func() bool { return chosenAPI != addProviderOption }),
+
+		// Page 3: Model for existing provider
+		huh.NewGroup(
 			huh.NewSelect[string]().
 				TitleFunc(func() string {
 					return fmt.Sprintf("Model for %s", chosenAPI)
@@ -74,28 +99,81 @@ func RunConfigWizard() error {
 				}, &chosenAPI).
 				Value(&chosenModel),
 		).
-			Title("mods setup").
-			Description("Connect a provider and pick the model you want to start with."),
+			Title("model").
+			Description("Choose an existing model or add one to this provider.").
+			WithHideFunc(func() bool { return chosenAPI == addProviderOption }),
 
-		// Page 2: API key storage method (skip for ollama)
+		// Page 4: New model name
+		huh.NewGroup(
+			huh.NewInput().
+				TitleFunc(func() string {
+					if chosenAPI == addProviderOption {
+						return fmt.Sprintf("Model for %s", wizardProviderName(chosenAPI, newProviderName))
+					}
+					return fmt.Sprintf("New model for %s", chosenAPI)
+				}, []any{&chosenAPI, &newProviderName}).
+				Description("This model will be added under the selected provider.").
+				Placeholder("llama-3.3-70b-versatile").
+				Value(&newModelName).
+				Validate(func(value string) error {
+					return validateNewModelName(wizardProviderName(chosenAPI, newProviderName), value)
+				}),
+		).
+			Title("new model").
+			Description("Enter the provider's exact model identifier.").
+			WithHideFunc(func() bool {
+				return chosenAPI != addProviderOption && chosenModel != addModelOption
+			}),
+
+		// Page 5: Base URL (required for a new provider, optional for custom)
+		huh.NewGroup(
+			huh.NewInput().
+				TitleFunc(func() string {
+					if chosenAPI == addProviderOption {
+						return fmt.Sprintf("Base URL for %s", wizardProviderName(chosenAPI, newProviderName))
+					}
+					return "Base URL for your custom API"
+				}, []any{&chosenAPI, &newProviderName}).
+				Description("Any OpenAI-compatible endpoint.").
+				Placeholder("https://your-server.com/v1").
+				Value(&baseURL).
+				Validate(func(value string) error {
+					value = strings.TrimSpace(value)
+					if value == "" {
+						if chosenAPI == addProviderOption {
+							return fmt.Errorf("base URL is required")
+						}
+						return nil
+					}
+					if !isHTTPURL(value) {
+						return fmt.Errorf("base URL must start with http:// or https://")
+					}
+					return nil
+				}),
+		).
+			Title("provider endpoint").
+			Description("Point mods at an OpenAI-compatible server.").
+			WithHideFunc(func() bool { return chosenAPI != addProviderOption && chosenAPI != "custom" }),
+
+		// Page 6: API key storage method (skip for ollama)
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("API key").
 				Description("Environment variables keep secrets out of the YAML file.").
 				OptionsFunc(func() []huh.Option[string] {
-					envVar := resolveEnvVar(chosenAPI)
+					envVar := resolveEnvVar(wizardProviderName(chosenAPI, newProviderName))
 					return []huh.Option[string]{
 						huh.NewOption(fmt.Sprintf("Use environment variable (%s)", envVar), "env"),
 						huh.NewOption("Save in config file", "config"),
 					}
-				}, &chosenAPI).
+				}, []any{&chosenAPI, &newProviderName}).
 				Value(&keyStorage),
 		).
 			Title("credentials").
 			Description("Tell mods where to read the API key from.").
-			WithHideFunc(func() bool { return chosenAPI == "ollama" }),
+			WithHideFunc(func() bool { return wizardProviderName(chosenAPI, newProviderName) == "ollama" }),
 
-		// Page 3: API key input (skip for ollama or env-var storage)
+		// Page 7: API key input (skip for ollama or env-var storage)
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Enter your API key").
@@ -106,21 +184,11 @@ func RunConfigWizard() error {
 		).
 			Title("saved key").
 			Description("Only use this on a machine and config file you control.").
-			WithHideFunc(func() bool { return chosenAPI == "ollama" || keyStorage != "config" }),
+			WithHideFunc(func() bool {
+				return wizardProviderName(chosenAPI, newProviderName) == "ollama" || keyStorage != "config"
+			}),
 
-		// Page 4: Base URL (only for custom provider)
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Base URL for your custom API").
-				Description("Any OpenAI-compatible endpoint.").
-				Placeholder("https://your-server.com/v1").
-				Value(&baseURL),
-		).
-			Title("custom endpoint").
-			Description("Point mods at an OpenAI-compatible server.").
-			WithHideFunc(func() bool { return chosenAPI != "custom" }),
-
-		// Page 5: Built-in tools
+		// Page 8: Built-in tools
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Filesystem").
@@ -143,7 +211,7 @@ func RunConfigWizard() error {
 			Title("built-in tools").
 			Description("Decide which local capabilities mods can use."),
 
-		// Page 6: Web search on/off
+		// Page 9: Web search on/off
 		huh.NewGroup(
 			huh.NewConfirm().
 				Title("Enable web search?").
@@ -153,7 +221,7 @@ func RunConfigWizard() error {
 			Title("web search").
 			Description("Let mods search the web during prompts when needed."),
 
-		// Page 7: Web search provider
+		// Page 10: Web search provider
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Web search provider").
@@ -169,7 +237,7 @@ func RunConfigWizard() error {
 			Description("Choose where web_search sends queries.").
 			WithHideFunc(func() bool { return !webSearchOn }),
 
-		// Page 8: Custom web search URL
+		// Page 11: Custom web search URL
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Custom search URL").
@@ -191,7 +259,7 @@ func RunConfigWizard() error {
 			Description("Use a self-hosted or third-party search endpoint.").
 			WithHideFunc(func() bool { return !webSearchOn || webSearchProvider != "custom" }),
 
-		// Page 9: Web search API key storage
+		// Page 12: Web search API key storage
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Web search API key").
@@ -206,7 +274,7 @@ func RunConfigWizard() error {
 			Description("Tell mods where to read the web search API key from.").
 			WithHideFunc(func() bool { return !webSearchOn || !webSearchProviderUsesKey(webSearchProvider) }),
 
-		// Page 10: Web search API key input
+		// Page 13: Web search API key input
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Enter your web search API key").
@@ -221,7 +289,7 @@ func RunConfigWizard() error {
 				return !webSearchOn || !webSearchProviderUsesKey(webSearchProvider) || webSearchKeyStorage != "config"
 			}),
 
-		// Page 11: Review mode
+		// Page 14: Review mode
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Tool review").
@@ -247,18 +315,24 @@ func RunConfigWizard() error {
 		return fmt.Errorf("config wizard: %w", err)
 	}
 
-	// Resolve the env var name for the chosen provider (for display + save).
-	envVarName := resolveEnvVar(chosenAPI)
-	providerBaseURL := findBaseURL(chosenAPI)
-	if baseURL != "" {
-		providerBaseURL = baseURL
+	// Resolve the final provider/model after handling the "add" choices.
+	apiName, modelName, providerBaseURL, addedModel := resolveWizardProviderModel(
+		chosenAPI,
+		chosenModel,
+		newProviderName,
+		newModelName,
+		baseURL,
+	)
+	envVarName := resolveEnvVar(apiName)
+	if providerBaseURL == "" {
+		providerBaseURL = findBaseURL(apiName)
 	}
 	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
 
 	// Connection test (OpenAI-compatible providers only, with a key to test).
-	if apiKey != "" && isOpenAICompatible(chosenAPI) && providerBaseURL != "" {
-		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", chosenAPI)
-		if err := testConnection(chosenModel, providerBaseURL, apiKey); err != nil {
+	if apiKey != "" && isOpenAICompatible(apiName) && providerBaseURL != "" {
+		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
+		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
 			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
 			var saveAnyway bool
 			if err := huh.NewConfirm().
@@ -275,8 +349,8 @@ func RunConfigWizard() error {
 
 	// Build the summary.
 	printConfigSummary(summaryData{
-		api:                 chosenAPI,
-		model:               chosenModel,
+		api:                 apiName,
+		model:               modelName,
 		keyStorage:          keyStorage,
 		envVarName:          envVarName,
 		baseURL:             baseURL,
@@ -291,43 +365,50 @@ func RunConfigWizard() error {
 	})
 
 	// Build updates and save.
-	updates := map[string]any{
-		"default-api":                       chosenAPI,
-		"default-model":                     chosenModel,
-		"review-mode":                       reviewMode,
-		"builtin-tools.filesystem":          fsMode,
-		"builtin-tools.shell":               shellOn,
-		"builtin-tools.sequential-thinking": thinkingOn,
-		"web-search":                        webSearchOn,
-		"web-search-provider":               webSearchProviderValue,
+	updates := []FieldUpdate{
+		{Path: []string{"default-api"}, Value: apiName},
+		{Path: []string{"default-model"}, Value: modelName},
+		{Path: []string{"review-mode"}, Value: reviewMode},
+		{Path: []string{"builtin-tools", "filesystem"}, Value: fsMode},
+		{Path: []string{"builtin-tools", "shell"}, Value: shellOn},
+		{Path: []string{"builtin-tools", "sequential-thinking"}, Value: thinkingOn},
+		{Path: []string{"web-search"}, Value: webSearchOn},
+		{Path: []string{"web-search-provider"}, Value: webSearchProviderValue},
 	}
 	if webSearchOn && webSearchProviderUsesKey(webSearchProvider) {
 		if webSearchKeyStorage == "config" {
-			updates["web-search-api-key"] = strings.TrimSpace(webSearchAPIKey)
+			updates = append(updates, FieldUpdate{Path: []string{"web-search-api-key"}, Value: strings.TrimSpace(webSearchAPIKey)})
 		} else {
-			updates["web-search-api-key"] = nil
+			updates = append(updates, FieldUpdate{Path: []string{"web-search-api-key"}, Value: nil})
 		}
 	}
 
-	if chosenAPI != "ollama" {
+	if apiName != "ollama" {
 		if keyStorage == "config" && apiKey != "" {
-			updates["apis."+chosenAPI+".api-key"] = apiKey
+			updates = append(updates, FieldUpdate{Path: []string{"apis", apiName, "api-key"}, Value: apiKey})
 		} else if envVarName != "" {
-			updates["apis."+chosenAPI+".api-key-env"] = envVarName
+			updates = append(updates, FieldUpdate{Path: []string{"apis", apiName, "api-key-env"}, Value: envVarName})
 		}
 	}
 
 	if baseURL != "" {
-		updates["apis."+chosenAPI+".base-url"] = baseURL
+		updates = append(updates, FieldUpdate{Path: []string{"apis", apiName, "base-url"}, Value: strings.TrimSpace(baseURL)})
 	}
 
-	if err := SaveFields(config.SettingsPath, updates); err != nil {
+	if addedModel {
+		updates = append(updates, FieldUpdate{
+			Path:  []string{"apis", apiName, "models", modelName, "max-input-chars"},
+			Value: defaultNewModelInputChars,
+		})
+	}
+
+	if err := SaveFieldPaths(config.SettingsPath, updates); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
 
 	fmt.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(config.SettingsPath))
 
-	if keyStorage == "env" && chosenAPI != "ollama" {
+	if keyStorage == "env" && apiName != "ollama" {
 		fmt.Fprintf(os.Stderr, "\nRemember to export your key:\n  export %s=sk-...\n",
 			envVarName)
 	}
@@ -356,7 +437,7 @@ func buildProviderOptions() []huh.Option[string] {
 		"azure":      "Azure OpenAI",
 	}
 
-	opts := make([]huh.Option[string], 0, len(config.APIs))
+	opts := make([]huh.Option[string], 0, len(config.APIs)+1)
 	for _, api := range config.APIs {
 		label := api.Name
 		if desc, ok := descs[api.Name]; ok {
@@ -364,6 +445,7 @@ func buildProviderOptions() []huh.Option[string] {
 		}
 		opts = append(opts, huh.NewOption(label, api.Name))
 	}
+	opts = append(opts, huh.NewOption("Add new OpenAI-compatible provider", addProviderOption))
 	return opts
 }
 
@@ -449,13 +531,77 @@ func buildModelOptions(apiName string) []huh.Option[string] {
 			names = append(names, name)
 		}
 		sort.Strings(names)
-		opts := make([]huh.Option[string], 0, len(names))
+		opts := make([]huh.Option[string], 0, len(names)+1)
 		for _, name := range names {
 			opts = append(opts, huh.NewOption(name, name))
 		}
+		opts = append(opts, huh.NewOption("Add new model", addModelOption))
 		return opts
 	}
 	return nil
+}
+
+func wizardProviderName(chosenAPI, newProviderName string) string {
+	if chosenAPI == addProviderOption {
+		return strings.TrimSpace(newProviderName)
+	}
+	return chosenAPI
+}
+
+func validateNewProviderName(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("provider name is required")
+	}
+	if value == addProviderOption || value == addModelOption {
+		return fmt.Errorf("provider name is reserved")
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return fmt.Errorf("provider name may only contain lowercase letters, digits, '-' or '_'")
+	}
+	for _, api := range config.APIs {
+		if api.Name == value {
+			return fmt.Errorf("provider %q already exists", value)
+		}
+	}
+	return nil
+}
+
+func validateNewModelName(provider, value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("model name is required")
+	}
+	if value == addProviderOption || value == addModelOption {
+		return fmt.Errorf("model name is reserved")
+	}
+	for _, api := range config.APIs {
+		if api.Name != provider {
+			continue
+		}
+		if _, ok := api.Models[value]; ok {
+			return fmt.Errorf("model %q already exists for %s", value, provider)
+		}
+		break
+	}
+	return nil
+}
+
+func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newModelName, baseURL string) (string, string, string, bool) {
+	apiName := wizardProviderName(chosenAPI, newProviderName)
+	addedModel := chosenAPI == addProviderOption || chosenModel == addModelOption
+	modelName := strings.TrimSpace(chosenModel)
+	if addedModel {
+		modelName = strings.TrimSpace(newModelName)
+	}
+	providerBaseURL := strings.TrimSpace(baseURL)
+	if providerBaseURL == "" {
+		providerBaseURL = findBaseURL(apiName)
+	}
+	return apiName, modelName, providerBaseURL, addedModel
 }
 
 // resolveEnvVar returns the configured api-key-env for the provider, or

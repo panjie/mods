@@ -8,6 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// FieldUpdate describes a single YAML field update. Path is already split into
+// YAML mapping keys, so keys may safely contain dots, slashes, or colons.
+type FieldUpdate struct {
+	Path  []string
+	Value any
+}
+
 // SaveFields updates specific fields in the YAML config file at path,
 // preserving comments and formatting by round-tripping through yaml.Node.
 //
@@ -26,6 +33,19 @@ import (
 //	    "apis.openai.api-key-env":   "OPENAI_API_KEY",
 //	})
 func SaveFields(path string, updates map[string]any) error {
+	pathUpdates := make([]FieldUpdate, 0, len(updates))
+	for keyPath, value := range updates {
+		pathUpdates = append(pathUpdates, FieldUpdate{
+			Path:  strings.Split(keyPath, "."),
+			Value: value,
+		})
+	}
+	return SaveFieldPaths(path, pathUpdates)
+}
+
+// SaveFieldPaths updates specific fields using explicit YAML path parts. Use
+// this when a key itself may contain dots, such as model names.
+func SaveFieldPaths(path string, updates []FieldUpdate) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read config %s: %w", path, err)
@@ -38,13 +58,12 @@ func SaveFields(path string, updates map[string]any) error {
 
 	mapping := rootMapping(&doc)
 
-	for keyPath, value := range updates {
-		parts := strings.Split(keyPath, ".")
-		if value == nil {
-			deleteNestedValue(mapping, parts)
+	for _, update := range updates {
+		if update.Value == nil {
+			deleteNestedValue(mapping, update.Path)
 			continue
 		}
-		setNestedValue(mapping, parts, value)
+		setNestedValue(mapping, update.Path, update.Value)
 	}
 
 	out, err := yaml.Marshal(&doc)

@@ -136,6 +136,28 @@ func TestSaveFields_CreatesMissingDeepPath(t *testing.T) {
 	require.Equal(t, "GROQ_API_KEY", groq["api-key-env"])
 }
 
+func TestSaveFieldPaths_ModelNameWithSeparators(t *testing.T) {
+	path := writeTestConfig(t, `apis:
+  openrouter:
+    models: {}
+`)
+
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{
+			Path:  []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "max-input-chars"},
+			Value: 1000000,
+		},
+	}))
+
+	m := loadAsMap(t, path)
+	apis := m["apis"].(map[string]any)
+	openrouter := apis["openrouter"].(map[string]any)
+	models := openrouter["models"].(map[string]any)
+	model := models["vendor/gpt-5.5:latest"].(map[string]any)
+	require.Equal(t, 1000000, model["max-input-chars"])
+	require.NotContains(t, models, "vendor/gpt-5")
+}
+
 func TestSaveFields_BoolSerialization(t *testing.T) {
 	path := writeTestConfig(t, `builtin-tools:
   shell: false

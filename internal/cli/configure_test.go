@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBuildProviderOptionsIncludesAddProvider(t *testing.T) {
@@ -48,41 +52,127 @@ func TestResolveWizardProviderModel(t *testing.T) {
 		},
 	}
 
-	apiName, modelName, baseURL, addedModel := resolveWizardProviderModel(
+	apiName, modelName, addedModelNames, baseURL, addedModel, err := resolveWizardProviderModel(
 		addProviderOption,
 		"",
 		"groq",
-		"llama-3.3-70b-versatile",
+		"llama-3.3-70b-versatile\nllama-3.1-8b-instant",
 		"https://api.groq.com/openai/v1",
 	)
+	require.NoError(t, err)
 	require.Equal(t, "groq", apiName)
 	require.Equal(t, "llama-3.3-70b-versatile", modelName)
+	require.Equal(t, []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"}, addedModelNames)
 	require.Equal(t, "https://api.groq.com/openai/v1", baseURL)
 	require.True(t, addedModel)
 
-	apiName, modelName, baseURL, addedModel = resolveWizardProviderModel(
+	apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
 		"openrouter",
 		addModelOption,
 		"",
 		"vendor/gpt-5.5:latest",
 		"",
 	)
+	require.NoError(t, err)
 	require.Equal(t, "openrouter", apiName)
 	require.Equal(t, "vendor/gpt-5.5:latest", modelName)
+	require.Equal(t, []string{"vendor/gpt-5.5:latest"}, addedModelNames)
 	require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
 	require.True(t, addedModel)
 
-	apiName, modelName, baseURL, addedModel = resolveWizardProviderModel(
+	apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
 		"openrouter",
 		"anthropic/claude-sonnet-4-6",
 		"",
 		"",
 		"",
 	)
+	require.NoError(t, err)
 	require.Equal(t, "openrouter", apiName)
 	require.Equal(t, "anthropic/claude-sonnet-4-6", modelName)
+	require.Nil(t, addedModelNames)
 	require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
 	require.False(t, addedModel)
+}
+
+func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:                "groq",
+		modelName:              "llama-3.3-70b-versatile",
+		reviewMode:             "mutable",
+		fsMode:                 "auto",
+		webSearchProvider:      "duckduckgo",
+		webSearchProviderValue: "duckduckgo",
+		keyStorage:             "env",
+		envVarName:             "GROQ_API_KEY",
+		baseURLInput:           " https://api.groq.com/openai/v1 ",
+		addedModelNames:        []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"},
+		addedModel:             true,
+	})
+
+	requireUpdateValue(t, updates, []string{"apis", "groq", "base-url"}, "https://api.groq.com/openai/v1")
+	requireUpdateValue(t, updates, []string{"apis", "groq", "api-key-env"}, "GROQ_API_KEY")
+	requireUpdateValue(t, updates, []string{"default-model"}, "llama-3.3-70b-versatile")
+	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.3-70b-versatile", "max-input-chars"}, defaultNewModelInputChars)
+	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.1-8b-instant", "max-input-chars"}, defaultNewModelInputChars)
+
+	path := writeCLIConfig(t, `default-api: openai
+default-model: gpt-5.4
+apis: {}
+`)
+	require.NoError(t, SaveFieldPaths(path, updates))
+
+	m := loadCLIConfig(t, path)
+	apis := m["apis"].(map[string]any)
+	groq := apis["groq"].(map[string]any)
+	require.Equal(t, "https://api.groq.com/openai/v1", groq["base-url"])
+	require.Equal(t, "GROQ_API_KEY", groq["api-key-env"])
+	models := groq["models"].(map[string]any)
+	model := models["llama-3.3-70b-versatile"].(map[string]any)
+	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
+	model = models["llama-3.1-8b-instant"].(map[string]any)
+	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
+}
+
+func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:                "openrouter",
+		modelName:              "vendor/gpt-5.5:latest",
+		reviewMode:             "mutable",
+		fsMode:                 "auto",
+		webSearchProvider:      "duckduckgo",
+		webSearchProviderValue: "duckduckgo",
+		keyStorage:             "env",
+		envVarName:             "OPENROUTER_API_KEY",
+		addedModelNames:        []string{"vendor/gpt-5.5:latest"},
+		addedModel:             true,
+	})
+
+	requireNoUpdatePath(t, updates, []string{"apis", "openrouter", "base-url"})
+	requireUpdateValue(t, updates, []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "max-input-chars"}, defaultNewModelInputChars)
+}
+
+func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
+	output := captureStderr(t, func() {
+		printConfigSummary(summaryData{
+			api:                 "openrouter",
+			model:               "vendor/gpt-5.5:latest",
+			keyStorage:          "env",
+			envVarName:          "OPENROUTER_API_KEY",
+			baseURL:             "https://openrouter.ai/api/v1",
+			addedModelCount:     2,
+			fsMode:              "auto",
+			webSearchProvider:   "duckduckgo",
+			webSearchKeyStorage: "env",
+			reviewMode:          "mutable",
+			settingsPath:        "/tmp/mods.yml",
+		})
+	})
+
+	require.Contains(t, output, "Base URL")
+	require.Contains(t, output, "https://openrouter.ai/api/v1")
+	require.Contains(t, output, "Added models")
+	require.Contains(t, output, "default, first line")
 }
 
 func TestValidateNewProviderName(t *testing.T) {
@@ -117,4 +207,100 @@ func TestValidateNewModelName(t *testing.T) {
 	require.NoError(t, validateNewModelName("openrouter", "vendor/gpt-5.5:latest"))
 	require.Error(t, validateNewModelName("openrouter", ""))
 	require.Error(t, validateNewModelName("openrouter", "anthropic/claude-sonnet-4-6"))
+}
+
+func TestParseNewModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
+	saveConfig := config
+	defer func() { config = saveConfig }()
+	config = Config{
+		PersistentConfig: PersistentConfig{
+			APIs: []API{{
+				Name: "openrouter",
+				Models: map[string]Model{
+					"anthropic/claude-sonnet-4-6": {},
+				},
+			}},
+		},
+	}
+
+	models, err := parseNewModelNames("openrouter", "\n vendor/gpt-5.5:latest \n\nvendor/gpt-5.5:latest\nopenai/gpt-5.4\n")
+	require.NoError(t, err)
+	require.Equal(t, []string{"vendor/gpt-5.5:latest", "openai/gpt-5.4"}, models)
+
+	_, err = parseNewModelNames("openrouter", "\n \t")
+	require.Error(t, err)
+	_, err = parseNewModelNames("openrouter", "anthropic/claude-sonnet-4-6")
+	require.Error(t, err)
+}
+
+func TestValidateWizardBaseURLRequiresNewProviderURL(t *testing.T) {
+	require.Error(t, validateWizardBaseURL(addProviderOption, ""))
+	require.NoError(t, validateWizardBaseURL("custom", ""))
+	require.Error(t, validateWizardBaseURL(addProviderOption, "api.groq.com/openai/v1"))
+	require.NoError(t, validateWizardBaseURL(addProviderOption, "https://api.groq.com/openai/v1"))
+}
+
+func requireUpdateValue(t *testing.T, updates []FieldUpdate, path []string, value any) {
+	t.Helper()
+	for _, update := range updates {
+		if equalPath(update.Path, path) {
+			require.Equal(t, value, update.Value)
+			return
+		}
+	}
+	require.Failf(t, "missing update", "path %v was not updated", path)
+}
+
+func requireNoUpdatePath(t *testing.T, updates []FieldUpdate, path []string) {
+	t.Helper()
+	for _, update := range updates {
+		require.Falsef(t, equalPath(update.Path, path), "unexpected update for path %v", path)
+	}
+}
+
+func equalPath(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func writeCLIConfig(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
+func loadCLIConfig(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &m))
+	return m
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = writer
+	defer func() {
+		os.Stderr = old
+	}()
+
+	fn()
+
+	require.NoError(t, writer.Close())
+	out, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+	return string(out)
 }

@@ -416,9 +416,6 @@ func Ensure() (Config, error) {
 		return c, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
 
-	// Auto-configure a custom provider from MODS_BASE_URL + MODS_API_KEY.
-	applyEnvCustomProvider(&c)
-
 	if c.CachePath == "" {
 		c.CachePath = filepath.Join(xdg.DataHome, "mods")
 	}

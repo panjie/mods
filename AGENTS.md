@@ -19,7 +19,7 @@
 
 ## Quirks
 - Config precedence is intentionally `CLI flags > mods.yml > MODS_ env > defaults`; `config.Ensure` parses env before YAML so the file can override env.
-- `MODS_BASE_URL` plus `MODS_API_KEY` auto-adds a `custom` provider and switches to it only if the configured default provider has no resolvable key.
+- Custom OpenAI-compatible endpoints are configured as providers under `apis.<name>.base-url`; use `mods --config` or edit `mods.yml` instead of environment-variable auto-discovery.
 - Custom web-search providers reject private/loopback targets unless `MODS_WEB_SEARCH_ALLOW_PRIVATE=1` is set; keep that SSRF guard covered by `internal/websearch` tests.
 - `mage install` path precedence is `BINDIR` > `PREFIX/bin` > XDG local bin > default (`/usr/local/bin`, or `%USERPROFILE%\.local\bin` on Windows); `DESTDIR` wraps the final path.
 - CI runs on Ubuntu, macOS, and Windows; platform-specific code is split with build tags in `internal/tools`, `internal/platform`, and `internal/clipboard`.

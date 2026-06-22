@@ -126,45 +126,6 @@ func HasAPIKey(config *Config) bool {
 	return false
 }
 
-// applyEnvCustomProvider adds or updates a "custom" API profile from the
-// MODS_BASE_URL and MODS_API_KEY environment variables. If both are set and
-// the current default provider has no resolvable key, the default is switched
-// to "custom" so the user can start using mods immediately without editing
-// the config file.
-func applyEnvCustomProvider(c *Config) {
-	baseURL := os.Getenv("MODS_BASE_URL")
-	apiKey := os.Getenv("MODS_API_KEY")
-	if baseURL == "" || apiKey == "" {
-		return
-	}
-
-	// Update an existing "custom" profile in-place, or append a new one.
-	for i := range c.APIs {
-		if c.APIs[i].Name == "custom" {
-			c.APIs[i].BaseURL = baseURL
-			c.APIs[i].APIKey = apiKey
-			goto checkDefault
-		}
-	}
-	c.APIs = append(c.APIs, API{
-		Name:    "custom",
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-		Models: map[string]Model{
-			"default": {Name: "default", MaxChars: 1000000},
-		},
-	})
-
-checkDefault:
-	// If the current default provider has no working key, switch to custom.
-	if !HasAPIKey(c) {
-		c.API = "custom"
-		if c.Model == "" {
-			c.Model = "default"
-		}
-	}
-}
-
 // rootMapping extracts the top-level mapping node from a parsed document,
 // creating one if the document is empty or malformed.
 func rootMapping(doc *yaml.Node) *yaml.Node {

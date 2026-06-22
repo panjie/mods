@@ -103,6 +103,13 @@ func (m *Mods) appendToOutput(s string) {
 	m.appendToOutputWithDisplay(s, s)
 }
 
+func (m *Mods) appendResponseBoundary() {
+	if m.Output == "" || strings.HasSuffix(m.Output, "\n") || strings.HasSuffix(m.Output, "\r") {
+		return
+	}
+	m.appendToOutput("\n\n")
+}
+
 func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 	m.Output += raw
 	m.displayOutput += display

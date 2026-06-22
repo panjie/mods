@@ -62,6 +62,7 @@ func (m *Mods) startPlanCmd(content string) tea.Cmd {
 	m.cancelRequest = nil
 	m.cancelMu.Unlock()
 	m.responseOutputStarted = false
+	m.responseBoundaryPending = false
 	m.Output = ""
 	m.displayOutput = ""
 
@@ -270,4 +271,5 @@ func (m *Mods) resetExecutionOutput() {
 	m.glamHeight = 0
 	m.glamViewport.SetContent("")
 	m.responseOutputStarted = false
+	m.responseBoundaryPending = false
 }

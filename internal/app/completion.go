@@ -50,6 +50,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.cancelMu.Unlock()
 	m.reasoningActive = false
 	m.responseOutputStarted = false
+	m.responseBoundaryPending = false
 	m.Thought = ""
 	m.thoughtFlushed = false
 

@@ -40,32 +40,33 @@ const numPlanReviewOptions = 4
 // Mods is the Bubble Tea model that manages reading stdin and querying
 // LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
 type Mods struct {
-	Output                string
-	Input                 string
-	Styles                Styles
-	Error                 *modsError
-	state                 state
-	retries               int
-	toolCallRounds        int
-	totalRounds           int
-	renderer              *lipgloss.Renderer
-	glam                  *glamour.TermRenderer
-	glamViewport          viewport.Model
-	glamOutput            string
-	displayOutput         string
-	glamHeight            int
-	messages              []proto.Message
-	cancelRequest         []context.CancelFunc
-	cancelMu              sync.Mutex
-	anim                  tea.Model
-	activeOperation       string
-	reasoningActive       bool
-	responseOutputStarted bool
-	width                 int
-	height                int
-	showOperationStatus   bool
-	Thought               string
-	thoughtFlushed        bool
+	Output                  string
+	Input                   string
+	Styles                  Styles
+	Error                   *modsError
+	state                   state
+	retries                 int
+	toolCallRounds          int
+	totalRounds             int
+	renderer                *lipgloss.Renderer
+	glam                    *glamour.TermRenderer
+	glamViewport            viewport.Model
+	glamOutput              string
+	displayOutput           string
+	glamHeight              int
+	messages                []proto.Message
+	cancelRequest           []context.CancelFunc
+	cancelMu                sync.Mutex
+	anim                    tea.Model
+	activeOperation         string
+	reasoningActive         bool
+	responseOutputStarted   bool
+	responseBoundaryPending bool
+	width                   int
+	height                  int
+	showOperationStatus     bool
+	Thought                 string
+	thoughtFlushed          bool
 
 	db     *DB
 	Config *Config
@@ -257,6 +258,13 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.responseOutputStarted && m.Output == "" {
 				msg.content = strings.TrimLeft(msg.content, "\r\n")
 			}
+			if m.responseBoundaryPending {
+				msg.content = strings.TrimLeft(msg.content, "\r\n")
+				if msg.content != "" {
+					m.appendResponseBoundary()
+					m.responseBoundaryPending = false
+				}
+			}
 			if msg.content == "" {
 				cmds = append(cmds, m.receiveCompletionStreamCmd(completionOutput{
 					stream: msg.stream,
@@ -369,6 +377,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, msgCmd(completionOutput{errh: msg.errh})
 		}
 		debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
+		m.responseBoundaryPending = true
 		return m, msgCmd(toolMsg)
 	case planCompleteMsg:
 		m.planContent = msg.plan

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -205,4 +206,38 @@ func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
 		errh:    func(err error) tea.Msg { return nil },
 	})
 	require.Equal(t, "你好", m.Output)
+}
+
+func TestCompletionOutputSeparatesResponsesAfterToolCall(t *testing.T) {
+	m := &Mods{
+		Config:              &Config{},
+		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		state:               requestState,
+		contentMutex:        &sync.Mutex{},
+		showOperationStatus: true,
+		reviewer:            &toolReviewer{},
+	}
+	m.Config.Raw = true
+	errh := func(error) tea.Msg { return nil }
+
+	_, _ = m.Update(completionOutput{
+		content: "I'll check what's available and install GitHub CLI.",
+		stream:  staticStream{},
+		errh:    errh,
+	})
+	_, _ = m.Update(toolCallsOutput{
+		results: []proto.ToolCallStatus{{Name: "shell_run"}},
+		stream:  staticStream{},
+		errh:    errh,
+	})
+	require.True(t, m.responseBoundaryPending)
+
+	_, _ = m.Update(completionOutput{
+		content: "\nThe installation seems to have succeeded.",
+		stream:  staticStream{},
+		errh:    errh,
+	})
+
+	require.Equal(t, "I'll check what's available and install GitHub CLI.\n\nThe installation seems to have succeeded.", m.Output)
+	require.False(t, m.responseBoundaryPending)
 }

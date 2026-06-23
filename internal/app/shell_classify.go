@@ -60,7 +60,7 @@ func (m *Mods) classifyShellCommand(tool, command string) bool {
 	}
 
 	st := client.Request(classifyCtx, request)
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	var sb strings.Builder
 	for st.Next() {

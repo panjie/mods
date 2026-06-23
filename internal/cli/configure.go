@@ -789,7 +789,7 @@ func testConnection(model, baseURL, apiKey string) error {
 	if err != nil {
 		return fmt.Errorf("network error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch {
 	case resp.StatusCode == 401 || resp.StatusCode == 403:

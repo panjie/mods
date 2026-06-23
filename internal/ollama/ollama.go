@@ -118,7 +118,7 @@ type Stream struct {
 }
 
 func (s *Stream) fn(run uint64, ch chan api.ChatResponse, resp api.ChatResponse) error {
-	defer func() { recover() }()
+	defer func() { _ = recover() }()
 	s.mu.Lock()
 	if s.closed || s.run != run {
 		s.mu.Unlock()

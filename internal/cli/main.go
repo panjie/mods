@@ -609,8 +609,12 @@ func resetSettings() error {
 		return modsError{Err: err, ReasonText: "Couldn't write config file."}
 	}
 	// The copy was successful, so now delete the original file
-	inputFile.Close()
-	outputFile.Close()
+	if err := inputFile.Close(); err != nil {
+		return modsError{Err: err, ReasonText: "Couldn't close config file."}
+	}
+	if err := outputFile.Close(); err != nil {
+		return modsError{Err: err, ReasonText: "Couldn't close backup config file."}
+	}
 	err = os.Remove(config.SettingsPath)
 	if err != nil {
 		return modsError{Err: err, ReasonText: "Couldn't remove config file."}

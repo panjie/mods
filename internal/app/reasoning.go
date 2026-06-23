@@ -55,6 +55,9 @@ func (m *Mods) resolveReasoning(
 		debug.Printf("Auto judge: reasoning=%v", shouldReason)
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, shouldReason)
 		return shouldReason
+	case ReasoningOff:
+		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
+		return false
 	default:
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
 		return false
@@ -227,7 +230,7 @@ func judgeTaskComplexity(
 	}
 
 	st := client.Request(ctx, request)
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	var sb strings.Builder
 	for st.Next() {

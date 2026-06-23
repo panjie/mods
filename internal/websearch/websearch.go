@@ -231,7 +231,7 @@ func searchDuckDuckGoInstant(ctx context.Context, query string, maxResults int) 
 	if err != nil {
 		return nil, fmt.Errorf("searching DuckDuckGo: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("searching DuckDuckGo: HTTP %d", resp.StatusCode)
@@ -381,7 +381,7 @@ func searchTavily(ctx context.Context, apiKey, query string, maxResults int) ([]
 	if err != nil {
 		return nil, fmt.Errorf("searching Tavily: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -435,7 +435,7 @@ func searchCustom(ctx context.Context, baseURL, apiKey, query string, maxResults
 	if err != nil {
 		return nil, fmt.Errorf("web search: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

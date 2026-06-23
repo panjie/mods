@@ -2,6 +2,8 @@ module github.com/panjie/mods
 
 go 1.25.0
 
+replace github.com/charmbracelet/huh v0.8.0 => ./internal/huh
+
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/anthropics/anthropic-sdk-go v1.26.0

@@ -677,6 +677,10 @@ func (m *MultiSelect[T]) setFilter(filter bool) {
 	m.keymap.ClearFilter.SetEnabled(!filter && m.filter.Value() != "")
 }
 
+func (m *MultiSelect[T]) consumesEscape() bool {
+	return m.filtering || m.filter.Value() != ""
+}
+
 // filterFunc returns true if the option matches the filter.
 func (m *MultiSelect[T]) filterFunc(option string) bool {
 	// XXX: remove diacritics or allow customization of filter function.

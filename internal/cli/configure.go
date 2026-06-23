@@ -60,11 +60,7 @@ func RunConfigWizard() error {
 
 	providerOpts := buildProviderOptions()
 
-	keymap := huh.NewDefaultKeyMap()
-	keymap.Text.NewLine = key.NewBinding(
-		key.WithKeys("ctrl+j"),
-		key.WithHelp("ctrl+j", "new line"),
-	)
+	keymap := configWizardKeyMap()
 
 	form := huh.NewForm(
 		// Page 1: Provider
@@ -305,7 +301,8 @@ func RunConfigWizard() error {
 			Description("Tune the approval behavior for tool execution."),
 	).
 		WithTheme(configWizardTheme(config.Theme)).
-		WithKeyMap(keymap)
+		WithKeyMap(keymap).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
@@ -352,21 +349,21 @@ func RunConfigWizard() error {
 
 	// Build the summary.
 	printConfigSummary(summaryData{
-		api:                    apiName,
-		model:                  modelName,
-		keyStorage:             keyStorage,
-		envVarName:             envVarName,
-		baseURL:                providerBaseURL,
-		addedModelCount:        len(addedModelNames),
-		fsMode:                 fsMode,
-		shellOn:                shellOn,
-		thinkingOn:             thinkingOn,
-		webSearchOn:            webSearchOn,
-		webSearchProvider:      webSearchProviderValue,
-		webSearchKeyStorage:    webSearchKeyStorage,
-		webSearchAPIKeyEnv:     webSearchAPIKeyEnv,
-		reviewMode:             reviewMode,
-		settingsPath:           config.SettingsPath,
+		api:                 apiName,
+		model:               modelName,
+		keyStorage:          keyStorage,
+		envVarName:          envVarName,
+		baseURL:             providerBaseURL,
+		addedModelCount:     len(addedModelNames),
+		fsMode:              fsMode,
+		shellOn:             shellOn,
+		thinkingOn:          thinkingOn,
+		webSearchOn:         webSearchOn,
+		webSearchProvider:   webSearchProviderValue,
+		webSearchKeyStorage: webSearchKeyStorage,
+		webSearchAPIKeyEnv:  webSearchAPIKeyEnv,
+		reviewMode:          reviewMode,
+		settingsPath:        config.SettingsPath,
 	})
 
 	updates := buildConfigWizardUpdates(configWizardSaveData{
@@ -405,6 +402,28 @@ func RunConfigWizard() error {
 	}
 
 	return nil
+}
+
+func configWizardKeyMap() *huh.KeyMap {
+	keymap := huh.NewDefaultKeyMap()
+	back := func() key.Binding {
+		return key.NewBinding(
+			key.WithKeys("esc", "shift+tab"),
+			key.WithHelp("esc", "back"),
+		)
+	}
+	keymap.Input.Prev = back()
+	keymap.FilePicker.Prev = back()
+	keymap.Text.Prev = back()
+	keymap.Select.Prev = back()
+	keymap.MultiSelect.Prev = back()
+	keymap.Note.Prev = back()
+	keymap.Confirm.Prev = back()
+	keymap.Text.NewLine = key.NewBinding(
+		key.WithKeys("ctrl+j"),
+		key.WithHelp("ctrl+j", "new line"),
+	)
+	return keymap
 }
 
 // buildProviderOptions returns huh options for each configured provider,
@@ -696,13 +715,13 @@ func webSearchProviderUsesKey(provider string) bool {
 }
 
 type configWizardSaveData struct {
-	apiName, modelName, reviewMode, fsMode          string
-	webSearchProvider, webSearchProviderValue       string
-	webSearchKeyStorage, webSearchAPIKey            string
-	webSearchAPIKeyEnv                              string
-	keyStorage, apiKey, envVarName, baseURLInput    string
-	addedModelNames                                 []string
-	shellOn, thinkingOn, webSearchOn, addedModel    bool
+	apiName, modelName, reviewMode, fsMode       string
+	webSearchProvider, webSearchProviderValue    string
+	webSearchKeyStorage, webSearchAPIKey         string
+	webSearchAPIKeyEnv                           string
+	keyStorage, apiKey, envVarName, baseURLInput string
+	addedModelNames                              []string
+	shellOn, thinkingOn, webSearchOn, addedModel bool
 }
 
 func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {

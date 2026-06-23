@@ -80,6 +80,9 @@ type Form struct {
 	quitting bool
 	aborted  bool
 
+	escapeAbortMessage string
+	escapeAbortArmed   bool
+
 	// options
 	width      int
 	height     int
@@ -349,6 +352,14 @@ func (f *Form) WithTimeout(t time.Duration) *Form {
 	return f
 }
 
+// WithEscapeAbortConfirmation makes Escape on the first visible group require
+// a second Escape before aborting the form.
+func (f *Form) WithEscapeAbortConfirmation(message string) *Form {
+	f.escapeAbortMessage = message
+	f.escapeAbortArmed = false
+	return f
+}
+
 // WithProgramOptions sets the tea options of the form.
 func (f *Form) WithProgramOptions(opts ...tea.ProgramOption) *Form {
 	f.teaOptions = opts
@@ -560,6 +571,18 @@ func (f *Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			f.quitting = true
 			f.State = StateAborted
 			return f, f.CancelCmd
+		case f.shouldHandleEscapeAbort(msg, group):
+			if f.escapeAbortArmed {
+				f.aborted = true
+				f.quitting = true
+				f.State = StateAborted
+				return f, f.CancelCmd
+			}
+			f.escapeAbortArmed = true
+			return f, nil
+		}
+		if !isEscapeKey(msg) {
+			f.escapeAbortArmed = false
 		}
 
 	case nextFieldMsg:
@@ -568,6 +591,7 @@ func (f *Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		f.results[field.GetKey()] = field.GetValue()
 
 	case nextGroupMsg:
+		f.escapeAbortArmed = false
 		if len(group.Errors()) > 0 {
 			return f, nil
 		}
@@ -597,6 +621,7 @@ func (f *Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return f, f.selector.Selected().Init()
 
 	case prevGroupMsg:
+		f.escapeAbortArmed = false
 		for i := f.selector.Index() - 1; i >= 0; i-- {
 			if !f.isGroupHidden(f.selector.Get(i)) {
 				f.selector.SetIndex(i)
@@ -619,6 +644,35 @@ func (f *Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return f, cmd
+}
+
+func (f *Form) shouldHandleEscapeAbort(msg tea.KeyMsg, group *Group) bool {
+	return f.escapeAbortMessage != "" &&
+		isEscapeKey(msg) &&
+		f.onFirstVisibleGroup() &&
+		!fieldConsumesEscape(group.selector.Selected())
+}
+
+func isEscapeKey(msg tea.KeyMsg) bool {
+	return key.Matches(msg, key.NewBinding(key.WithKeys("esc")))
+}
+
+func (f *Form) onFirstVisibleGroup() bool {
+	for i := 0; i < f.selector.Total(); i++ {
+		if !f.isGroupHidden(f.selector.Get(i)) {
+			return f.selector.Index() == i
+		}
+	}
+	return f.selector.OnFirst()
+}
+
+type escapeConsumer interface {
+	consumesEscape() bool
+}
+
+func fieldConsumesEscape(field Field) bool {
+	consumer, ok := field.(escapeConsumer)
+	return ok && consumer.consumesEscape()
 }
 
 func (f *Form) isGroupHidden(group *Group) bool {
@@ -646,7 +700,11 @@ func (f *Form) View() string {
 		return ""
 	}
 
-	return f.styles().Base.Render(f.layout.View(f))
+	view := f.layout.View(f)
+	if f.escapeAbortArmed && f.escapeAbortMessage != "" {
+		view += "\n\n" + f.escapeAbortMessage
+	}
+	return f.styles().Base.Render(view)
 }
 
 // Run runs the form.

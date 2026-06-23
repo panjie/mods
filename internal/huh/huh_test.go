@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -942,6 +943,107 @@ func TestPrevGroup(t *testing.T) {
 		t.Log(pretty.Render(v))
 		t.Error("expected Bar to not be hidden")
 	}
+}
+
+func TestEscapeNavigatesToPreviousGroup(t *testing.T) {
+	keymap := escapeBackTestKeyMap()
+	f := NewForm(
+		NewGroup(NewSelect[string]().Options(NewOptions("Bar")...).Title("Bar")),
+		NewGroup(NewSelect[string]().Options(NewOptions("Foo")...).Title("Foo")),
+	).
+		WithKeyMap(keymap).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
+
+	f = batchUpdate(f, f.Init()).(*Form)
+	f.Update(nextGroup())
+
+	m, cmd := f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = batchUpdate(m, cmd)
+
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "Bar") {
+		t.Log(pretty.Render(v))
+		t.Error("expected Esc to navigate to the previous group")
+	}
+}
+
+func TestEscapeAbortConfirmation(t *testing.T) {
+	f := NewForm(
+		NewGroup(NewSelect[string]().Options(NewOptions("Bar")...).Title("Bar")),
+	).WithEscapeAbortConfirmation("Press Esc again to exit.")
+
+	f = batchUpdate(f, f.Init()).(*Form)
+
+	m, _ := f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	f = m.(*Form)
+
+	if f.State != StateNormal {
+		t.Fatalf("expected first Esc to keep form normal, got %v", f.State)
+	}
+	if v := ansi.Strip(f.View()); !strings.Contains(v, "Press Esc again to exit.") {
+		t.Log(pretty.Render(v))
+		t.Error("expected first Esc to show exit confirmation")
+	}
+
+	m, _ = f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	f = m.(*Form)
+
+	if f.State != StateAborted {
+		t.Fatalf("expected second Esc to abort form, got %v", f.State)
+	}
+}
+
+func TestEscapeAbortConfirmationClearsOnOtherKey(t *testing.T) {
+	f := NewForm(
+		NewGroup(NewSelect[string]().Options(NewOptions("Bar", "Foo")...).Title("Bar")),
+	).WithEscapeAbortConfirmation("Press Esc again to exit.")
+
+	f = batchUpdate(f, f.Init()).(*Form)
+
+	m, _ := f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	f = m.(*Form)
+	m, _ = f.Update(keys('j'))
+	f = m.(*Form)
+
+	if v := ansi.Strip(f.View()); strings.Contains(v, "Press Esc again to exit.") {
+		t.Log(pretty.Render(v))
+		t.Error("expected non-Esc key to clear exit confirmation")
+	}
+}
+
+func TestEscapeDoesNotArmAbortConfirmationWhenSelectFilterConsumesIt(t *testing.T) {
+	f := NewForm(
+		NewGroup(NewSelect[string]().Options(NewOptions("Bar", "Foo")...).Title("Bar")),
+	).WithEscapeAbortConfirmation("Press Esc again to exit.")
+
+	f = batchUpdate(f, f.Init()).(*Form)
+
+	m, _ := f.Update(keys('/'))
+	f = m.(*Form)
+	m, _ = f.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	f = m.(*Form)
+
+	if v := ansi.Strip(f.View()); strings.Contains(v, "Press Esc again to exit.") {
+		t.Log(pretty.Render(v))
+		t.Error("expected select filter to consume Esc without showing exit confirmation")
+	}
+}
+
+func escapeBackTestKeyMap() *KeyMap {
+	keymap := NewDefaultKeyMap()
+	back := func() key.Binding {
+		return key.NewBinding(
+			key.WithKeys("esc", "shift+tab"),
+			key.WithHelp("esc", "back"),
+		)
+	}
+	keymap.Input.Prev = back()
+	keymap.FilePicker.Prev = back()
+	keymap.Text.Prev = back()
+	keymap.Select.Prev = back()
+	keymap.MultiSelect.Prev = back()
+	keymap.Note.Prev = back()
+	keymap.Confirm.Prev = back()
+	return keymap
 }
 
 func TestNote(t *testing.T) {

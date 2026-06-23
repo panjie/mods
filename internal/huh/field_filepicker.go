@@ -306,6 +306,10 @@ func (f *FilePicker) setPicking(v bool) {
 	f.picker.KeyMap.Back.SetEnabled(v)
 }
 
+func (f *FilePicker) consumesEscape() bool {
+	return f.picking
+}
+
 // Run runs the file field.
 func (f *FilePicker) Run() error {
 	if f.accessible { // TODO: remove in a future release.

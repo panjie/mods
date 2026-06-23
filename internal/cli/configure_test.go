@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -41,6 +43,27 @@ func TestBuildModelOptionsIncludesAddModel(t *testing.T) {
 	opts := buildModelOptions("openai")
 	require.NotEmpty(t, opts)
 	require.Equal(t, addModelOption, opts[len(opts)-1].Value)
+}
+
+func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
+	keymap := configWizardKeyMap()
+	esc := tea.KeyMsg{Type: tea.KeyEsc}
+	shiftTab := tea.KeyMsg{Type: tea.KeyShiftTab}
+
+	prevBindings := []key.Binding{
+		keymap.Input.Prev,
+		keymap.FilePicker.Prev,
+		keymap.Text.Prev,
+		keymap.Select.Prev,
+		keymap.MultiSelect.Prev,
+		keymap.Note.Prev,
+		keymap.Confirm.Prev,
+	}
+
+	for _, binding := range prevBindings {
+		require.True(t, key.Matches(esc, binding))
+		require.True(t, key.Matches(shiftTab, binding))
+	}
 }
 
 func TestResolveWizardProviderModel(t *testing.T) {

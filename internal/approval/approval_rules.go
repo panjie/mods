@@ -675,19 +675,19 @@ func shellExactRule(tool, command string) Rule {
 }
 
 func dirAllowRulesForTool(tool string, command string, posix bool) []Rule {
-	paths := extractCommandPaths(command, posix)
-	if len(paths) == 0 {
+	dirs := extractWritableDirs(command, posix)
+	if len(dirs) == 0 {
 		return nil
 	}
 	return []Rule{{
 		Type:  DirAllow,
-		Paths: paths,
+		Paths: dirs,
 	}}
 }
 
 func dirAllowForCommand(tool string, command string, rules []Rule, workspaceRoot string, posix bool) bool {
-	targets := extractCommandPaths(command, posix)
-	if len(targets) == 0 {
+	targetDirs := extractWritableDirs(command, posix)
+	if len(targetDirs) == 0 {
 		return false
 	}
 	for _, rule := range rules {
@@ -695,8 +695,8 @@ func dirAllowForCommand(tool string, command string, rules []Rule, workspaceRoot
 			continue
 		}
 		allMatch := true
-		for _, target := range targets {
-			if !dirWithinPaths(rule.Paths, target) {
+		for _, targetDir := range targetDirs {
+			if !dirWithinPaths(rule.Paths, targetDir) {
 				allMatch = false
 				break
 			}
@@ -708,125 +708,358 @@ func dirAllowForCommand(tool string, command string, rules []Rule, workspaceRoot
 	return false
 }
 
-func extractCommandPaths(command string, posix bool) []string {
+func extractWritableDirs(command string, posix bool) []string {
 	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
 		return nil
 	}
 	if !posix {
-		return extractCommandPathsSimple(normalized)
+		return extractWritableDirsSimple(normalized)
 	}
-	return extractCommandPathsPOSIX(command)
+	return extractWritableDirsPOSIX(command)
 }
 
-func extractCommandPathsPOSIX(command string) []string {
+func extractWritableDirsPOSIX(command string) []string {
 	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
 	file, err := parser.Parse(strings.NewReader(command), "")
 	if err != nil {
 		return nil
 	}
-	var paths []string
+	var dirs []string
 	for _, stmt := range file.Stmts {
-		collectPathsFromStmt(stmt, &paths)
+		collectWritableDirsFromStmt(stmt, &dirs)
 	}
-	if len(paths) == 0 {
+	if len(dirs) == 0 {
 		return nil
 	}
-	return dedupeSorted(paths)
+	return dedupeSorted(dirs)
 }
 
-func collectPathsFromStmt(stmt *syntax.Stmt, paths *[]string) {
+func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string) {
 	if stmt == nil || stmt.Cmd == nil {
 		return
 	}
+	for _, redir := range stmt.Redirs {
+		if redir == nil || redir.Word == nil || !redirectionWrites(redir.Op) {
+			continue
+		}
+		target, ok := staticShellWord(redir.Word)
+		if !ok || target == "" {
+			continue
+		}
+		*dirs = append(*dirs, parentDir(target))
+	}
 	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
-		collectPathsFromStmt(binary.X, paths)
-		collectPathsFromStmt(binary.Y, paths)
+		collectWritableDirsFromStmt(binary.X, dirs)
+		collectWritableDirsFromStmt(binary.Y, dirs)
 		return
 	}
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Args) < 2 {
+	if !ok || len(call.Args) == 0 {
 		return
 	}
-	hasDynamic := false
-	for _, word := range call.Args {
-		if !wordIsStatic(word) {
-			hasDynamic = true
-			break
-		}
-	}
-	if hasDynamic {
+	args := shellWords(call.Args)
+	if len(args) == 0 {
 		return
 	}
-	for _, word := range call.Args[1:] {
-		value, ok := staticShellWord(word)
-		if !ok {
-			continue
-		}
-		if strings.HasPrefix(value, "-") {
-			continue
-		}
-		if value == "" {
-			continue
-		}
-		*paths = append(*paths, value)
+	*dirs = append(*dirs, writableDirsFromTokens(args, true)...)
+}
+
+func redirectionWrites(op syntax.RedirOperator) bool {
+	switch op {
+	case syntax.RdrOut, syntax.AppOut, syntax.ClbOut, syntax.RdrAll, syntax.AppAll, syntax.RdrInOut:
+		return true
+	default:
+		return false
 	}
 }
 
-func wordIsStatic(word *syntax.Word) bool {
-	for _, part := range word.Parts {
-		switch part.(type) {
-		case *syntax.Lit, *syntax.SglQuoted, *syntax.DblQuoted:
-			continue
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func extractCommandPathsSimple(command string) []string {
-	normalized := normalizeSimpleCommand(command)
-	if normalized == "" {
-		return nil
-	}
-	parts := splitSimpleCompound(normalized)
+func extractWritableDirsSimple(command string) []string {
+	parts := splitSimpleCompound(normalizeSimpleCommand(command))
 	if len(parts) == 0 {
 		return nil
 	}
-	var paths []string
+	var dirs []string
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if part == "" || hasShellRedirection(part) {
+		if part == "" {
 			continue
 		}
+		dirs = append(dirs, writableDirsFromRedirection(part)...)
 		tokens := tokenizeSimple(part)
-		if len(tokens) < 2 {
+		if len(tokens) == 0 {
 			continue
 		}
-		for _, token := range tokens[1:] {
-			if strings.HasPrefix(token, "-") {
-				continue
-			}
-			if token == "" {
-				continue
-			}
-			paths = append(paths, token)
-		}
+		dirs = append(dirs, writableDirsFromTokens(tokens, false)...)
 	}
-	if len(paths) == 0 {
+	if len(dirs) == 0 {
 		return nil
 	}
-	return dedupeSorted(paths)
+	return dedupeSorted(dirs)
+}
+
+func shellWords(words []*syntax.Word) []string {
+	args := make([]string, 0, len(words))
+	for _, word := range words {
+		value, ok := staticShellWord(word)
+		if !ok {
+			return nil
+		}
+		args = append(args, value)
+	}
+	return args
+}
+
+func writableDirsFromTokens(args []string, posix bool) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	command := args[0]
+	if !posix {
+		command = strings.ToLower(command)
+	}
+	switch command {
+	case "rm", "rmdir", "unlink", "touch", "chmod", "chown":
+		return parentDirs(commandOperands(args[1:]))
+	case "mkdir":
+		return parentDirs(commandOperands(args[1:]))
+	case "cp", "mv":
+		operands := commandOperands(args[1:])
+		if len(operands) == 0 {
+			return nil
+		}
+		return []string{destinationDir(operands[len(operands)-1])}
+	case "tee":
+		return parentDirs(commandOperands(args[1:]))
+	case "remove-item", "del", "erase", "rd":
+		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
+			return parentDirs(paths)
+		}
+		return parentDirs(commandOperands(args[1:]))
+	case "copy-item", "move-item":
+		if destinations := powerShellParamValues(args, "destination"); len(destinations) > 0 {
+			return destinationDirs(destinations)
+		}
+		operands := commandOperands(args[1:])
+		if len(operands) == 0 {
+			return nil
+		}
+		return []string{destinationDir(operands[len(operands)-1])}
+	case "copy", "move":
+		operands := commandOperands(args[1:])
+		if len(operands) == 0 {
+			return nil
+		}
+		return []string{destinationDir(operands[len(operands)-1])}
+	case "new-item", "set-content", "add-content":
+		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
+			return parentDirs(paths)
+		}
+		return parentDirs(commandOperands(args[1:]))
+	case "out-file":
+		if paths := powerShellParamValues(args, "filepath", "literalpath", "path"); len(paths) > 0 {
+			return parentDirs(paths)
+		}
+		return parentDirs(commandOperands(args[1:]))
+	default:
+		return nil
+	}
+}
+
+func powerShellParamValues(args []string, names ...string) []string {
+	nameSet := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		nameSet[strings.ToLower(name)] = struct{}{}
+	}
+	var values []string
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			continue
+		}
+		key := strings.TrimLeft(arg, "-")
+		var inlineValue string
+		if before, after, ok := strings.Cut(key, ":"); ok {
+			key = before
+			inlineValue = after
+		}
+		if _, ok := nameSet[strings.ToLower(key)]; !ok {
+			continue
+		}
+		if inlineValue != "" {
+			values = append(values, inlineValue)
+			continue
+		}
+		if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			values = append(values, args[i+1])
+			i++
+		}
+	}
+	return values
+}
+
+func commandOperands(args []string) []string {
+	operands := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		operands = append(operands, arg)
+	}
+	return operands
+}
+
+func parentDirs(paths []string) []string {
+	dirs := make([]string, 0, len(paths))
+	for _, path := range paths {
+		dirs = append(dirs, parentDir(path))
+	}
+	return dirs
+}
+
+func destinationDirs(paths []string) []string {
+	dirs := make([]string, 0, len(paths))
+	for _, path := range paths {
+		dirs = append(dirs, destinationDir(path))
+	}
+	return dirs
+}
+
+func writableDirsFromRedirection(command string) []string {
+	tokens := tokenizeSimple(command)
+	dirs := make([]string, 0)
+	for i, token := range tokens {
+		if !isRedirectionToken(token) || i+1 >= len(tokens) {
+			continue
+		}
+		dirs = append(dirs, parentDir(tokens[i+1]))
+	}
+	return dirs
+}
+
+func isRedirectionToken(token string) bool {
+	return token == ">" || token == ">>" || token == "1>" || token == "1>>" || token == "2>" || token == "2>>"
+}
+
+func destinationDir(path string) string {
+	if strings.HasSuffix(path, "/") || strings.HasSuffix(path, "\\") {
+		return cleanDir(path)
+	}
+	return parentDir(path)
+}
+
+func parentDir(path string) string {
+	path = cleanDir(path)
+	if path == "" {
+		return "."
+	}
+	if windowsStylePath(path) {
+		if windowsDriveRoot(path) {
+			return path
+		}
+		if i := strings.LastIndex(path, `\`); i >= 0 {
+			if i == 0 {
+				return path[:1]
+			}
+			if i == 2 && len(path) >= 2 && path[1] == ':' {
+				return path[:i+1]
+			}
+			return strings.TrimRight(path[:i], `\`)
+		}
+		return "."
+	}
+	if i := strings.LastIndexAny(path, `/\`); i >= 0 {
+		if i == 0 {
+			return path[:1]
+		}
+		if i == 2 && len(path) >= 2 && path[1] == ':' {
+			return path[:i]
+		}
+		return strings.TrimRight(path[:i], `/\`)
+	}
+	return "."
+}
+
+func cleanDir(path string) string {
+	path = strings.TrimSpace(path)
+	if windowsStylePath(path) {
+		return cleanWindowsPath(path)
+	}
+	cleaned := filepath.Clean(path)
+	if cleaned == "" {
+		return "."
+	}
+	return cleaned
 }
 
 func dirWithinPaths(allowed []string, target string) bool {
 	for _, dir := range allowed {
-		if target == dir || strings.HasPrefix(target, dir) {
+		dir = cleanDir(dir)
+		target = cleanDir(target)
+		if dir == "." {
+			if target == "." || !filepath.IsAbs(target) && !windowsPathIsAbs(target) {
+				return true
+			}
+			continue
+		}
+		compareDir, compareTarget := dir, target
+		if windowsStylePath(dir) || windowsStylePath(target) {
+			compareDir = strings.ToLower(compareDir)
+			compareTarget = strings.ToLower(compareTarget)
+		}
+		if compareTarget == compareDir || strings.HasPrefix(compareTarget, descendantPrefix(compareDir)) {
 			return true
 		}
 	}
 	return false
+}
+
+func descendantPrefix(path string) string {
+	separator := pathSeparatorFor(path)
+	if strings.HasSuffix(path, separator) {
+		return path
+	}
+	return path + separator
+}
+
+func pathSeparatorFor(path string) string {
+	if strings.Contains(path, "\\") {
+		return "\\"
+	}
+	return "/"
+}
+
+func windowsPathIsAbs(path string) bool {
+	return len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')
+}
+
+func windowsStylePath(path string) bool {
+	return strings.Contains(path, `\`) || windowsPathHasDrive(path)
+}
+
+func windowsPathHasDrive(path string) bool {
+	return len(path) >= 2 && path[1] == ':'
+}
+
+func windowsDriveRoot(path string) bool {
+	return len(path) == 3 && path[1] == ':' && path[2] == '\\'
+}
+
+func cleanWindowsPath(path string) string {
+	path = strings.ReplaceAll(path, "/", `\`)
+	if path == "" {
+		return "."
+	}
+	for len(path) > 1 && strings.HasSuffix(path, `\`) && !windowsDriveRoot(path) {
+		path = strings.TrimSuffix(path, `\`)
+	}
+	return path
 }
 
 func dedupeSorted(items []string) []string {

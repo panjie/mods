@@ -190,10 +190,10 @@ func TestApprovalRuleSet(t *testing.T) {
 	require.False(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), WorkspaceScope("/other")))
 
 	rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
-	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`), testApprovalScope))
-	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`), testApprovalScope))
-	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`), WorkspaceScope("/other")))
-	require.False(t, rules.Allows("shell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`), testApprovalScope))
+	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), testApprovalScope))
+	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Windows\\old.txt"}`), testApprovalScope))
+	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), WorkspaceScope("/other")))
+	require.False(t, rules.Allows("shell_run", []byte(`{"command":"Remove-Item C:\\Windows\\old.txt"}`), testApprovalScope))
 
 	rules.Add(scopedRule(ApprovalRule{Type: approvalToolAll, Tool: "mcp_tool"}))
 	require.True(t, rules.Allows("mcp_tool", []byte(`{"value":1}`), testApprovalScope))
@@ -257,16 +257,16 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
 			name: "shell_run",
-			args: []byte(`{"command":"git commit -m message"}`),
+			args: []byte(`{"command":"rm -f /Users/panjie/temp/demo.gif"}`),
 			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
 				Type:  approvalDirAllow,
-				Paths: []string{"git", "commit"},
+				Paths: []string{"/Users/panjie/temp"},
 			})},
 		},
 	}
 	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "[A] Always allow")
-	require.Contains(t, rendered, "Always saves in /workspace: dirs: git, commit")
+	require.Contains(t, rendered, "Always allows writes in /Users/panjie/temp")
 }
 
 func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
@@ -307,7 +307,7 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 			args: []byte(`{"command":"cat >> ~/.config/ghostty/config.ghostty << 'EOF'\nfont-family = JetBrainsMono Nerd Font\nfont-family-bold = JetBrainsMono Nerd Font\nfont-family-italic = JetBrainsMono Nerd Font\nfont-family-bold-italic = JetBrainsMono Nerd Font\nEOF"}`),
 			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
 				Type:  approvalDirAllow,
-				Paths: []string{"cat", ">>"},
+				Paths: []string{"~/.config/ghostty"},
 			})},
 		},
 	}
@@ -316,7 +316,7 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 	for _, line := range lines {
 		require.LessOrEqual(t, len([]rune(line)), 80, line)
 	}
-	require.Contains(t, rendered, "Always saves in /workspace: dirs: cat, >>")
+	require.Contains(t, rendered, "Always allows writes in ~/.config/ghostty")
 }
 
 func TestReviewPolicyNonTTY(t *testing.T) {
@@ -394,8 +394,8 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`))
+		require.NoError(t, err)
 	})
 
 	t.Run("saved powershell prefix does not allow pipeline mutation", func(t *testing.T) {
@@ -461,31 +461,36 @@ func testReviewRegistry(t *testing.T) *toolregistry.Registry {
 func noopToolCall(context.Context, json.RawMessage) (string, error) { return "", nil }
 
 func TestDirAllowPathExtraction(t *testing.T) {
-	t.Run("extracts file paths from command", func(t *testing.T) {
+	t.Run("extracts parent dir from deleted file", func(t *testing.T) {
 		rules := RulesFor("shell_run", []byte(`{"command":"rm -rf /tmp/cache/foo"}`), testApprovalScope)
 		require.Len(t, rules, 1)
 		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"/tmp/cache/foo"}, rules[0].Paths)
+		require.ElementsMatch(t, []string{"/tmp/cache"}, rules[0].Paths)
 	})
 
-	t.Run("extracts multiple paths", func(t *testing.T) {
+	t.Run("extracts parent dir for demo gif deletion", func(t *testing.T) {
+		rules := RulesFor("shell_run", []byte(`{"command":"rm -f /Users/panjie/temp/demo.gif"}`), testApprovalScope)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.ElementsMatch(t, []string{"/Users/panjie/temp"}, rules[0].Paths)
+	})
+
+	t.Run("extracts destination dir from copy", func(t *testing.T) {
 		rules := RulesFor("shell_run", []byte(`{"command":"cp /tmp/a /var/b"}`), testApprovalScope)
 		require.Len(t, rules, 1)
 		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"/tmp/a", "/var/b"}, rules[0].Paths)
+		require.ElementsMatch(t, []string{"/var"}, rules[0].Paths)
 	})
 
 	t.Run("skips flags", func(t *testing.T) {
 		rules := RulesFor("shell_run", []byte(`{"command":"rm -rf --preserve-root /tmp/x"}`), testApprovalScope)
 		require.Len(t, rules, 1)
-		require.ElementsMatch(t, []string{"/tmp/x"}, rules[0].Paths)
+		require.ElementsMatch(t, []string{"/tmp"}, rules[0].Paths)
 	})
 
-	t.Run("skips subcommands", func(t *testing.T) {
+	t.Run("ignores commands without known write dirs", func(t *testing.T) {
 		rules := RulesFor("shell_run", []byte(`{"command":"git commit -m message"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"commit", "message"}, rules[0].Paths)
+		require.Empty(t, rules)
 	})
 
 	t.Run("dynamic expansion returns empty", func(t *testing.T) {
@@ -496,7 +501,42 @@ func TestDirAllowPathExtraction(t *testing.T) {
 	t.Run("compound commands extract from all leaves", func(t *testing.T) {
 		rules := RulesFor("shell_run", []byte(`{"command":"rm /tmp/a && rm /var/b"}`), testApprovalScope)
 		require.Len(t, rules, 1)
-		require.ElementsMatch(t, []string{"/tmp/a", "/var/b"}, rules[0].Paths)
+		require.ElementsMatch(t, []string{"/tmp", "/var"}, rules[0].Paths)
+	})
+
+	t.Run("extracts parent dir from redirection", func(t *testing.T) {
+		rules := RulesFor("shell_run", []byte(`{"command":"printf hi > /tmp/output.txt"}`), testApprovalScope)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.ElementsMatch(t, []string{"/tmp"}, rules[0].Paths)
+	})
+
+	t.Run("extracts windows dir from lowercase powershell command", func(t *testing.T) {
+		rules := RulesFor("powershell_run", []byte(`{"command":"remove-item c:\\users\\old.txt"}`), testApprovalScope)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.ElementsMatch(t, []string{`c:\users`}, rules[0].Paths)
+	})
+
+	t.Run("keeps windows drive root", func(t *testing.T) {
+		rules := RulesFor("powershell_run", []byte(`{"command":"Remove-Item C:\\old.txt"}`), testApprovalScope)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.ElementsMatch(t, []string{`C:\`}, rules[0].Paths)
+	})
+
+	t.Run("uses powershell named path parameter", func(t *testing.T) {
+		rules := RulesFor("powershell_run", []byte(`{"command":"New-Item -Path C:\\Users\\new.txt -ItemType File"}`), testApprovalScope)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.ElementsMatch(t, []string{`C:\Users`}, rules[0].Paths)
+	})
+
+	t.Run("uses powershell destination parameter", func(t *testing.T) {
+		rules := RulesFor("powershell_run", []byte(`{"command":"Copy-Item -Path C:\\in.txt -Destination C:\\Users\\out.txt"}`), testApprovalScope)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.ElementsMatch(t, []string{`C:\Users`}, rules[0].Paths)
 	})
 }
 
@@ -565,10 +605,38 @@ func TestDirAllowMatching(t *testing.T) {
 	})
 
 	t.Run("simple mode path extraction", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"foo"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
 		var rs approvalRuleSet
 		rs.Add(rule)
-		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Get-ChildItem foo"}`), testApprovalScope))
-		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Get-ChildItem bar"}`), testApprovalScope))
+		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), testApprovalScope))
+		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Windows\\old.txt"}`), testApprovalScope))
+	})
+
+	t.Run("windows matching is case insensitive", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"remove-item c:\\users\\old.txt"}`), testApprovalScope))
+	})
+
+	t.Run("windows drive root allows children", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\`}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\old.txt"}`), testApprovalScope))
+	})
+
+	t.Run("denies sibling prefix", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/cache2/file"}`), testApprovalScope))
+	})
+
+	t.Run("denies windows sibling prefix", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users2\\old.txt"}`), testApprovalScope))
 	})
 }

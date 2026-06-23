@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -258,14 +257,26 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	return strings.TrimRight(content, "\r\n") + "\n" + block
 }
 
-func formatAlwaysAllowSummary(rules []Rule, scope Scope, width int) string {
+func formatAlwaysAllowSummary(rules []Rule, _ Scope, width int) string {
 	if len(rules) == 0 {
 		return ""
 	}
-	if scope.Kind == "" || scope.Value == "" {
-		return TruncateOperationStatus("Always saves: "+RulesLabel(rules), width)
+	dirs := alwaysAllowDirs(rules)
+	if len(dirs) == 1 {
+		return TruncateOperationStatus("Always allows writes in "+dirs[0], width)
 	}
-	return TruncateOperationStatus(fmt.Sprintf("Always saves in %s: %s", filepath.ToSlash(scope.Value), RulesLabel(rules)), width)
+	if len(dirs) > 1 {
+		return TruncateOperationStatus("Always allows writes in: "+strings.Join(dirs, ", "), width)
+	}
+	return TruncateOperationStatus("Always allows: "+RulesLabel(rules), width)
+}
+
+func alwaysAllowDirs(rules []Rule) []string {
+	var dirs []string
+	for _, rule := range rules {
+		dirs = append(dirs, rule.Paths...)
+	}
+	return dirs
 }
 
 func padRight(s string, w int) string {

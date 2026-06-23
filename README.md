@@ -218,9 +218,9 @@ Mods asks for confirmation before any file write or shell command runs. You
 always see exactly what will execute, and you choose what happens next:
 
 ```
-Review: Run: git commit -m "Update docs"
+Review: Run: rm -f /path/to/workspace/demo.gif
 [Y] Approve  [N] Deny  [A] Always allow  [Ctrl+C] Cancel
-Always saves in /path/to/workspace: shell_run(git commit *)
+Always allows writes in /path/to/workspace
 ```
 
 - `Y` — approve this one call

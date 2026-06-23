@@ -27,9 +27,34 @@ jobs:
         run: go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci
 
   snapshot:
-    uses: charmbracelet/meta/.github/workflows/snapshot.yml@main
-    secrets:
-      goreleaser_key: ${{ secrets.GORELEASER_KEY }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+          check-latest: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 7
+          name: dist
+          path: dist
 
   dependabot:
     needs: [build]

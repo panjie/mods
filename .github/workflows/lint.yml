@@ -1,15 +1,23 @@
 name: lint
-on:
-  push:
-  pull_request:
+
+on: [push, pull_request]
 
 permissions:
   contents: read
-  pull-requests: read
-  checks: write
 
 jobs:
   lint:
-    uses: charmbracelet/meta/.github/workflows/lint.yml@main
-    with:
-      golangci_path: .golangci.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+          check-latest: true
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          args: ./...

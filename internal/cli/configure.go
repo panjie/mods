@@ -31,6 +31,9 @@ func RunConfigWizard() error {
 	chosenAPI := config.API
 	chosenModel := config.Model
 	var apiKey, keyStorage, baseURL, newProviderName, newModelNames string
+	if chosenAPI != "" && chosenAPI != addProviderOption {
+		baseURL = findBaseURL(chosenAPI)
+	}
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -91,16 +94,13 @@ func RunConfigWizard() error {
 			Description("Use lowercase letters, digits, '-' or '_'.").
 			WithHideFunc(func() bool { return chosenAPI != addProviderOption }),
 
-		// Page 3: Base URL (required for a new provider, optional for custom)
+		// Page 3: Base URL (editable for all providers, required for new ones)
 		huh.NewGroup(
 			huh.NewInput().
 				TitleFunc(func() string {
-					if chosenAPI == addProviderOption {
-						return fmt.Sprintf("Base URL for %s", wizardProviderName(chosenAPI, newProviderName))
-					}
-					return "Base URL for your custom API"
+					return fmt.Sprintf("Base URL for %s", wizardProviderName(chosenAPI, newProviderName))
 				}, []any{&chosenAPI, &newProviderName}).
-				Description("Provider-level OpenAI-compatible endpoint shared by all models on this provider.").
+				Description("Provider-level API endpoint shared by all models on this provider.").
 				Placeholder("https://your-server.com/v1").
 				Value(&baseURL).
 				Validate(func(value string) error {
@@ -108,8 +108,7 @@ func RunConfigWizard() error {
 				}),
 		).
 			Title("provider endpoint").
-			Description("Point mods at an OpenAI-compatible server before choosing models.").
-			WithHideFunc(func() bool { return chosenAPI != addProviderOption && chosenAPI != "custom" }),
+			Description("Set or update the provider base URL before choosing models."),
 
 		// Page 4: Model for existing provider
 		huh.NewGroup(

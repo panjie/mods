@@ -83,6 +83,8 @@ type Mods struct {
 
 	reviewer *toolReviewer
 
+	shellAnalyzer func(tool, command string) shellCommandAnalysis
+
 	planContent  string
 	planRetries  int
 	planSelected int

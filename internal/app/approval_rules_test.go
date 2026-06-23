@@ -269,6 +269,50 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 	require.Contains(t, rendered, "Always allows writes in /Users/panjie/temp")
 }
 
+func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			name:           "shell_run",
+			args:           []byte(`{"command":"git commit -m message"}`),
+			candidateRules: nil,
+		},
+	}
+	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	require.NotContains(t, rendered, "[A] Always allow")
+	require.Contains(t, rendered, "No reusable allow rule for this command.")
+}
+
+func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			resp:           make(chan reviewResponse, 1),
+			candidateRules: nil,
+		},
+	}
+	handled, _ := reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	require.True(t, handled)
+	require.Empty(t, reviewer.rules.Snapshot())
+	select {
+	case <-reviewer.reviewItem.resp:
+		t.Fatal("always allow without candidate rules should not approve")
+	default:
+	}
+
+	handled, _ = reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	require.True(t, handled)
+	require.Equal(t, 1, reviewer.selected)
+	handled, _ = reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	require.True(t, handled)
+	require.Equal(t, 2, reviewer.selected)
+	handled, _ = reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	require.True(t, handled)
+	require.Equal(t, 0, reviewer.selected)
+}
+
 func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
 	renderer := lipgloss.NewRenderer(nil)
 	renderer.SetColorProfile(termenv.TrueColor)
@@ -321,8 +365,11 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 
 func TestReviewPolicyNonTTY(t *testing.T) {
 	oldIsInputTTY := isInputTTY
+	oldInputTTY := IsInputTTY
 	isInputTTY = func() bool { return false }
+	IsInputTTY = func() bool { return false }
 	t.Cleanup(func() { isInputTTY = oldIsInputTTY })
+	t.Cleanup(func() { IsInputTTY = oldInputTTY })
 
 	mods := &Mods{
 		ctx:    context.Background(),
@@ -391,6 +438,10 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	})
 
 	t.Run("saved rule allows matching powershell command", func(t *testing.T) {
+		mods.shellAnalyzer = func(string, string) shellCommandAnalysis {
+			return shellCommandAnalysis{NeedsReview: true, AffectedDirs: []string{"C:\\Users"}}
+		}
+		t.Cleanup(func() { mods.shellAnalyzer = nil })
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
@@ -399,6 +450,10 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	})
 
 	t.Run("saved powershell prefix does not allow pipeline mutation", func(t *testing.T) {
+		mods.shellAnalyzer = func(string, string) shellCommandAnalysis {
+			return shellCommandAnalysis{NeedsReview: true, AffectedDirs: []string{"C:\\Windows"}}
+		}
+		t.Cleanup(func() { mods.shellAnalyzer = nil })
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
@@ -418,6 +473,102 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}))
 		require.True(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
 		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+		require.NoError(t, err)
+	})
+}
+
+func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
+	oldInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldInputTTY })
+
+	registry := testReviewRegistry(t)
+
+	t.Run("mutable skips review when LLM says no review", func(t *testing.T) {
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
+			},
+		}
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
+		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"ls"}`))
+		require.NoError(t, err)
+	})
+
+	t.Run("candidate rules come directly from LLM dirs", func(t *testing.T) {
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{
+					NeedsReview:  true,
+					AffectedDirs: []string{"/tmp/cache"},
+					Reason:       "writes output",
+				}
+			},
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
+		}()
+
+		item := <-reviewer.reviewChan
+		require.Len(t, item.candidateRules, 1)
+		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
+		require.Equal(t, []string{"/tmp/cache"}, item.candidateRules[0].Paths)
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
+	t.Run("always still prompts when LLM says no review", func(t *testing.T) {
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
+			},
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewAlways,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"ls"}`))
+		}()
+
+		item := <-reviewer.reviewChan
+		require.Empty(t, item.candidateRules)
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
+	t.Run("saved rule allows matching LLM dirs", func(t *testing.T) {
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{
+					NeedsReview:  true,
+					AffectedDirs: []string{"/tmp/cache/subdir"},
+				}
+			},
+		}
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}}))
+		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})
 }
@@ -460,84 +611,67 @@ func testReviewRegistry(t *testing.T) *toolregistry.Registry {
 
 func noopToolCall(context.Context, json.RawMessage) (string, error) { return "", nil }
 
-func TestDirAllowPathExtraction(t *testing.T) {
-	t.Run("extracts parent dir from deleted file", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"rm -rf /tmp/cache/foo"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"/tmp/cache"}, rules[0].Paths)
+func TestShellAnalysisParsing(t *testing.T) {
+	t.Run("valid json with review and dirs", func(t *testing.T) {
+		analysis, ok := parseShellAnalysisResponse(`{"needs_review":true,"affected_dirs":["/tmp/cache"],"reason":"writes file"}`)
+		require.True(t, ok)
+		require.True(t, analysis.NeedsReview)
+		require.Equal(t, []string{"/tmp/cache"}, analysis.AffectedDirs)
+		require.Equal(t, "writes file", analysis.Reason)
 	})
 
-	t.Run("extracts parent dir for demo gif deletion", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"rm -f /Users/panjie/temp/demo.gif"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"/Users/panjie/temp"}, rules[0].Paths)
+	t.Run("valid json without review", func(t *testing.T) {
+		analysis, ok := parseShellAnalysisResponse(`{"needs_review":false,"affected_dirs":[],"reason":"read-only"}`)
+		require.True(t, ok)
+		require.False(t, analysis.NeedsReview)
+		require.Empty(t, analysis.AffectedDirs)
 	})
 
-	t.Run("extracts destination dir from copy", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"cp /tmp/a /var/b"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"/var"}, rules[0].Paths)
+	t.Run("thinking before json", func(t *testing.T) {
+		raw := `<think>I should classify this as read-only.</think>
+{"needs_review":false,"affected_dirs":[],"reason":"lists directory contents only"}`
+		analysis, ok := parseShellAnalysisResponse(raw)
+		require.True(t, ok)
+		require.False(t, analysis.NeedsReview)
+		require.Equal(t, "lists directory contents only", analysis.Reason)
 	})
 
-	t.Run("skips flags", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"rm -rf --preserve-root /tmp/x"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.ElementsMatch(t, []string{"/tmp"}, rules[0].Paths)
+	t.Run("fenced json", func(t *testing.T) {
+		raw := "```json\n{\"needs_review\":true,\"affected_dirs\":[\"/tmp/out\"],\"reason\":\"writes output\"}\n```"
+		analysis, ok := parseShellAnalysisResponse(raw)
+		require.True(t, ok)
+		require.True(t, analysis.NeedsReview)
+		require.Equal(t, []string{"/tmp/out"}, analysis.AffectedDirs)
 	})
 
-	t.Run("ignores commands without known write dirs", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"git commit -m message"}`), testApprovalScope)
-		require.Empty(t, rules)
+	t.Run("mixed text with balanced json", func(t *testing.T) {
+		raw := `analysis text {"ignored":true}
+final answer: {"needs_review":false,"affected_dirs":[],"reason":"read-only with {braces} in text"} thanks`
+		analysis, ok := parseShellAnalysisResponse(raw)
+		require.True(t, ok)
+		require.False(t, analysis.NeedsReview)
+		require.Equal(t, "read-only with {braces} in text", analysis.Reason)
 	})
 
-	t.Run("dynamic expansion returns empty", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"rm -rf $TARGET"}`), testApprovalScope)
-		require.Empty(t, rules)
+	t.Run("malformed json falls back safe", func(t *testing.T) {
+		_, ok := parseShellAnalysisResponse(`YES`)
+		require.False(t, ok)
+		require.True(t, defaultShellCommandAnalysis().NeedsReview)
 	})
 
-	t.Run("compound commands extract from all leaves", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"rm /tmp/a && rm /var/b"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.ElementsMatch(t, []string{"/tmp", "/var"}, rules[0].Paths)
+	t.Run("legacy yes no parser still works", func(t *testing.T) {
+		require.True(t, classifyResponse("YES"))
+		require.False(t, classifyResponse("NO"))
 	})
+}
 
-	t.Run("extracts parent dir from redirection", func(t *testing.T) {
-		rules := RulesFor("shell_run", []byte(`{"command":"printf hi > /tmp/output.txt"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{"/tmp"}, rules[0].Paths)
-	})
+func TestShellCandidateRulesUseLLMAffectedDirs(t *testing.T) {
+	require.Empty(t, RulesFor("shell_run", []byte(`{"command":"rm -rf /tmp/cache/foo"}`), testApprovalScope))
 
-	t.Run("extracts windows dir from lowercase powershell command", func(t *testing.T) {
-		rules := RulesFor("powershell_run", []byte(`{"command":"remove-item c:\\users\\old.txt"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{`c:\users`}, rules[0].Paths)
-	})
-
-	t.Run("keeps windows drive root", func(t *testing.T) {
-		rules := RulesFor("powershell_run", []byte(`{"command":"Remove-Item C:\\old.txt"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{`C:\`}, rules[0].Paths)
-	})
-
-	t.Run("uses powershell named path parameter", func(t *testing.T) {
-		rules := RulesFor("powershell_run", []byte(`{"command":"New-Item -Path C:\\Users\\new.txt -ItemType File"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{`C:\Users`}, rules[0].Paths)
-	})
-
-	t.Run("uses powershell destination parameter", func(t *testing.T) {
-		rules := RulesFor("powershell_run", []byte(`{"command":"Copy-Item -Path C:\\in.txt -Destination C:\\Users\\out.txt"}`), testApprovalScope)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.ElementsMatch(t, []string{`C:\Users`}, rules[0].Paths)
-	})
+	rules := RulesForDirs([]string{"/tmp/cache", "/var/tmp"}, testApprovalScope)
+	require.Len(t, rules, 1)
+	require.Equal(t, approvalDirAllow, rules[0].Type)
+	require.ElementsMatch(t, []string{"/tmp/cache", "/var/tmp"}, rules[0].Paths)
 }
 
 func TestDirAllowMatching(t *testing.T) {

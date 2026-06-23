@@ -13,7 +13,19 @@ import (
 
 var errReviewUnavailable = errors.New("tool execution requires review but interactive approval is unavailable")
 
-const numToolReviewOptions = 4
+type reviewOptionAction int
+
+const (
+	reviewOptionApprove reviewOptionAction = iota
+	reviewOptionDeny
+	reviewOptionAlwaysAllow
+	reviewOptionCancel
+)
+
+type reviewOption struct {
+	label  string
+	action reviewOptionAction
+}
 
 // toolReviewer manages interactive approval of tool executions (file writes,
 // shell commands, etc.) before they run. It owns the review channel, approval
@@ -83,6 +95,10 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	if !r.isPending() {
 		return false, nil
 	}
+	options := r.reviewOptions()
+	if r.selected >= len(options) {
+		r.selected = 0
+	}
 	switch msg.String() {
 	case "y", "Y":
 		r.reviewItem.resp <- reviewResponse{approved: true}
@@ -95,6 +111,9 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "a", "A":
+		if len(r.reviewItem.candidateRules) == 0 {
+			return true, nil
+		}
 		r.rules.Add(r.reviewItem.candidateRules...)
 		r.reviewItem.resp <- reviewResponse{approved: true}
 		r.reviewPending = false
@@ -108,25 +127,25 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	case "left":
 		r.selected--
 		if r.selected < 0 {
-			r.selected = numToolReviewOptions - 1
+			r.selected = len(options) - 1
 		}
 		return true, nil
 	case "right":
 		r.selected++
-		if r.selected >= numToolReviewOptions {
+		if r.selected >= len(options) {
 			r.selected = 0
 		}
 		return true, nil
 	case "enter":
-		switch r.selected {
-		case 0:
+		switch options[r.selected].action {
+		case reviewOptionApprove:
 			r.reviewItem.resp <- reviewResponse{approved: true}
-		case 1:
+		case reviewOptionDeny:
 			r.reviewItem.resp <- reviewResponse{}
-		case 2:
+		case reviewOptionAlwaysAllow:
 			r.rules.Add(r.reviewItem.candidateRules...)
 			r.reviewItem.resp <- reviewResponse{approved: true}
-		case 3:
+		case reviewOptionCancel:
 			r.reviewItem.resp <- reviewResponse{}
 		}
 		r.reviewPending = false
@@ -134,6 +153,17 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return true, r.pollReviewCmd()
 	}
 	return true, nil
+}
+
+func (r *toolReviewer) reviewOptions() []reviewOption {
+	options := []reviewOption{
+		{label: "[Y] Approve", action: reviewOptionApprove},
+		{label: "[N] Deny", action: reviewOptionDeny},
+	}
+	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
+		options = append(options, reviewOption{label: "[A] Always allow", action: reviewOptionAlwaysAllow})
+	}
+	return append(options, reviewOption{label: "[Ctrl+C] Cancel", action: reviewOptionCancel})
 }
 
 func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name string) bool {
@@ -160,19 +190,28 @@ func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name st
 
 func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) error {
 	debug.Printf("requestApproval called: name=%s", name)
-	if r.rules.Allows(name, data, r.scope) {
+	shellExecution := ctx.currentToolRegistry != nil && ctx.currentToolRegistry.ShellExecution(name)
+	var analysis shellCommandAnalysis
+	if shellExecution {
+		if cmd := extractShellCommand(data); cmd != "" {
+			analysis = ctx.analyzeShellCommand(name, cmd)
+			debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", cmd, analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
+			if RulesAllowDirs(r.rules.Snapshot(), analysis.AffectedDirs, r.scope) {
+				debug.Printf("requestApproval: matched LLM affected dirs against saved approval rule")
+				return nil
+			}
+		} else {
+			analysis = defaultShellCommandAnalysis()
+		}
+	}
+	if !shellExecution && r.rules.Allows(name, data, r.scope) {
 		debug.Printf("requestApproval: matched conversation approval rule, auto-approving")
 		return nil
 	}
-	if r.reviewMode != ReviewAlways && ctx.currentToolRegistry != nil && ctx.currentToolRegistry.ShellExecution(name) {
-		cmd := extractShellCommand(data)
-		if cmd != "" {
-			mutable := ctx.classifyShellCommand(name, cmd)
-			debug.Printf("shell classifier: cmd=%q mutable=%v", cmd, mutable)
-			if !mutable {
-				debug.Printf("shell classifier result: NOT mutable, auto-approving")
-				return nil
-			}
+	if r.reviewMode != ReviewAlways && shellExecution {
+		if !analysis.NeedsReview {
+			debug.Printf("shell classifier result: NOT mutable, auto-approving")
+			return nil
 		}
 	}
 	if !IsInputTTY() {
@@ -185,6 +224,9 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 	}
 	respCh := make(chan reviewResponse, 1)
 	candidateRules := RulesFor(name, data, r.scope)
+	if shellExecution {
+		candidateRules = RulesForDirs(analysis.AffectedDirs, r.scope)
+	}
 	item := toolReviewItem{
 		name:           name,
 		args:           data,
@@ -233,18 +275,17 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	selectedStyle := baseStyle.Copy().
 		Foreground(lipgloss.Color("#4A3B9F")).
 		Background(lipgloss.Color("#E0DDFF"))
-	options := []string{
-		"[Y] Approve",
-		"[N] Deny",
-		"[A] Always allow",
-		"[Ctrl+C] Cancel",
+	options := r.reviewOptions()
+	selected := r.selected
+	if selected >= len(options) {
+		selected = 0
 	}
 	var parts []string
 	for i, opt := range options {
-		if i == r.selected {
-			parts = append(parts, selectedStyle.Render(opt))
+		if i == selected {
+			parts = append(parts, selectedStyle.Render(opt.label))
 		} else {
-			parts = append(parts, baseStyle.Render(opt))
+			parts = append(parts, baseStyle.Render(opt.label))
 		}
 	}
 	separator := baseStyle.Render("  ")
@@ -259,7 +300,7 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 
 func formatAlwaysAllowSummary(rules []Rule, _ Scope, width int) string {
 	if len(rules) == 0 {
-		return ""
+		return TruncateOperationStatus("No reusable allow rule for this command.", width)
 	}
 	dirs := alwaysAllowDirs(rules)
 	if len(dirs) == 1 {

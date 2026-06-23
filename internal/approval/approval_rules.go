@@ -149,13 +149,46 @@ func rulesForTool(name string, data []byte) []Rule {
 			Tool: "file_edit",
 		}}
 	case "shell_run", "powershell_run":
-		return dirAllowRulesForTool(name, ExtractShellCommand(data), shellToolUsesPOSIX(name))
+		return nil
 	default:
 		return []Rule{{
 			Type: ToolAll,
 			Tool: name,
 		}}
 	}
+}
+
+func RulesForDirs(dirs []string, scope Scope) []Rule {
+	if len(dirs) == 0 {
+		return nil
+	}
+	return scopeRules([]Rule{{
+		Type:  DirAllow,
+		Paths: dirs,
+	}}, scope)
+}
+
+func RulesAllowDirs(rules []Rule, dirs []string, scope Scope) bool {
+	if len(dirs) == 0 {
+		return false
+	}
+	scopedRules := rulesForScope(rules, scope)
+	for _, rule := range scopedRules {
+		if rule.Type != DirAllow {
+			continue
+		}
+		allMatch := true
+		for _, dir := range dirs {
+			if !dirWithinPaths(rule.Paths, dir) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			return true
+		}
+	}
+	return false
 }
 
 func scopeRules(rules []Rule, scope Scope) []Rule {

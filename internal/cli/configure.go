@@ -31,9 +31,6 @@ func RunConfigWizard() error {
 	chosenAPI := config.API
 	chosenModel := config.Model
 	var apiKey, keyStorage, baseURL, newProviderName, newModelNames string
-	if chosenAPI != "" && chosenAPI != addProviderOption {
-		baseURL = findBaseURL(chosenAPI)
-	}
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -101,7 +98,12 @@ func RunConfigWizard() error {
 					return fmt.Sprintf("Base URL for %s", wizardProviderName(chosenAPI, newProviderName))
 				}, []any{&chosenAPI, &newProviderName}).
 				Description("Provider-level API endpoint shared by all models on this provider.").
-				Placeholder("https://your-server.com/v1").
+				PlaceholderFunc(func() string {
+					if url := findBaseURL(chosenAPI); url != "" {
+						return url
+					}
+					return "https://your-server.com/v1"
+				}, &chosenAPI).
 				Value(&baseURL).
 				Validate(func(value string) error {
 					return validateWizardBaseURL(chosenAPI, value)

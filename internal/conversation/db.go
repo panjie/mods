@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -109,8 +110,9 @@ func Open(ds string) (*DB, error) {
 			rule_type string NOT NULL,
 			tool_name string NOT NULL,
 			pattern string NOT NULL DEFAULT '',
+			paths string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern),
+			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
 			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
 		)
 	`); err != nil {
@@ -118,6 +120,11 @@ func Open(ds string) (*DB, error) {
 	}
 	if !hasColumn(db, "approval_rules", "scope_kind") || !hasColumn(db, "approval_rules", "scope_value") {
 		if err := migrateApprovalRulesScope(db); err != nil {
+			return nil, fmt.Errorf("could not migrate db: %w", err)
+		}
+	}
+	if !hasColumn(db, "approval_rules", "paths") {
+		if err := migrateApprovalRulesPaths(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
@@ -171,6 +178,46 @@ func migrateApprovalRulesScope(db *sqlx.DB) error {
 		return err
 	}
 	if _, err := tx.Exec(`ALTER TABLE approval_rules_scoped_migration RENAME TO approval_rules`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func migrateApprovalRulesPaths(db *sqlx.DB) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`
+		CREATE TABLE approval_rules_paths_migration (
+			conversation_id string NOT NULL,
+			scope_kind string NOT NULL DEFAULT '',
+			scope_value string NOT NULL DEFAULT '',
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			paths string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO approval_rules_paths_migration
+			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, created_at)
+		SELECT conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, '', created_at
+		FROM approval_rules
+	`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DROP TABLE approval_rules`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE approval_rules_paths_migration RENAME TO approval_rules`); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -269,10 +316,14 @@ func (c *DB) SaveConversation(
 		return fmt.Errorf("SaveConversation rules: %w", err)
 	}
 	for _, rule := range approval.Dedupe(rules) {
+		paths, err := json.Marshal(rule.Paths)
+		if err != nil {
+			return fmt.Errorf("SaveConversation paths: %w", err)
+		}
 		if _, err := tx.Exec(tx.Rebind(`
-			INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern); err != nil {
+			INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths)); err != nil {
 			return fmt.Errorf("SaveConversation rule: %w", err)
 		}
 	}
@@ -295,18 +346,41 @@ func (c *DB) ReadMessages(id string, messages *[]proto.Message) error {
 	return nil
 }
 
+type ruleRow struct {
+	ScopeKind  string `db:"scope_kind"`
+	ScopeValue string `db:"scope_value"`
+	Type       string `db:"rule_type"`
+	Tool       string `db:"tool_name"`
+	Pattern    string `db:"pattern"`
+	Paths      string `db:"paths"`
+}
+
 func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
-	var rules []approval.Rule
+	var rows []ruleRow
 	if id == "" {
-		return rules, nil
+		return nil, nil
 	}
-	if err := c.db.Select(&rules, c.db.Rebind(`
-		SELECT scope_kind, scope_value, rule_type, tool_name, pattern
+	if err := c.db.Select(&rows, c.db.Rebind(`
+		SELECT scope_kind, scope_value, rule_type, tool_name, pattern, paths
 		FROM approval_rules
 		WHERE conversation_id = ?
 		ORDER BY created_at, scope_kind, scope_value, rule_type, tool_name, pattern
 	`), id); err != nil {
 		return nil, fmt.Errorf("ApprovalRules: %w", err)
+	}
+	rules := make([]approval.Rule, 0, len(rows))
+	for _, row := range rows {
+		rule := approval.Rule{
+			ScopeKind:  approval.ScopeKind(row.ScopeKind),
+			ScopeValue: row.ScopeValue,
+			Type:       approval.RuleType(row.Type),
+			Tool:       row.Tool,
+			Pattern:    row.Pattern,
+		}
+		if row.Paths != "" && row.Paths != "null" {
+			_ = json.Unmarshal([]byte(row.Paths), &rule.Paths)
+		}
+		rules = append(rules, rule)
 	}
 	return rules, nil
 }

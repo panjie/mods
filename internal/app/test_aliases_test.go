@@ -36,6 +36,7 @@ const (
 	approvalShellExact        = approval.ShellExact
 	approvalEditAll           = approval.EditAll
 	approvalToolAll           = approval.ToolAll
+	approvalDirAllow          = approval.DirAllow
 	sha1short                 = conversation.ShortIDLength
 	FilesystemAuto            = cfgpkg.FilesystemAuto
 	FilesystemAlways          = cfgpkg.FilesystemAlways

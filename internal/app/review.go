@@ -259,6 +259,9 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 }
 
 func formatAlwaysAllowSummary(rules []Rule, scope Scope, width int) string {
+	if len(rules) == 0 {
+		return ""
+	}
 	if scope.Kind == "" || scope.Value == "" {
 		return TruncateOperationStatus("Always saves: "+RulesLabel(rules), width)
 	}

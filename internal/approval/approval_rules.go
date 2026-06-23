@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 
@@ -21,6 +22,7 @@ const (
 	ShellExact  RuleType = "shell_exact"
 	EditAll     RuleType = "edit_all"
 	ToolAll     RuleType = "tool_all"
+	DirAllow    RuleType = "dir_allow"
 
 	ScopeWorkspace ScopeKind = "workspace"
 )
@@ -38,6 +40,7 @@ type Rule struct {
 	Type       RuleType  `db:"rule_type"`
 	Tool       string    `db:"tool_name"`
 	Pattern    string    `db:"pattern"`
+	Paths      []string  `db:"paths"`
 }
 
 func WorkspaceScope(root string) Scope {
@@ -48,8 +51,9 @@ func WorkspaceScope(root string) Scope {
 }
 
 func (r Rule) key() string {
+	pathsKey := strings.Join(r.Paths, "\x01")
 	return string(r.ScopeKind) + "\x00" + r.ScopeValue + "\x00" +
-		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern
+		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern + "\x00" + pathsKey
 }
 
 func (r Rule) matchesScope(scope Scope) bool {
@@ -65,6 +69,8 @@ func (r Rule) String() string {
 		return fmt.Sprintf("%s(%s)", r.Tool, r.Pattern)
 	case EditAll:
 		return "file edits"
+	case DirAllow:
+		return fmt.Sprintf("dirs: %s", strings.Join(r.Paths, ", "))
 	case ToolAll:
 		return r.Tool
 	default:
@@ -107,7 +113,7 @@ func (s *RuleSet) Allows(name string, data []byte, scope Scope) bool {
 		if command == "" {
 			return false
 		}
-		return ShellAllowForToolWithMode(name, command, rules, shellToolUsesPOSIX(name))
+		return dirAllowForCommand(name, command, rules, scope.Value, shellToolUsesPOSIX(name))
 	default:
 		return slices.ContainsFunc(rules, func(rule Rule) bool {
 			return rule.Type == ToolAll && rule.Tool == name
@@ -119,7 +125,7 @@ func Dedupe(rules []Rule) []Rule {
 	seen := make(map[string]struct{}, len(rules))
 	result := make([]Rule, 0, len(rules))
 	for _, rule := range rules {
-		if rule.Tool == "" {
+		if rule.Tool == "" && rule.Type != DirAllow {
 			continue
 		}
 		if _, ok := seen[rule.key()]; ok {
@@ -143,7 +149,7 @@ func rulesForTool(name string, data []byte) []Rule {
 			Tool: "file_edit",
 		}}
 	case "shell_run", "powershell_run":
-		return ShellRulesForToolWithMode(name, ExtractShellCommand(data), shellToolUsesPOSIX(name))
+		return dirAllowRulesForTool(name, ExtractShellCommand(data), shellToolUsesPOSIX(name))
 	default:
 		return []Rule{{
 			Type: ToolAll,
@@ -666,4 +672,170 @@ func shellExactRule(tool, command string) Rule {
 		Tool:    tool,
 		Pattern: command,
 	}
+}
+
+func dirAllowRulesForTool(tool string, command string, posix bool) []Rule {
+	paths := extractCommandPaths(command, posix)
+	if len(paths) == 0 {
+		return nil
+	}
+	return []Rule{{
+		Type:  DirAllow,
+		Paths: paths,
+	}}
+}
+
+func dirAllowForCommand(tool string, command string, rules []Rule, workspaceRoot string, posix bool) bool {
+	targets := extractCommandPaths(command, posix)
+	if len(targets) == 0 {
+		return false
+	}
+	for _, rule := range rules {
+		if rule.Type != DirAllow {
+			continue
+		}
+		allMatch := true
+		for _, target := range targets {
+			if !dirWithinPaths(rule.Paths, target) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			return true
+		}
+	}
+	return false
+}
+
+func extractCommandPaths(command string, posix bool) []string {
+	normalized := normalizeShellCommandWithMode(command, posix)
+	if normalized == "" {
+		return nil
+	}
+	if !posix {
+		return extractCommandPathsSimple(normalized)
+	}
+	return extractCommandPathsPOSIX(command)
+}
+
+func extractCommandPathsPOSIX(command string) []string {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
+	file, err := parser.Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for _, stmt := range file.Stmts {
+		collectPathsFromStmt(stmt, &paths)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	return dedupeSorted(paths)
+}
+
+func collectPathsFromStmt(stmt *syntax.Stmt, paths *[]string) {
+	if stmt == nil || stmt.Cmd == nil {
+		return
+	}
+	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
+		collectPathsFromStmt(binary.X, paths)
+		collectPathsFromStmt(binary.Y, paths)
+		return
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) < 2 {
+		return
+	}
+	hasDynamic := false
+	for _, word := range call.Args {
+		if !wordIsStatic(word) {
+			hasDynamic = true
+			break
+		}
+	}
+	if hasDynamic {
+		return
+	}
+	for _, word := range call.Args[1:] {
+		value, ok := staticShellWord(word)
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(value, "-") {
+			continue
+		}
+		if value == "" {
+			continue
+		}
+		*paths = append(*paths, value)
+	}
+}
+
+func wordIsStatic(word *syntax.Word) bool {
+	for _, part := range word.Parts {
+		switch part.(type) {
+		case *syntax.Lit, *syntax.SglQuoted, *syntax.DblQuoted:
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func extractCommandPathsSimple(command string) []string {
+	normalized := normalizeSimpleCommand(command)
+	if normalized == "" {
+		return nil
+	}
+	parts := splitSimpleCompound(normalized)
+	if len(parts) == 0 {
+		return nil
+	}
+	var paths []string
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || hasShellRedirection(part) {
+			continue
+		}
+		tokens := tokenizeSimple(part)
+		if len(tokens) < 2 {
+			continue
+		}
+		for _, token := range tokens[1:] {
+			if strings.HasPrefix(token, "-") {
+				continue
+			}
+			if token == "" {
+				continue
+			}
+			paths = append(paths, token)
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	return dedupeSorted(paths)
+}
+
+func dirWithinPaths(allowed []string, target string) bool {
+	for _, dir := range allowed {
+		if target == dir || strings.HasPrefix(target, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func dedupeSorted(items []string) []string {
+	sort.Strings(items)
+	result := items[:0]
+	for i, item := range items {
+		if i == 0 || items[i-1] != item {
+			result = append(result, item)
+		}
+	}
+	return result
 }

@@ -318,6 +318,7 @@ func initFlags() {
 	regBool(flags, &config.WebSearch, "web-search", "", config.WebSearch)
 	regStr(flags, &config.WebSearchProvider, "web-search-provider", "", config.WebSearchProvider)
 	regStr(flags, &config.WebSearchAPIKey, "web-search-api-key", "", config.WebSearchAPIKey)
+	regStr(flags, &config.WebSearchAPIKeyEnv, "web-search-api-key-env", "", config.WebSearchAPIKeyEnv)
 	regStrArr(flags, &config.Images, "image", "i", config.Images)
 	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
@@ -389,7 +390,7 @@ func initFlags() {
 	)
 	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "theme", "help", "help-all", "version")
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
-	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key")
+	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key", "web-search-api-key-env")
 	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review", "max-tool-rounds")
 	markCategory(flags, flagCategoryMCP, "mcp-list", "mcp-list-tools", "mcp-enable", "mcp-disable")
 	markCategory(

@@ -140,6 +140,9 @@ web-search-provider: duckduckgo
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
 
+# {{ index .Help "web-search-api-key-env" }}
+# web-search-api-key-env: TAVILY_API_KEY
+
 # ── Images ────────────────────────────────────────────────────────
 
 # {{ index .Help "image" }}

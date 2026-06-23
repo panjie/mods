@@ -42,7 +42,11 @@ func RunConfigWizard() error {
 	webSearchCustomURL := webSearchCustomURLForWizard(config.WebSearchProvider)
 	webSearchKeyStorage := "env"
 	webSearchAPIKey := ""
-	if config.WebSearchAPIKey != "" && os.Getenv("MODS_WEB_SEARCH_API_KEY") == "" {
+	webSearchAPIKeyEnv := config.WebSearchAPIKeyEnv
+	if webSearchAPIKeyEnv == "" {
+		webSearchAPIKeyEnv = "TAVILY_API_KEY"
+	}
+	if config.WebSearchAPIKey != "" && os.Getenv(webSearchAPIKeyEnv) == "" {
 		webSearchKeyStorage = "config"
 		webSearchAPIKey = config.WebSearchAPIKey
 	}
@@ -257,10 +261,12 @@ func RunConfigWizard() error {
 			huh.NewSelect[string]().
 				Title("Web search API key").
 				Description("Environment variables keep secrets out of the YAML file.").
-				Options(
-					huh.NewOption("Use environment variable (MODS_WEB_SEARCH_API_KEY)", "env"),
-					huh.NewOption("Save in config file", "config"),
-				).
+				OptionsFunc(func() []huh.Option[string] {
+					return []huh.Option[string]{
+						huh.NewOption(fmt.Sprintf("Use environment variable (%s)", webSearchAPIKeyEnv), "env"),
+						huh.NewOption("Save in config file", "config"),
+					}
+				}, &webSearchAPIKeyEnv).
 				Value(&webSearchKeyStorage),
 		).
 			Title("search credentials").
@@ -345,20 +351,21 @@ func RunConfigWizard() error {
 
 	// Build the summary.
 	printConfigSummary(summaryData{
-		api:                 apiName,
-		model:               modelName,
-		keyStorage:          keyStorage,
-		envVarName:          envVarName,
-		baseURL:             providerBaseURL,
-		addedModelCount:     len(addedModelNames),
-		fsMode:              fsMode,
-		shellOn:             shellOn,
-		thinkingOn:          thinkingOn,
-		webSearchOn:         webSearchOn,
-		webSearchProvider:   webSearchProviderValue,
-		webSearchKeyStorage: webSearchKeyStorage,
-		reviewMode:          reviewMode,
-		settingsPath:        config.SettingsPath,
+		api:                    apiName,
+		model:                  modelName,
+		keyStorage:             keyStorage,
+		envVarName:             envVarName,
+		baseURL:                providerBaseURL,
+		addedModelCount:        len(addedModelNames),
+		fsMode:                 fsMode,
+		shellOn:                shellOn,
+		thinkingOn:             thinkingOn,
+		webSearchOn:            webSearchOn,
+		webSearchProvider:      webSearchProviderValue,
+		webSearchKeyStorage:    webSearchKeyStorage,
+		webSearchAPIKeyEnv:     webSearchAPIKeyEnv,
+		reviewMode:             reviewMode,
+		settingsPath:           config.SettingsPath,
 	})
 
 	updates := buildConfigWizardUpdates(configWizardSaveData{
@@ -373,6 +380,7 @@ func RunConfigWizard() error {
 		webSearchProviderValue: webSearchProviderValue,
 		webSearchKeyStorage:    webSearchKeyStorage,
 		webSearchAPIKey:        webSearchAPIKey,
+		webSearchAPIKeyEnv:     webSearchAPIKeyEnv,
 		keyStorage:             keyStorage,
 		apiKey:                 apiKey,
 		envVarName:             envVarName,
@@ -392,7 +400,7 @@ func RunConfigWizard() error {
 			envVarName)
 	}
 	if webSearchOn && webSearchProviderUsesKey(webSearchProvider) && webSearchKeyStorage == "env" {
-		fmt.Fprintln(os.Stderr, "\nRemember to export your web search key:\n  export MODS_WEB_SEARCH_API_KEY=...")
+		fmt.Fprintf(os.Stderr, "\nRemember to export your web search key:\n  export %s=...\n", webSearchAPIKeyEnv)
 	}
 
 	return nil
@@ -687,12 +695,13 @@ func webSearchProviderUsesKey(provider string) bool {
 }
 
 type configWizardSaveData struct {
-	apiName, modelName, reviewMode, fsMode       string
-	webSearchProvider, webSearchProviderValue    string
-	webSearchKeyStorage, webSearchAPIKey         string
-	keyStorage, apiKey, envVarName, baseURLInput string
-	addedModelNames                              []string
-	shellOn, thinkingOn, webSearchOn, addedModel bool
+	apiName, modelName, reviewMode, fsMode          string
+	webSearchProvider, webSearchProviderValue       string
+	webSearchKeyStorage, webSearchAPIKey            string
+	webSearchAPIKeyEnv                              string
+	keyStorage, apiKey, envVarName, baseURLInput    string
+	addedModelNames                                 []string
+	shellOn, thinkingOn, webSearchOn, addedModel    bool
 }
 
 func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
@@ -711,6 +720,7 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 			updates = append(updates, FieldUpdate{Path: []string{"web-search-api-key"}, Value: strings.TrimSpace(d.webSearchAPIKey)})
 		} else {
 			updates = append(updates, FieldUpdate{Path: []string{"web-search-api-key"}, Value: nil})
+			updates = append(updates, FieldUpdate{Path: []string{"web-search-api-key-env"}, Value: d.webSearchAPIKeyEnv})
 		}
 	}
 
@@ -807,6 +817,7 @@ type summaryData struct {
 	addedModelCount                             int
 	shellOn, thinkingOn, webSearchOn            bool
 	webSearchProvider, webSearchKeyStorage      string
+	webSearchAPIKeyEnv                          string
 	reviewMode, settingsPath                    string
 }
 
@@ -861,7 +872,7 @@ func printConfigSummary(d summaryData) {
 			if d.webSearchKeyStorage == "config" {
 				rows = append(rows, summaryRow(labelStyle, valueStyle, "Search key", "saved in config"))
 			} else {
-				rows = append(rows, summaryRow(labelStyle, valueStyle, "Search key", "env var MODS_WEB_SEARCH_API_KEY"))
+				rows = append(rows, summaryRow(labelStyle, valueStyle, "Search key", "env var "+d.webSearchAPIKeyEnv))
 			}
 		}
 	}

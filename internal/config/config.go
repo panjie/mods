@@ -102,7 +102,8 @@ var Help = map[string]string{
 	"builtin-tools":         "Native tool configuration for filesystem, shell, and sequential thinking tools",
 	"web-search":            "Enable web search for up-to-date information (uses DuckDuckGo by default)",
 	"web-search-provider":   "Web search provider: duckduckgo (default), tavily, or custom",
-	"web-search-api-key":    "API key for the web search provider (required for tavily)",
+	"web-search-api-key":     "API key for the web search provider (required for tavily)",
+	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to TAVILY_API_KEY)",
 	"image":                 "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
 	"stdin-image":           "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":       "Attach the current image in the system clipboard to the prompt",
@@ -226,6 +227,7 @@ type PersistentConfig struct {
 	WebSearch           bool                       `yaml:"web-search" env:"WEB_SEARCH"`
 	WebSearchProvider   string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
 	WebSearchAPIKey     string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+	WebSearchAPIKeyEnv  string                     `yaml:"web-search-api-key-env"`
 	Images              []string                   `yaml:"images" env:"IMAGES"`
 	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
@@ -431,7 +433,11 @@ func Ensure() (Config, error) {
 		c.WordWrap = 80
 	}
 	if c.WebSearchAPIKey == "" {
-		c.WebSearchAPIKey = os.Getenv("MODS_WEB_SEARCH_API_KEY")
+		envName := c.WebSearchAPIKeyEnv
+		if envName == "" {
+			envName = "TAVILY_API_KEY"
+		}
+		c.WebSearchAPIKey = os.Getenv(envName)
 	}
 
 	return c, nil

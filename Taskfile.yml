@@ -1,0 +1,47 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the mods binary with git version metadata.
+    cmds:
+      - go run ./internal/buildtask build
+
+  release:
+    desc: Build a stripped release binary with git version metadata.
+    cmds:
+      - go run ./internal/buildtask release
+
+  install:
+    desc: Build and install the mods binary.
+    cmds:
+      - go run ./internal/buildtask install
+
+  uninstall:
+    desc: Remove the installed mods binary.
+    cmds:
+      - go run ./internal/buildtask uninstall
+
+  clean:
+    desc: Remove build artifacts.
+    cmds:
+      - go run ./internal/buildtask clean
+
+  check:
+    desc: Verify that all packages compile.
+    cmds:
+      - go build ./...
+
+  test:
+    desc: Run the Go test suite.
+    cmds:
+      - go test ./...
+
+  ci:
+    desc: Run the CI build and test baseline.
+    cmds:
+      - go build -v ./...
+      - go test -v -cover -timeout=30s ./...

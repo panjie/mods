@@ -1,5 +1,3 @@
-//go:build mage
-
 package main
 
 import (
@@ -18,31 +16,36 @@ const (
 	binDir = "bin"
 )
 
-var Default = Build
-
-// Build compiles the CLI with version metadata.
-func Build() error {
-	return build(binaryPath(), false)
+func main() {
+	if err := runTask(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
-// Release builds a stripped release binary with version metadata.
-func Release() error {
-	return build(binaryPath(), true)
+func runTask(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: go run ./internal/buildtask <build|release|install|uninstall|clean>")
+	}
+
+	switch args[0] {
+	case "build":
+		return build(binaryPath(), false)
+	case "release":
+		return build(binaryPath(), true)
+	case "install":
+		return install()
+	case "uninstall":
+		return uninstall()
+	case "clean":
+		return clean()
+	default:
+		return fmt.Errorf("unknown task %q", args[0])
+	}
 }
 
-// Check verifies that all packages compile.
-func Check() error {
-	return run("go", "build", "./...")
-}
-
-// Test runs the Go test suite.
-func Test() error {
-	return run("go", "test", "./...")
-}
-
-// Install builds and installs the binary.
-func Install() error {
-	if err := Build(); err != nil {
+func install() error {
+	if err := build(binaryPath(), false); err != nil {
 		return err
 	}
 
@@ -56,8 +59,7 @@ func Install() error {
 	return copyFile(binaryPath(), filepath.Join(paths.binDir, app+goExe()), 0o755)
 }
 
-// Uninstall removes installed files.
-func Uninstall() error {
+func uninstall() error {
 	paths, err := installPaths()
 	if err != nil {
 		return err
@@ -65,8 +67,7 @@ func Uninstall() error {
 	return removeFile(filepath.Join(paths.binDir, app+goExe()))
 }
 
-// Clean removes build artifacts.
-func Clean() error {
+func clean() error {
 	return os.RemoveAll(binDir)
 }
 

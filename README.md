@@ -74,17 +74,16 @@ go install github.com/panjie/mods@latest
 <details>
 <summary>Other ways to install</summary>
 
-Build from source with [Mage](https://magefile.org):
+Build from source with [Task](https://taskfile.dev):
 
 ```sh
-go install github.com/magefile/mage@latest
 git clone https://github.com/panjie/mods.git
 cd mods
-mage build        # binary lands in bin/mods
-mage install      # installs to /usr/local/bin/mods (or $XDG_BIN_HOME)
+go run github.com/go-task/task/v3/cmd/task@v3.51.1 build        # binary lands in bin/mods
+go run github.com/go-task/task/v3/cmd/task@v3.51.1 install      # installs to /usr/local/bin/mods (or $XDG_BIN_HOME)
 ```
 
-`mage install` honors `PREFIX`, `BINDIR`, `DESTDIR`, and any `XDG_*` env var.
+The `install` task honors `PREFIX`, `BINDIR`, `DESTDIR`, and any `XDG_*` env var.
 On Windows the default install path is `%USERPROFILE%\.local\bin\mods.exe`.
 
 Prebuilt Windows portable ZIPs are published on the [releases] page.
@@ -377,8 +376,8 @@ mods --list-roles
 
 ## Contributing
 
-Issues and pull requests are welcome on this fork. Use `mage check` to verify
-the project compiles and `mage test` to run the test suite before opening a PR.
+Issues and pull requests are welcome on this fork. Use `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` to verify
+the project compiles and `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` to run the test suite before opening a PR.
 
 ## License
 

@@ -87,8 +87,10 @@ The `install` task honors `PREFIX`, `BINDIR`, `DESTDIR`, and any `XDG_*` env var
 On Windows the default install path is `%USERPROFILE%\.local\bin\mods.exe`.
 
 Prebuilt Windows portable ZIPs are published on the [releases] page.
+The latest nightly build is published as the [nightly prerelease].
 
 [releases]: https://github.com/panjie/mods/releases
+[nightly prerelease]: https://github.com/panjie/mods/releases/tag/nightly
 
 Generate shell completions:
 

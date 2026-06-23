@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -827,6 +828,53 @@ func TestResolveModel(t *testing.T) {
 		require.Equal(t, "anthropic", api.Name)
 		require.Equal(t, "claude-sonnet-4", mod.Name)
 	})
+}
+
+func TestBuildRequestSessionValidatesImagesBeforeAPIKey(t *testing.T) {
+	m := testMods(t)
+	m.ctx = context.Background()
+	m.Config = &Config{PersistentConfig: PersistentConfig{
+		API:    "openai",
+		Model:  "gpt-4",
+		Images: []string{filepath.Join(t.TempDir(), "missing.png")},
+		APIs: APIs{{
+			Name: "openai",
+			Models: map[string]Model{
+				"gpt-4": {},
+			},
+		}},
+	}}
+
+	_, err := m.buildRequestSession("describe image", requestModeCompletion)
+	require.Error(t, err)
+	merr, ok := err.(modsError)
+	require.True(t, ok)
+	require.Equal(t, "Could not read image file", merr.ReasonText)
+	require.NotContains(t, merr.Error(), "api key")
+}
+
+func TestBuildRequestSessionKeepsNonImageValidationAfterAPIKey(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	m := testMods(t)
+	m.ctx = context.Background()
+	m.Config = &Config{PersistentConfig: PersistentConfig{
+		API:   "openai",
+		Model: "gpt-4",
+		Role:  "missing-role",
+		Roles: map[string][]string{},
+		APIs: APIs{{
+			Name: "openai",
+			Models: map[string]Model{
+				"gpt-4": {},
+			},
+		}},
+	}}
+
+	_, err := m.buildRequestSession("hello", requestModeCompletion)
+	require.Error(t, err)
+	merr, ok := err.(modsError)
+	require.True(t, ok)
+	require.Equal(t, "OpenAI authentication failed", merr.ReasonText)
 }
 
 func TestEnsureKey(t *testing.T) {

@@ -15,7 +15,7 @@ var flagParseErrorTests = []struct {
 	{
 		"unknown flag: --nope",
 		"--nope",
-		"Flag %s is missing.",
+		"Unknown flag %s.",
 	},
 	{
 		// Shorthand cluster: pflag reports the unknown character quoted. The

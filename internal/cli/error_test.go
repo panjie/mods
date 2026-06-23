@@ -28,7 +28,7 @@ func TestNewFlagParseError(t *testing.T) {
 
 	t.Run("unknown flag", func(t *testing.T) {
 		fpe := newFlagParseError(errors.New("unknown flag: --wut"))
-		require.Equal(t, "Flag %s is missing.", fpe.ReasonText)
+		require.Equal(t, "Unknown flag %s.", fpe.ReasonText)
 		require.Equal(t, "--wut", fpe.flag)
 	})
 

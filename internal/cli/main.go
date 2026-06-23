@@ -308,7 +308,7 @@ func initFlags() {
 	regBool(flags, &config.Dirs, "dirs", "", false)
 	regStr(flags, &config.Role, "role", "R", config.Role)
 	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
-	regStr(flags, &config.Theme, "theme", "", config.Theme)
+	flags.Var(newThemeFlag(config.Theme, &config.Theme), "theme", flagDesc("theme"))
 	regBool(flags, &config.OpenEditor, "editor", "e", false)
 	regBool(flags, &config.Plan, "plan", "p", config.Plan)
 	regBool(flags, &config.MCPList, "mcp-list", "", false)
@@ -495,12 +495,45 @@ func execute() {
 		rootCmd.InitDefaultCompletionCmd()
 	}
 
+	rootCmd.SetArgs(normalizeOptionalReasoningValueArgs(os.Args[1:]))
+
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
 		if db != nil {
 			_ = db.Close()
 		}
 		os.Exit(1)
+	}
+}
+
+func normalizeOptionalReasoningValueArgs(args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			out = append(out, args[i:]...)
+			break
+		}
+		if (arg == "--reasoning" || arg == "-T") && i+1 < len(args) && isReasoningValue(args[i+1]) {
+			out = append(out, arg+"="+args[i+1])
+			i++
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
+}
+
+func isReasoningValue(value string) bool {
+	switch value {
+	case "off", "on", "auto":
+		return true
+	default:
+		return false
 	}
 }
 

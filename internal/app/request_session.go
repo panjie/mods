@@ -10,6 +10,7 @@ import (
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/cohere"
 	"github.com/panjie/mods/internal/google"
+	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/proto"
@@ -40,6 +41,10 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 	}
 	if api.Name == "" {
 		return requestSession{}, m.apiNotConfiguredError(cfg, api)
+	}
+
+	if err := validateImagePaths(cfg.Images); err != nil {
+		return requestSession{}, err
 	}
 
 	cfgs, err := m.buildProviderConfigs(mod, api)
@@ -148,6 +153,15 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 		cleanup: registry,
 		errh:    errh,
 	}, nil
+}
+
+func validateImagePaths(paths []string) error {
+	for _, path := range paths {
+		if _, _, err := imageutil.ReadImage(path); err != nil {
+			return modsError{Err: err, ReasonText: "Could not read image file"}
+		}
+	}
+	return nil
 }
 
 func (m *Mods) apiNotConfiguredError(cfg *Config, api API) modsError {

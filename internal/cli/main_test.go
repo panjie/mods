@@ -133,6 +133,63 @@ func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
 	require.False(t, config.ClipboardImage)
 }
 
+func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
+	tests := map[string]struct {
+		in   []string
+		want []string
+	}{
+		"long flag consumes valid spaced value": {
+			in:   []string{"--reasoning", "auto", "hello"},
+			want: []string{"--reasoning=auto", "hello"},
+		},
+		"short flag consumes valid spaced value": {
+			in:   []string{"-T", "off", "hello"},
+			want: []string{"-T=off", "hello"},
+		},
+		"bare long flag keeps prompt text": {
+			in:   []string{"--reasoning", "hello"},
+			want: []string{"--reasoning", "hello"},
+		},
+		"bare short flag keeps prompt text": {
+			in:   []string{"-T", "hello"},
+			want: []string{"-T", "hello"},
+		},
+		"equals form is unchanged": {
+			in:   []string{"--reasoning=auto", "hello"},
+			want: []string{"--reasoning=auto", "hello"},
+		},
+		"end of options stops normalization": {
+			in:   []string{"--", "--reasoning", "auto"},
+			want: []string{"--", "--reasoning", "auto"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.want, normalizeOptionalReasoningValueArgs(tc.in))
+		})
+	}
+}
+
+func TestThemeFlagValidatesChoices(t *testing.T) {
+	saveConfig := config
+	defer func() { config = saveConfig }()
+
+	config = Config{}
+	ensureTestFlags()
+
+	for _, theme := range []string{"charm", "catppuccin", "dracula", "base16"} {
+		t.Run(theme, func(t *testing.T) {
+			require.NoError(t, rootCmd.Flags().Set("theme", theme))
+			require.Equal(t, theme, config.Theme)
+		})
+	}
+
+	t.Run("invalid", func(t *testing.T) {
+		require.Error(t, rootCmd.Flags().Set("theme", "solarized"))
+	})
+}
+
 func TestFancinessFlagRemoved(t *testing.T) {
 	if rootCmd.Flags().Lookup("minimal") == nil {
 		initFlags()

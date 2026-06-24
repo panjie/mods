@@ -203,7 +203,7 @@ func (m *Mods) injectApprovedPlan() {
 	}
 	planMsg := proto.Message{
 		Role:    proto.RoleSystem,
-		Content: "The user has approved the following plan for execution:\n\n" + m.planContent,
+		Content: "The user has approved the following plan for execution:\n\n" + m.planContent + "\n\nFollow this approved plan during execution. If new information requires changing it, explain the reason before deviating.",
 	}
 	if len(m.messages) > 0 {
 		last := m.messages[len(m.messages)-1]

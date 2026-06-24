@@ -483,6 +483,52 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 	})
 }
 
+func TestSetupPlanContextPromptPolicy(t *testing.T) {
+	cfg := Config{}
+	cfg.Roles = map[string][]string{}
+	cfg.FormatText = defaultConfig().FormatText
+	cfg.FormatAs = "markdown"
+	m := &Mods{
+		Config: &cfg,
+		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		ctx:    context.Background(),
+	}
+
+	require.NoError(t, m.setupPlanContext("hello", Model{MaxChars: 1000}))
+
+	systemMessages := make([]string, 0, len(m.messages))
+	for _, msg := range m.messages {
+		if msg.Role == proto.RoleSystem {
+			systemMessages = append(systemMessages, msg.Content)
+		}
+	}
+	require.Contains(t, systemMessages, planSystemPrompt)
+	require.Contains(t, planSystemPrompt, "Use platform-appropriate read-only commands")
+	for _, msg := range systemMessages {
+		require.NotContains(t, msg, "Safe workspace:")
+	}
+}
+
+func TestInjectApprovedPlanGuidance(t *testing.T) {
+	m := &Mods{
+		planContent: "1. Do the approved thing",
+		messages: []proto.Message{
+			{Role: proto.RoleSystem, Content: "system"},
+			{Role: proto.RoleUser, Content: "execute"},
+		},
+	}
+
+	m.injectApprovedPlan()
+
+	require.Len(t, m.messages, 3)
+	require.Equal(t, proto.RoleSystem, m.messages[1].Role)
+	require.Contains(t, m.messages[1].Content, "The user has approved the following plan for execution:")
+	require.Contains(t, m.messages[1].Content, "Follow this approved plan during execution.")
+	require.Contains(t, m.messages[1].Content, "If new information requires changing it")
+	require.Equal(t, proto.RoleUser, m.messages[2].Role)
+	require.Empty(t, m.planContent)
+}
+
 func TestProbeWindowsPowerShellCapabilities(t *testing.T) {
 	t.Run("reports versions and missing shells", func(t *testing.T) {
 		probe := func(_ context.Context, name string) (string, error) {

@@ -21,7 +21,7 @@ CRITICAL — PLANNING PHASE ONLY. You are NOT authorized to:
 
 Investigation means READING, not BUILDING. If you catch yourself writing a script, STOP — that script belongs in the plan, not in your current tool calls.
 
-Valid investigation (read-only): ls, which, python3 -c "import x", cat, head, grep (no redirect), wc, du, df, find (no -exec/-delete), fs_list_dir, fs_read_file, fs_search.
+Valid investigation means read-only inspection. Use platform-appropriate read-only commands for listing directories, reading files, searching text, and checking metadata; do not redirect output to files. Built-in read-only tools such as fs_list_dir, fs_read_file, fs_stat, and fs_search are allowed.
 
 When you have enough context, output the plan IMMEDIATELY. Do not over-investigate. Do not include investigation notes, tool call results, or running commentary — just the plan itself.
 
@@ -127,6 +127,10 @@ func (m *Mods) renderProposalSelectionBar(content string) string {
 }
 
 func (m *Mods) setupPlanContext(content string, mod Model) error {
+	wasPlan := m.Config.Plan
+	m.Config.Plan = true
+	defer func() { m.Config.Plan = wasPlan }()
+
 	if err := m.setupStreamContext(content, mod); err != nil {
 		return err
 	}

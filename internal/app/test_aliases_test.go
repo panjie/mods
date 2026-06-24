@@ -42,7 +42,7 @@ const (
 	FilesystemAlways          = cfgpkg.FilesystemAlways
 	FilesystemNever           = cfgpkg.FilesystemNever
 	minimalSystemPrompt       = cfgpkg.MinimalSystemPrompt
-	defaultMarkdownFormatText = "Format the response as markdown without enclosing backticks."
+	defaultMarkdownFormatText = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
 )
 
 type approvalRuleSet = approval.RuleSet

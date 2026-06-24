@@ -58,11 +58,13 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			Role:    proto.RoleSystem,
 			Content: ToolSelectionRules,
 		})
-		safeDir := os.TempDir()
-		m.messages = append(m.messages, proto.Message{
-			Role:    proto.RoleSystem,
-			Content: fmt.Sprintf("Safe workspace: %s. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes.", safeDir),
-		})
+		if !cfg.Plan {
+			safeDir := os.TempDir()
+			m.messages = append(m.messages, proto.Message{
+				Role:    proto.RoleSystem,
+				Content: fmt.Sprintf("Safe workspace: %s. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes.", safeDir),
+			})
+		}
 	}
 	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && !cfg.Minimal && txt != "" {
 		m.messages = append(m.messages, proto.Message{

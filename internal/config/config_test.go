@@ -30,6 +30,28 @@ func TestConfig(t *testing.T) {
 	})
 }
 
+func TestDefaultPromptText(t *testing.T) {
+	cfg := defaultConfig()
+
+	require.Contains(t, MinimalSystemPrompt, "Unless the user explicitly requests otherwise")
+	require.Contains(t, MinimalSystemPrompt, "output only the final answer")
+
+	require.Equal(t,
+		"Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it.",
+		cfg.FormatText["markdown"],
+	)
+	require.Equal(t,
+		"Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them.",
+		cfg.FormatText["json"],
+	)
+}
+
+func TestToolSelectionRulesArePrioritized(t *testing.T) {
+	require.Contains(t, ToolSelectionRules, "Priority order:")
+	require.Contains(t, ToolSelectionRules, "Use fs_* tools only for files inside workspace_root")
+	require.Contains(t, ToolSelectionRules, "Use platform-appropriate shell tools for paths outside workspace_root")
+}
+
 func TestDefaultConfigDisplay(t *testing.T) {
 	cfg := defaultConfig()
 	require.Equal(t, "Generating", cfg.StatusText)

@@ -24,9 +24,9 @@ import (
 var configTemplate string
 
 const (
-	defaultMarkdownFormatText = "Format the response as markdown without enclosing backticks."
-	defaultJSONFormatText     = "Format the response as json without enclosing backticks."
-	MinimalSystemPrompt       = "Return only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
+	defaultMarkdownFormatText = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
+	defaultJSONFormatText     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
+	MinimalSystemPrompt       = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
 	ToolSelectionRules        = toolregistry.ToolSelectionRules
 )
 

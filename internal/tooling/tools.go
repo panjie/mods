@@ -2,6 +2,7 @@ package tooling
 
 import (
 	"context"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -22,7 +23,8 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	if ShouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
-			Root: root,
+			Root:     root,
+			SafeDirs: []string{os.TempDir()},
 		}); err != nil {
 			return nil, err
 		}

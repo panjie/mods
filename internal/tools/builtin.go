@@ -36,7 +36,8 @@ const (
 
 // FilesystemConfig configures native filesystem tools.
 type FilesystemConfig struct {
-	Root string
+	Root     string
+	SafeDirs []string
 }
 
 // ShellConfig configures the native shell tool.
@@ -60,6 +61,8 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		}
 		return err
 	}
+
+	safeDirs := cfg.SafeDirs
 
 	register := func(tool Tool) error {
 		return registry.Register(tool)
@@ -86,7 +89,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path)
+			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -149,7 +152,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path)
+			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -184,7 +187,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path)
+			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -231,7 +234,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path)
+			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -270,7 +273,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if args.Query == "" {
 				return "", fmt.Errorf("query is required")
 			}
-			path, err := resolveWorkspacePath(root, args.Path)
+			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -490,7 +493,7 @@ func integerProp(description string) map[string]any {
 	}
 }
 
-func resolveWorkspacePath(root, input string) (string, error) {
+func resolveWorkspacePath(root, input string, safeDirs []string) (string, error) {
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -500,6 +503,9 @@ func resolveWorkspacePath(root, input string) (string, error) {
 	}
 	path = filepath.Clean(path)
 	if err := ensureInsideRoot(root, path); err != nil {
+		if isInsideSafeDir(path, safeDirs) {
+			return path, nil
+		}
 		return "", err
 	}
 
@@ -540,6 +546,19 @@ func ensureInsideRoot(root, path string) error {
 		return nil
 	}
 	return fmt.Errorf("path %q is outside workspace root; use shell_run to access paths outside the workspace", path)
+}
+
+func isInsideSafeDir(path string, safeDirs []string) bool {
+	for _, safe := range safeDirs {
+		rel, err := filepath.Rel(safe, path)
+		if err != nil {
+			continue
+		}
+		if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
+			return true
+		}
+	}
+	return false
 }
 
 func workspaceRel(root, path string) string {
@@ -762,7 +781,7 @@ func validatePatchPaths(root, patch string) error {
 		if filepath.IsAbs(path) || strings.HasPrefix(filepath.Clean(path), "..") {
 			return fmt.Errorf("patch path %q is outside workspace root", path)
 		}
-		if _, err := resolveWorkspacePath(root, path); err != nil && !os.IsNotExist(err) {
+		if _, err := resolveWorkspacePath(root, path, nil); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}

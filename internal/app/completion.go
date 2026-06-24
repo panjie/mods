@@ -51,7 +51,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.thoughtFlushed = false
 
 	return func() tea.Msg {
-		session, err := m.buildRequestSession(content, requestModeCompletion)
+		session, err := m.buildRequestSession(content)
 		if err != nil {
 			return err
 		}

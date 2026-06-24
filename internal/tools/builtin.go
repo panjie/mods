@@ -19,6 +19,7 @@ import (
 
 	localereader "github.com/mattn/go-localereader"
 
+	"github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/websearch"
 )
@@ -53,6 +54,10 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			debug.Printf("RegisterFilesystem: workspace %q does not exist, skipping filesystem tools", root)
+			return nil
+		}
 		return err
 	}
 

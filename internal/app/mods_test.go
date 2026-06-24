@@ -845,7 +845,7 @@ func TestBuildRequestSessionValidatesImagesBeforeAPIKey(t *testing.T) {
 		}},
 	}}
 
-	_, err := m.buildRequestSession("describe image", requestModeCompletion)
+	_, err := m.buildRequestSession("describe image")
 	require.Error(t, err)
 	merr, ok := err.(modsError)
 	require.True(t, ok)
@@ -870,7 +870,7 @@ func TestBuildRequestSessionKeepsNonImageValidationAfterAPIKey(t *testing.T) {
 		}},
 	}}
 
-	_, err := m.buildRequestSession("hello", requestModeCompletion)
+	_, err := m.buildRequestSession("hello")
 	require.Error(t, err)
 	merr, ok := err.(modsError)
 	require.True(t, ok)

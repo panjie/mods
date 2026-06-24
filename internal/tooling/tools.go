@@ -67,6 +67,9 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 }
 
 func ShouldEnableFilesystemTools(cfg *cfgpkg.Config, prompt string) bool {
+	if cfg.Plan {
+		return true
+	}
 	switch cfg.BuiltinTools.Filesystem {
 	case cfgpkg.FilesystemAlways:
 		return true

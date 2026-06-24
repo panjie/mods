@@ -128,7 +128,7 @@ builtin-tools:
   sequential-thinking: false
   shell-timeout: 30s
   shell-max-output: 20000
-  workspace-root: ""  # root directory for filesystem/shell tools, defaults to CWD
+  workspace: ""  # root directory for filesystem/shell tools, defaults to CWD
 
 # {{ index .Help "web-search" }}
 web-search: false

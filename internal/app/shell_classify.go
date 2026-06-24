@@ -50,6 +50,17 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		return analysis
 	}
 
+	if !isObviouslyMutable(command) {
+		analysis := shellCommandAnalysis{
+			NeedsReview:  false,
+			AffectedDirs: []string{},
+			Reason:       "read-only command (local heuristic)",
+		}
+		shellClassifyCache.Store(cacheKey, analysis)
+		debug.Printf("analyzeShellCommand: cmd=%q -> local heuristic: read-only", debug.Truncate(command, 80))
+		return analysis
+	}
+
 	cfg := m.Config
 	api, mod, err := m.resolveModel(cfg)
 	if err != nil {
@@ -226,5 +237,17 @@ func classifyResponse(raw string) bool {
 var reYes = regexp.MustCompile(`\bYES\b`)
 var reNo = regexp.MustCompile(`\bNO\b`)
 var reJSONFence = regexp.MustCompile("(?is)```(?:json)?\\s*(.*?)\\s*```")
+var reShellMutable = regexp.MustCompile(`(?i)` +
+	`\b(rm|mv|cp|mkdir|touch|chmod|chown|dd|tee|Remove-Item|Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Invoke-WebRequest|Invoke-RestMethod)\s` +
+	`|\b(git)\s+(add|commit|push|merge|rebase|stash)\b` +
+	`|\b(pip|pip3|npm|apt|apt-get|yum|brew|cargo|go)\s+install` +
+	`|\b(>|>>)\s*/\S` +
+	`|sed\s+-i` +
+	`|-EncodedCommand\b`,
+)
+
+func isObviouslyMutable(command string) bool {
+	return reShellMutable.MatchString(command)
+}
 
 var shellClassifyCache sync.Map

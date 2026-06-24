@@ -295,7 +295,7 @@ func initFlags() {
 	regBool(flags, &config.NoLimit, "no-limit", "", config.NoLimit)
 	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
-	regStr(flags, &config.BuiltinTools.WorkspaceRoot, "workspace", "", config.BuiltinTools.WorkspaceRoot)
+	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
 	regFloat64(flags, &config.Temperature, "temp", config.Temperature)
 	regStrArr(flags, &config.Stop, "stop", "", config.Stop)
 	regFloat64(flags, &config.TopP, "topp", config.TopP)

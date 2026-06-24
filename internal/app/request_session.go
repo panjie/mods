@@ -19,13 +19,6 @@ import (
 	"github.com/panjie/mods/internal/websearch"
 )
 
-type requestMode int
-
-const (
-	requestModeCompletion requestMode = iota
-	requestModePlan
-)
-
 type requestSession struct {
 	stream  stream.Stream
 	runner  *streamRunner
@@ -33,7 +26,7 @@ type requestSession struct {
 	errh    func(error) tea.Msg
 }
 
-func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSession, error) {
+func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	cfg := m.Config
 	api, mod, err := m.resolveModel(cfg)
 	if err != nil {
@@ -91,12 +84,9 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 	m.currentToolRegistry = registry
 
 	tools := registry.Specs()
-	if mode == requestModePlan {
-		tools = filterPlanTools(registry, tools)
-	}
-	debugTools(mode, tools, registry.Len())
+	debugTools(tools, registry.Len())
 
-	if mode == requestModePlan {
+	if cfg.Plan {
 		err = m.setupPlanContext(content, mod)
 	} else {
 		err = m.setupStreamContext(content, mod)
@@ -106,7 +96,7 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 		m.currentToolRegistry = nil
 		return requestSession{}, err
 	}
-	if mode == requestModeCompletion {
+	if !cfg.Plan {
 		m.injectApprovedPlan()
 	}
 	if err := rejectUnsupportedImages(mod.API, m.messages); err != nil {
@@ -125,7 +115,7 @@ func (m *Mods) buildRequestSession(content string, mode requestMode) (requestSes
 		TopK:        ptrOrNil(cfg.TopK),
 		Stop:        cfg.Stop,
 		Tools:       tools,
-		ToolCaller:  m.toolCaller(registry, cfg, mode),
+		ToolCaller:  m.toolCaller(registry, cfg),
 	}
 	if maxTokens > 0 {
 		request.MaxTokens = &maxTokens
@@ -197,25 +187,8 @@ func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, 
 	return nil
 }
 
-func filterPlanTools(registry *toolregistry.Registry, tools []proto.ToolSpec) []proto.ToolSpec {
-	out := make([]proto.ToolSpec, 0, len(tools))
-	for _, t := range tools {
-		if registry.ReadOnly(t.Name) {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
-func debugTools(mode requestMode, tools []proto.ToolSpec, total int) {
+func debugTools(tools []proto.ToolSpec, total int) {
 	if !debug.Enabled() {
-		return
-	}
-	if mode == requestModePlan {
-		debug.Printf("Plan mode: %d read-only tool(s) of %d total", len(tools), total)
-		for _, t := range tools {
-			debug.Printf("  Plan tool: %s", t.Name)
-		}
 		return
 	}
 	debug.Printf("Tools: %d total tool(s)", len(tools))
@@ -265,17 +238,14 @@ func supportsJSONResponseFormat(api string) bool {
 	}
 }
 
-func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, mode requestMode) func(name string, data []byte) (string, error) {
+func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(name string, data []byte) (string, error) {
 	return func(name string, data []byte) (string, error) {
-		if mode == requestModePlan && !registry.ReadOnly(name) {
-			return "", fmt.Errorf("tool %q is not available during planning phase", name)
-		}
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
 		m.addCancel(cancel)
 		defer cancel()
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 
-		if mode == requestModeCompletion && m.reviewer.shouldReviewTool(registry, name) {
+		if m.reviewer.shouldReviewTool(registry, name) {
 			if err := m.reviewer.requestApproval(m, name, data); err != nil {
 				return "", err
 			}

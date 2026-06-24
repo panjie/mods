@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -208,6 +210,10 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 		debug.Printf("requestApproval: matched conversation approval rule, auto-approving")
 		return nil
 	}
+	if isSafeWorkArea(name, data, analysis) {
+		debug.Printf("requestApproval: target is within safe workspace, auto-approving")
+		return nil
+	}
 	if r.reviewMode != ReviewAlways && shellExecution {
 		if !analysis.NeedsReview {
 			debug.Printf("shell classifier result: NOT mutable, auto-approving")
@@ -250,6 +256,61 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 	case <-ctx.ctx.Done():
 		debug.Printf("requestApproval: context cancelled while waiting for user response")
 		return fmt.Errorf("execution denied by user for: %s", name)
+	}
+}
+
+func safeDirs() []string {
+	return []string{os.TempDir()}
+}
+
+func isUnderSafeDir(path string) bool {
+	cleaned := filepath.Clean(path)
+	for _, safe := range safeDirs() {
+		safeClean := filepath.Clean(safe)
+		if cleaned == safeClean || strings.HasPrefix(cleaned, safeClean+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPathMentioned(command, dir string) bool {
+	dir = filepath.ToSlash(filepath.Clean(dir))
+	cmd := filepath.ToSlash(command)
+	return strings.Contains(cmd, dir)
+}
+
+func isSafeWorkArea(name string, data []byte, analysis shellCommandAnalysis) bool {
+	switch name {
+	case "shell_run", "powershell_run":
+		if len(analysis.AffectedDirs) > 0 {
+			for _, d := range analysis.AffectedDirs {
+				if !isUnderSafeDir(d) {
+					return false
+				}
+			}
+			return true
+		}
+		cmd := extractShellCommand(data)
+		if cmd == "" {
+			return false
+		}
+		for _, safe := range safeDirs() {
+			if isPathMentioned(cmd, safe) {
+				return true
+			}
+		}
+		return false
+	case "fs_write_file":
+		var parsed struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(data, &parsed); err != nil || parsed.Path == "" {
+			return false
+		}
+		return isUnderSafeDir(parsed.Path)
+	default:
+		return false
 	}
 }
 

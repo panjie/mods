@@ -41,6 +41,16 @@ func (m *Mods) View() string {
 			}
 			return m.renderPlanFeedbackInput(content)
 		}
+		if m.proposalMode && len(m.proposals) > 0 {
+			content := m.glamOutput
+			if content == "" {
+				content = m.Output
+			}
+			if m.viewportNeeded() {
+				return m.renderProposalSelectionBar(m.glamViewport.View())
+			}
+			return m.renderProposalSelectionBar(content)
+		}
 		if strings.TrimSpace(m.planContent) != "" {
 			content := m.glamOutput
 			if content == "" {

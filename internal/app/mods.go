@@ -89,6 +89,10 @@ type Mods struct {
 	planRetries  int
 	planSelected int
 
+	proposals       []proposal
+	proposalSelected int
+	proposalMode    bool
+
 	feedbackInput textinput.Model
 	feedbackMode  bool
 }
@@ -284,11 +288,17 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setActiveOperation("")
 	case planCompleteMsg:
 		m.planContent = msg.plan
+		m.proposals = parseProposals(msg.plan)
+		if len(m.proposals) > 0 {
+			m.proposalMode = true
+			m.showProposal(0)
+		}
 		m.setActiveOperation("")
 		m.state = planState
 		m.planSelected = 0
 		return m, nil
 	case planApprovedMsg:
+		m.clearProposals()
 		transcript := m.approvedPlanTranscript()
 		m.planContent = msg.plan
 		m.Config.Plan = false
@@ -301,6 +311,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = requestState
 		return m, m.startCompletionCmd(m.Input)
 	case planDeniedMsg:
+		m.clearProposals()
 		m.planRetries++
 		if m.planRetries >= maxPlanRetries {
 			m.state = doneState
@@ -311,6 +322,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = planState
 		return m, m.startPlanCmd("The previous plan was rejected. Please create a completely different plan.")
 	case planModifyMsg:
+		m.clearProposals()
 		m.resetOutputBuffers()
 		m.planContent = ""
 		m.planRetries = 0
@@ -324,58 +336,21 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Error = &msg
 		m.state = errorState
 		return m, m.quit
+	case error:
+		m.Error = &modsError{Err: msg, ReasonText: msg.Error()}
+		m.state = errorState
+		return m, m.quit
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.glamViewport.Width = m.width
 		m.glamViewport.Height = m.height
 		return m, nil
 	case tea.KeyMsg:
-		if m.state == planState && strings.TrimSpace(m.planContent) != "" {
-			switch msg.String() {
-			case "y", "Y":
-				return m, msgCmd(planApprovedMsg{plan: m.planContent})
-			case "n", "N":
-				return m, msgCmd(planDeniedMsg{content: m.Config.Prefix})
-			case "m", "M":
-				ti := textinput.New()
-				ti.Placeholder = "Describe changes you want to make to the plan..."
-				ti.Width = max(m.width-4, 20)
-				m.feedbackInput = ti
-				m.feedbackMode = true
-				return m, m.feedbackInput.Focus()
-			case "ctrl+c":
-				m.state = doneState
-				return m, m.quit
-			case "left":
-				m.planSelected--
-				if m.planSelected < 0 {
-					m.planSelected = numPlanReviewOptions - 1
-				}
-				return m, nil
-			case "right":
-				m.planSelected++
-				if m.planSelected >= numPlanReviewOptions {
-					m.planSelected = 0
-				}
-				return m, nil
-			case "enter":
-				switch m.planSelected {
-				case 0:
-					return m, msgCmd(planApprovedMsg{plan: m.planContent})
-				case 1:
-					return m, msgCmd(planDeniedMsg{content: m.Config.Prefix})
-				case 2:
-					ti := textinput.New()
-					ti.Placeholder = "Describe changes you want to make to the plan..."
-					ti.Width = max(m.width-4, 20)
-					m.feedbackInput = ti
-					m.feedbackMode = true
-					return m, m.feedbackInput.Focus()
-				case 3:
-					m.state = doneState
-					return m, m.quit
-				}
-			}
+		if cmd, handled := m.handleProposalKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.handlePlanReviewKey(msg); handled {
+			return m, cmd
 		}
 		if handled, cmd := m.reviewer.handleKey(msg); handled {
 			return m, cmd
@@ -472,11 +447,7 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 		return msg.runner.receiveCmd()
 	}
 	m.responseOutputStarted = true
-	if m.Config.Plan {
-		m.setActiveOperation("Planning...")
-	} else {
-		m.setActiveOperation("")
-	}
+	m.setActiveOperation("")
 	if m.reasoningActive && !m.thoughtFlushed {
 		m.flushThought()
 	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
@@ -506,17 +477,13 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 	m.setActiveOperation("Running tools")
 	m.state = responseState
 	cmds := []tea.Cmd{m.pollToolOperationStatusCmd(ch), m.callToolsCmd(runner, ch)}
-	if !m.Config.Plan {
-		cmds = append(cmds[:1], append([]tea.Cmd{m.reviewer.startSession()}, cmds[1:]...)...)
-	}
+	cmds = append(cmds[:1], append([]tea.Cmd{m.reviewer.startSession()}, cmds[1:]...)...)
 	return cmds
 }
 
 func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
-	if !m.Config.Plan {
-		m.reviewer.reset()
-	}
+	m.reviewer.reset()
 	for _, call := range msg.results {
 		if call.Err != nil {
 			debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
@@ -563,4 +530,133 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
 	m.responseBoundaryPending = true
 	return msg.runner.receiveCmd()
+}
+
+func (m *Mods) clearProposals() {
+	m.proposalMode = false
+	m.proposals = nil
+}
+
+func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.proposalMode || len(m.proposals) == 0 {
+		return nil, false
+	}
+	switch msg.String() {
+	case "left":
+		idx := m.proposalSelected - 1
+		if idx < 0 {
+			idx = len(m.proposals) - 1
+		}
+		m.showProposal(idx)
+		m.planSelected = 1
+		return nil, true
+	case "right":
+		idx := m.proposalSelected + 1
+		if idx >= len(m.proposals) {
+			idx = 0
+		}
+		m.showProposal(idx)
+		m.planSelected = 1
+		return nil, true
+	case "y", "Y":
+		m.planContent = m.proposals[m.proposalSelected].content
+		m.clearProposals()
+		m.planSelected = 0
+		return nil, true
+	case "m", "M":
+		ti := textinput.New()
+		ti.Placeholder = "Describe changes you want to make to this proposal..."
+		ti.Width = max(m.width-4, 20)
+		m.feedbackInput = ti
+		m.feedbackMode = true
+		return m.feedbackInput.Focus(), true
+	case "enter":
+		switch m.planSelected {
+		case 0:
+			idx := m.proposalSelected - 1
+			if idx < 0 {
+				idx = len(m.proposals) - 1
+			}
+			m.showProposal(idx)
+			m.planSelected = 1
+			return nil, true
+		case 1:
+			m.planContent = m.proposals[m.proposalSelected].content
+			m.clearProposals()
+			m.planSelected = 0
+			return nil, true
+		case 2:
+			ti := textinput.New()
+			ti.Placeholder = "Describe changes you want to make to this proposal..."
+			ti.Width = max(m.width-4, 20)
+			m.feedbackInput = ti
+			m.feedbackMode = true
+			return m.feedbackInput.Focus(), true
+		case 3:
+			m.clearProposals()
+			return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
+		case 4:
+			m.state = doneState
+			return m.quit, true
+		}
+	case "n", "N":
+		m.clearProposals()
+		return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
+	case "ctrl+c":
+		m.state = doneState
+		return m.quit, true
+	}
+	return nil, true
+}
+
+func (m *Mods) handlePlanReviewKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if m.proposalMode || strings.TrimSpace(m.planContent) == "" {
+		return nil, false
+	}
+	switch msg.String() {
+	case "y", "Y":
+		return msgCmd(planApprovedMsg{plan: m.planContent}), true
+	case "n", "N":
+		return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
+	case "m", "M":
+		ti := textinput.New()
+		ti.Placeholder = "Describe changes you want to make to the plan..."
+		ti.Width = max(m.width-4, 20)
+		m.feedbackInput = ti
+		m.feedbackMode = true
+		return m.feedbackInput.Focus(), true
+	case "ctrl+c":
+		m.state = doneState
+		return m.quit, true
+	case "left":
+		m.planSelected--
+		if m.planSelected < 0 {
+			m.planSelected = numPlanReviewOptions - 1
+		}
+		return nil, true
+	case "right":
+		m.planSelected++
+		if m.planSelected >= numPlanReviewOptions {
+			m.planSelected = 0
+		}
+		return nil, true
+	case "enter":
+		switch m.planSelected {
+		case 0:
+			return msgCmd(planApprovedMsg{plan: m.planContent}), true
+		case 1:
+			return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
+		case 2:
+			ti := textinput.New()
+			ti.Placeholder = "Describe changes you want to make to the plan..."
+			ti.Width = max(m.width-4, 20)
+			m.feedbackInput = ti
+			m.feedbackMode = true
+			return m.feedbackInput.Focus(), true
+		case 3:
+			m.state = doneState
+			return m.quit, true
+		}
+	}
+	return nil, false
 }

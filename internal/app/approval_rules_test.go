@@ -399,7 +399,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
 	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
@@ -409,11 +409,11 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable requires review for powershell command when classifier unavailable", func(t *testing.T) {
+	t.Run("mutable auto-approves read-only powershell in non-TTY", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
 	t.Run("mutable denies nested powershell", func(t *testing.T) {
@@ -423,11 +423,11 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable routes powershell pipelines to review", func(t *testing.T) {
+	t.Run("mutable auto-approves read-only powershell pipeline in non-TTY", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
 	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {

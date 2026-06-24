@@ -294,10 +294,10 @@ func (c Config) ResolveWorkspaceRoot() string {
 }
 
 func (c Config) ResolveWorkspace() Workspace {
-	input := c.BuiltinTools.WorkspaceRoot
+	input := c.BuiltinTools.Workspace
 	abs := ""
-	if c.BuiltinTools.WorkspaceRoot != "" {
-		if resolved, err := filepath.Abs(c.BuiltinTools.WorkspaceRoot); err == nil {
+	if c.BuiltinTools.Workspace != "" {
+		if resolved, err := filepath.Abs(c.BuiltinTools.Workspace); err == nil {
 			abs = resolved
 		}
 	} else if cwd, err := os.Getwd(); err == nil {
@@ -326,7 +326,7 @@ type BuiltinToolsConfig struct {
 	SequentialThinking bool           `yaml:"sequential-thinking"`
 	ShellTimeout       time.Duration  `yaml:"shell-timeout"`
 	ShellMaxOutput     int            `yaml:"shell-max-output"`
-	WorkspaceRoot      string         `yaml:"workspace-root"`
+	Workspace          string         `yaml:"workspace"`
 }
 
 // FilesystemMode controls when native filesystem tools are exposed.

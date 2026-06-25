@@ -1,6 +1,8 @@
 package app
 
 import (
+	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -240,4 +242,50 @@ func TestCompletionOutputSeparatesResponsesAfterToolCall(t *testing.T) {
 
 	require.Equal(t, "I'll check what's available and install GitHub CLI.\n\nThe installation seems to have succeeded.", m.Output)
 	require.False(t, m.responseBoundaryPending)
+}
+
+func TestCachedConversationOutputFlushesForNonTTY(t *testing.T) {
+	oldIsOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return false }
+	t.Cleanup(func() { IsOutputTTY = oldIsOutputTTY })
+
+	db := testDB(t)
+	id := newConversationID()
+	require.NoError(t, db.SaveConversation(
+		id,
+		"show flush",
+		"openai",
+		"gpt-4",
+		[]proto.Message{{Role: proto.RoleUser, Content: "show me"}},
+		nil,
+	))
+
+	m := &Mods{
+		Config:       &Config{CacheReadFromID: id},
+		db:           db,
+		contentMutex: &sync.Mutex{},
+		reviewer:     &toolReviewer{},
+	}
+	msg := m.readFromCache()()
+	require.IsType(t, streamEventMsg{}, msg)
+	_, _ = m.Update(msg)
+
+	output := captureStdout(t, func() { _ = m.View() })
+	require.Contains(t, output, "**User**: show me")
+}
+
+func captureStdout(tb testing.TB, fn func()) string {
+	tb.Helper()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(tb, err)
+	os.Stdout = w
+	defer func() { os.Stdout = old }()
+
+	fn()
+	require.NoError(tb, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(tb, err)
+	return string(out)
 }

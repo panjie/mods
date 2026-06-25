@@ -85,19 +85,24 @@ func (m *Mods) View() string {
 			return m.renderWithOperation(m.Output)
 		}
 
-		m.contentMutex.Lock()
-		for _, c := range m.content {
-			fmt.Print(c)
-		}
-		m.content = []string{}
-		m.contentMutex.Unlock()
+		m.flushBufferedContent()
 	case doneState:
+		m.flushBufferedContent()
 		if !IsOutputTTY() {
 			fmt.Printf("\n")
 		}
 		return ""
 	}
 	return ""
+}
+
+func (m *Mods) flushBufferedContent() {
+	m.contentMutex.Lock()
+	defer m.contentMutex.Unlock()
+	for _, c := range m.content {
+		fmt.Print(c)
+	}
+	m.content = []string{}
 }
 
 func (m *Mods) renderWithOperation(content string) string {

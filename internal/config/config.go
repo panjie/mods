@@ -445,19 +445,18 @@ func Ensure() (Config, error) {
 
 func settingsFilePath() (string, error) {
 	relPath := filepath.Join("mods", "mods.yml")
+	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
+		return filepath.Join(configHome, relPath), nil
+	}
 	if runtime.GOOS != "darwin" {
 		return xdg.ConfigFile(relPath)
 	}
 
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		configHome = filepath.Join(home, ".config")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(configHome, relPath), nil
+	return filepath.Join(home, ".config", relPath), nil
 }
 
 func WriteDefaultFile(path string) error {

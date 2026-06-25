@@ -483,6 +483,52 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 	})
 }
 
+func TestSetupStreamContextIdentityPrompt(t *testing.T) {
+	newTestMods := func(cfg Config) *Mods {
+		if cfg.Roles == nil {
+			cfg.Roles = map[string][]string{}
+		}
+		if cfg.FormatText == nil {
+			cfg.FormatText = defaultConfig().FormatText
+		}
+		return &Mods{
+			Config: &cfg,
+			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			ctx:    context.Background(),
+		}
+	}
+	systemContents := func(messages []proto.Message) []string {
+		out := make([]string, 0, len(messages))
+		for _, msg := range messages {
+			if msg.Role == proto.RoleSystem {
+				out = append(out, msg.Content)
+			}
+		}
+		return out
+	}
+	model := Model{MaxChars: 1000}
+
+	t.Run("normal mode injects identity", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, systemContents(m.messages), modsIdentityPrompt)
+	})
+
+	t.Run("minimal mode skips identity", func(t *testing.T) {
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NotContains(t, systemContents(m.messages), modsIdentityPrompt)
+	})
+
+	t.Run("plan mode injects identity and plan prompt", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupPlanContext("hello", model))
+		contents := systemContents(m.messages)
+		require.Contains(t, contents, modsIdentityPrompt)
+		require.Contains(t, contents, planSystemPrompt)
+	})
+}
+
 func TestSetupPlanContextPromptPolicy(t *testing.T) {
 	cfg := Config{}
 	cfg.Roles = map[string][]string{}

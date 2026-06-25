@@ -56,6 +56,10 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	if !cfg.Minimal {
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,
+			Content: modsIdentityPrompt,
+		})
+		m.messages = append(m.messages, proto.Message{
+			Role:    proto.RoleSystem,
 			Content: ToolSelectionRules,
 		})
 		if !cfg.Plan {

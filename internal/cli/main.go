@@ -250,7 +250,10 @@ var (
 			}
 
 			if config.CacheWriteToID != "" {
-				return saveConversation(mods)
+				if err := saveConversation(mods); err != nil {
+					return err
+				}
+				return maybeCollectEvolutionEvaluation(cmd.Context(), mods, db)
 			}
 
 			return nil
@@ -281,6 +284,8 @@ func initFlags() {
 	regStr(flags, &config.Continue, "continue", "c", "")
 	regBool(flags, &config.ContinueLast, "continue-last", "C", false)
 	regBool(flags, &config.List, "list", "l", config.List)
+	regBool(flags, &config.EvolveAuto, "evolve-auto", "", false)
+	flags.Var(newRatingThresholdFlag(3, &config.EvolveThreshold), flagEvolveThreshold, flagDesc(flagEvolveThreshold))
 	regStr(flags, &config.Title, "title", "t", config.Title)
 	regStrArr(flags, &config.Delete, "delete", "d", config.Delete)
 	flags.Var(newDurationFlag(config.DeleteOlderThan, &config.DeleteOlderThan), flagDeleteOlder, flagDesc(flagDeleteOlder))
@@ -369,6 +374,8 @@ func initFlags() {
 		"show-last",
 		"delete",
 		flagDeleteOlder,
+		"evolve-auto",
+		"evolve-threshold",
 		"no-cache",
 	)
 	markCategory(

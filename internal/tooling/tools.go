@@ -22,9 +22,13 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 	root := workspace.Canonical
 
 	if ShouldEnableFilesystemTools(cfg, prompt) {
+		safeDirs := []string{os.TempDir()}
+		if cfg.EvolveAutoImprove {
+			safeDirs = nil
+		}
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
 			Root:     root,
-			SafeDirs: []string{os.TempDir()},
+			SafeDirs: safeDirs,
 		}); err != nil {
 			return nil, err
 		}

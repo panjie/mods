@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panjie/mods/internal/evolution"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 	"modernc.org/sqlite"
@@ -205,6 +206,177 @@ func TestUpdatedAtIndexExists(t *testing.T) {
 		WHERE type = 'index' AND name = 'idx_conv_updated_at'
 	`))
 	require.Equal(t, 1, count)
+}
+
+func TestEvolutionTablesExist(t *testing.T) {
+	db := testDB(t)
+	var count int
+	require.NoError(t, db.db.Get(&count, db.db.Rebind(`
+		SELECT count(*) FROM sqlite_master
+		WHERE type = 'table' AND name = ?
+	`), "evolution_evaluations"))
+	require.Equal(t, 1, count)
+
+	for _, table := range []string{"evolution_feedback", "evolution_proposals"} {
+		t.Run(table, func(t *testing.T) {
+			require.NoError(t, db.db.Get(&count, db.db.Rebind(`
+				SELECT count(*) FROM sqlite_master
+				WHERE type = 'table' AND name = ?
+			`), table))
+			require.Equal(t, 0, count)
+		})
+	}
+}
+
+func TestEvolutionMigrationIsIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.db")
+	db, err := openDB(path)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	db, err = openDB(path)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
+
+	_, err = db.SaveEvolutionEvaluation(evolution.Evaluation{
+		Workspace:      "/workspace",
+		ConversationID: "conversation",
+		Rating:         5,
+		Feedback:       "migration works",
+	})
+	require.NoError(t, err)
+}
+
+func TestEvolutionLegacyTablesDropped(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.db")
+	raw, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	_, err = raw.Exec(`
+		CREATE TABLE conversations (
+			id string NOT NULL PRIMARY KEY,
+			title string NOT NULL,
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			CHECK (id <> ''),
+			CHECK (title <> '')
+		);
+		CREATE TABLE conversation_messages (
+			conversation_id string NOT NULL PRIMARY KEY,
+			messages blob NOT NULL
+		);
+		CREATE TABLE approval_rules (
+			conversation_id string NOT NULL,
+			scope_kind string NOT NULL DEFAULT '',
+			scope_value string NOT NULL DEFAULT '',
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			paths string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths)
+		);
+		CREATE TABLE evolution_feedback (
+			id string NOT NULL PRIMARY KEY,
+			workspace string NOT NULL,
+			kind string NOT NULL,
+			content string NOT NULL,
+			status string NOT NULL,
+			source string NOT NULL,
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			CHECK (status IN ('open', 'converted', 'rejected', 'archived'))
+		);
+		CREATE TABLE evolution_proposals (
+			id string NOT NULL PRIMARY KEY,
+			workspace string NOT NULL,
+			feedback_id string NOT NULL DEFAULT '',
+			title string NOT NULL,
+			body string NOT NULL,
+			status string NOT NULL,
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now'))
+		);
+		INSERT INTO evolution_proposals (id, workspace, feedback_id, title, body, status)
+		VALUES ('df31ae23ab8b75b5643c2f846c570997edc71333', '/workspace', '', 'Legacy', 'Body', 'draft');
+		INSERT INTO evolution_feedback (id, workspace, kind, content, status, source)
+		VALUES ('af31ae23ab8b75b5643c2f846c570997edc71333', '/workspace', 'gap', 'legacy feedback', 'converted', 'cli');
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	db, err := openDB(path)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	var count int
+	require.NoError(t, db.db.Get(&count, db.db.Rebind(`
+		SELECT count(*) FROM sqlite_master
+		WHERE type = 'table' AND name = ?
+	`), "evolution_proposals"))
+	require.Equal(t, 0, count)
+
+	require.NoError(t, db.db.Get(&count, db.db.Rebind(`
+		SELECT count(*) FROM sqlite_master
+		WHERE type = 'table' AND name = ?
+	`), "evolution_feedback"))
+	require.Equal(t, 0, count)
+}
+
+func TestEvolutionEvaluations(t *testing.T) {
+	db := testDB(t)
+
+	evaluation, err := db.SaveEvolutionEvaluation(evolution.Evaluation{
+		Workspace:      "/workspace/a",
+		ConversationID: "conv-1",
+		Rating:         2,
+		Feedback:       "missed the requested output",
+		Triggered:      true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, evaluation.ID)
+	require.Equal(t, evolution.EvaluationRecorded, evaluation.Status)
+	require.True(t, evaluation.Triggered)
+
+	found, err := db.FindEvolutionEvaluation("/workspace/a", evaluation.ID[:sha1minLen])
+	require.NoError(t, err)
+	require.Equal(t, evaluation.ID, found.ID)
+	require.Equal(t, "conv-1", found.ConversationID)
+	require.Equal(t, 2, found.Rating)
+	require.Equal(t, "missed the requested output", found.Feedback)
+
+	list, err := db.ListEvolutionEvaluations("/workspace/a")
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, evaluation.ID, list[0].ID)
+
+	list, err = db.ListEvolutionEvaluations("/workspace/none")
+	require.NoError(t, err)
+	require.Empty(t, list)
+
+	improving, err := db.UpdateEvolutionEvaluationStatus("/workspace/a", evaluation.ID[:sha1minLen], evolution.EvaluationImproving, "")
+	require.NoError(t, err)
+	require.Equal(t, evolution.EvaluationImproving, improving.Status)
+	require.Empty(t, improving.FailureReason)
+
+	failed, err := db.UpdateEvolutionEvaluationStatus("/workspace/a", evaluation.ID[:sha1minLen], evolution.EvaluationFailed, "tests failed")
+	require.NoError(t, err)
+	require.Equal(t, evolution.EvaluationFailed, failed.Status)
+	require.Equal(t, "tests failed", failed.FailureReason)
+
+	verified, err := db.UpdateEvolutionEvaluationStatus("/workspace/a", evaluation.ID[:sha1minLen], evolution.EvaluationVerified, "")
+	require.NoError(t, err)
+	require.Equal(t, evolution.EvaluationVerified, verified.Status)
+	require.Empty(t, verified.FailureReason)
+
+	_, err = db.SaveEvolutionEvaluation(evolution.Evaluation{
+		Workspace:      "/workspace/a",
+		ConversationID: "conv-2",
+		Rating:         6,
+	})
+	require.Error(t, err)
 }
 
 func TestConversationData(t *testing.T) {

@@ -13,6 +13,7 @@ type modsError = apperr.Error
 type Config = cfgpkg.Config
 type API = cfgpkg.API
 type Model = cfgpkg.Model
+type Workspace = cfgpkg.Workspace
 type ReviewMode = cfgpkg.ReviewMode
 type ReasoningMode = cfgpkg.ReasoningMode
 type DB = conversation.DB
@@ -23,6 +24,7 @@ type Scope = approval.Scope
 type Styles = ui.Styles
 
 var newUserErrorf = apperr.NewUserErrorf
+var Default = cfgpkg.Default
 var NewID = conversation.NewID
 var IDPattern = conversation.IDPattern
 var IsInputTTY = ui.IsInputTTY

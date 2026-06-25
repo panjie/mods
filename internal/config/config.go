@@ -92,6 +92,8 @@ var Help = map[string]string{
 	"show":                   "Show a saved conversation with the given title or ID",
 	"theme":                  "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
 	"show-last":              "Show the last saved conversation",
+	"evolve-auto":            "Collect feedback and a rating after a response, then automatically improve mods when triggered",
+	"evolve-threshold":       "Rating threshold for automatic improvement, from 1 to 5 (default 3)",
 	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":            "MCP Servers configurations",
 	"mcp-enable":             "Enable only specific MCP servers (whitelist, overrides disable list)",
@@ -249,28 +251,31 @@ type Config struct {
 	PersistentConfig `yaml:",inline"`
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
-	AskModel        bool
-	Plan            bool
-	ShowHelp        bool
-	HelpAll         bool
-	ResetSettings   bool
-	Version         bool
-	Settings        bool
-	ConfigSetup     bool
-	Dirs            bool
-	ContinueLast    bool
-	Continue        string
-	Title           string
-	ShowLast        bool
-	Show            string
-	List            bool
-	ListRoles       bool
-	Delete          []string
-	DeleteOlderThan time.Duration
-	MCPList         bool
-	MCPListTools    bool
-	MCPEnable       []string
-	MCPDisable      []string
+	AskModel          bool
+	Plan              bool
+	ShowHelp          bool
+	HelpAll           bool
+	ResetSettings     bool
+	Version           bool
+	Settings          bool
+	ConfigSetup       bool
+	Dirs              bool
+	ContinueLast      bool
+	Continue          string
+	Title             string
+	ShowLast          bool
+	Show              string
+	List              bool
+	EvolveAuto        bool
+	EvolveThreshold   int
+	EvolveAutoImprove bool
+	ListRoles         bool
+	Delete            []string
+	DeleteOlderThan   time.Duration
+	MCPList           bool
+	MCPListTools      bool
+	MCPEnable         []string
+	MCPDisable        []string
 
 	// Runtime state (computed internally, never persisted).
 	Prefix                                             string

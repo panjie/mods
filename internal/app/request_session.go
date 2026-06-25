@@ -245,7 +245,11 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		defer cancel()
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 
-		if m.reviewer.shouldReviewTool(registry, name) {
+		if cfg.EvolveAutoImprove {
+			if err := m.authorizeAutonomousWorkspaceTool(registry, name, data); err != nil {
+				return "", err
+			}
+		} else if m.reviewer.shouldReviewTool(registry, name) {
 			if err := m.reviewer.requestApproval(m, name, data); err != nil {
 				return "", err
 			}

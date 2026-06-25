@@ -45,18 +45,20 @@ var flagCategoryOrder = []string{
 // existed between initFlags, MarkFlagsMutuallyExclusive, isNoArgs and
 // selectFromList.
 const (
-	flagSettings      = "settings"
-	flagShow          = "show"
-	flagShowLast      = "show-last"
-	flagDelete        = "delete"
-	flagDeleteOlder   = "delete-older-than"
-	flagList          = "list"
-	flagContinue      = "continue"
-	flagContinueLast  = "continue-last"
-	flagResetSettings = "reset-settings"
-	flagConfig        = "config"
-	flagMCPList       = "mcp-list"
-	flagMCPListTools  = "mcp-list-tools"
+	flagSettings        = "settings"
+	flagShow            = "show"
+	flagShowLast        = "show-last"
+	flagDelete          = "delete"
+	flagDeleteOlder     = "delete-older-than"
+	flagList            = "list"
+	flagEvolveAuto      = "evolve-auto"
+	flagEvolveThreshold = "evolve-threshold"
+	flagContinue        = "continue"
+	flagContinueLast    = "continue-last"
+	flagResetSettings   = "reset-settings"
+	flagConfig          = "config"
+	flagMCPList         = "mcp-list"
+	flagMCPListTools    = "mcp-list-tools"
 )
 
 // sessionActionFlags are mutually exclusive: at most one may be passed per

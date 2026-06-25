@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,6 +95,33 @@ func (d *durationFlag) String() string {
 
 func (*durationFlag) Type() string {
 	return "duration"
+}
+
+func newRatingThresholdFlag(val int, p *int) *ratingThresholdFlag {
+	*p = val
+	return (*ratingThresholdFlag)(p)
+}
+
+type ratingThresholdFlag int
+
+func (r *ratingThresholdFlag) Set(s string) error {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("invalid rating threshold %q, must be an integer from 1 to 5", s)
+	}
+	if v < 1 || v > 5 {
+		return fmt.Errorf("invalid rating threshold %q, must be from 1 to 5", s)
+	}
+	*r = ratingThresholdFlag(v)
+	return nil
+}
+
+func (r *ratingThresholdFlag) String() string {
+	return strconv.Itoa(int(*r))
+}
+
+func (*ratingThresholdFlag) Type() string {
+	return "rating"
 }
 
 func newReasoningFlag(val ReasoningMode, p *ReasoningMode) *reasoningFlag {

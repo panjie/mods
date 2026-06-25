@@ -53,6 +53,10 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		Role:    proto.RoleSystem,
 		Content: sysInfo,
 	})
+	m.messages = append(m.messages, proto.Message{
+		Role:    proto.RoleSystem,
+		Content: identityContext(cfg, workspace),
+	})
 	if !cfg.Minimal {
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,

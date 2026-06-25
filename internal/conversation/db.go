@@ -12,6 +12,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/evolution"
 	"github.com/panjie/mods/internal/proto"
 	"modernc.org/sqlite"
 )
@@ -127,6 +128,39 @@ func Open(ds string) (*DB, error) {
 		if err := migrateApprovalRulesPaths(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
+	}
+	if _, err := db.Exec(`DROP TABLE IF EXISTS evolution_feedback`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`DROP TABLE IF EXISTS evolution_proposals`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS evolution_evaluations (
+			id string NOT NULL PRIMARY KEY,
+			workspace string NOT NULL,
+			conversation_id string NOT NULL,
+			rating integer NOT NULL,
+			feedback string NOT NULL DEFAULT '',
+			triggered boolean NOT NULL DEFAULT false,
+			status string NOT NULL,
+			failure_reason string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			CHECK (id <> ''),
+			CHECK (workspace <> ''),
+			CHECK (conversation_id <> ''),
+			CHECK (rating >= 1 AND rating <= 5),
+			CHECK (status IN ('recorded', 'improving', 'verified', 'failed'))
+		)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_evolution_evaluations_workspace_updated_at
+		ON evolution_evaluations (workspace, updated_at DESC)
+	`); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 
 	return &DB{db: db}, nil
@@ -383,6 +417,125 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 		rules = append(rules, rule)
 	}
 	return rules, nil
+}
+
+func (c *DB) SaveEvolutionEvaluation(evaluation evolution.Evaluation) (evolution.Evaluation, error) {
+	evaluation.ID = strings.TrimSpace(evaluation.ID)
+	if evaluation.ID == "" {
+		evaluation.ID = NewID()
+	}
+	evaluation.Workspace = strings.TrimSpace(evaluation.Workspace)
+	evaluation.ConversationID = strings.TrimSpace(evaluation.ConversationID)
+	evaluation.Feedback = strings.TrimSpace(evaluation.Feedback)
+	evaluation.FailureReason = strings.TrimSpace(evaluation.FailureReason)
+	if evaluation.Status == "" {
+		evaluation.Status = evolution.EvaluationRecorded
+	}
+	if evaluation.Workspace == "" {
+		return evolution.Evaluation{}, fmt.Errorf("SaveEvolutionEvaluation: workspace is required")
+	}
+	if evaluation.ConversationID == "" {
+		return evolution.Evaluation{}, fmt.Errorf("SaveEvolutionEvaluation: conversation id is required")
+	}
+	if evaluation.Rating < 1 || evaluation.Rating > 5 {
+		return evolution.Evaluation{}, fmt.Errorf("SaveEvolutionEvaluation: rating must be between 1 and 5")
+	}
+	if !evolution.ValidEvaluationStatus(evaluation.Status) {
+		return evolution.Evaluation{}, fmt.Errorf("%w: %q", evolution.ErrInvalidEvaluationStatus, evaluation.Status)
+	}
+
+	if _, err := c.db.Exec(c.db.Rebind(`
+		INSERT INTO evolution_evaluations (
+			id, workspace, conversation_id, rating, feedback, triggered, status, failure_reason
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`), evaluation.ID, evaluation.Workspace, evaluation.ConversationID, evaluation.Rating,
+		evaluation.Feedback, evaluation.Triggered, evaluation.Status, evaluation.FailureReason); err != nil {
+		return evolution.Evaluation{}, fmt.Errorf("SaveEvolutionEvaluation: %w", err)
+	}
+	saved, err := c.FindEvolutionEvaluation(evaluation.Workspace, evaluation.ID)
+	if err != nil {
+		return evolution.Evaluation{}, fmt.Errorf("SaveEvolutionEvaluation: %w", err)
+	}
+	return saved, nil
+}
+
+func (c *DB) FindEvolutionEvaluation(workspace, id string) (evolution.Evaluation, error) {
+	workspace = strings.TrimSpace(workspace)
+	id = strings.TrimSpace(id)
+	if workspace == "" {
+		return evolution.Evaluation{}, fmt.Errorf("FindEvolutionEvaluation: workspace is required")
+	}
+	if id == "" {
+		return evolution.Evaluation{}, fmt.Errorf("FindEvolutionEvaluation: id is required")
+	}
+	var evaluations []evolution.Evaluation
+	op := "="
+	arg := id
+	if len(id) >= MinIDLength {
+		op = "glob"
+		arg = id + "*"
+	}
+	if err := c.db.Select(&evaluations, c.db.Rebind(fmt.Sprintf(`
+		SELECT
+			id, workspace, conversation_id, rating, feedback, triggered,
+			status, failure_reason, created_at, updated_at
+		FROM evolution_evaluations
+		WHERE workspace = ? AND id %s ?
+		ORDER BY updated_at DESC, created_at DESC, id DESC
+	`, op)), workspace, arg); err != nil {
+		return evolution.Evaluation{}, fmt.Errorf("FindEvolutionEvaluation: %w", err)
+	}
+	if len(evaluations) > 1 {
+		return evolution.Evaluation{}, fmt.Errorf("%w: %s", ErrManyMatches, id)
+	}
+	if len(evaluations) == 0 {
+		return evolution.Evaluation{}, fmt.Errorf("%w: %s", ErrNoMatches, id)
+	}
+	return evaluations[0], nil
+}
+
+func (c *DB) ListEvolutionEvaluations(workspace string) ([]evolution.Evaluation, error) {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return nil, fmt.Errorf("ListEvolutionEvaluations: workspace is required")
+	}
+	var evaluations []evolution.Evaluation
+	if err := c.db.Select(&evaluations, c.db.Rebind(`
+		SELECT
+			id, workspace, conversation_id, rating, feedback, triggered,
+			status, failure_reason, created_at, updated_at
+		FROM evolution_evaluations
+		WHERE workspace = ?
+		ORDER BY updated_at DESC, created_at DESC, id DESC
+	`), workspace); err != nil {
+		return nil, fmt.Errorf("ListEvolutionEvaluations: %w", err)
+	}
+	return evaluations, nil
+}
+
+func (c *DB) UpdateEvolutionEvaluationStatus(workspace, id string, status evolution.EvaluationStatus, failureReason string) (evolution.Evaluation, error) {
+	if !evolution.ValidEvaluationStatus(status) {
+		return evolution.Evaluation{}, fmt.Errorf("%w: %q", evolution.ErrInvalidEvaluationStatus, status)
+	}
+	evaluation, err := c.FindEvolutionEvaluation(workspace, id)
+	if err != nil {
+		return evolution.Evaluation{}, err
+	}
+	failureReason = strings.TrimSpace(failureReason)
+	if status != evolution.EvaluationFailed {
+		failureReason = ""
+	} else if failureReason == "" {
+		failureReason = "automatic improvement failed"
+	}
+	if _, err := c.db.Exec(c.db.Rebind(`
+		UPDATE evolution_evaluations
+		SET status = ?, failure_reason = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND workspace = ?
+	`), status, failureReason, evaluation.ID, evaluation.Workspace); err != nil {
+		return evolution.Evaluation{}, fmt.Errorf("UpdateEvolutionEvaluationStatus: %w", err)
+	}
+	return c.FindEvolutionEvaluation(evaluation.Workspace, evaluation.ID)
 }
 
 func (c *DB) Delete(id string) error {

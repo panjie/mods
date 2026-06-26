@@ -31,6 +31,9 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 			}
 			if found != nil {
 				readID = found.ID
+				if m.Config.Continue != "" && m.Config.Title == "" {
+					title = found.Title
+				}
 				if found.Model != nil && found.API != nil {
 					model = *found.Model
 					api = *found.API

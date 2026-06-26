@@ -121,6 +121,14 @@ func TestClipboardImageShortFlag(t *testing.T) {
 	require.True(t, config.ClipboardImage)
 }
 
+func TestChatFlagRegistered(t *testing.T) {
+	ensureTestFlags()
+
+	flag := rootCmd.Flags().Lookup("chat")
+	require.NotNil(t, flag)
+	require.Empty(t, flag.Shorthand)
+}
+
 func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
 	saveConfig := config
 	defer func() { config = saveConfig }()
@@ -256,6 +264,10 @@ func TestIsNoArgs(t *testing.T) {
 		cfg := Config{HelpAll: true}
 		require.False(t, isNoArgsCfg(cfg))
 	})
+	t.Run("with chat", func(t *testing.T) {
+		cfg := Config{Chat: true}
+		require.False(t, isNoArgsCfg(cfg))
+	})
 }
 
 func isNoArgsCfg(cfg Config) bool {
@@ -272,6 +284,8 @@ func isNoArgsCfg(cfg Config) bool {
 		!cfg.MCPListTools &&
 		!cfg.Dirs &&
 		!cfg.Settings &&
+		!cfg.ConfigSetup &&
+		!cfg.Chat &&
 		!cfg.ResetSettings
 }
 
@@ -380,12 +394,23 @@ func captureStdout(tb testing.TB, fn func()) string {
 	defer func() {
 		os.Stdout = old
 	}()
+	readDone := make(chan struct {
+		out []byte
+		err error
+	}, 1)
+	go func() {
+		out, err := io.ReadAll(r)
+		readDone <- struct {
+			out []byte
+			err error
+		}{out: out, err: err}
+	}()
 
 	fn()
 
 	require.NoError(tb, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(tb, err)
+	result := <-readDone
+	require.NoError(tb, result.err)
 	require.NoError(tb, r.Close())
-	return string(out)
+	return string(result.out)
 }

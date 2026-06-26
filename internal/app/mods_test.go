@@ -102,6 +102,21 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Equal(t, rules, dets.Rules)
 	})
 
+	t.Run("continue id preserves existing title", func(t *testing.T) {
+		mods := newMods(t)
+		id := newConversationID()
+		require.NoError(t, mods.db.Save(id, "message", "openai", "gpt-4"))
+		mods.Config.Continue = id
+		mods.Config.Prefix = "prompt"
+
+		msg := mods.findCacheOpsDetails()()
+		dets := msg.(cacheDetailsMsg)
+
+		require.Equal(t, id, dets.ReadID)
+		require.Equal(t, id, dets.WriteID)
+		require.Equal(t, "message", dets.Title)
+	})
+
 	t.Run("continue with no prompt", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()

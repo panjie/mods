@@ -210,7 +210,16 @@ mods -I "describe the image on my clipboard"
 mods --title release-notes "draft v1.1 release notes from CHANGELOG.md"
 mods --continue release-notes "turn those into a Twitter thread"
 mods --list
+
+# Start a continuous conversation
+mods --chat
+mods --chat --title release-notes
+mods --chat --continue release-notes
 ```
+
+Use `--chat` for a REPL-style session when one prompt is not enough. Type
+`/exit` or `/quit` to leave; each turn is saved to the same conversation so you
+can resume it later with `--continue`.
 
 ## Safety & Review
 

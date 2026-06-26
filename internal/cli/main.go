@@ -122,6 +122,10 @@ var (
 				}
 			}
 
+			if err := validateChatMode(); err != nil {
+				return err
+			}
+
 			if config.ConfigSetup {
 				if err := RunConfigWizard(); err != nil {
 					return modsError{Err: err, ReasonText: "Configuration wizard failed."}
@@ -134,19 +138,13 @@ var (
 					config.API, StderrStyles().InlineCode.Render("mods --config"))
 			}
 
-			mods, err := newMods(cmd.Context(), StderrRenderer(), &config, db)
-			if err != nil {
-				return modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
-			}
-			p := tea.NewProgram(mods, opts...)
-			m, err := p.Run()
-			if err != nil {
-				return modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
+			if config.Chat {
+				return runChat(cmd.Context(), args, opts)
 			}
 
-			mods = m.(*Mods)
-			if mods.Error != nil {
-				return *mods.Error
+			mods, err := runOneTurn(cmd.Context(), opts)
+			if err != nil {
+				return err
 			}
 
 			if config.Dirs {
@@ -281,6 +279,7 @@ func initFlags() {
 	regStr(flags, &config.Continue, "continue", "c", "")
 	regBool(flags, &config.ContinueLast, "continue-last", "C", false)
 	regBool(flags, &config.List, "list", "l", config.List)
+	regBool(flags, &config.Chat, flagChat, "", false)
 	regStr(flags, &config.Title, "title", "t", config.Title)
 	regStrArr(flags, &config.Delete, "delete", "d", config.Delete)
 	flags.Var(newDurationFlag(config.DeleteOlderThan, &config.DeleteOlderThan), flagDeleteOlder, flagDesc(flagDeleteOlder))
@@ -363,6 +362,7 @@ func initFlags() {
 		flagCategorySession,
 		"title",
 		"list",
+		flagChat,
 		"continue",
 		"continue-last",
 		"show",
@@ -922,6 +922,7 @@ func isNoArgs() bool {
 		!config.ShowHelp &&
 		!config.HelpAll &&
 		!config.List &&
+		!config.Chat &&
 		!config.ListRoles &&
 		!config.MCPList &&
 		!config.MCPListTools &&

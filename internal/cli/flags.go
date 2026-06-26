@@ -51,6 +51,7 @@ const (
 	flagDelete        = "delete"
 	flagDeleteOlder   = "delete-older-than"
 	flagList          = "list"
+	flagChat          = "chat"
 	flagContinue      = "continue"
 	flagContinueLast  = "continue-last"
 	flagResetSettings = "reset-settings"

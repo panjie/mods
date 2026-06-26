@@ -85,6 +85,7 @@ var Help = map[string]string{
 	"continue-last":          "Continue from the last response",
 	"no-cache":               "Disables caching of the prompt/response",
 	"cache-path":             "Path to store conversation cache (defaults to XDG_DATA_HOME/mods)",
+	"chat":                   "Start a continuous conversation; type /exit or /quit to quit",
 	"title":                  "Saves the current conversation with the given title",
 	"list":                   "Lists saved conversations",
 	"delete":                 "Deletes one or more saved conversations with the given titles or IDs",
@@ -250,6 +251,7 @@ type Config struct {
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
 	AskModel        bool
+	Chat            bool
 	Plan            bool
 	ShowHelp        bool
 	HelpAll         bool

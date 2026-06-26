@@ -251,4 +251,3 @@ func TestSearchCustomAllowedViaEnvOptIn(t *testing.T) {
 	require.Len(t, results, 1)
 	require.Equal(t, "T", results[0].Title)
 }
-

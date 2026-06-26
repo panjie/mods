@@ -89,9 +89,9 @@ type Mods struct {
 	planRetries  int
 	planSelected int
 
-	proposals       []proposal
+	proposals        []proposal
 	proposalSelected int
-	proposalMode    bool
+	proposalMode     bool
 
 	feedbackInput textinput.Model
 	feedbackMode  bool

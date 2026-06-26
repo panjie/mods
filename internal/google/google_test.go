@@ -94,4 +94,3 @@ func TestRequestOmitsAPIKeyHeaderWhenEmpty(t *testing.T) {
 
 	require.False(t, headerPresent, "no api key header should be sent when AuthToken is empty")
 }
-

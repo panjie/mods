@@ -141,3 +141,29 @@ func TestSettingsFilePathDarwin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(xdgConfigHome, "mods", "mods.yml"), path)
 }
+
+func TestEnsureReportsSettingsExistedFalseWhenCreatingDefault(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	cfg, err := Ensure()
+
+	require.NoError(t, err)
+	require.False(t, cfg.SettingsExisted)
+	require.FileExists(t, cfg.SettingsPath)
+}
+
+func TestEnsureReportsSettingsExistedTrueWhenFileAlreadyExists(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	first, err := Ensure()
+	require.NoError(t, err)
+	require.False(t, first.SettingsExisted)
+
+	second, err := Ensure()
+
+	require.NoError(t, err)
+	require.True(t, second.SettingsExisted)
+	require.Equal(t, first.SettingsPath, second.SettingsPath)
+}

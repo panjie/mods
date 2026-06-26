@@ -36,6 +36,8 @@ func TestIsCompletionCmd(t *testing.T) {
 		"completion powershell --help":         true,
 		"__complete":                           true,
 		"__complete blah blah blah":            true,
+		"__completeNoDesc":                     true,
+		"__completeNoDesc blah blah blah":      true,
 	} {
 		t.Run(args, func(t *testing.T) {
 			vargs := append([]string{"mods"}, strings.Fields(args)...)

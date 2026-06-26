@@ -634,3 +634,14 @@ func (c *DB) List() ([]Conversation, error) {
 	}
 	return convos, nil
 }
+
+func (c *DB) HasConversations() (bool, error) {
+	var count int
+	if err := c.db.Get(&count, `
+		SELECT count(*)
+		FROM conversations
+	`); err != nil {
+		return false, fmt.Errorf("HasConversations: %w", err)
+	}
+	return count > 0, nil
+}

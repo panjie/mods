@@ -115,6 +115,11 @@ The wizard walks you through provider and model selection, API key entry,
 built-in tools, and review mode — then saves everything to `mods.yml`
 automatically.
 
+On first real use, if `mods.yml` does not exist and there are no saved
+conversations, Mods starts this setup wizard automatically. Help, version,
+completion, directory, settings, config, list, show, delete, role listing, and
+MCP listing commands do not trigger first-run setup.
+
 Prefer to edit the raw YAML? Open it in your `$EDITOR`:
 
 ```sh

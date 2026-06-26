@@ -100,6 +100,10 @@ var (
 				config.Quiet = true
 			}
 
+			if autoConfig, err := maybeRunAutoConfig(os.Args); autoConfig || err != nil {
+				return err
+			}
+
 			if isNoArgs() && IsInputTTY() && config.OpenEditor {
 				prompt, err := prefixFromEditor()
 				if err != nil {
@@ -127,7 +131,7 @@ var (
 			}
 
 			if config.ConfigSetup {
-				if err := RunConfigWizard(); err != nil {
+				if err := runConfigWizard(); err != nil {
 					return modsError{Err: err, ReasonText: "Configuration wizard failed."}
 				}
 				return nil
@@ -1014,7 +1018,7 @@ func isCompletionCmd(args []string) bool {
 	if len(args) <= 1 {
 		return false
 	}
-	if args[1] == "__complete" {
+	if args[1] == "__complete" || args[1] == "__completeNoDesc" {
 		return true
 	}
 	if args[1] != "completion" {

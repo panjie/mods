@@ -44,6 +44,20 @@ func TestHandleSqliteErr(t *testing.T) {
 	})
 }
 
+func TestHasConversations(t *testing.T) {
+	db := testDB(t)
+
+	has, err := db.HasConversations()
+	require.NoError(t, err)
+	require.False(t, has)
+
+	require.NoError(t, db.Save("df31ae23ab8b75b5643c2f846c570997edc71333", "message", "openai", "gpt-4"))
+
+	has, err = db.HasConversations()
+	require.NoError(t, err)
+	require.True(t, has)
+}
+
 func TestConvoDB(t *testing.T) {
 	const testid = "df31ae23ab8b75b5643c2f846c570997edc71333"
 

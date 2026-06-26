@@ -277,6 +277,7 @@ type Config struct {
 	// Runtime state (computed internally, never persisted).
 	Prefix                                             string
 	SettingsPath                                       string
+	SettingsExisted                                    bool
 	User                                               string
 	OpenEditor                                         bool
 	CacheReadFromID, CacheWriteToID, CacheWriteToTitle string
@@ -401,6 +402,15 @@ func Ensure() (Config, error) {
 	dir := filepath.Dir(sp)
 	if dirErr := os.MkdirAll(dir, 0o700); dirErr != nil { //nolint:mnd
 		return c, modsError{Err: dirErr, ReasonText: "Could not create cache directory."}
+	}
+	_, statErr := os.Stat(sp)
+	switch {
+	case statErr == nil:
+		c.SettingsExisted = true
+	case errors.Is(statErr, os.ErrNotExist):
+		c.SettingsExisted = false
+	default:
+		return c, modsError{Err: statErr, ReasonText: "Could not stat path."}
 	}
 
 	if dirErr := WriteDefaultFile(sp); dirErr != nil {

@@ -287,6 +287,13 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reviewer.handleStartMsg(msg)
 		m.setActiveOperation("")
 	case planCompleteMsg:
+		if !looksLikePlan(msg.plan) {
+			m.setActiveOperation("")
+			return m, msgCmd(modsError{
+				Err:        errors.New("no plan generated"),
+				ReasonText: "The model finished without producing a plan — its investigation may have been interrupted or it stopped early. Re-run, or rephrase the request.",
+			})
+		}
 		m.planContent = msg.plan
 		m.proposals = parseProposals(msg.plan)
 		if len(m.proposals) > 0 {
@@ -481,6 +488,24 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 	return cmds
 }
 
+// shellExitCoder is satisfied by errors that merely carry a non-zero process
+// exit code (e.g. tools.ShellExitError). A non-zero shell exit is a normal
+// command outcome (no match, file not found, etc.), not a tool-execution
+// failure, so it must not consume the failed-round budget used to break out
+// of genuine error loops.
+type shellExitCoder interface{ ExitCode() int }
+
+// toolCallFailed reports whether a tool result error is a genuine execution
+// failure. A normal non-zero shell exit is treated as a successful execution
+// that happened to return a non-zero status, so it does not count as a failure.
+func toolCallFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	var exitErr shellExitCoder
+	return !errors.As(err, &exitErr)
+}
+
 func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
 	m.reviewer.reset()
@@ -517,7 +542,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	}
 	m.totalRounds++
 	hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
-		return c.Err != nil
+		return toolCallFailed(c.Err)
 	})
 	if hasFailed {
 		m.toolCallRounds++

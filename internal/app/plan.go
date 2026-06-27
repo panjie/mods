@@ -90,6 +90,19 @@ func parseProposals(content string) []proposal {
 	return proposals
 }
 
+// planStructureRe matches the structural markers the plan system prompt
+// requires: a "# Plan" / "# Proposal N" heading at any level, or the bold
+// field labels (**Approach**, **Steps**, ...).
+var planStructureRe = regexp.MustCompile(`(?m)(^#{1,}[ \t]+(?:Plan|Proposal)\b|\*\*(?:Approach|Steps|Files|Commands|Risks)\*\*)`)
+
+// looksLikePlan reports whether the model's output actually contains a plan.
+// It guards the plan-review UI: a stream that ended before the model wrote a
+// plan (for example, when its investigation hit the tool-round limit) would
+// otherwise render the review screen with whatever narration it produced.
+func looksLikePlan(content string) bool {
+	return strings.TrimSpace(content) != "" && planStructureRe.MatchString(content)
+}
+
 func (m *Mods) showProposal(idx int) {
 	if idx < 0 || idx >= len(m.proposals) {
 		return

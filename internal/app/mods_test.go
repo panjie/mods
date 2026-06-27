@@ -1073,3 +1073,52 @@ func TestAppendShellResult(t *testing.T) {
 		require.Contains(t, m.Output, "thinking...\n\n> \u2713 ran `ls`")
 	})
 }
+
+func TestToolCallFailed(t *testing.T) {
+	t.Run("nil is not a failure", func(t *testing.T) {
+		require.False(t, toolCallFailed(nil))
+	})
+	t.Run("plain error is a failure", func(t *testing.T) {
+		require.True(t, toolCallFailed(errors.New("boom")))
+	})
+	t.Run("non-zero shell exit is not a failure", func(t *testing.T) {
+		require.False(t, toolCallFailed(toolregistry.ShellExitError{Code: 1}))
+	})
+	t.Run("wrapped non-zero shell exit is not a failure", func(t *testing.T) {
+		require.False(t, toolCallFailed(fmt.Errorf("wrapped: %w", toolregistry.ShellExitError{Code: 2})))
+	})
+}
+
+func TestPlanCompleteRejectsNonPlanOutput(t *testing.T) {
+	m := &Mods{
+		Config:          &Config{Plan: true},
+		Styles:          makeStyles(lipgloss.NewRenderer(nil)),
+		reviewer:        &toolReviewer{},
+		width:           80,
+		operationMutex:  sync.Mutex{},
+	}
+	model, cmd := m.Update(planCompleteMsg{plan: "好的，我先调查一下你当前的 opencode 配置和相关环境。"})
+	m = model.(*Mods)
+	require.NotNil(t, cmd, "non-plan output must not silently enter plan review")
+	msg := cmd()
+	mErr, ok := msg.(modsError)
+	require.True(t, ok, "expected a modsError when no plan was produced, got %T", msg)
+	require.Contains(t, mErr.ReasonText, "without producing a plan")
+	require.NotEqual(t, planState, m.state, "must not enter plan review without a real plan")
+}
+
+func TestPlanCompleteAcceptsStructuredPlan(t *testing.T) {
+	m := &Mods{
+		Config:         &Config{Plan: true},
+		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		reviewer:       &toolReviewer{},
+		width:          80,
+		operationMutex: sync.Mutex{},
+	}
+	plan := "## Plan\n- **Approach**: do it\n- **Steps**: 1. thing"
+	model, cmd := m.Update(planCompleteMsg{plan: plan})
+	m = model.(*Mods)
+	require.Nil(t, cmd)
+	require.Equal(t, planState, m.state)
+	require.Equal(t, plan, m.planContent)
+}

@@ -126,7 +126,7 @@ var (
 				}
 			}
 
-			if err := validateChatMode(); err != nil {
+			if err := validateFirstRunPrerequisites(os.Args); err != nil {
 				return err
 			}
 

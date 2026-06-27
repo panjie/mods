@@ -13,9 +13,6 @@ func readImage() ([]byte, error) {
 	if data, err := readImageX11(); err == nil {
 		return data, nil
 	}
-	if data, err := readImageWLClipboard(); err == nil {
-		return data, nil
-	}
 	return nil, fmt.Errorf("%w: xclip or wl-paste required; install one of them", ErrNoImage)
 }
 
@@ -40,14 +37,6 @@ func readImageWayland() ([]byte, error) {
 	data, err := execCmd("wl-paste", "-t", "image/png")
 	if err != nil || len(data) == 0 {
 		return nil, fmt.Errorf("wl-paste not available")
-	}
-	return data, nil
-}
-
-func readImageWLClipboard() ([]byte, error) {
-	data, err := execCmd("wl-paste", "-t", "image/png")
-	if err != nil || len(data) == 0 {
-		return nil, fmt.Errorf("wl-copy not available")
 	}
 	return data, nil
 }

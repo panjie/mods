@@ -10,8 +10,9 @@ Mods 不只是一次性问答工具，而是能理解自身项目、用户目标
 
 - 会后评价本地保存，并按 workspace 隔离。
 - 默认运行仍遵守现有 plan、review、conversation 和 tool approval 机制。
-- 自动改进只能由用户显式开启，并且只允许作用于 mods 自身仓库。
-- 自动改进不经过人工 proposal，但必须有硬性 workspace 边界、测试验证和失败记录。
+- 自动改进只能由用户显式开启，并且只允许作用于 mods 自身仓库的 `internal/self` 自我层。
+- 自动改进不经过人工 proposal，但必须有硬性自我层边界（`internal/self`）、测试验证和失败记录。
+- 内核（流式、provider、approval、安全分类器）不可被自我进化触碰；只有自我层可被自动改进修改。
 - 当 workspace、影响路径或 shell 命令效果无法确认时，自动改进必须拒绝执行。
 - 不声称不可验证的主观体验；只描述实际实现的身份、能力、限制和流程。
 
@@ -23,6 +24,7 @@ Mods 不只是一次性问答工具，而是能理解自身项目、用户目标
 - plan/review 机制：普通交互中，用户可以要求先生成计划，审批后再执行。
 - 工具调用审批：普通交互中，文件写入和 shell 命令等风险操作会进入 review 流程。
 - 自动评价改进：`--evolve-auto` 可在会话结束后收集反馈和评分，并在低分时自动改进。
+- 自我层（self layer）：`internal/self` 集中承载身份、prompts、行为策略和自我改进元策略，是自动进化唯一允许修改的代码区域；内核保持可信、不可被自我进化触碰。
 
 ## 阶段路线图
 
@@ -52,7 +54,7 @@ Mods 不只是一次性问答工具，而是能理解自身项目、用户目标
 - 评分小于等于阈值时，立即进入自动改进；高分只保存 evaluation。
 - 自动改进目标固定为 `github.com/panjie/mods` workspace；非 mods 仓库直接拒绝。
 - 自动改进不创建 proposal、不等待用户批准、不启用 plan 审批。
-- 自动改进使用 workspace-only 审查策略：workspace 内文件写入允许；workspace 外文件、未知影响目录 shell 命令、系统配置和全局配置命令拒绝。
+- 自动改进使用 self-layer-only 审查策略：只允许修改 `internal/self` 自我层内的文件；`internal/self` 之外的文件（内核、provider、DB schema 等）、未知影响目录的 shell 命令、系统配置和全局配置命令一律拒绝。
 - 自动改进结束后运行验证命令，成功写 `verified`，失败写 `failed` 和原因。
 
 ## Backlog
@@ -83,15 +85,19 @@ Mods 不只是一次性问答工具，而是能理解自身项目、用户目标
 - [x] 新增 evaluation 状态：`recorded`、`improving`、`verified`、`failed`。
 - [x] 建立自动改进入口，将普通会话的请求、输出、评分和反馈转化为一次内部 mods 执行。
 - [x] 自动改进后运行 `task check` 和 `task test` 作为兜底验证。
+- [x] 将身份、prompts、行为策略和自我改进元策略外置到 `internal/self` 自我层（内核/self 分层）。
+- [x] 自我改进的元策略（prompt、阈值、边界文本）本身位于自我层、可被自己编辑。
 - [ ] 记录自动改进产物摘要，例如变更文件、测试结果和回滚建议。
 - [ ] 设计失败后的恢复入口，例如重试、查看失败原因、生成修复建议。
+- [ ] 提供自动改进回滚入口（仅 `git checkout`/`stash` `internal/self`），便于失败或不满时快速还原。
 
 ### Safety
 
 - [x] 自动改进前校验 `go.mod` module 为 `github.com/panjie/mods`。
 - [x] 自动改进模式下移除 filesystem 工具对系统临时目录的额外 safe dir。
-- [x] workspace 内文件写入自动允许，workspace 外文件写入拒绝。
-- [x] workspace 内测试命令允许，影响目录未知或 workspace 外的 shell 命令拒绝。
+- [x] 自动改进的文件写入（含 `fs_apply_patch`）和 mutable shell 命令限制在 `internal/self` 自我层内；越界一律拒绝。
+- [x] 堵住 `fs_apply_patch` 此前无条件放行的缺口，解析 patch 路径并校验落在自我层内。
+- [x] 确认 `reShellMutable` 与 approval 引擎为安全承重项，留在内核、不外置到自我层。
 - [ ] 为自动改进失败定义更明确的回滚提示。
 - [ ] 为长期评价记录增加隐私说明与本地优先约束。
 
@@ -107,7 +113,8 @@ Mods 不只是一次性问答工具，而是能理解自身项目、用户目标
 - [x] 为身份说明和系统上下文构造添加单元测试。
 - [x] 为 DB migration 和 evaluation 状态流转添加测试。
 - [x] 为新 CLI flags、阈值校验和会话评价触发条件添加测试。
-- [x] 为 workspace-only 自动审查策略添加安全测试。
+- [x] 为 self-layer-only 自动审查策略与 `fs_apply_patch` 路径校验添加安全测试。
+- [x] 为自我层（identity/prompts/meta/policies）添加 golden 风格单元测试。
 - [ ] 为真实模型触发自动改进增加黑盒验证脚本或文档。
 
 ## 用户反馈闭环
@@ -143,6 +150,15 @@ Mods 不只是一次性问答工具，而是能理解自身项目、用户目标
 - 数据：删除手动 feedback 和 proposal，保留 evaluation；`evolution_feedback` 和 `evolution_proposals` 启动时删除，历史数据不迁移。
 - 边界：自动改进只针对 mods 自身仓库，且必须拒绝 workspace 外文件、系统配置、全局配置和影响目录未知的 shell 命令。
 - 验证：自动改进后运行 `task check` 和 `task test`，并把结果写回 evaluation 状态。
+
+### 2026-06-27：内核/自我层分层架构与 self-only 进化边界
+
+- 决定：把“自我”从内核物理分离为 `internal/self` 自我层；内核（流式、provider、approval、授权门、安全分类器）保持可信、不可被自我进化触碰；自动进化的文件写入、`fs_apply_patch` 与 mutable shell 只允许落在 `internal/self` 内。
+- 理由：自动进化若直接改 Go 源码且无边界，会把整个内核暴露给自我修改。分离后进化面收敛到明确的自我层；内核硬性强制 `internal/self` 边界，即便 LLM 越界、或自我层把边界文字改宽松，越界写入仍被拒绝。
+- 不变量（安全分类器留在内核）：`reShellMutable`（决定 shell 安全门是否触发）和 approval 引擎（`internal/approval`）是安全承重项；弱化它们会绕过授权门，故不属于可编辑的自我层。只有“能力暴露策略”（如 `PromptLooksFileRelated`，决定何时武装文件工具、从不批准写入）才安全外置到自我层。
+- 不自动提交：进化产物只停在工作区。即使自我层被改坏、编译失败，`git checkout internal/self` 即可回滚——eva 不会把自己锁死。这是“全量可进化”仍安全的根本。
+- 取舍：因重建后生效可接受，自我层采用纯 Go 表达（编译+测试门即验证），暂不引入脚本热重载或 plugin/loader 抽象（YAGNI）。
+- 落地：迁移身份/prompt（c92d345）、收紧为 self-only 并堵 apply_patch（5c1ffd7）、外置元策略（eb7c3d5）、外置能力暴露策略（eeb6e7b）。
 
 ## 维护约定
 

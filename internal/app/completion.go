@@ -44,9 +44,18 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		return m.readFromCache()
 	}
 
+	// Release any prior request's resources before starting a new one. The
+	// cancel slice and the active streamRunner can both linger if a previous
+	// stream is in flight (e.g. retry path); close them explicitly so HTTP
+	// bodies, MCP processes, and tool-call contexts are not leaked.
+	m.closeActiveRunner()
 	m.cancelMu.Lock()
+	cancels := m.cancelRequest
 	m.cancelRequest = nil
 	m.cancelMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
 	m.reasoningActive = false
 	m.responseOutputStarted = false
 	m.responseBoundaryPending = false

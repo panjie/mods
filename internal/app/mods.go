@@ -77,6 +77,14 @@ type Mods struct {
 	toolOperations      chan<- toolOperationStatusMsg
 	currentToolRegistry *toolregistry.Registry
 
+	// sessionMu guards activeRunner. activeRunner tracks the streamRunner
+	// owning the in-flight provider stream (if any) so quit() and
+	// startCompletionCmd can cancel the stream's context and release HTTP/SSE
+	// + MCP resources rather than waiting for the provider goroutine to
+	// finish on its own.
+	sessionMu    sync.Mutex
+	activeRunner *streamRunner
+
 	stdinImageData []byte
 
 	ctx context.Context
@@ -413,10 +421,47 @@ func (m *Mods) addCancel(cancel context.CancelFunc) {
 	m.cancelRequest = append(m.cancelRequest, cancel)
 }
 
+// setActiveRunner registers the runner that owns the current in-flight stream
+// so quit() and the next startCompletion/startPlan can cancel + release it.
+// Replaces any previously registered runner without closing it; callers that
+// need to swap should call closeActiveRunner() first.
+func (m *Mods) setActiveRunner(r *streamRunner) {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	m.activeRunner = r
+}
+
+// takeActiveRunner atomically clears m.activeRunner and returns the previous
+// value (possibly nil). Use it before close()ing to avoid double-close races
+// with the natural stream completion path.
+func (m *Mods) takeActiveRunner() *streamRunner {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	r := m.activeRunner
+	m.activeRunner = nil
+	return r
+}
+
+// closeActiveRunner takes ownership of the current active runner (if any) and
+// closes it. streamRunner.close() is idempotent so it is safe to call this
+// even when the natural completion path may close the runner concurrently.
+func (m *Mods) closeActiveRunner() {
+	if r := m.takeActiveRunner(); r != nil {
+		r.close()
+	}
+}
+
 func (m *Mods) quit() tea.Msg {
+	// Tear down the in-flight stream (cancels its context, releases HTTP
+	// body + MCP resources) before draining the cancel slice for any tool
+	// calls. close() is idempotent so racing with receiveCmd's error path
+	// is harmless.
+	m.closeActiveRunner()
 	m.cancelMu.Lock()
-	defer m.cancelMu.Unlock()
-	for _, cancel := range m.cancelRequest {
+	cancels := m.cancelRequest
+	m.cancelRequest = nil
+	m.cancelMu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
 	return tea.Quit()

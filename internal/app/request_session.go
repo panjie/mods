@@ -133,13 +133,20 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 
 	debugRequest(cfg, &mod, &m.messages, tools, &request)
 	m.reasoningActive = reasoningActive
-	st := client.Request(m.ctx, request)
+	// Derive a cancellable context for the stream so quit() / a subsequent
+	// start*Cmd can tear down the in-flight HTTP/SSE request rather than
+	// waiting for it to finish on its own. The cancel is owned by the
+	// streamRunner and released by close().
+	streamCtx, streamCancel := context.WithCancel(m.ctx)
+	st := client.Request(streamCtx, request)
 	errh := func(err error) tea.Msg {
 		return m.handleRequestError(err, mod, m.Input)
 	}
+	runner := newStreamRunner(st, registry, streamCancel, errh)
+	m.setActiveRunner(runner)
 	return requestSession{
 		stream:  st,
-		runner:  newStreamRunner(st, registry, errh),
+		runner:  runner,
 		cleanup: registry,
 		errh:    errh,
 	}, nil

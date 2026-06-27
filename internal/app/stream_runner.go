@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/proto"
@@ -27,14 +29,21 @@ type streamEventMsg struct {
 	err     error
 }
 
+// streamRunner owns the per-request lifecycle of a provider stream together
+// with any tool registry created for that request and the cancel func of the
+// stream's derived context. close() is idempotent so the natural completion
+// path (receiveCmd returning streamEventDone/streamEventError) and the user
+// quit path can both invoke it without double-close issues.
 type streamRunner struct {
 	stream  stream.Stream
 	cleanup *toolregistry.Registry
 	errh    func(error) tea.Msg
+	cancel  context.CancelFunc
+	closed  atomic.Bool
 }
 
-func newStreamRunner(st stream.Stream, cleanup *toolregistry.Registry, errh func(error) tea.Msg) *streamRunner {
-	return &streamRunner{stream: st, cleanup: cleanup, errh: errh}
+func newStreamRunner(st stream.Stream, cleanup *toolregistry.Registry, cancel context.CancelFunc, errh func(error) tea.Msg) *streamRunner {
+	return &streamRunner{stream: st, cleanup: cleanup, cancel: cancel, errh: errh}
 }
 
 func (r *streamRunner) receiveCmd() tea.Cmd {
@@ -76,9 +85,19 @@ func (r *streamRunner) messages() []proto.Message {
 	return r.stream.Messages()
 }
 
+// close releases the stream's context, the underlying HTTP/SSE body, and any
+// tool registry created for this request. It is safe to call from multiple
+// goroutines (quit path versus the natural receiveCmd error/done path); the
+// first caller wins, subsequent calls are no-ops.
 func (r *streamRunner) close() {
 	if r == nil {
 		return
+	}
+	if !r.closed.CompareAndSwap(false, true) {
+		return
+	}
+	if r.cancel != nil {
+		r.cancel()
 	}
 	if r.stream != nil {
 		_ = r.stream.Close()

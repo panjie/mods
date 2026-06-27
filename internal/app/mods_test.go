@@ -831,7 +831,7 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		_, _ = m.Update(streamEventMsg{
 			kind:   streamEventChunk,
 			chunk:  proto.Chunk{Content: "hello"},
-			runner: newStreamRunner(staticStream{}, nil, func(err error) tea.Msg { return modsError{Err: err} }),
+			runner: newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return modsError{Err: err} }),
 		})
 		require.True(t, m.responseOutputStarted)
 		require.Contains(t, m.Output, "hello")

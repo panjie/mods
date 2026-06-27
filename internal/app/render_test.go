@@ -165,7 +165,7 @@ func TestCompletionOutputThoughtField(t *testing.T) {
 	_, _ = m.Update(streamEventMsg{
 		kind:   streamEventChunk,
 		chunk:  proto.Chunk{Thought: "step one\nstep two"},
-		runner: newStreamRunner(staticStream{}, nil, func(err error) tea.Msg { return nil }),
+		runner: newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return nil }),
 	})
 	require.Equal(t, "step one\nstep two", m.Thought)
 	require.False(t, m.thoughtFlushed, "thought should not be flushed by a thought-only chunk")
@@ -174,7 +174,7 @@ func TestCompletionOutputThoughtField(t *testing.T) {
 	_, _ = m.Update(streamEventMsg{
 		kind:   streamEventChunk,
 		chunk:  proto.Chunk{Content: "the answer"},
-		runner: newStreamRunner(staticStream{}, nil, func(err error) tea.Msg { return nil }),
+		runner: newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return nil }),
 	})
 	require.True(t, m.thoughtFlushed, "first content chunk should flush the thought")
 	require.Contains(t, m.Output, "> **💭 thinking**")
@@ -205,7 +205,7 @@ func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
 	_, _ = m.Update(streamEventMsg{
 		kind:   streamEventChunk,
 		chunk:  proto.Chunk{Content: "\n你好"},
-		runner: newStreamRunner(staticStream{}, nil, func(err error) tea.Msg { return nil }),
+		runner: newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return nil }),
 	})
 	require.Equal(t, "你好", m.Output)
 }
@@ -225,19 +225,19 @@ func TestCompletionOutputSeparatesResponsesAfterToolCall(t *testing.T) {
 	_, _ = m.Update(streamEventMsg{
 		kind:   streamEventChunk,
 		chunk:  proto.Chunk{Content: "I'll check what's available and install GitHub CLI."},
-		runner: newStreamRunner(staticStream{}, nil, errh),
+		runner: newStreamRunner(staticStream{}, nil, nil, errh),
 	})
 	_, _ = m.Update(streamEventMsg{
 		kind:    streamEventToolCalls,
 		results: []proto.ToolCallStatus{{Name: "shell_run"}},
-		runner:  newStreamRunner(staticStream{}, nil, errh),
+		runner:  newStreamRunner(staticStream{}, nil, nil, errh),
 	})
 	require.True(t, m.responseBoundaryPending)
 
 	_, _ = m.Update(streamEventMsg{
 		kind:   streamEventChunk,
 		chunk:  proto.Chunk{Content: "\nThe installation seems to have succeeded."},
-		runner: newStreamRunner(staticStream{}, nil, errh),
+		runner: newStreamRunner(staticStream{}, nil, nil, errh),
 	})
 
 	require.Equal(t, "I'll check what's available and install GitHub CLI.\n\nThe installation seems to have succeeded.", m.Output)

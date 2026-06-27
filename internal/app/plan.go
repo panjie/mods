@@ -167,9 +167,16 @@ func (m *Mods) setupPlanContext(content string, mod Model) error {
 }
 
 func (m *Mods) startPlanCmd(content string) tea.Cmd {
+	// Release any prior session's resources first so a retry/replan does
+	// not leave an HTTP stream or tool registry leaking behind.
+	m.closeActiveRunner()
 	m.cancelMu.Lock()
+	cancels := m.cancelRequest
 	m.cancelRequest = nil
 	m.cancelMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
 	m.responseOutputStarted = false
 	m.responseBoundaryPending = false
 	m.resetOutputBuffers()

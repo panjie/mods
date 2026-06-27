@@ -189,6 +189,7 @@ func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, 
 	httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	ccfg.HTTPClient = httpClient
 	accfg.HTTPClient = httpClient
+	gccfg.HTTPClient = httpClient
 	cccfg.HTTPClient = httpClient
 	occfg.HTTPClient = httpClient
 	return nil

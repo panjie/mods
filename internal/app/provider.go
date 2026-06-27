@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/cohere"
@@ -43,6 +45,9 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		}
 		cfgs.Google = google.DefaultConfig(mod.Name, key)
 		cfgs.Google.ThinkingBudget = mod.ThinkingBudget
+		if api.BaseURL != "" {
+			cfgs.Google.BaseURL = applyGoogleBaseURLOverride(api.BaseURL, mod.Name)
+		}
 	case "cohere":
 		key, err := m.ensureKey(api, "COHERE_API_KEY", "https://dashboard.cohere.com/api-keys")
 		if err != nil {
@@ -107,4 +112,17 @@ func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
 	default:
 		return openai.New(ccfg), nil
 	}
+}
+
+// applyGoogleBaseURLOverride combines a user-supplied Google API URL with
+// the model name. The URL is treated as a full streaming endpoint (mirroring
+// what google.DefaultConfig builds) and may include the literal token
+// "{model}", which is replaced with the path-escaped model name. Users who
+// proxy a single Gemini model can supply a URL without a placeholder and
+// have it used verbatim.
+func applyGoogleBaseURLOverride(base, model string) string {
+	if !strings.Contains(base, "{model}") {
+		return base
+	}
+	return strings.ReplaceAll(base, "{model}", url.PathEscape(model))
 }

@@ -212,6 +212,14 @@ apis:
         max-input-chars: 392000
 
   google:
+    # Optional override of the Gemini streaming endpoint. The default,
+    # built by google.DefaultConfig, is the public
+    # generativelanguage.googleapis.com URL with the model path embedded.
+    # When you set base-url here, mods uses it verbatim unless you include
+    # the literal token {model} (path-escaped substitution), useful for a
+    # multi-model proxy that mirrors Google's URL structure. Single-model
+    # proxies should write the full URL without a placeholder.
+    # base-url: https://my-vertex-proxy.example.com/v1beta/models/{model}:streamGenerateContent?alt=sse
     models:
       gemini-2.5-pro:
         aliases: ["gm2.5p", "gemini-pro"]

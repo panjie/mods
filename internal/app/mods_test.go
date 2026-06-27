@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/self"
 	"github.com/stretchr/testify/require"
 )
 
@@ -502,8 +503,8 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 			systemMessages = append(systemMessages, msg.Content)
 		}
 	}
-	require.Contains(t, systemMessages, planSystemPrompt)
-	require.Contains(t, planSystemPrompt, "Use platform-appropriate read-only commands")
+	require.Contains(t, systemMessages, self.PlanSystemPrompt)
+	require.Contains(t, self.PlanSystemPrompt, "Use platform-appropriate read-only commands")
 	for _, msg := range systemMessages {
 		require.NotContains(t, msg, "Safe workspace:")
 	}

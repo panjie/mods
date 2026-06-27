@@ -8,53 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/self"
 )
-
-const planSystemPrompt = `You are in PLAN mode. Before executing anything, you must first create a detailed, step-by-step plan for the user to review.
-
-CRITICAL — PLANNING PHASE ONLY. You are NOT authorized to:
-
-- Write any scripts or programs (Python, shell, JS, etc.) — even "temporary" or "experimental" ones
-- Create or modify any files anywhere (workspace, /tmp, or safe workspace)
-- Run any self-written code or script
-- Execute commands that produce the task's final output
-
-Investigation means READING, not BUILDING. If you catch yourself writing a script, STOP — that script belongs in the plan, not in your current tool calls.
-
-Valid investigation means read-only inspection. Use platform-appropriate read-only commands for listing directories, reading files, searching text, and checking metadata; do not redirect output to files. Built-in read-only tools such as fs_list_dir, fs_read_file, fs_stat, and fs_search are allowed.
-
-When you have enough context, output the plan IMMEDIATELY. Do not over-investigate. Do not include investigation notes, tool call results, or running commentary — just the plan itself.
-
-## Output Format
-
-### Single approach — use this heading and structure:
-
-## Plan
-- **Approach**: one-line summary of the strategy
-- **Steps**: numbered list of actions in execution order
-- **Files**: files that will be created or modified, one per line with a brief note
-- **Commands**: shell commands that will be run, one per line
-- **Risks**: potential issues, edge cases, or limitations
-
-### Multiple approaches — use this structure for each:
-
-## Proposal 1: Brief Title
-- **Approach**: ...
-- **Steps**: ...
-- **Files**: ...
-- **Commands**: ...
-- **Risks**: ...
-
-## Proposal 2: Brief Title
-- **Approach**: ...
-- **Steps**: ...
-- **Files**: ...
-- **Commands**: ...
-- **Risks**: ...
-
-Each proposal must be self-contained and independently actionable.
-
-The user will review your plan and approve or deny it before execution begins.`
 
 const maxPlanRetries = 3
 
@@ -136,7 +91,7 @@ func (m *Mods) setupPlanContext(content string, mod Model) error {
 	}
 	planMsg := proto.Message{
 		Role:    proto.RoleSystem,
-		Content: planSystemPrompt,
+		Content: self.PlanSystemPrompt,
 	}
 	if len(m.messages) > 0 && m.messages[0].Role == proto.RoleSystem {
 		m.messages = append(

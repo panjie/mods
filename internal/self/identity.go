@@ -1,11 +1,13 @@
-package app
+package self
 
 import (
 	"fmt"
 	"strings"
+
+	cfgpkg "github.com/panjie/mods/internal/config"
 )
 
-func identityContext(cfg *Config, workspace Workspace) string {
+func IdentityContext(cfg *cfgpkg.Config, workspace cfgpkg.Workspace) string {
 	toolModes := []string{
 		fmt.Sprintf("filesystem=%s", cfg.BuiltinTools.Filesystem),
 		fmt.Sprintf("shell=%t", cfg.BuiltinTools.Shell),

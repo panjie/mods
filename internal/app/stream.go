@@ -16,6 +16,7 @@ import (
 	"github.com/panjie/mods/internal/clipboard"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/self"
 )
 
 func (m *Mods) setupStreamContext(content string, mod Model) error {
@@ -55,7 +56,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	})
 	m.messages = append(m.messages, proto.Message{
 		Role:    proto.RoleSystem,
-		Content: identityContext(cfg, workspace),
+		Content: self.IdentityContext(cfg, workspace),
 	})
 	if !cfg.Minimal {
 		m.messages = append(m.messages, proto.Message{

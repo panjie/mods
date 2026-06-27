@@ -11,17 +11,9 @@ import (
 	"time"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/self"
 	"github.com/panjie/mods/internal/stream"
 )
-
-const defaultShellClassifyPrompt = `Analyze this shell command for review.
-Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
-Use exactly this shape:
-{"needs_review":true,"affected_dirs":["/path/or/relative/dir"],"reason":"short reason"}
-
-Set needs_review to true if the command creates, deletes, modifies, or may modify files, directories, system settings, or persistent state. If unsure, set needs_review to true.
-Set affected_dirs to the directories that may be written, deleted, or modified. If none are affected or unknown, use an empty array.
-Example: ls -la /path/to/project => {"needs_review":false,"affected_dirs":[],"reason":"lists directory contents only"}.`
 
 type shellCommandAnalysis struct {
 	NeedsReview  bool
@@ -83,7 +75,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 
 	system := m.Config.ShellClassifyPrompt
 	if system == "" {
-		system = defaultShellClassifyPrompt
+		system = self.DefaultShellClassifyPrompt
 	}
 	debug.Printf("analyzeShellCommand: using model=%s api=%s, structured=%v, system=%q", mod.Name, mod.API, !customPrompt, system)
 	maxTokens := int64(256)

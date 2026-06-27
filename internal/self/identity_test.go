@@ -1,20 +1,21 @@
-package app
+package self
 
 import (
 	"strings"
 	"testing"
 
+	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityContextIncludesBoundaries(t *testing.T) {
-	cfg := Default()
+	cfg := cfgpkg.Default()
 	cfg.BuiltinTools.Filesystem = "auto"
 	cfg.BuiltinTools.Shell = true
 	cfg.BuiltinTools.SequentialThinking = true
-	cfg.ReviewMode = ReviewMutable
+	cfg.ReviewMode = cfgpkg.ReviewMutable
 
-	content := identityContext(&cfg, Workspace{
+	content := IdentityContext(&cfg, cfgpkg.Workspace{
 		Display: "/workspace",
 	})
 

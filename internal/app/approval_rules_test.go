@@ -601,6 +601,7 @@ func testReviewRegistry(t *testing.T) *toolregistry.Registry {
 	for _, tool := range []toolregistry.Tool{
 		{Spec: proto.ToolSpec{Name: "fs_read_file"}, Capabilities: toolregistry.ToolCapabilities{ReadOnly: true}, Call: noopToolCall},
 		{Spec: proto.ToolSpec{Name: "fs_write_file"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true}, Call: noopToolCall},
+		{Spec: proto.ToolSpec{Name: "fs_apply_patch"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true}, Call: noopToolCall},
 		{Spec: proto.ToolSpec{Name: "shell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true}, Call: noopToolCall},
 		{Spec: proto.ToolSpec{Name: "powershell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true}, Call: noopToolCall},
 	} {

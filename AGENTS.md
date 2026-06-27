@@ -5,9 +5,9 @@
 - Pre-PR baseline from README/CI: `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` (`go build ./...`) then `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` (`go test ./...`). To mirror CI exactly, run `go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci` (`go build -v ./...` then `go test -v -cover -timeout=30s ./...`).
 - Focus a normal test with `go test ./internal/app -run TestName -count=1` or the relevant package path.
 - Build task install-path tests live in `internal/buildtask`; run `go test ./internal/buildtask -run TestInstallDir -count=1` after touching `Taskfile.yml` or install-path logic.
-- Provider integration tests are excluded by default; run `go test -tags integration ./internal/app -run TestOpenAIIntegration -count=1` only with the matching provider key. Ollama integration uses `OLLAMA_HOST` or `http://localhost:11434` and model `llama4:16x17b`.
+- Provider integration tests are excluded by default; run `go test -tags integration ./internal/app -run TestOpenAIIntegration -count=1` only with the matching provider key. Ollama integration uses `OLLAMA_HOST` or `http://localhost:11434` and model `llama3.1`.
 - The golden test in `internal/proto` updates with `go test ./internal/proto -run TestStringer -update`.
-- Lint config is `.golangci.yml` v2; local lint is `golangci-lint run ./...` if installed. It enables `gofumpt`/`goimports` formatters and sets `run.tests: false`.
+- Lint config is `.golangci.yml` v2; local lint is `golangci-lint run ./...` if installed. It enables `govet` and `ineffassign` linters, the `gofmt` and `goimports` formatters, and sets `run.tests: false`.
 
 ## Architecture
 - Entry path is `main.go` -> `internal/cli.Run` -> Cobra root in `internal/cli/main.go`; `execute` loads settings with `config.Ensure`, initializes flags after config, and opens the conversation DB unless doing completion/help/version.

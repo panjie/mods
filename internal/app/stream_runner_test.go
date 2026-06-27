@@ -195,10 +195,10 @@ type countingStream struct {
 	closes *atomic.Int32
 }
 
-func (s *countingStream) Next() bool                       { return s.inner.Next() }
-func (s *countingStream) Current() (proto.Chunk, error)    { return s.inner.Current() }
-func (s *countingStream) Err() error                       { return s.inner.Err() }
-func (s *countingStream) Messages() []proto.Message        { return s.inner.Messages() }
+func (s *countingStream) Next() bool                        { return s.inner.Next() }
+func (s *countingStream) Current() (proto.Chunk, error)     { return s.inner.Current() }
+func (s *countingStream) Err() error                        { return s.inner.Err() }
+func (s *countingStream) Messages() []proto.Message         { return s.inner.Messages() }
 func (s *countingStream) CallTools() []proto.ToolCallStatus { return s.inner.CallTools() }
 func (s *countingStream) Close() error {
 	s.closes.Add(1)

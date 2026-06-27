@@ -3,5 +3,15 @@ run:
   tests: false
 linters:
   default: none
+  # Keep the analyzer set deliberately small and stable so contributors do
+  # not chase shifting lint output across golangci-lint upgrades. The
+  # baseline below covers the high-signal checks the codebase already
+  # passes; expanding it further should be a follow-up that explicitly
+  # cleans the existing findings first.
   enable:
     - govet
+    - ineffassign
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -72,9 +72,9 @@ func TestFilterEnvForMCPSubprocess(t *testing.T) {
 	got := filterEnvForMCPSubprocess(input)
 
 	want := map[string]bool{
-		"PATH=/usr/bin":     true,
-		"HOME=/home/me":     true,
-		"LANG=en_US.UTF-8":  true,
+		"PATH=/usr/bin":    true,
+		"HOME=/home/me":    true,
+		"LANG=en_US.UTF-8": true,
 	}
 	require.Len(t, got, len(want), "filtered env: %v", got)
 	for _, kv := range got {
@@ -112,17 +112,17 @@ func TestValidateMCPRemoteURL(t *testing.T) {
 	t.Setenv("MODS_MCP_ALLOW_PRIVATE", "")
 
 	rejectCases := map[string]string{
-		"loopback hostname":     "https://localhost:8080",
-		"loopback v4":           "http://127.0.0.1/api",
-		"loopback v6":           "http://[::1]:8080",
-		"link-local v4":         "http://169.254.169.254/latest/meta-data",
-		"private v4 (10/8)":     "http://10.0.0.1/",
-		"private v4 (192.168)":  "http://192.168.1.5/",
+		"loopback hostname":      "https://localhost:8080",
+		"loopback v4":            "http://127.0.0.1/api",
+		"loopback v6":            "http://[::1]:8080",
+		"link-local v4":          "http://169.254.169.254/latest/meta-data",
+		"private v4 (10/8)":      "http://10.0.0.1/",
+		"private v4 (192.168)":   "http://192.168.1.5/",
 		"private v4 (172.16/12)": "http://172.16.5.5/",
-		"missing host":          "http:///path",
-		"empty url":             "",
-		"bad scheme":            "ftp://example.com",
-		"file scheme":           "file:///etc/passwd",
+		"missing host":           "http:///path",
+		"empty url":              "",
+		"bad scheme":             "ftp://example.com",
+		"file scheme":            "file:///etc/passwd",
 	}
 	for name, raw := range rejectCases {
 		t.Run("reject/"+name, func(t *testing.T) {

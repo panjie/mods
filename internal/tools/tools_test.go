@@ -208,12 +208,12 @@ func TestFilesystemApplyPatchRejectsQuotedTraversal(t *testing.T) {
 	}
 
 	cases := map[string]string{
-		"quoted absolute path":     "--- /dev/null\n+++ \"b/../../etc/leak\"\n@@ -0,0 +1 @@\n+pwned\n",
-		"quoted traversal":         "--- /dev/null\n+++ \"b/sub/../../outside\"\n@@ -0,0 +1 @@\n+pwned\n",
-		"quoted with octal slash":  "--- /dev/null\n+++ \"b/\\057etc/leak\"\n@@ -0,0 +1 @@\n+pwned\n",
-		"unbalanced quotes":        "--- /dev/null\n+++ \"b/oops\n@@ -0,0 +1 @@\n+pwned\n",
-		"unknown escape":           "--- /dev/null\n+++ \"b/\\xff\"\n@@ -0,0 +1 @@\n+pwned\n",
-		"unquoted with spaces":     "--- /dev/null\n+++ b/oops file\n@@ -0,0 +1 @@\n+pwned\n",
+		"quoted absolute path":    "--- /dev/null\n+++ \"b/../../etc/leak\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"quoted traversal":        "--- /dev/null\n+++ \"b/sub/../../outside\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"quoted with octal slash": "--- /dev/null\n+++ \"b/\\057etc/leak\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"unbalanced quotes":       "--- /dev/null\n+++ \"b/oops\n@@ -0,0 +1 @@\n+pwned\n",
+		"unknown escape":          "--- /dev/null\n+++ \"b/\\xff\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"unquoted with spaces":    "--- /dev/null\n+++ b/oops file\n@@ -0,0 +1 @@\n+pwned\n",
 	}
 	for name, patch := range cases {
 		t.Run(name, func(t *testing.T) {

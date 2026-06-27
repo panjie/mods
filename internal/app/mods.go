@@ -44,16 +44,16 @@ const numPlanReviewOptions = 4
 // LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
 type Mods struct {
 	outputRenderer
-	Input                   string
-	Styles                  Styles
-	Error                   *modsError
-	state                   state
-	retries                 int
-	toolCallRounds          int
-	totalRounds             int
-	renderer                *lipgloss.Renderer
-	glam                    *glamour.TermRenderer
-	glamViewport            viewport.Model
+	Input          string
+	Styles         Styles
+	Error          *modsError
+	state          state
+	retries        int
+	toolCallRounds int
+	totalRounds    int
+	renderer       *lipgloss.Renderer
+	glam           *glamour.TermRenderer
+	glamViewport   viewport.Model
 	// messages is the conversation history fed to the provider on each
 	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
 	// dispatched by startCompletionCmd/startPlanCmd) and re-read from the

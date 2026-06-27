@@ -1094,11 +1094,11 @@ func TestToolCallFailed(t *testing.T) {
 
 func TestPlanCompleteRejectsNonPlanOutput(t *testing.T) {
 	m := &Mods{
-		Config:          &Config{Plan: true},
-		Styles:          makeStyles(lipgloss.NewRenderer(nil)),
-		reviewer:        &toolReviewer{},
-		width:           80,
-		operationMutex:  sync.Mutex{},
+		Config:         &Config{Plan: true},
+		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		reviewer:       &toolReviewer{},
+		width:          80,
+		operationMutex: sync.Mutex{},
 	}
 	model, cmd := m.Update(planCompleteMsg{plan: "好的，我先调查一下你当前的 opencode 配置和相关环境。"})
 	m = model.(*Mods)

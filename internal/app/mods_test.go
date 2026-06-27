@@ -252,7 +252,10 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		msg := mods.findCacheOpsDetails()()
 		err := msg.(modsError)
 		require.Equal(t, "Could not find the conversation.", err.ReasonText)
-		require.EqualError(t, err, "no conversations found: aaa")
+		// Error() now composes the reason and inner detail so the chain
+		// preserves both layers across additional wrapping. The previous
+		// "no conversations found: aaa" message is still in the suffix.
+		require.EqualError(t, err, "Could not find the conversation.: no conversations found: aaa")
 	})
 
 	t.Run("uses config model and api not global config", func(t *testing.T) {

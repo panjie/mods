@@ -8,16 +8,29 @@ func NewUserErrorf(format string, a ...any) error {
 }
 
 // Error is a wrapper around an error that adds additional context.
+//
+// Error implements error in a way that preserves both the wrapping
+// ReasonText and the underlying Err message. Previously, when Err was
+// set, Error() returned only Err.Error() and the ReasonText was lost
+// from any caller that simply printed the error or wrapped it again.
+// Now Error() composes the two so error chains carry their context
+// through repeated wrapping.
 type Error struct {
 	Err        error
 	ReasonText string
 }
 
 func (m Error) Error() string {
-	if m.Err == nil {
+	switch {
+	case m.Err == nil && m.ReasonText == "":
+		return ""
+	case m.Err == nil:
 		return m.ReasonText
+	case m.ReasonText == "":
+		return m.Err.Error()
+	default:
+		return m.ReasonText + ": " + m.Err.Error()
 	}
-	return m.Err.Error()
 }
 
 func (m Error) Reason() string {

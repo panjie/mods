@@ -617,9 +617,11 @@ func handleError(err error) {
 		}
 
 		// Skip the error details if the user simply canceled out of huh.
-		if merr.Err != huh.ErrUserAborted {
+		// Render only the inner err message so the ReasonText (already
+		// shown in the header above) is not repeated by Error.Error().
+		if merr.Err != nil && merr.Err != huh.ErrUserAborted {
 			format += "%s\n\n"
-			args = append(args, StderrStyles().ErrPadding.Render(StderrStyles().ErrorDetails.Render(err.Error())))
+			args = append(args, StderrStyles().ErrPadding.Render(StderrStyles().ErrorDetails.Render(merr.Err.Error())))
 		}
 	} else {
 		args = []any{

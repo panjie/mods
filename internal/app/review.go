@@ -326,33 +326,31 @@ func isUnderSafeDir(path string) bool {
 	return false
 }
 
-func isPathMentioned(command, dir string) bool {
-	dir = filepath.ToSlash(filepath.Clean(dir))
-	cmd := filepath.ToSlash(command)
-	return strings.Contains(cmd, dir)
-}
-
+// isSafeWorkArea reports whether a tool invocation may be auto-approved
+// because its real targets all live under a configured safe workspace
+// directory (typically the OS temp dir).
+//
+// Decision is intentionally fail-closed: when the shell classifier cannot
+// determine the affected directories (LLM timeout, empty result, parse
+// failure -> defaultShellCommandAnalysis), we return false so the request
+// falls through to the normal review flow. Previous versions retried with
+// a strings.Contains(command, safeDir) fallback, which let any command
+// auto-approve as long as it mentioned the safe dir name anywhere in its
+// text (including inside echo arguments, comments, or URLs).
 func isSafeWorkArea(name string, data []byte, analysis shellCommandAnalysis) bool {
 	switch name {
 	case "shell_run", "powershell_run":
-		if len(analysis.AffectedDirs) > 0 {
-			for _, d := range analysis.AffectedDirs {
-				if !isUnderSafeDir(d) {
-					return false
-				}
-			}
-			return true
-		}
-		cmd := extractShellCommand(data)
-		if cmd == "" {
+		if len(analysis.AffectedDirs) == 0 {
+			// No reliable signal about what the command will touch ->
+			// require explicit review rather than guessing.
 			return false
 		}
-		for _, safe := range safeDirs() {
-			if isPathMentioned(cmd, safe) {
-				return true
+		for _, d := range analysis.AffectedDirs {
+			if !isUnderSafeDir(d) {
+				return false
 			}
 		}
-		return false
+		return true
 	case "fs_write_file":
 		var parsed struct {
 			Path string `json:"path"`

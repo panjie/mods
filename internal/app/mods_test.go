@@ -1122,3 +1122,49 @@ func TestPlanCompleteAcceptsStructuredPlan(t *testing.T) {
 	require.Equal(t, planState, m.state)
 	require.Equal(t, plan, m.planContent)
 }
+
+// retryResetMods builds a minimal Mods for testing the retries=0 reset on
+// plan/exec lineage transitions. It avoids the full New() constructor so the
+// test stays focused on Update state machine semantics.
+func retryResetMods(t *testing.T) *Mods {
+	t.Helper()
+	return &Mods{
+		Config:         &Config{},
+		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		reviewer:       &toolReviewer{},
+		contentMutex:   &sync.Mutex{},
+		operationMutex: sync.Mutex{},
+		ctx:            context.Background(),
+	}
+}
+
+// TestPlanExecutionStartResetsRetries asserts that transitioning from a
+// planning phase into execution clears the API retry counter, so plan-phase
+// retries do not steal back-off budget from execution.
+func TestPlanExecutionStartResetsRetries(t *testing.T) {
+	m := retryResetMods(t)
+	m.retries = 4
+	m.Input = "do thing"
+	_, _ = m.Update(planExecutionStartMsg{})
+	require.Equal(t, 0, m.retries, "planExecutionStartMsg must reset m.retries")
+}
+
+// TestPlanDeniedResetsRetries asserts that abandoning a plan and starting a
+// fresh planning attempt clears the API retry counter.
+func TestPlanDeniedResetsRetries(t *testing.T) {
+	m := retryResetMods(t)
+	m.Config.Prefix = "ignored"
+	m.retries = 3
+	m.planRetries = 0
+	_, _ = m.Update(planDeniedMsg{content: "ignored"})
+	require.Equal(t, 0, m.retries, "planDeniedMsg must reset m.retries before the next plan")
+}
+
+// TestPlanModifyResetsRetries asserts that user-driven plan revision clears
+// the API retry counter.
+func TestPlanModifyResetsRetries(t *testing.T) {
+	m := retryResetMods(t)
+	m.retries = 2
+	_, _ = m.Update(planModifyMsg{feedback: "redo", plan: "old plan"})
+	require.Equal(t, 0, m.retries, "planModifyMsg must reset m.retries before the revised plan")
+}

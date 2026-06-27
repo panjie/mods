@@ -331,6 +331,13 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msgCmd(planExecutionStartMsg{}),
 		)
 	case planExecutionStartMsg:
+		// Plan and execution are independent API-call lineages. Resetting
+		// retries here ensures the exec phase gets the full back-off budget
+		// even if the plan phase had to retry on rate limits or transient
+		// server errors. planRetries is intentionally untouched: it tracks
+		// "user rejected the plan, try a different one" attempts, which are
+		// orthogonal to API retry policy.
+		m.retries = 0
 		m.resetExecutionOutput()
 		m.state = requestState
 		return m, m.startCompletionCmd(m.Input)
@@ -343,6 +350,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.resetOutputBuffers()
 		m.planContent = ""
+		// A fresh planning attempt starts a new API-call lineage; clear the
+		// retry counter so prior plan attempts do not steal back-off budget.
+		m.retries = 0
 		m.state = planState
 		return m, m.startPlanCmd("The previous plan was rejected. Please create a completely different plan.")
 	case planModifyMsg:
@@ -350,6 +360,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetOutputBuffers()
 		m.planContent = ""
 		m.planRetries = 0
+		// User-driven plan revision is also a fresh API-call lineage.
+		m.retries = 0
 		m.state = planState
 		reviseContent := fmt.Sprintf(
 			"Revise the plan based on this feedback: %s\n\nFor reference, the previous plan was:\n%s",

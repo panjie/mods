@@ -502,11 +502,19 @@ func resolveWorkspacePath(root, input string, safeDirs []string) (string, error)
 		path = filepath.Join(root, path)
 	}
 	path = filepath.Clean(path)
+
+	// boundary is the directory the resolved path must stay inside after
+	// symlink evaluation. The default is the workspace root; if the input
+	// instead lives under a configured safe directory (e.g. os.TempDir()),
+	// that safe directory becomes the boundary so a symlink inside it
+	// cannot escape to arbitrary paths like /etc/passwd.
+	boundary := root
 	if err := ensureInsideRoot(root, path); err != nil {
-		if isInsideSafeDir(path, safeDirs) {
-			return path, nil
+		safe, ok := matchSafeDir(path, safeDirs)
+		if !ok {
+			return "", err
 		}
-		return "", err
+		boundary = safe
 	}
 
 	existing := path
@@ -531,10 +539,47 @@ func resolveWorkspacePath(root, input string, safeDirs []string) (string, error)
 	}
 	parts := append([]string{existingEval}, missing...)
 	resolved := filepath.Join(parts...)
-	if err := ensureInsideRoot(root, resolved); err != nil {
+
+	// Compare the resolved path against the boundary after evaluating the
+	// boundary's own symlinks (necessary on macOS where /tmp resolves to
+	// /private/tmp; without this step a perfectly valid path under
+	// /private/tmp/... would be reported as escaping /tmp).
+	boundaryEval := boundary
+	if absBoundary, absErr := filepath.Abs(boundary); absErr == nil {
+		boundaryEval = absBoundary
+	}
+	if eval, evalErr := filepath.EvalSymlinks(boundaryEval); evalErr == nil {
+		boundaryEval = eval
+	}
+	if err := ensureInsideRoot(boundaryEval, resolved); err != nil {
 		return "", err
 	}
 	return resolved, nil
+}
+
+// matchSafeDir returns the first safe directory that lexically contains
+// path together with a bool indicator. It does not follow symlinks so the
+// fallback path stays cheap; the symlink-aware boundary check happens
+// after the caller's symlink resolution step.
+func matchSafeDir(path string, safeDirs []string) (string, bool) {
+	for _, safe := range safeDirs {
+		rel, err := filepath.Rel(safe, path)
+		if err != nil {
+			continue
+		}
+		if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
+			return safe, true
+		}
+	}
+	return "", false
+}
+
+func workspaceRel(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return path
+	}
+	return filepath.ToSlash(rel)
 }
 
 func ensureInsideRoot(root, path string) error {
@@ -546,27 +591,6 @@ func ensureInsideRoot(root, path string) error {
 		return nil
 	}
 	return fmt.Errorf("path %q is outside workspace root; use shell_run to access paths outside the workspace", path)
-}
-
-func isInsideSafeDir(path string, safeDirs []string) bool {
-	for _, safe := range safeDirs {
-		rel, err := filepath.Rel(safe, path)
-		if err != nil {
-			continue
-		}
-		if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
-			return true
-		}
-	}
-	return false
-}
-
-func workspaceRel(root, path string) string {
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return path
-	}
-	return filepath.ToSlash(rel)
 }
 
 func searchFiles(ctx context.Context, root, path, query string, limit int) (string, error) {

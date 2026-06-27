@@ -293,6 +293,68 @@ func TestFilesystemApplyPatchAcceptsTabbedTimestamp(t *testing.T) {
 	}
 }
 
+// TestResolveWorkspacePathRejectsSymlinkEscapeFromSafeDir pins the fix for
+// the safe-dir bypass: a symlink inside the safe directory that points
+// outside (e.g. /tmp/sub/link -> /etc) used to slip past
+// resolveWorkspacePath because the safe-dir branch returned early without
+// running EvalSymlinks. After the fix the resolved real path must still
+// be inside the matched safe boundary, so escaping symlinks are rejected.
+func TestResolveWorkspacePathRejectsSymlinkEscapeFromSafeDir(t *testing.T) {
+	root := t.TempDir()
+	safe := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0o600); err != nil {
+		t.Fatalf("seed secret: %v", err)
+	}
+
+	// Create the escaping symlink: safe/link -> outside.
+	linkPath := filepath.Join(safe, "link")
+	if err := os.Symlink(outside, linkPath); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+
+	// Sanity: the lexical path is inside the safe dir.
+	target := filepath.Join(safe, "link", "secret.txt")
+	if _, ok := matchSafeDir(target, []string{safe}); !ok {
+		t.Fatal("test sanity: matchSafeDir must report target inside safe dir")
+	}
+
+	if _, err := resolveWorkspacePath(root, target, []string{safe}); err == nil {
+		t.Fatalf("resolveWorkspacePath must reject symlink escape via safe dir")
+	}
+}
+
+// TestResolveWorkspacePathAcceptsSymlinkWithinSafeDir checks the
+// complementary case: a symlink that stays inside the safe dir remains
+// usable.
+func TestResolveWorkspacePathAcceptsSymlinkWithinSafeDir(t *testing.T) {
+	root := t.TempDir()
+	safe := t.TempDir()
+
+	subA := filepath.Join(safe, "a")
+	subB := filepath.Join(safe, "b")
+	if err := os.MkdirAll(subB, 0o755); err != nil {
+		t.Fatalf("mkdir b: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subB, "data.txt"), []byte("ok"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := os.Symlink(subB, subA); err != nil {
+		t.Skipf("symlink creation not supported: %v", err)
+	}
+
+	target := filepath.Join(safe, "a", "data.txt")
+	resolved, err := resolveWorkspacePath(root, target, []string{safe})
+	if err != nil {
+		t.Fatalf("symlink within safe dir must be accepted: %v", err)
+	}
+	// The resolved path must point at the real file location.
+	wantSuffix := filepath.Join("b", "data.txt")
+	if !strings.HasSuffix(resolved, wantSuffix) {
+		t.Fatalf("resolved=%q does not end with %q", resolved, wantSuffix)
+	}
+}
+
 func TestPowerShellRun(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell tool is Windows-only")

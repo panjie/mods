@@ -416,3 +416,31 @@ func captureStdout(tb testing.TB, fn func()) string {
 	require.NoError(tb, r.Close())
 	return string(result.out)
 }
+
+// TestNextBackupPathAvoidsOverwrite locks in the fix for resetSettings:
+// the previous .bak (which may contain plaintext API keys) is never
+// silently clobbered. Successive resets land at .bak, .bak.1, .bak.2, ...
+func TestNextBackupPathAvoidsOverwrite(t *testing.T) {
+	t.Run("returns base when none exists", func(t *testing.T) {
+		base := filepath.Join(t.TempDir(), "mods.yml.bak")
+		got, err := nextBackupPath(base)
+		require.NoError(t, err)
+		require.Equal(t, base, got)
+	})
+
+	t.Run("appends numeric suffix when base exists", func(t *testing.T) {
+		dir := t.TempDir()
+		base := filepath.Join(dir, "mods.yml.bak")
+		require.NoError(t, os.WriteFile(base, []byte("first"), 0o600))
+
+		second, err := nextBackupPath(base)
+		require.NoError(t, err)
+		require.Equal(t, base+".1", second)
+
+		// Simulate the previous slot also being taken.
+		require.NoError(t, os.WriteFile(second, []byte("second"), 0o600))
+		third, err := nextBackupPath(base)
+		require.NoError(t, err)
+		require.Equal(t, base+".2", third)
+	})
+}

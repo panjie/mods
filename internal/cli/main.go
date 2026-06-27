@@ -640,7 +640,19 @@ func resetSettings() error {
 		return modsError{Err: err, ReasonText: "Couldn't open config file."}
 	}
 	defer inputFile.Close() //nolint:errcheck
-	outputFile, err := os.Create(config.SettingsPath + ".bak")
+
+	// Pick a backup name that does not silently overwrite an existing
+	// .bak: the original config can contain plaintext API keys, so a
+	// previous reset's backup must not be clobbered. If foo.bak exists,
+	// fall back to foo.bak.1, foo.bak.2, ... until a free slot is found.
+	backupPath, err := nextBackupPath(config.SettingsPath + ".bak")
+	if err != nil {
+		return modsError{Err: err, ReasonText: "Couldn't pick a backup file name."}
+	}
+	// Create the backup with the same restrictive mode the original config
+	// uses (0o600). Plain os.Create would inherit umask and leave the
+	// secrets in the backup readable by other local users.
+	outputFile, err := os.OpenFile(backupPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return modsError{Err: err, ReasonText: "Couldn't backup config file."}
 	}
@@ -669,10 +681,29 @@ func resetSettings() error {
 		fmt.Fprintf(os.Stderr,
 			"\n  %s %s\n\n",
 			StderrStyles().Comment.Render("Your old settings have been saved to:"),
-			StderrStyles().Link.Render(config.SettingsPath+".bak"),
+			StderrStyles().Link.Render(backupPath),
 		)
 	}
 	return nil
+}
+
+// nextBackupPath returns the first path among base, base.1, base.2, ...
+// that does not already exist, so resetSettings never silently overwrites
+// a previous backup. The loop bound prevents an unbounded retry storm if
+// the filesystem somehow returns errors that look like ErrNotExist for
+// every candidate.
+func nextBackupPath(base string) (string, error) {
+	const maxAttempts = 1000
+	candidate := base
+	for i := 0; i < maxAttempts; i++ {
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		candidate = fmt.Sprintf("%s.%d", base, i+1)
+	}
+	return "", fmt.Errorf("could not find an unused backup name starting at %q", base)
 }
 
 func deleteConversationOlderThan() error {

@@ -494,12 +494,14 @@ func WriteDefaultFile(path string) error {
 func createConfigFile(path string) error {
 	tmpl := template.Must(template.New("config").Parse(configTemplate))
 
-	f, err := os.Create(path)
+	// Create with restrictive mode in the OpenFile call rather than a
+	// post-Create Chmod: the latter leaves a sub-millisecond window during
+	// which a 0o666 (& ~umask) file containing the API-key template is
+	// readable by other local users. O_EXCL ensures we never silently
+	// overwrite an existing file the caller did not consent to clobber.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return modsError{Err: err, ReasonText: "Could not create configuration file."}
-	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		return modsError{Err: err, ReasonText: "Could not set configuration file permissions."}
 	}
 	defer func() { _ = f.Close() }()
 

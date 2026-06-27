@@ -195,3 +195,31 @@ func TestEnsureReportsSettingsExistedTrueWhenFileAlreadyExists(t *testing.T) {
 	require.True(t, second.SettingsExisted)
 	require.Equal(t, first.SettingsPath, second.SettingsPath)
 }
+
+// TestCreateConfigFileRefusesToOverwrite locks in the O_EXCL guarantee: a
+// previously written config (potentially containing API keys) must not be
+// silently clobbered by a re-run of createConfigFile.
+func TestCreateConfigFileRefusesToOverwrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	err := createConfigFile(path)
+	require.Error(t, err, "createConfigFile must not silently overwrite an existing file")
+}
+
+// TestCreateConfigFilePermissionsOnUnix asserts the file is created with
+// 0o600 in a single syscall, eliminating the post-create chmod race
+// window that previously exposed the API-key template to other users.
+// Permission bits on Windows do not follow POSIX conventions, so the test
+// is unix-only.
+func TestCreateConfigFilePermissionsOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits do not follow POSIX conventions on Windows")
+	}
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}

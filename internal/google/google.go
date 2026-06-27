@@ -50,10 +50,17 @@ func DefaultConfig(model, authToken string) Config {
 }
 
 // Part is a datatype containing media that is part of a multi-part Content message.
+//
+// When Gemini's thinking is enabled, the API returns separate parts for the
+// model's internal reasoning. Such parts carry Thought=true and the reasoning
+// text inside Text; non-thought parts contain the response intended for the
+// user. Thought is *bool so a missing field (the common case for non-thought
+// parts) is distinguishable from an explicit false. See
+// https://ai.google.dev/gemini-api/docs/thinking
 type Part struct {
 	Text       string `json:"text,omitempty"`
 	InlineData *Blob  `json:"inlineData,omitempty"`
-	Thought    string `json:"thought,omitempty"`
+	Thought    *bool  `json:"thought,omitempty"`
 }
 
 // Blob contains raw media bytes to be sent inline to the model.
@@ -337,13 +344,21 @@ func (s *Stream) Current() (proto.Chunk, error) {
 
 		var text, thought string
 		for _, part := range parts {
-			if part.Text != "" {
-				text += part.Text
+			if part.Text == "" {
+				continue
 			}
-			if part.Thought != "" {
-				thought += part.Thought
+			// Gemini marks reasoning parts with Thought=true; the reasoning
+			// text lives in Text on the same part. Non-thought parts contain
+			// the response intended for the user. Dispatch each part's Text
+			// to exactly one of {content, thought}; never both.
+			if part.Thought != nil && *part.Thought {
+				thought += part.Text
+				continue
 			}
+			text += part.Text
 		}
+		// Persist only the user-facing answer for replay in subsequent turns;
+		// internal reasoning must not contaminate Messages() history.
 		s.message += text
 
 		return proto.Chunk{Content: text, Thought: thought}, nil

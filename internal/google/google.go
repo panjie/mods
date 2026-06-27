@@ -175,6 +175,11 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	req, err := c.newRequest(ctx, http.MethodPost, c.config.BaseURL, withBody(body))
 	if err != nil {
 		stream.err = err
+		// Mark the stream finished here so callers do not advance via
+		// Next() into Current(), which would dereference the nil reader
+		// and panic. The companion error path below already sets this;
+		// the symmetric guard keeps both failure modes consistent.
+		stream.isFinished = true
 		return stream
 	}
 

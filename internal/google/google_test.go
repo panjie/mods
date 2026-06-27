@@ -98,6 +98,35 @@ func TestRequestOmitsAPIKeyHeaderWhenEmpty(t *testing.T) {
 	require.False(t, headerPresent, "no api key header should be sent when AuthToken is empty")
 }
 
+// TestRequestBuildErrorFinishesStream pins the fix for the missing
+// isFinished assignment on the first error path in Request(). If a
+// malformed BaseURL prevents newRequest from constructing the
+// *http.Request, the returned Stream used to report Next() == true
+// because isFinished stayed false. The next Current() call then
+// dereferenced the nil reader and panicked. After the fix the stream
+// must surface the error via Err() and report Next() == false so the
+// caller does not enter Current() at all.
+func TestRequestBuildErrorFinishesStream(t *testing.T) {
+	cfg := Config{
+		// Missing scheme makes http.NewRequestWithContext fail, exercising
+		// the c.newRequest error branch without spinning up a server.
+		BaseURL:    "://bad-url",
+		HTTPClient: &http.Client{},
+		AuthToken:  "k",
+	}
+	client := New(cfg)
+	st := client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+
+	require.Error(t, st.Err(), "request build failure must surface via Err()")
+	require.False(t, st.Next(),
+		"stream must report finished after a build-time failure so callers skip Current()")
+	require.NotPanics(t, func() {
+		_ = st.Close()
+	}, "Close() must be safe even when the underlying response was never opened")
+}
+
 // streamFromSSE constructs a Stream pre-loaded with the given SSE payload so
 // Current() can be exercised without a live HTTP server.
 func streamFromSSE(payload string) *Stream {

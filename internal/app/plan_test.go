@@ -1,8 +1,12 @@
 package app
 
 import (
+	"strconv"
+	"sync"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,4 +96,90 @@ func TestPlanPromptDiscouragesOverInvestigation(t *testing.T) {
 	require.Contains(t, planSystemPrompt, "directly relevant")
 	require.Contains(t, planSystemPrompt, "hardware")
 	require.Contains(t, planSystemPrompt, "3 to 5")
+}
+
+// proposalModeMods constructs the minimum Mods state required for the
+// proposal-mode key handler to operate.
+func proposalModeMods(t *testing.T, proposals ...proposal) *Mods {
+	t.Helper()
+	m := &Mods{
+		Config:         &Config{},
+		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		reviewer:       &toolReviewer{},
+		contentMutex:   &sync.Mutex{},
+		operationMutex: sync.Mutex{},
+		proposals:      proposals,
+		proposalMode:   true,
+	}
+	return m
+}
+
+// TestProposalEnterSelectsCurrent asserts the enter key in proposal mode
+// behaves the same as Y: it selects the proposal currently displayed,
+// regardless of the residual m.planSelected value. The previous switch on
+// m.planSelected was unreachable dead code.
+func TestProposalEnterSelectsCurrent(t *testing.T) {
+	proposals := []proposal{
+		{title: "Proposal 1", content: "approach A"},
+		{title: "Proposal 2", content: "approach B"},
+	}
+
+	for _, residual := range []int{0, 1, 2, 3, 4, 99} {
+		t.Run(name("planSelected=", residual), func(t *testing.T) {
+			m := proposalModeMods(t, proposals...)
+			m.proposalSelected = 1
+			m.planSelected = residual
+
+			cmd, handled := m.handleProposalKey(tea.KeyMsg{Type: tea.KeyEnter})
+			require.True(t, handled)
+			require.Nil(t, cmd)
+			require.False(t, m.proposalMode, "selecting must exit proposal mode")
+			require.Equal(t, "approach B", m.planContent,
+				"enter must commit the currently displayed proposal (Proposal 2)")
+		})
+	}
+}
+
+// TestProposalEnterEquivalentToY pins the design that enter and Y produce
+// the same state transition so future refactors keep the two in sync.
+func TestProposalEnterEquivalentToY(t *testing.T) {
+	proposals := []proposal{
+		{title: "Proposal 1", content: "alpha"},
+		{title: "Proposal 2", content: "beta"},
+	}
+	mEnter := proposalModeMods(t, proposals...)
+	mEnter.proposalSelected = 1
+	mY := proposalModeMods(t, proposals...)
+	mY.proposalSelected = 1
+
+	_, _ = mEnter.handleProposalKey(tea.KeyMsg{Type: tea.KeyEnter})
+	_, _ = mY.handleProposalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	require.Equal(t, mY.planContent, mEnter.planContent)
+	require.Equal(t, mY.proposalMode, mEnter.proposalMode)
+}
+
+// TestProposalSelectionBarNoMisleadingHighlight verifies the rendered nav
+// bar does not pull from m.planSelected (which has no key to advance it in
+// proposal mode) to highlight a single option. Concretely: changing
+// planSelected must not change the rendered output.
+func TestProposalSelectionBarNoMisleadingHighlight(t *testing.T) {
+	proposals := []proposal{
+		{title: "Proposal 1", content: "x"},
+		{title: "Proposal 2", content: "y"},
+	}
+	mA := proposalModeMods(t, proposals...)
+	mA.width = 100
+	mA.planSelected = 0
+
+	mB := proposalModeMods(t, proposals...)
+	mB.width = 100
+	mB.planSelected = 3
+
+	require.Equal(t, mA.renderProposalSelectionBar(""), mB.renderProposalSelectionBar(""),
+		"the proposal bar must be invariant under m.planSelected because no key advances it in proposal mode")
+}
+
+func name(prefix string, n int) string {
+	return prefix + strconv.Itoa(n)
 }

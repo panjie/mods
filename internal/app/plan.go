@@ -126,13 +126,16 @@ func (m *Mods) renderProposalSelectionBar(content string) string {
 	navLabel := fmt.Sprintf("Proposal %d/%d", m.proposalSelected+1, len(m.proposals))
 	options := []string{
 		"[← →] Navigate",
-		"[Y] Select",
+		"[Y/Enter] Select",
 		"[M] Modify",
 		"[N] Try again",
 		"[Ctrl+C] Cancel",
 	}
 	navStyle := m.Styles.ReviewChoices.Copy().Padding(0, 0)
-	optsLine := m.renderReviewOptions(options, m.planSelected, navStyle)
+	// Render options as plain badges: every option maps to a direct key, so
+	// highlighting a single one based on m.planSelected (which has no key
+	// to advance it in proposal mode) would mislead the user.
+	optsLine := navStyle.Render(strings.Join(options, "  "))
 	navLine := navStyle.Copy().Width(m.width).Render(
 		navStyle.Render(navLabel) + "  " + optsLine,
 	)

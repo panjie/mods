@@ -642,7 +642,6 @@ func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			idx = len(m.proposals) - 1
 		}
 		m.showProposal(idx)
-		m.planSelected = 0
 		return nil, true
 	case "right":
 		idx := m.proposalSelected + 1
@@ -650,12 +649,15 @@ func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			idx = 0
 		}
 		m.showProposal(idx)
-		m.planSelected = 0
 		return nil, true
-	case "y", "Y":
+	case "enter", "y", "Y":
+		// Enter is shorthand for Y (select the current proposal). The
+		// previous switch on m.planSelected was dead code: no key in
+		// proposal mode could move planSelected away from 0, so cases 1-4
+		// were unreachable and the case-0 branch left planSelected=1 which
+		// no subsequent enter could observe.
 		m.planContent = m.proposals[m.proposalSelected].content
 		m.clearProposals()
-		m.planSelected = 0
 		return nil, true
 	case "m", "M":
 		ti := textinput.New()
@@ -664,35 +666,6 @@ func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.feedbackInput = ti
 		m.feedbackMode = true
 		return m.feedbackInput.Focus(), true
-	case "enter":
-		switch m.planSelected {
-		case 0:
-			idx := m.proposalSelected - 1
-			if idx < 0 {
-				idx = len(m.proposals) - 1
-			}
-			m.showProposal(idx)
-			m.planSelected = 1
-			return nil, true
-		case 1:
-			m.planContent = m.proposals[m.proposalSelected].content
-			m.clearProposals()
-			m.planSelected = 0
-			return nil, true
-		case 2:
-			ti := textinput.New()
-			ti.Placeholder = "Describe changes you want to make to this proposal..."
-			ti.Width = max(m.width-4, 20)
-			m.feedbackInput = ti
-			m.feedbackMode = true
-			return m.feedbackInput.Focus(), true
-		case 3:
-			m.clearProposals()
-			return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
-		case 4:
-			m.state = doneState
-			return m.quit, true
-		}
 	case "n", "N":
 		m.clearProposals()
 		return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true

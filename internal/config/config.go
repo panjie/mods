@@ -403,16 +403,27 @@ type MCPServerConfig struct {
 }
 
 func Ensure() (Config, error) {
+	// fallback is the Config returned on every error path. Callers such as
+	// the --settings / --config wizards continue to use the returned value
+	// after a partial failure, so it must satisfy the invariants those
+	// callers rely on: SettingsPath is filled in as soon as it is known,
+	// CachePath always has at least the default value, and every other
+	// field carries its Default() value rather than the zero value.
+	fallback := Default()
 	c := Default()
+	applyCachePathDefault(&c)
+	applyCachePathDefault(&fallback)
+
 	sp, err := settingsFilePath()
 	if err != nil {
-		return c, modsError{Err: err, ReasonText: "Could not find settings path."}
+		return fallback, modsError{Err: err, ReasonText: "Could not find settings path."}
 	}
 	c.SettingsPath = sp
+	fallback.SettingsPath = sp
 
 	dir := filepath.Dir(sp)
 	if dirErr := os.MkdirAll(dir, 0o700); dirErr != nil { //nolint:mnd
-		return c, modsError{Err: dirErr, ReasonText: "Could not create cache directory."}
+		return fallback, modsError{Err: dirErr, ReasonText: "Could not create cache directory."}
 	}
 	_, statErr := os.Stat(sp)
 	switch {
@@ -421,35 +432,33 @@ func Ensure() (Config, error) {
 	case errors.Is(statErr, os.ErrNotExist):
 		c.SettingsExisted = false
 	default:
-		return c, modsError{Err: statErr, ReasonText: "Could not stat path."}
+		return fallback, modsError{Err: statErr, ReasonText: "Could not stat path."}
 	}
 
 	if dirErr := WriteDefaultFile(sp); dirErr != nil {
-		return c, dirErr
+		return fallback, dirErr
 	}
 	content, err := os.ReadFile(sp)
 	if err != nil {
-		return c, modsError{Err: err, ReasonText: "Could not read settings file."}
+		return fallback, modsError{Err: err, ReasonText: "Could not read settings file."}
 	}
 	// Parse env vars first so that the config file takes priority over
 	// environment overrides (priority: CLI flags > config file > env > defaults).
 	if err := env.ParseWithOptions(&c, env.Options{Prefix: "MODS_"}); err != nil {
-		return c, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
+		return fallback, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
 	}
 
 	if err := yaml.Unmarshal(content, &c); err != nil {
-		return c, modsError{Err: err, ReasonText: "Could not parse settings file."}
+		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
 
-	if c.CachePath == "" {
-		c.CachePath = filepath.Join(xdg.DataHome, "mods")
-	}
+	applyCachePathDefault(&c)
 
 	if err := os.MkdirAll(
 		filepath.Join(c.CachePath, "conversations"),
 		0o700,
 	); err != nil { //nolint:mnd
-		return c, modsError{Err: err, ReasonText: "Could not create cache directory."}
+		return fallback, modsError{Err: err, ReasonText: "Could not create cache directory."}
 	}
 
 	if c.WordWrap < 0 {
@@ -464,6 +473,17 @@ func Ensure() (Config, error) {
 	}
 
 	return c, nil
+}
+
+// applyCachePathDefault ensures c.CachePath always points at a usable
+// location. The default lives outside Default() because the XDG lookup
+// depends on environment variables that are normally only resolved at
+// Ensure() time, and we want any partial Ensure() failure to still leave
+// callers with a Config they can use for --settings / --config flows.
+func applyCachePathDefault(c *Config) {
+	if c.CachePath == "" {
+		c.CachePath = filepath.Join(xdg.DataHome, "mods")
+	}
 }
 
 func settingsFilePath() (string, error) {

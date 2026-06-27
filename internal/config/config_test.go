@@ -196,9 +196,39 @@ func TestEnsureReportsSettingsExistedTrueWhenFileAlreadyExists(t *testing.T) {
 	require.Equal(t, first.SettingsPath, second.SettingsPath)
 }
 
-// TestCreateConfigFileRefusesToOverwrite locks in the O_EXCL guarantee: a
-// previously written config (potentially containing API keys) must not be
-// silently clobbered by a re-run of createConfigFile.
+// TestEnsureReturnsCompleteConfigOnError pins the invariant that every
+// error path from Ensure() returns a Config the caller can still use:
+// SettingsPath is filled in as soon as it is known, CachePath always has
+// the default value, and the rest matches Default(). Callers of
+// --settings / --config keep the returned value after a partial failure,
+// so a half-initialised Config would surface as zero-valued fields
+// downstream.
+func TestEnsureReturnsCompleteConfigOnError(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	// Write a syntactically invalid YAML so the yaml.Unmarshal branch in
+	// Ensure() takes its error return, exercising one of the middle
+	// failure paths.
+	path := filepath.Join(configHome, "mods", "mods.yml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("not: [a: valid: yaml"), 0o600))
+
+	cfg, err := Ensure()
+	require.Error(t, err, "Ensure must surface the parse error")
+
+	// Even on failure, callers must observe a usable Config.
+	require.NotEmpty(t, cfg.SettingsPath,
+		"SettingsPath must be set so --settings / --config can locate the file")
+	require.NotEmpty(t, cfg.CachePath,
+		"CachePath must have its default so the cache layer never sees an empty path")
+	require.Equal(t, Default().ReviewMode, cfg.ReviewMode,
+		"non-failure fields must keep their Default() value")
+	require.Equal(t, Default().WordWrap, cfg.WordWrap)
+	require.Equal(t, Default().FormatAs, cfg.FormatAs)
+	require.Equal(t, Default().MCPTimeout, cfg.MCPTimeout)
+}
 func TestCreateConfigFileRefusesToOverwrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))

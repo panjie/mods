@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +15,6 @@ import (
 	"github.com/atotto/clipboard"
 	timeago "github.com/caarlos0/timea.go"
 	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
 	glamour "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/editor"
@@ -86,44 +84,18 @@ var (
 				return cmd.Usage()
 			}
 
-			opts := []tea.ProgramOption{}
-
-			if !IsInputTTY() || config.Raw {
-				opts = append(opts, tea.WithInput(nil))
-			}
-			if IsOutputTTY() && !config.Raw {
-				opts = append(opts, tea.WithOutput(os.Stderr))
-			} else {
-				opts = append(opts, tea.WithoutRenderer())
-			}
 			if os.Getenv("VIMRUNTIME") != "" {
 				config.Quiet = true
 			}
+
+			opts := buildTeaProgramOptions()
 
 			if autoConfig, err := maybeRunAutoConfig(os.Args); autoConfig || err != nil {
 				return err
 			}
 
-			if isNoArgs() && IsInputTTY() && config.OpenEditor {
-				prompt, err := prefixFromEditor()
-				if err != nil {
-					return err
-				}
-				config.Prefix = prompt
-			}
-
-			if (isNoArgs() || config.AskModel) && IsInputTTY() {
-				if err := askInfo(); err != nil && err == huh.ErrUserAborted {
-					return modsError{
-						Err:        err,
-						ReasonText: "User canceled.",
-					}
-				} else if err != nil {
-					return modsError{
-						Err:        err,
-						ReasonText: "Prompt failed.",
-					}
-				}
+			if err := gatherInteractivePrompt(); err != nil {
+				return err
 			}
 
 			if err := validateFirstRunPrerequisites(os.Args); err != nil {
@@ -137,10 +109,7 @@ var (
 				return nil
 			}
 
-			if isNoArgs() && !HasAPIKey(&config) && config.API != "ollama" && IsErrorTTY() {
-				fmt.Fprintf(os.Stderr, "\n  No API key detected for %s.\n  Run %s to configure your provider.\n\n",
-					config.API, StderrStyles().InlineCode.Render("mods --config"))
-			}
+			maybePrintMissingAPIKeyHint()
 
 			if config.Chat {
 				return runChat(cmd.Context(), args, opts)
@@ -151,111 +120,7 @@ var (
 				return err
 			}
 
-			if config.Dirs {
-				if len(args) > 0 {
-					switch args[0] {
-					case "config":
-						fmt.Println(filepath.Dir(config.SettingsPath))
-						return nil
-					case "cache":
-						fmt.Println(config.CachePath)
-						return nil
-					}
-				}
-				fmt.Printf("Configuration: %s\n", filepath.Dir(config.SettingsPath))
-				//nolint:mnd
-				fmt.Printf("%*sCache: %s\n", 8, " ", config.CachePath)
-				return nil
-			}
-
-			if config.Settings {
-				c, err := editor.Cmd("mods", config.SettingsPath)
-				if err != nil {
-					return modsError{
-						Err:        err,
-						ReasonText: "Could not edit your settings file.",
-					}
-				}
-				HideCommandWindow(c)
-				c.Stdin = os.Stdin
-				c.Stdout = os.Stdout
-				c.Stderr = os.Stderr
-				if err := c.Run(); err != nil {
-					return modsError{
-						Err: err,
-						ReasonText: fmt.Sprintf(
-							"Missing %s.",
-							StderrStyles().InlineCode.Render("$EDITOR"),
-						),
-					}
-				}
-
-				if !config.Quiet {
-					fmt.Fprintln(os.Stderr, "Wrote config file to:", config.SettingsPath)
-				}
-				return nil
-			}
-
-			if config.ResetSettings {
-				return resetSettings()
-			}
-
-			if mods.Input == "" && isNoArgs() {
-				return modsError{
-					ReasonText: "You haven't provided any prompt input.",
-					Err: newUserErrorf(
-						"You can give your prompt as arguments and/or pipe it from STDIN.\nExample: %s",
-						StdoutStyles().InlineCode.Render("mods [PROMPT...]"),
-					),
-				}
-			}
-
-			if config.ListRoles {
-				listRoles()
-				return nil
-			}
-			if config.List {
-				return listConversations(config.Raw)
-			}
-
-			if config.MCPList {
-				List(&config)
-				return nil
-			}
-
-			if config.MCPListTools {
-				ctx, cancel := context.WithTimeout(cmd.Context(), config.MCPTimeout)
-				defer cancel()
-				return ListTools(ctx, &config)
-			}
-
-			if len(config.Delete) > 0 {
-				return deleteConversations()
-			}
-
-			if config.DeleteOlderThan > 0 {
-				return deleteConversationOlderThan()
-			}
-
-			// raw mode already prints the output, no need to print it again
-			if IsOutputTTY() && !config.Raw {
-				switch {
-				case mods.RenderedOutput() != "":
-					fmt.Print(mods.RenderedOutput())
-				case mods.Output != "":
-					fmt.Print(mods.Output)
-				}
-			}
-
-			if config.Show != "" || config.ShowLast {
-				return nil
-			}
-
-			if config.CacheWriteToID != "" {
-				return saveConversation(mods)
-			}
-
-			return nil
+			return dispatchOneShotActions(cmd.Context(), args, mods)
 		},
 	}
 )

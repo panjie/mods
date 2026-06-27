@@ -328,6 +328,7 @@ func initFlags() {
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
 	regBool(flags, &config.Debug, "debug", "D", config.Debug)
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
+	regStr(flags, &config.CachePath, "cache-path", "", config.CachePath)
 	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", flagDesc("reasoning"))
 	f.NoOptDefVal = "on"
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", flagDesc("review"))
@@ -361,6 +362,7 @@ func initFlags() {
 		"clipboard-image",
 		"format-as",
 		"no-cache",
+		"cache-path",
 	)
 	markCategory(flags, flagCategoryModelAPI, "api", "model", "ask-model", "http-proxy")
 	markCategory(
@@ -376,6 +378,7 @@ func initFlags() {
 		"delete",
 		flagDeleteOlder,
 		"no-cache",
+		"cache-path",
 	)
 	markCategory(
 		flags,
@@ -443,15 +446,27 @@ func initFlags() {
 }
 
 func conversationCompletions(toComplete string) []string {
-	var err error
-	if db == nil {
-		db, err = Open(filepath.Join(config.CachePath, "conversations", "mods.db"))
+	// Cobra invokes flag completions via the __complete subcommand on
+	// every shell tab, so the package-level db may already be opened by
+	// execute() and we want to reuse it. When called in completion-only
+	// mode (or by tests that haven't set db), open a private connection
+	// for the duration of the call and close it before returning, so a
+	// completion invocation never leaks a dangling DB handle through
+	// the package-level variable.
+	completionDB := db
+	if completionDB == nil {
+		if config.CachePath == "" {
+			return nil
+		}
+		var err error
+		completionDB, err = Open(filepath.Join(config.CachePath, "conversations", "mods.db"))
 		if err != nil {
 			return nil
 		}
+		defer completionDB.Close() //nolint:errcheck
 	}
 
-	results, err := db.Completions(toComplete)
+	results, err := completionDB.Completions(toComplete)
 	if err != nil {
 		return nil
 	}

@@ -420,6 +420,31 @@ func captureStdout(tb testing.TB, fn func()) string {
 // TestNextBackupPathAvoidsOverwrite locks in the fix for resetSettings:
 // the previous .bak (which may contain plaintext API keys) is never
 // silently clobbered. Successive resets land at .bak, .bak.1, .bak.2, ...
+// TestCachePathFlagRegistered pins the fix for the documentation/CLI
+// mismatch: the cache-path entry in the Help map promised a CLI flag,
+// but initFlags() never registered one, so users could only set it via
+// YAML or MODS_CACHE_PATH. Surface it as an advanced flag so the help
+// output and the actual flag set agree.
+func TestCachePathFlagRegistered(t *testing.T) {
+	if rootCmd.Flags().Lookup("cache-path") == nil {
+		initFlags()
+	}
+	f := rootCmd.Flags().Lookup("cache-path")
+	require.NotNil(t, f, "--cache-path must be a registered CLI flag")
+	require.Equal(t, "string", f.Value.Type())
+
+	saveCachePath := config.CachePath
+	t.Cleanup(func() {
+		config.CachePath = saveCachePath
+		_ = rootCmd.Flags().Set("cache-path", saveCachePath)
+	})
+
+	// Setting the flag must drive the same destination as the YAML
+	// field; verify by parsing and reading back.
+	require.NoError(t, rootCmd.Flags().Set("cache-path", "/tmp/mods-cache"))
+	require.Equal(t, "/tmp/mods-cache", config.CachePath)
+}
+
 func TestNextBackupPathAvoidsOverwrite(t *testing.T) {
 	t.Run("returns base when none exists", func(t *testing.T) {
 		base := filepath.Join(t.TempDir(), "mods.yml.bak")

@@ -98,6 +98,13 @@ func (s *Stream) CallTools() []proto.ToolCallStatus { return nil }
 // Close implements stream.Stream.
 func (s *Stream) Close() error {
 	s.done = true
+	// Request() leaves s.stream nil when ChatStream itself failed (and the
+	// error is reported via Err()). The streamRunner.close path still
+	// calls Close unconditionally; guard the nil here so a request-time
+	// failure cannot turn into a deferred Close panic.
+	if s.stream == nil {
+		return nil
+	}
 	return s.stream.Close() //nolint:wrapcheck
 }
 

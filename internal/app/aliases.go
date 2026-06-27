@@ -38,6 +38,7 @@ var ToolOperationArgs = ui.ToolOperationArgs
 var ToolArgsSummary = ui.ToolArgsSummary
 var ArgString = ui.ArgString
 var OneLinePreview = ui.OneLinePreview
+var ShellCommandPreview = ui.ShellCommandPreview
 var TruncateOperationStatus = ui.TruncateOperationStatus
 var RemoveWhitespace = ui.RemoveWhitespace
 var ShellResultBlock = ui.ShellResultBlock

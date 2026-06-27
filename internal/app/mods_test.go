@@ -392,6 +392,11 @@ func TestToolOperationLabel(t *testing.T) {
 		require.Equal(t, "Running command: go test ./...", got)
 	})
 
+	t.Run("shell command skips leading comment", func(t *testing.T) {
+		got := toolOperationLabel("shell_run", []byte(`{"command":"# check workspace config\nls .opencode*"}`), 80)
+		require.Equal(t, "Running command: ls .opencode*", got)
+	})
+
 	t.Run("file read path", func(t *testing.T) {
 		got := toolOperationLabel("fs_read_file", []byte(`{"path":"mods.go"}`), 80)
 		require.Equal(t, "Reading file: mods.go", got)

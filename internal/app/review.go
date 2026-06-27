@@ -401,10 +401,10 @@ func formatReviewLabel(name string, args []byte) string {
 	case "fs_apply_patch":
 		return "Apply patch to workspace files"
 	case "shell_run":
-		cmd := OneLinePreview(ArgString(parsed, "command"))
+		cmd := ShellCommandPreview(ArgString(parsed, "command"))
 		return fmt.Sprintf("Run: %s", cmd)
 	case "powershell_run":
-		cmd := OneLinePreview(ArgString(parsed, "command"))
+		cmd := ShellCommandPreview(ArgString(parsed, "command"))
 		return fmt.Sprintf("Run PowerShell: %s", cmd)
 	default:
 		summary := ToolArgsSummary(parsed)

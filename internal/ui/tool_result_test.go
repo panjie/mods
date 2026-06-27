@@ -51,6 +51,11 @@ func TestShellResultBlock(t *testing.T) {
 		got := ShellResultBlock("shell_run", []byte(`{"command":"echo a\n echo b"}`), nil)
 		require.Equal(t, "> \u2713 ran `echo a` \u00b7 exit 0", got)
 	})
+
+	t.Run("leading comment hidden in preview", func(t *testing.T) {
+		got := ShellResultBlock("shell_run", []byte(`{"command":"# probe workspace config\nls .opencode*"}`), exitCodeErr{code: 1})
+		require.Equal(t, "> \u2717 ran `ls .opencode*` \u00b7 exit 1", got)
+	})
 }
 
 func TestShellResultBlockBackticks(t *testing.T) {

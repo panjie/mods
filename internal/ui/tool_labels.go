@@ -49,11 +49,11 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 			return TruncateOperationStatus("Searching web: "+query, width)
 		}
 	case "shell_run":
-		if command := OneLinePreview(ArgString(args, "command")); command != "" {
+		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
 			return TruncateOperationStatus("Running command: "+command, width)
 		}
 	case "powershell_run":
-		if command := OneLinePreview(ArgString(args, "command")); command != "" {
+		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
 			return TruncateOperationStatus("Running PowerShell: "+command, width)
 		}
 	case "fs_read_file":
@@ -177,6 +177,24 @@ func OneLinePreview(s string) string {
 func FirstLine(s string) string {
 	first, _, _ := strings.Cut(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 	return first
+}
+
+// ShellCommandPreview returns a compact one-line preview of a shell command.
+// It skips leading blank lines and comment lines (lines whose first non-space
+// character is '#') because models often prepend a '#' comment to narrate
+// intent; without skipping, the preview would show only the comment and hide
+// the command that actually runs. If every line is blank or a comment, it
+// falls back to the first line so the preview is never empty.
+func ShellCommandPreview(s string) string {
+	normalized := strings.ReplaceAll(s, "\r", "\n")
+	for _, line := range strings.Split(normalized, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		return OneLinePreview(line)
+	}
+	return OneLinePreview(s)
 }
 
 func TruncateOperationStatus(s string, width int) string {

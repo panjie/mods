@@ -38,7 +38,7 @@ func shellCommand(name string, data []byte) string {
 	default:
 		return ""
 	}
-	return OneLinePreview(ArgString(ToolOperationArgs(data), "command"))
+	return ShellCommandPreview(ArgString(ToolOperationArgs(data), "command"))
 }
 
 // inlineCode wraps s in a markdown inline-code span, using a backtick fence

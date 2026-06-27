@@ -32,8 +32,11 @@ func (m *Mods) retry(content string, err modsError) tea.Msg {
 	}
 	wait := time.Millisecond * 100 * time.Duration(math.Pow(2, float64(m.retries))) //nolint:mnd
 	debug.Printf("API error: retry %d/%d in %v -> %s", m.retries, m.Config.MaxRetries, wait, err.ReasonText)
-	time.Sleep(wait)
-	return completionInput{content}
+	// Return a retryMsg instead of sleeping here: a synchronous time.Sleep
+	// would freeze the Bubble Tea Update loop, blocking animation redraws and
+	// keystrokes (including Ctrl+C) for up to several seconds during back-off.
+	// Update() schedules a tea.Tick that delivers completionInput after wait.
+	return retryMsg{content: content, wait: wait}
 }
 
 func (m *Mods) startCompletionCmd(content string) tea.Cmd {

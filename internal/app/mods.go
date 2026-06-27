@@ -220,6 +220,15 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = requestState
 		cmds = append(cmds, m.startCompletionCmd(""))
 
+	case retryMsg:
+		// Schedule the retry via tea.Tick so the Update loop remains
+		// responsive during the back-off. If the user quits before the tick
+		// fires, the resulting completionInput is delivered to a stopped
+		// Program and harmlessly dropped by Bubble Tea.
+		return m, tea.Tick(msg.wait, func(time.Time) tea.Msg {
+			return completionInput{content: msg.content}
+		})
+
 	case completionInput:
 		if msg.content != "" {
 			m.Input = RemoveWhitespace(msg.content)

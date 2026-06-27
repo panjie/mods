@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"github.com/panjie/mods/internal/proto"
 )
@@ -37,6 +38,17 @@ func FirstLine(s string) string {
 // completionInput is a tea.Msg that wraps the content read from stdin.
 type completionInput struct {
 	content string
+}
+
+// retryMsg signals that a retryable provider error occurred and the
+// completion should be re-attempted after a backoff delay. retry() returns
+// this message instead of calling time.Sleep so the Bubble Tea Update loop
+// stays responsive (especially to Ctrl+C and other keystrokes) during the
+// wait. Update() converts it into a tea.Tick that fires completionInput
+// after the requested duration.
+type retryMsg struct {
+	content string
+	wait    time.Duration
 }
 
 type toolOperationStatusMsg struct {

@@ -46,9 +46,9 @@ func TestHandleAPIError(t *testing.T) {
 		apiErr := makeErr(http.StatusNotFound, "")
 		mod := Model{Name: "gpt-4", API: "openai", Fallback: "gpt-3.5-turbo"}
 		msg := m.handleAPIError(apiErr, mod, "prompt")
-		ci, ok := msg.(completionInput)
-		require.True(t, ok, "expected completionInput for retry, got %T", msg)
-		require.Equal(t, "prompt", ci.content)
+		rm, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg for retry, got %T", msg)
+		require.Equal(t, "prompt", rm.content)
 	})
 
 	t.Run("404 without fallback returns error", func(t *testing.T) {
@@ -70,8 +70,8 @@ func TestHandleAPIError(t *testing.T) {
 		apiErr.Message = "This model's maximum context length is 10 tokens. However, your messages resulted in 3 tokens"
 		mod := Model{Name: "gpt-4", API: "openai"}
 		msg := m.handleAPIError(apiErr, mod, "this is a long prompt I have no idea if its really 10 tokens")
-		_, ok := msg.(completionInput)
-		require.True(t, ok, "expected completionInput for retry")
+		_, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg for retry")
 	})
 
 	t.Run("400 context_length_exceeded no_limit returns error", func(t *testing.T) {
@@ -112,8 +112,8 @@ func TestHandleAPIError(t *testing.T) {
 		apiErr := makeErr(http.StatusTooManyRequests, "")
 		mod := Model{Name: "gpt-4", API: "openai"}
 		msg := m.handleAPIError(apiErr, mod, "prompt")
-		_, ok := msg.(completionInput)
-		require.True(t, ok, "expected completionInput for rate limit retry")
+		_, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg for rate limit retry")
 	})
 
 	t.Run("413 returns error", func(t *testing.T) {
@@ -133,8 +133,8 @@ func TestHandleAPIError(t *testing.T) {
 		apiErr := makeErr(http.StatusInternalServerError, "")
 		mod := Model{Name: "gpt-4", API: "openai"}
 		msg := m.handleAPIError(apiErr, mod, "prompt")
-		_, ok := msg.(completionInput)
-		require.True(t, ok, "expected completionInput for 500 retry")
+		_, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg for 500 retry")
 	})
 
 	t.Run("500 non-openai returns error", func(t *testing.T) {
@@ -164,8 +164,8 @@ func TestHandleAPIError(t *testing.T) {
 		apiErr := makeErr(http.StatusBadGateway, "")
 		mod := Model{Name: "gpt-4", API: "anthropic"}
 		msg := m.handleAPIError(apiErr, mod, "prompt")
-		_, ok := msg.(completionInput)
-		require.True(t, ok, "expected completionInput for 5xx retry")
+		_, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg for 5xx retry")
 	})
 
 	t.Run("max retries reached returns error", func(t *testing.T) {
@@ -275,7 +275,7 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "gemini-2.5-pro", API: "google", Fallback: "gemini-2.5-flash"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusNotFound, "model not found"), mod, "prompt")
-		require.IsType(t, completionInput{}, msg, "expected retry")
+		require.IsType(t, retryMsg{}, msg, "expected retry")
 		require.Equal(t, "gemini-2.5-flash", m.Config.Model, "fallback model should be selected")
 	})
 
@@ -295,7 +295,7 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		m.Config.NoLimit = false
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusBadRequest, "Request exceeds context length"), mod, "a long prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on context-length error")
 	})
 
@@ -305,7 +305,7 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusBadRequest, "token count too high"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on token-count error")
 	})
 
@@ -344,7 +344,7 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusTooManyRequests, ""), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on rate limit")
 	})
 
@@ -354,7 +354,7 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusServiceUnavailable, ""), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 503")
 	})
 
@@ -364,7 +364,7 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusBadGateway, "upstream down"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 5xx")
 	})
 
@@ -388,7 +388,7 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic", Fallback: "claude-3-5-haiku"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusNotFound, ""), mod, "prompt")
-		require.IsType(t, completionInput{}, msg, "expected retry")
+		require.IsType(t, retryMsg{}, msg, "expected retry")
 		require.Equal(t, "claude-3-5-haiku", m.Config.Model)
 	})
 
@@ -408,7 +408,7 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		m.Config.NoLimit = false
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusBadRequest, contextLenBody), mod, "a long prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on prompt-too-long")
 	})
 
@@ -418,7 +418,7 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusBadRequest, tokenCountBody), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on number-of-tokens")
 	})
 
@@ -456,7 +456,7 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusTooManyRequests, ""), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on rate limit")
 	})
 
@@ -466,7 +466,7 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusServiceUnavailable, ""), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 503")
 	})
 
@@ -476,7 +476,7 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusBadGateway, ""), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 5xx")
 	})
 }
@@ -492,7 +492,7 @@ func TestHandleCohereAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "command-r-plus", API: "cohere", Fallback: "command-r"}
 		msg := m.handleCohereAPIError(makeErr(http.StatusNotFound, "model not found"), mod, "prompt")
-		require.IsType(t, completionInput{}, msg, "expected retry")
+		require.IsType(t, retryMsg{}, msg, "expected retry")
 		require.Equal(t, "command-r", m.Config.Model)
 	})
 
@@ -512,7 +512,7 @@ func TestHandleCohereAPIError(t *testing.T) {
 		m.Config.NoLimit = false
 		mod := Model{Name: "command-r-plus", API: "cohere"}
 		msg := m.handleCohereAPIError(makeErr(http.StatusBadRequest, "token limit exceeded"), mod, "a long prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on token-limit")
 	})
 
@@ -522,7 +522,7 @@ func TestHandleCohereAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "command-r-plus", API: "cohere"}
 		msg := m.handleCohereAPIError(makeErr(http.StatusBadRequest, "too many tokens in input"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on too-many-tokens")
 	})
 
@@ -560,7 +560,7 @@ func TestHandleCohereAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "command-r-plus", API: "cohere"}
 		msg := m.handleCohereAPIError(makeErr(http.StatusTooManyRequests, "rate limited"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on rate limit")
 	})
 
@@ -570,7 +570,7 @@ func TestHandleCohereAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "command-r-plus", API: "cohere"}
 		msg := m.handleCohereAPIError(makeErr(http.StatusServiceUnavailable, "unavailable"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 503")
 	})
 
@@ -580,7 +580,7 @@ func TestHandleCohereAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "command-r-plus", API: "cohere"}
 		msg := m.handleCohereAPIError(makeErr(http.StatusBadGateway, "gateway down"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 5xx")
 	})
 }
@@ -596,7 +596,7 @@ func TestHandleOllamaAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "llama3.3", API: "ollama", Fallback: "llama3.2"}
 		msg := m.handleOllamaAPIError(makeErr(http.StatusNotFound, "model not found"), mod, "prompt")
-		require.IsType(t, completionInput{}, msg, "expected retry")
+		require.IsType(t, retryMsg{}, msg, "expected retry")
 		require.Equal(t, "llama3.2", m.Config.Model)
 	})
 
@@ -637,7 +637,7 @@ func TestHandleOllamaAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "llama3.3", API: "ollama"}
 		msg := m.handleOllamaAPIError(makeErr(http.StatusTooManyRequests, "rate limited"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on rate limit")
 	})
 
@@ -647,7 +647,7 @@ func TestHandleOllamaAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "llama3.3", API: "ollama"}
 		msg := m.handleOllamaAPIError(makeErr(http.StatusServiceUnavailable, "unavailable"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 503")
 	})
 
@@ -657,7 +657,7 @@ func TestHandleOllamaAPIError(t *testing.T) {
 		m.retries = 0
 		mod := Model{Name: "llama3.3", API: "ollama"}
 		msg := m.handleOllamaAPIError(makeErr(http.StatusBadGateway, "gateway down"), mod, "prompt")
-		_, ok := msg.(completionInput)
+		_, ok := msg.(retryMsg)
 		require.True(t, ok, "expected retry on 5xx")
 	})
 }

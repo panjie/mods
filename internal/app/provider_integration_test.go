@@ -25,11 +25,11 @@ type providerTest struct {
 }
 
 var providerTests = []providerTest{
-	{api: "openai", model: "gpt-5.4", envKey: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1"},
-	{api: "google", model: "gemini-3.5-flash", envKey: "GOOGLE_API_KEY"},
-	{api: "anthropic", model: "claude-sonnet-4-6", envKey: "ANTHROPIC_API_KEY", baseURL: "https://api.anthropic.com/v1"},
-	{api: "cohere", model: "command-a-v7", envKey: "COHERE_API_KEY"},
-	{api: "ollama", model: "llama4:16x17b"},
+	{api: "openai", model: "gpt-4o-mini", envKey: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1"},
+	{api: "google", model: "gemini-2.5-flash", envKey: "GOOGLE_API_KEY"},
+	{api: "anthropic", model: "claude-3-5-haiku-20241022", envKey: "ANTHROPIC_API_KEY", baseURL: "https://api.anthropic.com/v1"},
+	{api: "cohere", model: "command-r-plus", envKey: "COHERE_API_KEY"},
+	{api: "ollama", model: "llama3.1"},
 }
 
 func testIntegrationMods(t *testing.T, api, model string) *Mods {
@@ -72,30 +72,30 @@ func testIntegrationModsWithBaseURL(t *testing.T, api, model, baseURL string) *M
 
 func TestOpenAIIntegration(t *testing.T) {
 	skipIfNoKey(t, "OPENAI_API_KEY", "openai")
-	m := testIntegrationModsWithBaseURL(t, "openai", "gpt-5.4", "https://api.openai.com/v1")
+	m := testIntegrationModsWithBaseURL(t, "openai", "gpt-4o-mini", "https://api.openai.com/v1")
 	runIntegrationPrompt(t, m, "hello")
 }
 
 func TestGoogleIntegration(t *testing.T) {
 	skipIfNoKey(t, "GOOGLE_API_KEY", "google")
-	m := testIntegrationMods(t, "google", "gemini-3.5-flash")
+	m := testIntegrationMods(t, "google", "gemini-2.5-flash")
 	runIntegrationPrompt(t, m, "say hello")
 }
 
 func TestAnthropicIntegration(t *testing.T) {
 	skipIfNoKey(t, "ANTHROPIC_API_KEY", "anthropic")
-	m := testIntegrationModsWithBaseURL(t, "anthropic", "claude-sonnet-4-6", "https://api.anthropic.com/v1")
+	m := testIntegrationModsWithBaseURL(t, "anthropic", "claude-3-5-haiku-20241022", "https://api.anthropic.com/v1")
 	runIntegrationPrompt(t, m, "say hello")
 }
 
 func TestCohereIntegration(t *testing.T) {
 	skipIfNoKey(t, "COHERE_API_KEY", "cohere")
-	m := testIntegrationMods(t, "cohere", "command-a-v7")
+	m := testIntegrationMods(t, "cohere", "command-r-plus")
 	runIntegrationPrompt(t, m, "say hello")
 }
 
 func TestOllamaIntegration(t *testing.T) {
-	m := testIntegrationMods(t, "ollama", "llama4:16x17b")
+	m := testIntegrationMods(t, "ollama", "llama3.1")
 	m.Config.APIs[0].BaseURL = ollamaBaseURL()
 	runIntegrationPrompt(t, m, "say hello")
 }

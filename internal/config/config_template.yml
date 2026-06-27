@@ -1,7 +1,7 @@
 # {{ index .Help "api" }}
 default-api: openai
 # {{ index .Help "model" }}
-default-model: gpt-5.4
+default-model: gpt-4o-mini
 
 # ── Formatting ────────────────────────────────────────────────────
 
@@ -194,29 +194,33 @@ apis:
     # command is executed via the shell. Prefer api-key-env when possible.
     # api-key-cmd: rbw get -f OPENAI_API_KEY chat.openai.com
     models:
-      gpt-5.5:
-        aliases: ["5.5", "gpt5.5"]
-        max-input-chars: 1000000
-        fallback: gpt-5.4
-      gpt-5.4:
-        aliases: ["5.4", "gpt5.4"]
-        max-input-chars: 1000000
-        fallback: gpt-5.4-mini
-      gpt-5.4-mini:
-        aliases: ["5.4m", "gpt5.4m", "mini"]
-        max-input-chars: 400000
-        fallback: gpt-5.4
+      gpt-4o:
+        aliases: ["4o"]
+        max-input-chars: 392000
+        fallback: gpt-4o-mini
+      gpt-4o-mini:
+        aliases: ["4o-mini", "mini"]
+        max-input-chars: 392000
+      o1:
+        aliases: ["o1"]
+        max-input-chars: 392000
+      o1-mini:
+        aliases: ["o1m"]
+        max-input-chars: 392000
+      o3-mini:
+        aliases: ["o3m"]
+        max-input-chars: 392000
 
   google:
     models:
-      gemini-3.5-flash:
-        aliases: ["gm3.5f", "gemini-flash"]
-        max-input-chars: 4194304
-      gemini-3.1-pro:
-        aliases: ["gm3.1p", "gemini-pro"]
-        max-input-chars: 4194304
       gemini-2.5-pro:
-        aliases: ["gm2.5p"]
+        aliases: ["gm2.5p", "gemini-pro"]
+        max-input-chars: 4194304
+      gemini-2.5-flash:
+        aliases: ["gm2.5f", "gemini-flash"]
+        max-input-chars: 4194304
+      gemini-2.0-flash:
+        aliases: ["gm2.0f"]
         max-input-chars: 4194304
 
   anthropic:
@@ -224,15 +228,15 @@ apis:
     api-key:
     api-key-env: ANTHROPIC_API_KEY
     models:
-      claude-opus-4-8:
-        aliases: ["claude-opus-4.8", "opus-4.8", "opus"]
-        max-input-chars: 1000000
-      claude-sonnet-4-6:
-        aliases: ["claude-sonnet-4.6", "sonnet-4.6", "sonnet"]
-        max-input-chars: 1000000
-      claude-haiku-4-5-20251001:
-        aliases: ["claude-haiku-4.5", "haiku-4.5", "haiku"]
-        max-input-chars: 200000
+      claude-3-5-sonnet-20241022:
+        aliases: ["claude-3.5-sonnet", "sonnet-3.5", "sonnet"]
+        max-input-chars: 800000
+      claude-3-5-haiku-20241022:
+        aliases: ["claude-3.5-haiku", "haiku-3.5", "haiku"]
+        max-input-chars: 800000
+      claude-3-opus-20240229:
+        aliases: ["claude-3-opus", "opus-3", "opus"]
+        max-input-chars: 800000
 
   # ── Enterprise / Alternative ──────────────────────────────────
 
@@ -241,9 +245,9 @@ apis:
     api-key:
     api-key-env: AZURE_OPENAI_KEY
     models:
-      gpt-5.4:
-        aliases: ["az5.4"]
-        max-input-chars: 1000000
+      gpt-4o:
+        aliases: ["az4o"]
+        max-input-chars: 392000
 
   deepseek:
     base-url: https://api.deepseek.com/
@@ -256,30 +260,29 @@ apis:
       # See: https://api-docs.deepseek.com/guides/thinking_mode
       deepseek-reasoner:
         aliases: ["r1", "reasoner"]
-        max-input-chars: 1000000
-        thinking-type: enabled
-      deepseek-v4-flash:
-        aliases: ["flash", "v4-flash"]
-        max-input-chars: 1000000
+        max-input-chars: 800000
         thinking-type: enabled
       deepseek-chat:
         aliases: ["chat", "v3"]
-        max-input-chars: 1000000
+        max-input-chars: 800000
 
   # ── Chinese AI Providers (国内大模型) ──────────────────────────
 
   # 智谱 GLM (ZhipuAI)
-  # GLM-5.2 uses thinking.type: "enabled" (Anthropic-style) and returns
-  # reasoning via the reasoning_content delta field (auto-captured).
+  # Recent GLM models use thinking.type: "enabled" (Anthropic-style) and
+  # return reasoning via the reasoning_content delta field (auto-captured).
   glm:
     base-url: https://open.bigmodel.cn/api/paas/v4
     api-key:
     api-key-env: ZAI_API_KEY
     models:
-      glm-5.2:
-        aliases: ["glm", "glm5"]
+      glm-4-plus:
+        aliases: ["glm", "glm4"]
         max-input-chars: 128000
         thinking-type: enabled
+      glm-4-air:
+        aliases: ["glm4-air"]
+        max-input-chars: 128000
 
   # MiniMax
   # Uses thinking.type: "adaptive" (NOT "enabled") and inlines reasoning
@@ -289,14 +292,14 @@ apis:
     api-key:
     api-key-env: MINIMAX_API_KEY
     models:
-      MiniMax-M3:
-        aliases: ["m3", "minimax"]
-        max-input-chars: 1000000
+      MiniMax-Text-01:
+        aliases: ["m1", "minimax"]
+        max-input-chars: 800000
         thinking-type: adaptive
 
   # 通义千问 Qwen (Alibaba DashScope)
   # Two thinking modes: qwq (dedicated reasoning model, always thinks)
-  # and qwen3 (toggle via enable_thinking).
+  # and qwen-plus (toggle via enable_thinking).
   qwen:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     api-key:
@@ -305,25 +308,34 @@ apis:
       qwq-plus:
         aliases: ["qwq", "qwen-reasoner"]
         max-input-chars: 131072
-      qwen3-plus:
+      qwen-plus:
         aliases: ["qwen", "qp"]
         max-input-chars: 131072
-        # enable_thinking is always-on; -T does not toggle it.
-        # Switch to qwq-plus for a model that only thinks on demand.
+        # enable_thinking toggles reasoning on this model; -T does not
+        # toggle it for OpenAI-compatible endpoints. Switch to qwq-plus
+        # for a model that only thinks on demand.
         extra-params:
           enable_thinking: true
+      qwen-max:
+        aliases: ["qmax"]
+        max-input-chars: 131072
+      qwen-turbo:
+        aliases: ["qturbo"]
+        max-input-chars: 131072
 
   # Kimi (Moonshot AI)
-  # K2 supports thinking via thinking.type: "enabled".
+  # moonshot-v1 family does not expose thinking-mode controls.
   kimi:
     base-url: https://api.moonshot.cn/v1
     api-key:
     api-key-env: MOONSHOT_API_KEY
     models:
-      kimi-k2:
-        aliases: ["k2", "kimi"]
-        max-input-chars: 131072
-        thinking-type: enabled
+      moonshot-v1-128k:
+        aliases: ["kimi128", "kimi"]
+        max-input-chars: 128000
+      moonshot-v1-32k:
+        aliases: ["kimi32"]
+        max-input-chars: 32000
 
   # ── Multi-provider Aggregator ─────────────────────────────────
 
@@ -332,30 +344,30 @@ apis:
     api-key:
     api-key-env: OPENROUTER_API_KEY
     models:
-      deepseek/deepseek-v4-flash:
-        aliases: ["or-v4-flash"]
-        max-input-chars: 1000000
-      anthropic/claude-sonnet-4-6:
-        aliases: ["or-sonnet-4.6"]
-        max-input-chars: 1000000
-      google/gemini-3.1-pro:
+      anthropic/claude-3.5-sonnet:
+        aliases: ["or-sonnet"]
+        max-input-chars: 800000
+      google/gemini-2.5-pro:
         aliases: ["or-gemini-pro"]
         max-input-chars: 4194304
+      deepseek/deepseek-chat:
+        aliases: ["or-deepseek"]
+        max-input-chars: 800000
 
   # ── Local / Self-hosted ───────────────────────────────────────
 
   ollama:
     base-url: http://localhost:11434
     models:
-      "llama4:16x17b":
-        aliases: ["llama4", "scout"]
-        max-input-chars: 10000000
-      "gemma4:12b":
-        aliases: ["gemma4", "gemma"]
-        max-input-chars: 1000000
-      "qwen3.5:7b":
-        aliases: ["qwen3.5", "qwen"]
+      "llama3.1":
+        aliases: ["llama3.1", "llama"]
         max-input-chars: 392000
+      "qwen2.5":
+        aliases: ["qwen2.5"]
+        max-input-chars: 131072
+      "gemma2":
+        aliases: ["gemma2", "gemma"]
+        max-input-chars: 32000
 
   # Example: custom OpenAI-compatible server
   # custom:

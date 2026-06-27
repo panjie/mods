@@ -481,22 +481,8 @@ func (c *DB) MigrateLegacyConversations(cachePath string) error {
 				fmt.Errorf("check migrated conversation %s: %w", id, existingErr))
 			continue
 		}
-		tx, err := c.db.Beginx()
-		if err != nil {
-			migrationErrors = append(migrationErrors, fmt.Errorf("begin legacy migration %s: %w", id, err))
-			continue
-		}
-		if _, err := tx.Exec(tx.Rebind(`
-			INSERT INTO conversation_messages (conversation_id, messages)
-			VALUES (?, ?)
-			ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
-		`), id, encoded); err != nil {
-			_ = tx.Rollback()
+		if err := c.migrateOneLegacyConversation(id, encoded); err != nil {
 			migrationErrors = append(migrationErrors, fmt.Errorf("migrate legacy conversation %s: %w", id, err))
-			continue
-		}
-		if err := tx.Commit(); err != nil {
-			migrationErrors = append(migrationErrors, fmt.Errorf("commit legacy conversation %s: %w", id, err))
 			continue
 		}
 		if err := os.Remove(path); err != nil {
@@ -505,6 +491,33 @@ func (c *DB) MigrateLegacyConversations(cachePath string) error {
 		}
 	}
 	return errors.Join(migrationErrors...)
+}
+
+// migrateOneLegacyConversation persists a single legacy conversation in
+// its own transaction. The defer-Rollback pattern mirrors the other
+// migration helpers in this file (migrateApprovalRulesScope,
+// migrateApprovalRulesPaths, SaveConversation, Delete): a Rollback on an
+// already-committed transaction is a documented no-op, so this is safe
+// to call unconditionally and guarantees the transaction handle is
+// released even if Commit fails.
+func (c *DB) migrateOneLegacyConversation(id string, encoded []byte) error {
+	tx, err := c.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin legacy migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(tx.Rebind(`
+		INSERT INTO conversation_messages (conversation_id, messages)
+		VALUES (?, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+	`), id, encoded); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit legacy conversation: %w", err)
+	}
+	return nil
 }
 
 func (c *DB) ListOlderThan(t time.Duration) ([]Conversation, error) {

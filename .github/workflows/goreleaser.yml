@@ -29,6 +29,15 @@ jobs:
           go-version: stable
           check-latest: true
 
+      - name: Check Homebrew tap token
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_GITHUB_TOKEN" ]; then
+            echo "HOMEBREW_TAP_GITHUB_TOKEN is required to update panjie/homebrew-tap." >&2
+            exit 1
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -37,3 +46,103 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: panjie/homebrew-tap
+          path: homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Update Homebrew formula
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          release_url="https://github.com/panjie/mods/releases/download/${tag}"
+          checksums="dist/checksums.txt"
+
+          checksum() {
+            local asset="$1"
+            awk -v asset="$asset" '$2 == asset { print $1 }' "$checksums"
+          }
+
+          darwin_arm64="mods_${version}_Darwin_arm64.tar.gz"
+          darwin_amd64="mods_${version}_Darwin_x86_64.tar.gz"
+          linux_arm64="mods_${version}_Linux_arm64.tar.gz"
+          linux_amd64="mods_${version}_Linux_x86_64.tar.gz"
+
+          darwin_arm64_sha="$(checksum "$darwin_arm64")"
+          darwin_amd64_sha="$(checksum "$darwin_amd64")"
+          linux_arm64_sha="$(checksum "$linux_arm64")"
+          linux_amd64_sha="$(checksum "$linux_amd64")"
+
+          for value in "$darwin_arm64_sha" "$darwin_amd64_sha" "$linux_arm64_sha" "$linux_amd64_sha"; do
+            if [ -z "$value" ]; then
+              echo "Missing checksum in $checksums" >&2
+              exit 1
+            fi
+          done
+
+          mkdir -p homebrew-tap/Formula
+          cat > homebrew-tap/Formula/mods.rb <<FORMULA
+          class Mods < Formula
+            desc "AI agent for your terminal"
+            homepage "https://github.com/panjie/mods"
+            version "${version}"
+            license "MIT"
+            head "https://github.com/panjie/mods.git", branch: "main" do
+              depends_on "go" => :build
+            end
+
+            on_macos do
+              on_arm do
+                url "${release_url}/${darwin_arm64}"
+                sha256 "${darwin_arm64_sha}"
+              end
+              on_intel do
+                url "${release_url}/${darwin_amd64}"
+                sha256 "${darwin_amd64_sha}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "${release_url}/${linux_arm64}"
+                sha256 "${linux_arm64_sha}"
+              end
+              on_intel do
+                url "${release_url}/${linux_amd64}"
+                sha256 "${linux_amd64_sha}"
+              end
+            end
+
+            def install
+              if build.head?
+                ldflags = "-s -w -X main.Version=v#{version}"
+                system "go", "build", "-trimpath", "-ldflags=#{ldflags}", "-o", bin/"mods", "."
+              else
+                bin.install "mods"
+              end
+              generate_completions_from_executable(bin/"mods", "completion")
+            end
+
+            test do
+              assert_match "v#{version}", shell_output("#{bin}/mods --version")
+            end
+          end
+          FORMULA
+
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- Formula/mods.rb; then
+            echo "Homebrew formula is already up to date."
+            exit 0
+          fi
+
+          git add Formula/mods.rb
+          git commit -m "Update mods to ${tag}"
+          git push

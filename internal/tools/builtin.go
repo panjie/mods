@@ -648,6 +648,11 @@ func (e ShellExitError) Error() string {
 	return fmt.Sprintf("command exited with status %d", e.Code)
 }
 
+// ExitCode returns the process exit status carried by the error.
+func (e ShellExitError) ExitCode() int {
+	return e.Code
+}
+
 type ShellRunner struct {
 	Root           string
 	Timeout        time.Duration

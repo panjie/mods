@@ -101,6 +101,30 @@ func TestConfigTemplateIncludesHideToolStatus(t *testing.T) {
 	require.True(t, strings.Contains(string(content), "hide-tool-status: false"))
 }
 
+func TestHideToolResultsConfig(t *testing.T) {
+	t.Run("yaml", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte("hide-tool-results: true"), &cfg))
+		require.True(t, cfg.HideToolResults)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("MODS_HIDE_TOOL_RESULTS", "true")
+		var cfg Config
+		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+		require.True(t, cfg.HideToolResults)
+	})
+}
+
+func TestConfigTemplateIncludesHideToolResults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.True(t, strings.Contains(string(content), "hide-tool-results: false"))
+}
+
 func TestFilesystemModeYAML(t *testing.T) {
 	t.Run("string auto", func(t *testing.T) {
 		var cfg Config

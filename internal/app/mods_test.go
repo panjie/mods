@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1025,5 +1026,45 @@ func TestEnsureKey(t *testing.T) {
 		require.Error(t, err)
 		merr := err.(modsError)
 		require.Contains(t, merr.ReasonText, "MISSING_KEY")
+	})
+}
+
+func TestAppendShellResult(t *testing.T) {
+	newMods := func() *Mods {
+		return &Mods{Config: &Config{}, contentMutex: &sync.Mutex{}}
+	}
+
+	t.Run("success appends block", func(t *testing.T) {
+		m := newMods()
+		m.appendShellResult("shell_run", []byte(`{"command":"ls -la"}`), nil)
+		require.Contains(t, m.Output, "> \u2713 ran `ls -la`")
+		require.Contains(t, m.Output, "exit 0")
+	})
+
+	t.Run("failure appends exit code", func(t *testing.T) {
+		m := newMods()
+		m.appendShellResult("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1})
+		require.Contains(t, m.Output, "> \u2717 ran `npm test`")
+		require.Contains(t, m.Output, "exit 1")
+	})
+
+	t.Run("hide tool results suppresses output", func(t *testing.T) {
+		m := newMods()
+		m.Config.HideToolResults = true
+		m.appendShellResult("shell_run", []byte(`{"command":"ls"}`), nil)
+		require.Empty(t, m.Output)
+	})
+
+	t.Run("non shell tool is skipped", func(t *testing.T) {
+		m := newMods()
+		m.appendShellResult("fs_read_file", []byte(`{"path":"/a"}`), nil)
+		require.Empty(t, m.Output)
+	})
+
+	t.Run("block separates from prior content", func(t *testing.T) {
+		m := newMods()
+		m.appendToOutput("thinking...")
+		m.appendShellResult("shell_run", []byte(`{"command":"ls"}`), nil)
+		require.Contains(t, m.Output, "thinking...\n\n> \u2713 ran `ls`")
 	})
 }

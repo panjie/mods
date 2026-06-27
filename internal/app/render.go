@@ -139,6 +139,24 @@ func (m *Mods) appendResponseBoundary() {
 	m.appendToOutput("\n\n")
 }
 
+// appendShellResult appends a compact transcript block describing the outcome of
+// a completed shell command so users can review which commands ran and whether
+// they succeeded. Non-shell tools render as empty and are skipped.
+func (m *Mods) appendShellResult(name string, data []byte, err error) {
+	if m.Config.HideToolResults {
+		return
+	}
+	block := ShellResultBlock(name, data, err)
+	if block == "" {
+		return
+	}
+	if m.Output == "" {
+		m.appendToOutput(block + "\n\n")
+		return
+	}
+	m.appendToOutput("\n\n" + block + "\n\n")
+}
+
 func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 	m.outputBuilder.WriteString(raw)
 	m.Output = m.outputBuilder.String()

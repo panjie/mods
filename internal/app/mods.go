@@ -485,6 +485,9 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
 	m.reviewer.reset()
 	for _, call := range msg.results {
+		if !errors.Is(call.Err, errReviewUnavailable) {
+			m.appendShellResult(call.Name, call.Arguments, call.Err)
+		}
 		if call.Err != nil {
 			debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
 			if errors.Is(call.Err, errReviewUnavailable) {
@@ -548,7 +551,7 @@ func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			idx = len(m.proposals) - 1
 		}
 		m.showProposal(idx)
-		m.planSelected = 1
+		m.planSelected = 0
 		return nil, true
 	case "right":
 		idx := m.proposalSelected + 1
@@ -556,7 +559,7 @@ func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			idx = 0
 		}
 		m.showProposal(idx)
-		m.planSelected = 1
+		m.planSelected = 0
 		return nil, true
 	case "y", "Y":
 		m.planContent = m.proposals[m.proposalSelected].content

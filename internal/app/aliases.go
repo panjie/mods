@@ -40,6 +40,7 @@ var ArgString = ui.ArgString
 var OneLinePreview = ui.OneLinePreview
 var TruncateOperationStatus = ui.TruncateOperationStatus
 var RemoveWhitespace = ui.RemoveWhitespace
+var ShellResultBlock = ui.ShellResultBlock
 var MakeStyles = ui.MakeStyles
 var NewAnim = ui.NewAnim
 var HideCommandWindow = platform.HideCommandWindow

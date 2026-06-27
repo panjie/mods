@@ -291,6 +291,7 @@ func initFlags() {
 	regBool(flags, &config.ShowLast, "show-last", "S", false)
 	regBool(flags, &config.Quiet, "quiet", "q", config.Quiet)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
+	regBool(flags, &config.HideToolResults, "hide-tool-results", "", config.HideToolResults)
 	regBool(flags, &config.ShowHelp, "help", "h", false)
 	regBool(flags, &config.HelpAll, "help-all", "", false)
 	regBool(flags, &config.Version, "version", "v", false)
@@ -347,6 +348,7 @@ func initFlags() {
 		"status-text",
 		"theme",
 		"hide-tool-status",
+		"hide-tool-results",
 		"web-search-provider",
 		"web-search-api-key",
 		"max-tool-rounds",
@@ -384,6 +386,7 @@ func initFlags() {
 		"raw",
 		"quiet",
 		"hide-tool-status",
+		"hide-tool-results",
 		"word-wrap",
 		"status-text",
 		"workspace",

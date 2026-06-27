@@ -54,6 +54,8 @@ When you have enough context, output the plan IMMEDIATELY. Do not over-investiga
 
 Each proposal must be self-contained and independently actionable.
 
+Each proposal heading MUST begin with exactly two hash characters followed by a space (for example, "## Proposal 1: Title"). Do not use three or more hash characters and do not nest proposals under another heading; the proposal parser recognizes proposals only at this exact heading level.
+
 The user will review your plan and approve or deny it before execution begins.`
 
 const maxPlanRetries = 3
@@ -63,7 +65,7 @@ type proposal struct {
 	content string
 }
 
-var proposalHeadingRe = regexp.MustCompile(`(?m)^## Proposal \d+: `)
+var proposalHeadingRe = regexp.MustCompile(`(?m)^#{2,}[ \t]+Proposal[ \t]+\d+:`)
 
 func parseProposals(content string) []proposal {
 	locs := proposalHeadingRe.FindAllStringIndex(content, -1)
@@ -79,7 +81,7 @@ func parseProposals(content string) []proposal {
 		}
 		raw := strings.TrimSpace(content[start:end])
 		titleLine, body, _ := strings.Cut(raw, "\n")
-		title := strings.TrimSpace(strings.TrimPrefix(titleLine, "## "))
+		title := strings.TrimSpace(strings.TrimLeft(titleLine, "#"))
 		proposals = append(proposals, proposal{
 			title:   title,
 			content: strings.TrimSpace(body),

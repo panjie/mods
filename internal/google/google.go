@@ -94,8 +94,9 @@ type GenerationConfig struct {
 
 // MessageCompletionRequest represents the valid parameters and value options for the request.
 type MessageCompletionRequest struct {
-	Contents         []Content        `json:"contents,omitempty"`
-	GenerationConfig GenerationConfig `json:"generationConfig,omitempty"`
+	Contents          []Content        `json:"contents,omitempty"`
+	SystemInstruction *Content         `json:"systemInstruction,omitempty"`
+	GenerationConfig  GenerationConfig `json:"generationConfig,omitempty"`
 }
 
 // RequestBuilder is an interface for building HTTP requests for the Google API.
@@ -139,8 +140,10 @@ type Client struct {
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	stream := new(Stream)
+	sysInstr, contents := fromProtoMessages(request.Messages)
 	body := MessageCompletionRequest{
-		Contents: fromProtoMessages(request.Messages),
+		Contents:          contents,
+		SystemInstruction: sysInstr,
 		GenerationConfig: GenerationConfig{
 			ResponseMimeType: "",
 			CandidateCount:   1,

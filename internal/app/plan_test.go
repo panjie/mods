@@ -86,3 +86,10 @@ func TestLooksLikePlan(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanPromptDiscouragesOverInvestigation(t *testing.T) {
+	// Pin the over-investigation guidance so it is not accidentally removed.
+	require.Contains(t, planSystemPrompt, "directly relevant")
+	require.Contains(t, planSystemPrompt, "hardware")
+	require.Contains(t, planSystemPrompt, "3 to 5")
+}

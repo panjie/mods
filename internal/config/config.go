@@ -391,6 +391,15 @@ type MCPServerConfig struct {
 	Env     []string `yaml:"env"`
 	Args    []string `yaml:"args"`
 	URL     string   `yaml:"url"`
+	// PassEnvAll restores the legacy behaviour of forwarding the entire
+	// parent process environment (including OPENAI_API_KEY, AWS_*,
+	// GITHUB_TOKEN, ...) to the MCP subprocess. The default is to filter
+	// out variables that commonly carry secrets so a third-party MCP
+	// package cannot exfiltrate them. Users who deliberately want to
+	// share their full environment with a trusted server can set this
+	// to true; secrets only the server needs are otherwise listed
+	// explicitly via the Env field.
+	PassEnvAll bool `yaml:"pass-env-all"`
 }
 
 func Ensure() (Config, error) {

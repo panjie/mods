@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"iter"
 	"maps"
-	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -261,21 +260,29 @@ func InitClient(ctx context.Context, server MCPServerConfig) (*client.Client, er
 
 	switch server.Type {
 	case "", "stdio":
+		env := mcpSubprocessEnv(server)
 		cli, err = client.NewStdioMCPClientWithOptions(
 			server.Command,
-			append(os.Environ(), server.Env...),
+			env,
 			server.Args,
 			transport.WithCommandFunc(func(ctx context.Context, command string, env []string, args []string) (*exec.Cmd, error) {
 				cmd := exec.CommandContext(ctx, command, args...)
-				cmd.Env = append(os.Environ(), env...)
+				// env passed in here is the filtered env from above; it
+				// already contains everything we want the subprocess to
+				// see, so don't append os.Environ() again.
+				cmd.Env = env
 				platform.HideCommandWindow(cmd)
 				return cmd, nil
 			}),
 		)
 	case "sse":
-		cli, err = client.NewSSEMCPClient(server.URL)
+		if err = validateMCPRemoteURL(server.URL); err == nil {
+			cli, err = client.NewSSEMCPClient(server.URL)
+		}
 	case "http":
-		cli, err = client.NewStreamableHttpClient(server.URL)
+		if err = validateMCPRemoteURL(server.URL); err == nil {
+			cli, err = client.NewStreamableHttpClient(server.URL)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported MCP server type: %q, supported types are: stdio, sse, http", server.Type)
 	}

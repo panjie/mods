@@ -120,6 +120,20 @@ mcp-servers:
   #     - "-e"
   #     - GITHUB_PERSONAL_ACCESS_TOKEN
   #     - "ghcr.io/github/github-mcp-server"
+  #
+  # By default, mods filters obvious secrets out of the environment it
+  # forwards to stdio MCP subprocesses (OPENAI_API_KEY, AWS_*,
+  # GITHUB_TOKEN, MODS_*, anything matching *TOKEN/*SECRET/*PASSWORD/...).
+  # The server's own env: block above is always forwarded verbatim, so
+  # list only the variables the server actually needs. Set
+  # pass-env-all: true to opt back into the legacy behaviour of leaking
+  # the entire parent environment, only do that for fully trusted
+  # local servers.
+  #
+  # For remote MCP servers (type: sse or http), URLs that target
+  # loopback/private/link-local hosts are rejected. Set
+  # MODS_MCP_ALLOW_PRIVATE=1 in the environment to opt in for local
+  # development against a self-hosted MCP gateway.
 
 # {{ index .Help "mcp-timeout" }}
 mcp-timeout: 15s

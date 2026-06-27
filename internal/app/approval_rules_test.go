@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -773,4 +775,85 @@ func TestDirAllowMatching(t *testing.T) {
 		rs.Add(rule)
 		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users2\\old.txt"}`), testApprovalScope))
 	})
+}
+
+// TestToolReviewerSnapshotChanRaceFree exercises the mu-guarded reviewChan
+// replacement so go test -race does not flag the field load/store. The test
+// reads the channel from a sender goroutine while the main goroutine swaps
+// it via startSession / reset, which is the pattern that the production
+// code uses across Update vs. tool-caller goroutines.
+func TestToolReviewerSnapshotChanRaceFree(t *testing.T) {
+	r := &toolReviewer{}
+
+	var wg sync.WaitGroup
+	done := make(chan struct{})
+	// Reader: continually snapshot the channel (read by tea.Cmd /
+	// tool-caller goroutines in production).
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				_ = r.snapshotChan()
+			}
+		}
+	}()
+
+	// Writer: alternate between startSession and reset on the main
+	// goroutine (simulating Update replacing the channel between tool
+	// rounds and at session teardown).
+	for i := 0; i < 200; i++ {
+		_ = r.startSession()
+		r.reset()
+	}
+	close(done)
+	wg.Wait()
+}
+
+// TestRequestApprovalAfterResetIsUnavailable confirms requestApproval bails
+// out with errReviewUnavailable when no review session is active, instead of
+// panicking on a nil channel send.
+func TestRequestApprovalAfterResetIsUnavailable(t *testing.T) {
+	r := &toolReviewer{reviewMode: ReviewMutable}
+	_ = r.startSession()
+	r.reset()
+
+	mods := &Mods{
+		ctx:                 context.Background(),
+		Config:              &Config{},
+		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		currentToolRegistry: nil,
+	}
+
+	err := r.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+	require.Error(t, err)
+	require.ErrorIs(t, err, errReviewUnavailable)
+}
+
+// TestPollReviewCmdSnapshotsChannel makes sure pollReviewCmd captures the
+// review channel at construction time rather than reading r.reviewChan from
+// inside the goroutine. A subsequent reset() must therefore unblock the
+// existing poll goroutine via the snapshotted channel close, regardless of
+// what r.reviewChan is replaced with later.
+func TestPollReviewCmdSnapshotsChannel(t *testing.T) {
+	r := &toolReviewer{}
+	cmd := r.startSession()
+
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmd() }()
+
+	// Replace the channel: reset closes the original, then startSession
+	// creates a fresh one. The pre-existing cmd goroutine must observe the
+	// close of the snapshotted channel and exit, not block on the new one.
+	r.reset()
+
+	select {
+	case msg := <-done:
+		require.Nil(t, msg, "closed channel must yield a nil tea.Msg from pollReviewCmd")
+	case <-time.After(2 * time.Second):
+		t.Fatal("pollReviewCmd did not return after reset() closed its snapshotted channel")
+	}
 }

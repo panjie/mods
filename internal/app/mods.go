@@ -54,6 +54,15 @@ type Mods struct {
 	renderer                *lipgloss.Renderer
 	glam                    *glamour.TermRenderer
 	glamViewport            viewport.Model
+	// messages is the conversation history fed to the provider on each
+	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
+	// dispatched by startCompletionCmd/startPlanCmd) and re-read from the
+	// stream on the Update goroutine after the stream finishes. Concurrent
+	// access is serialized by Bubble Tea's program loop: a Cmd goroutine
+	// publishes its writes via the returned tea.Msg, and the next Update
+	// observes them through Bubble Tea's internal channel send/receive.
+	// There is intentionally no per-field mutex; callers must not introduce
+	// new background goroutines that touch m.messages outside this pattern.
 	messages                []proto.Message
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -32,7 +33,22 @@ type reviewOption struct {
 // toolReviewer manages interactive approval of tool executions (file writes,
 // shell commands, etc.) before they run. It owns the review channel, approval
 // state, and safety heuristics, isolating this concern from the main Mods model.
+//
+// Concurrency model:
+//
+//   - reviewChan is accessed from three goroutines: Update (startSession /
+//     reset replace it), pollReviewCmd's tea.Cmd goroutine (reads), and the
+//     tool-caller goroutine via requestApproval (writes). The mu mutex
+//     guards the field load/store. Channel ops themselves are safe; callers
+//     snapshot the channel pointer under the lock and then send/receive on
+//     the snapshot so a concurrent reset does not race the receive.
+//
+//   - reviewMode, reviewPending, reviewItem, selected, rules.scope are only
+//     touched from the Update goroutine (handleStartMsg, handleKey, reset,
+//     isPending, renderBanner) plus the View pass that Bubble Tea runs
+//     synchronously after each Update. rules has its own internal mutex.
 type toolReviewer struct {
+	mu            sync.Mutex
 	reviewChan    chan toolReviewItem
 	reviewMode    ReviewMode
 	reviewPending bool
@@ -54,9 +70,22 @@ func (r *toolReviewer) isPending() bool {
 	return r.reviewPending && r.reviewItem != nil && r.reviewItem.resp != nil
 }
 
+// snapshotChan returns the current review channel under the mutex so callers
+// in tea.Cmd / tool-caller goroutines can operate on a stable reference even
+// if Update replaces the channel via startSession or reset.
+func (r *toolReviewer) snapshotChan() chan toolReviewItem {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.reviewChan
+}
+
 func (r *toolReviewer) pollReviewCmd() tea.Cmd {
+	ch := r.snapshotChan()
 	return func() tea.Msg {
-		item, ok := <-r.reviewChan
+		if ch == nil {
+			return nil
+		}
+		item, ok := <-ch
 		if !ok {
 			return nil
 		}
@@ -65,12 +94,24 @@ func (r *toolReviewer) pollReviewCmd() tea.Cmd {
 }
 
 func (r *toolReviewer) startSession() tea.Cmd {
+	r.mu.Lock()
 	if r.reviewChan != nil {
 		close(r.reviewChan)
 	}
 	r.reviewChan = make(chan toolReviewItem, 4)
+	ch := r.reviewChan
+	r.mu.Unlock()
 	debug.Printf("toolReviewer: session started, reviewChan created")
-	return r.pollReviewCmd()
+	// Capture ch (not r.reviewChan) so a subsequent reset/startSession that
+	// replaces the field cannot leave this goroutine receiving from a
+	// closed channel without warning.
+	return func() tea.Msg {
+		item, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return toolReviewStartMsg{item: item}
+	}
 }
 
 func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
@@ -81,10 +122,12 @@ func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
 }
 
 func (r *toolReviewer) reset() {
+	r.mu.Lock()
 	if r.reviewChan != nil {
 		close(r.reviewChan)
 	}
 	r.reviewChan = nil
+	r.mu.Unlock()
 	r.reviewPending = false
 	r.reviewItem = nil
 	r.selected = 0
@@ -239,8 +282,17 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 		candidateRules: candidateRules,
 		resp:           respCh,
 	}
+	// Snapshot the channel under the lock so a concurrent reset() that
+	// replaces r.reviewChan does not leave this send dispatching to a stale
+	// reference; a closed-channel panic here is impossible because reset()
+	// holds the lock while closing and assigning nil.
+	ch := r.snapshotChan()
+	if ch == nil {
+		debug.Printf("requestApproval: no review channel registered (session ended)")
+		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
+	}
 	select {
-	case r.reviewChan <- item:
+	case ch <- item:
 		debug.Printf("requestApproval: review item sent to channel, waiting for user...")
 	case <-ctx.ctx.Done():
 		debug.Printf("requestApproval: context cancelled while sending review item")

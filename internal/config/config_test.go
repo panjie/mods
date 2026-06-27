@@ -102,6 +102,10 @@ func TestConfigTemplateIncludesHideToolStatus(t *testing.T) {
 }
 
 func TestHideToolResultsConfig(t *testing.T) {
+	t.Run("default is true", func(t *testing.T) {
+		require.True(t, Default().HideToolResults)
+	})
+
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config
 		require.NoError(t, yaml.Unmarshal([]byte("hide-tool-results: true"), &cfg))
@@ -122,7 +126,7 @@ func TestConfigTemplateIncludesHideToolResults(t *testing.T) {
 
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.True(t, strings.Contains(string(content), "hide-tool-results: false"))
+	require.True(t, strings.Contains(string(content), "hide-tool-results: true"))
 }
 
 func TestFilesystemModeYAML(t *testing.T) {

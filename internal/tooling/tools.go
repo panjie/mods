@@ -3,17 +3,14 @@ package tooling
 import (
 	"context"
 	"os"
-	"regexp"
 	"runtime"
-	"strings"
 
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/mcpclient"
+	"github.com/panjie/mods/internal/self"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
 )
-
-var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[\w./-]+|[\w.-]+\.(go|ts|tsx|js|jsx|py|rs|java|c|cc|cpp|h|hpp|md|txt|json|yaml|yml|toml|mod|sum|sh|sql))($|\s|[,.，。:：;；])`)
 
 func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
@@ -82,25 +79,8 @@ func ShouldEnableFilesystemTools(cfg *cfgpkg.Config, prompt string) bool {
 	case cfgpkg.FilesystemNever:
 		return false
 	case "", cfgpkg.FilesystemAuto:
-		return PromptLooksFileRelated(prompt)
+		return self.PromptLooksFileRelated(prompt)
 	default:
 		return false
 	}
-}
-
-func PromptLooksFileRelated(prompt string) bool {
-	p := strings.ToLower(prompt)
-	keywords := []string{
-		"file", "files", "directory", "folder", "repo", "repository",
-		"codebase", "source", "write", "edit", "modify", "patch",
-		"grep", "rg",
-		"文件", "目录", "代码", "仓库", "项目",
-		"修改", "编辑", "修复",
-	}
-	for _, keyword := range keywords {
-		if strings.Contains(p, keyword) {
-			return true
-		}
-	}
-	return filesystemPathPattern.MatchString(prompt)
 }

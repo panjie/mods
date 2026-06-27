@@ -196,6 +196,103 @@ func TestFilesystemApplyPatchRejectsTraversal(t *testing.T) {
 	}
 }
 
+// TestFilesystemApplyPatchRejectsQuotedTraversal pins the fix for the
+// validatePatchPaths bypass where strings.Fields()[0] would split a
+// C-quoted path at its leading double quote, leaving the actual traversal
+// component unchecked.
+func TestFilesystemApplyPatchRejectsQuotedTraversal(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	cases := map[string]string{
+		"quoted absolute path":     "--- /dev/null\n+++ \"b/../../etc/leak\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"quoted traversal":         "--- /dev/null\n+++ \"b/sub/../../outside\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"quoted with octal slash":  "--- /dev/null\n+++ \"b/\\057etc/leak\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"unbalanced quotes":        "--- /dev/null\n+++ \"b/oops\n@@ -0,0 +1 @@\n+pwned\n",
+		"unknown escape":           "--- /dev/null\n+++ \"b/\\xff\"\n@@ -0,0 +1 @@\n+pwned\n",
+		"unquoted with spaces":     "--- /dev/null\n+++ b/oops file\n@@ -0,0 +1 @@\n+pwned\n",
+	}
+	for name, patch := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			if err == nil {
+				t.Fatal("expected quoted-path traversal patch to be rejected")
+			}
+		})
+	}
+}
+
+// TestFilesystemApplyPatchAcceptsQuotedLegitPath confirms quoted paths
+// without traversal (e.g. a filename containing a space, the canonical
+// reason git C-quotes paths in the first place) are still accepted.
+func TestFilesystemApplyPatchAcceptsQuotedLegitPath(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "with space.txt"), []byte("old\n"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	// Modify an existing file whose name contains a space; git emits such
+	// paths C-quoted. The validator must accept the quoted path.
+	patch := "--- \"a/with space.txt\"\n+++ \"b/with space.txt\"\n@@ -1 +1 @@\n-old\n+new\n"
+	if _, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`)); err != nil {
+		t.Fatalf("legitimate quoted path with space must be accepted: %v", err)
+	}
+}
+
+// TestFilesystemApplyPatchRejectsRenameTraversal pins the fix for the
+// rename-header bypass: a rename-only diff carries no +++/--- lines, so
+// the old validatePatchPaths skipped its target entirely. A rename target
+// that escapes the workspace must now be rejected too.
+func TestFilesystemApplyPatchRejectsRenameTraversal(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	patches := map[string]string{
+		"rename to":   "diff --git a/a.txt b/../escape.txt\nsimilarity index 100%\nrename from a.txt\nrename to ../escape.txt\n",
+		"copy to":     "diff --git a/a.txt b/../escape.txt\nsimilarity index 100%\ncopy from a.txt\ncopy to ../escape.txt\n",
+		"rename from": "diff --git a/../oops b/x\nsimilarity index 100%\nrename from ../oops\nrename to x\n",
+	}
+	for name, patch := range patches {
+		t.Run(name, func(t *testing.T) {
+			_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			if err == nil {
+				t.Fatal("expected rename/copy traversal patch to be rejected")
+			}
+		})
+	}
+}
+
+// TestFilesystemApplyPatchAcceptsTabbedTimestamp verifies the validator
+// still tolerates the POSIX patch convention where a tab separates the
+// path from a timestamp suffix.
+func TestFilesystemApplyPatchAcceptsTabbedTimestamp(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("old\n"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	// `git apply` accepts a TAB followed by a timestamp on +++/--- lines.
+	// Validation must strip that suffix, not reject the patch.
+	patch := "--- a/a.txt\t2024-01-01 12:00:00 +0000\n+++ b/a.txt\t2024-01-02 12:00:00 +0000\n@@ -1 +1 @@\n-old\n+new\n"
+	if _, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`)); err != nil {
+		t.Fatalf("apply patch with timestamps: %v", err)
+	}
+}
+
 func TestPowerShellRun(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell tool is Windows-only")

@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/huh"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/evolution"
+	"github.com/panjie/mods/internal/self"
 )
 
 const modsModulePath = "github.com/panjie/mods"
@@ -93,11 +94,7 @@ func shouldTriggerAutoImprove(cfg *Config, rating int) bool {
 	if !cfg.EvolveAuto {
 		return false
 	}
-	threshold := cfg.EvolveThreshold
-	if threshold == 0 {
-		threshold = 3
-	}
-	return rating <= threshold
+	return self.ShouldTriggerAutoImprove(rating, cfg.EvolveThreshold)
 }
 
 func promptEvolutionEvaluation(cfg *Config) (evolutionEvaluationInput, error) {
@@ -146,7 +143,14 @@ func runAutomaticEvolutionImprovement(ctx context.Context, mods *Mods, db *DB, e
 		return err
 	}
 	autoCfg := *mods.Config
-	autoCfg.Prefix = automaticEvolutionPrompt(mods, evaluation)
+	autoCfg.Prefix = self.AutomaticEvolutionPrompt(self.EvolutionPromptInput{
+		Workspace:       workspace,
+		ConversationID:  mods.Config.CacheWriteToID,
+		Rating:          evaluation.Rating,
+		Feedback:        evaluation.Feedback,
+		OriginalRequest: lastPrompt(mods.Messages()),
+		ModelOutput:     mods.Output,
+	})
 	autoCfg.Plan = false
 	autoCfg.NoCache = true
 	autoCfg.EvolveAuto = false
@@ -191,33 +195,6 @@ func validateModsWorkspace(workspace string) error {
 		}
 	}
 	return fmt.Errorf("automatic improvement refused: go.mod has no module declaration")
-}
-
-func automaticEvolutionPrompt(mods *Mods, evaluation evolution.Evaluation) string {
-	var b strings.Builder
-	b.WriteString("Improve mods based on the completed session evaluation.\n\n")
-	b.WriteString("Boundaries:\n")
-	b.WriteString("- Work only inside the current mods workspace.\n")
-	b.WriteString("- Do not edit files outside the workspace, user home config, system config, or global settings.\n")
-	b.WriteString("- Do not create or use an evolution proposal, approval workflow, or plan approval gate.\n")
-	b.WriteString("- Make the smallest code, test, or documentation change that directly addresses the feedback.\n")
-	b.WriteString("- Run relevant tests; if the affected area is unclear, run task check and task test.\n")
-	b.WriteString("- Stop and explain if the request cannot be implemented safely within the workspace.\n\n")
-	fmt.Fprintf(&b, "Workspace: %s\n", mods.Config.ResolveWorkspaceRoot())
-	fmt.Fprintf(&b, "Conversation ID: %s\n", mods.Config.CacheWriteToID)
-	fmt.Fprintf(&b, "Rating: %d\n", evaluation.Rating)
-	writeAutoSection(&b, "User Feedback", evaluation.Feedback)
-	writeAutoSection(&b, "Original Request", lastPrompt(mods.Messages()))
-	writeAutoSection(&b, "Model Output", mods.Output)
-	return strings.TrimSpace(b.String())
-}
-
-func writeAutoSection(b *strings.Builder, title, value string) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		value = "(empty)"
-	}
-	fmt.Fprintf(b, "\n%s:\n%s\n", title, value)
 }
 
 func runEvolutionValidation(ctx context.Context, workspace string) error {

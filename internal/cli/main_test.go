@@ -148,7 +148,7 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 		in   []string
 		want []string
 	}{
-		"long flag consumes valid spaced value": {
+		"long flag consumes removed auto value so flag parser reports it": {
 			in:   []string{"--reasoning", "auto", "hello"},
 			want: []string{"--reasoning=auto", "hello"},
 		},
@@ -164,7 +164,7 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 			in:   []string{"-T", "hello"},
 			want: []string{"-T", "hello"},
 		},
-		"equals form is unchanged": {
+		"removed auto equals form is unchanged": {
 			in:   []string{"--reasoning=auto", "hello"},
 			want: []string{"--reasoning=auto", "hello"},
 		},

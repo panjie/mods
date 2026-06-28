@@ -419,6 +419,9 @@ func normalizeOptionalReasoningValueArgs(args []string) []string {
 func isReasoningValue(value string) bool {
 	switch value {
 	case "off", "on", "auto":
+		// "auto" is no longer accepted by reasoningFlag.Set, but keeping it
+		// here preserves an explicit error for "--reasoning auto" instead of
+		// treating "auto" as prompt text.
 		return true
 	default:
 		return false

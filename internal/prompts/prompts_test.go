@@ -19,7 +19,6 @@ func TestBuiltinPrompts(t *testing.T) {
 		KeyIdentity,
 		KeyToolSelection,
 		KeyPlan,
-		KeyReasoningClassifier,
 		KeyShellClassifier,
 		KeyMinimal,
 		KeyFormatMarkdown,

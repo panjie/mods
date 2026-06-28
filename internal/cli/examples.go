@@ -23,7 +23,7 @@ var examples = map[string]string{
 	"Plan before acting":               `mods --plan --workspace . "Refactor the CLI examples to cover more features"`,
 	"Inspect MCP servers":              `mods --mcp-list`,
 	"Inspect MCP tools":                `mods --mcp-list-tools`,
-	"Debug reasoning":                  `mods --reasoning auto --debug "When should I use each review mode?"`,
+	"Debug reasoning":                  `mods --reasoning on --debug "When should I use each review mode?"`,
 }
 
 func randomExample() string {

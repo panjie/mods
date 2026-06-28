@@ -41,7 +41,6 @@ prompts:
   identity: ""
   tool-selection: ""
   plan: ""
-  reasoning-classifier: ""
   shell-classifier: ""
 
 # ── Display & Output ──────────────────────────────────────────────

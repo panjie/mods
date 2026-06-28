@@ -55,7 +55,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		requestUser = api.User
 	}
 
-	reasoningActive, err := m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
+	reasoningActive, err := m.resolveReasoning(&mod, &accfg, &gccfg, &ccfg)
 	if err != nil {
 		return requestSession{}, err
 	}

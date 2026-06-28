@@ -58,7 +58,6 @@ const (
 	ReviewAlways  = cfgpkg.ReviewAlways
 	ReasoningOff  = cfgpkg.ReasoningOff
 	ReasoningOn   = cfgpkg.ReasoningOn
-	ReasoningAuto = cfgpkg.ReasoningAuto
 
 	ShortIDLength = conversation.ShortIDLength
 	MinIDLength   = conversation.MinIDLength

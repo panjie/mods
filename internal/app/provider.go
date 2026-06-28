@@ -92,7 +92,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 
 // newStreamClient creates the appropriate stream.Client for the given API
 // backend. This consolidates the provider switch that was duplicated in
-// startCompletionCmd and judgeTaskComplexity.
+// startCompletionCmd.
 func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
 	cccfg cohere.Config, occfg ollama.Config, ccfg openai.Config,
 ) (stream.Client, error) {

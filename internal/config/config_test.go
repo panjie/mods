@@ -37,17 +37,25 @@ func TestPromptConfig(t *testing.T) {
   identity: custom identity
   tool-selection: custom tools
   plan: custom plan
-  reasoning-classifier: custom reasoning
   shell-classifier: custom shell
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
 	require.Equal(t, "custom plan", cfg.Prompts.Plan)
-	require.Equal(t, "custom reasoning", cfg.Prompts.ReasoningClassifier)
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
+}
+
+func TestValidateReasoningMode(t *testing.T) {
+	require.NoError(t, validateReasoningMode(""))
+	require.NoError(t, validateReasoningMode(ReasoningOff))
+	require.NoError(t, validateReasoningMode(ReasoningOn))
+
+	err := validateReasoningMode("auto")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be off or on")
 }
 
 func TestDefaultPromptText(t *testing.T) {

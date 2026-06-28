@@ -80,3 +80,16 @@ func TestFlagParseError(t *testing.T) {
 		})
 	}
 }
+
+func TestReasoningFlagRejectsAuto(t *testing.T) {
+	var mode ReasoningMode
+	flag := newReasoningFlag(ReasoningOff, &mode)
+
+	require.NoError(t, flag.Set("on"))
+	require.Equal(t, ReasoningOn, mode)
+
+	err := flag.Set("auto")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `invalid reasoning mode "auto"`)
+	require.Contains(t, err.Error(), "must be off or on")
+}

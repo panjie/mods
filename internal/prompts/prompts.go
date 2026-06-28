@@ -1,11 +1,10 @@
 package prompts
 
 const (
-	KeyIdentity            = "identity"
-	KeyToolSelection       = "tool-selection"
-	KeyPlan                = "plan"
-	KeyReasoningClassifier = "reasoning-classifier"
-	KeyShellClassifier     = "shell-classifier"
+	KeyIdentity        = "identity"
+	KeyToolSelection   = "tool-selection"
+	KeyPlan            = "plan"
+	KeyShellClassifier = "shell-classifier"
 )
 
 const (
@@ -21,8 +20,6 @@ const (
 	JSONFormat     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
 	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
 	ToolSelection  = "Tool selection. Priority order: 1. Use fs_* tools only for files inside the configured workspace; they cannot access files outside it. 2. Use platform-appropriate shell tools for paths outside the configured workspace, such as Downloads, Desktop, or system temp directories. 3. On Windows, use shell_run for cmd.exe builtins such as dir, type, and echo; use powershell_run for PowerShell pipelines, variables, filtering, counting, or querying. Pass only the PowerShell command, without powershell, powershell.exe, pwsh, or -Command prefixes. 4. Minimize tool calls by using one well-formed command instead of repeated small retries. 5. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review. 6. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review."
-
-	ReasoningClassifier = "You are a task classifier. Determine if the following task requires deep reasoning (multi-step analysis, debugging, complex logic, math, code design, or creative writing). Answer only YES."
 
 	SafeWorkspaceTemplate = "Safe temporary workspace: {safe_workspace}. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes."
 
@@ -100,7 +97,6 @@ func Builtin() []Definition {
 		{Name: KeyIdentity, Description: "Base Mods identity and behavior instructions.", Default: Identity, Configurable: true},
 		{Name: KeyToolSelection, Description: "Guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyPlan, Description: "System prompt used while drafting an approval plan.", Default: Plan, Configurable: true},
-		{Name: KeyReasoningClassifier, Description: "Classifier prompt used by reasoning:auto.", Default: ReasoningClassifier, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},

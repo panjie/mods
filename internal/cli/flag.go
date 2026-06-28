@@ -105,11 +105,11 @@ type reasoningFlag ReasoningMode
 
 func (r *reasoningFlag) Set(s string) error {
 	switch s {
-	case "off", "on", "auto":
+	case "off", "on":
 		*r = reasoningFlag(s)
 		return nil
 	default:
-		return fmt.Errorf("invalid reasoning mode %q, must be off, on, or auto", s)
+		return fmt.Errorf("invalid reasoning mode %q, must be off or on", s)
 	}
 }
 

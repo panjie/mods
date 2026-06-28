@@ -34,9 +34,8 @@ const (
 type ReasoningMode string
 
 const (
-	ReasoningOff  ReasoningMode = "off"
-	ReasoningOn   ReasoningMode = "on"
-	ReasoningAuto ReasoningMode = "auto"
+	ReasoningOff ReasoningMode = "off"
+	ReasoningOn  ReasoningMode = "on"
 )
 
 // ReviewMode controls whether mods prompts for confirmation before executing tools.
@@ -113,7 +112,7 @@ var Help = map[string]string{
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
-	"reasoning":              "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
+	"reasoning":              "Enables deep reasoning mode: off or on",
 	"review":                 "Review tool execution before running: never, mutable (default), or always",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
@@ -291,11 +290,10 @@ type Config struct {
 
 // PromptConfig holds user overrides for built-in runtime prompts.
 type PromptConfig struct {
-	Identity            string `yaml:"identity"`
-	ToolSelection       string `yaml:"tool-selection"`
-	Plan                string `yaml:"plan"`
-	ReasoningClassifier string `yaml:"reasoning-classifier"`
-	ShellClassifier     string `yaml:"shell-classifier"`
+	Identity        string `yaml:"identity"`
+	ToolSelection   string `yaml:"tool-selection"`
+	Plan            string `yaml:"plan"`
+	ShellClassifier string `yaml:"shell-classifier"`
 }
 
 func (p PromptConfig) Value(key string) string {
@@ -306,8 +304,6 @@ func (p PromptConfig) Value(key string) string {
 		return p.ToolSelection
 	case prompts.KeyPlan:
 		return p.Plan
-	case prompts.KeyReasoningClassifier:
-		return p.ReasoningClassifier
 	case prompts.KeyShellClassifier:
 		return p.ShellClassifier
 	default:
@@ -481,6 +477,9 @@ func Ensure() (Config, error) {
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
+	if err := validateReasoningMode(c.Reasoning); err != nil {
+		return fallback, modsError{Err: err, ReasonText: "Could not use reasoning setting."}
+	}
 
 	applyCachePathDefault(&c)
 
@@ -503,6 +502,15 @@ func Ensure() (Config, error) {
 	}
 
 	return c, nil
+}
+
+func validateReasoningMode(mode ReasoningMode) error {
+	switch mode {
+	case "", ReasoningOff, ReasoningOn:
+		return nil
+	default:
+		return fmt.Errorf("invalid reasoning mode %q, must be off or on", mode)
+	}
 }
 
 // applyCachePathDefault ensures c.CachePath always points at a usable

@@ -9,6 +9,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResolveReasoning(t *testing.T) {
+	t.Run("on enables reasoning", func(t *testing.T) {
+		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Reasoning: ReasoningOn}}}
+		ccfg := openai.Config{}
+
+		active, err := m.resolveReasoning(&Model{API: "openai"}, nil, nil, &ccfg)
+
+		require.NoError(t, err)
+		require.True(t, active)
+		require.Equal(t, openai.ReasoningEffortMedium, ccfg.ReasoningEffort)
+	})
+
+	t.Run("off disables reasoning", func(t *testing.T) {
+		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Reasoning: ReasoningOff}}}
+		ccfg := openai.Config{}
+
+		active, err := m.resolveReasoning(&Model{API: "openai"}, nil, nil, &ccfg)
+
+		require.NoError(t, err)
+		require.False(t, active)
+		require.Equal(t, "minimal", ccfg.ExtraParams["reasoning_effort"])
+	})
+}
+
 func TestApplyReasoningConfigs(t *testing.T) {
 	// ── thinking.type providers (MiniMax / GLM / Anthropic-compat) ──
 

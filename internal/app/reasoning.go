@@ -1,30 +1,17 @@
 package app
 
 import (
-	"context"
-	"errors"
-	"strings"
-	"time"
-
 	"github.com/openai/openai-go/shared"
 	"github.com/panjie/mods/internal/anthropic"
-	"github.com/panjie/mods/internal/cohere"
 	"github.com/panjie/mods/internal/google"
-	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
-	"github.com/panjie/mods/internal/prompts"
-	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/stream"
 )
 
 func (m *Mods) resolveReasoning(
 	mod *Model,
-	content string,
 	accfg *anthropic.Config,
 	gccfg *google.Config,
 	ccfg *openai.Config,
-	occfg ollama.Config,
-	cccfg cohere.Config,
 ) (bool, error) {
 	cfg := m.Config
 	switch cfg.Reasoning {
@@ -32,35 +19,6 @@ func (m *Mods) resolveReasoning(
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, true)
 		debug.Printf("Reasoning: enabled for %s/%s", mod.API, mod.Name)
 		return true, nil
-	case ReasoningAuto:
-		if content == "" {
-			applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
-			return false, nil
-		}
-		if mod.API == "cohere" || mod.API == "ollama" {
-			return false, nil
-		}
-		debug.Printf("Auto judge: evaluating task complexity for model=%s", mod.Name)
-		m.setActiveOperation("Evaluating task complexity...")
-		judgeCtx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
-		defer cancel()
-		// Reset reasoning configs for the judge call
-		gccfgJ := *gccfg
-		gccfgJ.ThinkingBudget = 0
-		accfgJ := *accfg
-		accfgJ.ThinkingBudget = 0
-		ccfgJ := *ccfg
-		ccfgJ.ReasoningEffort = ""
-		clearThinkingFromExtraParams(ccfgJ.ExtraParams)
-		system, err := m.resolvePrompt(prompts.KeyReasoningClassifier, prompts.ReasoningClassifier)
-		if err != nil {
-			applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
-			return false, err
-		}
-		shouldReason := judgeTaskComplexity(judgeCtx, mod, system, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
-		debug.Printf("Auto judge: reasoning=%v", shouldReason)
-		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, shouldReason)
-		return shouldReason, nil
 	case ReasoningOff:
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
 		return false, nil
@@ -196,9 +154,7 @@ func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 }
 
 // clearThinkingFromExtraParams removes anthropic-style `thinking`, Qwen-style
-// `enable_thinking`, and any pre-set `reasoning_effort` from extra-params so
-// the auto-judge call does not accidentally inherit the user's reasoning
-// configuration.
+// `enable_thinking`, and any pre-set `reasoning_effort` from extra-params.
 func clearThinkingFromExtraParams(extra map[string]any) {
 	if extra == nil {
 		return
@@ -206,48 +162,4 @@ func clearThinkingFromExtraParams(extra map[string]any) {
 	delete(extra, "thinking")
 	delete(extra, "reasoning_effort")
 	delete(extra, "enable_thinking")
-}
-
-func judgeTaskComplexity(
-	ctx context.Context,
-	mod *Model,
-	system string,
-	prompt string,
-	accfg anthropic.Config,
-	gccfg google.Config,
-	ccfg openai.Config,
-	occfg ollama.Config,
-	cccfg cohere.Config,
-) bool {
-	max3 := int64(3)
-	request := proto.Request{
-		Messages: []proto.Message{
-			{Role: proto.RoleSystem, Content: system},
-			{Role: proto.RoleUser, Content: prompt},
-		},
-		Model:       mod.Name,
-		MaxTokens:   &max3,
-		Temperature: ptrOrNil(float64(0)),
-	}
-
-	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
-	if err != nil {
-		return false
-	}
-
-	st := client.Request(ctx, request)
-	defer func() { _ = st.Close() }()
-
-	var sb strings.Builder
-	for st.Next() {
-		chunk, err := st.Current()
-		if err != nil && !errors.Is(err, stream.ErrNoContent) {
-			return false
-		}
-		sb.WriteString(chunk.Content)
-	}
-	if st.Err() != nil {
-		return false
-	}
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(sb.String())), "YES")
 }

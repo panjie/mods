@@ -1,6 +1,5 @@
 package app
 
-import _ "embed"
+import "github.com/panjie/mods/internal/prompts"
 
-//go:embed identity.md
-var modsIdentityPrompt string
+var modsIdentityPrompt = prompts.Identity

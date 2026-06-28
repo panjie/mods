@@ -58,6 +58,7 @@ const (
 	flagConfig        = "config"
 	flagMCPList       = "mcp-list"
 	flagMCPListTools  = "mcp-list-tools"
+	flagListPrompts   = "list-prompts"
 )
 
 // sessionActionFlags are mutually exclusive: at most one may be passed per
@@ -75,6 +76,7 @@ var sessionActionFlags = []string{
 	flagConfig,
 	flagMCPList,
 	flagMCPListTools,
+	flagListPrompts,
 }
 
 // conversationCompleteFlags take a conversation id or title as their value and

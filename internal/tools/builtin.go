@@ -76,7 +76,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			Name:        "fs_read_file",
 			Description: "Read a UTF-8 text file from the workspace. Use offset and limit to read large files in chunks.",
 			InputSchema: objectSchema(map[string]any{
-				"path":   stringProp("Path to the file, relative to the workspace root or absolute within it."),
+				"path":   stringProp("Path to the file, relative to the workspace or absolute within it."),
 				"offset": integerProp("Zero-based byte offset to start reading from."),
 				"limit":  integerProp("Maximum bytes to return."),
 			}, "path"),
@@ -141,7 +141,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			Name:        "fs_write_file",
 			Description: "Write a UTF-8 text file inside the workspace, replacing existing content.",
 			InputSchema: objectSchema(map[string]any{
-				"path":    stringProp("Path to write, relative to the workspace root or absolute within it."),
+				"path":    stringProp("Path to write, relative to the workspace or absolute within it."),
 				"content": stringProp("Complete file content to write."),
 			}, "path", "content"),
 		},
@@ -176,7 +176,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			Name:        "fs_list_dir",
 			Description: "List files and directories in a workspace directory.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory path, relative to the workspace root or absolute within it."),
+				"path":        stringProp("Directory path, relative to the workspace or absolute within it."),
 				"max_entries": integerProp("Maximum entries to return."),
 			}, "path"),
 		},
@@ -225,7 +225,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			Name:        "fs_stat",
 			Description: "Get metadata for a workspace file or directory.",
 			InputSchema: objectSchema(map[string]any{
-				"path": stringProp("Path to inspect, relative to the workspace root or absolute within it."),
+				"path": stringProp("Path to inspect, relative to the workspace or absolute within it."),
 			}, "path"),
 		},
 		Call: func(_ context.Context, data json.RawMessage) (string, error) {

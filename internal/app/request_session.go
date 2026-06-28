@@ -55,7 +55,10 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		requestUser = api.User
 	}
 
-	reasoningActive := m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
+	reasoningActive, err := m.resolveReasoning(&mod, content, &accfg, &gccfg, &ccfg, occfg, cccfg)
+	if err != nil {
+		return requestSession{}, err
+	}
 	if err := applyHTTPProxy(cfg, &accfg, &gccfg, &cccfg, &occfg, &ccfg); err != nil {
 		return requestSession{}, err
 	}
@@ -211,7 +214,7 @@ func (m *Mods) injectApprovedPlan() {
 	}
 	planMsg := proto.Message{
 		Role:    proto.RoleSystem,
-		Content: "The user has approved the following plan for execution:\n\n" + m.planContent + "\n\nFollow this approved plan during execution. If new information requires changing it, explain the reason before deviating.",
+		Content: formatApprovedPlanPrompt(m.planContent),
 	}
 	if len(m.messages) > 0 {
 		last := m.messages[len(m.messages)-1]

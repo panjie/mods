@@ -87,6 +87,7 @@ func hasChatSessionAction() bool {
 		config.ShowLast ||
 		config.List ||
 		config.ListRoles ||
+		config.ListPrompts ||
 		len(config.Delete) > 0 ||
 		config.DeleteOlderThan != 0 ||
 		config.Settings ||

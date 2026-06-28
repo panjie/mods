@@ -16,7 +16,7 @@ import (
 	"github.com/caarlos0/duration"
 	"github.com/caarlos0/env/v9"
 	"github.com/charmbracelet/x/exp/strings"
-	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/prompts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,10 +24,10 @@ import (
 var configTemplate string
 
 const (
-	defaultMarkdownFormatText = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
-	defaultJSONFormatText     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
-	MinimalSystemPrompt       = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
-	ToolSelectionRules        = toolregistry.ToolSelectionRules
+	defaultMarkdownFormatText = prompts.MarkdownFormat
+	defaultJSONFormatText     = prompts.JSONFormat
+	MinimalSystemPrompt       = prompts.Minimal
+	ToolSelectionRules        = prompts.ToolSelection
 )
 
 // ReasoningMode controls whether the LLM should use deep reasoning.
@@ -62,6 +62,8 @@ var Help = map[string]string{
 	"role":                   "System role to use",
 	"roles":                  "List of predefined system messages that can be used as roles",
 	"list-roles":             "List the roles defined in your configuration file",
+	"list-prompts":           "List built-in prompts and prompt templates",
+	"prompts":                "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":                    "Render output as raw text when connected to a TTY",
 	"quiet":                  "Quiet mode (hide the spinner while loading and stderr messages for success)",
 	"hide-tool-status":       "Hide the bottom status line while tools are running",
@@ -113,8 +115,8 @@ var Help = map[string]string{
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
 	"reasoning":              "Enables deep reasoning mode: off, on, or auto (judge task complexity with current model)",
 	"review":                 "Review tool execution before running: never, mutable (default), or always",
-	"shell-classify-prompt":  "Custom legacy prompt for classifying whether a shell command needs review; defaults to built-in JSON analysis when unset",
-	"workspace":              "Set the workspace root for filesystem tools and shell, resolving relative paths from the current working directory",
+	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
+	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
 
@@ -223,6 +225,7 @@ type PersistentConfig struct {
 	APIs                APIs       `yaml:"apis"`
 	Role                string     `yaml:"role" env:"ROLE"`
 	Roles               map[string][]string
+	Prompts             PromptConfig `yaml:"prompts"`
 	Theme               string
 	MCPServers          map[string]MCPServerConfig `yaml:"mcp-servers"`
 	MCPTimeout          time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
@@ -269,6 +272,7 @@ type Config struct {
 	Show            string
 	List            bool
 	ListRoles       bool
+	ListPrompts     bool
 	Delete          []string
 	DeleteOlderThan time.Duration
 	MCPList         bool
@@ -283,6 +287,32 @@ type Config struct {
 	User                                               string
 	OpenEditor                                         bool
 	CacheReadFromID, CacheWriteToID, CacheWriteToTitle string
+}
+
+// PromptConfig holds user overrides for built-in runtime prompts.
+type PromptConfig struct {
+	Identity            string `yaml:"identity"`
+	ToolSelection       string `yaml:"tool-selection"`
+	Plan                string `yaml:"plan"`
+	ReasoningClassifier string `yaml:"reasoning-classifier"`
+	ShellClassifier     string `yaml:"shell-classifier"`
+}
+
+func (p PromptConfig) Value(key string) string {
+	switch key {
+	case prompts.KeyIdentity:
+		return p.Identity
+	case prompts.KeyToolSelection:
+		return p.ToolSelection
+	case prompts.KeyPlan:
+		return p.Plan
+	case prompts.KeyReasoningClassifier:
+		return p.ReasoningClassifier
+	case prompts.KeyShellClassifier:
+		return p.ShellClassifier
+	default:
+		return ""
+	}
 }
 
 // Workspace describes the configured workspace root in normalized forms.

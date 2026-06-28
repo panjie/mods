@@ -12,6 +12,7 @@ import (
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
 )
@@ -24,20 +25,20 @@ func (m *Mods) resolveReasoning(
 	ccfg *openai.Config,
 	occfg ollama.Config,
 	cccfg cohere.Config,
-) bool {
+) (bool, error) {
 	cfg := m.Config
 	switch cfg.Reasoning {
 	case ReasoningOn:
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, true)
 		debug.Printf("Reasoning: enabled for %s/%s", mod.API, mod.Name)
-		return true
+		return true, nil
 	case ReasoningAuto:
 		if content == "" {
 			applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
-			return false
+			return false, nil
 		}
 		if mod.API == "cohere" || mod.API == "ollama" {
-			return false
+			return false, nil
 		}
 		debug.Printf("Auto judge: evaluating task complexity for model=%s", mod.Name)
 		m.setActiveOperation("Evaluating task complexity...")
@@ -51,16 +52,21 @@ func (m *Mods) resolveReasoning(
 		ccfgJ := *ccfg
 		ccfgJ.ReasoningEffort = ""
 		clearThinkingFromExtraParams(ccfgJ.ExtraParams)
-		shouldReason := judgeTaskComplexity(judgeCtx, mod, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
+		system, err := m.resolvePrompt(prompts.KeyReasoningClassifier, prompts.ReasoningClassifier)
+		if err != nil {
+			applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
+			return false, err
+		}
+		shouldReason := judgeTaskComplexity(judgeCtx, mod, system, content, accfgJ, gccfgJ, ccfgJ, occfg, cccfg)
 		debug.Printf("Auto judge: reasoning=%v", shouldReason)
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, shouldReason)
-		return shouldReason
+		return shouldReason, nil
 	case ReasoningOff:
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
-		return false
+		return false, nil
 	default:
 		applyReasoningConfigs(*mod, gccfg, accfg, ccfg, false)
-		return false
+		return false, nil
 	}
 }
 
@@ -205,6 +211,7 @@ func clearThinkingFromExtraParams(extra map[string]any) {
 func judgeTaskComplexity(
 	ctx context.Context,
 	mod *Model,
+	system string,
 	prompt string,
 	accfg anthropic.Config,
 	gccfg google.Config,
@@ -212,7 +219,6 @@ func judgeTaskComplexity(
 	occfg ollama.Config,
 	cccfg cohere.Config,
 ) bool {
-	system := "You are a task classifier. Determine if the following task requires deep reasoning (multi-step analysis, debugging, complex logic, math, code design, or creative writing). Answer only YES."
 	max3 := int64(3)
 	request := proto.Request{
 		Messages: []proto.Message{

@@ -6,7 +6,7 @@ Key mods flags and behaviors (the user runs these, not you):
 - `mods --help` — full flag reference; suggest it for anything not covered here.
 - `--plan` / `-p` — draft a step-by-step plan for the user to approve before executing.
 - `--minimal` — terse, plain-text output suited for shell pipelines.
-- `--workspace <dir>` — set the workspace root for filesystem tools and shell.
+- `--workspace <dir>` — set the workspace for filesystem tools and shell.
 - `-f` / `--format` — render the response as Markdown.
 - `--web-search` — enable web search for up-to-date information.
 - `--image <path>` / `--clipboard-image` — attach images to the prompt.

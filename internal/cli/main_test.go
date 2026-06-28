@@ -270,6 +270,10 @@ func TestIsNoArgs(t *testing.T) {
 		cfg := Config{Chat: true}
 		require.False(t, isNoArgsCfg(cfg))
 	})
+	t.Run("with list prompts", func(t *testing.T) {
+		cfg := Config{ListPrompts: true}
+		require.False(t, isNoArgsCfg(cfg))
+	})
 }
 
 func isNoArgsCfg(cfg Config) bool {
@@ -282,6 +286,7 @@ func isNoArgsCfg(cfg Config) bool {
 		!cfg.HelpAll &&
 		!cfg.List &&
 		!cfg.ListRoles &&
+		!cfg.ListPrompts &&
 		!cfg.MCPList &&
 		!cfg.MCPListTools &&
 		!cfg.Dirs &&
@@ -369,6 +374,7 @@ func TestReadmeDoesNotListRemovedPromptFlags(t *testing.T) {
 	require.NotContains(t, readme, "`--prompt-args`")
 	require.NotContains(t, readme, "`-P`, `--prompt`")
 	require.NotContains(t, readme, "`-p`, `--prompt-args`")
+	require.NotContains(t, readme, "workspace-root")
 }
 
 func ensureTestFlags() {
@@ -415,6 +421,17 @@ func captureStdout(tb testing.TB, fn func()) string {
 	require.NoError(tb, result.err)
 	require.NoError(tb, r.Close())
 	return string(result.out)
+}
+
+func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
+	output := captureStdout(t, listPrompts)
+
+	require.Contains(t, output, "## identity\n\n")
+	require.Contains(t, output, "## plan\n\n")
+	require.Contains(t, output, "## shell-classifier\n\n")
+	require.Contains(t, output, "## safe-workspace-template\n\n")
+	require.Contains(t, output, "You are running inside mods")
+	require.Contains(t, output, "Analyze this shell command for review.")
 }
 
 // TestNextBackupPathAvoidsOverwrite locks in the fix for resetSettings:

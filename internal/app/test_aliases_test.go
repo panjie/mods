@@ -48,6 +48,7 @@ const (
 type approvalRuleSet = approval.RuleSet
 type ApprovalRule = approval.Rule
 type PersistentConfig = cfgpkg.PersistentConfig
+type PromptConfig = cfgpkg.PromptConfig
 type APIs = cfgpkg.APIs
 
 func testDB(tb testing.TB) *conversation.DB {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -538,6 +539,14 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		require.Contains(t, systemContents(m.messages), modsIdentityPrompt)
 	})
 
+	t.Run("system info uses workspace field", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NotEmpty(t, m.messages)
+		require.Contains(t, m.messages[0].Content, "workspace=")
+		require.NotContains(t, m.messages[0].Content, "workspace_root=")
+	})
+
 	t.Run("minimal mode skips identity", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
 		require.NoError(t, m.setupStreamContext("hello", model))
@@ -550,6 +559,36 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		contents := systemContents(m.messages)
 		require.Contains(t, contents, modsIdentityPrompt)
 		require.Contains(t, contents, planSystemPrompt)
+	})
+
+	t.Run("identity prompt override", func(t *testing.T) {
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{
+			Prompts: PromptConfig{Identity: "custom identity"},
+		}})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		contents := systemContents(m.messages)
+		require.Contains(t, contents, "custom identity")
+		require.NotContains(t, contents, modsIdentityPrompt)
+	})
+
+	t.Run("tool selection prompt override", func(t *testing.T) {
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{
+			Prompts: PromptConfig{ToolSelection: "custom tool rules"},
+		}})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		contents := systemContents(m.messages)
+		require.Contains(t, contents, "custom tool rules")
+		require.NotContains(t, contents, ToolSelectionRules)
+	})
+
+	t.Run("prompt override loads file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "identity.txt")
+		require.NoError(t, os.WriteFile(path, []byte("identity from file"), 0o644))
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{
+			Prompts: PromptConfig{Identity: "file://" + path},
+		}})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, systemContents(m.messages), "identity from file")
 	})
 }
 
@@ -575,8 +614,61 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 	require.Contains(t, systemMessages, planSystemPrompt)
 	require.Contains(t, planSystemPrompt, "Use platform-appropriate read-only commands")
 	for _, msg := range systemMessages {
-		require.NotContains(t, msg, "Safe workspace:")
+		require.NotContains(t, msg, "Safe temporary workspace:")
 	}
+}
+
+func TestSetupPlanContextPromptOverride(t *testing.T) {
+	cfg := Config{PersistentConfig: PersistentConfig{
+		Prompts: PromptConfig{Plan: "custom plan prompt"},
+	}}
+	cfg.Roles = map[string][]string{}
+	cfg.FormatText = defaultConfig().FormatText
+	cfg.FormatAs = "markdown"
+	m := &Mods{
+		Config: &cfg,
+		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		ctx:    context.Background(),
+	}
+
+	require.NoError(t, m.setupPlanContext("hello", Model{MaxChars: 1000}))
+
+	systemMessages := make([]string, 0, len(m.messages))
+	for _, msg := range m.messages {
+		if msg.Role == proto.RoleSystem {
+			systemMessages = append(systemMessages, msg.Content)
+		}
+	}
+	require.Contains(t, systemMessages, "custom plan prompt")
+	require.NotContains(t, systemMessages, planSystemPrompt)
+}
+
+func TestShellClassifierPromptResolution(t *testing.T) {
+	m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{
+		ShellClassifyPrompt: "legacy yes no",
+		Prompts:             PromptConfig{ShellClassifier: "custom json"},
+	}}}
+
+	system, structured, err := m.resolveShellClassifierPrompt()
+
+	require.NoError(t, err)
+	require.Equal(t, "custom json", system)
+	require.True(t, structured)
+
+	m.Config.Prompts.ShellClassifier = ""
+	system, structured, err = m.resolveShellClassifierPrompt()
+	require.NoError(t, err)
+	require.Equal(t, "legacy yes no", system)
+	require.False(t, structured)
+}
+
+func TestShellClassifyCacheKeyIncludesPromptAndMode(t *testing.T) {
+	keyA := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt a")
+	keyB := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt b")
+	keyC := shellClassifyCacheKey("shell_run", "rm out", "yesno", "prompt a")
+
+	require.NotEqual(t, keyA, keyB)
+	require.NotEqual(t, keyA, keyC)
 }
 
 func TestInjectApprovedPlanGuidance(t *testing.T) {

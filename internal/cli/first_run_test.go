@@ -55,6 +55,7 @@ func TestShouldAutoConfigSkipsNonRequestActions(t *testing.T) {
 		"delete":            {args: []string{"mods", "--delete", "abc"}, cfg: Config{Delete: []string{"abc"}}},
 		"delete older than": {args: []string{"mods", "--delete-older-than", "1d"}, cfg: Config{DeleteOlderThan: time.Hour}},
 		"list roles":        {args: []string{"mods", "--list-roles"}, cfg: Config{ListRoles: true}},
+		"list prompts":      {args: []string{"mods", "--list-prompts"}, cfg: Config{ListPrompts: true}},
 		"mcp list":          {args: []string{"mods", "--mcp-list"}, cfg: Config{MCPList: true}},
 		"mcp list tools":    {args: []string{"mods", "--mcp-list-tools"}, cfg: Config{MCPListTools: true}},
 	}

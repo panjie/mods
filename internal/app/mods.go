@@ -229,6 +229,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Config.ShowHelp ||
 			m.Config.List ||
 			m.Config.ListRoles ||
+			m.Config.ListPrompts ||
 			m.Config.Settings ||
 			m.Config.ConfigSetup ||
 			m.Config.ResetSettings {
@@ -259,6 +260,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Config.ShowHelp ||
 			m.Config.List ||
 			m.Config.ListRoles ||
+			m.Config.ListPrompts ||
 			m.Config.Settings ||
 			m.Config.ConfigSetup ||
 			m.Config.ResetSettings {

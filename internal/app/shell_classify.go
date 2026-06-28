@@ -11,18 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
 )
 
-const defaultShellClassifyPrompt = `Analyze this shell command for review.
-Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
-Use exactly this shape:
-{"needs_review":true,"affected_dirs":["/path/or/relative/dir"],"reason":"short reason"}
-
-Set needs_review to true if the command creates, deletes, modifies, or may modify files, directories, system settings, or persistent state. If unsure, set needs_review to true.
-Set affected_dirs to the directories that may be written, deleted, or modified. If none are affected or unknown, use an empty array.
-Example: ls -la /path/to/project => {"needs_review":false,"affected_dirs":[],"reason":"lists directory contents only"}.`
+const defaultShellClassifyPrompt = prompts.ShellClassifier
 
 type shellCommandAnalysis struct {
 	NeedsReview  bool
@@ -43,22 +37,29 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		return m.shellAnalyzer(tool, command)
 	}
 
-	customPrompt := m.Config.ShellClassifyPrompt != ""
-	cacheKey := tool + "\x00" + command + "\x00" + m.Config.ShellClassifyPrompt
-	if cached, ok := shellClassifyCache.Load(cacheKey); ok {
-		debug.Printf("analyzeShellCommand: cmd=%q cached -> needsReview=%v dirs=%v", debug.Truncate(command, 80), cached.NeedsReview, cached.AffectedDirs)
-		return cached
-	}
-
 	if !isObviouslyMutable(command) {
 		analysis := shellCommandAnalysis{
 			NeedsReview:  false,
 			AffectedDirs: []string{},
 			Reason:       "read-only command (local heuristic)",
 		}
-		shellClassifyCache.Store(cacheKey, analysis)
 		debug.Printf("analyzeShellCommand: cmd=%q -> local heuristic: read-only", debug.Truncate(command, 80))
 		return analysis
+	}
+
+	system, structured, err := m.resolveShellClassifierPrompt()
+	if err != nil {
+		debug.Printf("analyzeShellCommand: prompt override failed: %v", err)
+		return defaultShellCommandAnalysis()
+	}
+	parseMode := "json"
+	if !structured {
+		parseMode = "yesno"
+	}
+	cacheKey := shellClassifyCacheKey(tool, command, parseMode, system)
+	if cached, ok := shellClassifyCache.Load(cacheKey); ok {
+		debug.Printf("analyzeShellCommand: cmd=%q cached -> needsReview=%v dirs=%v", debug.Truncate(command, 80), cached.NeedsReview, cached.AffectedDirs)
+		return cached
 	}
 
 	cfg := m.Config
@@ -81,11 +82,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
 
-	system := m.Config.ShellClassifyPrompt
-	if system == "" {
-		system = defaultShellClassifyPrompt
-	}
-	debug.Printf("analyzeShellCommand: using model=%s api=%s, structured=%v, system=%q", mod.Name, mod.API, !customPrompt, system)
+	debug.Printf("analyzeShellCommand: using model=%s api=%s, structured=%v, system=%q", mod.Name, mod.API, structured, system)
 	maxTokens := int64(256)
 	request := proto.Request{
 		Messages: []proto.Message{
@@ -119,20 +116,35 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	}
 	rawResponse := strings.TrimSpace(sb.String())
 	var analysis shellCommandAnalysis
-	if customPrompt {
-		analysis = shellCommandAnalysis{NeedsReview: classifyResponse(rawResponse)}
-	} else {
+	if structured {
 		var ok bool
 		analysis, ok = parseShellAnalysisResponse(rawResponse)
 		if !ok {
 			analysis = defaultShellCommandAnalysis()
 		}
+	} else {
+		analysis = shellCommandAnalysis{NeedsReview: classifyResponse(rawResponse)}
 	}
 	debug.Printf("analyzeShellCommand: cmd=%q resp=%s -> needsReview=%v dirs=%v reason=%q",
 		command, debug.Truncate(rawResponse, 80), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 
 	shellClassifyCache.Store(cacheKey, analysis)
 	return analysis
+}
+
+func shellClassifyCacheKey(tool, command, parseMode, system string) string {
+	return strings.Join([]string{tool, command, parseMode, system}, "\x00")
+}
+
+func (m *Mods) resolveShellClassifierPrompt() (string, bool, error) {
+	if m.Config != nil && strings.TrimSpace(m.Config.Prompts.ShellClassifier) != "" {
+		system, err := m.resolvePrompt(prompts.KeyShellClassifier, defaultShellClassifyPrompt)
+		return system, true, err
+	}
+	if m.Config != nil && m.Config.ShellClassifyPrompt != "" {
+		return m.Config.ShellClassifyPrompt, false, nil
+	}
+	return defaultShellClassifyPrompt, true, nil
 }
 
 func parseShellAnalysisResponse(raw string) (shellCommandAnalysis, bool) {

@@ -44,6 +44,7 @@ func isPassiveAutoConfigSkippedAction(args []string) bool {
 		config.Dirs ||
 		config.List ||
 		config.ListRoles ||
+		config.ListPrompts ||
 		config.Show != "" ||
 		config.ShowLast ||
 		len(config.Delete) > 0 ||
@@ -70,6 +71,7 @@ func isAutoConfigSkippedAction() bool {
 		config.ResetSettings ||
 		config.List ||
 		config.ListRoles ||
+		config.ListPrompts ||
 		config.Show != "" ||
 		config.ShowLast ||
 		len(config.Delete) > 0 ||

@@ -73,7 +73,7 @@ func TestRunChatRejectsNoCache(t *testing.T) {
 
 func TestRunChatRejectsSessionActions(t *testing.T) {
 	withChatTest(t, "/exit\n", func(_ *[]string) {
-		config.List = true
+		config.ListPrompts = true
 
 		err := runChat(context.Background(), nil, nil)
 

@@ -34,6 +34,16 @@ roles:
 # {{ index .Help "role" }}
 role: "default"
 
+# ── Built-in Prompt Overrides ─────────────────────────────────────
+
+# {{ index .Help "prompts" }}
+prompts:
+  identity: ""
+  tool-selection: ""
+  plan: ""
+  reasoning-classifier: ""
+  shell-classifier: ""
+
 # ── Display & Output ──────────────────────────────────────────────
 
 # {{ index .Help "raw" }}

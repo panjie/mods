@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/caarlos0/env/v9"
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -30,6 +31,25 @@ func TestConfig(t *testing.T) {
 	})
 }
 
+func TestPromptConfig(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte(`prompts:
+  identity: custom identity
+  tool-selection: custom tools
+  plan: custom plan
+  reasoning-classifier: custom reasoning
+  shell-classifier: custom shell
+`), &cfg))
+
+	require.Equal(t, "custom identity", cfg.Prompts.Identity)
+	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
+	require.Equal(t, "custom plan", cfg.Prompts.Plan)
+	require.Equal(t, "custom reasoning", cfg.Prompts.ReasoningClassifier)
+	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
+	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
+	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
+}
+
 func TestDefaultPromptText(t *testing.T) {
 	cfg := defaultConfig()
 
@@ -48,8 +68,14 @@ func TestDefaultPromptText(t *testing.T) {
 
 func TestToolSelectionRulesArePrioritized(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Priority order:")
-	require.Contains(t, ToolSelectionRules, "Use fs_* tools only for files inside workspace_root")
-	require.Contains(t, ToolSelectionRules, "Use platform-appropriate shell tools for paths outside workspace_root")
+	require.Contains(t, ToolSelectionRules, "Use fs_* tools only for files inside the configured workspace")
+	require.Contains(t, ToolSelectionRules, "Use platform-appropriate shell tools for paths outside the configured workspace")
+	require.NotContains(t, ToolSelectionRules, "workspace_root")
+}
+
+func TestWorkspaceHelpUsesWorkspaceTerminology(t *testing.T) {
+	require.Contains(t, Help["workspace"], "Set the workspace")
+	require.NotContains(t, Help["workspace"], "workspace root")
 }
 
 func TestDefaultConfigDisplay(t *testing.T) {
@@ -99,6 +125,17 @@ func TestConfigTemplateIncludesHideToolStatus(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.True(t, strings.Contains(string(content), "hide-tool-status: false"))
+}
+
+func TestConfigTemplateIncludesPrompts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "prompts:")
+	require.Contains(t, string(content), `identity: ""`)
+	require.Contains(t, string(content), `shell-classifier: ""`)
 }
 
 func TestHideToolResultsConfig(t *testing.T) {

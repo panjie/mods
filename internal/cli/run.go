@@ -105,6 +105,10 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		listRoles()
 		return nil
 	}
+	if config.ListPrompts {
+		listPrompts()
+		return nil
+	}
 	if config.List {
 		return listConversations(config.Raw)
 	}

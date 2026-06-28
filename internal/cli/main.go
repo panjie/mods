@@ -177,6 +177,7 @@ func initFlags() {
 	regBool(flags, &config.Dirs, "dirs", "", false)
 	regStr(flags, &config.Role, "role", "R", config.Role)
 	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
+	regBool(flags, &config.ListPrompts, flagListPrompts, "", config.ListPrompts)
 	flags.Var(newThemeFlag(config.Theme, &config.Theme), "theme", flagDesc("theme"))
 	regBool(flags, &config.OpenEditor, "editor", "e", false)
 	regBool(flags, &config.Plan, "plan", "p", config.Plan)
@@ -263,7 +264,7 @@ func initFlags() {
 		"stdin-image",
 		"clipboard-image",
 	)
-	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "theme", "help", "help-all", "version")
+	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "theme", "help", "help-all", "version", flagListPrompts)
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key", "web-search-api-key-env")
 	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review", "max-tool-rounds")
@@ -844,6 +845,7 @@ func isNoArgs() bool {
 		!config.List &&
 		!config.Chat &&
 		!config.ListRoles &&
+		!config.ListPrompts &&
 		!config.MCPList &&
 		!config.MCPListTools &&
 		!config.Dirs &&

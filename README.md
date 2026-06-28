@@ -282,10 +282,10 @@ builtin-tools:
   sequential-thinking: true
   shell-timeout: 30s
   shell-max-output: 20000
-  workspace-root: ""        # defaults to the current working directory
+  workspace: ""             # defaults to the current working directory
 ```
 
-Pass `--workspace` to scope filesystem and shell tools to a project root. The
+Pass `--workspace` to scope filesystem and shell tools to a project workspace. The
 status line at the bottom shows what Mods is doing between tool calls
 ("Reading file: ...", "Running command: ...", "Searching web: ..."). Hide it
 with `--hide-tool-status`. When a shell command finishes, Mods also leaves a
@@ -391,6 +391,19 @@ Then use it:
 ```sh
 mods --role shell "list the largest files in the current directory"
 mods --list-roles
+```
+
+Built-in runtime prompts can also be overridden in `mods.yml`. Run
+`mods --list-prompts` to print the available keys and their default text, then
+copy the one you want to customize:
+
+```yaml
+prompts:
+  plan: |
+    Create a concise plan for approval before making changes.
+  shell-classifier: |
+    Analyze this shell command for review.
+    Return only strict JSON.
 ```
 
 ## Contributing

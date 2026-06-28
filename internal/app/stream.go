@@ -15,6 +15,7 @@ import (
 
 	"github.com/panjie/mods/internal/clipboard"
 	imageutil "github.com/panjie/mods/internal/image"
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -38,7 +39,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		}
 	}
 	sysParts := []string{
-		fmt.Sprintf("workspace_root=%s", root),
+		fmt.Sprintf("workspace=%s", root),
 		fmt.Sprintf("user=%s", user),
 		fmt.Sprintf("host=%s", hostname),
 		fmt.Sprintf("os=%s/%s", runtime.GOOS, runtime.GOARCH),
@@ -54,19 +55,27 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		Content: sysInfo,
 	})
 	if !cfg.Minimal {
+		identityPrompt, err := m.resolvePrompt(prompts.KeyIdentity, modsIdentityPrompt)
+		if err != nil {
+			return err
+		}
+		toolSelectionPrompt, err := m.resolvePrompt(prompts.KeyToolSelection, ToolSelectionRules)
+		if err != nil {
+			return err
+		}
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,
-			Content: modsIdentityPrompt,
+			Content: identityPrompt,
 		})
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,
-			Content: ToolSelectionRules,
+			Content: toolSelectionPrompt,
 		})
 		if !cfg.Plan {
 			safeDir := os.TempDir()
 			m.messages = append(m.messages, proto.Message{
 				Role:    proto.RoleSystem,
-				Content: fmt.Sprintf("Safe workspace: %s. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes.", safeDir),
+				Content: formatSafeWorkspacePrompt(safeDir),
 			})
 		}
 	}

@@ -1,6 +1,8 @@
 package tools
 
-const ToolSelectionRules = "Tool selection. Priority order: 1. Use fs_* tools only for files inside workspace_root; they cannot access files outside it. 2. Use platform-appropriate shell tools for paths outside workspace_root, such as Downloads, Desktop, or system temp directories. 3. On Windows, use shell_run for cmd.exe builtins such as dir, type, and echo; use powershell_run for PowerShell pipelines, variables, filtering, counting, or querying. Pass only the PowerShell command, without powershell, powershell.exe, pwsh, or -Command prefixes. 4. Minimize tool calls by using one well-formed command instead of repeated small retries. 5. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review. 6. For multi-step work that genuinely needs intermediate files, write them inside the workspace root so fs_read_file can inspect them without shell review."
+import "github.com/panjie/mods/internal/prompts"
+
+const ToolSelectionRules = prompts.ToolSelection
 
 const PosixShellRunDescription = "Run a shell command via sh and return stdout+stderr. Output is returned directly; do not redirect to a file just to see results. Pipe commands together for filtering, counting, or text processing (e.g. find ... | wc -l)."
 

@@ -968,10 +968,3 @@ func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
 	platform.HideCommandWindow(cmd)
 	return cmd
 }
-
-func truncateOutput(out string, limit int) string {
-	if len(out) <= limit {
-		return out
-	}
-	return out[:limit] + fmt.Sprintf("\n\n[Output truncated at %d chars.]", limit)
-}

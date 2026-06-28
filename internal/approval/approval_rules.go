@@ -427,10 +427,6 @@ func printShellNode(node syntax.Node) (string, bool) {
 	return strings.TrimSpace(buf.String()), true
 }
 
-func normalizeShellCommand(command string) string {
-	return normalizeShellCommandWithMode(command, shellToolUsesPOSIX("shell_run"))
-}
-
 func normalizeShellCommandWithMode(command string, posix bool) string {
 	command = strings.TrimSpace(command)
 	if command == "" || !posix {
@@ -705,17 +701,6 @@ func shellExactRule(tool, command string) Rule {
 		Tool:    tool,
 		Pattern: command,
 	}
-}
-
-func dirAllowRulesForTool(tool string, command string, posix bool) []Rule {
-	dirs := extractWritableDirs(command, posix)
-	if len(dirs) == 0 {
-		return nil
-	}
-	return []Rule{{
-		Type:  DirAllow,
-		Paths: dirs,
-	}}
 }
 
 func dirAllowForCommand(tool string, command string, rules []Rule, workspaceRoot string, posix bool) bool {

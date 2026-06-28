@@ -33,7 +33,6 @@ type cyclingChar struct {
 	finalValue   rune // if < 0 cycle forever
 	currentValue rune
 	initialDelay time.Duration
-	lifetime     time.Duration
 }
 
 func (c cyclingChar) randomRune() rune {
@@ -138,7 +137,6 @@ func NewAnim(cyclingCharsSize uint, label string, r *lipgloss.Renderer, s Styles
 		c.labelChars[i] = cyclingChar{
 			finalValue:   r,
 			initialDelay: makeInitialDelay(),
-			lifetime:     makeDelay(5, 180), //nolint:mnd
 		}
 	}
 

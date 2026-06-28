@@ -15,7 +15,6 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -316,49 +315,6 @@ func ToolsFor(ctx context.Context, name string, server MCPServerConfig) ([]mcp.T
 		return nil, fmt.Errorf("could not setup %s: %w", name, err)
 	}
 	return tools.Tools, nil
-}
-
-// ToolCallDirect executes an MCP tool using pre-resolved server and tool names,
-// avoiding string splitting that breaks when server names contain underscores.
-func ToolCallDirect(ctx context.Context, cfg *Config, sname, tool string, server MCPServerConfig, data []byte) (string, error) {
-	if !IsEnabled(cfg, sname) {
-		return "", fmt.Errorf("mcp: server is disabled: %q", sname)
-	}
-
-	var args map[string]any
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &args); err != nil {
-			return "", fmt.Errorf("mcp: %w: %s", err, string(data))
-		}
-	}
-
-	fullName := fmt.Sprintf("%s_%s", sname, tool)
-	var result *mcp.CallToolResult
-	var lastErr error
-	for attempt := range 2 {
-		client, err := InitClient(ctx, server)
-		if err != nil {
-			lastErr = fmt.Errorf("mcp: %w", err)
-			continue
-		}
-
-		request := mcp.CallToolRequest{}
-		request.Params.Name = tool
-		request.Params.Arguments = args
-		result, err = client.CallTool(ctx, request)
-		client.Close() //nolint:errcheck
-		if err == nil {
-			lastErr = nil
-			break
-		}
-		lastErr = err
-		debug.Printf("MCP retry %d/2 for %s: %v", attempt+1, fullName, err)
-	}
-	if lastErr != nil {
-		return "", fmt.Errorf("mcp: %w", lastErr)
-	}
-
-	return toolResultText(result)
 }
 
 func toolResultText(result *mcp.CallToolResult) (string, error) {

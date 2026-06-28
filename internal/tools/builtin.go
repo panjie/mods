@@ -20,6 +20,7 @@ import (
 	localereader "github.com/mattn/go-localereader"
 
 	"github.com/panjie/mods/internal/debug"
+	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/websearch"
 )
@@ -314,7 +315,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				return "", err
 			}
 			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn")
-			hideCommandWindow(cmd)
+			platform.HideCommandWindow(cmd)
 			cmd.Dir = root
 			cmd.Stdin = strings.NewReader(args.Patch)
 			out, err := cmd.CombinedOutput()
@@ -956,7 +957,7 @@ func unquoteCStylePath(s string) (string, error) {
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
 		cmd := exec.CommandContext(ctx, "cmd", "/D", "/C", command)
-		hideCommandWindow(cmd)
+		platform.HideCommandWindow(cmd)
 		return cmd
 	}
 	return exec.CommandContext(ctx, "sh", "-c", command)
@@ -964,7 +965,7 @@ func shellCommand(ctx context.Context, command string) *exec.Cmd {
 
 func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command)
-	hideCommandWindow(cmd)
+	platform.HideCommandWindow(cmd)
 	return cmd
 }
 

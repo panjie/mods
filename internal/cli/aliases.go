@@ -1,64 +1,56 @@
 package cli
 
-import "github.com/panjie/mods/internal/apperr"
-import "github.com/panjie/mods/internal/app"
-import cfgpkg "github.com/panjie/mods/internal/config"
-import "github.com/panjie/mods/internal/conversation"
-import debugpkg "github.com/panjie/mods/internal/debug"
-import "github.com/panjie/mods/internal/mcpclient"
-import "github.com/panjie/mods/internal/platform"
-import "github.com/panjie/mods/internal/ui"
+import (
+	"github.com/panjie/mods/internal/app"
+	"github.com/panjie/mods/internal/apperr"
+	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/conversation"
+	debugpkg "github.com/panjie/mods/internal/debug"
+	"github.com/panjie/mods/internal/mcpclient"
+	"github.com/panjie/mods/internal/platform"
+	"github.com/panjie/mods/internal/ui"
+)
 
-type modsError = apperr.Error
-type Config = cfgpkg.Config
-type API = cfgpkg.API
-type Model = cfgpkg.Model
-type FieldUpdate = cfgpkg.FieldUpdate
-type ReasoningMode = cfgpkg.ReasoningMode
-type ReviewMode = cfgpkg.ReviewMode
-type DB = conversation.DB
-type Conversation = conversation.Conversation
-type Mods = app.Mods
-type Styles = ui.Styles
+type (
+	modsError     = apperr.Error
+	Config        = cfgpkg.Config
+	API           = cfgpkg.API
+	Model         = cfgpkg.Model
+	FieldUpdate   = cfgpkg.FieldUpdate
+	ReasoningMode = cfgpkg.ReasoningMode
+	ReviewMode    = cfgpkg.ReviewMode
+	DB            = conversation.DB
+	Conversation  = conversation.Conversation
+	Mods          = app.Mods
+	Styles        = ui.Styles
+)
 
-var newUserErrorf = apperr.NewUserErrorf
-var newMods = app.New
-var Default = cfgpkg.Default
-var defaultConfig = cfgpkg.Default
-var Ensure = cfgpkg.Ensure
-var ensureConfig = cfgpkg.Ensure
-var WriteDefaultFile = cfgpkg.WriteDefaultFile
-var writeConfigFile = cfgpkg.WriteDefaultFile
-var SaveFields = cfgpkg.SaveFields
-var SaveFieldPaths = cfgpkg.SaveFieldPaths
-var HasAPIKey = cfgpkg.HasAPIKey
-var help = cfgpkg.Help
-var Help = cfgpkg.Help
-var openDB = conversation.Open
-var Open = conversation.Open
-var newConversationID = conversation.NewID
-var RemoveWhitespace = ui.RemoveWhitespace
-var IsInputTTY = ui.IsInputTTY
-var IsOutputTTY = ui.IsOutputTTY
-var IsErrorTTY = ui.IsErrorTTY
-var StdoutStyles = ui.StdoutStyles
-var StderrStyles = ui.StderrStyles
-var StdoutRenderer = ui.StdoutRenderer
-var StderrRenderer = ui.StderrRenderer
-var stdoutStyles = ui.StdoutStyles
-var stderrStyles = ui.StderrStyles
-var stdoutRenderer = ui.StdoutRenderer
-var stderrRenderer = ui.StderrRenderer
-var isInputTTY = ui.IsInputTTY
-var isOutputTTY = ui.IsOutputTTY
-var isErrorTTY = ui.IsErrorTTY
-var PrintConfirmation = ui.PrintConfirmation
-var printConfirmation = ui.PrintConfirmation
-var FirstLine = ui.FirstLine
-var HideCommandWindow = platform.HideCommandWindow
-var hideCommandWindow = platform.HideCommandWindow
-var List = mcpclient.List
-var ListTools = mcpclient.ListTools
+var (
+	newUserErrorf     = apperr.NewUserErrorf
+	newMods           = app.New
+	Default           = cfgpkg.Default
+	Ensure            = cfgpkg.Ensure
+	WriteDefaultFile  = cfgpkg.WriteDefaultFile
+	SaveFields        = cfgpkg.SaveFields
+	SaveFieldPaths    = cfgpkg.SaveFieldPaths
+	HasAPIKey         = cfgpkg.HasAPIKey
+	Help              = cfgpkg.Help
+	Open              = conversation.Open
+	newConversationID = conversation.NewID
+	RemoveWhitespace  = ui.RemoveWhitespace
+	IsInputTTY        = ui.IsInputTTY
+	IsOutputTTY       = ui.IsOutputTTY
+	IsErrorTTY        = ui.IsErrorTTY
+	StdoutStyles      = ui.StdoutStyles
+	StderrStyles      = ui.StderrStyles
+	StdoutRenderer    = ui.StdoutRenderer
+	StderrRenderer    = ui.StderrRenderer
+	PrintConfirmation = ui.PrintConfirmation
+	FirstLine         = ui.FirstLine
+	HideCommandWindow = platform.HideCommandWindow
+	List              = mcpclient.List
+	ListTools         = mcpclient.ListTools
+)
 
 const (
 	ReviewNever   = cfgpkg.ReviewNever
@@ -68,16 +60,14 @@ const (
 	ReasoningOn   = cfgpkg.ReasoningOn
 	ReasoningAuto = cfgpkg.ReasoningAuto
 
-	sha1short  = conversation.ShortIDLength
-	sha1minLen = conversation.MinIDLength
-
 	ShortIDLength = conversation.ShortIDLength
 	MinIDLength   = conversation.MinIDLength
 )
 
-var sha1reg = conversation.IDPattern
-var IDPattern = conversation.IDPattern
-var lastPrompt = app.LastPrompt
+var (
+	IDPattern  = conversation.IDPattern
+	lastPrompt = app.LastPrompt
+)
 
 type debugFacade struct{}
 

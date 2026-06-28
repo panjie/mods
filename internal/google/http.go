@@ -10,8 +10,6 @@ import (
 	"net/http"
 )
 
-type httpHeader http.Header
-
 // ErrTooManyEmptyStreamMessages represents an error when a stream has sent too many empty messages.
 var ErrTooManyEmptyStreamMessages = errors.New("stream has sent too many empty messages")
 
@@ -32,7 +30,8 @@ func (jm *JSONMarshaller) Marshal(value any) ([]byte, error) {
 	return result, nil
 }
 
-// HTTPRequestBuilder is an implementation of OllamaRequestBuilder that builds HTTP requests.
+// HTTPRequestBuilder builds HTTP requests for the Google API, marshalling the
+// body via the configured Marshaller.
 type HTTPRequestBuilder struct {
 	marshaller Marshaller
 }
@@ -79,12 +78,6 @@ func withBody(body MessageCompletionRequest) requestOption {
 	return func(args *requestOptions) {
 		args.body = body
 	}
-}
-
-// ErrorAccumulator is an interface for accumulating errors.
-type ErrorAccumulator interface {
-	Write(p []byte) error
-	Bytes() []byte
 }
 
 // Unmarshaler is an interface for unmarshalling bytes.

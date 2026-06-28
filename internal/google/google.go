@@ -258,8 +258,6 @@ type Stream struct {
 	unmarshaler Unmarshaler
 	message     string
 	messages    []proto.Message
-
-	httpHeader
 }
 
 // CallTools implements stream.Stream.
@@ -392,6 +390,5 @@ func googleSendRequestStream(client *Client, req *http.Request) (*Stream, error)
 		reader:      bufio.NewReader(resp.Body),
 		response:    resp,
 		unmarshaler: &JSONUnmarshaler{},
-		httpHeader:  httpHeader(resp.Header),
 	}, nil
 }

@@ -152,14 +152,3 @@ func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 
 	debug.Printf("Reasoning: no built-in disable for %s/%s (-T off); relying on extra-params or provider default", mod.API, mod.Name)
 }
-
-// clearThinkingFromExtraParams removes anthropic-style `thinking`, Qwen-style
-// `enable_thinking`, and any pre-set `reasoning_effort` from extra-params.
-func clearThinkingFromExtraParams(extra map[string]any) {
-	if extra == nil {
-		return
-	}
-	delete(extra, "thinking")
-	delete(extra, "reasoning_effort")
-	delete(extra, "enable_thinking")
-}

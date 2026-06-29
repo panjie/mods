@@ -293,27 +293,4 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 	})
 }
 
-func TestClearThinkingFromExtraParams(t *testing.T) {
-	t.Run("nil map is a no-op", func(t *testing.T) {
-		clearThinkingFromExtraParams(nil)
-	})
 
-	t.Run("removes thinking, reasoning_effort, and enable_thinking; keeps other keys", func(t *testing.T) {
-		extra := map[string]any{
-			"thinking":         map[string]any{"type": "enabled"},
-			"reasoning_effort": "low",
-			"enable_thinking":  true,
-			"top_p":            0.9,
-		}
-
-		clearThinkingFromExtraParams(extra)
-
-		_, hasThinking := extra["thinking"]
-		_, hasEffort := extra["reasoning_effort"]
-		_, hasEnable := extra["enable_thinking"]
-		require.False(t, hasThinking)
-		require.False(t, hasEffort)
-		require.False(t, hasEnable, "enable_thinking must also be cleared for the auto-judge call")
-		require.Equal(t, 0.9, extra["top_p"], "unrelated extra-params must be preserved")
-	})
-}

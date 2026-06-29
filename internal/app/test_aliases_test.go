@@ -1,14 +1,12 @@
 package app
 
 import (
-	"testing"
-
 	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/conversation"
+	"github.com/panjie/mods/internal/testutil"
 	"github.com/panjie/mods/internal/tooling"
 	"github.com/panjie/mods/internal/ui"
-	"github.com/stretchr/testify/require"
 )
 
 var shellApprovalRulesWithMode = approval.ShellRulesWithMode
@@ -51,11 +49,4 @@ type PersistentConfig = cfgpkg.PersistentConfig
 type PromptConfig = cfgpkg.PromptConfig
 type APIs = cfgpkg.APIs
 
-func testDB(tb testing.TB) *conversation.DB {
-	db, err := conversation.Open(":memory:")
-	require.NoError(tb, err)
-	tb.Cleanup(func() {
-		require.NoError(tb, db.Close())
-	})
-	return db
-}
+var testDB = testutil.OpenTestDB

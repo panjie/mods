@@ -60,3 +60,12 @@ func Truncate(s string, max int) string {
 	}
 	return s
 }
+
+type Facade struct{}
+
+var FacadeInstance Facade
+
+func (Facade) SetEnabled(enabled bool)           { SetEnabled(enabled) }
+func (Facade) Printf(format string, args ...any) { Printf(format, args...) }
+func (Facade) Enabled() bool                     { return Enabled() }
+func (Facade) Truncate(s string, max int) string { return Truncate(s, max) }

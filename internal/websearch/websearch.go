@@ -60,6 +60,18 @@ type Result struct {
 	Snippet string
 }
 
+type searchResponse struct {
+	Results []searchResultItem `json:"results"`
+}
+
+type searchResultItem struct {
+	Title   string  `json:"title"`
+	URL     string  `json:"url"`
+	Snippet string  `json:"snippet,omitempty"`
+	Content string  `json:"content,omitempty"`
+	Score   float64 `json:"score,omitempty"`
+}
+
 func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
 	provider := normalizeProvider(cfg.Provider)
 	baseURL := cfg.BaseURL
@@ -389,25 +401,22 @@ func searchTavily(ctx context.Context, apiKey, query string, maxResults int) ([]
 			string(respBody[:min(len(respBody), 200)]))
 	}
 
-	var tavilyResp struct {
-		Results []struct {
-			Title   string  `json:"title"`
-			URL     string  `json:"url"`
-			Content string  `json:"content"`
-			Score   float64 `json:"score"`
-		} `json:"results"`
-	}
+	var sr searchResponse
 
-	if err := json.NewDecoder(resp.Body).Decode(&tavilyResp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
 		return nil, fmt.Errorf("searching Tavily: %w", err)
 	}
 
 	var results []Result
-	for _, r := range tavilyResp.Results {
+	for _, r := range sr.Results {
+		snippet := r.Content
+		if snippet == "" {
+			snippet = r.Snippet
+		}
 		results = append(results, Result{
 			Title:   r.Title,
 			URL:     r.URL,
-			Snippet: r.Content,
+			Snippet: snippet,
 		})
 	}
 
@@ -447,20 +456,14 @@ func searchCustom(ctx context.Context, baseURL, apiKey, query string, maxResults
 		return nil, fmt.Errorf("web search: %w", err)
 	}
 
-	var customResp struct {
-		Results []struct {
-			Title   string `json:"title"`
-			URL     string `json:"url"`
-			Snippet string `json:"snippet"`
-		} `json:"results"`
-	}
+	var sr searchResponse
 
-	if err := json.Unmarshal(body, &customResp); err != nil {
+	if err := json.Unmarshal(body, &sr); err != nil {
 		return nil, fmt.Errorf("web search: %w", err)
 	}
 
 	var results []Result
-	for _, r := range customResp.Results {
+	for _, r := range sr.Results {
 		results = append(results, Result{
 			Title:   r.Title,
 			URL:     r.URL,

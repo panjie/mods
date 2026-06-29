@@ -68,11 +68,4 @@ var (
 	lastPrompt = app.LastPrompt
 )
 
-type debugFacade struct{}
-
-var debug debugFacade
-
-func (debugFacade) SetEnabled(enabled bool)           { debugpkg.SetEnabled(enabled) }
-func (debugFacade) Printf(format string, args ...any) { debugpkg.Printf(format, args...) }
-func (debugFacade) Enabled() bool                     { return debugpkg.Enabled() }
-func (debugFacade) Truncate(s string, max int) string { return debugpkg.Truncate(s, max) }
+var debug = debugpkg.FacadeInstance

@@ -30,7 +30,6 @@ var IsOutputTTY = ui.IsOutputTTY
 var IsErrorTTY = ui.IsErrorTTY
 var isInputTTY = ui.IsInputTTY
 var isOutputTTY = ui.IsOutputTTY
-var isErrorTTY = ui.IsErrorTTY
 var IncreaseIndent = ui.IncreaseIndent
 var CutPrompt = ui.CutPrompt
 var ToolOperationLabel = ui.ToolOperationLabel
@@ -68,10 +67,4 @@ const (
 	MinimalSystemPrompt = cfgpkg.MinimalSystemPrompt
 )
 
-type debugFacade struct{}
-
-var debug debugFacade
-
-func (debugFacade) Printf(format string, args ...any) { debugpkg.Printf(format, args...) }
-func (debugFacade) Enabled() bool                     { return debugpkg.Enabled() }
-func (debugFacade) Truncate(s string, max int) string { return debugpkg.Truncate(s, max) }
+var debug = debugpkg.FacadeInstance

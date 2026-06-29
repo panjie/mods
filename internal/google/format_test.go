@@ -13,6 +13,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newCapturingServer(t *testing.T) (client *Client, captured *[]byte, closeServer func()) {
+	t.Helper()
+	var buf []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "data: {\"candidates\":[]}\n\n")
+	}))
+	cfg := Config{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		AuthToken:  "k",
+	}
+	return New(cfg), &buf, server.Close
+}
+
 // TestFromProtoMessagesIncludesAssistantWithModelRole guards against the
 // regression where assistant messages were silently dropped and where, if
 // re-introduced naively, they would carry the wire role "assistant" which
@@ -175,21 +192,9 @@ func TestFromProtoMessagesUserWithImages(t *testing.T) {
 // TestRequestBodyEmitsSystemInstruction asserts the wire JSON matches Gemini's
 // schema: systemInstruction at top level, contents[*].role only "user"/"model".
 func TestRequestBodyEmitsSystemInstruction(t *testing.T) {
-	var captured []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		captured, _ = io.ReadAll(r.Body)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "data: {\"candidates\":[]}\n\n")
-	}))
-	defer server.Close()
+	client, captured, closeServer := newCapturingServer(t)
+	defer closeServer()
 
-	cfg := Config{
-		BaseURL:    server.URL,
-		HTTPClient: server.Client(),
-		AuthToken:  "k",
-	}
-	client := New(cfg)
 	_ = client.Request(context.Background(), proto.Request{
 		Messages: []proto.Message{
 			{Role: proto.RoleSystem, Content: "be concise"},
@@ -199,12 +204,12 @@ func TestRequestBodyEmitsSystemInstruction(t *testing.T) {
 		},
 	})
 
-	require.NotEmpty(t, captured, "no request body was captured")
-	require.True(t, bytes.Contains(captured, []byte(`"systemInstruction"`)),
-		"wire JSON must contain systemInstruction: %s", captured)
+	require.NotEmpty(t, *captured, "no request body was captured")
+	require.True(t, bytes.Contains(*captured, []byte(`"systemInstruction"`)),
+		"wire JSON must contain systemInstruction: %s", *captured)
 
 	var body map[string]any
-	require.NoError(t, json.Unmarshal(captured, &body))
+	require.NoError(t, json.Unmarshal(*captured, &body))
 
 	si, ok := body["systemInstruction"].(map[string]any)
 	require.True(t, ok, "systemInstruction must be an object")
@@ -227,26 +232,14 @@ func TestRequestBodyEmitsSystemInstruction(t *testing.T) {
 // produces no top-level systemInstruction field when there are no system
 // messages.
 func TestRequestBodyOmitsSystemInstructionWhenAbsent(t *testing.T) {
-	var captured []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		captured, _ = io.ReadAll(r.Body)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "data: {\"candidates\":[]}\n\n")
-	}))
-	defer server.Close()
+	client, captured, closeServer := newCapturingServer(t)
+	defer closeServer()
 
-	cfg := Config{
-		BaseURL:    server.URL,
-		HTTPClient: server.Client(),
-		AuthToken:  "k",
-	}
-	client := New(cfg)
 	_ = client.Request(context.Background(), proto.Request{
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
 	})
 
-	require.NotEmpty(t, captured)
-	require.False(t, bytes.Contains(captured, []byte(`"systemInstruction"`)),
-		"systemInstruction must be omitted when no system messages exist: %s", captured)
+	require.NotEmpty(t, *captured)
+	require.False(t, bytes.Contains(*captured, []byte(`"systemInstruction"`)),
+		"systemInstruction must be omitted when no system messages exist: %s", *captured)
 }

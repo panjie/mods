@@ -442,11 +442,18 @@ func TestToolOperationLabel(t *testing.T) {
 	})
 }
 
+func systemContents(messages []proto.Message) []string {
+	out := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role == proto.RoleSystem {
+			out = append(out, msg.Content)
+		}
+	}
+	return out
+}
+
 func TestSetupStreamContextMinimal(t *testing.T) {
 	newTestMods := func(cfg Config) *Mods {
-		// Production code normalizes via Config.ApplyDefaults in Ensure();
-		// tests reach the same state by calling ApplyDefaults directly so
-		// they do not have to re-derive each default.
 		cfg.ApplyDefaults()
 		if cfg.Roles == nil {
 			cfg.Roles = map[string][]string{}
@@ -457,33 +464,24 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 			ctx:    context.Background(),
 		}
 	}
-	contents := func(messages []proto.Message) []string {
-		out := make([]string, 0, len(messages))
-		for _, msg := range messages {
-			if msg.Role == proto.RoleSystem {
-				out = append(out, msg.Content)
-			}
-		}
-		return out
-	}
 	model := Model{MaxChars: 1000}
 
 	t.Run("minimal disabled", func(t *testing.T) {
 		m := newTestMods(Config{})
 		require.NoError(t, m.setupStreamContext("hello", model))
-		require.NotContains(t, contents(m.messages), minimalSystemPrompt)
+		require.NotContains(t, systemContents(m.messages), minimalSystemPrompt)
 	})
 
 	t.Run("minimal adds system prompt", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
 		require.NoError(t, m.setupStreamContext("hello", model))
-		require.Contains(t, contents(m.messages), minimalSystemPrompt)
+		require.Contains(t, systemContents(m.messages), minimalSystemPrompt)
 	})
 
 	t.Run("minimal suppresses format prompt", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true, Format: true}})
 		require.NoError(t, m.setupStreamContext("hello", model))
-		systemMessages := contents(m.messages)
+		systemMessages := systemContents(m.messages)
 		require.Contains(t, systemMessages, minimalSystemPrompt)
 		require.NotContains(t, systemMessages, defaultMarkdownFormatText)
 	})
@@ -497,7 +495,7 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 			},
 		})
 		require.NoError(t, m.setupStreamContext("hello", model))
-		systemMessages := contents(m.messages)
+		systemMessages := systemContents(m.messages)
 		roleIndex := slices.Index(systemMessages, "role prompt")
 		minimalIndex := slices.Index(systemMessages, minimalSystemPrompt)
 		require.NotEqual(t, -1, roleIndex)
@@ -519,15 +517,6 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 			Styles: makeStyles(lipgloss.NewRenderer(nil)),
 			ctx:    context.Background(),
 		}
-	}
-	systemContents := func(messages []proto.Message) []string {
-		out := make([]string, 0, len(messages))
-		for _, msg := range messages {
-			if msg.Role == proto.RoleSystem {
-				out = append(out, msg.Content)
-			}
-		}
-		return out
 	}
 	model := Model{MaxChars: 1000}
 
@@ -603,12 +592,7 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 
 	require.NoError(t, m.setupPlanContext("hello", Model{MaxChars: 1000}))
 
-	systemMessages := make([]string, 0, len(m.messages))
-	for _, msg := range m.messages {
-		if msg.Role == proto.RoleSystem {
-			systemMessages = append(systemMessages, msg.Content)
-		}
-	}
+	systemMessages := systemContents(m.messages)
 	require.Contains(t, systemMessages, planSystemPrompt)
 	require.Contains(t, planSystemPrompt, "Use platform-appropriate read-only commands")
 	for _, msg := range systemMessages {
@@ -631,12 +615,7 @@ func TestSetupPlanContextPromptOverride(t *testing.T) {
 
 	require.NoError(t, m.setupPlanContext("hello", Model{MaxChars: 1000}))
 
-	systemMessages := make([]string, 0, len(m.messages))
-	for _, msg := range m.messages {
-		if msg.Role == proto.RoleSystem {
-			systemMessages = append(systemMessages, msg.Content)
-		}
-	}
+	systemMessages := systemContents(m.messages)
 	require.Contains(t, systemMessages, "custom plan prompt")
 	require.NotContains(t, systemMessages, planSystemPrompt)
 }
@@ -734,48 +713,49 @@ func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
 	require.Contains(t, m.messages[0].Content, "pwsh=")
 }
 
-func TestOperationStatusView(t *testing.T) {
-	newTestMods := func() *Mods {
-		return &Mods{
-			Config:              &Config{},
-			Styles:              makeStyles(lipgloss.NewRenderer(nil)),
-			anim:                staticModel("Generating"),
-			state:               requestState,
-			showOperationStatus: true,
-			width:               80,
-			reviewer:            &toolReviewer{},
-		}
+func newAnimatingMods() *Mods {
+	return &Mods{
+		Config:              &Config{},
+		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		anim:                staticModel("Generating"),
+		state:               requestState,
+		showOperationStatus: true,
+		width:               80,
+		reviewer:            &toolReviewer{},
+		contentMutex:        &sync.Mutex{},
 	}
+}
 
+func TestOperationStatusView(t *testing.T) {
 	t.Run("shows active operation", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
 		require.Contains(t, m.View(), "Running command: go test ./...")
 	})
 
 	t.Run("clears active operation", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running tool: fs_read_file"})
 		_, _ = m.Update(toolOperationStatusMsg{done: true})
 		require.NotContains(t, m.View(), "Running tool: fs_read_file")
 	})
 
 	t.Run("quiet hides active operation", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.Config.Quiet = true
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
 		require.NotContains(t, m.View(), "Running command: go test ./...")
 	})
 
 	t.Run("hide tool status hides active operation", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.Config.HideToolStatus = true
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
 		require.NotContains(t, m.View(), "Running command: go test ./...")
 	})
 
 	t.Run("reasoning alone does not show status", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.reasoningActive = true
 		view := m.renderWithOperation("answer")
 		require.Equal(t, "answer", view)
@@ -784,7 +764,7 @@ func TestOperationStatusView(t *testing.T) {
 	})
 
 	t.Run("active operation while reasoning renders without reasoning badge", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.reasoningActive = true
 		m.setActiveOperation("Running command: go test ./...")
 		view := m.renderWithOperation("answer")
@@ -863,26 +843,13 @@ func TestPlanExecutionStartResetsOutput(t *testing.T) {
 }
 
 func TestGeneratingViewBeforeOutput(t *testing.T) {
-	newTestMods := func() *Mods {
-		return &Mods{
-			Config:              &Config{},
-			Styles:              makeStyles(lipgloss.NewRenderer(nil)),
-			anim:                staticModel("Generating"),
-			state:               requestState,
-			showOperationStatus: true,
-			width:               80,
-			reviewer:            &toolReviewer{},
-			contentMutex:        &sync.Mutex{},
-		}
-	}
-
 	t.Run("request state shows generating", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		require.Contains(t, m.View(), "Generating")
 	})
 
 	t.Run("request state does not show approved plan", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.Output = "approved plan"
 		m.glamOutput = "rendered approved plan"
 		view := m.View()
@@ -892,13 +859,13 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	})
 
 	t.Run("response state before output shows generating", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.state = responseState
 		require.Contains(t, m.View(), "Generating")
 	})
 
 	t.Run("response state before output shows generating and operation", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.state = responseState
 		m.setActiveOperation("Searching web: Go latest release")
 		view := m.View()
@@ -907,7 +874,7 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	})
 
 	t.Run("response state before output renders fancy animation prefix", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.Config = &Config{PersistentConfig: PersistentConfig{StatusText: "Generating"}}
 		m.anim = staticModel("***** Generating")
 		m.state = responseState
@@ -919,7 +886,7 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	})
 
 	t.Run("first output hides generating", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.Config.Raw = true
 		_, _ = m.Update(streamEventMsg{
 			kind:   streamEventChunk,
@@ -932,7 +899,7 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	})
 
 	t.Run("quiet hides generating", func(t *testing.T) {
-		m := newTestMods()
+		m := newAnimatingMods()
 		m.Config.Quiet = true
 		require.NotContains(t, m.View(), "Generating")
 	})

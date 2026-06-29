@@ -13,23 +13,19 @@ import (
 )
 
 func TestBuildProviderOptionsIncludesAddProvider(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{Name: "openai"}},
 		},
-	}
-
-	opts := buildProviderOptions()
-	require.NotEmpty(t, opts)
-	require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
+	}, func() {
+		opts := buildProviderOptions()
+		require.NotEmpty(t, opts)
+		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
+	})
 }
 
 func TestBuildModelOptionsIncludesAddModel(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{
 				Name: "openai",
@@ -38,11 +34,11 @@ func TestBuildModelOptionsIncludesAddModel(t *testing.T) {
 				},
 			}},
 		},
-	}
-
-	opts := buildModelOptions("openai")
-	require.NotEmpty(t, opts)
-	require.Equal(t, addModelOption, opts[len(opts)-1].Value)
+	}, func() {
+		opts := buildModelOptions("openai")
+		require.NotEmpty(t, opts)
+		require.Equal(t, addModelOption, opts[len(opts)-1].Value)
+	})
 }
 
 func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
@@ -67,55 +63,53 @@ func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 }
 
 func TestResolveWizardProviderModel(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{Name: "openrouter", BaseURL: "https://openrouter.ai/api/v1"}},
 		},
-	}
+	}, func() {
+		apiName, modelName, addedModelNames, baseURL, addedModel, err := resolveWizardProviderModel(
+			addProviderOption,
+			"",
+			"groq",
+			"llama-3.3-70b-versatile\nllama-3.1-8b-instant",
+			"https://api.groq.com/openai/v1",
+		)
+		require.NoError(t, err)
+		require.Equal(t, "groq", apiName)
+		require.Equal(t, "llama-3.3-70b-versatile", modelName)
+		require.Equal(t, []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"}, addedModelNames)
+		require.Equal(t, "https://api.groq.com/openai/v1", baseURL)
+		require.True(t, addedModel)
 
-	apiName, modelName, addedModelNames, baseURL, addedModel, err := resolveWizardProviderModel(
-		addProviderOption,
-		"",
-		"groq",
-		"llama-3.3-70b-versatile\nllama-3.1-8b-instant",
-		"https://api.groq.com/openai/v1",
-	)
-	require.NoError(t, err)
-	require.Equal(t, "groq", apiName)
-	require.Equal(t, "llama-3.3-70b-versatile", modelName)
-	require.Equal(t, []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"}, addedModelNames)
-	require.Equal(t, "https://api.groq.com/openai/v1", baseURL)
-	require.True(t, addedModel)
+		apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
+			"openrouter",
+			addModelOption,
+			"",
+			"vendor/gpt-5.5:latest",
+			"",
+		)
+		require.NoError(t, err)
+		require.Equal(t, "openrouter", apiName)
+		require.Equal(t, "vendor/gpt-5.5:latest", modelName)
+		require.Equal(t, []string{"vendor/gpt-5.5:latest"}, addedModelNames)
+		require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
+		require.True(t, addedModel)
 
-	apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
-		"openrouter",
-		addModelOption,
-		"",
-		"vendor/gpt-5.5:latest",
-		"",
-	)
-	require.NoError(t, err)
-	require.Equal(t, "openrouter", apiName)
-	require.Equal(t, "vendor/gpt-5.5:latest", modelName)
-	require.Equal(t, []string{"vendor/gpt-5.5:latest"}, addedModelNames)
-	require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
-	require.True(t, addedModel)
-
-	apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
-		"openrouter",
-		"anthropic/claude-sonnet-4-6",
-		"",
-		"",
-		"",
-	)
-	require.NoError(t, err)
-	require.Equal(t, "openrouter", apiName)
-	require.Equal(t, "anthropic/claude-sonnet-4-6", modelName)
-	require.Nil(t, addedModelNames)
-	require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
-	require.False(t, addedModel)
+		apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
+			"openrouter",
+			"anthropic/claude-sonnet-4-6",
+			"",
+			"",
+			"",
+		)
+		require.NoError(t, err)
+		require.Equal(t, "openrouter", apiName)
+		require.Equal(t, "anthropic/claude-sonnet-4-6", modelName)
+		require.Nil(t, addedModelNames)
+		require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
+		require.False(t, addedModel)
+	})
 }
 
 func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) {
@@ -199,24 +193,20 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 }
 
 func TestValidateNewProviderName(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{Name: "openai"}},
 		},
-	}
-
-	require.NoError(t, validateNewProviderName("groq_1"))
-	require.Error(t, validateNewProviderName(""))
-	require.Error(t, validateNewProviderName("Groq"))
-	require.Error(t, validateNewProviderName("openai"))
+	}, func() {
+		require.NoError(t, validateNewProviderName("groq_1"))
+		require.Error(t, validateNewProviderName(""))
+		require.Error(t, validateNewProviderName("Groq"))
+		require.Error(t, validateNewProviderName("openai"))
+	})
 }
 
 func TestValidateNewModelName(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{
 				Name: "openrouter",
@@ -225,17 +215,15 @@ func TestValidateNewModelName(t *testing.T) {
 				},
 			}},
 		},
-	}
-
-	require.NoError(t, validateNewModelName("openrouter", "vendor/gpt-5.5:latest"))
-	require.Error(t, validateNewModelName("openrouter", ""))
-	require.Error(t, validateNewModelName("openrouter", "anthropic/claude-sonnet-4-6"))
+	}, func() {
+		require.NoError(t, validateNewModelName("openrouter", "vendor/gpt-5.5:latest"))
+		require.Error(t, validateNewModelName("openrouter", ""))
+		require.Error(t, validateNewModelName("openrouter", "anthropic/claude-sonnet-4-6"))
+	})
 }
 
 func TestParseNewModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{
 				Name: "openrouter",
@@ -244,16 +232,16 @@ func TestParseNewModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
 				},
 			}},
 		},
-	}
+	}, func() {
+		models, err := parseNewModelNames("openrouter", "\n vendor/gpt-5.5:latest \n\nvendor/gpt-5.5:latest\nopenai/gpt-5.4\n")
+		require.NoError(t, err)
+		require.Equal(t, []string{"vendor/gpt-5.5:latest", "openai/gpt-5.4"}, models)
 
-	models, err := parseNewModelNames("openrouter", "\n vendor/gpt-5.5:latest \n\nvendor/gpt-5.5:latest\nopenai/gpt-5.4\n")
-	require.NoError(t, err)
-	require.Equal(t, []string{"vendor/gpt-5.5:latest", "openai/gpt-5.4"}, models)
-
-	_, err = parseNewModelNames("openrouter", "\n \t")
-	require.Error(t, err)
-	_, err = parseNewModelNames("openrouter", "anthropic/claude-sonnet-4-6")
-	require.Error(t, err)
+		_, err = parseNewModelNames("openrouter", "\n \t")
+		require.Error(t, err)
+		_, err = parseNewModelNames("openrouter", "anthropic/claude-sonnet-4-6")
+		require.Error(t, err)
+	})
 }
 
 func TestValidateWizardBaseURLRequiresNewProviderURL(t *testing.T) {

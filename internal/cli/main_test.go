@@ -102,45 +102,32 @@ func TestThemeFrom(t *testing.T) {
 }
 
 func TestMinimalFlagRegistered(t *testing.T) {
-	if rootCmd.Flags().Lookup("minimal") == nil {
-		initFlags()
-	}
 	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
 
 func TestClipboardImageShortFlag(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
+	withTestConfig(t, Config{}, func() {
+		flag := rootCmd.Flags().Lookup("clipboard-image")
+		require.NotNil(t, flag)
+		require.Equal(t, "I", flag.Shorthand)
 
-	config = Config{}
-	ensureTestFlags()
-
-	flag := rootCmd.Flags().Lookup("clipboard-image")
-	require.NotNil(t, flag)
-	require.Equal(t, "I", flag.Shorthand)
-
-	require.NoError(t, rootCmd.Flags().Parse([]string{"-I"}))
-	require.True(t, config.ClipboardImage)
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-I"}))
+		require.True(t, config.ClipboardImage)
+	})
 }
 
 func TestChatFlagRegistered(t *testing.T) {
-	ensureTestFlags()
-
 	flag := rootCmd.Flags().Lookup("chat")
 	require.NotNil(t, flag)
 	require.Empty(t, flag.Shorthand)
 }
 
 func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-
-	config = Config{}
-	ensureTestFlags()
-
-	require.NoError(t, rootCmd.Flags().Parse([]string{"-i", "assets/mods-product.png"}))
-	require.Equal(t, []string{"assets/mods-product.png"}, config.Images)
-	require.False(t, config.ClipboardImage)
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-i", "assets/mods-product.png"}))
+		require.Equal(t, []string{"assets/mods-product.png"}, config.Images)
+		require.False(t, config.ClipboardImage)
+	})
 }
 
 func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
@@ -182,36 +169,26 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 }
 
 func TestThemeFlagValidatesChoices(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
+	withTestConfig(t, Config{}, func() {
+		for _, theme := range []string{"charm", "catppuccin", "dracula", "base16"} {
+			t.Run(theme, func(t *testing.T) {
+				require.NoError(t, rootCmd.Flags().Set("theme", theme))
+				require.Equal(t, theme, config.Theme)
+			})
+		}
 
-	config = Config{}
-	ensureTestFlags()
-
-	for _, theme := range []string{"charm", "catppuccin", "dracula", "base16"} {
-		t.Run(theme, func(t *testing.T) {
-			require.NoError(t, rootCmd.Flags().Set("theme", theme))
-			require.Equal(t, theme, config.Theme)
+		t.Run("invalid", func(t *testing.T) {
+			require.Error(t, rootCmd.Flags().Set("theme", "solarized"))
 		})
-	}
-
-	t.Run("invalid", func(t *testing.T) {
-		require.Error(t, rootCmd.Flags().Set("theme", "solarized"))
 	})
 }
 
 func TestFancinessFlagRemoved(t *testing.T) {
-	if rootCmd.Flags().Lookup("minimal") == nil {
-		initFlags()
-	}
 	require.Nil(t, rootCmd.Flags().Lookup("fanciness"))
 }
 
 func TestRoleNames(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-
-	config = Config{
+	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			Roles: map[string][]string{
 				"default": {"You are helpful."},
@@ -219,25 +196,25 @@ func TestRoleNames(t *testing.T) {
 				"go-dev":  {"You write Go code."},
 			},
 		},
-	}
+	}, func() {
+		t.Run("all roles", func(t *testing.T) {
+			roles := roleNames("")
+			require.Len(t, roles, 3)
+			require.Contains(t, roles, "default")
+			require.Contains(t, roles, "shell")
+			require.Contains(t, roles, "go-dev")
+		})
 
-	t.Run("all roles", func(t *testing.T) {
-		roles := roleNames("")
-		require.Len(t, roles, 3)
-		require.Contains(t, roles, "default")
-		require.Contains(t, roles, "shell")
-		require.Contains(t, roles, "go-dev")
-	})
+		t.Run("prefix filter", func(t *testing.T) {
+			roles := roleNames("go")
+			require.Len(t, roles, 1)
+			require.Equal(t, "go-dev", roles[0])
+		})
 
-	t.Run("prefix filter", func(t *testing.T) {
-		roles := roleNames("go")
-		require.Len(t, roles, 1)
-		require.Equal(t, "go-dev", roles[0])
-	})
-
-	t.Run("no match prefix", func(t *testing.T) {
-		roles := roleNames("nonexistent")
-		require.Empty(t, roles)
+		t.Run("no match prefix", func(t *testing.T) {
+			roles := roleNames("nonexistent")
+			require.Empty(t, roles)
+		})
 	})
 }
 
@@ -297,8 +274,6 @@ func isNoArgsCfg(cfg Config) bool {
 }
 
 func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
-	ensureTestFlags()
-
 	flags := rootCmd.Flags()
 	require.True(t, flagVisibleInUsage(flags.Lookup("model"), false))
 	require.True(t, flagVisibleInUsage(flags.Lookup("help-all"), false))
@@ -315,26 +290,21 @@ func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
 }
 
 func TestUsageIntroAndPromptSyntax(t *testing.T) {
-	ensureTestFlags()
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	config.HelpAll = false
+	withTestConfig(t, Config{HelpAll: false}, func() {
+		output := captureStdout(t, func() {
+			require.NoError(t, usageFunc(rootCmd))
+		})
 
-	output := captureStdout(t, func() {
-		require.NoError(t, usageFunc(rootCmd))
+		require.Contains(t, output, helpIntroSummary)
+		require.Contains(t, output, "inspect and edit files")
+		require.Contains(t, output, "run shell commands")
+		require.Contains(t, output, "[PROMPT...]")
+		require.NotContains(t, output, "[PREFIX TERM]")
+		require.Equal(t, helpIntroSummary, rootCmd.Short)
 	})
-
-	require.Contains(t, output, helpIntroSummary)
-	require.Contains(t, output, "inspect and edit files")
-	require.Contains(t, output, "run shell commands")
-	require.Contains(t, output, "[PROMPT...]")
-	require.NotContains(t, output, "[PREFIX TERM]")
-	require.Equal(t, helpIntroSummary, rootCmd.Short)
 }
 
 func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
-	ensureTestFlags()
-
 	groups := groupedUsageFlags(rootCmd.Flags(), true)
 	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
 	require.True(t, groupHasFlag(groups, flagCategoryMCP, "mcp-list"))
@@ -346,17 +316,15 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 }
 
 func TestAdvancedFlagsStillParse(t *testing.T) {
-	saveConfig := config
-	defer func() { config = saveConfig }()
-	ensureTestFlags()
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Set("temp", "0.2"))
+		require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
+		require.NoError(t, rootCmd.Flags().Set("web-search-provider", "tavily"))
 
-	require.NoError(t, rootCmd.Flags().Set("temp", "0.2"))
-	require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
-	require.NoError(t, rootCmd.Flags().Set("web-search-provider", "tavily"))
-
-	require.Equal(t, 0.2, config.Temperature)
-	require.Equal(t, 12, config.MaxToolRounds)
-	require.Equal(t, "tavily", config.WebSearchProvider)
+		require.Equal(t, 0.2, config.Temperature)
+		require.Equal(t, 12, config.MaxToolRounds)
+		require.Equal(t, "tavily", config.WebSearchProvider)
+	})
 }
 
 func TestReadmeDoesNotListRemovedPromptFlags(t *testing.T) {
@@ -443,9 +411,6 @@ func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
 // YAML or MODS_CACHE_PATH. Surface it as an advanced flag so the help
 // output and the actual flag set agree.
 func TestCachePathFlagRegistered(t *testing.T) {
-	if rootCmd.Flags().Lookup("cache-path") == nil {
-		initFlags()
-	}
 	f := rootCmd.Flags().Lookup("cache-path")
 	require.NotNil(t, f, "--cache-path must be a registered CLI flag")
 	require.Equal(t, "string", f.Value.Type())

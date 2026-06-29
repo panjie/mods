@@ -17,6 +17,24 @@ const maxToolResultChars = 25000
 // Client is a streaming client.
 type Client interface {
 	Request(context.Context, proto.Request) Stream
+	// Capabilities reports what the provider backend supports. The
+	// caller uses this to decide whether to register tools, attach
+	// images, or fall back to text-only behavior. Implementations
+	// must be free of side effects so the method can be invoked
+	// before Request without affecting later calls.
+	Capabilities() Capabilities
+}
+
+// Capabilities describes what a provider backend supports. The zero
+// value is the safest fallback (no tools, no images), so unsupported
+// features fail closed.
+type Capabilities struct {
+	// Tools reports whether the provider implements tool/function
+	// calling. When false, Stream.CallTools returns nil without
+	// invoking any caller, and the registry construction path skips
+	// tool registration rather than sending tool specs the backend
+	// cannot honor.
+	Tools bool
 }
 
 // Stream is an ongoing stream.

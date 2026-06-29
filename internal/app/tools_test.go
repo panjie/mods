@@ -6,8 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panjie/mods/internal/anthropic"
+	"github.com/panjie/mods/internal/cohere"
+	"github.com/panjie/mods/internal/google"
+	"github.com/panjie/mods/internal/ollama"
+	"github.com/panjie/mods/internal/openai"
+	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShouldEnableFilesystemTools(t *testing.T) {
@@ -144,11 +151,20 @@ func TestToolCapabilities(t *testing.T) {
 }
 
 func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
+	// helper: build a real stream.Client for the given api name. The
+	// Client is never used to issue requests; it only needs to satisfy
+	// the stream.Client interface and report the right Capabilities().
+	clientFor := func(api string) (stream.Client, error) {
+		return newStreamClient(api, anthropic.Config{}, google.Config{}, cohere.Config{}, ollama.Config{}, openai.Config{})
+	}
+
 	t.Run("implicit auto filesystem is skipped", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.BuiltinTools.Filesystem = FilesystemAuto
 		mods := &Mods{ctx: context.Background()}
-		registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "read README.md", "google")
+		client, err := clientFor("google")
+		require.NoError(t, err)
+		registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "read README.md", client)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -161,7 +177,9 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.WebSearch = true
 		mods := &Mods{ctx: context.Background()}
-		_, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{Enabled: true}, "hello", "cohere")
+		client, err := clientFor("cohere")
+		require.NoError(t, err)
+		_, err = mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{Enabled: true}, "hello", client)
 		if err == nil {
 			t.Fatal("expected explicit tools to fail for unsupported provider")
 		}
@@ -173,7 +191,9 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 				cfg := defaultConfig()
 				cfg.BuiltinTools.Filesystem = FilesystemAlways
 				mods := &Mods{ctx: context.Background()}
-				registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "hello", provider)
+				client, err := clientFor(provider)
+				require.NoError(t, err)
+				registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "hello", client)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}

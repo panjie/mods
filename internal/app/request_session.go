@@ -77,9 +77,19 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		MaxResults: 5,
 	}
 
+	// Construct the provider client before building the tool registry so
+	// the registry decision can consult client.Capabilities().Tools
+	// instead of an app-layer string switch keyed on the API name. The
+	// client has no side effects until Request is called, so creating it
+	// here (rather than after the registry) does not change behavior.
+	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
+	if err != nil {
+		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
+	}
+
 	registryCtx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
 	m.addCancel(cancel)
-	registry, err := m.buildToolRegistryForProvider(registryCtx, cfg, wscfg, cfg.Prefix+"\n"+content, mod.API)
+	registry, err := m.buildToolRegistryForProvider(registryCtx, cfg, wscfg, cfg.Prefix+"\n"+content, client)
 	if err != nil {
 		cancel()
 		return requestSession{}, err
@@ -125,13 +135,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	if supportsJSONResponseFormat(mod.API) && cfg.Format && cfg.FormatAs == "json" {
 		request.ResponseFormat = &cfg.FormatAs
-	}
-
-	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
-	if err != nil {
-		_ = registry.Close()
-		m.currentToolRegistry = nil
-		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
 
 	debugRequest(cfg, &mod, &m.messages, tools, &request)
@@ -257,7 +260,11 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 
 		if m.reviewer.shouldReviewTool(registry, name) {
-			if err := m.reviewer.requestApproval(m, name, data); err != nil {
+			if err := m.reviewer.requestApproval(reviewerDeps{
+				ctx:              m.ctx,
+				isShellExecution: registry.ShellExecution,
+				analyzeShell:     m.analyzeShellCommand,
+			}, name, data); err != nil {
 				return "", err
 			}
 		}

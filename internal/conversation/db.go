@@ -145,14 +145,8 @@ func hasColumn(db *sqlx.DB, table, col string) bool {
 }
 
 func migrateApprovalRulesScope(db *sqlx.DB) error {
-	tx, err := db.Beginx()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.Exec(`
-		CREATE TABLE approval_rules_scoped_migration (
+	return migrateApprovalRulesReplaceTable(db, `
+		CREATE TABLE approval_rules_migration_tmp (
 			conversation_id string NOT NULL,
 			scope_kind string NOT NULL DEFAULT '',
 			scope_value string NOT NULL DEFAULT '',
@@ -163,35 +157,17 @@ func migrateApprovalRulesScope(db *sqlx.DB) error {
 			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern),
 			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
 		)
-	`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`
-		INSERT INTO approval_rules_scoped_migration
+	`, `
+		INSERT INTO approval_rules_migration_tmp
 			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, created_at)
 		SELECT conversation_id, '', '', rule_type, tool_name, pattern, created_at
 		FROM approval_rules
-	`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DROP TABLE approval_rules`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`ALTER TABLE approval_rules_scoped_migration RENAME TO approval_rules`); err != nil {
-		return err
-	}
-	return tx.Commit()
+	`)
 }
 
 func migrateApprovalRulesPaths(db *sqlx.DB) error {
-	tx, err := db.Beginx()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.Exec(`
-		CREATE TABLE approval_rules_paths_migration (
+	return migrateApprovalRulesReplaceTable(db, `
+		CREATE TABLE approval_rules_migration_tmp (
 			conversation_id string NOT NULL,
 			scope_kind string NOT NULL DEFAULT '',
 			scope_value string NOT NULL DEFAULT '',
@@ -203,22 +179,38 @@ func migrateApprovalRulesPaths(db *sqlx.DB) error {
 			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
 			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
 		)
-	`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`
-		INSERT INTO approval_rules_paths_migration
+	`, `
+		INSERT INTO approval_rules_migration_tmp
 			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, created_at)
 		SELECT conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, '', created_at
 		FROM approval_rules
-	`); err != nil {
+	`)
+}
+
+// migrateApprovalRulesReplaceTable rebuilds the approval_rules table by
+// creating a temporary table from newTableDDL, copying rows via
+// insertSelect, dropping the original, and renaming the temp table into
+// its place. SQLite cannot ALTER the PRIMARY KEY in place, so any
+// migration that changes the key shape must go through this path.
+//
+// The temporary table is always named approval_rules_migration_tmp so
+// callers do not have to invent unique names per migration.
+func migrateApprovalRulesReplaceTable(db *sqlx.DB, newTableDDL, insertSelect string) error {
+	tx, err := db.Beginx()
+	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DROP TABLE approval_rules`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`ALTER TABLE approval_rules_paths_migration RENAME TO approval_rules`); err != nil {
-		return err
+	defer func() { _ = tx.Rollback() }()
+
+	for _, q := range []string{
+		newTableDDL,
+		insertSelect,
+		`DROP TABLE approval_rules`,
+		`ALTER TABLE approval_rules_migration_tmp RENAME TO approval_rules`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

@@ -4,8 +4,12 @@ package clipboard
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+
+	"github.com/panjie/mods/internal/platform"
 )
 
 var ErrNoImage = errors.New("no image found in clipboard")
@@ -50,4 +54,22 @@ func isImageData(data []byte) bool {
 		return true
 	}
 	return false
+}
+
+// execCmd runs an external command with the parent environment and returns
+// its stdout. On Windows the spawned console window is hidden via
+// platform.HideCommandWindow (no-op on unix), so clipboard helpers do not
+// need to duplicate that logic per-platform.
+func execCmd(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Env = os.Environ()
+	platform.HideCommandWindow(cmd)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("%s: %s", err, string(exitErr.Stderr))
+		}
+		return nil, err
+	}
+	return out, nil
 }

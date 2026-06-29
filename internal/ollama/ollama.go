@@ -48,6 +48,10 @@ func New(config Config) (*Client, error) {
 	}, nil
 }
 
+// Capabilities reports Ollama backend features. The Ollama adapter
+// supports tool/function calling via CallTools.
+func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
+
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	s := &Stream{

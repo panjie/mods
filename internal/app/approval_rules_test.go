@@ -390,7 +390,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Run("mutable denies write without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
-		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
@@ -402,42 +402,42 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Run("mutable requires review for shell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
-		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"echo ok"}`))
 		require.NoError(t, err)
 	})
 
 	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
-		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable auto-approves read-only powershell in non-TTY", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
 		require.NoError(t, err)
 	})
 
 	t.Run("mutable denies nested powershell", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("mutable auto-approves read-only powershell pipeline in non-TTY", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
 		require.NoError(t, err)
 	})
 
 	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
@@ -449,7 +449,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`))
 		require.NoError(t, err)
 	})
 
@@ -461,14 +461,14 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
-		err := reviewer.requestApproval(mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows | Remove-Item -Recurse"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows | Remove-Item -Recurse"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("always denies read-only tool without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "fs_read_file"))
-		err := reviewer.requestApproval(mods, "fs_read_file", []byte(`{"path":"README.md"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "fs_read_file", []byte(`{"path":"README.md"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
@@ -476,7 +476,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}))
 		require.True(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
-		err := reviewer.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.NoError(t, err)
 	})
 }
@@ -498,7 +498,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			},
 		}
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
-		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"ls"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"ls"}`))
 		require.NoError(t, err)
 	})
 
@@ -522,7 +522,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		}()
 
 		item := <-reviewer.reviewChan
@@ -549,7 +549,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"ls"}`))
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"ls"}`))
 		}()
 
 		item := <-reviewer.reviewChan
@@ -572,7 +572,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}}))
-		err := reviewer.requestApproval(mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})
 }
@@ -614,6 +614,23 @@ func testReviewRegistry(t *testing.T) *toolregistry.Registry {
 }
 
 func noopToolCall(context.Context, json.RawMessage) (string, error) { return "", nil }
+
+// testReviewerDeps builds reviewerDeps from a *Mods in the shape these
+// tests historically construct. Prefer constructing reviewerDeps
+// directly in new tests; this helper keeps the diff small while the
+// existing tests migrate off the *Mods signature.
+//
+// Note: we capture mods.analyzeShellCommand (the method value) rather
+// than mods.shellAnalyzer (the field) so the local regex fallback
+// inside the method still runs when shellAnalyzer is unset.
+func testReviewerDeps(mods *Mods) reviewerDeps {
+	deps := reviewerDeps{ctx: mods.ctx}
+	if mods.currentToolRegistry != nil {
+		deps.isShellExecution = mods.currentToolRegistry.ShellExecution
+	}
+	deps.analyzeShell = mods.analyzeShellCommand
+	return deps
+}
 
 func TestShellAnalysisParsing(t *testing.T) {
 	t.Run("valid json with review and dirs", func(t *testing.T) {
@@ -830,7 +847,7 @@ func TestRequestApprovalAfterResetIsUnavailable(t *testing.T) {
 		currentToolRegistry: nil,
 	}
 
-	err := r.requestApproval(mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+	err := r.requestApproval(testReviewerDeps(mods), "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 	require.Error(t, err)
 	require.ErrorIs(t, err, errReviewUnavailable)
 }

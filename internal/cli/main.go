@@ -292,21 +292,11 @@ func initFlags() {
 		return roleNames(toComplete), cobra.ShellCompDirectiveDefault
 	})
 
-	if config.FormatText == nil {
-		config.FormatText = Default().FormatText
-	}
-
-	if config.Format && config.FormatAs == "" {
-		config.FormatAs = "markdown"
-	}
-
-	if config.Format && config.FormatAs != "" && config.FormatText[config.FormatAs] == "" {
-		config.FormatText[config.FormatAs] = Default().FormatText[config.FormatAs]
-	}
-
-	if config.MCPTimeout == 0 {
-		config.MCPTimeout = Default().MCPTimeout
-	}
+	// Default-value normalization (WordWrap, MCPTimeout, FormatText,
+	// FormatAs, WebSearchAPIKeyEnv, WebSearchAPIKey) is performed once in
+	// Config.applyDefaults via Ensure(). The CLI flag defaults are
+	// registered from the already-normalized config below, so they
+	// inherit those canonical values without re-deriving them here.
 
 	rootCmd.MarkFlagsMutuallyExclusive(sessionActionFlags...)
 }

@@ -444,14 +444,12 @@ func TestToolOperationLabel(t *testing.T) {
 
 func TestSetupStreamContextMinimal(t *testing.T) {
 	newTestMods := func(cfg Config) *Mods {
+		// Production code normalizes via Config.ApplyDefaults in Ensure();
+		// tests reach the same state by calling ApplyDefaults directly so
+		// they do not have to re-derive each default.
+		cfg.ApplyDefaults()
 		if cfg.Roles == nil {
 			cfg.Roles = map[string][]string{}
-		}
-		if cfg.FormatText == nil {
-			cfg.FormatText = defaultConfig().FormatText
-		}
-		if cfg.FormatAs == "" {
-			cfg.FormatAs = "markdown"
 		}
 		return &Mods{
 			Config: &cfg,

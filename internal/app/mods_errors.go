@@ -55,237 +55,205 @@ func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg 
 	}
 }
 
-func (m *Mods) handleAPIError(err *openai.Error, mod Model, content string) tea.Msg {
+// appAPIError is the SDK-agnostic shape of a provider API error. Each
+// provider handler below extracts the relevant fields from its SDK-specific
+// error type into this struct so the per-status dispatch logic can be
+// shared. Message is the most descriptive user-facing string available
+// (the SDK's Message field when one exists, otherwise Error()).
+type appAPIError struct {
+	StatusCode int
+	Code       string
+	Message    string
+	Err        error
+}
+
+// errorPolicy carries the per-provider differences that dispatchAPIError
+// cannot derive from the status code alone. Keeping these as data (or thin
+// closures) lets the dispatch skeleton be shared instead of duplicated
+// across five near-identical handlers.
+type errorPolicy struct {
+	// isContextLength reports whether the error indicates the prompt
+	// exceeded the model's context window. Return false (or set to nil)
+	// to disable the CutPrompt retry path entirely (e.g. ollama).
+	isContextLength func(ae appAPIError) bool
+	// notFoundExtra is appended to the standard 404-no-fallback reason
+	// text. Empty for most providers; ollama uses it to mention
+	// `ollama pull`.
+	notFoundExtra string
+	// badRequestReason renders the 400-non-context-length reason text.
+	// Some providers include the underlying message; OpenAI does not.
+	badRequestReason func(mod Model, ae appAPIError) string
+	// serverError handles HTTP 500 specifically. OpenAI historically
+	// branched on the API name here (retry for openai, hard fail for
+	// OpenAI-compatible providers); other providers just retry like any
+	// other 5xx. Return nil to fall back to the default 5xx retry path.
+	serverError func(m *Mods, ae appAPIError, mod Model, content string) tea.Msg
+}
+
+// dispatchAPIError contains the unified per-status handling for all
+// provider errors. The five exported handlers below are thin translators
+// that build an appAPIError and an errorPolicy from their SDK types and
+// delegate here.
+func (m *Mods) dispatchAPIError(ae appAPIError, mod Model, content string, p errorPolicy) tea.Msg {
 	cfg := m.Config
-	switch err.StatusCode {
+	switch ae.StatusCode {
 	case http.StatusNotFound:
 		if mod.Fallback != "" {
 			m.Config.Model = mod.Fallback
 			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API server error.", mod.API),
+				Err:        ae.Err,
+				ReasonText: fmt.Sprintf("%s API model not found.", mod.API),
 			})
 		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"Missing model '%s' for API '%s'.",
-			cfg.Model,
-			cfg.API,
+		return modsError{Err: ae.Err, ReasonText: fmt.Sprintf(
+			"Missing model '%s' for API '%s'.%s",
+			cfg.Model, cfg.API, p.notFoundExtra,
 		)}
 	case http.StatusBadRequest:
-		if err.Code == "context_length_exceeded" {
-			pe := modsError{Err: err, ReasonText: "Maximum prompt size exceeded."}
+		if p.isContextLength != nil && p.isContextLength(ae) {
+			pe := modsError{Err: ae.Err, ReasonText: "Maximum prompt size exceeded."}
 			if cfg.NoLimit {
 				return pe
 			}
-
-			return m.retry(CutPrompt(err.Message, content), pe)
+			return m.retry(CutPrompt(ae.Message, content), pe)
 		}
-		// bad request (do not retry)
-		return modsError{Err: err, ReasonText: fmt.Sprintf("%s API request error.", mod.API)}
+		return modsError{Err: ae.Err, ReasonText: p.badRequestReason(mod, ae)}
 	case http.StatusUnauthorized:
-		// invalid auth or key (do not retry)
-		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
+		return modsError{Err: ae.Err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
 	case http.StatusTooManyRequests:
-		// rate limiting or engine overload (wait and retry)
 		return m.retry(content, modsError{
-			Err: err, ReasonText: fmt.Sprintf("You’ve hit your %s API rate limit.", mod.API),
+			Err: ae.Err, ReasonText: fmt.Sprintf("You've hit your %s API rate limit.", mod.API),
 		})
 	case http.StatusRequestEntityTooLarge:
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
+		// Previously OpenAI-only; the maintainability review (H1)
+		// extended it to every provider since the message is generic.
+		return modsError{Err: ae.Err, ReasonText: fmt.Sprintf(
 			"Request too large for %s API. Try reducing input size, removing images, or using %s.",
 			mod.API,
 			m.Styles.InlineCode.Render("--no-limit=false"),
 		)}
+	case http.StatusServiceUnavailable:
+		return m.retry(content, modsError{
+			Err:        ae.Err,
+			ReasonText: fmt.Sprintf("%s API is temporarily unavailable (HTTP 503).", mod.API),
+		})
 	case http.StatusInternalServerError:
-		if mod.API == "openai" {
-			return m.retry(content, modsError{Err: err, ReasonText: "OpenAI API server error."})
+		if p.serverError != nil {
+			if msg := p.serverError(m, ae, mod, content); msg != nil {
+				return msg
+			}
 		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"Error loading model '%s' for API '%s'.",
-			mod.Name,
-			mod.API,
-		)}
+		return m.retry(content, modsError{
+			Err: ae.Err,
+			ReasonText: fmt.Sprintf(
+				"%s API server error (HTTP %d): %s",
+				mod.API, ae.StatusCode, ae.Message,
+			),
+		})
 	default:
-		if err.StatusCode >= 400 && err.StatusCode < 500 {
-			return modsError{Err: err, ReasonText: fmt.Sprintf("%s API request error (HTTP %d).", mod.API, err.StatusCode)}
+		if ae.StatusCode >= 500 {
+			return m.retry(content, modsError{
+				Err: ae.Err,
+				ReasonText: fmt.Sprintf(
+					"%s API server error (HTTP %d): %s",
+					mod.API, ae.StatusCode, ae.Message,
+				),
+			})
 		}
-		return m.retry(content, modsError{Err: err, ReasonText: "Unknown API error."})
+		return modsError{Err: ae.Err, ReasonText: fmt.Sprintf(
+			"%s API request error (HTTP %d): %s", mod.API, ae.StatusCode, ae.Message,
+		)}
 	}
+}
+
+func (m *Mods) handleAPIError(err *openai.Error, mod Model, content string) tea.Msg {
+	return m.dispatchAPIError(
+		appAPIError{StatusCode: err.StatusCode, Code: err.Code, Message: err.Message, Err: err},
+		mod, content,
+		errorPolicy{
+			isContextLength: func(ae appAPIError) bool {
+				return ae.Code == "context_length_exceeded"
+			},
+			badRequestReason: func(mod Model, _ appAPIError) string {
+				return fmt.Sprintf("%s API request error.", mod.API)
+			},
+			serverError: func(mm *Mods, ae appAPIError, mod Model, content string) tea.Msg {
+				// OpenAI's own endpoints occasionally 500 in a way that
+				// recovers on retry. OpenAI-compatible providers that 500
+				// almost always mean "model not loaded", so they fail fast
+				// instead of burning retries.
+				if mod.API == "openai" {
+					return mm.retry(content, modsError{
+						Err: ae.Err, ReasonText: "OpenAI API server error.",
+					})
+				}
+				return modsError{Err: ae.Err, ReasonText: fmt.Sprintf(
+					"Error loading model '%s' for API '%s'.", mod.Name, mod.API,
+				)}
+			},
+		},
+	)
 }
 
 func (m *Mods) handleGoogleAPIError(err *google.APIError, mod Model, content string) tea.Msg {
-	switch err.StatusCode {
-	case http.StatusNotFound:
-		if mod.Fallback != "" {
-			m.Config.Model = mod.Fallback
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API model not found.", mod.API),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"Missing model '%s' for API '%s'.", m.Config.Model, m.Config.API,
-		)}
-	case http.StatusBadRequest:
-		if strings.Contains(err.Message, "context length") || strings.Contains(err.Message, "token count") {
-			pe := modsError{Err: err, ReasonText: "Maximum prompt size exceeded."}
-			if m.Config.NoLimit {
-				return pe
-			}
-			return m.retry(CutPrompt(err.Message, content), pe)
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf("%s API request error: %s", mod.API, err.Message)}
-	case http.StatusUnauthorized:
-		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
-	case http.StatusTooManyRequests:
-		return m.retry(content, modsError{
-			Err: err, ReasonText: fmt.Sprintf("You've hit your %s API rate limit.", mod.API),
-		})
-	case http.StatusServiceUnavailable:
-		return m.retry(content, modsError{
-			Err:        err,
-			ReasonText: fmt.Sprintf("%s API is temporarily unavailable (HTTP 503).", mod.API),
-		})
-	default:
-		if err.StatusCode >= 500 {
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API server error (HTTP %d): %s", mod.API, err.StatusCode, err.Message),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"%s API request error (HTTP %d): %s", mod.API, err.StatusCode, err.Message,
-		)}
-	}
+	return m.dispatchAPIError(
+		appAPIError{StatusCode: err.StatusCode, Message: err.Message, Err: err},
+		mod, content,
+		errorPolicy{
+			isContextLength: func(ae appAPIError) bool {
+				return strings.Contains(ae.Message, "context length") ||
+					strings.Contains(ae.Message, "token count")
+			},
+			badRequestReason: func(mod Model, ae appAPIError) string {
+				return fmt.Sprintf("%s API request error: %s", mod.API, ae.Message)
+			},
+		},
+	)
 }
 
 func (m *Mods) handleAnthropicAPIError(err *anthropic.Error, mod Model, content string) tea.Msg {
-	switch err.StatusCode {
-	case http.StatusNotFound:
-		if mod.Fallback != "" {
-			m.Config.Model = mod.Fallback
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API model not found.", mod.API),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"Missing model '%s' for API '%s'.", m.Config.Model, m.Config.API,
-		)}
-	case http.StatusBadRequest:
-		if strings.Contains(err.Error(), "prompt is too long") || strings.Contains(err.Error(), "number of tokens") {
-			pe := modsError{Err: err, ReasonText: "Maximum prompt size exceeded."}
-			if m.Config.NoLimit {
-				return pe
-			}
-			return m.retry(CutPrompt(err.Error(), content), pe)
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf("%s API request error: %s", mod.API, err.Error())}
-	case http.StatusUnauthorized:
-		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
-	case http.StatusTooManyRequests:
-		return m.retry(content, modsError{
-			Err: err, ReasonText: fmt.Sprintf("You've hit your %s API rate limit.", mod.API),
-		})
-	case http.StatusServiceUnavailable:
-		return m.retry(content, modsError{
-			Err:        err,
-			ReasonText: fmt.Sprintf("%s API is temporarily unavailable (HTTP 503).", mod.API),
-		})
-	default:
-		if err.StatusCode >= 500 {
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API server error (HTTP %d): %s", mod.API, err.StatusCode, err.Error()),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"%s API request error (HTTP %d): %s", mod.API, err.StatusCode, err.Error(),
-		)}
-	}
+	return m.dispatchAPIError(
+		appAPIError{StatusCode: err.StatusCode, Message: err.Error(), Err: err},
+		mod, content,
+		errorPolicy{
+			isContextLength: func(ae appAPIError) bool {
+				return strings.Contains(ae.Message, "prompt is too long") ||
+					strings.Contains(ae.Message, "number of tokens")
+			},
+			badRequestReason: func(mod Model, ae appAPIError) string {
+				return fmt.Sprintf("%s API request error: %s", mod.API, ae.Message)
+			},
+		},
+	)
 }
 
 func (m *Mods) handleCohereAPIError(err *core.APIError, mod Model, content string) tea.Msg {
-	switch err.StatusCode {
-	case http.StatusNotFound:
-		if mod.Fallback != "" {
-			m.Config.Model = mod.Fallback
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API model not found.", mod.API),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"Missing model '%s' for API '%s'.", m.Config.Model, m.Config.API,
-		)}
-	case http.StatusBadRequest:
-		if strings.Contains(err.Error(), "token limit") || strings.Contains(err.Error(), "too many tokens") {
-			pe := modsError{Err: err, ReasonText: "Maximum prompt size exceeded."}
-			if m.Config.NoLimit {
-				return pe
-			}
-			return m.retry(CutPrompt(err.Error(), content), pe)
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf("%s API request error: %s", mod.API, err.Error())}
-	case http.StatusUnauthorized:
-		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
-	case http.StatusTooManyRequests:
-		return m.retry(content, modsError{
-			Err: err, ReasonText: fmt.Sprintf("You've hit your %s API rate limit.", mod.API),
-		})
-	case http.StatusServiceUnavailable:
-		return m.retry(content, modsError{
-			Err:        err,
-			ReasonText: fmt.Sprintf("%s API is temporarily unavailable (HTTP 503).", mod.API),
-		})
-	default:
-		if err.StatusCode >= 500 {
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API server error (HTTP %d): %s", mod.API, err.StatusCode, err.Error()),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"%s API request error (HTTP %d): %s", mod.API, err.StatusCode, err.Error(),
-		)}
-	}
+	return m.dispatchAPIError(
+		appAPIError{StatusCode: err.StatusCode, Message: err.Error(), Err: err},
+		mod, content,
+		errorPolicy{
+			isContextLength: func(ae appAPIError) bool {
+				return strings.Contains(ae.Message, "token limit") ||
+					strings.Contains(ae.Message, "too many tokens")
+			},
+			badRequestReason: func(mod Model, ae appAPIError) string {
+				return fmt.Sprintf("%s API request error: %s", mod.API, ae.Message)
+			},
+		},
+	)
 }
 
 func (m *Mods) handleOllamaAPIError(err *api.StatusError, mod Model, content string) tea.Msg {
-	switch err.StatusCode {
-	case http.StatusNotFound:
-		if mod.Fallback != "" {
-			m.Config.Model = mod.Fallback
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API model not found.", mod.API),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"Missing model '%s' for API '%s'. Check that the model is pulled with `ollama pull`.", m.Config.Model, m.Config.API,
-		)}
-	case http.StatusBadRequest:
-		return modsError{Err: err, ReasonText: fmt.Sprintf("%s API request error: %s", mod.API, err.Error())}
-	case http.StatusUnauthorized:
-		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
-	case http.StatusTooManyRequests:
-		return m.retry(content, modsError{
-			Err: err, ReasonText: fmt.Sprintf("You've hit your %s API rate limit.", mod.API),
-		})
-	case http.StatusServiceUnavailable:
-		return m.retry(content, modsError{
-			Err:        err,
-			ReasonText: fmt.Sprintf("%s API is temporarily unavailable (HTTP 503).", mod.API),
-		})
-	default:
-		if err.StatusCode >= 500 {
-			return m.retry(content, modsError{
-				Err:        err,
-				ReasonText: fmt.Sprintf("%s API server error (HTTP %d): %s", mod.API, err.StatusCode, err.Error()),
-			})
-		}
-		return modsError{Err: err, ReasonText: fmt.Sprintf(
-			"%s API request error (HTTP %d): %s", mod.API, err.StatusCode, err.Error(),
-		)}
-	}
+	return m.dispatchAPIError(
+		appAPIError{StatusCode: err.StatusCode, Message: err.Error(), Err: err},
+		mod, content,
+		errorPolicy{
+			// ollama does not surface a context-length signal.
+			isContextLength: nil,
+			notFoundExtra:   " Check that the model is pulled with `ollama pull`.",
+			badRequestReason: func(mod Model, ae appAPIError) string {
+				return fmt.Sprintf("%s API request error: %s", mod.API, ae.Message)
+			},
+		},
+	)
 }

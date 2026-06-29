@@ -17,8 +17,15 @@ import (
 	"github.com/caarlos0/env/v9"
 	"github.com/charmbracelet/x/exp/strings"
 	"github.com/panjie/mods/internal/prompts"
+	"github.com/panjie/mods/internal/tools"
 	"gopkg.in/yaml.v3"
 )
+
+// DefaultWebSearchAPIKeyEnv is the canonical environment-variable name
+// consulted when WebSearchAPIKeyEnv is unset. It is referenced from
+// Ensure / applyDefaults and the configuration wizard so the literal
+// cannot drift between call sites.
+const DefaultWebSearchAPIKeyEnv = "TAVILY_API_KEY"
 
 //go:embed config_template.yml
 var configTemplate string
@@ -106,7 +113,7 @@ var Help = map[string]string{
 	"web-search":             "Enable web search for up-to-date information (uses DuckDuckGo by default)",
 	"web-search-provider":    "Web search provider: duckduckgo (default), tavily, or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
-	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to TAVILY_API_KEY)",
+	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
 	"image":                  "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
 	"stdin-image":            "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
@@ -490,18 +497,64 @@ func Ensure() (Config, error) {
 		return fallback, modsError{Err: err, ReasonText: "Could not create cache directory."}
 	}
 
-	if c.WordWrap < 0 {
-		c.WordWrap = 80
-	}
-	if c.WebSearchAPIKey == "" {
-		envName := c.WebSearchAPIKeyEnv
-		if envName == "" {
-			envName = "TAVILY_API_KEY"
-		}
-		c.WebSearchAPIKey = os.Getenv(envName)
-	}
+	c.applyDefaults()
 
 	return c, nil
+}
+
+// ApplyDefaults normalizes fields whose zero value (set explicitly via env,
+// YAML, or partial CLI input) should fall back to a canonical default. The
+// canonical values live in Default() for the no-config case and in the
+// tools package for shell-related constants; this method exists so Ensure
+// does not have to re-derive each default at a different call site (which
+// previously led to drift between Default(), Ensure(), initFlags and the
+// tools package).
+//
+// ApplyDefaults is idempotent: running it twice produces the same Config.
+// Callers that construct a Config without going through Ensure (for
+// example, tests) should invoke ApplyDefaults to obtain the same
+// normalization the production path applies.
+func (c *Config) ApplyDefaults() {
+	c.applyDefaults()
+}
+
+func (c *Config) applyDefaults() {
+	if c.WordWrap <= 0 {
+		c.WordWrap = 80
+	}
+	if c.MCPTimeout <= 0 {
+		c.MCPTimeout = 15 * time.Second
+	}
+	if c.FormatText == nil {
+		c.FormatText = FormatText{
+			"markdown": defaultMarkdownFormatText,
+			"json":     defaultJSONFormatText,
+		}
+	}
+	if c.Format && c.FormatAs == "" {
+		c.FormatAs = "markdown"
+	}
+	if c.Format && c.FormatAs != "" && c.FormatText[c.FormatAs] == "" {
+		c.FormatText[c.FormatAs] = defaultFormatTextFor(c.FormatAs)
+	}
+	if c.WebSearchAPIKeyEnv == "" {
+		c.WebSearchAPIKeyEnv = DefaultWebSearchAPIKeyEnv
+	}
+	if c.WebSearchAPIKey == "" {
+		c.WebSearchAPIKey = os.Getenv(c.WebSearchAPIKeyEnv)
+	}
+}
+
+// defaultFormatTextFor returns the canonical FormatText body for the
+// given format-as key. Unknown keys fall back to the markdown body so
+// downstream format-text lookups never silently produce empty output.
+func defaultFormatTextFor(formatAs string) string {
+	switch formatAs {
+	case "json":
+		return defaultJSONFormatText
+	default:
+		return defaultMarkdownFormatText
+	}
 }
 
 func validateReasoningMode(mode ReasoningMode) error {
@@ -584,18 +637,21 @@ func Default() Config {
 				"markdown": defaultMarkdownFormatText,
 				"json":     defaultJSONFormatText,
 			},
-			Reasoning:       ReasoningOff,
-			ReviewMode:      ReviewMutable,
-			WordWrap:        80,
-			StatusText:      "Generating",
-			HideToolResults: true,
-			MCPTimeout:      15 * time.Second,
+			Reasoning:          ReasoningOff,
+			ReviewMode:         ReviewMutable,
+			WordWrap:           80,
+			StatusText:         "Generating",
+			HideToolResults:    true,
+			MCPTimeout:         15 * time.Second,
+			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
 				Filesystem:         FilesystemAuto,
 				Shell:              false,
 				SequentialThinking: false,
-				ShellTimeout:       30 * time.Second,
-				ShellMaxOutput:     20000,
+				// Reference the canonical tools-package defaults so the
+				// YAML template and the runtime fallback cannot drift.
+				ShellTimeout:   tools.DefaultShellTimeout,
+				ShellMaxOutput: tools.DefaultShellMaxOutput,
 			},
 		},
 	}

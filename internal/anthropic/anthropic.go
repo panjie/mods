@@ -21,6 +21,10 @@ type Client struct {
 	config Config
 }
 
+// Capabilities reports Anthropic backend features. The Anthropic
+// adapter supports tool/function calling via CallTools.
+func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
+
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	system, messages := fromProtoMessages(request.Messages)

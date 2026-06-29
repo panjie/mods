@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -233,13 +234,27 @@ func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name st
 	}
 }
 
-func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) error {
+// reviewerDeps carries the three things requestApproval needs from its
+// caller. Keeping them in a struct (instead of reaching into *Mods)
+// lets the reviewer stay physically independent of the main model: it
+// can be constructed, tested, and reasoned about without a live Mods.
+//
+// All fields are nil-safe; a nil func means "the answer is false" /
+// "no analysis available", matching the previous behaviour where a
+// missing currentToolRegistry produced shellExecution=false.
+type reviewerDeps struct {
+	ctx              context.Context
+	isShellExecution func(name string) bool
+	analyzeShell     func(tool, command string) shellCommandAnalysis
+}
+
+func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []byte) error {
 	debug.Printf("requestApproval called: name=%s", name)
-	shellExecution := ctx.currentToolRegistry != nil && ctx.currentToolRegistry.ShellExecution(name)
+	shellExecution := deps.isShellExecution != nil && deps.isShellExecution(name)
 	var analysis shellCommandAnalysis
 	if shellExecution {
 		if cmd := extractShellCommand(data); cmd != "" {
-			analysis = ctx.analyzeShellCommand(name, cmd)
+			analysis = deps.analyzeShell(name, cmd)
 			debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", cmd, analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 			if RulesAllowDirs(r.rules.Snapshot(), analysis.AffectedDirs, r.scope) {
 				debug.Printf("requestApproval: matched LLM affected dirs against saved approval rule")
@@ -294,7 +309,7 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 	select {
 	case ch <- item:
 		debug.Printf("requestApproval: review item sent to channel, waiting for user...")
-	case <-ctx.ctx.Done():
+	case <-deps.ctx.Done():
 		debug.Printf("requestApproval: context cancelled while sending review item")
 		return fmt.Errorf("execution denied by user for: %s", name)
 	}
@@ -305,7 +320,7 @@ func (r *toolReviewer) requestApproval(ctx *Mods, name string, data []byte) erro
 			return nil
 		}
 		return fmt.Errorf("execution denied by user for: %s", name)
-	case <-ctx.ctx.Done():
+	case <-deps.ctx.Done():
 		debug.Printf("requestApproval: context cancelled while waiting for user response")
 		return fmt.Errorf("execution denied by user for: %s", name)
 	}

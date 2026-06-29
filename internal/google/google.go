@@ -137,6 +137,10 @@ type Client struct {
 	requestBuilder RequestBuilder
 }
 
+// Capabilities reports Google backend features. The Google adapter
+// does not implement tool/function calling (CallTools is a no-op).
+func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: false} }
+
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	stream := new(Stream)

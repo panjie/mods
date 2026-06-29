@@ -83,6 +83,11 @@ func New(config Config) *Client {
 	}
 }
 
+// Capabilities reports OpenAI-compatible backend features. The OpenAI
+// adapter supports tool/function calling (CallTools implements the
+// multi-round tool loop).
+func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
+
 // Request makes a new request and returns a stream.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	body := openai.ChatCompletionNewParams{

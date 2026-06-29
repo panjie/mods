@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	cfgpkg "github.com/panjie/mods/internal/config"
 )
 
 const (
@@ -44,7 +45,7 @@ func RunConfigWizard() error {
 	webSearchAPIKey := ""
 	webSearchAPIKeyEnv := config.WebSearchAPIKeyEnv
 	if webSearchAPIKeyEnv == "" {
-		webSearchAPIKeyEnv = "TAVILY_API_KEY"
+		webSearchAPIKeyEnv = cfgpkg.DefaultWebSearchAPIKeyEnv
 	}
 	if config.WebSearchAPIKey != "" && os.Getenv(webSearchAPIKeyEnv) == "" {
 		webSearchKeyStorage = "config"

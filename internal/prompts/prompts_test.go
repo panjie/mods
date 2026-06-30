@@ -34,4 +34,9 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.False(t, byName[KeyMinimal].Configurable)
 	require.Equal(t, Plan, byName[KeyPlan].Default)
 	require.Equal(t, ShellClassifier, byName[KeyShellClassifier].Default)
+
+	require.Contains(t, Identity, "perform it directly with")
+	require.Contains(t, Identity, "built-in review step that prompts")
+	require.Contains(t, Identity, "still carry out the requested action")
+	require.Contains(t, ToolSelection, "attempt it directly rather than asking for permission first")
 }

@@ -19,7 +19,7 @@ func TestStreamMessagesIncludesAssistantResponse(t *testing.T) {
 		messages: []proto.Message{
 			{Role: proto.RoleUser, Content: "hello"},
 		},
-		message: "hi there",
+		message: proto.Message{Role: proto.RoleAssistant, Content: "hi there"},
 	}
 
 	require.Equal(t, []proto.Message{
@@ -244,7 +244,7 @@ func TestCurrentDoesNotPolluteMessageHistory(t *testing.T) {
 
 	// The persisted assistant message must contain only the user-facing
 	// answer, never any reasoning text.
-	require.Equal(t, "final answer", s.message)
+	require.Equal(t, "final answer", s.message.Content)
 	require.Equal(t, []proto.Message{
 		{Role: proto.RoleUser, Content: "q"},
 		{Role: proto.RoleAssistant, Content: "final answer"},

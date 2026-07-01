@@ -58,9 +58,11 @@ func DefaultConfig(model, authToken string) Config {
 // parts) is distinguishable from an explicit false. See
 // https://ai.google.dev/gemini-api/docs/thinking
 type Part struct {
-	Text       string `json:"text,omitempty"`
-	InlineData *Blob  `json:"inlineData,omitempty"`
-	Thought    *bool  `json:"thought,omitempty"`
+	Text             string            `json:"text,omitempty"`
+	InlineData       *Blob             `json:"inlineData,omitempty"`
+	FunctionCall     *FunctionCall     `json:"functionCall,omitempty"`
+	FunctionResponse *FunctionResponse `json:"functionResponse,omitempty"`
+	Thought          *bool             `json:"thought,omitempty"`
 }
 
 // Blob contains raw media bytes to be sent inline to the model.
@@ -73,6 +75,32 @@ type Blob struct {
 type Content struct {
 	Parts []Part `json:"parts,omitempty"`
 	Role  string `json:"role,omitempty"`
+}
+
+// FunctionCall is a model-requested client-side function call.
+type FunctionCall struct {
+	ID   string         `json:"id,omitempty"`
+	Name string         `json:"name,omitempty"`
+	Args map[string]any `json:"args,omitempty"`
+}
+
+// FunctionResponse is the result of a client-side function call.
+type FunctionResponse struct {
+	ID       string         `json:"id,omitempty"`
+	Name     string         `json:"name,omitempty"`
+	Response map[string]any `json:"response,omitempty"`
+}
+
+// Tool lists function declarations available to Gemini.
+type Tool struct {
+	FunctionDeclarations []FunctionDeclaration `json:"functionDeclarations,omitempty"`
+}
+
+// FunctionDeclaration describes one callable function.
+type FunctionDeclaration struct {
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
 // ThinkingConfig - for more details see https://ai.google.dev/gemini-api/docs/thinking#rest .
@@ -97,6 +125,7 @@ type MessageCompletionRequest struct {
 	Contents          []Content        `json:"contents,omitempty"`
 	SystemInstruction *Content         `json:"systemInstruction,omitempty"`
 	GenerationConfig  GenerationConfig `json:"generationConfig,omitempty"`
+	Tools             []Tool           `json:"tools,omitempty"`
 }
 
 // RequestBuilder is an interface for building HTTP requests for the Google API.
@@ -137,9 +166,10 @@ type Client struct {
 	requestBuilder RequestBuilder
 }
 
-// Capabilities reports Google backend features. The Google adapter
-// does not implement tool/function calling (CallTools is a no-op).
-func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: false} }
+// Capabilities reports Google backend features. The Google adapter supports
+// tool/function calling via Gemini function declarations and functionResponse
+// parts.
+func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
@@ -148,6 +178,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	body := MessageCompletionRequest{
 		Contents:          contents,
 		SystemInstruction: sysInstr,
+		Tools:             fromToolSpecs(request.Tools),
 		GenerationConfig: GenerationConfig{
 			ResponseMimeType: "",
 			CandidateCount:   1,
@@ -194,6 +225,10 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		return stream
 	}
 	stream.messages = append([]proto.Message(nil), request.Messages...)
+	stream.request = body
+	stream.client = c
+	stream.ctx = ctx
+	stream.toolCall = request.ToolCaller
 	return stream
 }
 
@@ -260,14 +295,57 @@ type Stream struct {
 	response    *http.Response
 	err         error
 	unmarshaler Unmarshaler
-	message     string
+	message     proto.Message
 	messages    []proto.Message
+	request     MessageCompletionRequest
+	client      *Client
+	ctx         context.Context
+	toolCall    func(name string, data []byte) (string, error)
+	callSeq     int
 }
 
 // CallTools implements stream.Stream.
 func (s *Stream) CallTools() []proto.ToolCallStatus {
-	// No tool calls in Gemini/Google API yet.
-	return nil
+	calls := s.message.ToolCalls
+	statuses := make([]proto.ToolCallStatus, 0, len(calls))
+	if len(calls) > 0 {
+		s.request.Contents = append(s.request.Contents, fromProtoMessage(s.message))
+		s.messages = append(s.messages, s.message)
+	}
+	for _, call := range calls {
+		msg, status := stream.CallTool(
+			call.ID,
+			call.Function.Name,
+			call.Function.Arguments,
+			s.toolCall,
+		)
+		s.request.Contents = append(s.request.Contents, fromProtoMessage(msg))
+		s.messages = append(s.messages, msg)
+		statuses = append(statuses, status)
+	}
+	if len(statuses) == 0 {
+		return statuses
+	}
+
+	s.message = proto.Message{}
+	s.isFinished = false
+	req, err := s.client.newRequest(s.ctx, http.MethodPost, s.client.config.BaseURL, withBody(s.request))
+	if err != nil {
+		s.err = err
+		s.isFinished = true
+		return statuses
+	}
+	next, err := googleSendRequestStream(s.client, req)
+	if err != nil {
+		s.err = err
+		s.isFinished = true
+		return statuses
+	}
+	s.reader = next.reader
+	s.response = next.response
+	s.unmarshaler = next.unmarshaler
+	s.err = nil
+	return statuses
 }
 
 // Err implements stream.Stream.
@@ -276,11 +354,8 @@ func (s *Stream) Err() error { return s.err }
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message {
 	messages := append([]proto.Message(nil), s.messages...)
-	if s.message != "" {
-		messages = append(messages, proto.Message{
-			Role:    proto.RoleAssistant,
-			Content: s.message,
-		})
+	if s.message.Content != "" || len(s.message.ToolCalls) > 0 {
+		messages = append(messages, s.message)
 	}
 	return messages
 }
@@ -354,6 +429,9 @@ func (s *Stream) Current() (proto.Chunk, error) {
 
 		var text, thought string
 		for _, part := range parts {
+			if part.FunctionCall != nil {
+				s.addFunctionCall(part.FunctionCall)
+			}
 			if part.Text == "" {
 				continue
 			}
@@ -369,10 +447,38 @@ func (s *Stream) Current() (proto.Chunk, error) {
 		}
 		// Persist only the user-facing answer for replay in subsequent turns;
 		// internal reasoning must not contaminate Messages() history.
-		s.message += text
+		if text != "" && s.message.Role == "" {
+			s.message.Role = proto.RoleAssistant
+		}
+		s.message.Content += text
 
 		return proto.Chunk{Content: text, Thought: thought}, nil
 	}
+}
+
+func (s *Stream) addFunctionCall(call *FunctionCall) {
+	if call == nil || call.Name == "" {
+		return
+	}
+	if s.message.Role == "" {
+		s.message.Role = proto.RoleAssistant
+	}
+	id := call.ID
+	if id == "" {
+		id = fmt.Sprintf("google_call_%d", s.callSeq)
+	}
+	s.callSeq++
+	args, err := json.Marshal(call.Args)
+	if err != nil {
+		args = []byte("{}")
+	}
+	s.message.ToolCalls = append(s.message.ToolCalls, proto.ToolCall{
+		ID: id,
+		Function: proto.Function{
+			Name:      call.Name,
+			Arguments: args,
+		},
+	})
 }
 
 func googleSendRequestStream(client *Client, req *http.Request) (*Stream, error) {

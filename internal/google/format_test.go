@@ -1,15 +1,18 @@
 package google
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,6 +31,30 @@ func newCapturingServer(t *testing.T) (client *Client, captured *[]byte, closeSe
 		AuthToken:  "k",
 	}
 	return New(cfg), &buf, server.Close
+}
+
+func newCapturingSequenceServer(t *testing.T, responses []string) (client *Client, captured *[][]byte, closeServer func()) {
+	t.Helper()
+	var bodies [][]byte
+	var idx int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if idx < len(responses) {
+			_, _ = io.WriteString(w, responses[idx])
+			idx++
+			return
+		}
+		_, _ = io.WriteString(w, "data: {\"candidates\":[]}\n\n")
+	}))
+	cfg := Config{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		AuthToken:  "k",
+	}
+	return New(cfg), &bodies, server.Close
 }
 
 // TestFromProtoMessagesIncludesAssistantWithModelRole guards against the
@@ -136,21 +163,46 @@ func TestFromProtoMessagesInterleavesUserAndAssistant(t *testing.T) {
 	require.Equal(t, "u3", contents[4].Parts[0].Text)
 }
 
-// TestFromProtoMessagesDropsToolMessages ensures tool messages from a
-// continued tool-capable conversation do not corrupt contents.
-func TestFromProtoMessagesDropsToolMessages(t *testing.T) {
+// TestFromProtoMessagesIncludesToolMessages ensures tool messages from a
+// continued tool-capable conversation are replayed as function responses.
+func TestFromProtoMessagesIncludesToolMessages(t *testing.T) {
 	sys, contents := fromProtoMessages([]proto.Message{
 		{Role: proto.RoleUser, Content: "list files"},
-		{Role: proto.RoleAssistant, Content: "calling tool"},
-		{Role: proto.RoleTool, Content: "a.txt\nb.txt", ToolCalls: []proto.ToolCall{{ID: "call_1"}}},
+		{
+			Role:    proto.RoleAssistant,
+			Content: "calling tool",
+			ToolCalls: []proto.ToolCall{{
+				ID: "call_1",
+				Function: proto.Function{
+					Name:      "list_files",
+					Arguments: []byte(`{"path":"."}`),
+				},
+			}},
+		},
+		{
+			Role:    proto.RoleTool,
+			Content: "a.txt\nb.txt",
+			ToolCalls: []proto.ToolCall{{
+				ID: "call_1",
+				Function: proto.Function{
+					Name: "list_files",
+				},
+			}},
+		},
 		{Role: proto.RoleAssistant, Content: "two files: a.txt, b.txt"},
 	})
 
 	require.Nil(t, sys)
-	require.Len(t, contents, 3, "tool message must not appear in contents")
+	require.Len(t, contents, 4, "tool message must appear as functionResponse content")
 	require.Equal(t, geminiRoleUser, contents[0].Role)
 	require.Equal(t, geminiRoleModel, contents[1].Role)
-	require.Equal(t, geminiRoleModel, contents[2].Role)
+	require.Equal(t, "calling tool", contents[1].Parts[0].Text)
+	require.Equal(t, "list_files", contents[1].Parts[1].FunctionCall.Name)
+	require.Equal(t, map[string]any{"path": "."}, contents[1].Parts[1].FunctionCall.Args)
+	require.Equal(t, geminiRoleUser, contents[2].Role)
+	require.Equal(t, "list_files", contents[2].Parts[0].FunctionResponse.Name)
+	require.Equal(t, map[string]any{"result": "a.txt\nb.txt"}, contents[2].Parts[0].FunctionResponse.Response)
+	require.Equal(t, geminiRoleModel, contents[3].Role)
 }
 
 // TestFromProtoMessagesSkipsEmptyAssistant prevents emitting parts:[] which
@@ -242,4 +294,153 @@ func TestRequestBodyOmitsSystemInstructionWhenAbsent(t *testing.T) {
 	require.NotEmpty(t, *captured)
 	require.False(t, bytes.Contains(*captured, []byte(`"systemInstruction"`)),
 		"systemInstruction must be omitted when no system messages exist: %s", *captured)
+}
+
+func TestRequestBodyIncludesFunctionDeclarations(t *testing.T) {
+	client, captured, closeServer := newCapturingServer(t)
+	defer closeServer()
+
+	_ = client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "read"}},
+		Tools: []proto.ToolSpec{{
+			Name:        "read_file",
+			Description: "Read a file",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "Path to read",
+					},
+				},
+				"required": []any{"path"},
+			},
+		}},
+	})
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(*captured, &body))
+	tools := body["tools"].([]any)
+	require.Len(t, tools, 1)
+	decls := tools[0].(map[string]any)["functionDeclarations"].([]any)
+	require.Len(t, decls, 1)
+	decl := decls[0].(map[string]any)
+	require.Equal(t, "read_file", decl["name"])
+	require.Equal(t, "Read a file", decl["description"])
+	params := decl["parameters"].(map[string]any)
+	require.Equal(t, "object", params["type"])
+	require.Contains(t, params["properties"].(map[string]any), "path")
+}
+
+func TestStreamParsesFunctionCallsAndPreservesText(t *testing.T) {
+	st := &Stream{
+		reader: bufio.NewReader(bytes.NewBufferString(
+			"data: {\"candidates\":[{\"content\":{\"parts\":[" +
+				"{\"text\":\"checking\"}," +
+				"{\"functionCall\":{\"name\":\"read_file\",\"args\":{\"path\":\"README.md\"}}}," +
+				"{\"text\":\"thinking\",\"thought\":true}" +
+				"]}}]}\n\n",
+		)),
+		unmarshaler: &JSONUnmarshaler{},
+	}
+
+	chunk, err := st.Current()
+	require.NoError(t, err)
+	require.Equal(t, "checking", chunk.Content)
+	require.Equal(t, "thinking", chunk.Thought)
+
+	messages := st.Messages()
+	require.Len(t, messages, 1)
+	require.Equal(t, proto.RoleAssistant, messages[0].Role)
+	require.Equal(t, "checking", messages[0].Content)
+	require.Len(t, messages[0].ToolCalls, 1)
+	require.Equal(t, "google_call_0", messages[0].ToolCalls[0].ID)
+	require.Equal(t, "read_file", messages[0].ToolCalls[0].Function.Name)
+	require.JSONEq(t, `{"path":"README.md"}`, string(messages[0].ToolCalls[0].Function.Arguments))
+}
+
+func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
+	client, captured, closeServer := newCapturingSequenceServer(t, []string{
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"call_1\",\"name\":\"read_file\",\"args\":{\"path\":\"README.md\"}}}]}}]}\n\n",
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"done\"}]}}]}\n\n",
+	})
+	defer closeServer()
+
+	st := client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "read README"}},
+		ToolCaller: func(name string, data []byte) (string, error) {
+			require.Equal(t, "read_file", name)
+			require.JSONEq(t, `{"path":"README.md"}`, string(data))
+			return "README contents", nil
+		},
+	})
+	require.True(t, st.Next())
+	_, err := st.Current()
+	require.NoError(t, err)
+	require.True(t, st.Next())
+	_, err = st.Current()
+	require.ErrorIs(t, err, stream.ErrNoContent)
+	require.False(t, st.Next())
+
+	statuses := st.CallTools()
+	require.Len(t, statuses, 1)
+	require.NoError(t, statuses[0].Err)
+	require.Len(t, *captured, 2)
+
+	var followup map[string]any
+	require.NoError(t, json.Unmarshal((*captured)[1], &followup))
+	contents := followup["contents"].([]any)
+	require.Len(t, contents, 3)
+	assistant := contents[1].(map[string]any)
+	require.Equal(t, geminiRoleModel, assistant["role"])
+	require.Contains(t, assistant["parts"].([]any)[0].(map[string]any), "functionCall")
+	toolResult := contents[2].(map[string]any)
+	require.Equal(t, geminiRoleUser, toolResult["role"])
+	fnResp := toolResult["parts"].([]any)[0].(map[string]any)["functionResponse"].(map[string]any)
+	require.Equal(t, "call_1", fnResp["id"])
+	require.Equal(t, "read_file", fnResp["name"])
+	require.Equal(t, map[string]any{"result": "README contents"}, fnResp["response"])
+
+	require.True(t, st.Next())
+	chunk, err := st.Current()
+	require.NoError(t, err)
+	require.Equal(t, "done", chunk.Content)
+}
+
+func TestCallToolsSerializesFailureAsError(t *testing.T) {
+	client, captured, closeServer := newCapturingSequenceServer(t, []string{
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"call_1\",\"name\":\"read_file\",\"args\":{\"path\":\"missing\"}}}]}}]}\n\n",
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"handled\"}]}}]}\n\n",
+	})
+	defer closeServer()
+
+	st := client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "read missing"}},
+		ToolCaller: func(name string, data []byte) (string, error) {
+			return "", errors.New("not found")
+		},
+	})
+	require.True(t, st.Next())
+	_, err := st.Current()
+	require.NoError(t, err)
+	require.True(t, st.Next())
+	_, err = st.Current()
+	require.ErrorIs(t, err, stream.ErrNoContent)
+	require.False(t, st.Next())
+
+	statuses := st.CallTools()
+	require.Len(t, statuses, 1)
+	require.Error(t, statuses[0].Err)
+
+	var followup map[string]any
+	require.NoError(t, json.Unmarshal((*captured)[1], &followup))
+	contents := followup["contents"].([]any)
+	fnResp := contents[2].(map[string]any)["parts"].([]any)[0].(map[string]any)["functionResponse"].(map[string]any)
+	require.Equal(t, map[string]any{"error": "not found"}, fnResp["response"])
+
+	messages := st.Messages()
+	require.Len(t, messages, 3)
+	require.Len(t, messages[1].ToolCalls, 1)
+	require.Equal(t, proto.RoleTool, messages[2].Role)
+	require.True(t, messages[2].ToolCalls[0].IsError)
 }

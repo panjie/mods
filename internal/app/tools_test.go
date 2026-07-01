@@ -158,11 +158,11 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 		return newStreamClient(api, anthropic.Config{}, google.Config{}, cohere.Config{}, ollama.Config{}, openai.Config{})
 	}
 
-	t.Run("implicit auto filesystem is skipped", func(t *testing.T) {
+	t.Run("implicit auto filesystem is skipped for unsupported provider", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.BuiltinTools.Filesystem = FilesystemAuto
 		mods := &Mods{ctx: context.Background()}
-		client, err := clientFor("google")
+		client, err := clientFor("cohere")
 		require.NoError(t, err)
 		registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "read README.md", client)
 		if err != nil {
@@ -186,7 +186,7 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 	})
 
 	t.Run("supported providers keep tools", func(t *testing.T) {
-		for _, provider := range []string{"openai", "anthropic", "ollama"} {
+		for _, provider := range []string{"openai", "anthropic", "ollama", "google"} {
 			t.Run(provider, func(t *testing.T) {
 				cfg := defaultConfig()
 				cfg.BuiltinTools.Filesystem = FilesystemAlways

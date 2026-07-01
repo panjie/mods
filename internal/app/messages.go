@@ -69,8 +69,8 @@ type toolReviewStartMsg struct {
 }
 
 type cacheDetailsMsg struct {
-	WriteID, Title, ReadID, API, Model string
-	Rules                              []Rule
+	WriteID, Title, ReadID string
+	Rules                  []Rule
 }
 
 type reviewResponse struct {

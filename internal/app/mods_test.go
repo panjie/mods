@@ -267,8 +267,6 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		msg := mods.findCacheOpsDetails()()
 		dets := msg.(cacheDetailsMsg)
 
-		require.Equal(t, "claude-3.7-sonnet", dets.Model)
-		require.Equal(t, "anthropic", dets.API)
 		require.Empty(t, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
 	})

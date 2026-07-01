@@ -207,8 +207,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.CacheWriteToID = msg.WriteID
 		m.Config.CacheWriteToTitle = msg.Title
 		m.Config.CacheReadFromID = msg.ReadID
-		m.Config.API = msg.API
-		m.Config.Model = msg.Model
 		m.reviewer.rules.Replace(msg.Rules)
 
 		if !m.Config.Quiet {

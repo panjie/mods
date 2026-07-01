@@ -17,8 +17,6 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 		readID := ordered.First(m.Config.Continue, m.Config.Show)
 		writeID := ordered.First(m.Config.Title, m.Config.Continue)
 		title := writeID
-		model := m.Config.Model
-		api := m.Config.API
 		var rules []Rule
 
 		if readID != "" || continueLast || m.Config.ShowLast {
@@ -33,10 +31,6 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 				readID = found.ID
 				if m.Config.Continue != "" && m.Config.Title == "" {
 					title = found.Title
-				}
-				if found.Model != nil && found.API != nil {
-					model = *found.Model
-					api = *found.API
 				}
 				if !m.Config.NoCache {
 					rules, err = m.db.ApprovalRules(readID)
@@ -74,8 +68,6 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 			WriteID: writeID,
 			Title:   title,
 			ReadID:  readID,
-			API:     api,
-			Model:   model,
 			Rules:   rules,
 		}
 	}

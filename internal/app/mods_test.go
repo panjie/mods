@@ -862,13 +862,14 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		require.Contains(t, m.View(), "Generating")
 	})
 
-	t.Run("response state before output shows generating and operation", func(t *testing.T) {
+	t.Run("response state before output shows operation, not generating", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.state = responseState
 		m.setActiveOperation("Searching web: Go latest release")
 		view := m.View()
-		require.Contains(t, view, "Generating")
 		require.Contains(t, view, "Searching web: Go latest release")
+		require.NotContains(t, view, "Generating",
+			"the spinner is suppressed while a tool/search operation is the active status (unified status bar)")
 	})
 
 	t.Run("response state before output renders fancy animation prefix", func(t *testing.T) {

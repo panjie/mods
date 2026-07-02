@@ -487,7 +487,7 @@ func extractShellCommand(args []byte) string {
 	return parsed.Command
 }
 
-func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, reviewChoices lipgloss.Style) string {
+func (r *toolReviewer) renderBanner(width int, reviewPrompt, reviewChoices lipgloss.Style) string {
 	if width <= 0 {
 		width = 80
 	}
@@ -519,11 +519,7 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	if r.reviewItem.summary != "" {
 		block += "\n" + reviewChoices.Copy().Width(width).Render(TruncateOperationStatus(r.reviewItem.summary, width))
 	}
-	block += "\n" + choicesLine + "\n" + alwaysLine
-	if strings.TrimSpace(content) == "" {
-		return block
-	}
-	return strings.TrimRight(content, "\r\n") + "\n" + block
+	return block + "\n" + choicesLine + "\n" + alwaysLine
 }
 
 func formatAlwaysAllowSummary(rules []Rule, name, summary string, width int) string {

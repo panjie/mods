@@ -106,27 +106,44 @@ func (m *Mods) flushBufferedContent() {
 }
 
 func (m *Mods) renderWithOperation(content string) string {
+	footer := m.footerView()
+	if footer == "" {
+		return content
+	}
+	// A non-empty footer means active tool activity (a running tool or a
+	// pending approval), not generation. While the model hasn't emitted any
+	// text yet, `content` is just the "Generating…" spinner — drop it so the
+	// spinner can never appear alongside the footer. This is what makes the
+	// status surfaces mutually exclusive by construction.
+	//
+	// Safe because View() passes real model output as `content` only once
+	// responseOutputStarted is true (the pre-output branch passes the spinner);
+	// so when this gate fires, `content` is the spinner — never output.
+	if !m.responseOutputStarted {
+		content = ""
+	}
+	if strings.TrimSpace(content) == "" {
+		return footer
+	}
+	return strings.TrimRight(content, "\r\n") + "\n" + footer
+}
+
+// footerView is the single source of truth for the status line shown beneath
+// the main content. At most one footer is ever returned: a pending tool
+// approval takes precedence over the current tool/web-search operation label.
+// renderWithOperation composes the footer below the main content and suppresses
+// the "Generating…" spinner whenever a footer is active.
+func (m *Mods) footerView() string {
 	if m.reviewer.isPending() {
-		// If the model called a tool before emitting any text, `content` is
-		// just the "Generating…" spinner. Showing it above the approval
-		// prompt is misleading (we're waiting on the user, not generating),
-		// so drop it until there's real output to show as context.
-		if !m.responseOutputStarted {
-			content = ""
-		}
-		return m.reviewer.renderBanner(content, m.width, m.Styles.ReviewPrompt, m.Styles.ReviewChoices)
+		return m.reviewer.renderBanner(m.width, m.Styles.ReviewPrompt, m.Styles.ReviewChoices)
 	}
 	if m.Config.Quiet || m.Config.HideToolStatus || !m.showOperationStatus {
-		return content
+		return ""
 	}
 	if strings.TrimSpace(m.getActiveOperation()) == "" {
-		return content
+		return ""
 	}
-	status := m.operationStatusLine()
-	if content == "" {
-		return status
-	}
-	return strings.TrimRight(content, "\r\n") + "\n" + status
+	return m.operationStatusLine()
 }
 
 func (m *Mods) operationStatusLine() string {

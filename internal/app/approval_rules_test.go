@@ -270,7 +270,7 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "[A] Always allow")
 	require.Contains(t, rendered, "Always allows writes in /Users/panjie/temp")
 }
@@ -290,7 +290,7 @@ func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "[A] Always allow")
 	require.Contains(t, rendered, "Always allows reads in /Users/panjie/temp")
 	require.NotContains(t, rendered, "Always allows writes in /Users/panjie/temp")
@@ -313,7 +313,7 @@ func TestReviewBannerAlwaysAllowLegacyFallback(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "Always allows reads in /Users/panjie/temp")
 }
 
@@ -327,7 +327,7 @@ func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
 			candidateRules: nil,
 		},
 	}
-	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.NotContains(t, rendered, "[A] Always allow")
 	require.Contains(t, rendered, "No reusable allow rule for this command.")
 }
@@ -380,7 +380,7 @@ func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner("", 120, renderer.NewStyle(), reviewChoices)
+	rendered := reviewer.renderBanner(120, renderer.NewStyle(), reviewChoices)
 
 	baseStyle := reviewChoices.Copy().Padding(0, 0)
 	selectedStyle := baseStyle.Copy().
@@ -404,7 +404,7 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner("", 80, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(80, lipgloss.NewStyle(), lipgloss.NewStyle())
 	lines := strings.Split(rendered, "\n")
 	for _, line := range lines {
 		require.LessOrEqual(t, len([]rune(line)), 80, line)

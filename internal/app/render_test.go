@@ -314,6 +314,33 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 	})
 }
 
+func TestRenderWithOperationSuppressesSpinnerDuringToolRun(t *testing.T) {
+	m := &Mods{
+		Config:              &Config{},
+		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		state:               responseState,
+		contentMutex:        &sync.Mutex{},
+		width:               60,
+		showOperationStatus: true,
+		reviewer:            &toolReviewer{},
+	}
+	m.setActiveOperation("Run: find . -name '*.go'")
+
+	t.Run("no model output yet: spinner dropped, only the tool label shows", func(t *testing.T) {
+		m.responseOutputStarted = false
+		got := m.renderWithOperation("✶ Generating...")
+		require.NotContains(t, got, "Generating", "spinner must not appear while a tool is running")
+		require.Contains(t, got, "Run: find")
+	})
+
+	t.Run("model output present: output kept above the tool label", func(t *testing.T) {
+		m.responseOutputStarted = true
+		got := m.renderWithOperation("partial answer so far")
+		require.Contains(t, got, "partial answer so far")
+		require.Contains(t, got, "Run: find")
+	})
+}
+
 func captureStdout(tb testing.TB, fn func()) string {
 	tb.Helper()
 

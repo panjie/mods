@@ -956,6 +956,15 @@ func TestResolveModel(t *testing.T) {
 				"claude-sonnet-4": {Aliases: []string{"sonnet-4"}},
 			},
 		},
+		{
+			// A custom-named provider that declares the Anthropic wire
+			// protocol via api-type.
+			Name:    "acme-claude",
+			APIType: "anthropic",
+			Models: map[string]Model{
+				"acme-sonnet-4": {Aliases: []string{"acme"}},
+			},
+		},
 	}
 
 	m := testMods(t)
@@ -998,6 +1007,24 @@ func TestResolveModel(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "anthropic", api.Name)
 		require.Equal(t, "claude-sonnet-4", mod.Name)
+	})
+
+	t.Run("api-type overrides name-based routing", func(t *testing.T) {
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "acme-claude", Model: "acme", APIs: apis}}
+		api, mod, err := m.resolveModel(cfg)
+		require.NoError(t, err)
+		require.Equal(t, "acme-claude", api.Name, "provider keeps its own name")
+		require.Equal(t, "acme-sonnet-4", mod.Name)
+		require.Equal(t, "anthropic", mod.API, "api-type should route through the Anthropic adapter")
+	})
+
+	t.Run("api-type absent falls back to name", func(t *testing.T) {
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "acme-claude", Model: "acme", APIs: APIs{
+			{Name: "acme-claude", Models: map[string]Model{"acme-sonnet-4": {Aliases: []string{"acme"}}}},
+		}}}
+		_, mod, err := m.resolveModel(cfg)
+		require.NoError(t, err)
+		require.Equal(t, "acme-claude", mod.API, "without api-type the provider name is used (OpenAI-compatible default)")
 	})
 }
 

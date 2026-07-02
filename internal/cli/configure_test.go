@@ -151,6 +151,44 @@ apis: {}
 	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
 }
 
+func TestBuildConfigWizardUpdatesWritesAPITypeForAnthropic(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:         "acme-claude",
+		apiType:         "anthropic",
+		modelName:       "claude-sonnet-4",
+		reviewMode:      "mutable",
+		fsMode:          "auto",
+		keyStorage:      "env",
+		envVarName:      "ACME_CLAUDE_API_KEY",
+		baseURLInput:    "https://acme.example.com/v1",
+		addedModelNames: []string{"claude-sonnet-4"},
+		addedModel:      true,
+	})
+
+	requireUpdateValue(t, updates, []string{"apis", "acme-claude", "api-type"}, "anthropic")
+
+	path := writeCLIConfig(t, "default-api: openai\ndefault-model: m\napis: {}\n")
+	require.NoError(t, SaveFieldPaths(path, updates))
+	m := loadCLIConfig(t, path)
+	apis := m["apis"].(map[string]any)
+	require.Equal(t, "anthropic", apis["acme-claude"].(map[string]any)["api-type"])
+}
+
+func TestBuildConfigWizardUpdatesOmitsAPITypeForOpenAI(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:         "groq",
+		apiType:         "openai",
+		modelName:       "llama",
+		reviewMode:      "mutable",
+		fsMode:          "auto",
+		keyStorage:      "env",
+		envVarName:      "GROQ_API_KEY",
+		addedModelNames: []string{"llama"},
+		addedModel:      true,
+	})
+	requireNoUpdatePath(t, updates, []string{"apis", "groq", "api-type"})
+}
+
 func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "openrouter",
@@ -166,6 +204,7 @@ func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testin
 	})
 
 	requireNoUpdatePath(t, updates, []string{"apis", "openrouter", "base-url"})
+	requireNoUpdatePath(t, updates, []string{"apis", "openrouter", "api-type"})
 	requireUpdateValue(t, updates, []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "max-input-chars"}, defaultNewModelInputChars)
 }
 
@@ -190,6 +229,26 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 	require.Contains(t, output, "https://openrouter.ai/api/v1")
 	require.Contains(t, output, "Added models")
 	require.Contains(t, output, "default, first line")
+	// Default (OpenAI-compatible) providers must not show an API type row.
+	require.NotContains(t, output, "API type")
+}
+
+func TestPrintConfigSummaryShowsAPITypeForAnthropic(t *testing.T) {
+	output := captureStderr(t, func() {
+		printConfigSummary(summaryData{
+			api:          "acme-claude",
+			model:        "claude-sonnet-4",
+			apiType:      "anthropic",
+			keyStorage:   "env",
+			envVarName:   "ACME_CLAUDE_API_KEY",
+			baseURL:      "https://acme.example.com/v1",
+			fsMode:       "auto",
+			reviewMode:   "mutable",
+			settingsPath: "/tmp/mods.yml",
+		})
+	})
+	require.Contains(t, output, "API type")
+	require.Contains(t, output, "anthropic")
 }
 
 func TestValidateNewProviderName(t *testing.T) {

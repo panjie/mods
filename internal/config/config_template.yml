@@ -422,3 +422,23 @@ apis:
   #       # reasoning-effort: target reasoning_effort value for -T.
   #       # Default "medium". Options: low, medium, high.
   #       # reasoning-effort: high
+
+  # Example: custom Anthropic-compatible server (speaks the Anthropic
+  # Messages API, e.g. a Claude proxy or a third-party gateway). Set
+  # api-type: anthropic so mods routes through the native Anthropic
+  # adapter — including tool calling, reasoning/thinking, and image
+  # support — regardless of the provider name. The adapter strips a
+  # trailing /v1 from base-url automatically.
+  # acme-claude:
+  #   api-type: anthropic
+  #   base-url: https://acme.example.com/v1
+  #   api-key:
+  #   api-key-env: ACME_API_KEY
+  #   models:
+  #     claude-sonnet-4:
+  #       aliases: ["acme-sonnet"]
+  #       max-input-chars: 800000
+  #
+  # api-type also works for the other native adapters: ollama, google,
+  # cohere, azure, azure-ad. Omit it to use the OpenAI-compatible
+  # adapter (the default for any unrecognized provider name).

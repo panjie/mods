@@ -57,6 +57,7 @@ const (
 var Help = map[string]string{
 	"api":                    "OpenAI compatible REST API (openai, localai, anthropic, ...)",
 	"apis":                   "Aliases and endpoints for OpenAI compatible REST API",
+	"api-type":               "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, cohere, azure, or azure-ad. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
 	"http-proxy":             "HTTP proxy to use for API requests",
 	"model":                  "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
 	"ask-model":              "Ask which model to use via interactive prompt",
@@ -162,6 +163,12 @@ type API struct {
 	BaseURL   string           `yaml:"base-url"`
 	Models    map[string]Model `yaml:"models"`
 	User      string           `yaml:"user"`
+	// APIType declares the wire protocol a custom provider speaks, overriding
+	// name-based routing. When empty, mods routes by the provider name and
+	// defaults unknown names to the OpenAI-compatible adapter. Set this to
+	// "anthropic" for any endpoint that implements the Anthropic Messages API,
+	// or one of "openai", "ollama", "google", "cohere", "azure", "azure-ad".
+	APIType string `yaml:"api-type,omitempty"`
 }
 
 // APIs is a type alias to allow custom YAML decoding.

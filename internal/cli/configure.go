@@ -32,6 +32,9 @@ func RunConfigWizard() error {
 	chosenAPI := config.API
 	chosenModel := config.Model
 	var apiKey, keyStorage, baseURL, newProviderName, newModelNames string
+	// apiType is the protocol chosen for a newly added provider (the page is
+	// only shown then). "openai" means OpenAI-compatible and writes nothing.
+	apiType := "openai"
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -79,13 +82,28 @@ func RunConfigWizard() error {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("New provider name").
-				Description("OpenAI-compatible provider key to write under apis.").
+				Description("Provider key to write under apis.").
 				Placeholder("groq").
 				Value(&newProviderName).
 				Validate(validateNewProviderName),
 		).
 			Title("new provider").
 			Description("Use lowercase letters, digits, '-' or '_'.").
+			WithHideFunc(func() bool { return chosenAPI != addProviderOption }),
+
+		// Page 2b: API type (custom providers only)
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("API type").
+				Description("Protocol this endpoint speaks. Choose Anthropic for Claude proxies or gateways that implement the Messages API.").
+				Options(
+					huh.NewOption("OpenAI-compatible (chat/completions)", "openai"),
+					huh.NewOption("Anthropic (Messages API)", "anthropic"),
+				).
+				Value(&apiType),
+		).
+			Title("api type").
+			Description("Most third-party gateways are OpenAI-compatible.").
 			WithHideFunc(func() bool { return chosenAPI != addProviderOption }),
 
 		// Page 3: Base URL (editable for all providers, required for new ones)
@@ -330,8 +348,15 @@ func RunConfigWizard() error {
 	}
 	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
 
-	// Connection test (OpenAI-compatible providers only, with a key to test).
-	if apiKey != "" && isOpenAICompatible(apiName) && providerBaseURL != "" {
+	// Connection test. Only the OpenAI-compatible adapter exposes a simple
+	// /chat/completions probe; a newly added Anthropic provider is skipped
+	// with a note (probing it with an OpenAI request would always fail).
+	effType := apiName
+	newProvider := chosenAPI == addProviderOption
+	if newProvider {
+		effType = apiType
+	}
+	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
 		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
 		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
 			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
@@ -346,12 +371,15 @@ func RunConfigWizard() error {
 		} else {
 			fmt.Fprintln(os.Stderr, "✓ OK")
 		}
+	} else if newProvider && apiKey != "" && providerBaseURL != "" && !isOpenAICompatible(effType) {
+		fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, effType)
 	}
 
 	// Build the summary.
 	printConfigSummary(summaryData{
 		api:                 apiName,
 		model:               modelName,
+		apiType:             apiType,
 		keyStorage:          keyStorage,
 		envVarName:          envVarName,
 		baseURL:             providerBaseURL,
@@ -369,6 +397,7 @@ func RunConfigWizard() error {
 
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                apiName,
+		apiType:                apiType,
 		modelName:              modelName,
 		reviewMode:             reviewMode,
 		fsMode:                 fsMode,
@@ -453,7 +482,7 @@ func buildProviderOptions() []huh.Option[string] {
 		}
 		opts = append(opts, huh.NewOption(label, api.Name))
 	}
-	opts = append(opts, huh.NewOption("Add new OpenAI-compatible provider", addProviderOption))
+	opts = append(opts, huh.NewOption("Add new provider", addProviderOption))
 	return opts
 }
 
@@ -716,13 +745,13 @@ func webSearchProviderUsesKey(provider string) bool {
 }
 
 type configWizardSaveData struct {
-	apiName, modelName, reviewMode, fsMode       string
-	webSearchProvider, webSearchProviderValue    string
-	webSearchKeyStorage, webSearchAPIKey         string
-	webSearchAPIKeyEnv                           string
-	keyStorage, apiKey, envVarName, baseURLInput string
-	addedModelNames                              []string
-	shellOn, thinkingOn, webSearchOn, addedModel bool
+	apiName, apiType, modelName, reviewMode, fsMode string
+	webSearchProvider, webSearchProviderValue       string
+	webSearchKeyStorage, webSearchAPIKey            string
+	webSearchAPIKeyEnv                              string
+	keyStorage, apiKey, envVarName, baseURLInput    string
+	addedModelNames                                 []string
+	shellOn, thinkingOn, webSearchOn, addedModel    bool
 }
 
 func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
@@ -755,6 +784,13 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 
 	if d.baseURLInput != "" {
 		updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "base-url"}, Value: strings.TrimSpace(d.baseURLInput)})
+	}
+
+	// A newly added provider may declare a non-OpenAI protocol (e.g. an
+	// Anthropic Messages API gateway). "openai" is the default and writes
+	// nothing, so existing OpenAI-compatible behavior is unchanged.
+	if d.apiType != "" && d.apiType != "openai" {
+		updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-type"}, Value: d.apiType})
 	}
 
 	if d.addedModel {
@@ -833,13 +869,13 @@ func testConnection(model, baseURL, apiKey string) error {
 }
 
 type summaryData struct {
-	api, model, keyStorage, envVarName, baseURL string
-	fsMode                                      string
-	addedModelCount                             int
-	shellOn, thinkingOn, webSearchOn            bool
-	webSearchProvider, webSearchKeyStorage      string
-	webSearchAPIKeyEnv                          string
-	reviewMode, settingsPath                    string
+	api, model, apiType, keyStorage, envVarName, baseURL string
+	fsMode                                               string
+	addedModelCount                                      int
+	shellOn, thinkingOn, webSearchOn                     bool
+	webSearchProvider, webSearchKeyStorage               string
+	webSearchAPIKeyEnv                                   string
+	reviewMode, settingsPath                             string
 }
 
 func printConfigSummary(d summaryData) {
@@ -879,6 +915,9 @@ func printConfigSummary(d summaryData) {
 	}
 	if d.baseURL != "" {
 		rows = append(rows, summaryRow(labelStyle, valueStyle, "Base URL", d.baseURL))
+	}
+	if d.apiType != "" && d.apiType != "openai" {
+		rows = append(rows, summaryRow(labelStyle, valueStyle, "API type", d.apiType))
 	}
 
 	rows = append(rows,

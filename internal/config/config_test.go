@@ -175,6 +175,45 @@ func TestConfigTemplateIncludesHideToolResults(t *testing.T) {
 	require.True(t, strings.Contains(string(content), "hide-tool-results: true"))
 }
 
+func TestAPITypeYAML(t *testing.T) {
+	t.Run("decodes api-type on a custom provider", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte(`apis:
+  acme-claude:
+    api-type: anthropic
+    base-url: https://acme.example.com/v1
+    api-key-env: ACME_API_KEY
+    models:
+      claude-sonnet-4:
+        aliases: ["acme-sonnet"]
+`), &cfg))
+		require.Len(t, cfg.APIs, 1)
+		require.Equal(t, "acme-claude", cfg.APIs[0].Name)
+		require.Equal(t, "anthropic", cfg.APIs[0].APIType)
+		require.Equal(t, "https://acme.example.com/v1", cfg.APIs[0].BaseURL)
+	})
+
+	t.Run("api-type defaults to empty", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte(`apis:
+  custom:
+    base-url: https://example.com/v1
+    models:
+      m: {}
+`), &cfg))
+		require.Empty(t, cfg.APIs[0].APIType)
+	})
+}
+
+func TestConfigTemplateDocumentsAPIType(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "api-type: anthropic")
+}
+
 func TestFilesystemModeYAML(t *testing.T) {
 	t.Run("string auto", func(t *testing.T) {
 		var cfg Config

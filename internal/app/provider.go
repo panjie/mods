@@ -21,6 +21,19 @@ type providerConfigs struct {
 	OpenAI    openai.Config
 }
 
+// knownAPITypes is the set of values that select a concrete adapter, either as
+// a provider name or via the api-type setting. Any other value falls through to
+// the OpenAI-compatible adapter in buildProviderConfigs / newStreamClient.
+var knownAPITypes = map[string]bool{
+	"openai":    true,
+	"anthropic": true,
+	"google":    true,
+	"cohere":    true,
+	"ollama":    true,
+	"azure":     true,
+	"azure-ad":  true,
+}
+
 func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error) {
 	var cfgs providerConfigs
 	switch mod.API {

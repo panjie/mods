@@ -55,7 +55,39 @@ var planStructureRe = regexp.MustCompile(`(?m)(^#{1,}[ \t]+(?:Plan|Proposal)\b|\
 // plan (for example, when its investigation hit the tool-round limit) would
 // otherwise render the review screen with whatever narration it produced.
 func looksLikePlan(content string) bool {
-	return strings.TrimSpace(content) != "" && planStructureRe.MatchString(content)
+	content = strings.TrimSpace(content)
+	if content == "" || !planStructureRe.MatchString(content) {
+		return false
+	}
+	if proposals := parseProposals(content); len(proposals) > 0 {
+		for _, proposal := range proposals {
+			if !hasRequiredPlanFields(proposal.content) {
+				return false
+			}
+		}
+		return true
+	}
+	return hasRequiredPlanFields(content)
+}
+
+func hasRequiredPlanFields(content string) bool {
+	fields := planFields(content)
+	return fields["approach"] &&
+		fields["steps"] &&
+		fields["risks"] &&
+		(fields["files"] || fields["commands"])
+}
+
+var planFieldRe = regexp.MustCompile(`(?mi)\*\*(Approach|Steps|Files|Commands|Risks)\*\*`)
+
+func planFields(content string) map[string]bool {
+	fields := map[string]bool{}
+	for _, match := range planFieldRe.FindAllStringSubmatch(content, -1) {
+		if len(match) > 1 {
+			fields[strings.ToLower(match[1])] = true
+		}
+	}
+	return fields
 }
 
 func (m *Mods) showProposal(idx int) {

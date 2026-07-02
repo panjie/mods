@@ -1173,7 +1173,7 @@ func TestPlanCompleteAcceptsStructuredPlan(t *testing.T) {
 		width:          80,
 		operationMutex: sync.Mutex{},
 	}
-	plan := "## Plan\n- **Approach**: do it\n- **Steps**: 1. thing"
+	plan := "## Plan\n- **Approach**: do it\n- **Steps**: 1. thing\n- **Files**: internal/app/mods.go\n- **Risks**: low"
 	model, cmd := m.Update(planCompleteMsg{plan: plan})
 	m = model.(*Mods)
 	require.Nil(t, cmd)

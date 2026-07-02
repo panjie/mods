@@ -77,12 +77,13 @@ func TestLooksLikePlan(t *testing.T) {
 		{name: "narration only is not a plan", content: "好的，我先调查一下你当前的 opencode 配置和相关环境。", want: false},
 		{name: "plain text without structure", content: "I will look into the config and suggest improvements.", want: false},
 		{name: "inline plan word is not a heading", content: "here is my plan for you", want: false},
-		{name: "single plan heading", content: "## Plan\n- **Approach**: do it\n- **Steps**: 1. x", want: true},
-		{name: "h3 plan heading", content: "### Plan\nbody", want: true},
-		{name: "proposal heading", content: "## Proposal 1: Foo\nbody", want: true},
-		{name: "h3 proposal heading", content: "### Proposal 2: Bar\nbody", want: true},
-		{name: "field markers without heading", content: "- **Approach**: a\n- **Steps**: b", want: true},
-		{name: "commands field", content: "notes\n**Commands**: go test", want: true},
+		{name: "missing required fields", content: "## Plan\n- **Approach**: do it\n- **Steps**: 1. x", want: false},
+		{name: "h3 plan missing fields", content: "### Plan\nbody", want: false},
+		{name: "proposal missing fields", content: "## Proposal 1: Foo\nbody", want: false},
+		{name: "field markers without heading", content: "- **Approach**: a\n- **Steps**: b\n- **Risks**: c\n- **Files**: d", want: true},
+		{name: "single complete plan", content: "## Plan\n- **Approach**: do it\n- **Steps**: 1. x\n- **Files**: a.go\n- **Risks**: low", want: true},
+		{name: "complete plan with commands instead of files", content: "## Plan\n- **Approach**: do it\n- **Steps**: 1. x\n- **Commands**: go test\n- **Risks**: low", want: true},
+		{name: "complete proposals", content: "## Proposal 1: Foo\n- **Approach**: a\n- **Steps**: b\n- **Files**: c\n- **Risks**: d\n\n## Proposal 2: Bar\n- **Approach**: e\n- **Steps**: f\n- **Commands**: g\n- **Risks**: h", want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -31,7 +31,7 @@ func RunConfigWizard() error {
 	// Pre-fill with current config values.
 	chosenAPI := config.API
 	chosenModel := config.Model
-	var apiKey, keyStorage, baseURL, newProviderName, newModelNames string
+	var apiKey, keyStorage, baseURL, newProviderName string
 	// apiType is the protocol chosen for a newly added provider (the page is
 	// only shown then). "openai" means OpenAI-compatible and writes nothing.
 	apiType := "openai"
@@ -70,7 +70,10 @@ func RunConfigWizard() error {
 
 	keymap := configWizardKeyMap()
 
-	form := huh.NewForm(
+	// Form 1: provider connection + credentials + model source.
+	// Model discovery needs the API key, so the model-source choice is placed
+	// after the key pages; discovery runs between form 1 and form 2.
+	form1 := huh.NewForm(
 		// Page 1: Provider
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -147,53 +150,6 @@ func RunConfigWizard() error {
 			Description("Choose an existing model or add one to this provider.").
 			WithHideFunc(func() bool { return chosenAPI == addProviderOption }),
 
-		// Page 4b: Model source — discover from API or enter manually.
-		// Shown whenever models are being added (new provider, or "add model"
-		// on an existing provider).
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Model source").
-				Description("Discover fetches the model list from the provider's API (needs the key). Manual lets you type identifiers.").
-				Options(
-					huh.NewOption("Discover models from API", "discover"),
-					huh.NewOption("Enter model names manually", "manual"),
-				).
-				Value(&modelSource),
-		).
-			Title("model source").
-			Description("Discovery is best-effort; if the provider doesn't list models, you'll fall back to manual entry.").
-			WithHideFunc(func() bool {
-				return chosenAPI != addProviderOption && chosenModel != addModelOption
-			}),
-
-		// Page 5: New model names
-		huh.NewGroup(
-			huh.NewText().
-				TitleFunc(func() string {
-					if chosenAPI == addProviderOption {
-						return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
-					}
-					return fmt.Sprintf("New models for %s", chosenAPI)
-				}, []any{&chosenAPI, &newProviderName}).
-				Description("Enter one model identifier per line. The first model becomes the default.").
-				Placeholder("llama-3.3-70b-versatile\nllama-3.1-8b-instant").
-				Lines(4).
-				ExternalEditor(false).
-				Value(&newModelNames).
-				Validate(func(value string) error {
-					_, err := parseNewModelNames(wizardProviderName(chosenAPI, newProviderName), value)
-					return err
-				}),
-		).
-			Title("new models").
-			Description("Add multiple models under the provider endpoint. Need a different base URL? Add a new provider instead.").
-			WithHideFunc(func() bool {
-				if chosenAPI != addProviderOption && chosenModel != addModelOption {
-					return true
-				}
-				return modelSource == "discover"
-			}),
-
 		// Page 6: API key storage method (skip for ollama)
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -227,6 +183,142 @@ func RunConfigWizard() error {
 				return wizardProviderName(chosenAPI, newProviderName) == "ollama" || keyStorage != "config"
 			}),
 
+		// Page 4b: Model source — discover from API or enter manually.
+		// Placed after the key pages so discovery can run immediately next,
+		// between form 1 and form 2. Shown whenever models are being added.
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Model source").
+				Description("Discover fetches the model list from the provider's API now. Manual lets you type identifiers.").
+				Options(
+					huh.NewOption("Discover models from API", "discover"),
+					huh.NewOption("Enter model names manually", "manual"),
+				).
+				Value(&modelSource),
+		).
+			Title("model source").
+			Description("Discovery is best-effort; if the provider doesn't list models, you'll fall back to manual entry.").
+			WithHideFunc(func() bool {
+				return chosenAPI != addProviderOption && chosenModel != addModelOption
+			}),
+	).
+		WithTheme(configWizardTheme(config.Theme)).
+		WithKeyMap(keymap).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
+
+	if err := form1.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			fmt.Fprintln(os.Stderr, "\nCanceled.")
+			return nil
+		}
+		return fmt.Errorf("config wizard: %w", err)
+	}
+
+	// Resolve provider identity and base URL (model names are filled below via
+	// discovery or manual entry, so parsing is skipped here).
+	apiName, _, _, providerBaseURL, addedModel, err := resolveWizardProviderModel(
+		chosenAPI,
+		chosenModel,
+		newProviderName,
+		"",
+		baseURL,
+		"discover", // skip manual parsing; models handled between forms
+	)
+	if err != nil {
+		return err
+	}
+	envVarName := resolveEnvVar(apiName)
+	if providerBaseURL == "" {
+		providerBaseURL = findBaseURL(apiName)
+	}
+
+	// Effective adapter protocol: built-in providers carry it in their name;
+	// a newly added provider declares it via the api-type selection, and an
+	// existing custom provider may declare it via its configured api-type.
+	effType := apiName
+	newProvider := chosenAPI == addProviderOption
+	if newProvider {
+		effType = apiType
+	} else if at := findAPIType(apiName); at != "" {
+		effType = at
+	}
+
+	// Model selection: discover from the API or enter manually. Runs now (after
+	// the key is available) and before the connection test + preferences form.
+	// Best-effort — discovery falls back to manual entry on any failure.
+	var addedModelNames []string
+	var modelName string
+	if addedModel {
+		switch modelSource {
+		case "discover":
+			fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
+			discovered, derr := discoverModels(effType, providerBaseURL, resolveKeyForDiscovery(apiName, apiKey))
+			if derr != nil {
+				fmt.Fprintf(os.Stderr, "\n⚠ Could not discover models for %s: %s\n", apiName, derr)
+				fmt.Fprintln(os.Stderr, "Falling back to manual entry.")
+				manual, merr := promptManualModelNames(apiName)
+				if merr != nil {
+					if errors.Is(merr, huh.ErrUserAborted) {
+						fmt.Fprintln(os.Stderr, "\nCanceled.")
+						return nil
+					}
+					return merr
+				}
+				addedModelNames = manual
+			} else {
+				picked, perr := promptDiscoveredModels(apiName, discovered)
+				if perr != nil {
+					if errors.Is(perr, huh.ErrUserAborted) {
+						fmt.Fprintln(os.Stderr, "\nCanceled.")
+						return nil
+					}
+					return perr
+				}
+				addedModelNames = picked
+			}
+		default: // manual
+			manual, merr := promptManualModelNames(apiName)
+			if merr != nil {
+				if errors.Is(merr, huh.ErrUserAborted) {
+					fmt.Fprintln(os.Stderr, "\nCanceled.")
+					return nil
+				}
+				return merr
+			}
+			addedModelNames = manual
+		}
+		if len(addedModelNames) == 0 {
+			return fmt.Errorf("no models selected for %s", apiName)
+		}
+		modelName = addedModelNames[0]
+	} else {
+		modelName = strings.TrimSpace(chosenModel)
+	}
+
+	// Connection test. Only the OpenAI-compatible adapter exposes a simple
+	// /chat/completions probe; a newly added Anthropic provider is skipped
+	// with a note (probing it with an OpenAI request would always fail).
+	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
+		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
+		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
+			var saveAnyway bool
+			if err := huh.NewConfirm().
+				Title("Connection test failed. Save configuration anyway?").
+				Value(&saveAnyway).
+				Run(); err != nil || !saveAnyway {
+				fmt.Fprintln(os.Stderr, "Not saved.")
+				return nil
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, "✓ OK")
+		}
+	} else if newProvider && apiKey != "" && providerBaseURL != "" && !isOpenAICompatible(effType) {
+		fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, effType)
+	}
+
+	// Form 2: preferences (built-in tools, web search, review).
+	form2 := huh.NewForm(
 		// Page 8: Built-in tools
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -349,7 +441,7 @@ func RunConfigWizard() error {
 		WithKeyMap(keymap).
 		WithEscapeAbortConfirmation("Press Esc again to exit.")
 
-	if err := form.Run(); err != nil {
+	if err := form2.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			fmt.Fprintln(os.Stderr, "\nCanceled.")
 			return nil
@@ -357,90 +449,7 @@ func RunConfigWizard() error {
 		return fmt.Errorf("config wizard: %w", err)
 	}
 
-	// Resolve the final provider/model after handling the "add" choices.
-	apiName, modelName, addedModelNames, providerBaseURL, addedModel, err := resolveWizardProviderModel(
-		chosenAPI,
-		chosenModel,
-		newProviderName,
-		newModelNames,
-		baseURL,
-		modelSource,
-	)
-	if err != nil {
-		return err
-	}
-	envVarName := resolveEnvVar(apiName)
-	if providerBaseURL == "" {
-		providerBaseURL = findBaseURL(apiName)
-	}
 	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
-
-	// Effective adapter protocol: built-in providers carry it in their name;
-	// a newly added provider declares it via the api-type selection, and an
-	// existing custom provider may declare it via its configured api-type.
-	effType := apiName
-	newProvider := chosenAPI == addProviderOption
-	if newProvider {
-		effType = apiType
-	} else if at := findAPIType(apiName); at != "" {
-		effType = at
-	}
-
-	// Model discovery: fetch the provider's model list and let the user pick.
-	// Best-effort — falls back to manual entry on any failure.
-	if addedModel && modelSource == "discover" {
-		fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
-		discovered, derr := discoverModels(effType, providerBaseURL, resolveKeyForDiscovery(apiName, apiKey))
-		if derr != nil {
-			fmt.Fprintf(os.Stderr, "\n⚠ Could not discover models for %s: %s\n", apiName, derr)
-			fmt.Fprintln(os.Stderr, "Falling back to manual entry.")
-			manual, merr := promptManualModelNames(apiName)
-			if merr != nil {
-				if errors.Is(merr, huh.ErrUserAborted) {
-					fmt.Fprintln(os.Stderr, "\nCanceled.")
-					return nil
-				}
-				return merr
-			}
-			addedModelNames = manual
-		} else {
-			picked, perr := promptDiscoveredModels(apiName, discovered)
-			if perr != nil {
-				if errors.Is(perr, huh.ErrUserAborted) {
-					fmt.Fprintln(os.Stderr, "\nCanceled.")
-					return nil
-				}
-				return perr
-			}
-			addedModelNames = picked
-		}
-		if len(addedModelNames) == 0 {
-			return fmt.Errorf("no models selected for %s", apiName)
-		}
-		modelName = addedModelNames[0]
-	}
-
-	// Connection test. Only the OpenAI-compatible adapter exposes a simple
-	// /chat/completions probe; a newly added Anthropic provider is skipped
-	// with a note (probing it with an OpenAI request would always fail).
-	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
-		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
-		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
-			var saveAnyway bool
-			if err := huh.NewConfirm().
-				Title("Connection test failed. Save configuration anyway?").
-				Value(&saveAnyway).
-				Run(); err != nil || !saveAnyway {
-				fmt.Fprintln(os.Stderr, "Not saved.")
-				return nil
-			}
-		} else {
-			fmt.Fprintln(os.Stderr, "✓ OK")
-		}
-	} else if newProvider && apiKey != "" && providerBaseURL != "" && !isOpenAICompatible(effType) {
-		fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, effType)
-	}
 
 	// Build the summary.
 	printConfigSummary(summaryData{

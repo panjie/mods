@@ -294,8 +294,13 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		debug.Printf("requestApproval: target is within safe workspace, auto-approving")
 		return nil
 	}
-	if r.reviewMode != ReviewAlways && shellExecution {
-		if !analysis.NeedsReview {
+	if r.reviewMode != ReviewAlways && shellExecution && !analysis.NeedsReview {
+		// Even when the LLM says the command is read-only and not mutable,
+		// consult the approval matrix for external-path access. A read-only
+		// command like 'cat /etc/passwd' should still trigger review when it
+		// reads outside the workspace.
+		intent := AccessIntent{Class: AccessRead, Dirs: analysis.AffectedDirs}
+		if ClassifyAccess(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
 			debug.Printf("shell classifier result: NOT mutable, auto-approving")
 			return nil
 		}

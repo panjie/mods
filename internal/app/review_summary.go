@@ -66,6 +66,11 @@ func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope
 
 func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {
 	if !analysis.NeedsReview {
+		for _, dir := range analysis.AffectedDirs {
+			if !pathWithinScope(dir, scope) {
+				return "external read"
+			}
+		}
 		return "read-only"
 	}
 	if len(analysis.AffectedDirs) == 0 {

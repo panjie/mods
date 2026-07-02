@@ -575,6 +575,35 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})
+
+	t.Run("external read needs review even when LLM says no review", func(t *testing.T) {
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: false, AffectedDirs: []string{"/etc"}, Reason: "read-only"}
+			},
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat /etc/passwd"}`))
+		}()
+
+		item := <-reviewer.reviewChan
+		require.Equal(t, "shell_run", item.name)
+		// External read triggers review (H1 fix); the label says "external
+		// read" because the LLM classified it as not mutable but it touches
+		// /etc — outside the test scope /workspace.
+		require.Contains(t, item.summary, "external read")
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
 }
 
 func TestReviewUnavailableIsFatal(t *testing.T) {

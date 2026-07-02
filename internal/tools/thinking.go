@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -12,7 +13,8 @@ import (
 func RegisterThinking(registry *Registry) error {
 	return registry.Register(Tool{
 		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{ReadOnly: true},
+		Capabilities:    ToolCapabilities{ReadOnly: true},
+		IntentExtractor: func(json.RawMessage) approval.AccessIntent { return approval.AccessIntent{Class: approval.AccessRead} },
 		Spec: proto.ToolSpec{
 			Name:        "thinking_note",
 			Description: "Record one concise reasoning step, next step, and whether the task is complete.",

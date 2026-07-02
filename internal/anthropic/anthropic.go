@@ -91,7 +91,7 @@ func New(config Config) *Client {
 		option.WithHTTPClient(config.HTTPClient),
 	}
 	if config.BaseURL != "" {
-		opts = append(opts, option.WithBaseURL(normalizeBaseURL(config.BaseURL)))
+		opts = append(opts, option.WithBaseURL(NormalizeBaseURL(config.BaseURL)))
 	}
 	client := anthropic.NewClient(opts...)
 	return &Client{
@@ -100,14 +100,16 @@ func New(config Config) *Client {
 	}
 }
 
-// normalizeBaseURL strips a redundant Anthropic messages-endpoint path from a
+// NormalizeBaseURL strips a redundant Anthropic messages-endpoint path from a
 // user-supplied base URL. The SDK always appends /v1/messages, so a base URL
 // that already includes the endpoint — as many providers quote it in their
 // docs (e.g. https://gateway/v1/messages) — must be trimmed to avoid a
-// doubled path like /v1/messages/v1/messages. At most one trailing suffix is
-// removed; any other path is preserved verbatim.
-func normalizeBaseURL(base string) string {
-	base = strings.TrimSpace(base)
+// doubled path like /v1/messages/v1/messages. Trailing slashes are removed
+// first; at most one path suffix is then stripped; any other path is
+// preserved verbatim. Shared with the wizard's model discovery so the two
+// never drift.
+func NormalizeBaseURL(base string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	for _, suffix := range []string{"/v1/messages", "/messages", "/v1"} {
 		if strings.HasSuffix(base, suffix) {
 			return strings.TrimSuffix(base, suffix)

@@ -13,13 +13,15 @@ func TestNormalizeBaseURL(t *testing.T) {
 		{"bare messages suffix", "https://gateway.example.com/messages", "https://gateway.example.com"},
 		{"custom path preserved", "https://gateway.example.com/custom", "https://gateway.example.com/custom"},
 		{"trailing v1 with custom path", "https://gateway.example.com/proxy/v1", "https://gateway.example.com/proxy"},
+		{"trailing slash on v1", "https://host/v1/", "https://host"},
+		{"trailing slash on messages", "https://host/v1/messages/", "https://host"},
 		{"surrounding whitespace trimmed", "  https://host/v1/messages  ", "https://host"},
 		{"empty stays empty", "", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := normalizeBaseURL(c.in); got != c.want {
-				t.Errorf("normalizeBaseURL(%q) = %q, want %q", c.in, got, c.want)
+			if got := NormalizeBaseURL(c.in); got != c.want {
+				t.Errorf("NormalizeBaseURL(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}

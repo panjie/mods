@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/panjie/mods/internal/anthropic"
 	cfgpkg "github.com/panjie/mods/internal/config"
 )
 
@@ -735,7 +736,11 @@ func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newMode
 // manual entry. Returns (nil, nil) if the user cancels via Esc.
 func chooseModels(apiName, source, effType, baseURL, apiKey string) ([]string, error) {
 	if source == "discover" {
-		fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
+		if effType != "ollama" && strings.TrimSpace(apiKey) == "" {
+			fmt.Fprintf(os.Stderr, "\n⚠ No API key available for %s discovery (set the env var or save the key in config); falling back to manual entry.\n", apiName)
+		} else {
+			fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
+		}
 		discovered, derr := discoverModels(effType, baseURL, apiKey)
 		switch {
 		case derr != nil:
@@ -781,6 +786,13 @@ func promptDiscoveredModels(apiName string, models []string) ([]string, error) {
 	}
 	if len(opts) == 0 {
 		return nil, nil
+	}
+	// Cap the picker so huge catalogs (e.g. OpenRouter's 300+) stay usable;
+	// the user can add anything beyond the cap via manual entry.
+	const maxPickerModels = 200
+	if len(opts) > maxPickerModels {
+		fmt.Fprintf(os.Stderr, "\nShowing the first %d of %d available models; enter any others manually if needed.\n", maxPickerModels, len(opts))
+		opts = opts[:maxPickerModels]
 	}
 	var picked []string
 	form := huh.NewForm(
@@ -1010,7 +1022,7 @@ func isHTTPURL(value string) bool {
 // OpenAI-compatible /chat/completions endpoint.
 func isOpenAICompatible(apiName string) bool {
 	switch apiName {
-	case "anthropic", "google", "cohere", "ollama", "azure":
+	case "anthropic", "google", "cohere", "ollama", "azure", "azure-ad":
 		return false
 	default:
 		return true
@@ -1066,7 +1078,7 @@ func discoverModels(apiType, baseURL, apiKey string) ([]string, error) {
 	case "ollama":
 		return fetchModelIDs(baseURL+"/api/tags", "", "", nil)
 	case "anthropic":
-		root := stripAnthropicPath(baseURL)
+		root := anthropic.NormalizeBaseURL(baseURL)
 		headers := map[string]string{"anthropic-version": "2023-06-01"}
 		ids, err := fetchModelIDs(root+"/v1/models?limit=1000", "x-api-key", apiKey, headers)
 		if err == nil {
@@ -1083,19 +1095,6 @@ func discoverModels(apiType, baseURL, apiKey string) ([]string, error) {
 		// OpenAI-compatible: base URL typically ends in /v1; append /models.
 		return fetchModelIDs(baseURL+"/models", "Authorization", "Bearer "+apiKey, nil)
 	}
-}
-
-// stripAnthropicPath removes a redundant Anthropic messages path so the models
-// endpoint (/v1/models) is built from the host root. Mirrors the adapter's
-// normalizeBaseURL.
-func stripAnthropicPath(base string) string {
-	base = strings.TrimSpace(base)
-	for _, suffix := range []string{"/v1/messages", "/messages", "/v1"} {
-		if strings.HasSuffix(base, suffix) {
-			return strings.TrimSuffix(base, suffix)
-		}
-	}
-	return base
 }
 
 // fetchModelIDs performs a GET and extracts model identifiers from either an

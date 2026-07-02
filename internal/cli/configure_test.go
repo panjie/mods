@@ -558,17 +558,19 @@ func TestExistingModelNames(t *testing.T) {
 	})
 }
 
-func TestStripAnthropicPath(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"https://api.anthropic.com", "https://api.anthropic.com"},
-		{"https://api.anthropic.com/v1", "https://api.anthropic.com"},
-		{"https://api.anthropic.com/v1/messages", "https://api.anthropic.com"},
-		{"https://gateway.example.com/messages", "https://gateway.example.com"},
-		{"https://gateway.example.com/proxy/v1", "https://gateway.example.com/proxy"},
-		{"https://gateway.example.com/custom", "https://gateway.example.com/custom"},
-		{"  https://host/v1/messages  ", "https://host"},
-	}
-	for _, c := range cases {
-		require.Equal(t, c.want, stripAnthropicPath(c.in), "input %q", c.in)
-	}
+// TestPromptDiscoveredModelsAllConfigured locks in the fix for the
+// "Configuration wizard failed" bug: when every discovered model is already on
+// the provider, the picker returns (nil, nil) WITHOUT erroring or showing a
+// form, so the wizard can fall back to manual entry.
+func TestPromptDiscoveredModelsAllConfigured(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name:   "deepseek",
+			Models: map[string]Model{"deepseek-chat": {}, "deepseek-reasoner": {}},
+		}},
+	}}, func() {
+		picked, err := promptDiscoveredModels("deepseek", []string{"deepseek-chat", "deepseek-reasoner"})
+		require.NoError(t, err)
+		require.Nil(t, picked)
+	})
 }

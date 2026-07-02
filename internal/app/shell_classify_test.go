@@ -150,6 +150,18 @@ func TestExtractExternalPaths(t *testing.T) {
 		got := extractExternalPaths("cat "+filepath.Join(ws, "a.txt"), ws)
 		require.Empty(t, got)
 	})
+
+	t.Run("PowerShell $HOME variable resolves to external", func(t *testing.T) {
+		sep := string(filepath.Separator)
+		got := extractExternalPaths("Get-ChildItem $HOME"+sep+"Downloads -Recurse", ws)
+		require.NotEmpty(t, got, "$HOME path should be detected as external to workspace")
+	})
+
+	t.Run("PowerShell $env:USERPROFILE variable resolves to external", func(t *testing.T) {
+		sep := string(filepath.Separator)
+		got := extractExternalPaths("Get-ChildItem $env:USERPROFILE"+sep+"Downloads -Recurse", ws)
+		require.NotEmpty(t, got, "$env:USERPROFILE path should be detected as external to workspace")
+	})
 }
 
 func TestMentionsExternalPath(t *testing.T) {
@@ -168,6 +180,10 @@ func TestMentionsExternalPath(t *testing.T) {
 		{"type C:\\Users\\Public\\x", true},
 		{"echo hello world", false},
 		{"cat " + filepath.Join(ws, "sub", "a") + " " + filepath.Join(ext, "b"), true},
+		{"Get-ChildItem $HOME\\Downloads", true},
+		{"ls $HOME/Downloads", true},
+		{"Get-ChildItem $env:USERPROFILE\\Downloads", true},
+		{"echo $HOME is nice", false},
 	}
 	for _, c := range cases {
 		require.Equalf(t, c.want, mentionsExternalPath(c.cmd, ws), "cmd=%q", c.cmd)
@@ -178,4 +194,31 @@ func TestMentionsExternalPathEmptyRoot(t *testing.T) {
 	// No workspace context: any absolute path is treated as potentially external.
 	require.True(t, mentionsExternalPath("cat /etc/passwd", ""))
 	require.False(t, mentionsExternalPath("cat README.md", ""))
+}
+
+func TestExpandHomeVars(t *testing.T) {
+	const home = "/home/test"
+	cases := []struct {
+		name string
+		cmd  string
+		want string
+	}{
+		{"$HOME backslash", "$HOME\\Downloads", "/home/test\\Downloads"},
+		{"$HOME forward slash", "$HOME/Downloads", "/home/test/Downloads"},
+		{"$env:USERPROFILE", "$env:USERPROFILE\\Downloads", "/home/test\\Downloads"},
+		{"${HOME} braced", "${HOME}\\Downloads", "/home/test\\Downloads"},
+		{"${env:USERPROFILE} braced", "${env:USERPROFILE}\\Downloads", "/home/test\\Downloads"},
+		{"lowercase $home", "$home\\Downloads", "/home/test\\Downloads"},
+		{"uppercase $ENV:USERPROFILE", "$ENV:USERPROFILE\\Downloads", "/home/test\\Downloads"},
+		{"$HOMEPAGE not expanded", "$HOMEPAGE\\foo", "$HOMEPAGE\\foo"},
+		{"no path separator after $HOME", "echo $HOME is nice", "echo $HOME is nice"},
+		{"multiple vars", "$HOME\\a $env:USERPROFILE\\b", "/home/test\\a /home/test\\b"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, expandHomeVars(c.cmd, home))
+		})
+	}
+	// Empty home dir: no expansion.
+	require.Equal(t, "$HOME\\Downloads", expandHomeVars("$HOME\\Downloads", ""))
 }

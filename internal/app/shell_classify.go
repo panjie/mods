@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -330,6 +331,9 @@ var (
 // The results populate AffectedDirs so ClassifyAccess and risk labels can
 // correctly identify external access even when the LLM omits them.
 func extractExternalPaths(command, workspaceDir string) []string {
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		command = expandHomeVars(command, homeDir)
+	}
 	dirClean := filepath.Clean(workspaceDir)
 	seen := map[string]bool{}
 	var paths []string
@@ -365,6 +369,23 @@ func extractExternalPaths(command, workspaceDir string) []string {
 func mentionsExternalPath(command, workspaceDir string) bool {
 	return len(extractExternalPaths(command, workspaceDir)) > 0
 }
+
+// expandHomeVars replaces $HOME and $env:USERPROFILE (and braced variants)
+// with homeDir when followed by a path separator, so downstream regexes can
+// detect the resolved absolute path as external.
+func expandHomeVars(command, homeDir string) string {
+	if homeDir == "" {
+		return command
+	}
+	return reHomeVar.ReplaceAllStringFunc(command, func(match string) string {
+		return homeDir + match[len(match)-1:]
+	})
+}
+
+// reHomeVar matches $HOME, $env:USERPROFILE, ${HOME}, or ${env:USERPROFILE}
+// (case-insensitive) only when immediately followed by a path separator,
+// so unrelated variables like $HOMEPAGE are not expanded.
+var reHomeVar = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/]`)
 
 func pathInsideWorkspace(target, workspaceDir string) bool {
 	if workspaceDir == "" {

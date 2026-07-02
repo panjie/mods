@@ -612,7 +612,10 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		m.messages = msg.runner.messages()
 		m.toolCallRounds = 0
 		m.totalRounds = 0
-		m.setActiveOperation(m.Config.StatusText)
+		// The next generation round renders the "Generating…" spinner on its
+		// own; mirroring StatusText in the operation-status line here produced
+		// a duplicate "Generating" row while waiting for the model to respond.
+		m.setActiveOperation("")
 		return msgCmd(msg.runner.doneMsg())
 	}
 	m.totalRounds++

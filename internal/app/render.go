@@ -107,6 +107,13 @@ func (m *Mods) flushBufferedContent() {
 
 func (m *Mods) renderWithOperation(content string) string {
 	if m.reviewer.isPending() {
+		// If the model called a tool before emitting any text, `content` is
+		// just the "Generating…" spinner. Showing it above the approval
+		// prompt is misleading (we're waiting on the user, not generating),
+		// so drop it until there's real output to show as context.
+		if !m.responseOutputStarted {
+			content = ""
+		}
 		return m.reviewer.renderBanner(content, m.width, m.Styles.ReviewPrompt, m.Styles.ReviewChoices)
 	}
 	if m.Config.Quiet || m.Config.HideToolStatus || !m.showOperationStatus {

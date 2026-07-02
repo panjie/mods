@@ -274,6 +274,46 @@ func TestCachedConversationOutputFlushesForNonTTY(t *testing.T) {
 	require.Contains(t, output, "**User**: show me")
 }
 
+// TestRenderWithOperationDropsSpinnerDuringPreOutputReview locks in fix ②:
+// when a tool approval is pending and the model hasn't emitted any text yet,
+// the "Generating…" spinner must not appear above the approval prompt (it's
+// misleading — we're waiting on the user, not generating). Once there is model
+// output, it's shown above the prompt as context.
+func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
+	pendingReviewer := &toolReviewer{
+		reviewMode:    ReviewMutable,
+		reviewPending: true,
+		reviewItem: &toolReviewItem{
+			name: "shell_run",
+			args: []byte(`{"command":"ls"}`),
+			resp: make(chan reviewResponse, 1),
+		},
+	}
+	m := &Mods{
+		Config:              &Config{},
+		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		state:               responseState,
+		contentMutex:        &sync.Mutex{},
+		width:               60,
+		showOperationStatus: true,
+		reviewer:            pendingReviewer,
+	}
+
+	t.Run("no model output yet: spinner dropped, review prompt shown", func(t *testing.T) {
+		m.responseOutputStarted = false
+		got := m.renderWithOperation("✶ Generating...")
+		require.NotContains(t, got, "Generating", "spinner must not appear above the approval prompt")
+		require.Contains(t, got, "Review:")
+	})
+
+	t.Run("model output present: output kept above the review prompt", func(t *testing.T) {
+		m.responseOutputStarted = true
+		got := m.renderWithOperation("partial answer so far")
+		require.Contains(t, got, "partial answer so far")
+		require.Contains(t, got, "Review:")
+	})
+}
+
 func captureStdout(tb testing.TB, fn func()) string {
 	tb.Helper()
 

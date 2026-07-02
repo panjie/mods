@@ -427,8 +427,10 @@ apis:
   # Messages API, e.g. a Claude proxy or a third-party gateway). Set
   # api-type: anthropic so mods routes through the native Anthropic
   # adapter — including tool calling, reasoning/thinking, and image
-  # support — regardless of the provider name. The adapter strips a
-  # trailing /v1 from base-url automatically.
+  # support — regardless of the provider name. base-url may be the host
+  # root, the host with /v1, or the full /v1/messages endpoint many
+  # providers document — the adapter normalizes it so the path is never
+  # doubled.
   # acme-claude:
   #   api-type: anthropic
   #   base-url: https://acme.example.com/v1

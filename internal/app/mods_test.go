@@ -1117,6 +1117,17 @@ func TestEnsureKey(t *testing.T) {
 		merr := err.(modsError)
 		require.Contains(t, merr.ReasonText, "MISSING_KEY")
 	})
+
+	t.Run("missing key names configured env over default", func(t *testing.T) {
+		t.Setenv("OPENCODE_API_KEY", "")
+		t.Setenv("ANTHROPIC_API_KEY", "")
+		api := API{APIKeyEnv: "OPENCODE_API_KEY"}
+		_, err := m.ensureKey(api, "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys")
+		require.Error(t, err)
+		merr := err.(modsError)
+		require.Contains(t, merr.ReasonText, "OPENCODE_API_KEY")
+		require.NotContains(t, merr.ReasonText, "ANTHROPIC_API_KEY")
+	})
 }
 
 func TestAppendShellResult(t *testing.T) {

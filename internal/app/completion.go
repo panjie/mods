@@ -119,18 +119,27 @@ func (m *Mods) ensureKey(api API, defaultEnv, docsURL string) (string, error) {
 	if key != "" {
 		return key, nil
 	}
-	return "", modsError{
+	// Surface the provider's own api-key-env when configured (e.g. a custom
+	// Anthropic-compatible provider with its own variable) rather than the
+	// generic provider-default variable, which would mislead the user.
+	envName := defaultEnv
+	if api.APIKeyEnv != "" {
+		envName = api.APIKeyEnv
+	}
+	me := modsError{
 		ReasonText: fmt.Sprintf(
 			"%[1]s required; set the environment variable %[1]s or update %[2]s through %[3]s.",
-			m.Styles.InlineCode.Render(defaultEnv),
+			m.Styles.InlineCode.Render(envName),
 			m.Styles.InlineCode.Render("mods.yaml"),
 			m.Styles.InlineCode.Render("mods --settings"),
 		),
-		Err: newUserErrorf(
-			"You can grab one at %s",
-			m.Styles.Link.Render(docsURL),
-		),
 	}
+	if api.APIKeyEnv == "" {
+		// Built-in provider: point at the vendor console for obtaining a key.
+		// Custom providers with their own variable have no canonical link.
+		me.Err = newUserErrorf("You can grab one at %s", m.Styles.Link.Render(docsURL))
+	}
+	return "", me
 }
 
 func (m *Mods) callToolsCmd(runner *streamRunner, ch chan toolOperationStatusMsg) tea.Cmd {

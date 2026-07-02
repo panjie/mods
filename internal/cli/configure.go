@@ -35,6 +35,10 @@ func RunConfigWizard() error {
 	// apiType is the protocol chosen for a newly added provider (the page is
 	// only shown then). "openai" means OpenAI-compatible and writes nothing.
 	apiType := "openai"
+	// modelSource decides how models are added: "manual" (type names) or
+	// "discover" (fetch the list from the provider's API after the key is
+	// entered). Only consulted when adding a provider or a model.
+	modelSource := "manual"
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -143,6 +147,25 @@ func RunConfigWizard() error {
 			Description("Choose an existing model or add one to this provider.").
 			WithHideFunc(func() bool { return chosenAPI == addProviderOption }),
 
+		// Page 4b: Model source — discover from API or enter manually.
+		// Shown whenever models are being added (new provider, or "add model"
+		// on an existing provider).
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Model source").
+				Description("Discover fetches the model list from the provider's API (needs the key). Manual lets you type identifiers.").
+				Options(
+					huh.NewOption("Discover models from API", "discover"),
+					huh.NewOption("Enter model names manually", "manual"),
+				).
+				Value(&modelSource),
+		).
+			Title("model source").
+			Description("Discovery is best-effort; if the provider doesn't list models, you'll fall back to manual entry.").
+			WithHideFunc(func() bool {
+				return chosenAPI != addProviderOption && chosenModel != addModelOption
+			}),
+
 		// Page 5: New model names
 		huh.NewGroup(
 			huh.NewText().
@@ -165,7 +188,10 @@ func RunConfigWizard() error {
 			Title("new models").
 			Description("Add multiple models under the provider endpoint. Need a different base URL? Add a new provider instead.").
 			WithHideFunc(func() bool {
-				return chosenAPI != addProviderOption && chosenModel != addModelOption
+				if chosenAPI != addProviderOption && chosenModel != addModelOption {
+					return true
+				}
+				return modelSource == "discover"
 			}),
 
 		// Page 6: API key storage method (skip for ollama)
@@ -338,6 +364,7 @@ func RunConfigWizard() error {
 		newProviderName,
 		newModelNames,
 		baseURL,
+		modelSource,
 	)
 	if err != nil {
 		return err
@@ -348,14 +375,54 @@ func RunConfigWizard() error {
 	}
 	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
 
-	// Connection test. Only the OpenAI-compatible adapter exposes a simple
-	// /chat/completions probe; a newly added Anthropic provider is skipped
-	// with a note (probing it with an OpenAI request would always fail).
+	// Effective adapter protocol: built-in providers carry it in their name;
+	// a newly added provider declares it via the api-type selection, and an
+	// existing custom provider may declare it via its configured api-type.
 	effType := apiName
 	newProvider := chosenAPI == addProviderOption
 	if newProvider {
 		effType = apiType
+	} else if at := findAPIType(apiName); at != "" {
+		effType = at
 	}
+
+	// Model discovery: fetch the provider's model list and let the user pick.
+	// Best-effort — falls back to manual entry on any failure.
+	if addedModel && modelSource == "discover" {
+		fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
+		discovered, derr := discoverModels(effType, providerBaseURL, resolveKeyForDiscovery(apiName, apiKey))
+		if derr != nil {
+			fmt.Fprintf(os.Stderr, "\n⚠ Could not discover models for %s: %s\n", apiName, derr)
+			fmt.Fprintln(os.Stderr, "Falling back to manual entry.")
+			manual, merr := promptManualModelNames(apiName)
+			if merr != nil {
+				if errors.Is(merr, huh.ErrUserAborted) {
+					fmt.Fprintln(os.Stderr, "\nCanceled.")
+					return nil
+				}
+				return merr
+			}
+			addedModelNames = manual
+		} else {
+			picked, perr := promptDiscoveredModels(apiName, discovered)
+			if perr != nil {
+				if errors.Is(perr, huh.ErrUserAborted) {
+					fmt.Fprintln(os.Stderr, "\nCanceled.")
+					return nil
+				}
+				return perr
+			}
+			addedModelNames = picked
+		}
+		if len(addedModelNames) == 0 {
+			return fmt.Errorf("no models selected for %s", apiName)
+		}
+		modelName = addedModelNames[0]
+	}
+
+	// Connection test. Only the OpenAI-compatible adapter exposes a simple
+	// /chat/completions probe; a newly added Anthropic provider is skipped
+	// with a note (probing it with an OpenAI request would always fail).
 	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
 		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
 		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
@@ -664,12 +731,12 @@ func validateWizardBaseURL(chosenAPI, value string) error {
 	return nil
 }
 
-func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newModelNames, baseURL string) (string, string, []string, string, bool, error) {
+func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newModelNames, baseURL, modelSource string) (string, string, []string, string, bool, error) {
 	apiName := wizardProviderName(chosenAPI, newProviderName)
 	addedModel := chosenAPI == addProviderOption || chosenModel == addModelOption
 	modelName := strings.TrimSpace(chosenModel)
 	addedModelNames := []string(nil)
-	if addedModel {
+	if addedModel && modelSource != "discover" {
 		var err error
 		addedModelNames, err = parseNewModelNames(apiName, newModelNames)
 		if err != nil {
@@ -682,6 +749,86 @@ func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newMode
 		providerBaseURL = findBaseURL(apiName)
 	}
 	return apiName, modelName, addedModelNames, providerBaseURL, addedModel, nil
+}
+
+// promptDiscoveredModels runs a second form letting the user pick which
+// discovered model IDs to add. Returns the selected IDs in display order.
+// Models already configured on the provider are filtered out so selecting one
+// can't silently overwrite an existing model's settings.
+func promptDiscoveredModels(apiName string, models []string) ([]string, error) {
+	existing := existingModelNames(apiName)
+	opts := make([]huh.Option[string], 0, len(models))
+	for _, m := range models {
+		if _, ok := existing[m]; ok {
+			continue
+		}
+		opts = append(opts, huh.NewOption(m, m))
+	}
+	if len(opts) == 0 {
+		fmt.Fprintf(os.Stderr, "\nAll discovered models for %s are already configured.\n", apiName)
+		return nil, nil
+	}
+	var picked []string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(fmt.Sprintf("Models for %s", apiName)).
+				Description("Select models to add. The first selected becomes the default.").
+				Options(opts...).
+				Value(&picked).
+				Validate(func(s []string) error {
+					if len(s) == 0 {
+						return fmt.Errorf("select at least one model")
+					}
+					return nil
+				}),
+		).Title("discover models"),
+	).
+		WithTheme(configWizardTheme(config.Theme)).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
+	if err := form.Run(); err != nil {
+		return nil, err
+	}
+	// Preserve the discovered (sorted) order rather than selection order so
+	// the default (first) is deterministic.
+	selected := make(map[string]struct{}, len(picked))
+	for _, m := range picked {
+		selected[m] = struct{}{}
+	}
+	ordered := make([]string, 0, len(picked))
+	for _, m := range models {
+		if _, ok := selected[m]; ok {
+			ordered = append(ordered, m)
+		}
+	}
+	return ordered, nil
+}
+
+// promptManualModelNames runs a second form for manual model entry, used as a
+// fallback when discovery fails or is unavailable.
+func promptManualModelNames(apiName string) ([]string, error) {
+	var text string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewText().
+				Title(fmt.Sprintf("Models for %s", apiName)).
+				Description("Enter one model identifier per line. The first model becomes the default.").
+				Placeholder("llama-3.3-70b-versatile\nllama-3.1-8b-instant").
+				Lines(6).
+				ExternalEditor(false).
+				Value(&text).
+				Validate(func(value string) error {
+					_, err := parseNewModelNames(apiName, value)
+					return err
+				}),
+		).Title("new models"),
+	).
+		WithTheme(configWizardTheme(config.Theme)).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
+	if err := form.Run(); err != nil {
+		return nil, err
+	}
+	return parseNewModelNames(apiName, text)
 }
 
 // resolveEnvVar returns the configured api-key-env for the provider, or
@@ -706,6 +853,33 @@ func findBaseURL(apiName string) string {
 		}
 	}
 	return ""
+}
+
+// findAPIType returns the configured api-type (wire protocol) for the provider,
+// or "" if unset (meaning name-based routing / OpenAI-compatible default).
+func findAPIType(apiName string) string {
+	for _, api := range config.APIs {
+		if api.Name == apiName {
+			return api.APIType
+		}
+	}
+	return ""
+}
+
+// existingModelNames returns the set of model names already configured on the
+// provider, so discovery can skip re-adding them.
+func existingModelNames(apiName string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, api := range config.APIs {
+		if api.Name != apiName {
+			continue
+		}
+		for name := range api.Models {
+			out[name] = struct{}{}
+		}
+		break
+	}
+	return out
 }
 
 func normalizeWebSearchProviderForWizard(provider string) string {
@@ -866,6 +1040,138 @@ func testConnection(model, baseURL, apiKey string) error {
 	default:
 		return nil
 	}
+}
+
+// discoverModels queries a provider's list-models endpoint and returns the
+// available model IDs. Supports OpenAI-compatible, Anthropic, and Ollama
+// protocols. Best-effort: many Anthropic-compatible gateways do not implement
+// /v1/models, so callers must handle errors and fall back to manual entry.
+func discoverModels(apiType, baseURL, apiKey string) ([]string, error) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	switch apiType {
+	case "ollama":
+		return fetchModelIDs(baseURL+"/api/tags", "", "", nil)
+	case "anthropic":
+		root := stripAnthropicPath(baseURL)
+		headers := map[string]string{"anthropic-version": "2023-06-01"}
+		ids, err := fetchModelIDs(root+"/v1/models?limit=1000", "x-api-key", apiKey, headers)
+		if err == nil {
+			return ids, nil
+		}
+		// Many Anthropic-compatible gateways omit /v1/models but expose an
+		// OpenAI-style /models list; try it with the same auth headers.
+		ids2, err2 := fetchModelIDs(root+"/models?limit=1000", "x-api-key", apiKey, headers)
+		if err2 == nil {
+			return ids2, nil
+		}
+		return nil, fmt.Errorf("%w (also tried /models: %v)", err, err2)
+	default:
+		// OpenAI-compatible: base URL typically ends in /v1; append /models.
+		return fetchModelIDs(baseURL+"/models", "Authorization", "Bearer "+apiKey, nil)
+	}
+}
+
+// stripAnthropicPath removes a redundant Anthropic messages path so the models
+// endpoint (/v1/models) is built from the host root. Mirrors the adapter's
+// normalizeBaseURL.
+func stripAnthropicPath(base string) string {
+	base = strings.TrimSpace(base)
+	for _, suffix := range []string{"/v1/messages", "/messages", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
+}
+
+// fetchModelIDs performs a GET and extracts model identifiers from either an
+// OpenAI/Anthropic-shaped response ({"data":[{"id":"..."}]}) or an
+// Ollama-shaped one ({"models":[{"name":"..."}]}).
+func fetchModelIDs(url, authHeader, authValue string, extraHeaders map[string]string) ([]string, error) {
+	req, err := http.NewRequest("GET", url, nil) //nolint:gosec,noctx
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if authHeader != "" && authValue != "" {
+		req.Header.Set(authHeader, authValue)
+	}
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch {
+	case resp.StatusCode == 401 || resp.StatusCode == 403:
+		return nil, fmt.Errorf("invalid API key (HTTP %d)", resp.StatusCode)
+	case resp.StatusCode >= 400:
+		return nil, fmt.Errorf("API error (HTTP %d)", resp.StatusCode)
+	}
+
+	var body map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	ids := make([]string, 0)
+	if raw, ok := body["data"]; ok {
+		var arr []struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(raw, &arr) == nil {
+			for _, m := range arr {
+				if m.ID != "" {
+					ids = append(ids, m.ID)
+				}
+			}
+		}
+	}
+	if len(ids) == 0 {
+		if raw, ok := body["models"]; ok {
+			var arr []struct {
+				Name string `json:"name"`
+			}
+			if json.Unmarshal(raw, &arr) == nil {
+				for _, m := range arr {
+					if m.Name != "" {
+						ids = append(ids, m.Name)
+					}
+				}
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("no models returned")
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+// resolveKeyForDiscovery returns a usable API key for model discovery: the key
+// just entered in the wizard if present, otherwise the provider's configured
+// key (api-key or its env var). Returns "" if none is available.
+func resolveKeyForDiscovery(apiName, enteredKey string) string {
+	if k := strings.TrimSpace(enteredKey); k != "" {
+		return k
+	}
+	for _, api := range config.APIs {
+		if api.Name != apiName {
+			continue
+		}
+		if api.APIKey != "" {
+			return api.APIKey
+		}
+		if api.APIKeyEnv != "" {
+			return os.Getenv(api.APIKeyEnv)
+		}
+		break
+	}
+	return ""
 }
 
 type summaryData struct {

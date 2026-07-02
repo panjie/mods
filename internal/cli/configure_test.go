@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,6 +77,7 @@ func TestResolveWizardProviderModel(t *testing.T) {
 			"groq",
 			"llama-3.3-70b-versatile\nllama-3.1-8b-instant",
 			"https://api.groq.com/openai/v1",
+			"manual",
 		)
 		require.NoError(t, err)
 		require.Equal(t, "groq", apiName)
@@ -88,6 +92,7 @@ func TestResolveWizardProviderModel(t *testing.T) {
 			"",
 			"vendor/gpt-5.5:latest",
 			"",
+			"manual",
 		)
 		require.NoError(t, err)
 		require.Equal(t, "openrouter", apiName)
@@ -102,6 +107,7 @@ func TestResolveWizardProviderModel(t *testing.T) {
 			"",
 			"",
 			"",
+			"manual",
 		)
 		require.NoError(t, err)
 		require.Equal(t, "openrouter", apiName)
@@ -109,6 +115,23 @@ func TestResolveWizardProviderModel(t *testing.T) {
 		require.Nil(t, addedModelNames)
 		require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
 		require.False(t, addedModel)
+
+		// Discovery skips manual parsing; models are filled in later by the
+		// post-form discovery flow, so names stay empty and addedModel is true.
+		apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
+			addProviderOption,
+			"",
+			"acme",
+			"",
+			"https://acme.example.com/v1",
+			"discover",
+		)
+		require.NoError(t, err)
+		require.Equal(t, "acme", apiName)
+		require.Empty(t, modelName)
+		require.Nil(t, addedModelNames)
+		require.Equal(t, "https://acme.example.com/v1", baseURL)
+		require.True(t, addedModel)
 	})
 }
 
@@ -373,4 +396,179 @@ func captureStderr(t *testing.T, fn func()) string {
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
 	return string(out)
+}
+
+func TestDiscoverModelsOpenAI(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/models", r.URL.Path)
+		require.Equal(t, "Bearer sk-test", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{{"id": "gpt-4o"}, {"id": "gpt-4o-mini"}},
+		})
+	}))
+	defer srv.Close()
+
+	ids, err := discoverModels("openai", srv.URL+"/v1", "sk-test")
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-4o", "gpt-4o-mini"}, ids)
+}
+
+func TestDiscoverModelsAnthropic(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/models", r.URL.Path)
+		require.Equal(t, "sk-test", r.Header.Get("x-api-key"))
+		require.Equal(t, "2023-06-01", r.Header.Get("anthropic-version"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{{"id": "claude-sonnet-4"}, {"id": "claude-haiku-4"}},
+		})
+	}))
+	defer srv.Close()
+
+	// base-url with the full messages endpoint is normalized away.
+	ids, err := discoverModels("anthropic", srv.URL+"/v1/messages", "sk-test")
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-haiku-4", "claude-sonnet-4"}, ids) // sorted
+}
+
+func TestDiscoverModelsAnthropicFallsBackToOpenAIStyleModels(t *testing.T) {
+	hits := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits[r.URL.Path]++
+		if r.URL.Path == "/v1/models" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		// /models — OpenAI-style list, same x-api-key auth.
+		require.Equal(t, "sk-test", r.Header.Get("x-api-key"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{{"id": "glm-4.6"}},
+		})
+	}))
+	defer srv.Close()
+
+	ids, err := discoverModels("anthropic", srv.URL, "sk-test")
+	require.NoError(t, err)
+	require.Equal(t, []string{"glm-4.6"}, ids)
+	require.Equal(t, 1, hits["/v1/models"])
+	require.Equal(t, 1, hits["/models"])
+}
+
+func TestDiscoverModelsOllama(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/tags", r.URL.Path)
+		require.Empty(t, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"models": []map[string]string{{"name": "llama3.1:latest"}, {"name": "qwen2.5:7b"}},
+		})
+	}))
+	defer srv.Close()
+
+	ids, err := discoverModels("ollama", srv.URL, "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"llama3.1:latest", "qwen2.5:7b"}, ids)
+}
+
+func TestDiscoverModelsAuthError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, err := discoverModels("openai", srv.URL+"/v1", "bad-key")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid API key")
+}
+
+func TestDiscoverModelsNoModelsReturned(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{}) // no data/models
+	}))
+	defer srv.Close()
+
+	_, err := discoverModels("openai", srv.URL+"/v1", "sk-test")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no models")
+}
+
+func TestResolveKeyForDiscovery(t *testing.T) {
+	t.Run("entered key wins", func(t *testing.T) {
+		withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+			APIs: []API{{Name: "openai", APIKey: "cfg-key", APIKeyEnv: "OPENAI_API_KEY"}},
+		}}, func() {
+			require.Equal(t, "entered", resolveKeyForDiscovery("openai", "entered"))
+		})
+	})
+
+	t.Run("falls back to configured api-key", func(t *testing.T) {
+		withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+			APIs: []API{{Name: "openai", APIKey: "cfg-key"}},
+		}}, func() {
+			require.Equal(t, "cfg-key", resolveKeyForDiscovery("openai", ""))
+		})
+	})
+
+	t.Run("falls back to env var", func(t *testing.T) {
+		t.Setenv("CUSTOM_API_KEY", "env-key")
+		withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+			APIs: []API{{Name: "custom", APIKeyEnv: "CUSTOM_API_KEY"}},
+		}}, func() {
+			require.Equal(t, "env-key", resolveKeyForDiscovery("custom", ""))
+		})
+	})
+
+	t.Run("empty when nothing configured", func(t *testing.T) {
+		withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+			APIs: []API{{Name: "custom"}},
+		}}, func() {
+			require.Empty(t, resolveKeyForDiscovery("custom", ""))
+		})
+	})
+}
+
+func TestFindAPIType(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{
+			{Name: "opencode", APIType: "anthropic"},
+			{Name: "groq"}, // no api-type
+		},
+	}}, func() {
+		require.Equal(t, "anthropic", findAPIType("opencode"))
+		require.Empty(t, findAPIType("groq"), "unset api-type should be empty")
+		require.Empty(t, findAPIType("unknown"))
+	})
+}
+
+func TestExistingModelNames(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name:   "openai",
+			Models: map[string]Model{"gpt-4o": {}, "gpt-4o-mini": {}},
+		}},
+	}}, func() {
+		got := existingModelNames("openai")
+		require.Contains(t, got, "gpt-4o")
+		require.Contains(t, got, "gpt-4o-mini")
+		require.Len(t, got, 2)
+		require.Empty(t, existingModelNames("unknown"))
+	})
+}
+
+func TestStripAnthropicPath(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://api.anthropic.com", "https://api.anthropic.com"},
+		{"https://api.anthropic.com/v1", "https://api.anthropic.com"},
+		{"https://api.anthropic.com/v1/messages", "https://api.anthropic.com"},
+		{"https://gateway.example.com/messages", "https://gateway.example.com"},
+		{"https://gateway.example.com/proxy/v1", "https://gateway.example.com/proxy"},
+		{"https://gateway.example.com/custom", "https://gateway.example.com/custom"},
+		{"  https://host/v1/messages  ", "https://host"},
+	}
+	for _, c := range cases {
+		require.Equal(t, c.want, stripAnthropicPath(c.in), "input %q", c.in)
+	}
 }

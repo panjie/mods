@@ -444,3 +444,36 @@ apis:
   # api-type also works for the other native adapters: ollama, google,
   # cohere, azure, azure-ad. Omit it to use the OpenAI-compatible
   # adapter (the default for any unrecognized provider name).
+
+  # Example: a service that splits models across TWO protocols. OpenCode's
+  # zen gateway serves some models only via its OpenAI-compatible endpoint
+  # (/v1/chat/completions) and others only via its Anthropic endpoint
+  # (/v1/messages). mods models one provider = one protocol, so configure
+  # TWO providers sharing the same key — one per endpoint. (OpenRouter, by
+  # contrast, serves every model through a single OpenAI-compatible
+  # endpoint, so it needs only one provider.)
+  #
+  # opencode:            # Anthropic-protocol models (MiniMax, Qwen3.7)
+  #   api-type: anthropic
+  #   base-url: https://opencode.ai/zen/go/v1/messages
+  #   api-key:
+  #   api-key-env: OPENCODE_API_KEY
+  #   models:
+  #     qwen3.7-plus:
+  #       aliases: ["qwen-plus"]
+  #       max-input-chars: 1000000
+  #     minimax-m3:
+  #       aliases: ["mimo"]
+  #       max-input-chars: 1000000
+  #
+  # opencode-openai:     # OpenAI-protocol models (GLM, Kimi, DeepSeek, MiMo)
+  #   base-url: https://opencode.ai/zen/go/v1
+  #   api-key:
+  #   api-key-env: OPENCODE_API_KEY
+  #   models:
+  #     glm-5.2:
+  #       aliases: ["glm"]
+  #       max-input-chars: 1000000
+  #     kimi-k2.7-code:
+  #       aliases: ["kimi"]
+  #       max-input-chars: 1000000

@@ -242,11 +242,7 @@ func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name st
 func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, analyze func(string, string) shellCommandAnalysis) AccessIntent {
 	if registry != nil && registry.ShellExecution(name) {
 		a := analyze(name, ExtractShellCommand(data))
-		class := AccessWrite
-		if !a.NeedsReview {
-			class = AccessRead
-		}
-		return AccessIntent{Class: class, Dirs: a.AffectedDirs}
+		return AccessIntent{Class: shellAccessMode(a), Dirs: a.AffectedDirs}
 	}
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
@@ -254,6 +250,76 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 		}
 	}
 	return AccessIntent{Class: AccessWrite}
+}
+
+// shellAccessMode derives the read/write access class from a shell
+// analysis: a command the LLM flags as not needing review is a read;
+// anything else (mutable, unknown, or unparsed) is treated as a write.
+func shellAccessMode(a shellCommandAnalysis) AccessClass {
+	if a.NeedsReview {
+		return AccessWrite
+	}
+	return AccessRead
+}
+
+// normalizeAffectedDirs reduces file paths to their parent directories and
+// drops entries already covered by a broader directory, so the review
+// summary and candidate DirAllow rule only mention directories. The LLM
+// classifier and external-path extractor occasionally report a file path
+// alongside (or instead of) its containing directory; without this, the
+// "Always allows" line would advertise a file name as if it were a dir.
+func normalizeAffectedDirs(dirs []string) []string {
+	if len(dirs) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(dirs))
+	resolved := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		d = filepath.Clean(d)
+		if d == "" || d == "." {
+			continue
+		}
+		// If the path exists and is a file, the affected directory is its
+		// parent. Non-existent paths are kept as-is: the LLM may report a
+		// directory that the command will create.
+		if info, err := os.Stat(d); err == nil && !info.IsDir() {
+			d = filepath.Dir(d)
+		}
+		if !seen[d] {
+			seen[d] = true
+			resolved = append(resolved, d)
+		}
+	}
+	// Drop any path that falls inside another listed path (e.g. a file
+	// reduced to its parent that is already present, or nested dirs).
+	kept := make([]string, 0, len(resolved))
+	for _, d := range resolved {
+		covered := false
+		for _, other := range resolved {
+			if d == other {
+				continue
+			}
+			if pathWithinDir(d, other) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			kept = append(kept, d)
+		}
+	}
+	return kept
+}
+
+// pathWithinDir reports whether target is root itself or a descendant of
+// root, using slash-normalized comparison so it works across platforms.
+func pathWithinDir(target, root string) bool {
+	target = filepath.ToSlash(filepath.Clean(target))
+	root = filepath.ToSlash(filepath.Clean(root))
+	if target == root {
+		return true
+	}
+	return strings.HasPrefix(target, root+"/")
 }
 
 // reviewerDeps carries the three things requestApproval needs from its
@@ -274,16 +340,20 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	debug.Printf("requestApproval called: name=%s", name)
 	shellExecution := deps.isShellExecution != nil && deps.isShellExecution(name)
 	var analysis shellCommandAnalysis
+	var opMode AccessClass
 	if shellExecution {
 		if cmd := extractShellCommand(data); cmd != "" {
 			analysis = deps.analyzeShell(name, cmd)
+			analysis.AffectedDirs = normalizeAffectedDirs(analysis.AffectedDirs)
 			debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", cmd, analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
-			if RulesAllowDirs(r.rules.Snapshot(), analysis.AffectedDirs, r.scope) {
+			opMode = shellAccessMode(analysis)
+			if RulesAllowDirs(r.rules.Snapshot(), analysis.AffectedDirs, r.scope, opMode) {
 				debug.Printf("requestApproval: matched LLM affected dirs against saved approval rule")
 				return nil
 			}
 		} else {
 			analysis = defaultShellCommandAnalysis()
+			opMode = shellAccessMode(analysis)
 		}
 	}
 	if !shellExecution && r.rules.Allows(name, data, r.scope) {
@@ -316,7 +386,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	respCh := make(chan reviewResponse, 1)
 	candidateRules := RulesFor(name, data, r.scope)
 	if shellExecution {
-		candidateRules = RulesForDirs(analysis.AffectedDirs, r.scope)
+		candidateRules = RulesForDirs(analysis.AffectedDirs, r.scope, opMode)
 	}
 	item := toolReviewItem{
 		name:           name,
@@ -444,7 +514,7 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	}
 	separator := baseStyle.Render("  ")
 	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, separator))
-	alwaysLine := reviewChoices.Copy().Width(width).Render(formatAlwaysAllowSummary(r.reviewItem.candidateRules, r.scope, width))
+	alwaysLine := reviewChoices.Copy().Width(width).Render(formatAlwaysAllowSummary(r.reviewItem.candidateRules, r.reviewItem.name, r.reviewItem.summary, width))
 	block := promptLine
 	if r.reviewItem.summary != "" {
 		block += "\n" + reviewChoices.Copy().Width(width).Render(TruncateOperationStatus(r.reviewItem.summary, width))
@@ -456,18 +526,48 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	return strings.TrimRight(content, "\r\n") + "\n" + block
 }
 
-func formatAlwaysAllowSummary(rules []Rule, _ Scope, width int) string {
+func formatAlwaysAllowSummary(rules []Rule, name, summary string, width int) string {
 	if len(rules) == 0 {
 		return TruncateOperationStatus("No reusable allow rule for this command.", width)
 	}
+	verb := alwaysAllowVerb(rules, name, summary)
 	dirs := alwaysAllowDirs(rules)
 	if len(dirs) == 1 {
-		return TruncateOperationStatus("Always allows writes in "+dirs[0], width)
+		return TruncateOperationStatus("Always allows "+verb+" in "+dirs[0], width)
 	}
 	if len(dirs) > 1 {
-		return TruncateOperationStatus("Always allows writes in: "+strings.Join(dirs, ", "), width)
+		return TruncateOperationStatus("Always allows "+verb+" in: "+strings.Join(dirs, ", "), width)
 	}
 	return TruncateOperationStatus("Always allows: "+RulesLabel(rules), width)
+}
+
+// alwaysAllowVerb picks the verb for the "Always allows <verb> in <dir>"
+// summary. It prefers the explicit read/write mode stamped on the
+// candidate DirAllow rule (set by RulesForDirs from the operation's
+// access class), so a read-only approval advertises "reads" and a
+// mutation advertises "writes". For legacy rules with no mode, it falls
+// back to inferring from the tool name and the review summary's risk
+// label.
+func alwaysAllowVerb(rules []Rule, name, summary string) string {
+	for _, r := range rules {
+		switch r.Mode {
+		case AccessRead:
+			return "reads"
+		case AccessWrite:
+			return "writes"
+		}
+	}
+	switch name {
+	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search":
+		return "reads"
+	case "fs_write_file", "fs_apply_patch":
+		return "writes"
+	default:
+		if strings.Contains(summary, "external read") || strings.Contains(summary, "read-only") {
+			return "reads"
+		}
+		return "writes"
+	}
 }
 
 func alwaysAllowDirs(rules []Rule) []string {

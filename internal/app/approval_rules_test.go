@@ -260,8 +260,53 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			name: "shell_run",
-			args: []byte(`{"command":"rm -f /Users/panjie/temp/demo.gif"}`),
+			name:    "shell_run",
+			args:    []byte(`{"command":"rm -f /Users/panjie/temp/demo.gif"}`),
+			summary: "Risk: external mutation - affects /Users/panjie/temp",
+			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
+				Type:  approvalDirAllow,
+				Paths: []string{"/Users/panjie/temp"},
+				Mode:  AccessWrite,
+			})},
+		},
+	}
+	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	require.Contains(t, rendered, "[A] Always allow")
+	require.Contains(t, rendered, "Always allows writes in /Users/panjie/temp")
+}
+
+func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			name:    "shell_run",
+			args:    []byte(`{"command":"du -sh /Users/panjie/temp/*"}`),
+			summary: "Risk: external read - affects /Users/panjie/temp",
+			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
+				Type:  approvalDirAllow,
+				Paths: []string{"/Users/panjie/temp"},
+				Mode:  AccessRead,
+			})},
+		},
+	}
+	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
+	require.Contains(t, rendered, "[A] Always allow")
+	require.Contains(t, rendered, "Always allows reads in /Users/panjie/temp")
+	require.NotContains(t, rendered, "Always allows writes in /Users/panjie/temp")
+}
+
+// TestReviewBannerAlwaysAllowLegacyFallback covers rules persisted before
+// mode-splitting (Mode == ""): the verb is inferred from the tool name and
+// review summary rather than the rule's mode.
+func TestReviewBannerAlwaysAllowLegacyFallback(t *testing.T) {
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			name:    "fs_read_file",
+			args:    []byte(`{"path":"/Users/panjie/temp/big.bin"}`),
+			summary: "Target: /Users/panjie/temp/big.bin - external read",
 			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
 				Type:  approvalDirAllow,
 				Paths: []string{"/Users/panjie/temp"},
@@ -269,8 +314,7 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 		},
 	}
 	rendered := reviewer.renderBanner("", 120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.Contains(t, rendered, "[A] Always allow")
-	require.Contains(t, rendered, "Always allows writes in /Users/panjie/temp")
+	require.Contains(t, rendered, "Always allows reads in /Users/panjie/temp")
 }
 
 func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
@@ -351,8 +395,9 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			name: "shell_run",
-			args: []byte(`{"command":"cat >> ~/.config/ghostty/config.ghostty << 'EOF'\nfont-family = JetBrainsMono Nerd Font\nfont-family-bold = JetBrainsMono Nerd Font\nfont-family-italic = JetBrainsMono Nerd Font\nfont-family-bold-italic = JetBrainsMono Nerd Font\nEOF"}`),
+			name:    "shell_run",
+			args:    []byte(`{"command":"cat >> ~/.config/ghostty/config.ghostty << 'EOF'\nfont-family = JetBrainsMono Nerd Font\nfont-family-bold = JetBrainsMono Nerd Font\nfont-family-italic = JetBrainsMono Nerd Font\nfont-family-bold-italic = JetBrainsMono Nerd Font\nEOF"}`),
+			summary: "Risk: external mutation - affects ~/.config/ghostty",
 			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
 				Type:  approvalDirAllow,
 				Paths: []string{"~/.config/ghostty"},
@@ -718,10 +763,19 @@ final answer: {"needs_review":false,"affected_dirs":[],"reason":"read-only with 
 func TestShellCandidateRulesUseLLMAffectedDirs(t *testing.T) {
 	require.Empty(t, RulesFor("shell_run", []byte(`{"command":"rm -rf /tmp/cache/foo"}`), testApprovalScope))
 
-	rules := RulesForDirs([]string{"/tmp/cache", "/var/tmp"}, testApprovalScope)
-	require.Len(t, rules, 1)
-	require.Equal(t, approvalDirAllow, rules[0].Type)
-	require.ElementsMatch(t, []string{"/tmp/cache", "/var/tmp"}, rules[0].Paths)
+	t.Run("write command stamps write mode", func(t *testing.T) {
+		rules := RulesForDirs([]string{"/tmp/cache", "/var/tmp"}, testApprovalScope, AccessWrite)
+		require.Len(t, rules, 1)
+		require.Equal(t, approvalDirAllow, rules[0].Type)
+		require.Equal(t, AccessWrite, rules[0].Mode)
+		require.ElementsMatch(t, []string{"/tmp/cache", "/var/tmp"}, rules[0].Paths)
+	})
+
+	t.Run("read command stamps read mode", func(t *testing.T) {
+		rules := RulesForDirs([]string{"/etc"}, testApprovalScope, AccessRead)
+		require.Len(t, rules, 1)
+		require.Equal(t, AccessRead, rules[0].Mode)
+	})
 }
 
 func TestDirAllowMatching(t *testing.T) {
@@ -822,6 +876,46 @@ func TestDirAllowMatching(t *testing.T) {
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users2\\old.txt"}`), testApprovalScope))
+	})
+}
+
+func TestDirAllowModeSplit(t *testing.T) {
+	t.Run("read rule does not satisfy a write command", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessRead})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		// dirAllowForCommand extracts write targets and only honours
+		// write/legacy rules, so a read-only approval must not grant writes.
+		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
+	})
+
+	t.Run("write rule satisfies a write command", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
+	})
+
+	t.Run("legacy rule satisfies a write command", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
+	})
+
+	t.Run("RulesAllowDirs honours mode for read ops", func(t *testing.T) {
+		readRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/etc"}, Mode: AccessRead})
+		writeRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/etc"}, Mode: AccessWrite})
+		require.True(t, RulesAllowDirs([]ApprovalRule{readRule}, []string{"/etc"}, testApprovalScope, AccessRead))
+		require.False(t, RulesAllowDirs([]ApprovalRule{readRule}, []string{"/etc"}, testApprovalScope, AccessWrite))
+		require.True(t, RulesAllowDirs([]ApprovalRule{writeRule}, []string{"/etc"}, testApprovalScope, AccessWrite))
+		require.False(t, RulesAllowDirs([]ApprovalRule{writeRule}, []string{"/etc"}, testApprovalScope, AccessRead))
+	})
+
+	t.Run("legacy rule satisfies both read and write via RulesAllowDirs", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/etc"}})
+		require.True(t, RulesAllowDirs([]ApprovalRule{rule}, []string{"/etc"}, testApprovalScope, AccessRead))
+		require.True(t, RulesAllowDirs([]ApprovalRule{rule}, []string{"/etc"}, testApprovalScope, AccessWrite))
 	})
 }
 
@@ -990,4 +1084,42 @@ func TestShellClassifyLRUUpdateInPlace(t *testing.T) {
 	got, ok := c.Load("k")
 	require.True(t, ok)
 	require.Equal(t, "v2", got.Reason)
+}
+
+func TestNormalizeAffectedDirs(t *testing.T) {
+	t.Run("reduces file path to parent and drops covered entry", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "mods")
+		require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+		// Simulates the LLM returning both the directory and the file path.
+		got := normalizeAffectedDirs([]string{dir, file})
+		require.Equal(t, []string{filepath.Clean(dir)}, got)
+	})
+
+	t.Run("reduces lone file path to its parent directory", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "data.txt")
+		require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+		got := normalizeAffectedDirs([]string{file})
+		require.Equal(t, []string{filepath.Clean(dir)}, got)
+	})
+
+	t.Run("keeps non-existent paths as-is", func(t *testing.T) {
+		got := normalizeAffectedDirs([]string{"/tmp/does-not-exist-12345"})
+		require.Equal(t, []string{"/tmp/does-not-exist-12345"}, got)
+	})
+
+	t.Run("drops nested directories covered by an ancestor", func(t *testing.T) {
+		got := normalizeAffectedDirs([]string{"/a/b", "/a/b/c", "/a/b/c/d"})
+		require.Equal(t, []string{"/a/b"}, got)
+	})
+
+	t.Run("keeps sibling directories separate", func(t *testing.T) {
+		got := normalizeAffectedDirs([]string{"/a/b", "/a/c"})
+		require.ElementsMatch(t, []string{"/a/b", "/a/c"}, got)
+	})
+
+	t.Run("empty input returns nil", func(t *testing.T) {
+		require.Nil(t, normalizeAffectedDirs(nil))
+	})
 }

@@ -111,8 +111,9 @@ func Open(ds string) (*DB, error) {
 			tool_name string NOT NULL,
 			pattern string NOT NULL DEFAULT '',
 			paths string NOT NULL DEFAULT '',
+			mode string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
+			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
 			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
 		)
 	`); err != nil {
@@ -125,6 +126,11 @@ func Open(ds string) (*DB, error) {
 	}
 	if !hasColumn(db, "approval_rules", "paths") {
 		if err := migrateApprovalRulesPaths(db); err != nil {
+			return nil, fmt.Errorf("could not migrate db: %w", err)
+		}
+	}
+	if !hasColumn(db, "approval_rules", "mode") {
+		if err := migrateApprovalRulesMode(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
@@ -183,6 +189,34 @@ func migrateApprovalRulesPaths(db *sqlx.DB) error {
 		INSERT INTO approval_rules_migration_tmp
 			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, created_at)
 		SELECT conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, '', created_at
+		FROM approval_rules
+	`)
+}
+
+// migrateApprovalRulesMode adds the mode column (read/write) to
+// approval_rules and folds it into the primary key so a read-only and a
+// write-only approval for the same directory can coexist. Existing rows
+// are copied with mode = ” which matches both read and write, preserving
+// the behaviour of approvals saved before mode-splitting.
+func migrateApprovalRulesMode(db *sqlx.DB) error {
+	return migrateApprovalRulesReplaceTable(db, `
+		CREATE TABLE approval_rules_migration_tmp (
+			conversation_id string NOT NULL,
+			scope_kind string NOT NULL DEFAULT '',
+			scope_value string NOT NULL DEFAULT '',
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			paths string NOT NULL DEFAULT '',
+			mode string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		)
+	`, `
+		INSERT INTO approval_rules_migration_tmp
+			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode, created_at)
+		SELECT conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, '', created_at
 		FROM approval_rules
 	`)
 }
@@ -313,9 +347,9 @@ func (c *DB) SaveConversation(
 			return fmt.Errorf("SaveConversation paths: %w", err)
 		}
 		if _, err := tx.Exec(tx.Rebind(`
-			INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths)); err != nil {
+			INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths), string(rule.Mode)); err != nil {
 			return fmt.Errorf("SaveConversation rule: %w", err)
 		}
 	}
@@ -345,6 +379,7 @@ type ruleRow struct {
 	Tool       string `db:"tool_name"`
 	Pattern    string `db:"pattern"`
 	Paths      string `db:"paths"`
+	Mode       string `db:"mode"`
 }
 
 func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
@@ -353,10 +388,10 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 		return nil, nil
 	}
 	if err := c.db.Select(&rows, c.db.Rebind(`
-		SELECT scope_kind, scope_value, rule_type, tool_name, pattern, paths
+		SELECT scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
 		FROM approval_rules
 		WHERE conversation_id = ?
-		ORDER BY created_at, scope_kind, scope_value, rule_type, tool_name, pattern
+		ORDER BY created_at, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
 	`), id); err != nil {
 		return nil, fmt.Errorf("ApprovalRules: %w", err)
 	}
@@ -368,6 +403,7 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 			Type:       approval.RuleType(row.Type),
 			Tool:       row.Tool,
 			Pattern:    row.Pattern,
+			Mode:       approval.AccessClass(row.Mode),
 		}
 		if row.Paths != "" && row.Paths != "null" {
 			_ = json.Unmarshal([]byte(row.Paths), &rule.Paths)

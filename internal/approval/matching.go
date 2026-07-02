@@ -55,23 +55,34 @@ func rulesForTool(name string, data []byte) []Rule {
 	}
 }
 
-func RulesForDirs(dirs []string, scope Scope) []Rule {
+// RulesForDirs builds the candidate DirAllow rule offered by the
+// "Always allow" choice for a shell command. The mode stamps the rule
+// as read-only or write-only so that approving a read command does not
+// later auto-approve writes in the same directory.
+func RulesForDirs(dirs []string, scope Scope, mode AccessClass) []Rule {
 	if len(dirs) == 0 {
 		return nil
 	}
 	return scopeRules([]Rule{{
 		Type:  DirAllow,
 		Paths: dirs,
+		Mode:  mode,
 	}}, scope)
 }
 
-func RulesAllowDirs(rules []Rule, dirs []string, scope Scope) bool {
+// RulesAllowDirs reports whether a saved DirAllow rule already covers
+// every affected directory for an operation of the given mode. A legacy
+// rule with an empty Mode matches both read and write operations.
+func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) bool {
 	if len(dirs) == 0 {
 		return false
 	}
 	scopedRules := rulesForScope(rules, scope)
 	for _, rule := range scopedRules {
 		if rule.Type != DirAllow {
+			continue
+		}
+		if rule.Mode != "" && rule.Mode != mode {
 			continue
 		}
 		allMatch := true
@@ -247,6 +258,10 @@ func matchShellPrefix(pattern, command string) bool {
 	return command == base || strings.HasPrefix(command, base+" ")
 }
 
+// dirAllowForCommand matches a shell command's writable directories
+// against saved DirAllow rules. Because it inspects write targets
+// extracted from the command, it only honours write-mode and legacy
+// (empty-mode) rules; a read-only approval must not satisfy a write.
 func dirAllowForCommand(tool string, command string, rules []Rule, _ string, posix bool) bool {
 	targetDirs := extractWritableDirs(command, posix)
 	if len(targetDirs) == 0 {
@@ -254,6 +269,9 @@ func dirAllowForCommand(tool string, command string, rules []Rule, _ string, pos
 	}
 	for _, rule := range rules {
 		if rule.Type != DirAllow {
+			continue
+		}
+		if rule.Mode != "" && rule.Mode != AccessWrite {
 			continue
 		}
 		allMatch := true

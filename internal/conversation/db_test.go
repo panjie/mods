@@ -248,6 +248,8 @@ func TestConversationData(t *testing.T) {
 	rules := []ApprovalRule{
 		testScopedRule(ApprovalRule{Type: approvalShellPrefix, Tool: "shell_run", Pattern: "git commit *"}),
 		testScopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}),
+		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessRead}),
+		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessWrite}),
 	}
 
 	require.NoError(t, db.SaveConversation(id, "conversation", "openai", "gpt-5", messages, rules))
@@ -343,6 +345,67 @@ func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
 	var ruleSet approvalRuleSet
 	ruleSet.Replace(rules)
 	require.False(t, ruleSet.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), workspaceScope("/workspace")))
+}
+
+// TestMigratesApprovalRulesToAddMode verifies that a DB persisted just
+// before mode-splitting (scope + paths columns, no mode column) migrates
+// cleanly: existing DirAllow rows survive with an empty Mode so they keep
+// matching both read and write, and new mode-scoped rules round-trip.
+func TestMigratesApprovalRulesToAddMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.db")
+	raw, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	_, err = raw.Exec(`
+		CREATE TABLE conversations (
+			id string NOT NULL PRIMARY KEY,
+			title string NOT NULL,
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			CHECK (id <> ''),
+			CHECK (title <> '')
+		);
+		CREATE TABLE approval_rules (
+			conversation_id string NOT NULL,
+			scope_kind string NOT NULL DEFAULT '',
+			scope_value string NOT NULL DEFAULT '',
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			paths string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
+			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+		);
+		INSERT INTO conversations (id, title) VALUES ('abc', 'pre-mode');
+		INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths)
+		VALUES ('abc', 'workspace', '/ws', 'dir_allow', '', '', '["/tmp/cache"]');
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	db, err := openDB(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	rules, err := db.ApprovalRules("abc")
+	require.NoError(t, err)
+	require.Len(t, rules, 1)
+	require.Equal(t, approvalDirAllow, rules[0].Type)
+	require.Equal(t, []string{"/tmp/cache"}, rules[0].Paths)
+	require.Equal(t, AccessClass(""), rules[0].Mode) // legacy: empty mode matches both
+
+	// A legacy (empty-mode) rule still satisfies both read and write ops.
+	require.True(t, rulesAllowDirs(rules, []string{"/tmp/cache"}, workspaceScope("/ws"), accessRead))
+	require.True(t, rulesAllowDirs(rules, []string{"/tmp/cache"}, workspaceScope("/ws"), accessWrite))
+
+	// New mode-scoped rules round-trip and coexist with the legacy row.
+	newRules := append(rules, ApprovalRule{
+		ScopeKind: "workspace", ScopeValue: "/ws",
+		Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessWrite,
+	})
+	require.NoError(t, db.SaveConversation("abc", "pre-mode", "openai", "gpt-5", nil, newRules))
+	loaded, err := db.ApprovalRules("abc")
+	require.NoError(t, err)
+	require.ElementsMatch(t, newRules, loaded)
 }
 
 func TestMigrateLegacyConversations(t *testing.T) {

@@ -31,13 +31,19 @@ type Scope struct {
 }
 
 // Rule is a scoped permission granted through the review UI.
+//
+// Mode scopes a DirAllow rule to read or write access. It is empty for
+// non-DirAllow rules and for rules persisted before mode-splitting; an
+// empty Mode matches both read and write operations to preserve the
+// behaviour of legacy saved approvals.
 type Rule struct {
-	ScopeKind  ScopeKind `db:"scope_kind"`
-	ScopeValue string    `db:"scope_value"`
-	Type       RuleType  `db:"rule_type"`
-	Tool       string    `db:"tool_name"`
-	Pattern    string    `db:"pattern"`
-	Paths      []string  `db:"paths"`
+	ScopeKind  ScopeKind   `db:"scope_kind"`
+	ScopeValue string      `db:"scope_value"`
+	Type       RuleType    `db:"rule_type"`
+	Tool       string      `db:"tool_name"`
+	Pattern    string      `db:"pattern"`
+	Paths      []string    `db:"paths"`
+	Mode       AccessClass `db:"mode"`
 }
 
 func WorkspaceScope(root string) Scope {
@@ -50,7 +56,7 @@ func WorkspaceScope(root string) Scope {
 func (r Rule) key() string {
 	pathsKey := strings.Join(r.Paths, "\x01")
 	return string(r.ScopeKind) + "\x00" + r.ScopeValue + "\x00" +
-		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern + "\x00" + pathsKey
+		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern + "\x00" + pathsKey + "\x00" + string(r.Mode)
 }
 
 func (r Rule) matchesScope(scope Scope) bool {
@@ -67,7 +73,10 @@ func (r Rule) String() string {
 	case EditAll:
 		return "file edits"
 	case DirAllow:
-		return fmt.Sprintf("dirs: %s", strings.Join(r.Paths, ", "))
+		if r.Mode == "" {
+			return fmt.Sprintf("dirs: %s", strings.Join(r.Paths, ", "))
+		}
+		return fmt.Sprintf("%s dirs: %s", r.Mode, strings.Join(r.Paths, ", "))
 	case ToolAll:
 		return r.Tool
 	default:

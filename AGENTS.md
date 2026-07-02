@@ -16,6 +16,12 @@
 - Tool wiring is `internal/tooling.BuildRegistry`: native tools in `internal/tools`, MCP in `internal/mcpclient`, review rules in `internal/approval`. Tools are supported for OpenAI-compatible, Anthropic, and Ollama; Cohere/Google skip implicit auto filesystem tools and error when tools are explicitly enabled.
 - Config defaults are generated from embedded `internal/config/config_template.yml`; when adding settings, update the config structs, `Help` map, template, and config tests together.
 - Conversation history and saved approval rules persist in a SQLite DB under the configured cache path; schema changes belong in `internal/conversation/db.go` migrations and legacy tests.
+- Approval/review subsystem (security-critical): `internal/app/review.go` `toolReviewer.requestApproval` gates every tool call. Rule types in `internal/approval/rules.go`: `DirAllow` (directory-scoped, carries a read/write `Mode`), `EditAll`, `ToolAll`, `ShellPrefix`, `ShellExact`. Matching in `matching.go` (`Allows`/`RulesAllowDirs`/`RulesForDirs`); access matrix in `access.go` (`ClassifyAccess` + `AccessIntent`). `DirAllow` rules with empty `Mode` are legacy and match both read+write.
+- Shell classification: `internal/app/shell_classify.go` `analyzeShellCommand` — local read-only heuristic fast-path, then LLM classifier (LRU-cached), then `extractExternalPaths` regex merge → `shellCommandAnalysis{NeedsReview, AffectedDirs, Reason}`; `!NeedsReview` ⇒ read. `AffectedDirs` are normalized to directories in `requestApproval`.
+- Path authorization: `buildAccessIntent` (review.go) → approved external dirs injected via `WithAuthorizedDirs`/`AuthorizedDirs` context → `internal/tools/path_safety.go` `resolveWorkspacePath` honors them. Approval (pre-Call) and path enforcement (in-Call) decouple only via context.
+- `internal/app` map: `mods.go` (model), `request_session.go` (tool-call orchestration), `review.go`+`review_summary.go` (approval UI/labels), `shell_classify.go`, `provider.go`/`stream.go`/`stream_runner.go`, `plan.go` (plan mode), `cache_ops.go`, `prompts.go`, `tool_support.go`, `aliases.go` (re-exports approval/config/ui types into the app package).
+- DB migrations: `internal/conversation/db.go` uses a replace-table pattern (`migrateApprovalRulesReplaceTable`) for primary-key changes (SQLite can't ALTER PK in place); guard each new column with `hasColumn` + a migration before the table is opened.
+- Design docs for major subsystems live in `docs/superpowers/specs/` and `docs/superpowers/plans/`; consult them for context on non-trivial subsystems.
 
 ## Quirks
 - Config precedence is intentionally `CLI flags > mods.yml > MODS_ env > defaults`; `config.Ensure` parses env before YAML so the file can override env.
@@ -23,3 +29,4 @@
 - Custom web-search providers reject private/loopback targets unless `MODS_WEB_SEARCH_ALLOW_PRIVATE=1` is set; keep that SSRF guard covered by `internal/websearch` tests.
 - The Task `install` path precedence is `BINDIR` > `PREFIX/bin` > XDG local bin > default (`/usr/local/bin`, or `%USERPROFILE%\.local\bin` on Windows); `DESTDIR` wraps the final path.
 - CI runs on Ubuntu, macOS, and Windows; platform-specific code is split with build tags in `internal/tools`, `internal/platform`, and `internal/clipboard`.
+- `DirAllow` approval rules are conversation-scoped (persisted in `approval_rules`, restored via `--continue`, not shared across conversations); a read approval does not grant write and vice versa (mode-split). Legacy rules with empty `Mode` match both.

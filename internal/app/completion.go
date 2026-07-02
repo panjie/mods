@@ -218,11 +218,20 @@ func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 			mod.API = api.Name
 			// An explicit api-type overrides name-based routing so a custom
 			// provider can declare the adapter/protocol it speaks (e.g. an
-			// Anthropic Messages API gateway), independent of its name.
+			// Anthropic Messages API gateway), independent of its name. Only a
+			// recognized, non-openai type overrides: "openai" is a true no-op
+			// (keeps the provider name), and an unknown value falls back to the
+			// name (OpenAI-compatible default) with a debug warning rather than
+			// leaving a bogus value in mod.API.
 			if api.APIType != "" {
-				mod.API = strings.ToLower(api.APIType)
-				if !knownAPITypes[mod.API] {
-					debug.Printf("api-type %q on %s is not a recognized adapter; falling back to OpenAI-compatible",
+				t := strings.ToLower(api.APIType)
+				switch {
+				case t == "openai":
+					// no-op: name-based routing already defaults to OpenAI-compatible
+				case knownAPITypes[t]:
+					mod.API = t
+				default:
+					debug.Printf("api-type %q on %s is not a recognized adapter; using OpenAI-compatible",
 						api.APIType, api.Name)
 				}
 			}

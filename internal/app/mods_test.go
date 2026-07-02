@@ -1026,6 +1026,24 @@ func TestResolveModel(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "acme-claude", mod.API, "without api-type the provider name is used (OpenAI-compatible default)")
 	})
+
+	t.Run("api-type openai is a no-op", func(t *testing.T) {
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "acme-claude", Model: "acme", APIs: APIs{
+			{Name: "acme-claude", APIType: "openai", Models: map[string]Model{"acme-sonnet-4": {Aliases: []string{"acme"}}}},
+		}}}
+		_, mod, err := m.resolveModel(cfg)
+		require.NoError(t, err)
+		require.Equal(t, "acme-claude", mod.API, "api-type openai keeps the provider name (true no-op)")
+	})
+
+	t.Run("api-type unknown falls back to name", func(t *testing.T) {
+		cfg := &Config{PersistentConfig: PersistentConfig{API: "acme-claude", Model: "acme", APIs: APIs{
+			{Name: "acme-claude", APIType: "anthrpic", Models: map[string]Model{"acme-sonnet-4": {Aliases: []string{"acme"}}}},
+		}}}
+		_, mod, err := m.resolveModel(cfg)
+		require.NoError(t, err)
+		require.Equal(t, "acme-claude", mod.API, "an unrecognized api-type falls back to the provider name instead of keeping the typo")
+	})
 }
 
 func TestBuildRequestSessionValidatesImagesBeforeAPIKey(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/anthropic"
@@ -259,7 +260,28 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		defer cancel()
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 
-		if m.reviewer.shouldReviewTool(registry, name) {
+		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
+		scope := m.reviewer.scope
+		safeDirs := []string{os.TempDir()}
+
+		// Inject authorized external directories so resolveWorkspacePath honors
+		// approval. This applies whether or not review is skipped below: a
+		// saved DirAllow rule may auto-approve the call, but the tool still
+		// needs the authorization to touch the external path.
+		if ext := ExternalDirs(intent, scope, safeDirs); len(ext) > 0 {
+			ctx = toolregistry.WithAuthorizedDirs(ctx, ext)
+		}
+
+		// Mutable tools always go through review. Read-only tools
+		// (shouldReviewTool=false) still require approval when the matrix says
+		// the access is external, so an out-of-workspace read is not silently
+		// allowed.
+		needsReview := m.reviewer.shouldReviewTool(registry, name)
+		if !needsReview && ClassifyAccess(intent, scope, safeDirs, ApprovalReviewMode(m.reviewer.reviewMode)) == DecisionAsk {
+			needsReview = true
+		}
+
+		if needsReview {
 			if err := m.reviewer.requestApproval(reviewerDeps{
 				ctx:              m.ctx,
 				isShellExecution: registry.ShellExecution,

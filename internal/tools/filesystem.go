@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
@@ -31,6 +32,65 @@ const (
 type FilesystemConfig struct {
 	Root     string
 	SafeDirs []string
+}
+
+// pathParentIntent builds an AccessIntent extractor for single-path tools.
+// The path argument is resolved against root and its parent directory is
+// reported as the touched directory.
+func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval.AccessIntent {
+	class := approval.AccessWrite
+	if readOnly {
+		class = approval.AccessRead
+	}
+	return func(data json.RawMessage) approval.AccessIntent {
+		var args struct {
+			Path string `json:"path"`
+		}
+		_ = json.Unmarshal(data, &args)
+		p := args.Path
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(root, p)
+		}
+		return approval.AccessIntent{Class: class, Dirs: []string{filepath.Dir(filepath.Clean(p))}}
+	}
+}
+
+// patchIntent builds an AccessIntent extractor for fs_apply_patch. It
+// parses the +++ headers (after stripping a/ b/ prefixes) and reports each
+// touched file's parent directory. Patch paths are workspace-relative by
+// construction (validatePatchPaths rejects absolute/.. paths), so they are
+// joined onto root.
+func patchIntent(root string) func(json.RawMessage) approval.AccessIntent {
+	return func(data json.RawMessage) approval.AccessIntent {
+		var args struct {
+			Patch string `json:"patch"`
+		}
+		_ = json.Unmarshal(data, &args)
+		var dirs []string
+		seen := map[string]struct{}{}
+		for _, line := range strings.Split(args.Patch, "\n") {
+			if !strings.HasPrefix(line, "+++ ") {
+				continue
+			}
+			p := strings.TrimSpace(line[4:])
+			p = strings.Trim(p, `"`)
+			if p == "/dev/null" {
+				continue
+			}
+			if strings.HasPrefix(p, "a/") || strings.HasPrefix(p, "b/") {
+				p = p[2:]
+			}
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(root, p)
+			}
+			d := filepath.Dir(filepath.Clean(p))
+			if _, ok := seen[d]; !ok {
+				seen[d] = struct{}{}
+				dirs = append(dirs, d)
+			}
+		}
+		return approval.AccessIntent{Class: approval.AccessWrite, Dirs: dirs}
+	}
 }
 
 // RegisterFilesystem registers native filesystem tools.
@@ -55,8 +115,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{ReadOnly: true},
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{ReadOnly: true},
+		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_read_file",
 			Description: "Read a UTF-8 text file from the workspace. Use offset and limit to read large files in chunks.",
@@ -66,7 +127,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				"limit":  integerProp("Maximum bytes to return."),
 			}, "path"),
 		},
-		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Path   string `json:"path"`
 				Offset int    `json:"offset"`
@@ -75,7 +136,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
+			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -120,8 +181,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{Mutable: true},
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{Mutable: true},
+		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_write_file",
 			Description: "Write a UTF-8 text file inside the workspace, replacing existing content.",
@@ -130,7 +192,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				"content": stringProp("Complete file content to write."),
 			}, "path", "content"),
 		},
-		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Path    string `json:"path"`
 				Content string `json:"content"`
@@ -138,7 +200,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
+			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -155,8 +217,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{ReadOnly: true},
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{ReadOnly: true},
+		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_list_dir",
 			Description: "List files and directories in a workspace directory.",
@@ -165,7 +228,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				"max_entries": integerProp("Maximum entries to return."),
 			}, "path"),
 		},
-		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Path       string `json:"path"`
 				MaxEntries int    `json:"max_entries"`
@@ -173,7 +236,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
+			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -204,8 +267,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{ReadOnly: true},
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{ReadOnly: true},
+		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_stat",
 			Description: "Get metadata for a workspace file or directory.",
@@ -213,14 +277,14 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 				"path": stringProp("Path to inspect, relative to the workspace or absolute within it."),
 			}, "path"),
 		},
-		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Path string `json:"path"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
+			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -236,8 +300,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	if err := register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{ReadOnly: true},
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{ReadOnly: true},
+		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_search",
 			Description: "Search text files in the workspace for a literal query string.",
@@ -259,7 +324,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if args.Query == "" {
 				return "", fmt.Errorf("query is required")
 			}
-			path, err := resolveWorkspacePath(root, args.Path, safeDirs)
+			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -277,8 +342,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	}
 
 	return register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{Mutable: true},
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{Mutable: true},
+		IntentExtractor: patchIntent(root),
 		Spec: proto.ToolSpec{
 			Name:        "fs_apply_patch",
 			Description: "Apply a unified diff patch to files inside the workspace.",
@@ -296,7 +362,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 			if strings.TrimSpace(args.Patch) == "" {
 				return "", fmt.Errorf("patch is required")
 			}
-			if err := validatePatchPaths(root, args.Patch); err != nil {
+			if err := validatePatchPaths(ctx, root, args.Patch); err != nil {
 				return "", err
 			}
 			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn")

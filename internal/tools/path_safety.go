@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +12,17 @@ import (
 // resolveWorkspacePath before touching the filesystem; the helpers here
 // are the only thing standing between an LLM-authored path and an
 // arbitrary location on disk, so they are deliberately defensive.
+//
+// Boundary precedence for a resolved path:
+//  1. workspace root
+//  2. a configured safe directory (e.g. os.TempDir())
+//  3. an approval-authorized external directory carried via ctx
+//
+// Anything else is rejected. All three boundary kinds undergo the same
+// symlink-aware EvalSymlinks comparison so a symlink cannot smuggle a
+// path outside its boundary.
 
-func resolveWorkspacePath(root, input string, safeDirs []string) (string, error) {
+func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []string) (string, error) {
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -26,14 +36,17 @@ func resolveWorkspacePath(root, input string, safeDirs []string) (string, error)
 	// symlink evaluation. The default is the workspace root; if the input
 	// instead lives under a configured safe directory (e.g. os.TempDir()),
 	// that safe directory becomes the boundary so a symlink inside it
-	// cannot escape to arbitrary paths like /etc/passwd.
+	// cannot escape to arbitrary paths like /etc/passwd. An approval-
+	// authorized external directory (carried via ctx) behaves the same.
 	boundary := root
 	if err := ensureInsideRoot(root, path); err != nil {
-		safe, ok := matchSafeDir(path, safeDirs)
-		if !ok {
+		if safe, ok := matchSafeDir(path, safeDirs); ok {
+			boundary = safe
+		} else if approved, ok := matchAuthorizedDir(ctx, path); ok {
+			boundary = approved
+		} else {
 			return "", err
 		}
-		boundary = safe
 	}
 
 	existing := path
@@ -82,15 +95,33 @@ func resolveWorkspacePath(root, input string, safeDirs []string) (string, error)
 // after the caller's symlink resolution step.
 func matchSafeDir(path string, safeDirs []string) (string, bool) {
 	for _, safe := range safeDirs {
-		rel, err := filepath.Rel(safe, path)
-		if err != nil {
-			continue
-		}
-		if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
+		if contains(safe, path) {
 			return safe, true
 		}
 	}
 	return "", false
+}
+
+// matchAuthorizedDir returns the first ctx-authorized external directory
+// that lexically contains path. Symlink escape is caught later by the
+// boundary-aware EvalSymlinks comparison, so this lexical check may run
+// before the target exists.
+func matchAuthorizedDir(ctx context.Context, path string) (string, bool) {
+	for _, ad := range AuthorizedDirs(ctx) {
+		if contains(ad, path) {
+			return ad, true
+		}
+	}
+	return "", false
+}
+
+// contains reports whether path is dir itself or a descendant of dir.
+func contains(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel))
 }
 
 func workspaceRel(root, path string) string {
@@ -102,12 +133,8 @@ func workspaceRel(root, path string) string {
 }
 
 func ensureInsideRoot(root, path string) error {
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return err
+	if !contains(root, path) {
+		return fmt.Errorf("path %q is outside workspace root; approval required to access paths outside the workspace", path)
 	}
-	if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
-		return nil
-	}
-	return fmt.Errorf("path %q is outside workspace root; use shell_run to access paths outside the workspace", path)
+	return nil
 }

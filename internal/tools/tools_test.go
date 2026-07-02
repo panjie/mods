@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -319,7 +320,7 @@ func TestResolveWorkspacePathRejectsSymlinkEscapeFromSafeDir(t *testing.T) {
 		t.Fatal("test sanity: matchSafeDir must report target inside safe dir")
 	}
 
-	if _, err := resolveWorkspacePath(root, target, []string{safe}); err == nil {
+	if _, err := resolveWorkspacePath(context.Background(), root, target, []string{safe}); err == nil {
 		t.Fatalf("resolveWorkspacePath must reject symlink escape via safe dir")
 	}
 }
@@ -344,7 +345,7 @@ func TestResolveWorkspacePathAcceptsSymlinkWithinSafeDir(t *testing.T) {
 	}
 
 	target := filepath.Join(safe, "a", "data.txt")
-	resolved, err := resolveWorkspacePath(root, target, []string{safe})
+	resolved, err := resolveWorkspacePath(context.Background(), root, target, []string{safe})
 	if err != nil {
 		t.Fatalf("symlink within safe dir must be accepted: %v", err)
 	}
@@ -440,4 +441,101 @@ func TestPowerShellRun(t *testing.T) {
 			t.Fatal("expected timeout error")
 		}
 	})
+}
+
+// TestResolveWorkspacePathAuthorizesApprovedExternal verifies the new
+// behavior: a path outside the workspace is rejected unless the caller
+// carries an approval-authorized directory (via ctx) that contains it.
+func TestResolveWorkspacePathAuthorizesApprovedExternal(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	target := filepath.Join(outside, "data.txt")
+	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Unapproved external access is rejected.
+	if _, err := resolveWorkspacePath(context.Background(), root, target, nil); err == nil {
+		t.Fatal("expected unapproved external path to be rejected")
+	}
+
+	// Approved external access is allowed.
+	ctx := WithAuthorizedDirs(context.Background(), []string{outside})
+	got, err := resolveWorkspacePath(ctx, root, target, nil)
+	if err != nil {
+		t.Fatalf("approved external path must resolve: %v", err)
+	}
+	if got != target {
+		t.Fatalf("resolved=%q want %q", got, target)
+	}
+}
+
+// TestResolveWorkspacePathRejectsSymlinkEscapeFromAuthorized ensures a
+// symlink inside an authorized directory that points outside is still
+// rejected, mirroring the safe-dir protection.
+func TestResolveWorkspacePathRejectsSymlinkEscapeFromAuthorized(t *testing.T) {
+	root := t.TempDir()
+	authorized := t.TempDir()
+	secret := t.TempDir()
+	if err := os.WriteFile(filepath.Join(secret, "pwn"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed secret: %v", err)
+	}
+	linkPath := filepath.Join(authorized, "escape")
+	if err := os.Symlink(secret, linkPath); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+
+	ctx := WithAuthorizedDirs(context.Background(), []string{authorized})
+	if _, err := resolveWorkspacePath(ctx, root, filepath.Join(authorized, "escape", "pwn"), nil); err == nil {
+		t.Fatal("resolveWorkspacePath must reject symlink escaping the authorized dir")
+	}
+}
+
+func TestFilesystemIntentExtractor(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	ext, ok := registry.IntentExtractor("fs_read_file")
+	if !ok {
+		t.Fatal("fs_read_file must have an intent extractor")
+	}
+	intent := ext([]byte(`{"path":"sub/a.txt"}`))
+	if intent.Class != approval.AccessRead {
+		t.Fatalf("fs_read_file class=%q want read", intent.Class)
+	}
+	wantDir := filepath.Join(root, "sub")
+	if len(intent.Dirs) != 1 || intent.Dirs[0] != wantDir {
+		t.Fatalf("fs_read_file dirs=%v want [%s]", intent.Dirs, wantDir)
+	}
+
+	extW, ok := registry.IntentExtractor("fs_write_file")
+	if !ok {
+		t.Fatal("fs_write_file must have an intent extractor")
+	}
+	intentW := extW([]byte(`{"path":"out.txt","content":"x"}`))
+	if intentW.Class != approval.AccessWrite {
+		t.Fatalf("fs_write_file class=%q want write", intentW.Class)
+	}
+	if len(intentW.Dirs) != 1 || intentW.Dirs[0] != root {
+		t.Fatalf("fs_write_file dirs=%v want [%s]", intentW.Dirs, root)
+	}
+
+	extP, ok := registry.IntentExtractor("fs_apply_patch")
+	if !ok {
+		t.Fatal("fs_apply_patch must have an intent extractor")
+	}
+	intentP := extP([]byte(`{"patch":"--- a/x.txt\n+++ b/x.txt\n@@ -0,0 +1 @@\n+hi\n"}`))
+	if intentP.Class != approval.AccessWrite {
+		t.Fatalf("fs_apply_patch class=%q want write", intentP.Class)
+	}
+	if len(intentP.Dirs) != 1 || intentP.Dirs[0] != root {
+		t.Fatalf("fs_apply_patch dirs=%v want [%s]", intentP.Dirs, root)
+	}
+
+	if _, ok := registry.IntentExtractor("fs_read_file_nonexistent"); ok {
+		t.Fatal("unknown tool must not have an extractor")
+	}
 }

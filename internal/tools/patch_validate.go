@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ var patchPathLinePrefixes = []struct {
 	{"copy to ", false},
 }
 
-func validatePatchPaths(root, patch string) error {
+func validatePatchPaths(ctx context.Context, root, patch string) error {
 	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
 		// Refuse symlink creation. A single patch can first create a symlink
 		// inside the workspace (e.g. `escape -> /etc`) and then write through
@@ -71,7 +72,7 @@ func validatePatchPaths(root, patch string) error {
 		if filepath.IsAbs(path) || strings.HasPrefix(filepath.Clean(path), "..") {
 			return fmt.Errorf("patch path %q is outside workspace root", path)
 		}
-		if _, err := resolveWorkspacePath(root, path, nil); err != nil && !os.IsNotExist(err) {
+		if _, err := resolveWorkspacePath(ctx, root, path, nil); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}

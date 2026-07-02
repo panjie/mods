@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -38,13 +39,22 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	}
 
 	if !isObviouslyMutable(command) {
-		analysis := shellCommandAnalysis{
-			NeedsReview:  false,
-			AffectedDirs: []string{},
-			Reason:       "read-only command (local heuristic)",
+		wsRoot := ""
+		if m.Config != nil {
+			wsRoot = m.Config.ResolveWorkspaceRoot()
 		}
-		debug.Printf("analyzeShellCommand: cmd=%q -> local heuristic: read-only", debug.Truncate(command, 80))
-		return analysis
+		// Read-only commands are auto-approved only when they stay inside the
+		// workspace. A command that mentions an external path (~/, ../, or an
+		// absolute path outside the workspace) escalates to the LLM classifier
+		// so its affected dirs can be run through the approval matrix.
+		if !mentionsExternalPath(command, wsRoot) {
+			debug.Printf("analyzeShellCommand: cmd=%q -> local heuristic: read-only, workspace-local", debug.Truncate(command, 80))
+			return shellCommandAnalysis{
+				NeedsReview: false,
+				Reason:      "read-only command, workspace-local (local heuristic)",
+			}
+		}
+		// external path suspected -> fall through to LLM classifier for affected dirs
 	}
 
 	system, structured, err := m.resolveShellClassifierPrompt()
@@ -260,6 +270,60 @@ var reShellMutable = regexp.MustCompile(`(?i)` +
 
 func isObviouslyMutable(command string) bool {
 	return reShellMutable.MatchString(command)
+}
+
+// Pre-screening patterns for read-only commands. mentionsExternalPath uses
+// these to decide whether a read-only command might touch paths outside the
+// workspace and therefore needs the LLM classifier's affected-dirs analysis.
+var (
+	reParentRef   = regexp.MustCompile(`\.\.[\\/]`)
+	reHomeRef     = regexp.MustCompile(`~[\\/]`)
+	reUnixAbsPath = regexp.MustCompile(`(?:^|[\s="'"])(/[A-Za-z0-9._][^\s'"<>|;,&(){}]*)`)
+	reWinAbsPath  = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
+)
+
+// mentionsExternalPath is a cheap pre-screen for read-only shell commands:
+// it reports whether the command text references any path outside the
+// workspace (parent traversal, home expansion, or an absolute path that is
+// not inside the workspace). When true, the caller escalates to the LLM
+// classifier for a precise affected-dirs analysis. It is deliberately wide
+// (false negatives would let an external read slip past approval) and cheap
+// (no LLM call). A cross-style path (e.g. a Windows path on a POSIX
+// workspace) always counts as external.
+func mentionsExternalPath(command, workspaceRoot string) bool {
+	if reParentRef.MatchString(command) || reHomeRef.MatchString(command) {
+		return true
+	}
+	wsClean := filepath.Clean(workspaceRoot)
+	for _, m := range reUnixAbsPath.FindAllStringSubmatch(command, -1) {
+		if !pathInsideWorkspace(m[1], wsClean) {
+			return true
+		}
+	}
+	for _, m := range reWinAbsPath.FindAllStringSubmatch(command, -1) {
+		if !pathInsideWorkspace(m[1], wsClean) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathInsideWorkspace(target, root string) bool {
+	if root == "" {
+		return false
+	}
+	if isWindowsStylePath(target) != isWindowsStylePath(root) {
+		return false
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel))
+}
+
+func isWindowsStylePath(p string) bool {
+	return len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/')
 }
 
 // shellClassifyCacheCapacity bounds the in-memory cache of shell classifier

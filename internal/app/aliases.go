@@ -20,6 +20,10 @@ type Conversation = conversation.Conversation
 type Rule = approval.Rule
 type RuleSet = approval.RuleSet
 type Scope = approval.Scope
+type AccessIntent = approval.AccessIntent
+type AccessClass = approval.AccessClass
+type Decision = approval.Decision
+type ApprovalReviewMode = approval.ReviewMode
 type Styles = ui.Styles
 
 var newUserErrorf = apperr.NewUserErrorf
@@ -51,6 +55,12 @@ var RulesAllowDirs = approval.RulesAllowDirs
 var RulesLabel = approval.RulesLabel
 var WorkspaceScope = approval.WorkspaceScope
 var ExtractShellCommand = approval.ExtractShellCommand
+var AccessRead = approval.AccessRead
+var AccessWrite = approval.AccessWrite
+var DecisionAllow = approval.DecisionAllow
+var DecisionAsk = approval.DecisionAsk
+var ClassifyAccess = approval.ClassifyAccess
+var ExternalDirs = approval.ExternalDirs
 var ErrNoMatches = conversation.ErrNoMatches
 
 const (

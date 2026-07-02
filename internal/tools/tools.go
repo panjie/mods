@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -39,11 +40,12 @@ type ToolCapabilities struct {
 
 // Tool is a registered executable tool.
 type Tool struct {
-	Spec          proto.ToolSpec
-	Call          Caller
-	Kind          ToolKind
-	TimeoutPolicy TimeoutPolicy
-	Capabilities  ToolCapabilities
+	Spec            proto.ToolSpec
+	Call            Caller
+	Kind            ToolKind
+	TimeoutPolicy   TimeoutPolicy
+	Capabilities    ToolCapabilities
+	IntentExtractor func(json.RawMessage) approval.AccessIntent
 }
 
 // Registry stores tools by name and exposes a provider-neutral call router.
@@ -144,6 +146,18 @@ func (r *Registry) Mutable(name string) bool {
 // ShellExecution reports whether a tool executes shell commands.
 func (r *Registry) ShellExecution(name string) bool {
 	return r.Capabilities(name).ShellExecution
+}
+
+// IntentExtractor returns the tool's access-intent extractor, which maps a
+// tool call's arguments to an approval.AccessIntent (read/write plus the
+// directories it touches). Tools without an extractor (e.g. shell tools,
+// whose intent is derived dynamically) report ok=false.
+func (r *Registry) IntentExtractor(name string) (func(json.RawMessage) approval.AccessIntent, bool) {
+	tool, ok := r.tools[name]
+	if !ok || tool.IntentExtractor == nil {
+		return nil, false
+	}
+	return tool.IntentExtractor, true
 }
 
 // Len returns the number of registered tools.

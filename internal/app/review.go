@@ -234,6 +234,28 @@ func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name st
 	}
 }
 
+// buildAccessIntent derives the unified AccessIntent for a tool call. Shell
+// tools use the dynamic analyzer (class from NeedsReview, dirs from
+// AffectedDirs); builtin tools with a registered IntentExtractor use that;
+// anything else (e.g. MCP tools) degrades fail-closed to a write with no
+// known dirs so the approval matrix asks for review.
+func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, analyze func(string, string) shellCommandAnalysis) AccessIntent {
+	if registry != nil && registry.ShellExecution(name) {
+		a := analyze(name, ExtractShellCommand(data))
+		class := AccessWrite
+		if !a.NeedsReview {
+			class = AccessRead
+		}
+		return AccessIntent{Class: class, Dirs: a.AffectedDirs}
+	}
+	if registry != nil {
+		if ext, ok := registry.IntentExtractor(name); ok {
+			return ext(data)
+		}
+	}
+	return AccessIntent{Class: AccessWrite}
+}
+
 // reviewerDeps carries the three things requestApproval needs from its
 // caller. Keeping them in a struct (instead of reaching into *Mods)
 // lets the reviewer stay physically independent of the main model: it

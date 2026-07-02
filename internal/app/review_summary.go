@@ -17,6 +17,8 @@ type patchFileChange struct {
 func formatReviewSummary(name string, args []byte, analysis shellCommandAnalysis, scope Scope) string {
 	parsed := ToolOperationArgs(args)
 	switch name {
+	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search":
+		return fmt.Sprintf("Target: %s - external read", OneLinePreview(ArgString(parsed, "path")))
 	case "fs_write_file":
 		path := ArgString(parsed, "path")
 		content := ArgString(parsed, "content")
@@ -81,19 +83,18 @@ func pathWithinScope(path string, scope Scope) bool {
 	if path == "" {
 		return false
 	}
-	if !filepath.IsAbs(path) && filepath.VolumeName(path) == "" {
+	// Normalize to slashes first: on Windows filepath.Clean("/tmp") yields
+	// "\tmp", which would defeat the POSIX-root check below.
+	target := filepath.ToSlash(filepath.Clean(path))
+	isAbs := strings.HasPrefix(target, "/") || filepath.VolumeName(target) != ""
+	if !isAbs {
 		return true
 	}
 	if scope.Value == "" {
 		return false
 	}
-	root := filepath.Clean(scope.Value)
-	target := filepath.Clean(path)
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	r := filepath.ToSlash(filepath.Clean(scope.Value))
+	return target == r || strings.HasPrefix(target, r+"/")
 }
 
 func summarizeAffectedDirs(dirs []string) string {

@@ -76,8 +76,9 @@ func TestDefaultPromptText(t *testing.T) {
 
 func TestToolSelectionRulesArePrioritized(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Priority order:")
-	require.Contains(t, ToolSelectionRules, "Use fs_* tools only for files inside the configured workspace")
-	require.Contains(t, ToolSelectionRules, "Use platform-appropriate shell tools for paths outside the configured workspace")
+	require.Contains(t, ToolSelectionRules, "fs_* tools may also access files outside the workspace")
+	require.Contains(t, ToolSelectionRules, "such access triggers an approval prompt")
+	require.NotContains(t, ToolSelectionRules, "they cannot access files outside it")
 	require.NotContains(t, ToolSelectionRules, "workspace_root")
 }
 

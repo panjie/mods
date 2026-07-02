@@ -50,7 +50,7 @@ const (
 
 // locateDir classifies an absolute path against the workspace scope and
 // safe directories. Relative paths are treated as workspace-local because
-// fs_* tools resolve them against the workspace root before reaching here
+// fs_* tools resolve them against the workspace before reaching here
 // and shell commands without absolute paths stay inside the workspace.
 func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 	if path == "" {

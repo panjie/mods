@@ -10,7 +10,7 @@ import (
 
 // Patch path validation. Runs before `git apply` to ensure every path
 // referenced by the patch (including rename/copy targets and C-style
-// quoted paths) stays inside the workspace root. This is the security
+// quoted paths) stays inside the workspace. This is the security
 // boundary that prevents a malicious patch from writing to /etc/passwd
 // via a symlink created earlier in the same diff.
 
@@ -37,7 +37,7 @@ func validatePatchPaths(ctx context.Context, root, patch string) error {
 		// inside the workspace (e.g. `escape -> /etc`) and then write through
 		// it in a later diff. Because validation runs before `git apply`,
 		// such a patch would pass the path checks below and escape the
-		// workspace root at apply time. There is no safe way to allow
+		// workspace at apply time. There is no safe way to allow
 		// mode 120000 via fs_apply_patch.
 		if strings.HasSuffix(line, "mode 120000") &&
 			(strings.HasPrefix(line, "new file mode ") ||
@@ -70,7 +70,7 @@ func validatePatchPaths(ctx context.Context, root, patch string) error {
 			path = path[2:]
 		}
 		if filepath.IsAbs(path) || strings.HasPrefix(filepath.Clean(path), "..") {
-			return fmt.Errorf("patch path %q is outside workspace root", path)
+			return fmt.Errorf("patch path %q is outside workspace", path)
 		}
 		if _, err := resolveWorkspacePath(ctx, root, path, nil); err != nil && !os.IsNotExist(err) {
 			return err

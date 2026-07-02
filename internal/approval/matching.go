@@ -247,7 +247,7 @@ func matchShellPrefix(pattern, command string) bool {
 	return command == base || strings.HasPrefix(command, base+" ")
 }
 
-func dirAllowForCommand(tool string, command string, rules []Rule, workspaceRoot string, posix bool) bool {
+func dirAllowForCommand(tool string, command string, rules []Rule, _ string, posix bool) bool {
 	targetDirs := extractWritableDirs(command, posix)
 	if len(targetDirs) == 0 {
 		return false

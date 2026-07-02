@@ -318,17 +318,12 @@ func (p PromptConfig) Value(key string) string {
 	}
 }
 
-// Workspace describes the configured workspace root in normalized forms.
+// Workspace describes the configured workspace in normalized forms.
 type Workspace struct {
 	Input     string
 	Abs       string
 	Canonical string
 	Display   string
-}
-
-func (c Config) ResolveWorkspaceRoot() string {
-	workspace := c.ResolveWorkspace()
-	return workspace.Canonical
 }
 
 func (c Config) ResolveWorkspace() Workspace {

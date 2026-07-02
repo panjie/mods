@@ -14,7 +14,7 @@ import (
 // arbitrary location on disk, so they are deliberately defensive.
 //
 // Boundary precedence for a resolved path:
-//  1. workspace root
+//  1. workspace
 //  2. a configured safe directory (e.g. os.TempDir())
 //  3. an approval-authorized external directory carried via ctx
 //
@@ -33,7 +33,7 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	path = filepath.Clean(path)
 
 	// boundary is the directory the resolved path must stay inside after
-	// symlink evaluation. The default is the workspace root; if the input
+	// symlink evaluation. The default is the workspace; if the input
 	// instead lives under a configured safe directory (e.g. os.TempDir()),
 	// that safe directory becomes the boundary so a symlink inside it
 	// cannot escape to arbitrary paths like /etc/passwd. An approval-
@@ -134,7 +134,7 @@ func workspaceRel(root, path string) string {
 
 func ensureInsideRoot(root, path string) error {
 	if !contains(root, path) {
-		return fmt.Errorf("path %q is outside workspace root; approval required to access paths outside the workspace", path)
+		return fmt.Errorf("path %q is outside workspace; approval required to access paths outside the workspace", path)
 	}
 	return nil
 }

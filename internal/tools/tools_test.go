@@ -193,7 +193,7 @@ func TestFilesystemApplyPatchRejectsTraversal(t *testing.T) {
 		t.Fatal("expected traversal patch to be rejected")
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "..", "outside.txt")); statErr == nil {
-		t.Fatal("file was created outside the workspace root")
+		t.Fatal("file was created outside the workspace")
 	}
 }
 

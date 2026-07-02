@@ -141,7 +141,7 @@ func TestExtractExternalPaths(t *testing.T) {
 		require.Equal(t, []string{p}, got)
 	})
 
-	t.Run("no workspace root treats all absolute paths as external", func(t *testing.T) {
+	t.Run("no workspace treats all absolute paths as external", func(t *testing.T) {
 		got := extractExternalPaths("cat /etc/passwd", "")
 		require.Equal(t, []string{"/etc/passwd"}, got)
 	})

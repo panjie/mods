@@ -38,16 +38,16 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		return m.shellAnalyzer(tool, command)
 	}
 
-	wsRoot := ""
+	ws := ""
 	if m.Config != nil {
-		wsRoot = m.Config.ResolveWorkspaceRoot()
+		ws = m.Config.ResolveWorkspace().Canonical
 	}
 
 	// Local fast-path: conservative allowlist of read-only commands with no
 	// shell metacharacters and no external-path references. Everything else,
 	// including read-only commands that touch external paths, goes to the
 	// LLM classifier for precise analysis.
-	if isSimpleReadOnly(command) && len(extractExternalPaths(command, wsRoot)) == 0 {
+	if isSimpleReadOnly(command) && len(extractExternalPaths(command, ws)) == 0 {
 		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, workspace-local", debug.Truncate(command, 80))
 		return shellCommandAnalysis{
 			NeedsReview: false,
@@ -61,7 +61,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// Post-process: merge regex-detected external paths into AffectedDirs
 	// so external access is never silently dropped when the LLM omits dirs
 	// (read-only commands) or fails entirely.
-	for _, p := range extractExternalPaths(command, wsRoot) {
+	for _, p := range extractExternalPaths(command, ws) {
 		found := false
 		for _, d := range result.AffectedDirs {
 			if d == p {
@@ -325,12 +325,12 @@ var (
 )
 
 // extractExternalPaths returns path tokens from the command that reference
-// locations outside the workspace: absolute paths not under workspaceRoot,
+// locations outside the workspace: absolute paths not under workspaceDir,
 // home-expanded paths (~/ and ~user), and parent-traversal paths (../).
 // The results populate AffectedDirs so ClassifyAccess and risk labels can
 // correctly identify external access even when the LLM omits them.
-func extractExternalPaths(command, workspaceRoot string) []string {
-	wsClean := filepath.Clean(workspaceRoot)
+func extractExternalPaths(command, workspaceDir string) []string {
+	dirClean := filepath.Clean(workspaceDir)
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
@@ -341,12 +341,12 @@ func extractExternalPaths(command, workspaceRoot string) []string {
 		paths = append(paths, p)
 	}
 	for _, m := range reUnixAbsPath.FindAllStringSubmatch(command, -1) {
-		if !pathInsideWorkspace(m[1], wsClean) {
+		if !pathInsideWorkspace(m[1], dirClean) {
 			add(m[1])
 		}
 	}
 	for _, m := range reWinAbsPath.FindAllStringSubmatch(command, -1) {
-		if !pathInsideWorkspace(m[1], wsClean) {
+		if !pathInsideWorkspace(m[1], dirClean) {
 			add(m[1])
 		}
 	}
@@ -362,18 +362,18 @@ func extractExternalPaths(command, workspaceRoot string) []string {
 // mentionsExternalPath reports whether the command text references any path
 // outside the workspace. It delegates to extractExternalPaths for the actual
 // work and is retained as a thin wrapper for existing callers and tests.
-func mentionsExternalPath(command, workspaceRoot string) bool {
-	return len(extractExternalPaths(command, workspaceRoot)) > 0
+func mentionsExternalPath(command, workspaceDir string) bool {
+	return len(extractExternalPaths(command, workspaceDir)) > 0
 }
 
-func pathInsideWorkspace(target, root string) bool {
-	if root == "" {
+func pathInsideWorkspace(target, workspaceDir string) bool {
+	if workspaceDir == "" {
 		return false
 	}
-	if isWindowsStylePath(target) != isWindowsStylePath(root) {
+	if isWindowsStylePath(target) != isWindowsStylePath(workspaceDir) {
 		return false
 	}
-	rel, err := filepath.Rel(root, target)
+	rel, err := filepath.Rel(workspaceDir, target)
 	if err != nil {
 		return false
 	}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 const (
@@ -88,7 +89,7 @@ func binaryPath() string {
 	return filepath.Join(binDir, app+goExe())
 }
 
-func goExe() string {
+var goExe = sync.OnceValue(func() string {
 	out, err := exec.Command("go", "env", "GOEXE").Output()
 	if err == nil {
 		return strings.TrimSpace(string(out))
@@ -97,7 +98,7 @@ func goExe() string {
 		return ".exe"
 	}
 	return ""
-}
+})
 
 func gitVersion() string {
 	return gitValue("describe", "--tags", "--always", "--dirty")
@@ -161,22 +162,7 @@ func defaultInstallDir() (string, error) {
 }
 
 func hasXDGEnv() bool {
-	if os.Getenv("XDG") == "1" {
-		return true
-	}
-	for _, name := range []string{
-		"XDG_BIN_HOME",
-		"XDG_CONFIG_HOME",
-		"XDG_DATA_HOME",
-		"XDG_CACHE_HOME",
-		"XDG_STATE_HOME",
-		"XDG_RUNTIME_DIR",
-	} {
-		if os.Getenv(name) != "" {
-			return true
-		}
-	}
-	return false
+	return os.Getenv("XDG") == "1" || os.Getenv("XDG_BIN_HOME") != ""
 }
 
 func xdgInstallDir() (string, error) {

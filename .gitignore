@@ -9,3 +9,4 @@ manpages/
 # macOS
 .DS_Store
 
+buildtask

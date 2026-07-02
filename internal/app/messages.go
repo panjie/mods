@@ -61,6 +61,7 @@ type toolReviewItem struct {
 	name           string
 	args           []byte
 	candidateRules []Rule
+	summary        string
 	resp           chan reviewResponse
 }
 

@@ -295,6 +295,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		name:           name,
 		args:           data,
 		candidateRules: candidateRules,
+		summary:        formatReviewSummary(name, data, analysis, r.scope),
 		resp:           respCh,
 	}
 	// Snapshot the channel under the lock so a concurrent reset() that
@@ -417,7 +418,11 @@ func (r *toolReviewer) renderBanner(content string, width int, reviewPrompt, rev
 	separator := baseStyle.Render("  ")
 	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, separator))
 	alwaysLine := reviewChoices.Copy().Width(width).Render(formatAlwaysAllowSummary(r.reviewItem.candidateRules, r.scope, width))
-	block := promptLine + "\n" + choicesLine + "\n" + alwaysLine
+	block := promptLine
+	if r.reviewItem.summary != "" {
+		block += "\n" + reviewChoices.Copy().Width(width).Render(TruncateOperationStatus(r.reviewItem.summary, width))
+	}
+	block += "\n" + choicesLine + "\n" + alwaysLine
 	if strings.TrimSpace(content) == "" {
 		return block
 	}

@@ -249,47 +249,15 @@ func RunConfigWizard() error {
 	var addedModelNames []string
 	var modelName string
 	if addedModel {
-		switch modelSource {
-		case "discover":
-			fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
-			discovered, derr := discoverModels(effType, providerBaseURL, resolveKeyForDiscovery(apiName, apiKey))
-			if derr != nil {
-				fmt.Fprintf(os.Stderr, "\n⚠ Could not discover models for %s: %s\n", apiName, derr)
-				fmt.Fprintln(os.Stderr, "Falling back to manual entry.")
-				manual, merr := promptManualModelNames(apiName)
-				if merr != nil {
-					if errors.Is(merr, huh.ErrUserAborted) {
-						fmt.Fprintln(os.Stderr, "\nCanceled.")
-						return nil
-					}
-					return merr
-				}
-				addedModelNames = manual
-			} else {
-				picked, perr := promptDiscoveredModels(apiName, discovered)
-				if perr != nil {
-					if errors.Is(perr, huh.ErrUserAborted) {
-						fmt.Fprintln(os.Stderr, "\nCanceled.")
-						return nil
-					}
-					return perr
-				}
-				addedModelNames = picked
-			}
-		default: // manual
-			manual, merr := promptManualModelNames(apiName)
-			if merr != nil {
-				if errors.Is(merr, huh.ErrUserAborted) {
-					fmt.Fprintln(os.Stderr, "\nCanceled.")
-					return nil
-				}
-				return merr
-			}
-			addedModelNames = manual
+		names, cerr := chooseModels(apiName, modelSource, effType, providerBaseURL, resolveKeyForDiscovery(apiName, apiKey))
+		if cerr != nil {
+			return cerr
 		}
-		if len(addedModelNames) == 0 {
-			return fmt.Errorf("no models selected for %s", apiName)
+		if names == nil { // user pressed Esc during discovery or manual entry
+			fmt.Fprintln(os.Stderr, "\nCanceled.")
+			return nil
 		}
+		addedModelNames = names
 		modelName = addedModelNames[0]
 	} else {
 		modelName = strings.TrimSpace(chosenModel)
@@ -760,6 +728,44 @@ func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newMode
 	return apiName, modelName, addedModelNames, providerBaseURL, addedModel, nil
 }
 
+// chooseModels resolves which model names to add for a provider. With
+// source=="discover" it fetches the provider's model list and presents a
+// multi-select; on any failure (API error, or every discovered model already
+// configured) it falls back to manual entry. source=="manual" goes straight to
+// manual entry. Returns (nil, nil) if the user cancels via Esc.
+func chooseModels(apiName, source, effType, baseURL, apiKey string) ([]string, error) {
+	if source == "discover" {
+		fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
+		discovered, derr := discoverModels(effType, baseURL, apiKey)
+		switch {
+		case derr != nil:
+			fmt.Fprintf(os.Stderr, "\n⚠ Could not discover models for %s: %s\nFalling back to manual entry.\n", apiName, derr)
+		default:
+			picked, perr := promptDiscoveredModels(apiName, discovered)
+			if perr != nil {
+				if errors.Is(perr, huh.ErrUserAborted) {
+					return nil, nil
+				}
+				return nil, perr
+			}
+			if len(picked) > 0 {
+				return picked, nil
+			}
+			fmt.Fprintf(os.Stderr, "\nAll discovered models for %s are already configured; add any extra names manually.\n", apiName)
+		}
+	}
+	// Manual entry — also the fallback when discovery is unavailable or yields
+	// nothing new. Esc cancels cleanly.
+	names, merr := promptManualModelNames(apiName)
+	if merr != nil {
+		if errors.Is(merr, huh.ErrUserAborted) {
+			return nil, nil
+		}
+		return nil, merr
+	}
+	return names, nil
+}
+
 // promptDiscoveredModels runs a second form letting the user pick which
 // discovered model IDs to add. Returns the selected IDs in display order.
 // Models already configured on the provider are filtered out so selecting one
@@ -774,7 +780,6 @@ func promptDiscoveredModels(apiName string, models []string) ([]string, error) {
 		opts = append(opts, huh.NewOption(m, m))
 	}
 	if len(opts) == 0 {
-		fmt.Fprintf(os.Stderr, "\nAll discovered models for %s are already configured.\n", apiName)
 		return nil, nil
 	}
 	var picked []string

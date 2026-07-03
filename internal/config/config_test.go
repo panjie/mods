@@ -78,6 +78,10 @@ func TestToolSelectionRulesArePrioritized(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Priority order:")
 	require.Contains(t, ToolSelectionRules, "fs_* tools may also access files outside the workspace")
 	require.Contains(t, ToolSelectionRules, "such access triggers an approval prompt")
+	require.Contains(t, ToolSelectionRules, "Use shell tools for repository-wide inspection")
+	require.Contains(t, ToolSelectionRules, "rg --files")
+	require.Contains(t, ToolSelectionRules, "powershell_run")
+	require.Contains(t, ToolSelectionRules, "go test ./...")
 	require.NotContains(t, ToolSelectionRules, "they cannot access files outside it")
 	require.NotContains(t, ToolSelectionRules, "workspace_root")
 }

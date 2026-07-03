@@ -39,4 +39,8 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, Identity, "built-in review step that gates mutating changes")
 	require.Contains(t, Identity, "state it briefly in one line, then proceed")
 	require.Contains(t, ToolSelection, "attempt it directly rather than asking for permission first")
+	require.Contains(t, ToolSelection, "rg --files")
+	require.Contains(t, ToolSelection, "powershell_run")
+	require.Contains(t, ToolSelection, "go test ./...")
+	require.Contains(t, ToolSelection, "Do not keep retrying blindly")
 }

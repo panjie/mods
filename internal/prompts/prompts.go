@@ -19,7 +19,42 @@ const (
 	MarkdownFormat = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
 	JSONFormat     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
 	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
-	ToolSelection  = "Tool selection. Priority order: 1. Use fs_* tools for files inside the configured workspace; they are auto-approved for reads and reviewed only for writes. 2. fs_* tools may also access files outside the workspace (Downloads, Desktop, system temp, etc.); such access triggers an approval prompt. Prefer workspace-local paths to minimize interruptions. 3. On Windows, use shell_run for cmd.exe builtins such as dir, type, and echo; use powershell_run for PowerShell pipelines, variables, filtering, counting, or querying. Pass only the PowerShell command, without powershell, powershell.exe, pwsh, or -Command prefixes. 4. Minimize tool calls by using one well-formed command instead of repeated small retries. 5. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review. 6. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review. 7. Mutating and destructive shell commands (delete, move, rename, overwrite) are automatically routed through mods' review step — when the user requests such an action, attempt it directly rather than asking for permission first."
+	ToolSelection  = `Tool selection.
+
+Priority order:
+1. Use fs_* tools for files inside the configured workspace; they are auto-approved for reads and reviewed only for writes.
+2. fs_* tools may also access files outside the workspace (Downloads, Desktop, system temp, etc.); such access triggers an approval prompt. Prefer workspace-local paths to minimize interruptions.
+3. Use shell tools for repository-wide inspection, test/build commands, git commands, package manager scripts, and data-processing pipelines.
+4. Minimize tool calls by using one well-formed command instead of repeated small retries.
+5. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review.
+6. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review.
+7. Mutating and destructive shell commands (delete, move, rename, overwrite) are automatically routed through mods' review step - when the user requests such an action, attempt it directly rather than asking for permission first.
+
+Platform rules:
+- On macOS/Linux/POSIX, prefer portable sh commands and common project tools.
+- On Windows, use shell_run for cmd.exe builtins such as dir, type, and echo.
+- On Windows, use powershell_run for pipelines, variables, filtering, counting, JSON/object inspection, and commands using $_ or $PSVersionTable. Pass only the PowerShell command, without powershell, powershell.exe, pwsh, or -Command prefixes.
+
+Command playbook:
+- Search text: rg "pattern" path
+- List files: rg --files path
+- Find files by name: rg --files | rg "name-or-extension"
+- Show file ranges: sed -n 'START,ENDp' file; on PowerShell use Get-Content file | Select-Object -Skip N -First M
+- Count matches: rg -n "pattern" path | wc -l; on PowerShell pipe to Measure-Object
+- Git status: git status --short
+- Git diff: git diff -- path
+- Git recent history: git log --oneline -n 20
+- Go tests: go test ./...; focused test: go test ./package -run TestName -count=1
+- Node projects: inspect package.json scripts first, then use npm/pnpm/yarn test or build consistently with the lockfile.
+- Python tests: prefer project tooling if configured; otherwise pytest or python -m pytest.
+- Rust tests: cargo test; focused test: cargo test test_name.
+- JSON: use jq when available; otherwise use the language/tooling already present in the project.
+- Sorting/unique/counting: use sort, uniq, wc; on PowerShell use Sort-Object, Get-Unique, Measure-Object.
+
+Failure handling:
+- If a command is missing, inspect project files for the intended tool or script before retrying.
+- If a command fails because of path, quoting, or package selection, fix the command once or twice with the error message as evidence.
+- Do not keep retrying blindly; report the failing command and relevant output when blocked.`
 
 	SafeWorkspaceTemplate = "Safe temporary workspace: {safe_workspace}. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes."
 

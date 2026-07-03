@@ -43,11 +43,21 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 
 	externalPaths := extractExternalPaths(command, ws)
 
-	// Tier 1: AST-based read-only classifier (POSIX only, skip powershell_run).
-	// Handles pipes, &&/||, subshells, command substitution, and subcommand
-	// tables. Covers both workspace-local and external-path read-only commands;
+	// Tier 1: AST-based read-only classifier.
+	// POSIX: handles pipes, &&/||, subshells, command substitution, subcommand tables.
+	// PowerShell: uses a persistent pwsh.exe bridge to call Parser::ParseInput.
+	// Both cover workspace-local and external-path read-only commands;
 	// the approval matrix decides whether external reads need review.
-	if tool != "powershell_run" {
+	if tool == "powershell_run" {
+		if ro, reason := approval.IsReadOnlyPowerShell(command); ro {
+			debug.Printf("analyzeShellCommand: cmd=%q -> PS AST: read-only", debug.Truncate(command, 80))
+			return shellCommandAnalysis{
+				NeedsReview:  false,
+				AffectedDirs: externalPaths,
+				Reason:       reason,
+			}
+		}
+	} else {
 		if ro, reason := approval.IsReadOnlyPOSIX(command); ro {
 			debug.Printf("analyzeShellCommand: cmd=%q -> AST: read-only", debug.Truncate(command, 80))
 			return shellCommandAnalysis{

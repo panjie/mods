@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -288,17 +289,59 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
-func TestAnalyzeShellCommandPowershellSkipsAST(t *testing.T) {
-	// powershell_run should skip the AST classifier and use the test seam
-	// (which simulates the LLM path).
+func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
+	// PowerShell AST classifier requires Windows + pwsh.exe. On other
+	// platforms IsReadOnlyPowerShell fail-closes, so read-only commands
+	// reach the LLM seam and t.Fatalf would fire.
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell AST classifier requires Windows")
+	}
+	// These PowerShell commands should be caught by the AST classifier
+	// and never reach the LLM (shellAnalyzer test seam).
+	cases := []struct {
+		name string
+		cmd  string
+	}{
+		{"get-childitem", "Get-ChildItem"},
+		{"get-content", "Get-Content file.txt"},
+		{"test-path", "Test-Path x"},
+		{"get-process", "Get-Process"},
+		{"pipe sort", "Get-ChildItem | Sort-Object Name"},
+		{"alias gci", "gci"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := &Mods{
+				shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+					t.Fatalf("LLM classifier should not be called for %q", command)
+					return defaultShellCommandAnalysis()
+				},
+			}
+			t.Cleanup(func() { mods.shellAnalyzer = nil })
+			result := mods.analyzeShellCommand("powershell_run", c.cmd)
+			require.Falsef(t, result.NeedsReview, "cmd=%q should be read-only", c.cmd)
+		})
+	}
+}
+
+func TestAnalyzeShellCommandPowerShellWriteGoesToLLM(t *testing.T) {
+	// PowerShell AST classifier requires Windows + pwsh.exe. On other
+	// platforms the classifier fail-closes and all PowerShell commands
+	// reach the LLM seam, so this test still passes but for a different
+	// reason — skip to avoid testing the wrong code path.
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell AST classifier requires Windows")
+	}
+	// Write PowerShell commands should fall through to the LLM (test seam).
 	called := false
 	mods := &Mods{
 		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
 			called = true
-			return shellCommandAnalysis{NeedsReview: true, Reason: "powershell"}
+			return shellCommandAnalysis{NeedsReview: true, Reason: "write command"}
 		},
 	}
 	t.Cleanup(func() { mods.shellAnalyzer = nil })
-	mods.analyzeShellCommand("powershell_run", "Get-ChildItem")
-	require.True(t, called, "shellAnalyzer should be called for powershell_run")
+	result := mods.analyzeShellCommand("powershell_run", "Set-Content file.txt 'hello'")
+	require.True(t, result.NeedsReview, "Set-Content should require review")
+	require.True(t, called, "LLM classifier should be called for write commands")
 }

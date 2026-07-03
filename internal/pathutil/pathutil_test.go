@@ -1,7 +1,6 @@
 package pathutil
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,8 +16,8 @@ func TestExpandTokenPOSIX(t *testing.T) {
 	require.Equal(t, "/home/test/Downloads", NormalizePath("~/Downloads", opts))
 	require.Equal(t, "/home/test/Downloads", NormalizePath("$HOME/Downloads", opts))
 	require.Equal(t, "/home/test/Downloads", NormalizePath("${HOME}/Downloads", opts))
-	require.Equal(t, filepath.Clean("/workspace/sibling/file"), NormalizePath("../sibling/file", opts))
-	require.Equal(t, filepath.Clean("/workspace/project/~/literal"), NormalizePath("./~/literal", opts))
+	require.Equal(t, "/workspace/sibling/file", NormalizePath("../sibling/file", opts))
+	require.Equal(t, "/workspace/project/~/literal", NormalizePath("./~/literal", opts))
 }
 
 func TestExpandTokenPowerShell(t *testing.T) {
@@ -91,7 +90,7 @@ func TestNormalizeDirs(t *testing.T) {
 	}, opts)
 	require.ElementsMatch(t, []string{
 		"/home/test/Downloads",
-		filepath.Clean("/workspace/sibling/file"),
+		"/workspace/sibling/file",
 	}, got)
 }
 
@@ -106,10 +105,10 @@ func TestNormalizeShellPathGlob(t *testing.T) {
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("$HOME/Downloads/*", posix))
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("${HOME}/Downloads/*", posix))
 	require.Equal(t, "/tmp", NormalizeShellPath("/tmp/*.log", posix))
-	require.Equal(t, filepath.Clean("/workspace/sibling"), NormalizeShellPath("../sibling/*.txt", posix))
+	require.Equal(t, "/workspace/sibling", NormalizeShellPath("../sibling/*.txt", posix))
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("~/Downloads/**/*.zip", posix))
 	require.Equal(t, "/", NormalizeShellPath("/*", posix))
-	require.Equal(t, filepath.Clean("/workspace/project/src"), NormalizeShellPath("src/*.go", posix))
+	require.Equal(t, "/workspace/project/src", NormalizeShellPath("src/*.go", posix))
 	require.Equal(t, "/tmp/*.log", NormalizePath("/tmp/*.log", posix))
 }
 

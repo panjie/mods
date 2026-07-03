@@ -1,9 +1,6 @@
 package approval
 
-import (
-	"path/filepath"
-	"strings"
-)
+import "github.com/panjie/mods/internal/pathutil"
 
 // ReviewMode mirrors the config-layer review modes without importing the
 // config package, keeping approval free of that dependency.
@@ -53,34 +50,16 @@ const (
 // fs_* tools resolve them against the workspace before reaching here
 // and shell commands without absolute paths stay inside the workspace.
 func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
-	if path == "" {
+	switch pathutil.Location(path, scope.Value, safeDirs) {
+	case pathutil.LocationUnknown:
 		return locUnknown
-	}
-	if !filepath.IsAbs(path) && !windowsPathIsAbs(path) {
+	case pathutil.LocationWorkspace:
 		return locWorkspace
+	case pathutil.LocationSafe:
+		return locTemp
+	default:
+		return locExternal
 	}
-	cleaned := filepath.Clean(path)
-	if isWithin(cleaned, filepath.Clean(scope.Value)) {
-		return locWorkspace
-	}
-	for _, s := range safeDirs {
-		if isWithin(cleaned, filepath.Clean(s)) {
-			return locTemp
-		}
-	}
-	return locExternal
-}
-
-// isWithin reports whether target is root itself or a descendant of root.
-func isWithin(target, root string) bool {
-	if root == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel))
 }
 
 // ClassifyAccess applies the directory-centric approval matrix.

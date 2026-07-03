@@ -263,6 +263,13 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
 		scope := m.reviewer.scope
 		safeDirs := []string{os.TempDir()}
+		if len(intent.Dirs) > 0 {
+			if registry.ShellExecution(name) {
+				intent.Dirs = normalizeShellAffectedDirsForTool(intent.Dirs, scope.Value, name)
+			} else {
+				intent.Dirs = normalizeAffectedDirsForWorkspace(intent.Dirs, scope.Value)
+			}
+		}
 
 		// Inject authorized external directories so resolveWorkspacePath honors
 		// approval. This applies whether or not review is skipped below: a

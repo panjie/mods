@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/panjie/mods/internal/pathutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
@@ -246,7 +246,7 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 			return AccessIntent{Class: shellAccessMode(a)}
 		}
 		a := analyze(name, ExtractShellCommand(data))
-		return AccessIntent{Class: shellAccessMode(a), Dirs: normalizeAffectedDirs(a.AffectedDirs)}
+		return AccessIntent{Class: shellAccessMode(a), Dirs: normalizeShellAffectedDirsForTool(a.AffectedDirs, "", name)}
 	}
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
@@ -273,62 +273,19 @@ func shellAccessMode(a shellCommandAnalysis) AccessClass {
 // alongside (or instead of) its containing directory; without this, the
 // "Always allows" line would advertise a file name as if it were a dir.
 func normalizeAffectedDirs(dirs []string) []string {
-	if len(dirs) == 0 {
-		return nil
-	}
-	homeDir := ""
-	if dir, err := os.UserHomeDir(); err == nil {
-		homeDir = dir
-	}
-	seen := make(map[string]bool, len(dirs))
-	resolved := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		d = expandCurrentUserHomePath(d, homeDir)
-		d = filepath.Clean(d)
-		if d == "" || d == "." {
-			continue
-		}
-		// If the path exists and is a file, the affected directory is its
-		// parent. Non-existent paths are kept as-is: the LLM may report a
-		// directory that the command will create.
-		if info, err := os.Stat(d); err == nil && !info.IsDir() {
-			d = filepath.Dir(d)
-		}
-		if !seen[d] {
-			seen[d] = true
-			resolved = append(resolved, d)
-		}
-	}
-	// Drop any path that falls inside another listed path (e.g. a file
-	// reduced to its parent that is already present, or nested dirs).
-	kept := make([]string, 0, len(resolved))
-	for _, d := range resolved {
-		covered := false
-		for _, other := range resolved {
-			if d == other {
-				continue
-			}
-			if pathWithinDir(d, other) {
-				covered = true
-				break
-			}
-		}
-		if !covered {
-			kept = append(kept, d)
-		}
-	}
-	return kept
+	return normalizeAffectedDirsForWorkspace(dirs, "")
 }
 
-// pathWithinDir reports whether target is root itself or a descendant of
-// root, using slash-normalized comparison so it works across platforms.
-func pathWithinDir(target, root string) bool {
-	target = filepath.ToSlash(filepath.Clean(target))
-	root = filepath.ToSlash(filepath.Clean(root))
-	if target == root {
-		return true
-	}
-	return strings.HasPrefix(target, root+"/")
+func normalizeAffectedDirsForWorkspace(dirs []string, workspace string) []string {
+	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+}
+
+func normalizeShellAffectedDirsForWorkspace(dirs []string, workspace string) []string {
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+}
+
+func normalizeShellAffectedDirsForTool(dirs []string, workspace string, tool string) []string {
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, shellPathFlavor(tool)))
 }
 
 // reviewerDeps carries the three things requestApproval needs from its
@@ -355,12 +312,12 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		if intent.Class != "" {
 			analysis = shellCommandAnalysis{
 				NeedsReview:  intent.Class == AccessWrite,
-				AffectedDirs: normalizeAffectedDirs(intent.Dirs),
+				AffectedDirs: normalizeShellAffectedDirsForTool(intent.Dirs, r.scope.Value, name),
 			}
 			intent.Dirs = analysis.AffectedDirs
 		} else if cmd := extractShellCommand(data); cmd != "" && deps.analyzeShell != nil {
 			analysis = deps.analyzeShell(name, cmd)
-			analysis.AffectedDirs = normalizeAffectedDirs(analysis.AffectedDirs)
+			analysis.AffectedDirs = normalizeShellAffectedDirsForTool(analysis.AffectedDirs, r.scope.Value, name)
 			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs}
 		} else {
 			analysis = defaultShellCommandAnalysis()
@@ -442,10 +399,9 @@ func safeDirs() []string {
 }
 
 func isUnderSafeDir(path string) bool {
-	cleaned := filepath.Clean(path)
+	cleaned := pathutil.NormalizePath(path, pathutil.DefaultOptions("", pathutil.FlavorPOSIX))
 	for _, safe := range safeDirs() {
-		safeClean := filepath.Clean(safe)
-		if cleaned == safeClean || strings.HasPrefix(cleaned, safeClean+string(filepath.Separator)) {
+		if pathutil.Contains(safe, cleaned) {
 			return true
 		}
 	}

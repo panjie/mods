@@ -16,6 +16,7 @@ import (
 
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/debug"
+	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 )
@@ -51,11 +52,8 @@ func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval
 		if p == "" {
 			return approval.AccessIntent{Class: class}
 		}
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(root, p)
-		}
-		p = filepath.Clean(p)
-		dir := filepath.Dir(p)
+		p = pathutil.NormalizePath(p, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
+		dir := pathutil.ParentDir(p)
 		if readOnly {
 			if info, err := os.Stat(p); err == nil && info.IsDir() {
 				dir = p
@@ -130,9 +128,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_read_file",
-			Description: "Read a UTF-8 text file from the workspace. Use offset and limit to read large files in chunks.",
+			Description: "Read a UTF-8 text file. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval. Use offset and limit to read large files in chunks.",
 			InputSchema: objectSchema(map[string]any{
-				"path":   stringProp("Path to the file, relative to the workspace or absolute within it."),
+				"path":   stringProp("Path to the file, relative to the workspace, absolute, or using the current user's home directory."),
 				"offset": integerProp("Zero-based byte offset to start reading from."),
 				"limit":  integerProp("Maximum bytes to return."),
 			}, "path"),
@@ -196,9 +194,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_write_file",
-			Description: "Write a UTF-8 text file inside the workspace, replacing existing content.",
+			Description: "Write a UTF-8 text file, replacing existing content. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
 			InputSchema: objectSchema(map[string]any{
-				"path":    stringProp("Path to write, relative to the workspace or absolute within it."),
+				"path":    stringProp("Path to write, relative to the workspace, absolute, or using the current user's home directory."),
 				"content": stringProp("Complete file content to write."),
 			}, "path", "content"),
 		},
@@ -232,9 +230,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_list_dir",
-			Description: "List files and directories in a workspace directory.",
+			Description: "List files and directories. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory path, relative to the workspace or absolute within it."),
+				"path":        stringProp("Directory path, relative to the workspace, absolute, or using the current user's home directory."),
 				"max_entries": integerProp("Maximum entries to return."),
 			}, "path"),
 		},
@@ -282,9 +280,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_stat",
-			Description: "Get metadata for a workspace file or directory.",
+			Description: "Get metadata for a file or directory. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
 			InputSchema: objectSchema(map[string]any{
-				"path": stringProp("Path to inspect, relative to the workspace or absolute within it."),
+				"path": stringProp("Path to inspect, relative to the workspace, absolute, or using the current user's home directory."),
 			}, "path"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
@@ -315,9 +313,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_search",
-			Description: "Search text files in the workspace for a literal query string.",
+			Description: "Search text files for a literal query string. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory or file path to search within."),
+				"path":        stringProp("Directory or file path to search within, relative to the workspace, absolute, or using the current user's home directory."),
 				"query":       stringProp("Literal text to search for."),
 				"max_results": integerProp("Maximum matching lines to return."),
 			}, "path", "query"),

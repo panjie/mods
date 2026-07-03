@@ -2,9 +2,10 @@ package approval
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/panjie/mods/internal/pathutil"
 )
 
 // Public matching predicates and the shell-rule bridge. These are the
@@ -77,6 +78,10 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 	if len(dirs) == 0 {
 		return false
 	}
+	dirs = normalizeDirsForScope(dirs, scope)
+	if len(dirs) == 0 {
+		return false
+	}
 	scopedRules := rulesForScope(rules, scope)
 	for _, rule := range scopedRules {
 		if rule.Type != DirAllow {
@@ -85,9 +90,10 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 		if rule.Mode != "" && rule.Mode != mode {
 			continue
 		}
+		rulePaths := normalizeShellDirsForWorkspace(rule.Paths, scope.Value)
 		allMatch := true
 		for _, dir := range dirs {
-			if !dirWithinPaths(rule.Paths, dir) {
+			if !dirWithinPaths(rulePaths, dir) {
 				allMatch = false
 				break
 			}
@@ -262,8 +268,8 @@ func matchShellPrefix(pattern, command string) bool {
 // against saved DirAllow rules. Because it inspects write targets
 // extracted from the command, it only honours write-mode and legacy
 // (empty-mode) rules; a read-only approval must not satisfy a write.
-func dirAllowForCommand(tool string, command string, rules []Rule, _ string, posix bool) bool {
-	targetDirs := extractWritableDirs(command, posix)
+func dirAllowForCommand(tool string, command string, rules []Rule, workspace string, posix bool) bool {
+	targetDirs := normalizeShellDirsForWorkspaceWithMode(extractWritableDirs(command, posix), workspace, posix)
 	if len(targetDirs) == 0 {
 		return false
 	}
@@ -274,9 +280,10 @@ func dirAllowForCommand(tool string, command string, rules []Rule, _ string, pos
 		if rule.Mode != "" && rule.Mode != AccessWrite {
 			continue
 		}
+		rulePaths := normalizeShellDirsForWorkspaceWithMode(rule.Paths, workspace, posix)
 		allMatch := true
 		for _, targetDir := range targetDirs {
-			if !dirWithinPaths(rule.Paths, targetDir) {
+			if !dirWithinPaths(rulePaths, targetDir) {
 				allMatch = false
 				break
 			}
@@ -293,23 +300,38 @@ func dirAllowForCommand(tool string, command string, rules []Rule, _ string, pos
 // Windows-style paths and rejects sibling-prefix matches such as
 // /tmp/cache2/file against an allowed /tmp/cache.
 func dirWithinPaths(allowed []string, target string) bool {
+	target = pathutil.NormalizePath(target, pathutil.DefaultOptions("", pathutil.FlavorPOSIX))
 	for _, dir := range allowed {
-		dir = cleanDir(dir)
-		target = cleanDir(target)
+		dir = pathutil.NormalizePath(dir, pathutil.DefaultOptions("", pathutil.FlavorPOSIX))
 		if dir == "." {
-			if target == "." || !filepath.IsAbs(target) && !windowsPathIsAbs(target) {
+			if target == "." || !pathutil.IsAbs(target) && !pathutil.IsUnresolvedHomePath(target) {
 				return true
 			}
 			continue
 		}
-		compareDir, compareTarget := dir, target
-		if windowsStylePath(dir) || windowsStylePath(target) {
-			compareDir = strings.ToLower(compareDir)
-			compareTarget = strings.ToLower(compareTarget)
-		}
-		if compareTarget == compareDir || strings.HasPrefix(compareTarget, descendantPrefix(compareDir)) {
+		if pathutil.Contains(dir, target) {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeDirsForScope(dirs []string, scope Scope) []string {
+	return normalizeDirsForWorkspace(dirs, scope.Value)
+}
+
+func normalizeDirsForWorkspace(dirs []string, workspace string) []string {
+	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+}
+
+func normalizeShellDirsForWorkspace(dirs []string, workspace string) []string {
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+}
+
+func normalizeShellDirsForWorkspaceWithMode(dirs []string, workspace string, posix bool) []string {
+	flavor := pathutil.FlavorPowerShell
+	if posix {
+		flavor = pathutil.FlavorPOSIX
+	}
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, flavor))
 }

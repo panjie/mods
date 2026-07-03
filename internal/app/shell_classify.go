@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
@@ -31,6 +31,13 @@ func defaultShellCommandAnalysis() shellCommandAnalysis {
 	return shellCommandAnalysis{NeedsReview: true}
 }
 
+func shellPathFlavor(tool string) pathutil.Flavor {
+	if tool == "powershell_run" {
+		return pathutil.FlavorPowerShell
+	}
+	return pathutil.FlavorPOSIX
+}
+
 func (m *Mods) classifyShellCommand(tool, command string) bool {
 	return m.analyzeShellCommand(tool, command).NeedsReview
 }
@@ -41,7 +48,8 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		ws = m.Config.ResolveWorkspace().Canonical
 	}
 
-	externalPaths := extractExternalPaths(command, ws)
+	flavor := shellPathFlavor(tool)
+	externalPaths := extractExternalPathsWithFlavor(command, ws, flavor)
 	var psArgPaths []string
 
 	// Tier 1: AST-based read-only classifier.
@@ -53,7 +61,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		ro, reason, psPaths := approval.IsReadOnlyPowerShell(command)
 		psArgPaths = psPaths
 		if ro {
-			psExternal := filterArgPaths(psPaths, ws)
+			psExternal := filterArgPaths(psPaths, ws, flavor)
 			debug.Printf("analyzeShellCommand: cmd=%q -> PS AST: read-only", debug.Truncate(command, 80))
 			return shellCommandAnalysis{
 				NeedsReview:  false,
@@ -110,7 +118,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	}
 	// Also merge AST-extracted PowerShell argument paths for write commands
 	// that fell through to the LLM — the LLM may miss path arguments.
-	for _, p := range filterArgPaths(psArgPaths, ws) {
+	for _, p := range filterArgPaths(psArgPaths, ws, flavor) {
 		found := false
 		for _, d := range result.AffectedDirs {
 			if d == p {
@@ -370,6 +378,8 @@ func isSimpleReadOnly(command string) bool {
 var (
 	reParentPath  = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
 	reHomePath    = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
+	reHomeVarPath = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/][^\s'"<>|;,&(){}]*`)
+	reCMDHomePath = regexp.MustCompile(`(?i)%(?:USERPROFILE|HOMEDRIVE%%HOMEPATH)%[\\/][^\s'"<>|;,&(){}]*`)
 	reUnixAbsPath = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
 	reWinAbsPath  = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
 )
@@ -380,16 +390,18 @@ var (
 // The results populate AffectedDirs so ClassifyAccess and risk labels can
 // correctly identify external access even when the LLM omits them.
 func extractExternalPaths(command, workspaceDir string) []string {
-	homeDir := ""
-	if dir, err := os.UserHomeDir(); err == nil && dir != "" {
-		homeDir = dir
-		command = expandHomeVars(command, homeDir)
-	}
-	dirClean := filepath.Clean(workspaceDir)
+	return extractExternalPathsWithFlavor(command, workspaceDir, pathutil.FlavorPOSIX)
+}
+
+func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
+	opts := pathutil.DefaultOptions(workspaceDir, flavor)
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
-		p = expandCurrentUserHomePath(p, homeDir)
+		p = pathutil.NormalizeShellPath(p, opts)
+		if pathutil.Location(p, workspaceDir, nil) != pathutil.LocationExternal {
+			return
+		}
 		if p == "" || seen[p] {
 			return
 		}
@@ -397,16 +409,18 @@ func extractExternalPaths(command, workspaceDir string) []string {
 		paths = append(paths, p)
 	}
 	for _, m := range reUnixAbsPath.FindAllStringSubmatch(command, -1) {
-		if !pathInsideWorkspace(m[1], dirClean) {
-			add(m[1])
-		}
+		add(m[1])
 	}
 	for _, m := range reWinAbsPath.FindAllStringSubmatch(command, -1) {
-		if !pathInsideWorkspace(m[1], dirClean) {
-			add(m[1])
-		}
+		add(m[1])
 	}
 	for _, m := range reHomePath.FindAllString(command, -1) {
+		add(m)
+	}
+	for _, m := range reHomeVarPath.FindAllString(command, -1) {
+		add(m)
+	}
+	for _, m := range reCMDHomePath.FindAllString(command, -1) {
 		add(m)
 	}
 	for _, m := range reParentPath.FindAllString(command, -1) {
@@ -415,59 +429,11 @@ func extractExternalPaths(command, workspaceDir string) []string {
 	return paths
 }
 
-func expandCurrentUserHomePath(path, homeDir string) string {
-	if homeDir == "" {
-		return path
-	}
-	if path == "~" {
-		return homeDir
-	}
-	if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
-		return filepath.Clean(filepath.Join(homeDir, path[2:]))
-	}
-	return path
-}
-
 // mentionsExternalPath reports whether the command text references any path
 // outside the workspace. It delegates to extractExternalPaths for the actual
 // work and is retained as a thin wrapper for existing callers and tests.
 func mentionsExternalPath(command, workspaceDir string) bool {
 	return len(extractExternalPaths(command, workspaceDir)) > 0
-}
-
-// expandHomeVars replaces $HOME and $env:USERPROFILE (and braced variants)
-// with homeDir when followed by a path separator, so downstream regexes can
-// detect the resolved absolute path as external.
-func expandHomeVars(command, homeDir string) string {
-	if homeDir == "" {
-		return command
-	}
-	return reHomeVar.ReplaceAllStringFunc(command, func(match string) string {
-		return homeDir + match[len(match)-1:]
-	})
-}
-
-// reHomeVar matches $HOME, $env:USERPROFILE, ${HOME}, or ${env:USERPROFILE}
-// (case-insensitive) only when immediately followed by a path separator,
-// so unrelated variables like $HOMEPAGE are not expanded.
-var reHomeVar = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/]`)
-
-func pathInsideWorkspace(target, workspaceDir string) bool {
-	if workspaceDir == "" {
-		return false
-	}
-	if isWindowsStylePath(target) != isWindowsStylePath(workspaceDir) {
-		return false
-	}
-	rel, err := filepath.Rel(workspaceDir, target)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel))
-}
-
-func isWindowsStylePath(p string) bool {
-	return len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/')
 }
 
 // shellClassifyCacheCapacity bounds the in-memory cache of shell classifier
@@ -550,14 +516,14 @@ var shellClassifyCache = newShellClassifyLRU(shellClassifyCacheCapacity)
 // on each argument individually, which is more precise than scanning the
 // full command text because it only considers actual AST-extracted argument
 // values, not arbitrary substrings.
-func filterArgPaths(args []string, workspaceDir string) []string {
+func filterArgPaths(args []string, workspaceDir string, flavor pathutil.Flavor) []string {
 	if len(args) == 0 {
 		return nil
 	}
 	var result []string
 	seen := map[string]bool{}
 	for _, arg := range args {
-		for _, p := range extractExternalPaths(arg, workspaceDir) {
+		for _, p := range extractExternalPathsWithFlavor(arg, workspaceDir, flavor) {
 			if !seen[p] {
 				seen[p] = true
 				result = append(result, p)

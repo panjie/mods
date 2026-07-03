@@ -546,6 +546,11 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	if len(intentW.Dirs) != 1 || intentW.Dirs[0] != canonicalRoot {
 		t.Fatalf("fs_write_file dirs=%v want [%s]", intentW.Dirs, canonicalRoot)
 	}
+	intentLiteralGlob := extW([]byte(`{"path":"literal*/out.txt","content":"x"}`))
+	wantLiteralGlobDir := filepath.Join(canonicalRoot, "literal*")
+	if len(intentLiteralGlob.Dirs) != 1 || intentLiteralGlob.Dirs[0] != wantLiteralGlobDir {
+		t.Fatalf("fs_write_file literal glob dirs=%v want [%s]", intentLiteralGlob.Dirs, wantLiteralGlobDir)
+	}
 
 	extP, ok := registry.IntentExtractor("fs_apply_patch")
 	if !ok {
@@ -561,5 +566,129 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 
 	if _, ok := registry.IntentExtractor("fs_read_file_nonexistent"); ok {
 		t.Fatal("unknown tool must not have an extractor")
+	}
+}
+
+func TestFilesystemHomePathExpansion(t *testing.T) {
+	root := t.TempDir()
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome)
+
+	downloads := filepath.Join(fakeHome, "Downloads")
+	if err := os.MkdirAll(downloads, 0o755); err != nil {
+		t.Fatalf("mkdir downloads: %v", err)
+	}
+	downloadFile := filepath.Join(downloads, "Codex.dmg")
+	if err := os.WriteFile(downloadFile, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed download: %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	extStat, ok := registry.IntentExtractor("fs_stat")
+	if !ok {
+		t.Fatal("fs_stat must have an intent extractor")
+	}
+	intentStat := extStat([]byte(`{"path":"~/Downloads/Codex.dmg"}`))
+	if intentStat.Class != approval.AccessRead {
+		t.Fatalf("fs_stat class=%q want read", intentStat.Class)
+	}
+	if len(intentStat.Dirs) != 1 || intentStat.Dirs[0] != downloads {
+		t.Fatalf("fs_stat dirs=%v want [%s]", intentStat.Dirs, downloads)
+	}
+
+	ctx := WithAuthorizedDirs(context.Background(), []string{downloads})
+	resolved, err := resolveWorkspacePath(ctx, root, "~/Downloads/Codex.dmg", nil)
+	if err != nil {
+		t.Fatalf("approved home read must resolve: %v", err)
+	}
+	wantResolved, err := filepath.EvalSymlinks(downloadFile)
+	if err != nil {
+		t.Fatalf("eval download: %v", err)
+	}
+	if resolved != wantResolved {
+		t.Fatalf("resolved=%q want %q", resolved, wantResolved)
+	}
+
+	extWrite, ok := registry.IntentExtractor("fs_write_file")
+	if !ok {
+		t.Fatal("fs_write_file must have an intent extractor")
+	}
+	outDir := filepath.Join(fakeHome, "mods-out")
+	intentWrite := extWrite([]byte(`{"path":"~/mods-out/out.txt","content":"x"}`))
+	if intentWrite.Class != approval.AccessWrite {
+		t.Fatalf("fs_write_file class=%q want write", intentWrite.Class)
+	}
+	if len(intentWrite.Dirs) != 1 || intentWrite.Dirs[0] != outDir {
+		t.Fatalf("fs_write_file dirs=%v want [%s]", intentWrite.Dirs, outDir)
+	}
+	ctx = WithAuthorizedDirs(context.Background(), []string{outDir})
+	resolved, err = resolveWorkspacePath(ctx, root, "~/mods-out/out.txt", nil)
+	if err != nil {
+		t.Fatalf("approved home write must resolve: %v", err)
+	}
+	fakeHomeEval, err := filepath.EvalSymlinks(fakeHome)
+	if err != nil {
+		t.Fatalf("eval fake home: %v", err)
+	}
+	wantOut := filepath.Join(fakeHomeEval, "mods-out", "out.txt")
+	if resolved != wantOut {
+		t.Fatalf("resolved=%q want %q", resolved, wantOut)
+	}
+}
+
+func TestFilesystemLiteralWorkspaceTilde(t *testing.T) {
+	root := t.TempDir()
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("eval root: %v", err)
+	}
+	literalDir := filepath.Join(canonicalRoot, "~", "literal")
+	if err := os.MkdirAll(literalDir, 0o755); err != nil {
+		t.Fatalf("mkdir literal dir: %v", err)
+	}
+	literalFile := filepath.Join(literalDir, "file.txt")
+	if err := os.WriteFile(literalFile, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed literal file: %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	extStat, ok := registry.IntentExtractor("fs_stat")
+	if !ok {
+		t.Fatal("fs_stat must have an intent extractor")
+	}
+	intent := extStat([]byte(`{"path":"./~/literal/file.txt"}`))
+	if intent.Class != approval.AccessRead {
+		t.Fatalf("fs_stat class=%q want read", intent.Class)
+	}
+	if len(intent.Dirs) != 1 || intent.Dirs[0] != literalDir {
+		t.Fatalf("fs_stat dirs=%v want [%s]", intent.Dirs, literalDir)
+	}
+
+	resolved, err := resolveWorkspacePath(context.Background(), root, "./~/literal/file.txt", nil)
+	if err != nil {
+		t.Fatalf("literal workspace tilde must resolve without external approval: %v", err)
+	}
+	wantResolved, err := filepath.EvalSymlinks(literalFile)
+	if err != nil {
+		t.Fatalf("eval literal file: %v", err)
+	}
+	if resolved != wantResolved {
+		t.Fatalf("resolved=%q want %q", resolved, wantResolved)
+	}
+}
+
+func TestResolveWorkspacePathRejectsUnsupportedOtherUserHome(t *testing.T) {
+	root := t.TempDir()
+	ctx := WithAuthorizedDirs(context.Background(), []string{"~root"})
+	if _, err := resolveWorkspacePath(ctx, root, "~root/.ssh/config", nil); err == nil {
+		t.Fatal("unsupported other-user home path must not resolve into the workspace")
 	}
 }

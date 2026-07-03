@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/panjie/mods/internal/pathutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,6 +122,12 @@ func TestExtractExternalPaths(t *testing.T) {
 		want := []string{filepath.Join(home, "Downloads")}
 		require.Equal(t, want, extractExternalPaths("find ~/Downloads -type f -printf '%s %p\\n'", ws))
 		require.Equal(t, want, extractExternalPaths("du -sh ~/Downloads", ws))
+		require.Equal(t, want, extractExternalPaths("du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20", ws))
+	})
+
+	t.Run("absolute shell glob collapses to containing directory", func(t *testing.T) {
+		got := extractExternalPaths("cat "+filepath.Join(ext, "*.log"), ws)
+		require.Equal(t, []string{ext}, got)
 	})
 
 	t.Run("tilde other user path", func(t *testing.T) {
@@ -130,12 +137,17 @@ func TestExtractExternalPaths(t *testing.T) {
 
 	t.Run("parent traversal path", func(t *testing.T) {
 		got := extractExternalPaths("cat ../sibling/file", ws)
-		require.Equal(t, []string{"../sibling/file"}, got)
+		require.Equal(t, []string{filepath.Clean(filepath.Join(ws, "..", "sibling", "file"))}, got)
+	})
+
+	t.Run("parent traversal shell glob collapses to containing directory", func(t *testing.T) {
+		got := extractExternalPaths("cat ../sibling/*.txt", ws)
+		require.Equal(t, []string{filepath.Clean(filepath.Join(ws, "..", "sibling"))}, got)
 	})
 
 	t.Run("bare dot-dot", func(t *testing.T) {
 		got := extractExternalPaths("cat ../../file", ws)
-		require.Equal(t, []string{"../../file"}, got)
+		require.Equal(t, []string{filepath.Clean(filepath.Join(ws, "..", "..", "file"))}, got)
 	})
 
 	t.Run("find with external dir", func(t *testing.T) {
@@ -168,15 +180,42 @@ func TestExtractExternalPaths(t *testing.T) {
 	})
 
 	t.Run("PowerShell $HOME variable resolves to external", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
 		sep := string(filepath.Separator)
 		got := extractExternalPaths("Get-ChildItem $HOME"+sep+"Downloads -Recurse", ws)
-		require.NotEmpty(t, got, "$HOME path should be detected as external to workspace")
+		require.Equal(t, []string{filepath.Join(home, "Downloads")}, got)
 	})
 
 	t.Run("PowerShell $env:USERPROFILE variable resolves to external", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
 		sep := string(filepath.Separator)
 		got := extractExternalPaths("Get-ChildItem $env:USERPROFILE"+sep+"Downloads -Recurse", ws)
-		require.NotEmpty(t, got, "$env:USERPROFILE path should be detected as external to workspace")
+		require.Equal(t, []string{filepath.Join(home, "Downloads")}, got)
+	})
+
+	t.Run("PowerShell tilde backslash resolves to external", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+		got := extractExternalPaths(`Get-Content ~\Downloads\notes.txt`, ws)
+		require.Equal(t, []string{filepath.Join(home, "Downloads", "notes.txt")}, got)
+	})
+
+	t.Run("cmd USERPROFILE variable resolves to external", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+		got := extractExternalPaths(`type %USERPROFILE%\Downloads\notes.txt`, ws)
+		require.Equal(t, []string{filepath.Join(home, "Downloads", "notes.txt")}, got)
+	})
+
+	t.Run("PowerShell drive glob collapses to containing directory", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(`Get-Content C:\Users\Test\Downloads\*`, ws, pathutil.FlavorPowerShell)
+		require.Equal(t, []string{`C:\Users\Test\Downloads`}, got)
 	})
 }
 
@@ -199,6 +238,8 @@ func TestMentionsExternalPath(t *testing.T) {
 		{"Get-ChildItem $HOME\\Downloads", true},
 		{"ls $HOME/Downloads", true},
 		{"Get-ChildItem $env:USERPROFILE\\Downloads", true},
+		{`Get-Content ~\Downloads\x`, true},
+		{`type %USERPROFILE%\Downloads\x`, true},
 		{"echo $HOME is nice", false},
 	}
 	for _, c := range cases {
@@ -210,33 +251,6 @@ func TestMentionsExternalPathEmptyRoot(t *testing.T) {
 	// No workspace context: any absolute path is treated as potentially external.
 	require.True(t, mentionsExternalPath("cat /etc/passwd", ""))
 	require.False(t, mentionsExternalPath("cat README.md", ""))
-}
-
-func TestExpandHomeVars(t *testing.T) {
-	const home = "/home/test"
-	cases := []struct {
-		name string
-		cmd  string
-		want string
-	}{
-		{"$HOME backslash", "$HOME\\Downloads", "/home/test\\Downloads"},
-		{"$HOME forward slash", "$HOME/Downloads", "/home/test/Downloads"},
-		{"$env:USERPROFILE", "$env:USERPROFILE\\Downloads", "/home/test\\Downloads"},
-		{"${HOME} braced", "${HOME}\\Downloads", "/home/test\\Downloads"},
-		{"${env:USERPROFILE} braced", "${env:USERPROFILE}\\Downloads", "/home/test\\Downloads"},
-		{"lowercase $home", "$home\\Downloads", "/home/test\\Downloads"},
-		{"uppercase $ENV:USERPROFILE", "$ENV:USERPROFILE\\Downloads", "/home/test\\Downloads"},
-		{"$HOMEPAGE not expanded", "$HOMEPAGE\\foo", "$HOMEPAGE\\foo"},
-		{"no path separator after $HOME", "echo $HOME is nice", "echo $HOME is nice"},
-		{"multiple vars", "$HOME\\a $env:USERPROFILE\\b", "/home/test\\a /home/test\\b"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			require.Equal(t, c.want, expandHomeVars(c.cmd, home))
-		})
-	}
-	// Empty home dir: no expansion.
-	require.Equal(t, "$HOME\\Downloads", expandHomeVars("$HOME\\Downloads", ""))
 }
 
 func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {

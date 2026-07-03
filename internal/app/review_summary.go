@@ -3,9 +3,10 @@ package app
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/panjie/mods/internal/pathutil"
 )
 
 type patchFileChange struct {
@@ -49,28 +50,21 @@ func readReviewTarget(parsed map[string]any, scope Scope, intent AccessIntent) s
 	if path == "" {
 		return ""
 	}
-	target := path
-	if !filepath.IsAbs(target) && scope.Value != "" {
-		target = filepath.Join(scope.Value, target)
-	}
-	target = filepath.Clean(target)
+	target := pathutil.NormalizePath(path, pathutil.DefaultOptions(scope.Value, pathutil.FlavorPOSIX))
 	if info, err := os.Stat(target); err == nil {
 		if info.IsDir() {
 			return target
 		}
-		return filepath.Dir(target)
+		return pathutil.ParentDir(target)
 	}
-	return filepath.Dir(target)
+	return pathutil.ParentDir(target)
 }
 
 func writeTargetMode(path string, scope Scope) string {
 	if path == "" {
 		return "unknown target"
 	}
-	target := path
-	if !filepath.IsAbs(target) && scope.Value != "" {
-		target = filepath.Join(scope.Value, target)
-	}
+	target := pathutil.NormalizePath(path, pathutil.DefaultOptions(scope.Value, pathutil.FlavorPOSIX))
 	info, err := os.Stat(target)
 	switch {
 	case err == nil && info.IsDir():
@@ -117,18 +111,7 @@ func pathWithinScope(path string, scope Scope) bool {
 	if path == "" {
 		return false
 	}
-	// Normalize to slashes first: on Windows filepath.Clean("/tmp") yields
-	// "\tmp", which would defeat the POSIX-root check below.
-	target := filepath.ToSlash(filepath.Clean(path))
-	isAbs := strings.HasPrefix(target, "/") || filepath.VolumeName(target) != ""
-	if !isAbs {
-		return true
-	}
-	if scope.Value == "" {
-		return false
-	}
-	r := filepath.ToSlash(filepath.Clean(scope.Value))
-	return target == r || strings.HasPrefix(target, r+"/")
+	return pathutil.Location(path, scope.Value, nil) == pathutil.LocationWorkspace
 }
 
 func summarizeAffectedDirs(dirs []string) string {

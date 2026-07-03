@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/panjie/mods/internal/pathutil"
 )
 
 // Workspace path resolution and safety. Every filesystem tool calls
@@ -26,11 +27,10 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}
-	path := input
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(root, path)
+	path := pathutil.NormalizePath(input, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
+	if pathutil.IsUnresolvedHomePath(path) {
+		return "", fmt.Errorf("path %q uses an unsupported user-home form; use an absolute path for that user", input)
 	}
-	path = filepath.Clean(path)
 
 	// boundary is the directory the resolved path must stay inside after
 	// symlink evaluation. The default is the workspace; if the input
@@ -49,6 +49,29 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 		}
 	}
 
+	resolved, err := evalPathThroughExistingParent(path)
+	if err != nil {
+		return "", err
+	}
+
+	// Compare the resolved path against the boundary after evaluating the
+	// boundary's own symlinks (necessary on macOS where /tmp resolves to
+	// /private/tmp; without this step a perfectly valid path under
+	// /private/tmp/... would be reported as escaping /tmp).
+	boundaryEval := boundary
+	if absBoundary, absErr := filepath.Abs(boundary); absErr == nil {
+		boundaryEval = absBoundary
+	}
+	if eval, evalErr := evalPathThroughExistingParent(boundaryEval); evalErr == nil {
+		boundaryEval = eval
+	}
+	if err := ensureInsideRoot(boundaryEval, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
+func evalPathThroughExistingParent(path string) (string, error) {
 	existing := path
 	var missing []string
 	for {
@@ -70,23 +93,7 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 		return "", err
 	}
 	parts := append([]string{existingEval}, missing...)
-	resolved := filepath.Join(parts...)
-
-	// Compare the resolved path against the boundary after evaluating the
-	// boundary's own symlinks (necessary on macOS where /tmp resolves to
-	// /private/tmp; without this step a perfectly valid path under
-	// /private/tmp/... would be reported as escaping /tmp).
-	boundaryEval := boundary
-	if absBoundary, absErr := filepath.Abs(boundary); absErr == nil {
-		boundaryEval = absBoundary
-	}
-	if eval, evalErr := filepath.EvalSymlinks(boundaryEval); evalErr == nil {
-		boundaryEval = eval
-	}
-	if err := ensureInsideRoot(boundaryEval, resolved); err != nil {
-		return "", err
-	}
-	return resolved, nil
+	return filepath.Join(parts...), nil
 }
 
 // matchSafeDir returns the first safe directory that lexically contains
@@ -117,11 +124,7 @@ func matchAuthorizedDir(ctx context.Context, path string) (string, bool) {
 
 // contains reports whether path is dir itself or a descendant of dir.
 func contains(dir, path string) bool {
-	rel, err := filepath.Rel(dir, path)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel))
+	return pathutil.Contains(dir, path)
 }
 
 func workspaceRel(root, path string) string {

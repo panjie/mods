@@ -446,6 +446,20 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("mutable requires approval for read-only shell parent traversal in non-TTY", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
+		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat ../sibling/file"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("mutable requires approval for read-only shell tilde path in non-TTY", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
+		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
+		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat ~/Downloads/file"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
 	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
@@ -573,6 +587,79 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.NoError(t, <-errCh)
 	})
 
+	t.Run("candidate dirs expand tilde before saving", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{
+					NeedsReview:  true,
+					AffectedDirs: []string{"~/.ssh"},
+					Reason:       "writes ssh config",
+				}
+			},
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"rm -rf ~/.ssh"}`))
+		}()
+
+		item := <-reviewer.reviewChan
+		require.Len(t, item.candidateRules, 1)
+		require.Equal(t, []string{filepath.Join(home, ".ssh")}, item.candidateRules[0].Paths)
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
+	t.Run("shell glob affected dirs collapse before review and saving", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+		downloads := filepath.Join(home, "Downloads")
+
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{
+					NeedsReview:  false,
+					AffectedDirs: []string{"~/Downloads/*"},
+					Reason:       "read-only",
+				}
+			},
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`))
+		}()
+
+		item := <-reviewer.reviewChan
+		require.Contains(t, item.summary, downloads)
+		require.NotContains(t, item.summary, downloads+string(filepath.Separator)+"*")
+		require.Len(t, item.candidateRules, 1)
+		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
+		require.Equal(t, AccessRead, item.candidateRules[0].Mode)
+		require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
 	t.Run("always still prompts when LLM says no review", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
@@ -613,6 +700,28 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}}))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"some unsupported writer"}`))
+		require.NoError(t, err)
+	})
+
+	t.Run("legacy tilde dir rule matches expanded affected dirs", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{
+					NeedsReview:  true,
+					AffectedDirs: []string{filepath.Join(home, ".config", "mods")},
+				}
+			},
+		}
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}}))
+		err = reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})
 
@@ -914,6 +1023,14 @@ func TestDirAllowMatching(t *testing.T) {
 		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"remove-item c:\\users\\old.txt"}`), testApprovalScope))
 	})
 
+	t.Run("powershell legacy glob rule matches containing directory", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\Users\Test\Downloads\*`}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\Test\\Downloads\\old.txt"}`), testApprovalScope))
+		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\Test\\Downloads2\\old.txt"}`), testApprovalScope))
+	})
+
 	t.Run("windows drive root allows children", func(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\`}})
 		var rs approvalRuleSet
@@ -928,11 +1045,31 @@ func TestDirAllowMatching(t *testing.T) {
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/cache2/file"}`), testApprovalScope))
 	})
 
+	t.Run("legacy glob rule matches containing directory", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/*"}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/cache/file"}`), testApprovalScope))
+		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/cache2/file"}`), testApprovalScope))
+	})
+
 	t.Run("denies windows sibling prefix", func(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users2\\old.txt"}`), testApprovalScope))
+	})
+
+	t.Run("legacy tilde rule matches expanded shell write target", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}})
+		var rs approvalRuleSet
+		rs.Add(rule)
+		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm ~/.config/mods/config.yml"}`), testApprovalScope))
+		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm ~/.ssh/config"}`), testApprovalScope))
 	})
 }
 

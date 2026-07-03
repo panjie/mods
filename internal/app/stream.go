@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -32,11 +31,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 	shell := "sh"
 	if runtime.GOOS == "windows" {
-		if s := os.Getenv("SHELL"); s != "" {
-			shell = filepath.Base(s)
-		} else {
-			shell = "cmd.exe"
-		}
+		shell = "powershell.exe"
 	}
 	sysParts := []string{
 		fmt.Sprintf("workspace=%s", root),

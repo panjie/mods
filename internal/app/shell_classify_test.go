@@ -253,6 +253,16 @@ func TestMentionsExternalPathEmptyRoot(t *testing.T) {
 	require.False(t, mentionsExternalPath("cat README.md", ""))
 }
 
+func TestShellRunPathFlavor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		require.True(t, shellToolUsesPowerShell("shell_run"))
+		require.Equal(t, pathutil.FlavorPowerShell, shellPathFlavor("shell_run"))
+		return
+	}
+	require.False(t, shellToolUsesPowerShell("shell_run"))
+	require.Equal(t, pathutil.FlavorPOSIX, shellPathFlavor("shell_run"))
+}
+
 func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	// These commands would previously fall through to the LLM classifier
 	// because of shell metacharacters (|, &&, $()) or missing from the

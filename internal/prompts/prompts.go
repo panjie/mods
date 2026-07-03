@@ -32,8 +32,8 @@ Priority order:
 
 Platform rules:
 - On macOS/Linux/POSIX, prefer portable sh commands and common project tools.
-- On Windows, prefer powershell_run for most tasks including filesystem inspection, text processing, filtering, counting, and querying. Use PowerShell 5.1 compatible syntax (avoid ternary operators, null-coalescing operators, pipeline chain operators && and ||, and other PowerShell 7+ only features) so commands work across both Windows PowerShell 5.1 and PowerShell 7+. Only use shell_run for cmd.exe builtins that have no PowerShell equivalent or when legacy cmd syntax is required.
-- On Windows, pass only the PowerShell command to powershell_run, without powershell, powershell.exe, pwsh, or -Command prefixes.
+- On Windows, all native shell tools execute PowerShell, including shell_run. Use PowerShell 5.1 compatible syntax (avoid ternary operators, null-coalescing operators, pipeline chain operators && and ||, and other PowerShell 7+ only features) so commands work across both Windows PowerShell 5.1 and PowerShell 7+. Do not use cmd.exe batch syntax or cmd-only flags such as /s, /a-d, or /o-s.
+- On Windows, pass only the PowerShell command to powershell_run or shell_run, without powershell, powershell.exe, pwsh, or -Command prefixes.
 
 Command playbook:
 - Search text: rg "pattern" path

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -32,10 +33,14 @@ func defaultShellCommandAnalysis() shellCommandAnalysis {
 }
 
 func shellPathFlavor(tool string) pathutil.Flavor {
-	if tool == "powershell_run" {
+	if shellToolUsesPowerShell(tool) {
 		return pathutil.FlavorPowerShell
 	}
 	return pathutil.FlavorPOSIX
+}
+
+func shellToolUsesPowerShell(tool string) bool {
+	return tool == "powershell_run" || (tool == "shell_run" && runtime.GOOS == "windows")
 }
 
 func (m *Mods) classifyShellCommand(tool, command string) bool {
@@ -57,7 +62,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// PowerShell: uses a persistent pwsh.exe bridge to call Parser::ParseInput.
 	// Both cover workspace-local and external-path read-only commands;
 	// the approval matrix decides whether external reads need review.
-	if tool == "powershell_run" {
+	if shellToolUsesPowerShell(tool) {
 		ro, reason, psPaths := approval.IsReadOnlyPowerShell(command)
 		psArgPaths = psPaths
 		if ro {
@@ -81,7 +86,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	}
 
 	// Tier 2: conservative allowlist fallback for commands the AST parser
-	// can't handle (e.g. cmd.exe syntax on Windows). Only matches commands
+	// can't handle. Only matches commands
 	// with no shell metacharacters and no external-path references.
 	if isSimpleReadOnly(command) && len(externalPaths) == 0 {
 		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, workspace-local", debug.Truncate(command, 80))

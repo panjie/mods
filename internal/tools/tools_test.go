@@ -443,6 +443,23 @@ func TestPowerShellRun(t *testing.T) {
 	})
 }
 
+func TestShellCommandUsesPowerShellOnWindows(t *testing.T) {
+	cmd := shellCommand(context.Background(), "Write-Output ok")
+	if runtime.GOOS == "windows" {
+		if filepath.Base(cmd.Path) != "powershell.exe" {
+			t.Fatalf("expected shell_run to use powershell.exe on Windows, got %q", cmd.Path)
+		}
+		wantArgs := []string{"powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "Write-Output ok"}
+		if strings.Join(cmd.Args, "\x00") != strings.Join(wantArgs, "\x00") {
+			t.Fatalf("unexpected PowerShell args: %#v", cmd.Args)
+		}
+		return
+	}
+	if filepath.Base(cmd.Path) != "sh" {
+		t.Fatalf("expected shell_run to use sh outside Windows, got %q", cmd.Path)
+	}
+}
+
 // TestResolveWorkspacePathAuthorizesApprovedExternal verifies the new
 // behavior: a path outside the workspace is rejected unless the caller
 // carries an approval-authorized directory (via ctx) that contains it.

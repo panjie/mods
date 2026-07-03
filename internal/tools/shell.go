@@ -232,9 +232,7 @@ func appendExitStatus(text string, code int) string {
 
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
-		cmd := exec.CommandContext(ctx, "cmd", "/D", "/C", command)
-		platform.HideCommandWindow(cmd)
-		return cmd
+		return powerShellCommand(ctx, command)
 	}
 	return exec.CommandContext(ctx, "sh", "-c", command)
 }

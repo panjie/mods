@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-07-03
+
+### Added
+- Directory-centric approval matrix shared by filesystem and shell tools, including read/write-scoped `DirAllow` rules.
+- AST-based POSIX shell and PowerShell read-only classifiers, with PowerShell path extraction for review summaries and approvals.
+- Google/Gemini function-calling support and Anthropic-compatible provider routing via `api-type: anthropic`.
+- Configurable runtime prompt catalog with `prompts` settings and `mods --list-prompts`.
+- Shell command result blocks, review operation summaries, and GoReleaser-based tagged release automation with Homebrew tap updates.
+
+### Changed
+- Windows tool guidance now prefers `powershell_run` and PS 5.1-compatible syntax.
+- `mods --config` can discover models from provider APIs and handles Anthropic-compatible base URLs more consistently.
+- `-c` now maps to `--continue-last`; `-C` now maps to `--continue <title>`.
+- Built-in identity/help guidance was expanded so models can answer more mods usage and configuration questions.
+- Approval and path authorization now pass approved external directories through context before tool execution.
+
+### Fixed
+- Hardened MCP subprocess environment filtering, remote MCP URL validation, patch path validation, and safe-workspace checks.
+- Fixed Gemini streaming/history handling, Cohere nil stream/tail message panics, and config error fallback behavior.
+- Fixed model discovery edge cases, configured API key error labels, provider routing overrides, and shell external path expansion.
+- Fixed XDG install-path detection to honor only `XDG_BIN_HOME` or `XDG=1`.
+- Stabilized release-prep tests against environment leakage and platform-specific temp directory behavior.
+
 ## [2.5.0] - 2026-06-27
 
 ### Added
@@ -79,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Review deadlock in pipe mode and Ctrl+C deadlock on review channel.
 - Cross-platform compatibility; glamour newline collapsing; empty LLM response due to low MaxTokens.
 
+[3.0.0]: https://github.com/panjie/mods/compare/v2.5.0...v3.0.0
 [2.5.0]: https://github.com/panjie/mods/compare/v2.0.0...v2.5.0
 [2.0.0]: https://github.com/panjie/mods/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/panjie/mods/compare/v1.0.0...v1.0.1

@@ -12,7 +12,7 @@ import (
 // RegisterThinking registers a lightweight sequential thinking note tool.
 func RegisterThinking(registry *Registry) error {
 	return registry.Register(Tool{
-		Kind:         ToolKindBuiltin,
+		Kind:            ToolKindBuiltin,
 		Capabilities:    ToolCapabilities{ReadOnly: true},
 		IntentExtractor: func(json.RawMessage) approval.AccessIntent { return approval.AccessIntent{Class: approval.AccessRead} },
 		Spec: proto.ToolSpec{

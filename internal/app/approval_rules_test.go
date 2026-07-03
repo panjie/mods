@@ -575,6 +575,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	})
 
 	t.Run("candidate rules come directly from LLM dirs", func(t *testing.T) {
+		externalDir := `C:\mods-external\cache`
 		mods := &Mods{
 			ctx:                 context.Background(),
 			Config:              &Config{},
@@ -582,7 +583,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			shellAnalyzer: func(string, string) shellCommandAnalysis {
 				return shellCommandAnalysis{
 					NeedsReview:  true,
-					AffectedDirs: []string{"/tmp/cache"},
+					AffectedDirs: []string{externalDir},
 					Reason:       "writes output",
 				}
 			},
@@ -597,10 +598,10 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		}()
 
-		item := <-reviewer.reviewChan
+		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
-		require.Equal(t, []string{"/tmp/cache"}, item.candidateRules[0].Paths)
+		require.Equal(t, []string{externalDir}, item.candidateRules[0].Paths)
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})
@@ -632,7 +633,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"rm -rf ~/.ssh"}`))
 		}()
 
-		item := <-reviewer.reviewChan
+		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, []string{filepath.Join(home, ".ssh")}, item.candidateRules[0].Paths)
 		item.resp <- reviewResponse{approved: true}
@@ -667,7 +668,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`))
 		}()
 
-		item := <-reviewer.reviewChan
+		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Contains(t, item.summary, downloads)
 		require.NotContains(t, item.summary, downloads+string(filepath.Separator)+"*")
 		require.Len(t, item.candidateRules, 1)
@@ -697,7 +698,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"ls"}`))
 		}()
 
-		item := <-reviewer.reviewChan
+		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Empty(t, item.candidateRules)
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
@@ -762,7 +763,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat /etc/passwd"}`))
 		}()
 
-		item := <-reviewer.reviewChan
+		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Equal(t, "shell_run", item.name)
 		// External read triggers review (H1 fix); the label says "external
 		// read" because the LLM classified it as not mutable but it touches
@@ -794,7 +795,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- reviewer.requestApproval(deps, "fs_stat", []byte(fmt.Sprintf(`{"path":%q}`, target)))
 		}()
 
-		item := <-reviewer.reviewChan
+		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Equal(t, "fs_stat", item.name)
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
@@ -873,6 +874,18 @@ func testReviewRegistry(t *testing.T) *toolregistry.Registry {
 }
 
 func noopToolCall(context.Context, json.RawMessage) (string, error) { return "", nil }
+
+func receiveReviewItem(t *testing.T, ch <-chan toolReviewItem) toolReviewItem {
+	t.Helper()
+
+	select {
+	case item := <-ch:
+		return item
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for review item")
+		return toolReviewItem{}
+	}
+}
 
 // testReviewerDeps builds reviewerDeps from a *Mods in the shape these
 // tests historically construct. Prefer constructing reviewerDeps

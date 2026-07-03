@@ -64,12 +64,10 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	s := &Stream{}
 	history, message := fromProtoMessages(request.Messages)
 	body := &cohere.ChatStreamRequest{
-		Model:         cohere.String(request.Model),
-		Message:       message,
-		ChatHistory:   history,
-		Temperature:   request.Temperature,
-		P:             request.TopP,
-		StopSequences: request.Stop,
+		Model:       cohere.String(request.Model),
+		Message:     message,
+		ChatHistory: history,
+		Temperature: request.Temperature,
 	}
 
 	if request.MaxTokens != nil {

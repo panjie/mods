@@ -105,12 +105,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		if request.Temperature != nil {
 			body.Temperature = openai.Float(*request.Temperature)
 		}
-		if request.TopP != nil {
-			body.TopP = openai.Float(*request.TopP)
-		}
-		body.Stop = openai.ChatCompletionNewParamsStopUnion{
-			OfStringArray: request.Stop,
-		}
 		if request.MaxTokens != nil {
 			body.MaxTokens = openai.Int(*request.MaxTokens)
 		}

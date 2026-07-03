@@ -102,10 +102,6 @@ with `--help-all` (marked [advanced]).
 - `--max-tokens <num>` [advanced] — Maximum number of tokens in response
 - `--max-input-chars <num>` — Default character limit on input to model
 - `--no-limit` [advanced] — Turn off the client-side limit on the size of the input into the model
-- `--temp <float>` [advanced] — Temperature (randomness) of results, from 0.0 to 2.0, -1.0 to disable
-- `--topp <float>` [advanced] — TopP, an alternative to temperature, from 0.0 to 1.0, -1.0 to disable
-- `--topk <int>` [advanced] — TopK, only sample from top K options for each subsequent token, -1 to disable
-- `--stop <sequence>` [advanced] — Up to 4 sequences where the API will stop generating further tokens
 
 ### Debug
 - `-D`, `--debug` [advanced] — Enable debug mode to print execution steps, tool calls, and request details
@@ -128,10 +124,6 @@ Top-level keys:
 - `status-text` (string) — text shown while generating
 - `max-tokens` (int) — max tokens in response
 - `max-input-chars` (int) — input character limit
-- `temp` (float) — temperature (0.0-2.0)
-- `topp` (float) — TopP (0.0-1.0)
-- `topk` (int) — TopK
-- `stop` ([]string) — up to 4 stop sequences
 - `no-limit` (bool) — disable input size limit
 - `no-cache` (bool) — disable conversation caching
 - `cache-path` (string) — override cache directory

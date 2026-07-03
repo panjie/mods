@@ -90,17 +90,11 @@ func newChatRequest(request proto.Request) api.ChatRequest {
 		Options:  map[string]any{},
 	}
 
-	if len(request.Stop) > 0 {
-		body.Options["stop"] = request.Stop
-	}
 	if request.MaxTokens != nil {
 		body.Options["num_predict"] = *request.MaxTokens
 	}
 	if request.Temperature != nil {
 		body.Options["temperature"] = *request.Temperature
-	}
-	if request.TopP != nil {
-		body.Options["top_p"] = *request.TopP
 	}
 	return body
 }

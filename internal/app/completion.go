@@ -279,15 +279,11 @@ func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []pr
 	if request.Temperature != nil {
 		tempStr = fmt.Sprintf("%.2f", *request.Temperature)
 	}
-	toppStr := "unset"
-	if request.TopP != nil {
-		toppStr = fmt.Sprintf("%.2f", *request.TopP)
-	}
 	maxTokStr := "unset"
 	if request.MaxTokens != nil {
 		maxTokStr = fmt.Sprintf("%d", *request.MaxTokens)
 	}
-	debug.Printf("Request: temp=%s, topp=%s, max_tokens=%s", tempStr, toppStr, maxTokStr)
+	debug.Printf("Request: temp=%s, max_tokens=%s", tempStr, maxTokStr)
 	debug.Printf("Request: no-limit=%v, max-input-chars=%d", cfg.NoLimit, mod.MaxChars)
 	if cfg.HTTPProxy != "" {
 		debug.Printf("HTTP proxy: %s", cfg.HTTPProxy)

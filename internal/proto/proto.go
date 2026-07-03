@@ -116,9 +116,6 @@ type Request struct {
 	User           string
 	Tools          []ToolSpec
 	Temperature    *float64
-	TopP           *float64
-	TopK           *int64
-	Stop           []string
 	MaxTokens      *int64
 	ResponseFormat *string
 	ToolCaller     func(name string, data []byte) (string, error)

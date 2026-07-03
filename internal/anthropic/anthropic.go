@@ -29,11 +29,10 @@ func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	system, messages := fromProtoMessages(request.Messages)
 	body := anthropic.MessageNewParams{
-		Model:         anthropic.Model(request.Model),
-		Messages:      messages,
-		System:        system,
-		Tools:         fromToolSpecs(request.Tools),
-		StopSequences: request.Stop,
+		Model:    anthropic.Model(request.Model),
+		Messages: messages,
+		System:   system,
+		Tools:    fromToolSpecs(request.Tools),
 	}
 
 	if request.MaxTokens != nil {
@@ -44,10 +43,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 	if request.Temperature != nil {
 		body.Temperature = anthropic.Float(*request.Temperature)
-	}
-
-	if request.TopP != nil {
-		body.TopP = anthropic.Float(*request.TopP)
 	}
 
 	if c.config.ThinkingBudget > 0 {

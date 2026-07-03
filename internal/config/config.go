@@ -80,10 +80,6 @@ var Help = map[string]string{
 	"no-limit":               "Turn off the client-side limit on the size of the input into the model",
 	"word-wrap":              "Wrap formatted output at specific width (default is 80)",
 	"max-tokens":             "Maximum number of tokens in response",
-	"temp":                   "Temperature (randomness) of results, from 0.0 to 2.0, -1.0 to disable",
-	"stop":                   "Up to 4 sequences where the API will stop generating further tokens",
-	"topp":                   "TopP, an alternative to temperature that narrows response, from 0.0 to 1.0, -1.0 to disable",
-	"topk":                   "TopK, only sample from the top K options for each subsequent token, -1 to disable",
 	"status-text":            "Text to show while generating",
 	"settings":               "Open settings in your $EDITOR",
 	"config":                 "Interactive setup wizard for provider, model, API key, and tools",
@@ -218,10 +214,6 @@ type PersistentConfig struct {
 	HideToolResults     bool       `yaml:"hide-tool-results" env:"HIDE_TOOL_RESULTS"`
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
 	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
-	Temperature         float64    `yaml:"temp" env:"TEMP"`
-	Stop                []string   `yaml:"stop" env:"STOP"`
-	TopP                float64    `yaml:"topp" env:"TOPP"`
-	TopK                int64      `yaml:"topk" env:"TOPK"`
 	NoLimit             bool       `yaml:"no-limit" env:"NO_LIMIT"`
 	CachePath           string     `yaml:"cache-path" env:"CACHE_PATH"`
 	NoCache             bool       `yaml:"no-cache" env:"NO_CACHE"`

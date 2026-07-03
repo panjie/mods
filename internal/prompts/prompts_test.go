@@ -99,10 +99,6 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"max-tokens",
 		"max-input-chars",
 		"no-limit",
-		"temp",
-		"topp",
-		"topk",
-		"stop",
 		"debug",
 	} {
 		require.Contains(t, Identity, "--"+name,

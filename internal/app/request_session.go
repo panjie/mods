@@ -120,16 +120,12 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 
 	request := proto.Request{
-		Messages:    m.messages,
-		API:         mod.API,
-		Model:       mod.Name,
-		User:        requestUser,
-		Temperature: ptrOrNil(cfg.Temperature),
-		TopP:        ptrOrNil(cfg.TopP),
-		TopK:        ptrOrNil(cfg.TopK),
-		Stop:        cfg.Stop,
-		Tools:       tools,
-		ToolCaller:  m.toolCaller(registry, cfg),
+		Messages:   m.messages,
+		API:        mod.API,
+		Model:      mod.Name,
+		User:       requestUser,
+		Tools:      tools,
+		ToolCaller: m.toolCaller(registry, cfg),
 	}
 	if maxTokens > 0 {
 		request.MaxTokens = &maxTokens

@@ -255,7 +255,7 @@ func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
 	require.True(t, flagVisibleInUsage(flags.Lookup("help-all"), false))
 	require.True(t, flagVisibleInUsage(flags.Lookup("workspace"), false))
 
-	for _, name := range []string{"temp", "max-tool-rounds", "web-search-provider"} {
+	for _, name := range []string{"word-wrap", "max-tool-rounds", "web-search-provider"} {
 		flag := flags.Lookup(name)
 		require.NotNil(t, flag)
 		require.False(t, flagVisibleInUsage(flag, false), name)
@@ -284,7 +284,7 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	groups := groupedUsageFlags(rootCmd.Flags(), true)
 	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
 	require.True(t, groupHasFlag(groups, flagCategoryMCP, "mcp-list"))
-	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "temp"))
+	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
 
 	for category, flags := range groups {
 		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))
@@ -293,11 +293,9 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 
 func TestAdvancedFlagsStillParse(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
-		require.NoError(t, rootCmd.Flags().Set("temp", "0.2"))
 		require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
 		require.NoError(t, rootCmd.Flags().Set("web-search-provider", "tavily"))
 
-		require.Equal(t, 0.2, config.Temperature)
 		require.Equal(t, 12, config.MaxToolRounds)
 		require.Equal(t, "tavily", config.WebSearchProvider)
 	})

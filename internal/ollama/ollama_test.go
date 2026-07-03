@@ -1,7 +1,6 @@
 package ollama
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -28,13 +27,10 @@ func TestNextStopsAtCompletedMessage(t *testing.T) {
 func TestNewChatRequestOptions(t *testing.T) {
 	maxTokens := int64(123)
 	temp := 0.7
-	topP := 0.9
 	req := newChatRequest(proto.Request{
 		Model:       "llama",
-		Stop:        []string{"END", "STOP"},
 		MaxTokens:   &maxTokens,
 		Temperature: &temp,
-		TopP:        &topP,
 	})
 
 	if got := req.Options["num_predict"]; got != maxTokens {
@@ -43,14 +39,8 @@ func TestNewChatRequestOptions(t *testing.T) {
 	if _, ok := req.Options["num_ctx"]; ok {
 		t.Fatal("max tokens should not be mapped to num_ctx")
 	}
-	if got := req.Options["stop"]; !reflect.DeepEqual(got, []string{"END", "STOP"}) {
-		t.Fatalf("expected all stop sequences, got %#v", got)
-	}
 	if got := req.Options["temperature"]; got != temp {
 		t.Fatalf("expected temperature=%v, got %#v", temp, got)
-	}
-	if got := req.Options["top_p"]; got != topP {
-		t.Fatalf("expected top_p=%v, got %#v", topP, got)
 	}
 }
 

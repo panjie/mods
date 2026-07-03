@@ -68,18 +68,6 @@ status-text: Generating
 
 # ── Model Parameters ──────────────────────────────────────────────
 
-# {{ index .Help "temp" }}
-temp: 1.0
-
-# {{ index .Help "topp" }}
-topp: 1.0
-
-# {{ index .Help "topk" }}
-topk: 50
-
-# {{ index .Help "stop" }}
-# stop: []
-
 # {{ index .Help "max-input-chars" }}
 max-input-chars: 12250
 

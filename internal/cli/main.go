@@ -159,10 +159,6 @@ func initFlags() {
 	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
-	regFloat64(flags, &config.Temperature, "temp", config.Temperature)
-	regStrArr(flags, &config.Stop, "stop", "", config.Stop)
-	regFloat64(flags, &config.TopP, "topp", config.TopP)
-	regInt64(flags, &config.TopK, "topk", config.TopK)
 	regStr(flags, &config.StatusText, "status-text", "", config.StatusText)
 	regBool(flags, &config.NoCache, "no-cache", "", config.NoCache)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
@@ -201,10 +197,6 @@ func initFlags() {
 		"max-retries",
 		"max-tokens",
 		"no-limit",
-		"temp",
-		"topp",
-		"topk",
-		"stop",
 		"word-wrap",
 		"status-text",
 		"theme",
@@ -266,10 +258,6 @@ func initFlags() {
 		"max-tokens",
 		"max-input-chars",
 		"no-limit",
-		"temp",
-		"topp",
-		"topk",
-		"stop",
 	)
 	markCategory(flags, flagCategoryDebug, "debug")
 

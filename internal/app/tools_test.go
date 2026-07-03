@@ -150,6 +150,42 @@ func TestToolCapabilities(t *testing.T) {
 	}
 }
 
+func TestReadOnlyToolAccessIntents(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Filesystem = FilesystemAlways
+	cfg.BuiltinTools.Shell = true
+	cfg.BuiltinTools.SequentialThinking = true
+	cfg.WebSearch = true
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello")
+	if err != nil {
+		t.Fatalf("build registry: %v", err)
+	}
+
+	args := map[string][]byte{
+		"fs_read_file":  []byte(`{"path":"README.md"}`),
+		"fs_list_dir":   []byte(`{"path":"."}`),
+		"fs_stat":       []byte(`{"path":"README.md"}`),
+		"fs_search":     []byte(`{"path":".","query":"mods"}`),
+		"web_search":    []byte(`{"query":"mods v2.5.0"}`),
+		"thinking_note": []byte(`{"thought":"inspect","next_step":"test","done":false}`),
+	}
+	seen := map[string]bool{}
+	for _, spec := range registry.Specs() {
+		if !registry.ReadOnly(spec.Name) {
+			continue
+		}
+		data, ok := args[spec.Name]
+		require.Truef(t, ok, "missing read-only intent sample for %s", spec.Name)
+		intent := buildAccessIntent(spec.Name, data, registry, nil)
+		require.NotEqualf(t, AccessWrite, intent.Class, "%s must not fall back to write intent", spec.Name)
+		require.Equalf(t, AccessRead, intent.Class, "%s", spec.Name)
+		seen[spec.Name] = true
+	}
+	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "web_search", "thinking_note"} {
+		require.Truef(t, seen[name], "expected read-only tool %s to be audited", name)
+	}
+}
+
 func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 	// helper: build a real stream.Client for the given api name. The
 	// Client is never used to issue requests; it only needs to satisfy

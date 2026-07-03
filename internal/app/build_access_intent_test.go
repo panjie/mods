@@ -1,10 +1,14 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/websearch"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildAccessIntent(t *testing.T) {
@@ -34,6 +38,24 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentFs := buildAccessIntent("fs_read_file", []byte(`{"path":"sub/a.txt"}`), regFs, nil)
 	require.Equal(t, AccessRead, intentFs.Class)
 	require.Len(t, intentFs.Dirs, 1)
+
+	// read-only tools without directory semantics stay read-only.
+	require.NoError(t, toolregistry.RegisterWebSearch(regFs, websearch.Config{Provider: "duckduckgo"}))
+	intentWeb := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), regFs, nil)
+	require.Equal(t, AccessRead, intentWeb.Class)
+	require.Empty(t, intentWeb.Dirs)
+	require.Equal(t, DecisionAllow, ClassifyAccess(intentWeb, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewMutable)))
+
+	// registered tools without extractor and without read-only capability
+	// still fail closed to writes.
+	require.NoError(t, regFs.Register(toolregistry.Tool{
+		Spec: proto.ToolSpec{Name: "custom_tool"},
+		Call: func(context.Context, json.RawMessage) (string, error) { return "", nil },
+	}))
+	intentCustom := buildAccessIntent("custom_tool", []byte(`{}`), regFs, nil)
+	require.Equal(t, AccessWrite, intentCustom.Class)
+	require.Empty(t, intentCustom.Dirs)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intentCustom, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewMutable)))
 
 	// unknown tool -> write fallback (fail-closed).
 	intentUnk := buildAccessIntent("mcp_x", []byte(`{}`), regFs, nil)

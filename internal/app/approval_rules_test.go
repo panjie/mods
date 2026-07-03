@@ -439,6 +439,15 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.False(t, reviewer.shouldReviewTool(registry, "fs_read_file"))
 	})
 
+	t.Run("mutable allows read-only tool without directory intent", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
+		require.False(t, reviewer.shouldReviewTool(registry, "web_search"))
+		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
+		require.Equal(t, AccessRead, intent.Class)
+		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
+		require.NoError(t, err)
+	})
+
 	t.Run("mutable requires review for shell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
@@ -523,6 +532,15 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		require.True(t, reviewer.shouldReviewTool(registry, "fs_read_file"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "fs_read_file", []byte(`{"path":"README.md"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("always reviews read-only tool without directory intent", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		require.True(t, reviewer.shouldReviewTool(registry, "web_search"))
+		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
+		require.Equal(t, AccessRead, intent.Class)
+		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
@@ -847,6 +865,7 @@ func testReviewRegistry(t *testing.T) *toolregistry.Registry {
 		{Spec: proto.ToolSpec{Name: "fs_write_file"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true}, Call: noopToolCall},
 		{Spec: proto.ToolSpec{Name: "shell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true}, Call: noopToolCall},
 		{Spec: proto.ToolSpec{Name: "powershell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true}, Call: noopToolCall},
+		{Spec: proto.ToolSpec{Name: "web_search"}, Capabilities: toolregistry.ToolCapabilities{ReadOnly: true}, Call: noopToolCall},
 	} {
 		require.NoError(t, registry.Register(tool))
 	}

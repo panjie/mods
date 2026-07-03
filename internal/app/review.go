@@ -236,9 +236,9 @@ func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name st
 
 // buildAccessIntent derives the unified AccessIntent for a tool call. Shell
 // tools use the dynamic analyzer (class from NeedsReview, dirs from
-// AffectedDirs); builtin tools with a registered IntentExtractor use that;
-// anything else (e.g. MCP tools) degrades fail-closed to a write with no
-// known dirs so the approval matrix asks for review.
+// AffectedDirs); tools with a registered IntentExtractor use that; read-only
+// tools without directory semantics become read intents; anything else
+// degrades fail-closed to a write with no known dirs.
 func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, analyze func(string, string) shellCommandAnalysis) AccessIntent {
 	if registry != nil && registry.ShellExecution(name) {
 		if analyze == nil {
@@ -251,6 +251,9 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
 			return ext(data)
+		}
+		if registry.ReadOnly(name) {
+			return AccessIntent{Class: AccessRead}
 		}
 	}
 	return AccessIntent{Class: AccessWrite}

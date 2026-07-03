@@ -1124,6 +1124,7 @@ func TestAppendShellResult(t *testing.T) {
 
 	t.Run("success appends block", func(t *testing.T) {
 		m := newMods()
+		m.Config.ShowToolResults = true
 		m.appendShellResult("shell_run", []byte(`{"command":"ls -la"}`), nil)
 		require.Contains(t, m.Output, "> \u2713 ran `ls -la`")
 		require.Contains(t, m.Output, "exit 0")
@@ -1131,14 +1132,14 @@ func TestAppendShellResult(t *testing.T) {
 
 	t.Run("failure appends exit code", func(t *testing.T) {
 		m := newMods()
+		m.Config.ShowToolResults = true
 		m.appendShellResult("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1})
 		require.Contains(t, m.Output, "> \u2717 ran `npm test`")
 		require.Contains(t, m.Output, "exit 1")
 	})
 
-	t.Run("hide tool results suppresses output", func(t *testing.T) {
+	t.Run("default suppresses tool results", func(t *testing.T) {
 		m := newMods()
-		m.Config.HideToolResults = true
 		m.appendShellResult("shell_run", []byte(`{"command":"ls"}`), nil)
 		require.Empty(t, m.Output)
 	})
@@ -1151,6 +1152,7 @@ func TestAppendShellResult(t *testing.T) {
 
 	t.Run("block separates from prior content", func(t *testing.T) {
 		m := newMods()
+		m.Config.ShowToolResults = true
 		m.appendToOutput("thinking...")
 		m.appendShellResult("shell_run", []byte(`{"command":"ls"}`), nil)
 		require.Contains(t, m.Output, "thinking...\n\n> \u2713 ran `ls`")

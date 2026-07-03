@@ -64,7 +64,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"raw",
 		"quiet",
 		"hide-tool-status",
-		"hide-tool-results",
+		"show-tool-results",
 		"word-wrap",
 		"status-text",
 		"workspace",

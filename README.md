@@ -288,10 +288,9 @@ builtin-tools:
 Pass `--workspace` to scope filesystem and shell tools to a project workspace. The
 status line at the bottom shows what Mods is doing between tool calls
 ("Reading file: ...", "Running command: ...", "Searching web: ..."). Hide it
-with `--hide-tool-status`. When a shell command finishes, Mods also leaves a
-result block in the output (for example `> ✓ ran `ls -la` · exit 0`) so you can
-review which commands ran and whether they succeeded; hide these with
-`--hide-tool-results`.
+with `--hide-tool-status`. To leave a completed shell-command result block in
+the output (for example ``> ✓ ran `ls -la` · exit 0``) so you can review which
+commands ran and whether they succeeded, pass `--show-tool-results`.
 
 ### MCP
 

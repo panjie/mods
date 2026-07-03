@@ -151,32 +151,33 @@ func TestConfigTemplateIncludesPrompts(t *testing.T) {
 	require.Contains(t, string(content), `shell-classifier: ""`)
 }
 
-func TestHideToolResultsConfig(t *testing.T) {
-	t.Run("default is true", func(t *testing.T) {
-		require.True(t, Default().HideToolResults)
+func TestShowToolResultsConfig(t *testing.T) {
+	t.Run("default is false", func(t *testing.T) {
+		require.False(t, Default().ShowToolResults)
 	})
 
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config
-		require.NoError(t, yaml.Unmarshal([]byte("hide-tool-results: true"), &cfg))
-		require.True(t, cfg.HideToolResults)
+		require.NoError(t, yaml.Unmarshal([]byte("show-tool-results: true"), &cfg))
+		require.True(t, cfg.ShowToolResults)
 	})
 
 	t.Run("env", func(t *testing.T) {
-		t.Setenv("MODS_HIDE_TOOL_RESULTS", "true")
+		t.Setenv("MODS_SHOW_TOOL_RESULTS", "true")
 		var cfg Config
 		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
-		require.True(t, cfg.HideToolResults)
+		require.True(t, cfg.ShowToolResults)
 	})
 }
 
-func TestConfigTemplateIncludesHideToolResults(t *testing.T) {
+func TestConfigTemplateIncludesShowToolResults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))
 
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.True(t, strings.Contains(string(content), "hide-tool-results: true"))
+	require.Contains(t, string(content), "show-tool-results: false")
+	require.NotContains(t, string(content), "hide-tool-results")
 }
 
 func TestAPITypeYAML(t *testing.T) {

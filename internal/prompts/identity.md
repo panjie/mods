@@ -55,7 +55,7 @@ with `--help-all` (marked [advanced]).
 - `-r`, `--raw` — Render output as raw text when connected to a TTY
 - `-q`, `--quiet` — Quiet mode (hide the spinner while loading and stderr messages)
 - `--hide-tool-status` [advanced] — Hide the bottom status line while tools are running
-- `--hide-tool-results` [advanced] — Hide the completed shell-command result blocks
+- `--show-tool-results` [advanced] — Show the completed shell-command result blocks
 - `--word-wrap <width>` [advanced] — Wrap formatted output at specific width (default is 80)
 - `--status-text <text>` [advanced] — Text to show while generating (default: "Generating")
 - `--workspace <dir>` — Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory
@@ -119,7 +119,7 @@ Top-level keys:
 - `raw` (bool) — raw text output
 - `quiet` (bool) — hide spinner and stderr messages
 - `hide-tool-status` (bool) — hide tool status line
-- `hide-tool-results` (bool) — hide completed tool result blocks
+- `show-tool-results` (bool) — show completed tool result blocks
 - `word-wrap` (int) — output width (default: 80)
 - `status-text` (string) — text shown while generating
 - `max-tokens` (int) — max tokens in response

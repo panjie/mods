@@ -167,7 +167,7 @@ func (m *Mods) appendResponseBoundary() {
 // a completed shell command so users can review which commands ran and whether
 // they succeeded. Non-shell tools render as empty and are skipped.
 func (m *Mods) appendShellResult(name string, data []byte, err error) {
-	if m.Config.HideToolResults {
+	if !m.Config.ShowToolResults {
 		return
 	}
 	block := ShellResultBlock(name, data, err)

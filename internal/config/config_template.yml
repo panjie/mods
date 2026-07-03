@@ -54,8 +54,8 @@ quiet: false
 # {{ index .Help "hide-tool-status" }}
 hide-tool-status: false
 
-# {{ index .Help "hide-tool-results" }}
-hide-tool-results: true
+# {{ index .Help "show-tool-results" }}
+show-tool-results: false
 
 # {{ index .Help "word-wrap" }}
 word-wrap: 80

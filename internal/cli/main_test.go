@@ -187,6 +187,12 @@ func TestFancinessFlagRemoved(t *testing.T) {
 	require.Nil(t, rootCmd.Flags().Lookup("fanciness"))
 }
 
+func TestToolResultsFlagRenamed(t *testing.T) {
+	require.Nil(t, rootCmd.Flags().Lookup("hide-tool-results"))
+	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
+	require.Error(t, rootCmd.Flags().Parse([]string{"--hide-tool-results"}))
+}
+
 func TestRoleNames(t *testing.T) {
 	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
@@ -285,6 +291,8 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
 	require.True(t, groupHasFlag(groups, flagCategoryMCP, "mcp-list"))
 	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
+	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
+	require.False(t, groupHasFlag(groups, flagCategoryInputOutput, "hide-tool-results"))
 
 	for category, flags := range groups {
 		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))

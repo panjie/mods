@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestShouldAutoConfigRequiresMissingSettingsAndNoConversations(t *testing.T) {
+func TestShouldAutoConfigRequiresMissingSettingsAndNoSessions(t *testing.T) {
 	withFirstRunTest(t, Config{SettingsExisted: false}, func() {
 		should, err := shouldAutoConfig([]string{"mods", "hello"})
 
@@ -26,7 +26,7 @@ func TestShouldAutoConfigSkipsWhenSettingsAlreadyExisted(t *testing.T) {
 	})
 }
 
-func TestShouldAutoConfigSkipsWhenConversationsExist(t *testing.T) {
+func TestShouldAutoConfigSkipsWhenSessionsExist(t *testing.T) {
 	withFirstRunTest(t, Config{SettingsExisted: false}, func() {
 		require.NoError(t, db.Save("df31ae23ab8b75b5643c2f846c570997edc71333", "message", "openai", "gpt-4"))
 
@@ -132,13 +132,13 @@ func TestCleanupAutoCreatedConfigKeepsExplicitSettingsCommandConfig(t *testing.T
 }
 
 func TestValidateChatModeRunsBeforeAutoConfig(t *testing.T) {
-	withFirstRunTest(t, Config{SettingsExisted: false, Chat: true, PersistentConfig: PersistentConfig{NoCache: true}}, func() {
-		err := validateFirstRunPrerequisites([]string{"mods", "--chat", "--no-cache"})
+	withFirstRunTest(t, Config{SettingsExisted: false, Chat: true, NoSave: true}, func() {
+		err := validateFirstRunPrerequisites([]string{"mods", "--chat", "--no-save"})
 
 		require.Error(t, err)
 		merr, ok := err.(modsError)
 		require.True(t, ok)
-		require.Equal(t, "Chat mode requires conversation caching.", merr.ReasonText)
+		require.Equal(t, "Chat mode requires session saving.", merr.ReasonText)
 	})
 }
 

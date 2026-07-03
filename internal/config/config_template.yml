@@ -77,12 +77,6 @@ max-input-chars: 12250
 # {{ index .Help "no-limit" }}
 no-limit: false
 
-# {{ index .Help "no-cache" }}
-no-cache: false
-
-# {{ index .Help "cache-path" }}
-# cache-path: ""  # automatically set to XDG_DATA_HOME/mods if empty
-
 # {{ index .Help "http-proxy" }}
 # http-proxy: ""  # HTTP proxy for API requests
 
@@ -260,8 +254,8 @@ apis:
     api-key-env: DEEPSEEK_API_KEY
     models:
       # DeepSeek models default to thinking ENABLED. mods actively sends
-      # thinking.type: disabled when -T is off, and thinking.type: enabled
-      # (the value below) when -T is on. No extra-params boilerplate needed.
+      # thinking.type: disabled when -r is off, and thinking.type: enabled
+      # (the value below) when -r is on. No extra-params boilerplate needed.
       # See: https://api-docs.deepseek.com/guides/thinking_mode
       deepseek-reasoner:
         aliases: ["r1", "reasoner"]
@@ -316,7 +310,7 @@ apis:
       qwen-plus:
         aliases: ["qwen", "qp"]
         max-input-chars: 131072
-        # enable_thinking toggles reasoning on this model; -T does not
+        # enable_thinking toggles reasoning on this model; -r does not
         # toggle it for OpenAI-compatible endpoints. Switch to qwq-plus
         # for a model that only thinks on demand.
         extra-params:
@@ -385,15 +379,15 @@ apis:
   #       max-input-chars: 100000
   #
   #       # ── Reasoning / Thinking configuration ──
-  #       # These fields control how -T / --reasoning on interacts with
+  #       # These fields control how -r / --reasoning on interacts with
   #       # the provider. All are optional with sensible defaults.
   #
-  #       # thinking-type: the value to set thinking.type to when -T is on.
+  #       # thinking-type: the value to set thinking.type to when -r is on.
   #       # Default "adaptive" (MiniMax). Use "enabled" for GLM/Anthropic.
   #       thinking-type: enabled
   #
   #       # extra-params: arbitrary fields merged into the request body.
-  #       # Set thinking.type: disabled here for "off by default, -T turns on".
+  #       # Set thinking.type: disabled here for "off by default, -r turns on".
   #       extra-params:
   #         thinking:
   #           type: disabled
@@ -404,10 +398,10 @@ apis:
   #       # thought-fields: [my_custom_field]
   #
   #       # think-tag: override the inline reasoning tag name.
-  #       # Default "think" → <think>...</think>. Only parsed when -T is on.
+  #       # Default "think" → <think>...</think>. Only parsed when -r is on.
   #       # think-tag: reasoning
   #
-  #       # reasoning-effort: target reasoning_effort value for -T.
+  #       # reasoning-effort: target reasoning_effort value for -r.
   #       # Default "medium". Options: low, medium, high.
   #       # reasoning-effort: high
 

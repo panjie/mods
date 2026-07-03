@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/stretchr/testify/require"
@@ -116,6 +117,39 @@ func TestMinimalConfig(t *testing.T) {
 	})
 }
 
+func TestSessionSaveConfig(t *testing.T) {
+	t.Run("default is false", func(t *testing.T) {
+		require.False(t, Default().NoSave)
+	})
+
+	t.Run("yaml and env aliases are ignored", func(t *testing.T) {
+		t.Setenv("MODS_NO_CACHE", "true")
+		t.Setenv("MODS_NO_SESSION_SAVE", "true")
+		t.Setenv("MODS_NO_SAVE", "true")
+		var cfg Config
+		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+		require.False(t, cfg.NoSave)
+
+		require.NoError(t, yaml.Unmarshal([]byte("no-cache: true"), &cfg))
+		require.False(t, cfg.NoSave)
+		require.NoError(t, yaml.Unmarshal([]byte("no-session-save: true"), &cfg))
+		require.False(t, cfg.NoSave)
+		require.NoError(t, yaml.Unmarshal([]byte("no-save: true"), &cfg))
+		require.False(t, cfg.NoSave)
+	})
+}
+
+func TestSessionDirIsFixed(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MODS_CACHE_PATH", filepath.Join(t.TempDir(), "old-cache"))
+	t.Setenv("MODS_SESSION_DIR", filepath.Join(t.TempDir(), "session-dir"))
+
+	cfg, err := Ensure()
+
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(xdg.DataHome, "mods", "sessions"), cfg.SessionDir)
+}
+
 func TestHideToolStatusConfig(t *testing.T) {
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config
@@ -178,6 +212,19 @@ func TestConfigTemplateIncludesShowToolResults(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(content), "show-tool-results: false")
 	require.NotContains(t, string(content), "hide-tool-results")
+}
+
+func TestConfigTemplateIncludesNoSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(content), "no-save")
+	require.NotContains(t, string(content), "no-cache")
+	require.NotContains(t, string(content), "cache-path")
+	require.NotContains(t, string(content), "session-dir")
+	require.NotContains(t, string(content), "no-session-save")
 }
 
 func TestAPITypeYAML(t *testing.T) {
@@ -288,7 +335,7 @@ func TestEnsureReportsSettingsExistedTrueWhenFileAlreadyExists(t *testing.T) {
 
 // TestEnsureReturnsCompleteConfigOnError pins the invariant that every
 // error path from Ensure() returns a Config the caller can still use:
-// SettingsPath is filled in as soon as it is known, CachePath always has
+// SettingsPath is filled in as soon as it is known, SessionDir always has
 // the default value, and the rest matches Default(). Callers of
 // --settings / --config keep the returned value after a partial failure,
 // so a half-initialised Config would surface as zero-valued fields
@@ -311,8 +358,8 @@ func TestEnsureReturnsCompleteConfigOnError(t *testing.T) {
 	// Even on failure, callers must observe a usable Config.
 	require.NotEmpty(t, cfg.SettingsPath,
 		"SettingsPath must be set so --settings / --config can locate the file")
-	require.NotEmpty(t, cfg.CachePath,
-		"CachePath must have its default so the cache layer never sees an empty path")
+	require.NotEmpty(t, cfg.SessionDir,
+		"SessionDir must have its default so the session layer never sees an empty path")
 	require.Equal(t, Default().ReviewMode, cfg.ReviewMode,
 		"non-failure fields must keep their Default() value")
 	require.Equal(t, Default().WordWrap, cfg.WordWrap)

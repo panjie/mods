@@ -54,7 +54,7 @@ type Mods struct {
 	renderer       *lipgloss.Renderer
 	glam           *glamour.TermRenderer
 	glamViewport   viewport.Model
-	// messages is the conversation history fed to the provider on each
+	// messages is the session history fed to the provider on each
 	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
 	// dispatched by startCompletionCmd/startPlanCmd) and re-read from the
 	// stream on the Update goroutine after the stream finishes. Concurrent
@@ -166,7 +166,7 @@ func (m *Mods) ApprovalRules() []Rule {
 
 // Init implements tea.Model.
 func (m *Mods) Init() tea.Cmd {
-	return m.findCacheOpsDetails()
+	return m.findSessionDetails()
 }
 
 // Update implements tea.Model.
@@ -203,10 +203,10 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case cacheDetailsMsg:
-		m.Config.CacheWriteToID = msg.WriteID
-		m.Config.CacheWriteToTitle = msg.Title
-		m.Config.CacheReadFromID = msg.ReadID
+	case sessionDetailsMsg:
+		m.Config.SessionWriteToID = msg.WriteID
+		m.Config.SessionWriteToTitle = msg.Title
+		m.Config.SessionReadFromID = msg.ReadID
 		m.reviewer.rules.Replace(msg.Rules)
 
 		if !m.Config.Quiet {
@@ -529,7 +529,7 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 	if m.reasoningActive && !m.thoughtFlushed {
 		m.flushThought()
 	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-		debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
+		debug.Printf("Reasoning: model emitted %d chars of thinking without -r (discarded; pass -r to display)", len(strings.TrimSpace(m.Thought)))
 		m.thoughtFlushed = true
 	}
 	m.appendToOutput(content)
@@ -547,7 +547,7 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 	if m.reasoningActive && !m.thoughtFlushed {
 		m.flushThought()
 	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-		debug.Printf("Reasoning: model emitted %d chars of thinking without -T (discarded; pass -T to display)", len(strings.TrimSpace(m.Thought)))
+		debug.Printf("Reasoning: model emitted %d chars of thinking without -r (discarded; pass -r to display)", len(strings.TrimSpace(m.Thought)))
 		m.thoughtFlushed = true
 	}
 	ch := make(chan toolOperationStatusMsg, 8)

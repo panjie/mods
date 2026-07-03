@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"bytes"
@@ -9,24 +9,24 @@ import (
 	"github.com/panjie/mods/internal/proto"
 )
 
-func encodeConversation(messages []proto.Message) ([]byte, error) {
+func encodeSession(messages []proto.Message) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(messages); err != nil {
-		return nil, fmt.Errorf("encode conversation: %w", err)
+		return nil, fmt.Errorf("encode session: %w", err)
 	}
 	return buf.Bytes(), nil
 }
 
-func decodeConversationBytes(data []byte, messages *[]proto.Message) error {
-	return decodeConversation(bytes.NewReader(data), messages)
+func decodeSessionBytes(data []byte, messages *[]proto.Message) error {
+	return decodeSession(bytes.NewReader(data), messages)
 }
 
-func decodeConversation(r io.Reader, messages *[]proto.Message) error {
+func decodeSession(r io.Reader, messages *[]proto.Message) error {
 	var backup bytes.Buffer
 	if err1 := gob.NewDecoder(io.TeeReader(r, &backup)).Decode(messages); err1 != nil {
 		var legacy []legacyMessage
 		if err2 := gob.NewDecoder(&backup).Decode(&legacy); err2 != nil {
-			return fmt.Errorf("decode conversation: %w", err1)
+			return fmt.Errorf("decode session: %w", err1)
 		}
 		for _, msg := range legacy {
 			*messages = append(*messages, proto.Message{

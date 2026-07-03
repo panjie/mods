@@ -1,14 +1,14 @@
-package conversation
+package session
 
 import "github.com/panjie/mods/internal/approval"
 
-type convoDB = DB
+type sessionDB = DB
 type ApprovalRule = approval.Rule
 type approvalRuleSet = approval.RuleSet
 type AccessClass = approval.AccessClass
 
 var openDB = Open
-var newConversationID = NewID
+var newSessionID = NewID
 var sha1reg = IDPattern
 var errNoMatches = ErrNoMatches
 var errManyMatches = ErrManyMatches

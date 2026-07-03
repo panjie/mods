@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"database/sql"
@@ -13,7 +13,7 @@ import (
 	"modernc.org/sqlite"
 )
 
-func testDB(tb testing.TB) *convoDB {
+func testDB(tb testing.TB) *sessionDB {
 	db, err := openDB(":memory:")
 	require.NoError(tb, err)
 	tb.Cleanup(func() {
@@ -44,21 +44,21 @@ func TestHandleSqliteErr(t *testing.T) {
 	})
 }
 
-func TestHasConversations(t *testing.T) {
+func TestHasSessions(t *testing.T) {
 	db := testDB(t)
 
-	has, err := db.HasConversations()
+	has, err := db.HasSessions()
 	require.NoError(t, err)
 	require.False(t, has)
 
 	require.NoError(t, db.Save("df31ae23ab8b75b5643c2f846c570997edc71333", "message", "openai", "gpt-4"))
 
-	has, err = db.HasConversations()
+	has, err = db.HasSessions()
 	require.NoError(t, err)
 	require.True(t, has)
 }
 
-func TestConvoDB(t *testing.T) {
+func TestSessionDB(t *testing.T) {
 	const testid = "df31ae23ab8b75b5643c2f846c570997edc71333"
 
 	t.Run("list-empty", func(t *testing.T) {
@@ -73,10 +73,10 @@ func TestConvoDB(t *testing.T) {
 
 		require.NoError(t, db.Save(testid, "message 1", "openai", "gpt-4o"))
 
-		convo, err := db.Find("df31")
+		session, err := db.Find("df31")
 		require.NoError(t, err)
-		require.Equal(t, testid, convo.ID)
-		require.Equal(t, "message 1", convo.Title)
+		require.Equal(t, testid, session.ID)
+		require.Equal(t, "message 1", session.Title)
 
 		list, err := db.List()
 		require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestConvoDB(t *testing.T) {
 
 	t.Run("save no message", func(t *testing.T) {
 		db := testDB(t)
-		require.Error(t, db.Save(newConversationID(), "", "openai", "gpt-4o"))
+		require.Error(t, db.Save(newSessionID(), "", "openai", "gpt-4o"))
 	})
 
 	t.Run("update", func(t *testing.T) {
@@ -100,10 +100,10 @@ func TestConvoDB(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		require.NoError(t, db.Save(testid, "message 2", "openai", "gpt-4o"))
 
-		convo, err := db.Find("df31")
+		session, err := db.Find("df31")
 		require.NoError(t, err)
-		require.Equal(t, testid, convo.ID)
-		require.Equal(t, "message 2", convo.Title)
+		require.Equal(t, testid, session.ID)
+		require.Equal(t, "message 2", session.Title)
 
 		list, err := db.List()
 		require.NoError(t, err)
@@ -126,12 +126,12 @@ func TestConvoDB(t *testing.T) {
 
 		require.NoError(t, db.Save(testid, "message 2", "openai", "gpt-4o"))
 		time.Sleep(time.Millisecond * 100)
-		nextConvo := newConversationID()
-		require.NoError(t, db.Save(nextConvo, "another message", "openai", "gpt-4o"))
+		nextSession := newSessionID()
+		require.NoError(t, db.Save(nextSession, "another message", "openai", "gpt-4o"))
 
 		head, err := db.FindHEAD()
 		require.NoError(t, err)
-		require.Equal(t, nextConvo, head.ID)
+		require.Equal(t, nextSession, head.ID)
 		require.Equal(t, "another message", head.Title)
 
 		list, err := db.List()
@@ -142,13 +142,13 @@ func TestConvoDB(t *testing.T) {
 	t.Run("find by title", func(t *testing.T) {
 		db := testDB(t)
 
-		require.NoError(t, db.Save(newConversationID(), "message 1", "openai", "gpt-4o"))
+		require.NoError(t, db.Save(newSessionID(), "message 1", "openai", "gpt-4o"))
 		require.NoError(t, db.Save(testid, "message 2", "openai", "gpt-4o"))
 
-		convo, err := db.Find("message 2")
+		session, err := db.Find("message 2")
 		require.NoError(t, err)
-		require.Equal(t, testid, convo.ID)
-		require.Equal(t, "message 2", convo.Title)
+		require.Equal(t, testid, session.ID)
+		require.Equal(t, "message 2", session.Title)
 	})
 
 	t.Run("find match nothing", func(t *testing.T) {
@@ -171,7 +171,7 @@ func TestConvoDB(t *testing.T) {
 		db := testDB(t)
 
 		require.NoError(t, db.Save(testid, "message 1", "openai", "gpt-4o"))
-		require.NoError(t, db.Delete(newConversationID()))
+		require.NoError(t, db.Delete(newSessionID()))
 
 		list, err := db.List()
 		require.NoError(t, err)
@@ -216,14 +216,14 @@ func TestUpdatedAtIndexExists(t *testing.T) {
 	var count int
 	require.NoError(t, db.db.Get(&count, `
 		SELECT count(*) FROM sqlite_master
-		WHERE type = 'index' AND name = 'idx_conv_updated_at'
+		WHERE type = 'index' AND name = 'idx_session_updated_at'
 	`))
 	require.Equal(t, 1, count)
 }
 
-func TestConversationData(t *testing.T) {
+func TestSessionData(t *testing.T) {
 	db := testDB(t)
-	id := newConversationID()
+	id := newSessionID()
 	messages := []proto.Message{
 		{
 			Role:    proto.RoleUser,
@@ -252,7 +252,7 @@ func TestConversationData(t *testing.T) {
 		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessWrite}),
 	}
 
-	require.NoError(t, db.SaveConversation(id, "conversation", "openai", "gpt-5", messages, rules))
+	require.NoError(t, db.SaveSession(id, "session", "openai", "gpt-5", messages, rules))
 
 	var loaded []proto.Message
 	require.NoError(t, db.ReadMessages(id, &loaded))
@@ -262,8 +262,8 @@ func TestConversationData(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, rules, loadedRules)
 
-	branchID := newConversationID()
-	require.NoError(t, db.SaveConversation(branchID, "branch", "openai", "gpt-5", loaded, loadedRules))
+	branchID := newSessionID()
+	require.NoError(t, db.SaveSession(branchID, "branch", "openai", "gpt-5", loaded, loadedRules))
 	branchRules, err := db.ApprovalRules(branchID)
 	require.NoError(t, err)
 	require.ElementsMatch(t, rules, branchRules)
@@ -275,19 +275,19 @@ func TestConversationData(t *testing.T) {
 	require.Empty(t, deletedRules)
 }
 
-func TestSaveConversationRollsBackAtomically(t *testing.T) {
+func TestSaveSessionRollsBackAtomically(t *testing.T) {
 	db := testDB(t)
-	id := newConversationID()
+	id := newSessionID()
 	originalMessages := []proto.Message{{Role: proto.RoleUser, Content: "original"}}
 	originalRules := []ApprovalRule{testScopedRule(ApprovalRule{
 		Type: approvalShellPrefix,
 		Tool: "shell_run", Pattern: "git commit *",
 	})}
-	require.NoError(t, db.SaveConversation(
+	require.NoError(t, db.SaveSession(
 		id, "original", "openai", "gpt-5", originalMessages, originalRules,
 	))
 
-	err := db.SaveConversation(
+	err := db.SaveSession(
 		id,
 		"",
 		"openai",
@@ -407,30 +407,58 @@ func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 		ScopeKind: "workspace", ScopeValue: legacyScope.Value,
 		Type: approvalDirAllow, Paths: []string{legacyCacheDir}, Mode: accessWrite,
 	})
-	require.NoError(t, db.SaveConversation("abc", "pre-mode", "openai", "gpt-5", nil, newRules))
+	require.NoError(t, db.SaveSession("abc", "pre-mode", "openai", "gpt-5", nil, newRules))
 	loaded, err := db.ApprovalRules("abc")
 	require.NoError(t, err)
 	require.ElementsMatch(t, newRules, loaded)
 }
 
-func TestMigrateLegacyConversations(t *testing.T) {
-	t.Run("imports valid conversation and removes gob", func(t *testing.T) {
-		cachePath := t.TempDir()
-		dir := filepath.Join(cachePath, "conversations")
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		db, err := openDB(filepath.Join(dir, "mods.db"))
+func TestMigrateDefaultStorageMovesLegacyDB(t *testing.T) {
+	dataHome := t.TempDir()
+	sessionDir := filepath.Join(dataHome, "sessions")
+	legacyDir := filepath.Join(dataHome, "conversations")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o700))
+
+	legacyDB := filepath.Join(legacyDir, "mods.db")
+	db, err := openDB(legacyDB)
+	require.NoError(t, err)
+	const id = "df31ae23ab8b75b5643c2f846c570997edc71333"
+	require.NoError(t, db.Save(id, "legacy default", "openai", "gpt-4o"))
+	require.NoError(t, db.Close())
+
+	require.NoError(t, MigrateDefaultStorage(sessionDir))
+
+	require.NoFileExists(t, legacyDB)
+	require.FileExists(t, filepath.Join(sessionDir, "mods.db"))
+
+	migrated, err := openDB(filepath.Join(sessionDir, "mods.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, migrated.Close()) })
+	found, err := migrated.Find(id)
+	require.NoError(t, err)
+	require.Equal(t, "legacy default", found.Title)
+}
+
+func TestMigrateLegacySessions(t *testing.T) {
+	t.Run("imports valid session and removes gob", func(t *testing.T) {
+		dataHome := t.TempDir()
+		sessionDir := filepath.Join(dataHome, "sessions")
+		legacyDir := filepath.Join(dataHome, "conversations")
+		require.NoError(t, os.MkdirAll(sessionDir, 0o700))
+		require.NoError(t, os.MkdirAll(legacyDir, 0o700))
+		db, err := openDB(filepath.Join(sessionDir, "mods.db"))
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, db.Save(id, "legacy", "openai", "gpt-4"))
 		messages := []proto.Message{{Role: proto.RoleUser, Content: "legacy message"}}
-		encoded, err := encodeConversation(messages)
+		encoded, err := encodeSession(messages)
 		require.NoError(t, err)
-		legacyPath := filepath.Join(dir, id+".gob")
+		legacyPath := filepath.Join(legacyDir, id+".gob")
 		require.NoError(t, os.WriteFile(legacyPath, encoded, 0o600))
 
-		require.NoError(t, db.MigrateLegacyConversations(cachePath))
+		require.NoError(t, db.MigrateLegacySessions(sessionDir))
 		require.NoFileExists(t, legacyPath)
 
 		var loaded []proto.Message
@@ -439,48 +467,52 @@ func TestMigrateLegacyConversations(t *testing.T) {
 	})
 
 	t.Run("retains corrupt and orphan files", func(t *testing.T) {
-		cachePath := t.TempDir()
-		dir := filepath.Join(cachePath, "conversations")
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		db, err := openDB(filepath.Join(dir, "mods.db"))
+		dataHome := t.TempDir()
+		sessionDir := filepath.Join(dataHome, "sessions")
+		legacyDir := filepath.Join(dataHome, "conversations")
+		require.NoError(t, os.MkdirAll(sessionDir, 0o700))
+		require.NoError(t, os.MkdirAll(legacyDir, 0o700))
+		db, err := openDB(filepath.Join(sessionDir, "mods.db"))
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-		corruptID := newConversationID()
+		corruptID := newSessionID()
 		require.NoError(t, db.Save(corruptID, "corrupt", "openai", "gpt-4"))
-		corruptPath := filepath.Join(dir, corruptID+".gob")
+		corruptPath := filepath.Join(legacyDir, corruptID+".gob")
 		require.NoError(t, os.WriteFile(corruptPath, []byte("not gob"), 0o600))
 
-		orphanID := newConversationID()
-		orphanPath := filepath.Join(dir, orphanID+".gob")
-		encoded, err := encodeConversation([]proto.Message{{Role: proto.RoleUser, Content: "orphan"}})
+		orphanID := newSessionID()
+		orphanPath := filepath.Join(legacyDir, orphanID+".gob")
+		encoded, err := encodeSession([]proto.Message{{Role: proto.RoleUser, Content: "orphan"}})
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(orphanPath, encoded, 0o600))
 
-		require.Error(t, db.MigrateLegacyConversations(cachePath))
+		require.Error(t, db.MigrateLegacySessions(sessionDir))
 		require.FileExists(t, corruptPath)
 		require.FileExists(t, orphanPath)
 	})
 
 	t.Run("does not overwrite newer sqlite messages", func(t *testing.T) {
-		cachePath := t.TempDir()
-		dir := filepath.Join(cachePath, "conversations")
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		db, err := openDB(filepath.Join(dir, "mods.db"))
+		dataHome := t.TempDir()
+		sessionDir := filepath.Join(dataHome, "sessions")
+		legacyDir := filepath.Join(dataHome, "conversations")
+		require.NoError(t, os.MkdirAll(sessionDir, 0o700))
+		require.NoError(t, os.MkdirAll(legacyDir, 0o700))
+		db, err := openDB(filepath.Join(sessionDir, "mods.db"))
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-		id := newConversationID()
+		id := newSessionID()
 		newer := []proto.Message{{Role: proto.RoleUser, Content: "newer sqlite message"}}
-		require.NoError(t, db.SaveConversation(id, "conversation", "openai", "gpt-5", newer, nil))
+		require.NoError(t, db.SaveSession(id, "session", "openai", "gpt-5", newer, nil))
 
 		older := []proto.Message{{Role: proto.RoleUser, Content: "older gob message"}}
-		encoded, err := encodeConversation(older)
+		encoded, err := encodeSession(older)
 		require.NoError(t, err)
-		legacyPath := filepath.Join(dir, id+".gob")
+		legacyPath := filepath.Join(legacyDir, id+".gob")
 		require.NoError(t, os.WriteFile(legacyPath, encoded, 0o600))
 
-		require.NoError(t, db.MigrateLegacyConversations(cachePath))
+		require.NoError(t, db.MigrateLegacySessions(sessionDir))
 		require.NoFileExists(t, legacyPath)
 
 		var loaded []proto.Message

@@ -13,7 +13,7 @@ func newFlagParseError(err error) flagParseError {
 	case strings.HasPrefix(s, "flag needs an argument:"):
 		reason = "Flag %s needs an argument."
 		// pflag emits two shapes:
-		//   "flag needs an argument: --cache-path"  (long flag)
+		//   "flag needs an argument: --api"          (long flag)
 		//   "flag needs an argument: 'a' in -a"      (short flag in a cluster)
 		// TrimPrefix handles arbitrary multi-hyphen long flag names; the previous
 		// strings.Split(s, "-") approach broke on any flag containing a hyphen.
@@ -21,7 +21,7 @@ func newFlagParseError(err error) flagParseError {
 		if idx := strings.Index(rest, " in -"); idx >= 0 {
 			flag = rest[idx+len(" in "):] // short cluster, e.g. "-d"
 		} else {
-			flag = rest // long flag, e.g. "--cache-path"
+			flag = rest // long flag, e.g. "--api"
 		}
 	case strings.HasPrefix(s, "unknown flag:"):
 		reason = "Unknown flag %s."

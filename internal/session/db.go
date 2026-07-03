@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"database/sql"
@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	ErrNoMatches   = errors.New("no conversations found")
-	ErrManyMatches = errors.New("multiple conversations matched the input")
+	ErrNoMatches   = errors.New("no sessions found")
+	ErrManyMatches = errors.New("multiple sessions matched the input")
 )
 
 func handleSqliteErr(err error) error {
@@ -31,6 +31,38 @@ func handleSqliteErr(err error) error {
 		)
 	}
 	return err
+}
+
+func MigrateDefaultStorage(sessionDir string) error {
+	oldDir := filepath.Join(filepath.Dir(sessionDir), "conversations")
+	oldDB := filepath.Join(oldDir, "mods.db")
+	newDB := filepath.Join(sessionDir, "mods.db")
+
+	if _, err := os.Stat(newDB); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat session db: %w", err)
+	}
+	if _, err := os.Stat(oldDB); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat legacy session db: %w", err)
+	}
+	if err := os.MkdirAll(sessionDir, 0o700); err != nil { //nolint:mnd
+		return fmt.Errorf("create session dir: %w", err)
+	}
+	if err := os.Rename(oldDB, newDB); err != nil {
+		return fmt.Errorf("move legacy session db: %w", err)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		oldCompanion := oldDB + suffix
+		newCompanion := newDB + suffix
+		if err := os.Rename(oldCompanion, newCompanion); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("move legacy session db companion: %w", err)
+		}
+	}
+	return nil
 }
 
 func Open(ds string) (*DB, error) {
@@ -51,9 +83,12 @@ func Open(ds string) (*DB, error) {
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
 		return nil, fmt.Errorf("could not enable foreign keys: %w", err)
 	}
+	if err := migrateLegacySessionSchema(db); err != nil {
+		return nil, fmt.Errorf("could not migrate db: %w", err)
+	}
 	if _, err := db.Exec(`
 		CREATE TABLE
-		  IF NOT EXISTS conversations (
+		  IF NOT EXISTS sessions (
 		    id string NOT NULL PRIMARY KEY,
 		    title string NOT NULL,
 		    updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
@@ -64,47 +99,47 @@ func Open(ds string) (*DB, error) {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 	if _, err := db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_conv_id ON conversations (id)
+		CREATE INDEX IF NOT EXISTS idx_session_id ON sessions (id)
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 	if _, err := db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_conv_title ON conversations (title)
+		CREATE INDEX IF NOT EXISTS idx_session_title ON sessions (title)
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 	if _, err := db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_conv_updated_at ON conversations (updated_at DESC)
+		CREATE INDEX IF NOT EXISTS idx_session_updated_at ON sessions (updated_at DESC)
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 
-	if !hasColumn(db, "conversations", "model") {
+	if !hasColumn(db, "sessions", "model") {
 		if _, err := db.Exec(`
-			ALTER TABLE conversations ADD COLUMN model string
+			ALTER TABLE sessions ADD COLUMN model string
 		`); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
-	if !hasColumn(db, "conversations", "api") {
+	if !hasColumn(db, "sessions", "api") {
 		if _, err := db.Exec(`
-			ALTER TABLE conversations ADD COLUMN api string
+			ALTER TABLE sessions ADD COLUMN api string
 		`); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
 	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS conversation_messages (
-			conversation_id string NOT NULL PRIMARY KEY,
+		CREATE TABLE IF NOT EXISTS session_messages (
+			session_id string NOT NULL PRIMARY KEY,
 			messages blob NOT NULL,
-			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
 		)
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS approval_rules (
-			conversation_id string NOT NULL,
+			session_id string NOT NULL,
 			scope_kind string NOT NULL DEFAULT '',
 			scope_value string NOT NULL DEFAULT '',
 			rule_type string NOT NULL,
@@ -113,8 +148,8 @@ func Open(ds string) (*DB, error) {
 			paths string NOT NULL DEFAULT '',
 			mode string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
-			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
+			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
 		)
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
@@ -150,23 +185,63 @@ func hasColumn(db *sqlx.DB, table, col string) bool {
 	return count > 0
 }
 
+func tableExists(db *sqlx.DB, table string) bool {
+	var count int
+	if err := db.Get(&count, db.Rebind(`
+		SELECT count(*)
+		FROM sqlite_master
+		WHERE type = 'table' AND name = ?
+	`), table); err != nil {
+		return false
+	}
+	return count > 0
+}
+
+func migrateLegacySessionSchema(db *sqlx.DB) error {
+	if tableExists(db, "conversations") && !tableExists(db, "sessions") {
+		if _, err := db.Exec(`ALTER TABLE conversations RENAME TO sessions`); err != nil {
+			return err
+		}
+	}
+	if tableExists(db, "conversation_messages") && !tableExists(db, "session_messages") {
+		if _, err := db.Exec(`ALTER TABLE conversation_messages RENAME TO session_messages`); err != nil {
+			return err
+		}
+	}
+	if tableExists(db, "session_messages") &&
+		hasColumn(db, "session_messages", "conversation_id") &&
+		!hasColumn(db, "session_messages", "session_id") {
+		if _, err := db.Exec(`ALTER TABLE session_messages RENAME COLUMN conversation_id TO session_id`); err != nil {
+			return err
+		}
+	}
+	if tableExists(db, "approval_rules") &&
+		hasColumn(db, "approval_rules", "conversation_id") &&
+		!hasColumn(db, "approval_rules", "session_id") {
+		if _, err := db.Exec(`ALTER TABLE approval_rules RENAME COLUMN conversation_id TO session_id`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func migrateApprovalRulesScope(db *sqlx.DB) error {
 	return migrateApprovalRulesReplaceTable(db, `
 		CREATE TABLE approval_rules_migration_tmp (
-			conversation_id string NOT NULL,
+			session_id string NOT NULL,
 			scope_kind string NOT NULL DEFAULT '',
 			scope_value string NOT NULL DEFAULT '',
 			rule_type string NOT NULL,
 			tool_name string NOT NULL,
 			pattern string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern),
-			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern),
+			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
 		)
 	`, `
 		INSERT INTO approval_rules_migration_tmp
-			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, created_at)
-		SELECT conversation_id, '', '', rule_type, tool_name, pattern, created_at
+			(session_id, scope_kind, scope_value, rule_type, tool_name, pattern, created_at)
+		SELECT session_id, '', '', rule_type, tool_name, pattern, created_at
 		FROM approval_rules
 	`)
 }
@@ -174,7 +249,7 @@ func migrateApprovalRulesScope(db *sqlx.DB) error {
 func migrateApprovalRulesPaths(db *sqlx.DB) error {
 	return migrateApprovalRulesReplaceTable(db, `
 		CREATE TABLE approval_rules_migration_tmp (
-			conversation_id string NOT NULL,
+			session_id string NOT NULL,
 			scope_kind string NOT NULL DEFAULT '',
 			scope_value string NOT NULL DEFAULT '',
 			rule_type string NOT NULL,
@@ -182,13 +257,13 @@ func migrateApprovalRulesPaths(db *sqlx.DB) error {
 			pattern string NOT NULL DEFAULT '',
 			paths string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
-			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths),
+			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
 		)
 	`, `
 		INSERT INTO approval_rules_migration_tmp
-			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, created_at)
-		SELECT conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, '', created_at
+			(session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, created_at)
+		SELECT session_id, scope_kind, scope_value, rule_type, tool_name, pattern, '', created_at
 		FROM approval_rules
 	`)
 }
@@ -201,7 +276,7 @@ func migrateApprovalRulesPaths(db *sqlx.DB) error {
 func migrateApprovalRulesMode(db *sqlx.DB) error {
 	return migrateApprovalRulesReplaceTable(db, `
 		CREATE TABLE approval_rules_migration_tmp (
-			conversation_id string NOT NULL,
+			session_id string NOT NULL,
 			scope_kind string NOT NULL DEFAULT '',
 			scope_value string NOT NULL DEFAULT '',
 			rule_type string NOT NULL,
@@ -210,13 +285,13 @@ func migrateApprovalRulesMode(db *sqlx.DB) error {
 			paths string NOT NULL DEFAULT '',
 			mode string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
-			FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
+			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
 		)
 	`, `
 		INSERT INTO approval_rules_migration_tmp
-			(conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode, created_at)
-		SELECT conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, '', created_at
+			(session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode, created_at)
+		SELECT session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, '', created_at
 		FROM approval_rules
 	`)
 }
@@ -253,8 +328,8 @@ type DB struct {
 	db *sqlx.DB
 }
 
-// Conversation in the database.
-type Conversation struct {
+// Session in the database.
+type Session struct {
 	ID        string    `db:"id"`
 	Title     string    `db:"title"`
 	UpdatedAt time.Time `db:"updated_at"`
@@ -277,7 +352,7 @@ type sqlExecutor interface {
 
 func (c *DB) saveMetadata(exec sqlExecutor, id, title, api, model string) error {
 	res, err := exec.Exec(exec.Rebind(`
-		UPDATE conversations
+		UPDATE sessions
 		SET
 		  title = ?,
 		  api = ?,
@@ -301,7 +376,7 @@ func (c *DB) saveMetadata(exec sqlExecutor, id, title, api, model string) error 
 
 	if _, err := exec.Exec(exec.Rebind(`
 		INSERT INTO
-		  conversations (id, title, api, model)
+		  sessions (id, title, api, model)
 		VALUES
 		  (?, ?, ?, ?)
 	`), id, title, api, model); err != nil {
@@ -311,18 +386,18 @@ func (c *DB) saveMetadata(exec sqlExecutor, id, title, api, model string) error 
 	return nil
 }
 
-func (c *DB) SaveConversation(
+func (c *DB) SaveSession(
 	id, title, api, model string,
 	messages []proto.Message,
 	rules []approval.Rule,
 ) error {
-	encoded, err := encodeConversation(messages)
+	encoded, err := encodeSession(messages)
 	if err != nil {
 		return err
 	}
 	tx, err := c.db.Beginx()
 	if err != nil {
-		return fmt.Errorf("SaveConversation: %w", err)
+		return fmt.Errorf("SaveSession: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -330,31 +405,31 @@ func (c *DB) SaveConversation(
 		return err
 	}
 	if _, err := tx.Exec(tx.Rebind(`
-		INSERT INTO conversation_messages (conversation_id, messages)
+		INSERT INTO session_messages (session_id, messages)
 		VALUES (?, ?)
-		ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+		ON CONFLICT(session_id) DO UPDATE SET messages = excluded.messages
 	`), id, encoded); err != nil {
-		return fmt.Errorf("SaveConversation messages: %w", err)
+		return fmt.Errorf("SaveSession messages: %w", err)
 	}
 	if _, err := tx.Exec(tx.Rebind(`
-		DELETE FROM approval_rules WHERE conversation_id = ?
+		DELETE FROM approval_rules WHERE session_id = ?
 	`), id); err != nil {
-		return fmt.Errorf("SaveConversation rules: %w", err)
+		return fmt.Errorf("SaveSession rules: %w", err)
 	}
 	for _, rule := range approval.Dedupe(rules) {
 		paths, err := json.Marshal(rule.Paths)
 		if err != nil {
-			return fmt.Errorf("SaveConversation paths: %w", err)
+			return fmt.Errorf("SaveSession paths: %w", err)
 		}
 		if _, err := tx.Exec(tx.Rebind(`
-			INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode)
+			INSERT INTO approval_rules (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths), string(rule.Mode)); err != nil {
-			return fmt.Errorf("SaveConversation rule: %w", err)
+			return fmt.Errorf("SaveSession rule: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("SaveConversation commit: %w", err)
+		return fmt.Errorf("SaveSession commit: %w", err)
 	}
 	return nil
 }
@@ -362,11 +437,11 @@ func (c *DB) SaveConversation(
 func (c *DB) ReadMessages(id string, messages *[]proto.Message) error {
 	var encoded []byte
 	if err := c.db.Get(&encoded, c.db.Rebind(`
-		SELECT messages FROM conversation_messages WHERE conversation_id = ?
+		SELECT messages FROM session_messages WHERE session_id = ?
 	`), id); err != nil {
 		return fmt.Errorf("ReadMessages: %w", err)
 	}
-	if err := decodeConversationBytes(encoded, messages); err != nil {
+	if err := decodeSessionBytes(encoded, messages); err != nil {
 		return fmt.Errorf("ReadMessages: %w", err)
 	}
 	return nil
@@ -390,7 +465,7 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 	if err := c.db.Select(&rows, c.db.Rebind(`
 		SELECT scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
 		FROM approval_rules
-		WHERE conversation_id = ?
+		WHERE session_id = ?
 		ORDER BY created_at, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
 	`), id); err != nil {
 		return nil, fmt.Errorf("ApprovalRules: %w", err)
@@ -420,17 +495,17 @@ func (c *DB) Delete(id string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.Exec(tx.Rebind(`
-		DELETE FROM approval_rules WHERE conversation_id = ?
+		DELETE FROM approval_rules WHERE session_id = ?
 	`), id); err != nil {
 		return fmt.Errorf("Delete rules: %w", err)
 	}
 	if _, err := tx.Exec(tx.Rebind(`
-		DELETE FROM conversation_messages WHERE conversation_id = ?
+		DELETE FROM session_messages WHERE session_id = ?
 	`), id); err != nil {
 		return fmt.Errorf("Delete messages: %w", err)
 	}
 	if _, err := tx.Exec(tx.Rebind(`
-		DELETE FROM conversations
+		DELETE FROM sessions
 		WHERE
 		  id = ?
 	`), id); err != nil {
@@ -442,14 +517,14 @@ func (c *DB) Delete(id string) error {
 	return nil
 }
 
-func (c *DB) MigrateLegacyConversations(cachePath string) error {
-	dir := filepath.Join(cachePath, "conversations")
+func (c *DB) MigrateLegacySessions(sessionDir string) error {
+	dir := filepath.Join(filepath.Dir(sessionDir), "conversations")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("read legacy conversations: %w", err)
+		return fmt.Errorf("read legacy sessions: %w", err)
 	}
 	var migrationErrors []error
 	for _, entry := range entries {
@@ -460,75 +535,75 @@ func (c *DB) MigrateLegacyConversations(cachePath string) error {
 		path := filepath.Join(dir, entry.Name())
 		if !IDPattern.MatchString(id) {
 			migrationErrors = append(migrationErrors,
-				fmt.Errorf("legacy conversation %s has an invalid ID; file retained", path))
+				fmt.Errorf("legacy session %s has an invalid ID; file retained", path))
 			continue
 		}
 		var exists int
 		if err := c.db.Get(&exists, c.db.Rebind(`
-			SELECT count(*) FROM conversations WHERE id = ?
+			SELECT count(*) FROM sessions WHERE id = ?
 		`), id); err != nil {
-			migrationErrors = append(migrationErrors, fmt.Errorf("check legacy conversation %s: %w", id, err))
+			migrationErrors = append(migrationErrors, fmt.Errorf("check legacy session %s: %w", id, err))
 			continue
 		}
 		if exists == 0 {
 			migrationErrors = append(migrationErrors,
-				fmt.Errorf("legacy conversation %s has no database metadata; file retained", id))
+				fmt.Errorf("legacy session %s has no database metadata; file retained", id))
 			continue
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			migrationErrors = append(migrationErrors, fmt.Errorf("read legacy conversation %s: %w", id, err))
+			migrationErrors = append(migrationErrors, fmt.Errorf("read legacy session %s: %w", id, err))
 			continue
 		}
 		var messages []proto.Message
-		if err := decodeConversationBytes(data, &messages); err != nil {
+		if err := decodeSessionBytes(data, &messages); err != nil {
 			migrationErrors = append(migrationErrors,
-				fmt.Errorf("decode legacy conversation %s: %w; file retained", id, err))
+				fmt.Errorf("decode legacy session %s: %w; file retained", id, err))
 			continue
 		}
-		encoded, err := encodeConversation(messages)
+		encoded, err := encodeSession(messages)
 		if err != nil {
-			migrationErrors = append(migrationErrors, fmt.Errorf("encode legacy conversation %s: %w", id, err))
+			migrationErrors = append(migrationErrors, fmt.Errorf("encode legacy session %s: %w", id, err))
 			continue
 		}
 		var existing []byte
 		existingErr := c.db.Get(&existing, c.db.Rebind(`
-			SELECT messages FROM conversation_messages WHERE conversation_id = ?
+			SELECT messages FROM session_messages WHERE session_id = ?
 		`), id)
 		if existingErr == nil {
 			var existingMessages []proto.Message
-			if err := decodeConversationBytes(existing, &existingMessages); err == nil {
+			if err := decodeSessionBytes(existing, &existingMessages); err == nil {
 				if err := os.Remove(path); err != nil {
 					migrationErrors = append(migrationErrors,
-						fmt.Errorf("remove migrated legacy conversation %s: %w", id, err))
+						fmt.Errorf("remove migrated legacy session %s: %w", id, err))
 				}
 				continue
 			}
 		} else if !errors.Is(existingErr, sql.ErrNoRows) {
 			migrationErrors = append(migrationErrors,
-				fmt.Errorf("check migrated conversation %s: %w", id, existingErr))
+				fmt.Errorf("check migrated session %s: %w", id, existingErr))
 			continue
 		}
-		if err := c.migrateOneLegacyConversation(id, encoded); err != nil {
-			migrationErrors = append(migrationErrors, fmt.Errorf("migrate legacy conversation %s: %w", id, err))
+		if err := c.migrateOneLegacySession(id, encoded); err != nil {
+			migrationErrors = append(migrationErrors, fmt.Errorf("migrate legacy session %s: %w", id, err))
 			continue
 		}
 		if err := os.Remove(path); err != nil {
 			migrationErrors = append(migrationErrors,
-				fmt.Errorf("remove migrated legacy conversation %s: %w", id, err))
+				fmt.Errorf("remove migrated legacy session %s: %w", id, err))
 		}
 	}
 	return errors.Join(migrationErrors...)
 }
 
-// migrateOneLegacyConversation persists a single legacy conversation in
+// migrateOneLegacySession persists a single legacy session in
 // its own transaction. The defer-Rollback pattern mirrors the other
 // migration helpers in this file (migrateApprovalRulesScope,
-// migrateApprovalRulesPaths, SaveConversation, Delete): a Rollback on an
+// migrateApprovalRulesPaths, SaveSession, Delete): a Rollback on an
 // already-committed transaction is a documented no-op, so this is safe
 // to call unconditionally and guarantees the transaction handle is
 // released even if Commit fails.
-func (c *DB) migrateOneLegacyConversation(id string, encoded []byte) error {
+func (c *DB) migrateOneLegacySession(id string, encoded []byte) error {
 	tx, err := c.db.Beginx()
 	if err != nil {
 		return fmt.Errorf("begin legacy migration: %w", err)
@@ -536,40 +611,40 @@ func (c *DB) migrateOneLegacyConversation(id string, encoded []byte) error {
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.Exec(tx.Rebind(`
-		INSERT INTO conversation_messages (conversation_id, messages)
+		INSERT INTO session_messages (session_id, messages)
 		VALUES (?, ?)
-		ON CONFLICT(conversation_id) DO UPDATE SET messages = excluded.messages
+		ON CONFLICT(session_id) DO UPDATE SET messages = excluded.messages
 	`), id, encoded); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit legacy conversation: %w", err)
+		return fmt.Errorf("commit legacy session: %w", err)
 	}
 	return nil
 }
 
-func (c *DB) ListOlderThan(t time.Duration) ([]Conversation, error) {
-	var convos []Conversation
-	if err := c.db.Select(&convos, c.db.Rebind(`
+func (c *DB) ListOlderThan(t time.Duration) ([]Session, error) {
+	var sessions []Session
+	if err := c.db.Select(&sessions, c.db.Rebind(`
 		SELECT
 		  *
 		FROM
-		  conversations
+		  sessions
 		WHERE
 		  updated_at < ?
 		`), time.Now().Add(-t)); err != nil {
 		return nil, fmt.Errorf("ListOlderThan: %w", err)
 	}
-	return convos, nil
+	return sessions, nil
 }
 
-func (c *DB) FindHEAD() (*Conversation, error) {
-	var convo Conversation
-	if err := c.db.Get(&convo, `
+func (c *DB) FindHEAD() (*Session, error) {
+	var session Session
+	if err := c.db.Get(&session, `
 		SELECT
 		  *
 		FROM
-		  conversations
+		  sessions
 		ORDER BY
 		  updated_at DESC
 		LIMIT
@@ -577,15 +652,15 @@ func (c *DB) FindHEAD() (*Conversation, error) {
 	`); err != nil {
 		return nil, fmt.Errorf("FindHead: %w", err)
 	}
-	return &convo, nil
+	return &session, nil
 }
 
-func (c *DB) findByExactTitle(result *[]Conversation, in string) error {
+func (c *DB) findByExactTitle(result *[]Session, in string) error {
 	if err := c.db.Select(result, c.db.Rebind(`
 		SELECT
 		  *
 		FROM
-		  conversations
+		  sessions
 		WHERE
 		  title = ?
 	`), in); err != nil {
@@ -594,12 +669,12 @@ func (c *DB) findByExactTitle(result *[]Conversation, in string) error {
 	return nil
 }
 
-func (c *DB) findByIDOrTitle(result *[]Conversation, in string) error {
+func (c *DB) findByIDOrTitle(result *[]Session, in string) error {
 	if err := c.db.Select(result, c.db.Rebind(`
 		SELECT
 		  *
 		FROM
-		  conversations
+		  sessions
 		WHERE
 		  id glob ?
 		  OR title = ?
@@ -623,14 +698,14 @@ func (c *DB) Completions(in string) ([]string, error) {
 		    title
 		  )
 		FROM
-		  conversations
+		  sessions
 		WHERE
 		  id glob ?
 		UNION
 		SELECT
 		  printf ("%s%c%s", title, char(9), substr (id, 1, ?))
 		FROM
-		  conversations
+		  sessions
 		WHERE
 		  title glob ?
 	`), in, ShortIDLength, ShortIDLength, in+"*", ShortIDLength, in+"*"); err != nil {
@@ -639,50 +714,50 @@ func (c *DB) Completions(in string) ([]string, error) {
 	return result, nil
 }
 
-func (c *DB) Find(in string) (*Conversation, error) {
-	var conversations []Conversation
+func (c *DB) Find(in string) (*Session, error) {
+	var sessions []Session
 	var err error
 
 	if len(in) < MinIDLength {
-		err = c.findByExactTitle(&conversations, in)
+		err = c.findByExactTitle(&sessions, in)
 	} else {
-		err = c.findByIDOrTitle(&conversations, in)
+		err = c.findByIDOrTitle(&sessions, in)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("Find %q: %w", in, err)
 	}
 
-	if len(conversations) > 1 {
+	if len(sessions) > 1 {
 		return nil, fmt.Errorf("%w: %s", ErrManyMatches, in)
 	}
-	if len(conversations) == 1 {
-		return &conversations[0], nil
+	if len(sessions) == 1 {
+		return &sessions[0], nil
 	}
 	return nil, fmt.Errorf("%w: %s", ErrNoMatches, in)
 }
 
-func (c *DB) List() ([]Conversation, error) {
-	var convos []Conversation
-	if err := c.db.Select(&convos, `
+func (c *DB) List() ([]Session, error) {
+	var sessions []Session
+	if err := c.db.Select(&sessions, `
 		SELECT
 		  *
 		FROM
-		  conversations
+		  sessions
 		ORDER BY
 		  updated_at DESC
 	`); err != nil {
-		return convos, fmt.Errorf("List: %w", err)
+		return sessions, fmt.Errorf("List: %w", err)
 	}
-	return convos, nil
+	return sessions, nil
 }
 
-func (c *DB) HasConversations() (bool, error) {
+func (c *DB) HasSessions() (bool, error) {
 	var count int
 	if err := c.db.Get(&count, `
 		SELECT count(*)
-		FROM conversations
+		FROM sessions
 	`); err != nil {
-		return false, fmt.Errorf("HasConversations: %w", err)
+		return false, fmt.Errorf("HasSessions: %w", err)
 	}
 	return count > 0, nil
 }

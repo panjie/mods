@@ -110,7 +110,7 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		return nil
 	}
 	if config.List {
-		return listConversations(config.Raw)
+		return listSessions(config.Raw)
 	}
 
 	if config.MCPList {
@@ -134,14 +134,14 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		}
 	}
 
-	if config.CacheWriteToID != "" {
-		return saveConversation(mods)
+	if config.SessionWriteToID != "" {
+		return saveSession(mods)
 	}
 
 	return nil
 }
 
-// runDirsAction prints either a single requested path (config | cache) or
+// runDirsAction prints either a single requested path (config | sessions) or
 // both with the same indentation as before. Extracted from RunE so the
 // args inspection is no longer interleaved with the prompt path.
 func runDirsAction(args []string) error {
@@ -150,14 +150,19 @@ func runDirsAction(args []string) error {
 		case "config":
 			fmt.Println(filepath.Dir(config.SettingsPath))
 			return nil
-		case "cache":
-			fmt.Println(config.CachePath)
+		case "sessions":
+			fmt.Println(config.SessionDir)
 			return nil
+		default:
+			return modsError{
+				Err:        newUserErrorf("unknown directory %q; use config or sessions", args[0]),
+				ReasonText: "Could not print requested directory.",
+			}
 		}
 	}
 	fmt.Printf("Configuration: %s\n", filepath.Dir(config.SettingsPath))
 	//nolint:mnd
-	fmt.Printf("%*sCache: %s\n", 8, " ", config.CachePath)
+	fmt.Printf("%*sSessions: %s\n", 8, " ", config.SessionDir)
 	return nil
 }
 

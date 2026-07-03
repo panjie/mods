@@ -14,11 +14,11 @@ func shouldAutoConfig(args []string) (bool, error) {
 	if isCompletionCmd(args) || isVersionOrHelpCmd(args) || isAutoConfigSkippedAction() {
 		return false, nil
 	}
-	hasConversations, err := db.HasConversations()
+	hasSessions, err := db.HasSessions()
 	if err != nil {
-		return false, fmt.Errorf("check first-run conversations: %w", err)
+		return false, fmt.Errorf("check first-run sessions: %w", err)
 	}
-	return !hasConversations, nil
+	return !hasSessions, nil
 }
 
 func validateFirstRunPrerequisites(args []string) error {

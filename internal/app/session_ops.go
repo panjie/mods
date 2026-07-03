@@ -11,7 +11,7 @@ import (
 	"github.com/panjie/mods/internal/proto"
 )
 
-func (m *Mods) findCacheOpsDetails() tea.Cmd {
+func (m *Mods) findSessionDetails() tea.Cmd {
 	return func() tea.Msg {
 		continueLast := m.Config.ContinueLast || (m.Config.Continue != "" && m.Config.Title == "")
 		readID := m.Config.Continue
@@ -24,7 +24,7 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 			if err != nil {
 				return modsError{
 					Err:        err,
-					ReasonText: "Could not find the conversation.",
+					ReasonText: "Could not find the session.",
 				}
 			}
 			if found != nil {
@@ -32,12 +32,12 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 				if m.Config.Continue != "" && m.Config.Title == "" {
 					title = found.Title
 				}
-				if !m.Config.NoCache {
+				if !m.Config.NoSave {
 					rules, err = m.db.ApprovalRules(readID)
 					if err != nil {
 						return modsError{
 							Err:        err,
-							ReasonText: "Could not load conversation approval rules.",
+							ReasonText: "Could not load session approval rules.",
 						}
 					}
 				}
@@ -53,18 +53,18 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 		}
 
 		if !IDPattern.MatchString(writeID) {
-			convo, err := m.db.Find(writeID)
+			found, err := m.db.Find(writeID)
 			if err != nil {
 				writeID = NewID()
 			} else {
-				writeID = convo.ID
+				writeID = found.ID
 			}
 		}
 
-		debug.Printf("Conversation: write_id=%s, read_id=%s, continue_last=%v, title=%s",
+		debug.Printf("Session: write_id=%s, read_id=%s, continue_last=%v, title=%s",
 			writeID[:min(ShortIDLength, len(writeID))], readID[:min(ShortIDLength, len(readID))], continueLast, title)
 
-		return cacheDetailsMsg{
+		return sessionDetailsMsg{
 			WriteID: writeID,
 			Title:   title,
 			ReadID:  readID,
@@ -73,16 +73,16 @@ func (m *Mods) findCacheOpsDetails() tea.Cmd {
 	}
 }
 
-func (m *Mods) findReadID(in string) (*Conversation, error) {
+func (m *Mods) findReadID(in string) (*Session, error) {
 	if in != "" {
 		return m.db.Find(in)
 	}
 	if m.Config.ContinueLast || m.Config.Continue != "" {
-		convo, err := m.db.FindHEAD()
+		found, err := m.db.FindHEAD()
 		if err != nil {
 			return nil, err
 		}
-		return convo, nil
+		return found, nil
 	}
 	return nil, ErrNoMatches
 }
@@ -128,14 +128,14 @@ func (m *Mods) readLimitedStdin(reader io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-func (m *Mods) readFromCache() tea.Cmd {
+func (m *Mods) readFromSession() tea.Cmd {
 	return func() tea.Msg {
 		var messages []proto.Message
-		if err := m.db.ReadMessages(m.Config.CacheReadFromID, &messages); err != nil {
-			return modsError{Err: err, ReasonText: "There was an error loading the conversation."}
+		if err := m.db.ReadMessages(m.Config.SessionReadFromID, &messages); err != nil {
+			return modsError{Err: err, ReasonText: "There was an error loading the session."}
 		}
 
-		m.appendToOutput(proto.Conversation(messages).String())
+		m.appendToOutput(proto.Session(messages).String())
 		return streamEventMsg{kind: streamEventDone}
 	}
 }

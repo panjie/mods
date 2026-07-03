@@ -48,7 +48,7 @@ func TestIsCompletionCmd(t *testing.T) {
 	}
 }
 
-func TestConversationCompletions(t *testing.T) {
+func TestSessionCompletions(t *testing.T) {
 	saveDB := db
 	defer func() { db = saveDB }()
 
@@ -56,7 +56,7 @@ func TestConversationCompletions(t *testing.T) {
 	const id = "df31ae23ab8b75b5643c2f846c570997edc71333"
 	require.NoError(t, db.Save(id, "message 1", "openai", "gpt-4o"))
 
-	results := conversationCompletions("df31")
+	results := sessionCompletions("df31")
 	require.Equal(t, []string{"df31ae2\tmessage 1"}, results)
 }
 
@@ -105,6 +105,30 @@ func TestMinimalFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
 
+func TestReasoningShortFlagUsesLowercaseR(t *testing.T) {
+	withTestConfig(t, Config{}, func() {
+		rawFlag := rootCmd.Flags().Lookup("raw")
+		require.NotNil(t, rawFlag)
+		require.Empty(t, rawFlag.Shorthand)
+
+		reasoningFlag := rootCmd.Flags().Lookup("reasoning")
+		require.NotNil(t, reasoningFlag)
+		require.Equal(t, "r", reasoningFlag.Shorthand)
+
+		require.NoError(t, rootCmd.Flags().Parse(normalizeOptionalReasoningValueArgs([]string{"-r", "on"})))
+		require.Equal(t, ReasoningOn, config.Reasoning)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--raw"}))
+		require.True(t, config.Raw)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.Error(t, rootCmd.Flags().Parse([]string{"-T"}))
+	})
+}
+
 func TestClipboardImageShortFlag(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		flag := rootCmd.Flags().Lookup("clipboard-image")
@@ -140,16 +164,20 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 			want: []string{"--reasoning=auto", "hello"},
 		},
 		"short flag consumes valid spaced value": {
-			in:   []string{"-T", "off", "hello"},
-			want: []string{"-T=off", "hello"},
+			in:   []string{"-r", "off", "hello"},
+			want: []string{"-r=off", "hello"},
 		},
 		"bare long flag keeps prompt text": {
 			in:   []string{"--reasoning", "hello"},
 			want: []string{"--reasoning", "hello"},
 		},
 		"bare short flag keeps prompt text": {
-			in:   []string{"-T", "hello"},
-			want: []string{"-T", "hello"},
+			in:   []string{"-r", "hello"},
+			want: []string{"-r", "hello"},
+		},
+		"old short flag is unchanged": {
+			in:   []string{"-T", "off", "hello"},
+			want: []string{"-T", "off", "hello"},
 		},
 		"removed auto equals form is unchanged": {
 			in:   []string{"--reasoning=auto", "hello"},
@@ -191,6 +219,27 @@ func TestToolResultsFlagRenamed(t *testing.T) {
 	require.Nil(t, rootCmd.Flags().Lookup("hide-tool-results"))
 	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
 	require.Error(t, rootCmd.Flags().Parse([]string{"--hide-tool-results"}))
+}
+
+func TestNoSaveFlag(t *testing.T) {
+	flag := rootCmd.Flags().Lookup("no-save")
+	require.NotNil(t, flag)
+	require.Equal(t, "n", flag.Shorthand)
+	require.Nil(t, rootCmd.Flags().Lookup("no-session-save"))
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--no-save"}))
+		require.True(t, config.NoSave)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-n"}))
+		require.True(t, config.NoSave)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.Error(t, rootCmd.Flags().Parse([]string{"--no-session-save"}))
+	})
 }
 
 func TestRoleNames(t *testing.T) {
@@ -289,6 +338,7 @@ func TestUsageIntroAndPromptSyntax(t *testing.T) {
 func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	groups := groupedUsageFlags(rootCmd.Flags(), true)
 	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
+	require.True(t, groupHasFlag(groups, flagCategorySession, "no-save"))
 	require.True(t, groupHasFlag(groups, flagCategoryMCP, "mcp-list"))
 	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
 	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
@@ -297,6 +347,26 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	for category, flags := range groups {
 		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))
 	}
+}
+
+func TestDirsActionUsesSessions(t *testing.T) {
+	withTestConfig(t, Config{
+		SettingsPath: filepath.Join(t.TempDir(), "mods.yml"),
+		SessionDir:   filepath.Join(t.TempDir(), "sessions"),
+	}, func() {
+		output := captureStdout(t, func() {
+			require.NoError(t, runDirsAction([]string{"sessions"}))
+		})
+		require.Equal(t, config.SessionDir+"\n", output)
+
+		output = captureStdout(t, func() {
+			require.NoError(t, runDirsAction(nil))
+		})
+		require.Contains(t, output, "Sessions: "+config.SessionDir)
+		require.NotContains(t, output, "Cache:")
+
+		require.Error(t, runDirsAction([]string{"cache"}))
+	})
 }
 
 func TestAdvancedFlagsStillParse(t *testing.T) {
@@ -387,26 +457,12 @@ func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
 // TestNextBackupPathAvoidsOverwrite locks in the fix for resetSettings:
 // the previous .bak (which may contain plaintext API keys) is never
 // silently clobbered. Successive resets land at .bak, .bak.1, .bak.2, ...
-// TestCachePathFlagRegistered pins the fix for the documentation/CLI
-// mismatch: the cache-path entry in the Help map promised a CLI flag,
-// but initFlags() never registered one, so users could only set it via
-// YAML or MODS_CACHE_PATH. Surface it as an advanced flag so the help
-// output and the actual flag set agree.
-func TestCachePathFlagRegistered(t *testing.T) {
-	f := rootCmd.Flags().Lookup("cache-path")
-	require.NotNil(t, f, "--cache-path must be a registered CLI flag")
-	require.Equal(t, "string", f.Value.Type())
-
-	saveCachePath := config.CachePath
-	t.Cleanup(func() {
-		config.CachePath = saveCachePath
-		_ = rootCmd.Flags().Set("cache-path", saveCachePath)
-	})
-
-	// Setting the flag must drive the same destination as the YAML
-	// field; verify by parsing and reading back.
-	require.NoError(t, rootCmd.Flags().Set("cache-path", "/tmp/mods-cache"))
-	require.Equal(t, "/tmp/mods-cache", config.CachePath)
+func TestSessionPathFlagsRemoved(t *testing.T) {
+	require.Nil(t, rootCmd.Flags().Lookup("cache-path"))
+	require.Nil(t, rootCmd.Flags().Lookup("session-dir"))
+	require.Nil(t, rootCmd.Flags().Lookup("session-path"))
+	require.Error(t, rootCmd.Flags().Parse([]string{"--cache-path", "/tmp/mods-cache"}))
+	require.Error(t, rootCmd.Flags().Parse([]string{"--session-dir", "/tmp/mods-sessions"}))
 }
 
 func TestNextBackupPathAvoidsOverwrite(t *testing.T) {

@@ -244,14 +244,14 @@ func TestCompletionOutputSeparatesResponsesAfterToolCall(t *testing.T) {
 	require.False(t, m.responseBoundaryPending)
 }
 
-func TestCachedConversationOutputFlushesForNonTTY(t *testing.T) {
+func TestSessionOutputFlushesForNonTTY(t *testing.T) {
 	oldIsOutputTTY := IsOutputTTY
 	IsOutputTTY = func() bool { return false }
 	t.Cleanup(func() { IsOutputTTY = oldIsOutputTTY })
 
 	db := testDB(t)
-	id := newConversationID()
-	require.NoError(t, db.SaveConversation(
+	id := newSessionID()
+	require.NoError(t, db.SaveSession(
 		id,
 		"show flush",
 		"openai",
@@ -261,12 +261,12 @@ func TestCachedConversationOutputFlushesForNonTTY(t *testing.T) {
 	))
 
 	m := &Mods{
-		Config:       &Config{CacheReadFromID: id},
+		Config:       &Config{SessionReadFromID: id},
 		db:           db,
 		contentMutex: &sync.Mutex{},
 		reviewer:     &toolReviewer{},
 	}
-	msg := m.readFromCache()()
+	msg := m.readFromSession()()
 	require.IsType(t, streamEventMsg{}, msg)
 	_, _ = m.Update(msg)
 

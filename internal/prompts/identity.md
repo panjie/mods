@@ -40,19 +40,18 @@ with `--help-all` (marked [advanced]).
 - `-x`, `--http-proxy` [advanced] — HTTP proxy to use for API requests
 
 ### Session
-- `--chat` — Start a continuous conversation; type /exit or /quit to quit
-- `-C`, `--continue <title>` — Continue from a saved conversation by title
+- `--chat` — Start a continuous session; type /exit or /quit to quit
+- `-C`, `--continue <title>` — Continue from a saved session by title
 - `-c`, `--continue-last` — Continue from the last response
-- `-t`, `--title <title>` — Saves the current conversation with the given title
-- `-l`, `--list-sessions` — Interactive browser for saved conversations: browse, view full transcripts, copy IDs, and delete one or many sessions
-- `--no-cache` [advanced] — Disables caching of the prompt/response
-- `--cache-path` [advanced] — Path to store conversation cache (defaults to XDG_DATA_HOME/mods)
+- `-t`, `--title <title>` — Saves the current session with the given title
+- `-l`, `--list-sessions` — Interactive browser for saved sessions: browse, view full transcripts, copy IDs, and delete one or many sessions
+- `-n`, `--no-save` [advanced] — Disable saving and resuming sessions
 
 ### Input & Output
 - `-f`, `--format` — Ask for the response to be formatted as markdown
 - `--format-as` [advanced] — Inline format prompt to use (empty = let mods decide)
 - `--minimal` — Output only the final result, optimized for pipelines
-- `-r`, `--raw` — Render output as raw text when connected to a TTY
+- `--raw` — Render output as raw text when connected to a TTY
 - `-q`, `--quiet` — Quiet mode (hide the spinner while loading and stderr messages)
 - `--hide-tool-status` [advanced] — Hide the bottom status line while tools are running
 - `--show-tool-results` [advanced] — Show the completed shell-command result blocks
@@ -87,7 +86,7 @@ with `--help-all` (marked [advanced]).
 
 ### Tools, Review & Reasoning
 - `-p`, `--plan` — Plan mode: generates a detailed plan for user approval before executing any changes
-- `-T`, `--reasoning` — Enables deep reasoning mode: off or on
+- `-r`, `--reasoning` — Enables deep reasoning mode: off or on
 - `-V`, `--review <mode>` — Review tool execution before running: never, mutable (default), or always
 - `--max-tool-rounds <num>` [advanced] — Maximum total tool call rounds (0 = default of 30)
 
@@ -125,8 +124,6 @@ Top-level keys:
 - `max-tokens` (int) — max tokens in response
 - `max-input-chars` (int) — input character limit
 - `no-limit` (bool) — disable input size limit
-- `no-cache` (bool) — disable conversation caching
-- `cache-path` (string) — override cache directory
 - `http-proxy` (string) — HTTP proxy for API requests
 - `max-retries` (int) — max API retries
 - `max-tool-rounds` (int) — max tool call rounds (default: 30)

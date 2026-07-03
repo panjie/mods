@@ -5,7 +5,7 @@ import (
 	"github.com/panjie/mods/internal/approval"
 
 	cfgpkg "github.com/panjie/mods/internal/config"
-	"github.com/panjie/mods/internal/conversation"
+	"github.com/panjie/mods/internal/session"
 
 	debugpkg "github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
@@ -19,8 +19,8 @@ type API = cfgpkg.API
 type Model = cfgpkg.Model
 type ReviewMode = cfgpkg.ReviewMode
 type ReasoningMode = cfgpkg.ReasoningMode
-type DB = conversation.DB
-type Conversation = conversation.Conversation
+type DB = session.DB
+type Session = session.Session
 type Rule = approval.Rule
 type RuleSet = approval.RuleSet
 type Scope = approval.Scope
@@ -31,8 +31,8 @@ type ApprovalReviewMode = approval.ReviewMode
 type Styles = ui.Styles
 
 var newUserErrorf = apperr.NewUserErrorf
-var NewID = conversation.NewID
-var IDPattern = conversation.IDPattern
+var NewID = session.NewID
+var IDPattern = session.IDPattern
 var IsInputTTY = ui.IsInputTTY
 var IsOutputTTY = ui.IsOutputTTY
 var IsErrorTTY = ui.IsErrorTTY
@@ -65,7 +65,7 @@ var DecisionAllow = approval.DecisionAllow
 var DecisionAsk = approval.DecisionAsk
 var ClassifyAccess = approval.ClassifyAccess
 var ExternalDirs = approval.ExternalDirs
-var ErrNoMatches = conversation.ErrNoMatches
+var ErrNoMatches = session.ErrNoMatches
 
 const (
 	ReviewNever   = cfgpkg.ReviewNever
@@ -74,8 +74,8 @@ const (
 	ReasoningOff  = cfgpkg.ReasoningOff
 	ReasoningOn   = cfgpkg.ReasoningOn
 
-	ShortIDLength = conversation.ShortIDLength
-	MinIDLength   = conversation.MinIDLength
+	ShortIDLength = session.ShortIDLength
+	MinIDLength   = session.MinIDLength
 
 	ToolSelectionRules  = cfgpkg.ToolSelectionRules
 	MinimalSystemPrompt = cfgpkg.MinimalSystemPrompt

@@ -80,7 +80,7 @@ type ToolCallStatus struct {
 	Err       error
 }
 
-// Message is a message in the conversation.
+// Message is a message in the session.
 type Message struct {
 	Role      string
 	Content   string
@@ -121,10 +121,10 @@ type Request struct {
 	ToolCaller     func(name string, data []byte) (string, error)
 }
 
-// Conversation is a conversation.
-type Conversation []Message
+// Session is a session.
+type Session []Message
 
-func (cc Conversation) String() string {
+func (cc Session) String() string {
 	var sb strings.Builder
 	for _, msg := range cc {
 		if msg.Content == "" {

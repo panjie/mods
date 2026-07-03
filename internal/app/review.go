@@ -333,7 +333,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		return nil
 	}
 	if intent.Class == "" && !shellExecution && r.rules.Allows(name, data, r.scope) {
-		debug.Printf("requestApproval: matched conversation approval rule, auto-approving")
+		debug.Printf("requestApproval: matched session approval rule, auto-approving")
 		return nil
 	}
 	if isSafeWorkArea(name, data, analysis) {

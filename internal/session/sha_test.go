@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"testing"
@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewConversationID(t *testing.T) {
-	id1 := newConversationID()
-	id2 := newConversationID()
+func TestNewSessionID(t *testing.T) {
+	id1 := newSessionID()
+	id2 := newSessionID()
 
 	require.Len(t, id1, 40)
 	require.Len(t, id2, 40)

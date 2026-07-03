@@ -41,7 +41,7 @@ func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Con
 			// to turn it off and save tokens.
 			gccfg.ThinkingBudget = 0
 			gccfg.ThinkingBudgetExplicit = true
-			debug.Printf("Reasoning: google thinking_budget=0 (-T off)")
+			debug.Printf("Reasoning: google thinking_budget=0 (-r off)")
 		}
 	case mod.API == "anthropic":
 		if enabled {
@@ -70,7 +70,7 @@ func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Con
 		thinking, hasThinking := ccfg.ExtraParams["thinking"].(map[string]any)
 		if !hasThinking && thinkingType != "" {
 			// User explicitly set thinking-type but has no thinking block in
-			// extra-params; auto-create one so -T turns thinking on without
+			// extra-params; auto-create one so -r turns thinking on without
 			// requiring a redundant extra-params.thinking.type: disabled.
 			thinking = map[string]any{}
 			if ccfg.ExtraParams == nil {
@@ -112,7 +112,7 @@ func applyReasoningConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Con
 
 // disableOpenAICompatibleReasoning sends the provider-appropriate "off"
 // signal so that thinking-enabled-by-default providers (DeepSeek, GLM, Kimi,
-// MiniMax, Qwen) do not silently consume reasoning tokens when -T is off.
+// MiniMax, Qwen) do not silently consume reasoning tokens when -r is off.
 // The mechanism is auto-detected from the model's configured reasoning style.
 func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 	if ccfg.ExtraParams == nil {
@@ -129,7 +129,7 @@ func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 		}
 		thinking["type"] = "disabled"
 		ccfg.ExtraParams["thinking"] = thinking
-		debug.Printf("Reasoning: thinking.type=disabled (-T off)")
+		debug.Printf("Reasoning: thinking.type=disabled (-r off)")
 		return
 	}
 
@@ -138,7 +138,7 @@ func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 	//    flip to false here.
 	if _, has := ccfg.ExtraParams["enable_thinking"]; has {
 		ccfg.ExtraParams["enable_thinking"] = false
-		debug.Printf("Reasoning: enable_thinking=false (-T off)")
+		debug.Printf("Reasoning: enable_thinking=false (-r off)")
 		return
 	}
 
@@ -146,9 +146,9 @@ func disableOpenAICompatibleReasoning(mod Model, ccfg *openai.Config) {
 	//    cleanly disabled — send the lowest effort as the closest equivalent.
 	if mod.API == "openai" || mod.API == "azure" {
 		ccfg.ExtraParams["reasoning_effort"] = "minimal"
-		debug.Printf("Reasoning: reasoning_effort=minimal (-T off, cannot fully disable for %s)", mod.API)
+		debug.Printf("Reasoning: reasoning_effort=minimal (-r off, cannot fully disable for %s)", mod.API)
 		return
 	}
 
-	debug.Printf("Reasoning: no built-in disable for %s/%s (-T off); relying on extra-params or provider default", mod.API, mod.Name)
+	debug.Printf("Reasoning: no built-in disable for %s/%s (-r off); relying on extra-params or provider default", mod.API, mod.Name)
 }

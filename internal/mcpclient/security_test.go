@@ -27,7 +27,7 @@ func TestIsSensitiveEnvName(t *testing.T) {
 			"SSH_AUTH_SOCK",
 			"GPG_TTY",
 			"KUBECONFIG_DATA",
-			"MODS_CACHE_PATH",
+			"MODS_REVIEW_MODE",
 			"MY_DATABASE_PASSWORD",
 			"WEBHOOK_SECRET",
 			"PRIVATE_KEY",

@@ -13,7 +13,7 @@ import (
 
 const (
 	helpIntroSummary = "Mods is an AI command-line assistant for prompts, pipelines, and local work."
-	helpIntroDetail  = "With built-in tools enabled, it can inspect and edit files, run shell commands, search the web, and keep conversations, with review controls for risky actions."
+	helpIntroDetail  = "With built-in tools enabled, it can inspect and edit files, run shell commands, search the web, and keep sessions, with review controls for risky actions."
 )
 
 func useLine() string {

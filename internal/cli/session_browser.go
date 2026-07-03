@@ -18,13 +18,13 @@ import (
 	"github.com/panjie/mods/internal/proto"
 )
 
-// Conversation browser — an interactive TUI replacement for the old
+// Session browser — an interactive TUI replacement for the old
 // single-select picker. It lets users browse saved sessions, view a
 // session's full transcript, copy an ID, and delete one or many sessions
 // without leaving the interface.
 //
 // The browser is launched only on a fully interactive TTY (see
-// listConversations); the machine-friendly tabular path (printList) is
+// listSessions); the machine-friendly tabular path (printList) is
 // untouched.
 
 const (
@@ -111,9 +111,9 @@ var (
 
 // --- list item ------------------------------------------------------------
 
-// convItem adapts a Conversation to the bubbles/list.Item interface.
+// convItem adapts a Session to the bubbles/list.Item interface.
 type convItem struct {
-	conv Conversation
+	conv Session
 }
 
 // FilterValue matches against title, id, model and api so the built-in "/"
@@ -200,7 +200,7 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 	if title == "" {
 		title = "(untitled)"
 	}
-	titleStyle := styles.ConversationList
+	titleStyle := styles.SessionList
 	if selected {
 		titleStyle = titleStyle.Bold(true)
 	}
@@ -233,7 +233,7 @@ type loadedContentMsg struct {
 type deletedMsg struct {
 	count int
 	err   error
-	fresh []Conversation
+	fresh []Session
 }
 
 // --- model ---------------------------------------------------------------
@@ -262,9 +262,9 @@ type browserModel struct {
 	statusMsg string // transient feedback, cleared on the next key
 }
 
-func newBrowserModel(conversations []Conversation) *browserModel {
-	items := make([]list.Item, 0, len(conversations))
-	for _, c := range conversations {
+func newBrowserModel(sessions []Session) *browserModel {
+	items := make([]list.Item, 0, len(sessions))
+	for _, c := range sessions {
 		items = append(items, convItem{conv: c})
 	}
 
@@ -516,7 +516,7 @@ func (m *browserModel) loadContent(id string) tea.Cmd {
 		if err := m.db.ReadMessages(id, &msgs); err != nil {
 			return loadedContentMsg{id: id, err: err}
 		}
-		return loadedContentMsg{id: id, content: proto.Conversation(msgs).String()}
+		return loadedContentMsg{id: id, content: proto.Session(msgs).String()}
 	}
 }
 
@@ -612,7 +612,7 @@ func (m *browserModel) deleteCmd(targets []convItem) tea.Cmd {
 				}
 				continue
 			}
-			_ = removeLegacyConversationFile(t.conv.ID) // best-effort cleanup
+			_ = removeLegacySessionFile(t.conv.ID) // best-effort cleanup
 		}
 		fresh, listErr := m.db.List()
 		if listErr != nil && firstErr == nil {
@@ -629,7 +629,7 @@ func (m *browserModel) handleDeleted(msg deletedMsg) (tea.Model, tea.Cmd) {
 		items = append(items, convItem{conv: c})
 		alive[c.ID] = true
 	}
-	// Prune marks for conversations that no longer exist.
+	// Prune marks for sessions that no longer exist.
 	for id := range m.marks {
 		if !alive[id] {
 			delete(m.marks, id)
@@ -637,11 +637,11 @@ func (m *browserModel) handleDeleted(msg deletedMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case len(items) == 0:
-		m.statusMsg = "no conversations left"
+		m.statusMsg = "no sessions left"
 	case msg.err != nil:
 		m.statusMsg = "delete failed: " + msg.err.Error()
 	default:
-		m.statusMsg = fmt.Sprintf("deleted %d conversation%s", msg.count, plural(msg.count))
+		m.statusMsg = fmt.Sprintf("deleted %d session%s", msg.count, plural(msg.count))
 	}
 	return m, m.list.SetItems(items)
 }
@@ -700,7 +700,7 @@ func (m *browserModel) viewViewer() string {
 	var body string
 	switch {
 	case m.viewErr != "":
-		hint := browserDangerTitle.Render(" couldn't load conversation ") + "\n\n" +
+		hint := browserDangerTitle.Render(" couldn't load session ") + "\n\n" +
 			browserEmpty.Render(m.viewErr) + "\n\n" +
 			StdoutStyles().Comment.Render("press esc to go back")
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center, hint)
@@ -709,7 +709,7 @@ func (m *browserModel) viewViewer() string {
 			browserEmpty.Render("Loading…"))
 	case m.viewerContent == "":
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
-			browserEmpty.Render("This conversation has no messages."))
+			browserEmpty.Render("This session has no messages."))
 	default:
 		body = m.viewport.View()
 	}
@@ -717,7 +717,7 @@ func (m *browserModel) viewViewer() string {
 }
 
 func (m *browserModel) viewTitle() string {
-	left := " Conversations " +
+	left := " Sessions " +
 		browserCountBadge.Render(fmt.Sprintf(" %d ", len(m.list.Items())))
 
 	var right string
@@ -775,7 +775,7 @@ func (m *browserModel) viewFooter() string {
 func (m *browserModel) viewConfirmPanel() string {
 	styles := StdoutStyles()
 	n := len(m.confirmTargets)
-	head := browserDangerTitle.Render(fmt.Sprintf(" Delete %d conversation%s? ", n, plural(n)))
+	head := browserDangerTitle.Render(fmt.Sprintf(" Delete %d session%s? ", n, plural(n)))
 
 	const maxShow = 5 //nolint:mnd
 	var rows []string
@@ -824,12 +824,12 @@ func renderHelp(width int, pairs [][2]string) string {
 }
 
 func emptyState(width, height int) string {
-	msg := "No conversations.\n\nPress q to exit."
+	msg := "No sessions.\n\nPress q to exit."
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
 		browserEmpty.Render(msg))
 }
 
-// renderTranscript colorizes the role prefixes that proto.Conversation emits
+// renderTranscript colorizes the role prefixes that proto.Session emits
 // and word-wraps to the viewport width for comfortable reading. It is kept
 // lightweight on purpose: a faithful, readable transcript beats a heavy
 // markdown pass here.
@@ -867,11 +867,11 @@ func plural(n int) string {
 
 // --- launcher ------------------------------------------------------------
 
-// runConversationBrowser starts the interactive browser over the supplied
+// runSessionBrowser starts the interactive browser over the supplied
 // sessions. It is only invoked on a fully interactive TTY.
-func runConversationBrowser(conversations []Conversation) error {
+func runSessionBrowser(sessions []Session) error {
 	program := tea.NewProgram(
-		newBrowserModel(conversations),
+		newBrowserModel(sessions),
 		tea.WithOutput(os.Stderr),
 		tea.WithAltScreen(),
 	)

@@ -4,10 +4,10 @@ import (
 	"github.com/panjie/mods/internal/app"
 	"github.com/panjie/mods/internal/apperr"
 	cfgpkg "github.com/panjie/mods/internal/config"
-	"github.com/panjie/mods/internal/conversation"
 	debugpkg "github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/mcpclient"
 	"github.com/panjie/mods/internal/platform"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -19,37 +19,38 @@ type (
 	FieldUpdate   = cfgpkg.FieldUpdate
 	ReasoningMode = cfgpkg.ReasoningMode
 	ReviewMode    = cfgpkg.ReviewMode
-	DB            = conversation.DB
-	Conversation  = conversation.Conversation
+	DB            = session.DB
+	Session       = session.Session
 	Mods          = app.Mods
 	Styles        = ui.Styles
 )
 
 var (
-	newUserErrorf     = apperr.NewUserErrorf
-	newMods           = app.New
-	Default           = cfgpkg.Default
-	Ensure            = cfgpkg.Ensure
-	WriteDefaultFile  = cfgpkg.WriteDefaultFile
-	SaveFields        = cfgpkg.SaveFields
-	SaveFieldPaths    = cfgpkg.SaveFieldPaths
-	HasAPIKey         = cfgpkg.HasAPIKey
-	Help              = cfgpkg.Help
-	Open              = conversation.Open
-	newConversationID = conversation.NewID
-	RemoveWhitespace  = ui.RemoveWhitespace
-	IsInputTTY        = ui.IsInputTTY
-	IsOutputTTY       = ui.IsOutputTTY
-	IsErrorTTY        = ui.IsErrorTTY
-	StdoutStyles      = ui.StdoutStyles
-	StderrStyles      = ui.StderrStyles
-	StdoutRenderer    = ui.StdoutRenderer
-	StderrRenderer    = ui.StderrRenderer
-	PrintConfirmation = ui.PrintConfirmation
-	FirstLine         = ui.FirstLine
-	HideCommandWindow = platform.HideCommandWindow
-	List              = mcpclient.List
-	ListTools         = mcpclient.ListTools
+	newUserErrorf         = apperr.NewUserErrorf
+	newMods               = app.New
+	Default               = cfgpkg.Default
+	Ensure                = cfgpkg.Ensure
+	WriteDefaultFile      = cfgpkg.WriteDefaultFile
+	SaveFields            = cfgpkg.SaveFields
+	SaveFieldPaths        = cfgpkg.SaveFieldPaths
+	HasAPIKey             = cfgpkg.HasAPIKey
+	Help                  = cfgpkg.Help
+	Open                  = session.Open
+	MigrateDefaultStorage = session.MigrateDefaultStorage
+	newSessionID          = session.NewID
+	RemoveWhitespace      = ui.RemoveWhitespace
+	IsInputTTY            = ui.IsInputTTY
+	IsOutputTTY           = ui.IsOutputTTY
+	IsErrorTTY            = ui.IsErrorTTY
+	StdoutStyles          = ui.StdoutStyles
+	StderrStyles          = ui.StderrStyles
+	StdoutRenderer        = ui.StdoutRenderer
+	StderrRenderer        = ui.StderrRenderer
+	PrintConfirmation     = ui.PrintConfirmation
+	FirstLine             = ui.FirstLine
+	HideCommandWindow     = platform.HideCommandWindow
+	List                  = mcpclient.List
+	ListTools             = mcpclient.ListTools
 )
 
 const (
@@ -59,12 +60,12 @@ const (
 	ReasoningOff  = cfgpkg.ReasoningOff
 	ReasoningOn   = cfgpkg.ReasoningOn
 
-	ShortIDLength = conversation.ShortIDLength
-	MinIDLength   = conversation.MinIDLength
+	ShortIDLength = session.ShortIDLength
+	MinIDLength   = session.MinIDLength
 )
 
 var (
-	IDPattern  = conversation.IDPattern
+	IDPattern  = session.IDPattern
 	lastPrompt = app.LastPrompt
 )
 

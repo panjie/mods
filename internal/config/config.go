@@ -87,11 +87,10 @@ var Help = map[string]string{
 	"reset-settings":         "Backup your old settings file and reset everything to the defaults",
 	"continue":               "Continue from the last response or a given save title",
 	"continue-last":          "Continue from the last response",
-	"no-cache":               "Disables caching of the prompt/response",
-	"cache-path":             "Path to store conversation cache (defaults to XDG_DATA_HOME/mods)",
-	"chat":                   "Start a continuous conversation; type /exit or /quit to quit",
-	"title":                  "Saves the current conversation with the given title",
-	"list-sessions":          "Interactively browse, view, and delete saved conversations",
+	"no-save":                "Disable saving and resuming sessions",
+	"chat":                   "Start a continuous session; type /exit or /quit to quit",
+	"title":                  "Saves the current session with the given title",
+	"list-sessions":          "Interactively browse, view, and delete saved sessions",
 	"theme":                  "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
 	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":            "MCP Servers configurations",
@@ -127,7 +126,7 @@ type Model struct {
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
 	// ThinkingType is the value to set thinking.type to when reasoning is
-	// enabled via -T / --reasoning. Defaults to "adaptive" (MiniMax) when
+	// enabled via -r / --reasoning. Defaults to "adaptive" (MiniMax) when
 	// extra-params.thinking already exists; use "enabled" for GLM and
 	// Anthropic-compatible APIs.
 	ThinkingType string `yaml:"thinking-type,omitempty"`
@@ -215,8 +214,6 @@ type PersistentConfig struct {
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
 	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
 	NoLimit             bool       `yaml:"no-limit" env:"NO_LIMIT"`
-	CachePath           string     `yaml:"cache-path" env:"CACHE_PATH"`
-	NoCache             bool       `yaml:"no-cache" env:"NO_CACHE"`
 	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
 	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
 	StatusText          string     `yaml:"status-text" env:"STATUS_TEXT"`
@@ -274,14 +271,16 @@ type Config struct {
 	MCPListTools  bool
 	MCPEnable     []string
 	MCPDisable    []string
+	NoSave        bool
 
 	// Runtime state (computed internally, never persisted).
-	Prefix                                             string
-	SettingsPath                                       string
-	SettingsExisted                                    bool
-	User                                               string
-	OpenEditor                                         bool
-	CacheReadFromID, CacheWriteToID, CacheWriteToTitle string
+	Prefix                                                   string
+	SettingsPath                                             string
+	SettingsExisted                                          bool
+	User                                                     string
+	OpenEditor                                               bool
+	SessionDir                                               string
+	SessionReadFromID, SessionWriteToID, SessionWriteToTitle string
 }
 
 // PromptConfig holds user overrides for built-in runtime prompts.
@@ -424,12 +423,12 @@ func Ensure() (Config, error) {
 	// the --settings / --config wizards continue to use the returned value
 	// after a partial failure, so it must satisfy the invariants those
 	// callers rely on: SettingsPath is filled in as soon as it is known,
-	// CachePath always has at least the default value, and every other
+	// SessionDir always has the fixed session storage path, and every other
 	// field carries its Default() value rather than the zero value.
 	fallback := Default()
 	c := Default()
-	applyCachePathDefault(&c)
-	applyCachePathDefault(&fallback)
+	applySessionDirDefault(&c)
+	applySessionDirDefault(&fallback)
 
 	sp, err := settingsFilePath()
 	if err != nil {
@@ -440,7 +439,7 @@ func Ensure() (Config, error) {
 
 	dir := filepath.Dir(sp)
 	if dirErr := os.MkdirAll(dir, 0o700); dirErr != nil { //nolint:mnd
-		return fallback, modsError{Err: dirErr, ReasonText: "Could not create cache directory."}
+		return fallback, modsError{Err: dirErr, ReasonText: "Could not create config directory."}
 	}
 	_, statErr := os.Stat(sp)
 	switch {
@@ -472,13 +471,13 @@ func Ensure() (Config, error) {
 		return fallback, modsError{Err: err, ReasonText: "Could not use reasoning setting."}
 	}
 
-	applyCachePathDefault(&c)
+	applySessionDirDefault(&c)
 
 	if err := os.MkdirAll(
-		filepath.Join(c.CachePath, "conversations"),
+		c.SessionDir,
 		0o700,
 	); err != nil { //nolint:mnd
-		return fallback, modsError{Err: err, ReasonText: "Could not create cache directory."}
+		return fallback, modsError{Err: err, ReasonText: "Could not create session directory."}
 	}
 
 	c.applyDefaults()
@@ -550,14 +549,15 @@ func validateReasoningMode(mode ReasoningMode) error {
 	}
 }
 
-// applyCachePathDefault ensures c.CachePath always points at a usable
-// location. The default lives outside Default() because the XDG lookup
-// depends on environment variables that are normally only resolved at
-// Ensure() time, and we want any partial Ensure() failure to still leave
-// callers with a Config they can use for --settings / --config flows.
-func applyCachePathDefault(c *Config) {
-	if c.CachePath == "" {
-		c.CachePath = filepath.Join(xdg.DataHome, "mods")
+// applySessionDirDefault ensures c.SessionDir always points at the fixed
+// session storage directory. The default lives outside Default() because
+// the XDG lookup depends on environment variables that are normally only
+// resolved at Ensure() time, and we want any partial Ensure() failure to
+// still leave callers with a Config they can use for --settings / --config
+// flows.
+func applySessionDirDefault(c *Config) {
+	if c.SessionDir == "" {
+		c.SessionDir = filepath.Join(xdg.DataHome, "mods", "sessions")
 	}
 }
 

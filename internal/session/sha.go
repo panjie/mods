@@ -1,4 +1,4 @@
-package conversation
+package session
 
 import (
 	"crypto/rand"
@@ -22,8 +22,8 @@ var IDPattern = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
 func NewID() string {
 	b := make([]byte, sha1ReadBlockSize)
 	if _, err := rand.Read(b); err != nil {
-		debug.Printf("rand.Read failed for conversation ID: %v, falling back to math/rand", err)
-		// Fall back to math/rand seeded with time, so conversation IDs remain
+		debug.Printf("rand.Read failed for session ID: %v, falling back to math/rand", err)
+		// Fall back to math/rand seeded with time, so session IDs remain
 		// unique even when the system CSPRNG is unavailable.
 		rng := mathrand.New(mathrand.NewPCG(uint64(time.Now().UnixNano()), 0))
 		for i := range b {

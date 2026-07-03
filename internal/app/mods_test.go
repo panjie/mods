@@ -43,7 +43,7 @@ func (staticStream) Messages() []proto.Message { return nil }
 
 func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 
-func TestFindCacheOpsDetails(t *testing.T) {
+func TestFindSessionDetails(t *testing.T) {
 	newMods := func(t *testing.T) *Mods {
 		db := testDB(t)
 		return &Mods{
@@ -53,8 +53,8 @@ func TestFindCacheOpsDetails(t *testing.T) {
 	}
 
 	t.Run("all empty", func(t *testing.T) {
-		msg := newMods(t).findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := newMods(t).findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Empty(t, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
 		require.Empty(t, dets.Title)
@@ -62,12 +62,12 @@ func TestFindCacheOpsDetails(t *testing.T) {
 
 	t.Run("continue id", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		rules := []ApprovalRule{scopedRule(ApprovalRule{
 			Type: approvalShellPrefix,
 			Tool: "shell_run", Pattern: "git commit *",
 		})}
-		require.NoError(t, mods.db.SaveConversation(
+		require.NoError(t, mods.db.SaveSession(
 			id,
 			"message",
 			"openai",
@@ -77,8 +77,8 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		))
 		mods.Config.Continue = id[:5]
 		mods.Config.Prefix = "prompt"
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
 		require.Equal(t, rules, dets.Rules)
@@ -86,13 +86,13 @@ func TestFindCacheOpsDetails(t *testing.T) {
 
 	t.Run("continue id preserves existing title", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message", "openai", "gpt-4"))
 		mods.Config.Continue = id
 		mods.Config.Prefix = "prompt"
 
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
@@ -101,11 +101,11 @@ func TestFindCacheOpsDetails(t *testing.T) {
 
 	t.Run("continue with no prompt", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.ContinueLast = true
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
 		require.Empty(t, dets.Title)
@@ -113,35 +113,35 @@ func TestFindCacheOpsDetails(t *testing.T) {
 
 	t.Run("continue explicit missing target does not fall back to head", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "missing-title"
 		mods.Config.Prefix = "prompt"
-		msg := mods.findCacheOpsDetails()()
+		msg := mods.findSessionDetails()()
 		_, ok := msg.(modsError)
 		require.True(t, ok, "expected missing explicit continue target to fail")
 	})
 
 	t.Run("continue title", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "message 1"
 		mods.Config.Prefix = "prompt"
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
 	})
 
 	t.Run("continue last", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.ContinueLast = true
 		mods.Config.Prefix = "prompt"
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
 		require.Empty(t, dets.Title)
@@ -149,11 +149,11 @@ func TestFindCacheOpsDetails(t *testing.T) {
 
 	t.Run("continue missing name fails", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "message 2"
 		mods.Config.Prefix = "prompt"
-		msg := mods.findCacheOpsDetails()()
+		msg := mods.findSessionDetails()()
 		_, ok := msg.(modsError)
 		require.True(t, ok, "expected missing explicit continue target to fail")
 	})
@@ -161,8 +161,8 @@ func TestFindCacheOpsDetails(t *testing.T) {
 	t.Run("write", func(t *testing.T) {
 		mods := newMods(t)
 		mods.Config.Title = "some title"
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Empty(t, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
 		require.NotEqual(t, "some title", dets.WriteID)
@@ -171,9 +171,9 @@ func TestFindCacheOpsDetails(t *testing.T) {
 
 	t.Run("continue id and write with title", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		rules := []ApprovalRule{scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})}
-		require.NoError(t, mods.db.SaveConversation(
+		require.NoError(t, mods.db.SaveSession(
 			id,
 			"message 1",
 			"openai",
@@ -183,8 +183,8 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		))
 		mods.Config.Title = "some title"
 		mods.Config.Continue = id[:10]
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
 		require.NotEqual(t, id, dets.WriteID)
@@ -193,10 +193,10 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Equal(t, rules, dets.Rules)
 	})
 
-	t.Run("no cache does not restore rules", func(t *testing.T) {
+	t.Run("no session save does not restore rules", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
-		require.NoError(t, mods.db.SaveConversation(
+		id := newSessionID()
+		require.NoError(t, mods.db.SaveSession(
 			id,
 			"message",
 			"openai",
@@ -206,20 +206,20 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		))
 		mods.Config.Continue = id
 		mods.Config.Prefix = "prompt"
-		mods.Config.NoCache = true
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		mods.Config.NoSave = true
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Empty(t, dets.Rules)
 	})
 
 	t.Run("continue title and write with title", func(t *testing.T) {
 		mods := newMods(t)
-		id := newConversationID()
+		id := newSessionID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Title = "some title"
 		mods.Config.Continue = "message 1"
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
 		require.NotEqual(t, id, dets.WriteID)
@@ -232,8 +232,8 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		mods.Config.Model = "claude-3.7-sonnet"
 		mods.Config.API = "anthropic"
 
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
+		msg := mods.findSessionDetails()()
+		dets := msg.(sessionDetailsMsg)
 
 		require.Empty(t, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)

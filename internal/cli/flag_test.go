@@ -46,8 +46,8 @@ var flagParseErrorTests = []struct {
 		"Flag %s have an invalid argument.",
 	},
 	{
-		`invalid argument "nope" for "-r, --raw" flag: strconv.ParseBool: parsing "nope": invalid syntax`,
-		"-r, --raw",
+		`invalid argument "nope" for "-r, --reasoning" flag: invalid reasoning mode "nope", must be off or on`,
+		"-r, --reasoning",
 		"Flag %s have an invalid argument.",
 	},
 }

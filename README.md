@@ -42,7 +42,7 @@ It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
   files, runs shell commands, and chains multiple tool calls together to complete
   a task end-to-end.
 - **Safety first.** Every file write and shell command passes through a review
-  prompt. Approve once, deny, or save a per-conversation rule. Prefer to see a
+  prompt. Approve once, deny, or save a per-session rule. Prefer to see a
   plan before anything runs? Use `--plan`.
 - **Stays in your pipeline.** Pipe command output in, get structured answers out.
   `--minimal` prints one item per line — perfect for `| gum choose` and friends.
@@ -50,7 +50,7 @@ It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
   default, no API key needed; Tavily and custom providers also supported).
 - **Sees images.** Attach pictures via `--image`, `--clipboard-image`, or piped
   stdin for any vision-capable model.
-- **Remembers.** Every conversation is saved locally with a title and a SHA-1 —
+- **Remembers.** Every session is saved locally with a title and a SHA-1 —
   list, resume, show, or delete with simple flags.
 - **Plays well with others.** Connect external capabilities through [MCP] servers,
   or define reusable system prompts as [custom roles].
@@ -116,7 +116,7 @@ built-in tools, and review mode — then saves everything to `mods.yml`
 automatically.
 
 On first real use, if `mods.yml` does not exist and there are no saved
-conversations, Mods starts this setup wizard automatically. Help, version,
+sessions, Mods starts this setup wizard automatically. Help, version,
 completion, directory, settings, config, list, show, delete, role listing, and
 MCP listing commands do not trigger first-run setup.
 
@@ -211,19 +211,19 @@ mods --web-search "what changed in the latest Go release? update go.mod if relev
 mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
 
-# Save and resume conversations
+# Save and resume sessions
 mods --title release-notes "draft v1.1 release notes from CHANGELOG.md"
 mods --continue release-notes "turn those into a Twitter thread"
 mods --list-sessions
 
-# Start a continuous conversation
+# Start a continuous session
 mods --chat
 mods --chat --title release-notes
 mods --chat --continue release-notes
 ```
 
 Use `--chat` for a REPL-style session when one prompt is not enough. Type
-`/exit` or `/quit` to leave; each turn is saved to the same conversation so you
+`/exit` or `/quit` to leave; each turn is saved to the same session so you
 can resume it later with `--continue`.
 
 ## Safety & Review
@@ -239,7 +239,7 @@ Always allows writes in /path/to/workspace
 
 - `Y` — approve this one call
 - `N` — deny; Mods gets the failure and can react
-- `A` — save a per-conversation rule for the current workspace so similar calls skip the prompt from now on
+- `A` — save a per-session rule for the current workspace so similar calls skip the prompt from now on
 - `Ctrl+C` — cancel the whole run
 
 Pick the mode that fits the task with `-V` / `--review` (or `review-mode` in

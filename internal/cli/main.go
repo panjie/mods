@@ -142,7 +142,7 @@ func initFlags() {
 	regBool(flags, &config.Format, "format", "f", config.Format)
 	regStr(flags, &config.FormatAs, "format-as", "", config.FormatAs)
 	regBool(flags, &config.Minimal, "minimal", "", config.Minimal)
-	regBool(flags, &config.Raw, "raw", "r", config.Raw)
+	regBool(flags, &config.Raw, "raw", "", config.Raw)
 	regStr(flags, &config.Continue, "continue", "C", "")
 	regBool(flags, &config.ContinueLast, "continue-last", "c", false)
 	regBool(flags, &config.List, flagListSessions, "l", config.List)
@@ -160,7 +160,7 @@ func initFlags() {
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
 	regStr(flags, &config.StatusText, "status-text", "", config.StatusText)
-	regBool(flags, &config.NoCache, "no-cache", "", config.NoCache)
+	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
 	regBool(flags, &config.Settings, "settings", "", false)
 	regBool(flags, &config.ConfigSetup, "config", "", false)
@@ -184,8 +184,7 @@ func initFlags() {
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
 	regBool(flags, &config.Debug, "debug", "D", config.Debug)
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
-	regStr(flags, &config.CachePath, "cache-path", "", config.CachePath)
-	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "T", flagDesc("reasoning"))
+	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "r", flagDesc("reasoning"))
 	f.NoOptDefVal = "on"
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", flagDesc("review"))
 
@@ -213,8 +212,7 @@ func initFlags() {
 		"stdin-image",
 		"clipboard-image",
 		"format-as",
-		"no-cache",
-		"cache-path",
+		"no-save",
 	)
 	markCategory(flags, flagCategoryModelAPI, "api", "model", "ask-model", "http-proxy")
 	markCategory(
@@ -225,8 +223,7 @@ func initFlags() {
 		flagChat,
 		"continue",
 		"continue-last",
-		"no-cache",
-		"cache-path",
+		"no-save",
 	)
 	markCategory(
 		flags,
@@ -261,9 +258,9 @@ func initFlags() {
 	)
 	markCategory(flags, flagCategoryDebug, "debug")
 
-	for _, name := range conversationCompleteFlags {
+	for _, name := range sessionCompleteFlags {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return conversationCompletions(toComplete), cobra.ShellCompDirectiveDefault
+			return sessionCompletions(toComplete), cobra.ShellCompDirectiveDefault
 		})
 	}
 	_ = rootCmd.RegisterFlagCompletionFunc("role", func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -279,7 +276,7 @@ func initFlags() {
 	rootCmd.MarkFlagsMutuallyExclusive(sessionActionFlags...)
 }
 
-func conversationCompletions(toComplete string) []string {
+func sessionCompletions(toComplete string) []string {
 	// Cobra invokes flag completions via the __complete subcommand on
 	// every shell tab, so the package-level db may already be opened by
 	// execute() and we want to reuse it. When called in completion-only
@@ -289,11 +286,14 @@ func conversationCompletions(toComplete string) []string {
 	// the package-level variable.
 	completionDB := db
 	if completionDB == nil {
-		if config.CachePath == "" {
+		if config.SessionDir == "" {
 			return nil
 		}
 		var err error
-		completionDB, err = Open(filepath.Join(config.CachePath, "conversations", "mods.db"))
+		if err := MigrateDefaultStorage(config.SessionDir); err != nil {
+			return nil
+		}
+		completionDB, err = Open(filepath.Join(config.SessionDir, "mods.db"))
 		if err != nil {
 			return nil
 		}
@@ -321,20 +321,24 @@ func execute() {
 	debug.Printf("Config loaded from: %s", config.SettingsPath)
 	debug.Printf("API: %s, Model: %s", config.API, config.Model)
 	debug.Printf("Role: %s, Format: %v, Format-as: %s, Raw: %v, Quiet: %v", config.Role, config.Format, config.FormatAs, config.Raw, config.Quiet)
-	debug.Printf("Cache path: %s", config.CachePath)
+	debug.Printf("Session dir: %s", config.SessionDir)
 
 	// XXX: this must come after creating the config.
 	initFlags()
 
 	if !isCompletionCmd(os.Args) && !isVersionOrHelpCmd(os.Args) {
-		db, err = Open(filepath.Join(config.CachePath, "conversations", "mods.db"))
+		if err := MigrateDefaultStorage(config.SessionDir); err != nil {
+			handleError(modsError{Err: err, ReasonText: "Could not migrate session storage."})
+			os.Exit(1)
+		}
+		db, err = Open(filepath.Join(config.SessionDir, "mods.db"))
 		if err != nil {
 			handleError(modsError{Err: err, ReasonText: "Could not open database."})
 			os.Exit(1)
 		}
 		defer db.Close() //nolint:errcheck
-		if err := db.MigrateLegacyConversations(config.CachePath); err != nil {
-			fmt.Fprintln(os.Stderr, "Warning: some legacy conversations were not migrated:")
+		if err := db.MigrateLegacySessions(config.SessionDir); err != nil {
+			fmt.Fprintln(os.Stderr, "Warning: some legacy sessions were not migrated:")
 			fmt.Fprintln(os.Stderr, err)
 		}
 	}
@@ -374,7 +378,7 @@ func normalizeOptionalReasoningValueArgs(args []string) []string {
 			out = append(out, args[i:]...)
 			break
 		}
-		if (arg == "--reasoning" || arg == "-T") && i+1 < len(args) && isReasoningValue(args[i+1]) {
+		if (arg == "--reasoning" || arg == "-r") && i+1 < len(args) && isReasoningValue(args[i+1]) {
 			out = append(out, arg+"="+args[i+1])
 			i++
 			continue
@@ -560,29 +564,29 @@ func nextBackupPath(base string) (string, error) {
 	return "", fmt.Errorf("could not find an unused backup name starting at %q", base)
 }
 
-func removeLegacyConversationFile(id string) error {
-	path := filepath.Join(config.CachePath, "conversations", id+".gob")
+func removeLegacySessionFile(id string) error {
+	path := filepath.Join(filepath.Dir(config.SessionDir), "conversations", id+".gob")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
 }
 
-func listConversations(raw bool) error {
-	conversations, err := db.List()
+func listSessions(raw bool) error {
+	sessions, err := db.List()
 	if err != nil {
 		return modsError{Err: err, ReasonText: "Couldn't list saves."}
 	}
 
-	if len(conversations) == 0 {
-		fmt.Fprintln(os.Stderr, "No conversations found.")
+	if len(sessions) == 0 {
+		fmt.Fprintln(os.Stderr, "No sessions found.")
 		return nil
 	}
 
 	if IsInputTTY() && IsOutputTTY() && !raw {
-		return runConversationBrowser(conversations)
+		return runSessionBrowser(sessions)
 	}
-	printList(conversations)
+	printList(sessions)
 	return nil
 }
 
@@ -608,46 +612,44 @@ func listRoles() {
 	}
 }
 
-func printList(conversations []Conversation) {
-	for _, conversation := range conversations {
+func printList(sessions []Session) {
+	for _, session := range sessions {
 		_, _ = fmt.Fprintf(
 			os.Stdout,
 			"%s\t%s\t%s\n",
-			StdoutStyles().ShaHash.Render(conversation.ID[:ShortIDLength]),
-			conversation.Title,
-			StdoutStyles().Timeago.Render(timeago.Of(conversation.UpdatedAt)),
+			StdoutStyles().ShaHash.Render(session.ID[:ShortIDLength]),
+			session.Title,
+			StdoutStyles().Timeago.Render(timeago.Of(session.UpdatedAt)),
 		)
 	}
 }
 
-func saveConversation(mods *Mods) error {
-	if config.NoCache {
+func saveSession(mods *Mods) error {
+	if config.NoSave {
 		if !config.Quiet {
 			fmt.Fprintf(
 				os.Stderr,
-				"\nConversation was not saved because %s or %s is set.\n",
-				StderrStyles().InlineCode.Render("--no-cache"),
-				StderrStyles().InlineCode.Render("NO_CACHE"),
+				"\nSession was not saved because %s is enabled.\n",
+				StderrStyles().InlineCode.Render("--no-save"),
 			)
 		}
 		return nil
 	}
 
 	// if message is a sha1, use the last prompt instead.
-	id := config.CacheWriteToID
-	title := strings.TrimSpace(config.CacheWriteToTitle)
+	id := config.SessionWriteToID
+	title := strings.TrimSpace(config.SessionWriteToTitle)
 
 	if IDPattern.MatchString(title) || title == "" {
 		title = FirstLine(lastPrompt(mods.Messages()))
 	}
 
 	errReason := fmt.Sprintf(
-		"There was a problem saving conversation %s. Use %s / %s to disable persistence.",
-		config.CacheWriteToID,
-		StderrStyles().InlineCode.Render("--no-cache"),
-		StderrStyles().InlineCode.Render("NO_CACHE"),
+		"There was a problem saving session %s. Use %s to disable persistence.",
+		config.SessionWriteToID,
+		StderrStyles().InlineCode.Render("--no-save"),
 	)
-	if err := db.SaveConversation(
+	if err := db.SaveSession(
 		id,
 		title,
 		config.API,
@@ -661,8 +663,8 @@ func saveConversation(mods *Mods) error {
 	if !config.Quiet {
 		fmt.Fprintln(
 			os.Stderr,
-			"\nConversation saved:",
-			StderrStyles().InlineCode.Render(config.CacheWriteToID[:ShortIDLength]),
+			"\nSession saved:",
+			StderrStyles().InlineCode.Render(config.SessionWriteToID[:ShortIDLength]),
 			StderrStyles().Comment.Render(title),
 		)
 	}

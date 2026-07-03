@@ -67,10 +67,10 @@ func validateChatMode() error {
 	if !config.Chat {
 		return nil
 	}
-	if config.NoCache {
+	if config.NoSave {
 		return modsError{
-			Err:        newUserErrorf("--chat requires conversation caching; remove --no-cache"),
-			ReasonText: "Chat mode requires conversation caching.",
+			Err:        newUserErrorf("--chat requires session saving; remove --no-save"),
+			ReasonText: "Chat mode requires session saving.",
 		}
 	}
 	if hasChatSessionAction() {
@@ -101,8 +101,8 @@ func runChatTurn(ctx context.Context, prompt string, opts []tea.ProgramOption) (
 		return mods, err
 	}
 	printChatTurnOutput(mods)
-	if config.CacheWriteToID != "" {
-		if err := saveConversation(mods); err != nil {
+	if config.SessionWriteToID != "" {
+		if err := saveSession(mods); err != nil {
 			return mods, err
 		}
 	}
@@ -121,15 +121,15 @@ func printChatTurnOutput(mods *Mods) {
 }
 
 func prepareNextChatTurn() {
-	if config.CacheWriteToID == "" {
+	if config.SessionWriteToID == "" {
 		return
 	}
-	config.Continue = config.CacheWriteToID
+	config.Continue = config.SessionWriteToID
 	config.ContinueLast = false
 	config.Title = ""
-	config.CacheReadFromID = ""
-	config.CacheWriteToID = ""
-	config.CacheWriteToTitle = ""
+	config.SessionReadFromID = ""
+	config.SessionWriteToID = ""
+	config.SessionWriteToTitle = ""
 }
 
 func isChatExit(input string) bool {

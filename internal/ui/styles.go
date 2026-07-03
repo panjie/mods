@@ -24,7 +24,7 @@ type Styles struct {
 	Link,
 	Pipe,
 	Quote,
-	ConversationList,
+	SessionList,
 	ShaHash,
 	Timeago,
 	ReviewPrompt,
@@ -49,7 +49,7 @@ func MakeStyles(r *lipgloss.Renderer) (s Styles) {
 	s.Link = r.NewStyle().Foreground(lipgloss.Color("#00AF87")).Underline(true)
 	s.Quote = r.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#FF71D0", Dark: "#FF78D2"})
 	s.Pipe = r.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#8470FF", Dark: "#745CFF"})
-	s.ConversationList = r.NewStyle().Padding(0, 1)
+	s.SessionList = r.NewStyle().Padding(0, 1)
 	s.ShaHash = s.Flag
 	s.Timeago = r.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#999", Dark: "#555"})
 	s.ReviewPrompt = r.NewStyle().

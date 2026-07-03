@@ -47,5 +47,5 @@ func TestStringer(t *testing.T) {
 		},
 	}
 
-	golden.RequireEqual(t, []byte(Conversation(messages).String()))
+	golden.RequireEqual(t, []byte(Session(messages).String()))
 }

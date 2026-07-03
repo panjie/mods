@@ -136,18 +136,17 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		debug.Printf("  User message (%d chars): %s%s", len(content), debug.Truncate(strings.ReplaceAll(content, "\n", "\\n"), 300), truncNote)
 	}
 
-	if !cfg.NoCache && cfg.CacheReadFromID != "" {
-		if err := m.db.ReadMessages(cfg.CacheReadFromID, &m.messages); err != nil {
+	if !cfg.NoSave && cfg.SessionReadFromID != "" {
+		if err := m.db.ReadMessages(cfg.SessionReadFromID, &m.messages); err != nil {
 			return modsError{
 				Err: err,
 				ReasonText: fmt.Sprintf(
-					"There was a problem reading the stored conversation. Use %s / %s to disable persistence.",
-					m.Styles.InlineCode.Render("--no-cache"),
-					m.Styles.InlineCode.Render("NO_CACHE"),
+					"There was a problem reading the stored session. Use %s to disable persistence.",
+					m.Styles.InlineCode.Render("--no-save"),
 				),
 			}
 		}
-		debug.Printf("Conversation: read %d messages from %s", len(m.messages), cfg.CacheReadFromID[:min(ShortIDLength, len(cfg.CacheReadFromID))])
+		debug.Printf("Session: read %d messages from %s", len(m.messages), cfg.SessionReadFromID[:min(ShortIDLength, len(cfg.SessionReadFromID))])
 		m.messages = pruneHistoryForBudget(m.messages, content, mod.MaxChars, cfg.NoLimit)
 	}
 
@@ -299,7 +298,7 @@ func pruneHistoryForBudget(messages []proto.Message, newContent string, maxChars
 	}
 	out = dropLeadingToolResults(out)
 	if len(out) < len(messages) {
-		debug.Printf("Conversation: pruned history from %d to %d messages (budget=%d chars)", len(messages), len(out), budget)
+		debug.Printf("Session: pruned history from %d to %d messages (budget=%d chars)", len(messages), len(out), budget)
 	}
 	return out
 }

@@ -39,14 +39,14 @@ func TestRunChatUsesArgsBeforePromptedInput(t *testing.T) {
 	})
 }
 
-func TestRunChatPreservesConversationID(t *testing.T) {
+func TestRunChatPreservesSessionID(t *testing.T) {
 	withChatTest(t, "second\n/exit\n", func(calls *[]string) {
 		config.Title = "my chat"
 		var continues []string
 		chatTurn = func(_ context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
 			*calls = append(*calls, prompt)
 			continues = append(continues, config.Continue)
-			config.CacheWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
+			config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
 			return &Mods{}, nil
 		}
 
@@ -58,16 +58,16 @@ func TestRunChatPreservesConversationID(t *testing.T) {
 	})
 }
 
-func TestRunChatRejectsNoCache(t *testing.T) {
+func TestRunChatRejectsNoSave(t *testing.T) {
 	withChatTest(t, "/exit\n", func(_ *[]string) {
-		config.NoCache = true
+		config.NoSave = true
 
 		err := runChat(context.Background(), nil, nil)
 
 		require.Error(t, err)
 		merr, ok := err.(modsError)
 		require.True(t, ok)
-		require.Equal(t, "Chat mode requires conversation caching.", merr.ReasonText)
+		require.Equal(t, "Chat mode requires session saving.", merr.ReasonText)
 	})
 }
 
@@ -174,7 +174,7 @@ func withChatTest(t *testing.T, input string, fn func(calls *[]string)) {
 	calls := []string{}
 	chatTurn = func(_ context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
 		calls = append(calls, prompt)
-		config.CacheWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
+		config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
 		return &Mods{}, nil
 	}
 

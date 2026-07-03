@@ -69,7 +69,7 @@ type toolReviewStartMsg struct {
 	item toolReviewItem
 }
 
-type cacheDetailsMsg struct {
+type sessionDetailsMsg struct {
 	WriteID, Title, ReadID string
 	Rules                  []Rule
 }

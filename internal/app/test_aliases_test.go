@@ -3,7 +3,7 @@ package app
 import (
 	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
-	"github.com/panjie/mods/internal/conversation"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/testutil"
 	"github.com/panjie/mods/internal/tooling"
 	"github.com/panjie/mods/internal/ui"
@@ -14,8 +14,8 @@ var shellApprovalRulesForToolWithMode = approval.ShellRulesForToolWithMode
 var shellRulesAllowWithMode = approval.ShellAllowWithMode
 var shellRulesAllowForToolWithMode = approval.ShellAllowForToolWithMode
 var dedupeApprovalRules = approval.Dedupe
-var newConversationID = conversation.NewID
-var sha1reg = conversation.IDPattern
+var newSessionID = session.NewID
+var sha1reg = session.IDPattern
 var newAnim = ui.NewAnim
 var makeStyles = ui.MakeStyles
 var defaultConfig = cfgpkg.Default
@@ -35,7 +35,7 @@ const (
 	approvalEditAll           = approval.EditAll
 	approvalToolAll           = approval.ToolAll
 	approvalDirAllow          = approval.DirAllow
-	sha1short                 = conversation.ShortIDLength
+	sha1short                 = session.ShortIDLength
 	FilesystemAuto            = cfgpkg.FilesystemAuto
 	FilesystemAlways          = cfgpkg.FilesystemAlways
 	FilesystemNever           = cfgpkg.FilesystemNever

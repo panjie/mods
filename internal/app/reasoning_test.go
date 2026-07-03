@@ -191,9 +191,9 @@ func TestApplyReasoningConfigs(t *testing.T) {
 }
 
 func TestApplyReasoningConfigsDisable(t *testing.T) {
-	// ── thinking.type style: disabled when -T is off ──
+	// ── thinking.type style: disabled when -r is off ──
 
-	t.Run("thinking-type model sends thinking.type=disabled when -T off", func(t *testing.T) {
+	t.Run("thinking-type model sends thinking.type=disabled when -r off", func(t *testing.T) {
 		// GLM/Kimi/DeepSeek have thinking-type set but no thinking block in extra-params.
 		ccfg := openai.Config{}
 
@@ -222,7 +222,7 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 
 	// ── enable_thinking style (Qwen): flipped to false ──
 
-	t.Run("enable_thinking model sends false when -T off", func(t *testing.T) {
+	t.Run("enable_thinking model sends false when -r off", func(t *testing.T) {
 		ccfg := openai.Config{
 			ExtraParams: map[string]any{
 				"enable_thinking": true,
@@ -236,7 +236,7 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 
 	// ── Google Gemini: thinkingBudget=0 + Explicit ──
 
-	t.Run("google sends thinkingBudget=0 and Explicit flag when -T off", func(t *testing.T) {
+	t.Run("google sends thinkingBudget=0 and Explicit flag when -r off", func(t *testing.T) {
 		gccfg := google.Config{}
 
 		applyReasoningConfigs(Model{API: "google"}, &gccfg, nil, &openai.Config{}, false)
@@ -245,7 +245,7 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 		require.True(t, gccfg.ThinkingBudgetExplicit, "Explicit flag must be set so 0 is actually sent")
 	})
 
-	t.Run("google with previously-set budget gets reset to 0 when -T off", func(t *testing.T) {
+	t.Run("google with previously-set budget gets reset to 0 when -r off", func(t *testing.T) {
 		gccfg := google.Config{ThinkingBudget: 8192}
 
 		applyReasoningConfigs(Model{API: "google"}, &gccfg, nil, &openai.Config{}, false)
@@ -266,7 +266,7 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 
 	// ── OpenAI reasoning_effort: cannot fully disable, sends minimal ──
 
-	t.Run("openai sends reasoning_effort=minimal when -T off", func(t *testing.T) {
+	t.Run("openai sends reasoning_effort=minimal when -r off", func(t *testing.T) {
 		ccfg := openai.Config{}
 
 		applyReasoningConfigs(Model{API: "openai"}, nil, nil, &ccfg, false)
@@ -274,7 +274,7 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 		require.Equal(t, "minimal", ccfg.ExtraParams["reasoning_effort"])
 	})
 
-	t.Run("azure sends reasoning_effort=minimal when -T off", func(t *testing.T) {
+	t.Run("azure sends reasoning_effort=minimal when -r off", func(t *testing.T) {
 		ccfg := openai.Config{}
 
 		applyReasoningConfigs(Model{API: "azure"}, nil, nil, &ccfg, false)
@@ -292,5 +292,3 @@ func TestApplyReasoningConfigsDisable(t *testing.T) {
 		require.Empty(t, ccfg.ExtraParams)
 	})
 }
-
-

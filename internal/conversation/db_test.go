@@ -352,7 +352,10 @@ func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
 // cleanly: existing DirAllow rows survive with an empty Mode so they keep
 // matching both read and write, and new mode-scoped rules round-trip.
 func TestMigratesApprovalRulesToAddMode(t *testing.T) {
-	const legacyCacheDir = `C:\mods-cache`
+	const (
+		legacyWorkspace = `C:\mods-workspace`
+		legacyCacheDir  = `C:\mods-cache`
+	)
 	path := filepath.Join(t.TempDir(), "mods.db")
 	raw, err := sql.Open("sqlite", path)
 	require.NoError(t, err)
@@ -378,7 +381,7 @@ func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 		);
 		INSERT INTO conversations (id, title) VALUES ('abc', 'pre-mode');
 		INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths)
-		VALUES ('abc', 'workspace', '/ws', 'dir_allow', '', '', '["C:\\mods-cache"]');
+		VALUES ('abc', 'workspace', 'C:\mods-workspace', 'dir_allow', '', '', '["C:\\mods-cache"]');
 	`)
 	require.NoError(t, err)
 	require.NoError(t, raw.Close())
@@ -395,12 +398,13 @@ func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 	require.Equal(t, AccessClass(""), rules[0].Mode) // legacy: empty mode matches both
 
 	// A legacy (empty-mode) rule still satisfies both read and write ops.
-	require.True(t, rulesAllowDirs(rules, []string{legacyCacheDir}, workspaceScope("/ws"), accessRead))
-	require.True(t, rulesAllowDirs(rules, []string{legacyCacheDir}, workspaceScope("/ws"), accessWrite))
+	legacyScope := workspaceScope(legacyWorkspace)
+	require.True(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessRead))
+	require.True(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessWrite))
 
 	// New mode-scoped rules round-trip and coexist with the legacy row.
 	newRules := append(rules, ApprovalRule{
-		ScopeKind: "workspace", ScopeValue: "/ws",
+		ScopeKind: "workspace", ScopeValue: legacyScope.Value,
 		Type: approvalDirAllow, Paths: []string{legacyCacheDir}, Mode: accessWrite,
 	})
 	require.NoError(t, db.SaveConversation("abc", "pre-mode", "openai", "gpt-5", nil, newRules))

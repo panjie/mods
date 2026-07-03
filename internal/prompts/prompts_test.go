@@ -44,3 +44,99 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "go test ./...")
 	require.Contains(t, ToolSelection, "Do not keep retrying blindly")
 }
+
+func TestIdentityCoversAllFlags(t *testing.T) {
+	for _, name := range []string{
+		"api",
+		"model",
+		"ask-model",
+		"http-proxy",
+		"chat",
+		"continue",
+		"continue-last",
+		"title",
+		"list",
+		"show",
+		"show-last",
+		"delete",
+		"delete-older-than",
+		"no-cache",
+		"cache-path",
+		"format",
+		"format-as",
+		"minimal",
+		"raw",
+		"quiet",
+		"hide-tool-status",
+		"hide-tool-results",
+		"word-wrap",
+		"status-text",
+		"workspace",
+		"editor",
+		"image",
+		"stdin-image",
+		"clipboard-image",
+		"settings",
+		"config",
+		"dirs",
+		"reset-settings",
+		"theme",
+		"help",
+		"help-all",
+		"version",
+		"list-prompts",
+		"role",
+		"list-roles",
+		"web-search",
+		"web-search-provider",
+		"web-search-api-key",
+		"web-search-api-key-env",
+		"plan",
+		"reasoning",
+		"review",
+		"max-tool-rounds",
+		"mcp-list",
+		"mcp-list-tools",
+		"mcp-enable",
+		"mcp-disable",
+		"max-retries",
+		"max-tokens",
+		"max-input-chars",
+		"no-limit",
+		"temp",
+		"topp",
+		"topk",
+		"stop",
+		"debug",
+	} {
+		require.Contains(t, Identity, "--"+name,
+			"identity.md must document --%s", name)
+	}
+}
+
+func TestIdentityCoversConfigKeys(t *testing.T) {
+	for _, key := range []string{
+		"default-api",
+		"default-model",
+		"format-text",
+		"roles",
+		"prompts",
+		"builtin-tools",
+		"mcp-servers",
+		"mcp-timeout",
+		"apis",
+		"review-mode",
+		"shell-classify-prompt",
+		"~/.config/mods/mods.yml",
+	} {
+		require.Contains(t, Identity, key,
+			"identity.md must document config key %q", key)
+	}
+}
+
+func TestIdentityHasSelfHelpPolicy(t *testing.T) {
+	require.Contains(t, Identity, "fs_read_file ~/.config/mods/mods.yml",
+		"must instruct LLM how to read config")
+	require.Contains(t, Identity, "Self-help policy",
+		"must have a self-help section")
+}

@@ -203,7 +203,7 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 
 func (r *toolReviewer) reviewOptions() []reviewOption {
 	options := []reviewOption{
-		{label: "[Y] Approve", action: reviewOptionApprove},
+		{label: "[Y] Allow once", action: reviewOptionApprove},
 		{label: "[N] Deny", action: reviewOptionDeny},
 	}
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
@@ -527,64 +527,11 @@ func (r *toolReviewer) renderBanner(width int, reviewPrompt, reviewChoices lipgl
 	}
 	separator := baseStyle.Render("  ")
 	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, separator))
-	alwaysLine := reviewChoices.Copy().Width(width).Render(formatAlwaysAllowSummary(r.reviewItem.candidateRules, r.reviewItem.name, r.reviewItem.summary, width))
 	block := promptLine
 	if r.reviewItem.summary != "" {
 		block += "\n" + reviewChoices.Copy().Width(width).Render(TruncateOperationStatus(r.reviewItem.summary, width))
 	}
-	return block + "\n" + choicesLine + "\n" + alwaysLine
-}
-
-func formatAlwaysAllowSummary(rules []Rule, name, summary string, width int) string {
-	if len(rules) == 0 {
-		return TruncateOperationStatus("No reusable allow rule for this command.", width)
-	}
-	verb := alwaysAllowVerb(rules, name, summary)
-	dirs := alwaysAllowDirs(rules)
-	if len(dirs) == 1 {
-		return TruncateOperationStatus("Always allows "+verb+" in "+dirs[0], width)
-	}
-	if len(dirs) > 1 {
-		return TruncateOperationStatus("Always allows "+verb+" in: "+strings.Join(dirs, ", "), width)
-	}
-	return TruncateOperationStatus("Always allows: "+RulesLabel(rules), width)
-}
-
-// alwaysAllowVerb picks the verb for the "Always allows <verb> in <dir>"
-// summary. It prefers the explicit read/write mode stamped on the
-// candidate DirAllow rule (set by RulesForDirs from the operation's
-// access class), so a read-only approval advertises "reads" and a
-// mutation advertises "writes". For legacy rules with no mode, it falls
-// back to inferring from the tool name and the review summary's risk
-// label.
-func alwaysAllowVerb(rules []Rule, name, summary string) string {
-	for _, r := range rules {
-		switch r.Mode {
-		case AccessRead:
-			return "reads"
-		case AccessWrite:
-			return "writes"
-		}
-	}
-	switch name {
-	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search":
-		return "reads"
-	case "fs_write_file", "fs_apply_patch":
-		return "writes"
-	default:
-		if strings.Contains(summary, "external read") || strings.Contains(summary, "read-only") {
-			return "reads"
-		}
-		return "writes"
-	}
-}
-
-func alwaysAllowDirs(rules []Rule) []string {
-	var dirs []string
-	for _, rule := range rules {
-		dirs = append(dirs, rule.Paths...)
-	}
-	return dirs
+	return block + "\n" + choicesLine
 }
 
 func padRight(s string, w int) string {

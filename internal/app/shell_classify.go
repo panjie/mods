@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
@@ -35,25 +36,44 @@ func (m *Mods) classifyShellCommand(tool, command string) bool {
 }
 
 func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
-	if m.shellAnalyzer != nil {
-		return m.shellAnalyzer(tool, command)
-	}
-
 	ws := ""
 	if m.Config != nil {
 		ws = m.Config.ResolveWorkspace().Canonical
 	}
 
-	// Local fast-path: conservative allowlist of read-only commands with no
-	// shell metacharacters and no external-path references. Everything else,
-	// including read-only commands that touch external paths, goes to the
-	// LLM classifier for precise analysis.
-	if isSimpleReadOnly(command) && len(extractExternalPaths(command, ws)) == 0 {
+	externalPaths := extractExternalPaths(command, ws)
+
+	// Tier 1: AST-based read-only classifier (POSIX only, skip powershell_run).
+	// Handles pipes, &&/||, subshells, command substitution, and subcommand
+	// tables. Covers both workspace-local and external-path read-only commands;
+	// the approval matrix decides whether external reads need review.
+	if tool != "powershell_run" {
+		if ro, reason := approval.IsReadOnlyPOSIX(command); ro {
+			debug.Printf("analyzeShellCommand: cmd=%q -> AST: read-only", debug.Truncate(command, 80))
+			return shellCommandAnalysis{
+				NeedsReview:  false,
+				AffectedDirs: externalPaths,
+				Reason:       reason,
+			}
+		}
+	}
+
+	// Tier 2: conservative allowlist fallback for commands the AST parser
+	// can't handle (e.g. cmd.exe syntax on Windows). Only matches commands
+	// with no shell metacharacters and no external-path references.
+	if isSimpleReadOnly(command) && len(externalPaths) == 0 {
 		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, workspace-local", debug.Truncate(command, 80))
 		return shellCommandAnalysis{
 			NeedsReview: false,
 			Reason:      "read-only command, workspace-local (local heuristic)",
 		}
+	}
+
+	// Test seam: short-circuits the LLM classifier. Local heuristics (AST
+	// and simple allowlist) run first so read-only commands never reach
+	// this path; everything else delegates to the seam or the LLM.
+	if m.shellAnalyzer != nil {
+		return m.shellAnalyzer(tool, command)
 	}
 
 	// LLM classifier
@@ -62,7 +82,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// Post-process: merge regex-detected external paths into AffectedDirs
 	// so external access is never silently dropped when the LLM omits dirs
 	// (read-only commands) or fails entirely.
-	for _, p := range extractExternalPaths(command, ws) {
+	for _, p := range externalPaths {
 		found := false
 		for _, d := range result.AffectedDirs {
 			if d == p {

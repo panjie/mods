@@ -237,3 +237,68 @@ func TestExpandHomeVars(t *testing.T) {
 	// Empty home dir: no expansion.
 	require.Equal(t, "$HOME\\Downloads", expandHomeVars("$HOME\\Downloads", ""))
 }
+
+func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
+	// These commands would previously fall through to the LLM classifier
+	// because of shell metacharacters (|, &&, $()) or missing from the
+	// simple allowlist. The AST classifier should catch them locally.
+	cases := []struct {
+		name string
+		tool string
+		cmd  string
+	}{
+		{"pipe cat grep", "shell_run", "cat file | grep foo"},
+		{"pipe ls head", "shell_run", "ls -la | head -5"},
+		{"git status", "shell_run", "git status"},
+		{"git log", "shell_run", "git log --oneline"},
+		{"docker ps", "shell_run", "docker ps -a"},
+		{"kubectl get", "shell_run", "kubectl get pods"},
+		{"cmdsubst date", "shell_run", "echo $(date)"},
+		{"and git", "shell_run", "git status && git diff"},
+		{"subshell", "shell_run", "(git status)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := &Mods{
+				shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+					t.Fatalf("LLM classifier should not be called for %q", command)
+					return defaultShellCommandAnalysis()
+				},
+			}
+			t.Cleanup(func() { mods.shellAnalyzer = nil })
+			result := mods.analyzeShellCommand(c.tool, c.cmd)
+			require.Falsef(t, result.NeedsReview, "cmd=%q should be read-only", c.cmd)
+			require.NotEmptyf(t, result.Reason, "cmd=%q should have a reason", c.cmd)
+		})
+	}
+}
+
+func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
+	// Read-only command with external path: AST classifier says read-only,
+	// extractExternalPaths provides AffectedDirs, no LLM call needed.
+	mods := &Mods{
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	result := mods.analyzeShellCommand("shell_run", "cat /etc/passwd")
+	require.False(t, result.NeedsReview, "cat /etc/passwd should be read-only")
+	require.Contains(t, result.AffectedDirs, "/etc/passwd")
+}
+
+func TestAnalyzeShellCommandPowershellSkipsAST(t *testing.T) {
+	// powershell_run should skip the AST classifier and use the test seam
+	// (which simulates the LLM path).
+	called := false
+	mods := &Mods{
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			called = true
+			return shellCommandAnalysis{NeedsReview: true, Reason: "powershell"}
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	mods.analyzeShellCommand("powershell_run", "Get-ChildItem")
+	require.True(t, called, "shellAnalyzer should be called for powershell_run")
+}

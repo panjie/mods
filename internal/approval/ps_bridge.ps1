@@ -22,6 +22,7 @@ function New-IR {
         has_stop_parsing  = $false
         has_control_flow  = $false
         command_args      = @{}
+        paths             = [System.Collections.Generic.List[string]]::new()
     }
 }
 
@@ -84,6 +85,23 @@ function Invoke-Parse {
                             }
                         }
                     }
+                    # Collect string literal argument values as potential paths
+                    for ($i = 1; $i -lt $elems.Count; $i++) {
+                        $elem = $elems[$i]
+                        if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                            # For parameters with inline arguments (-Path:value), collect the value
+                            if ($elem.Argument -and $elem.Argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                                $argVal = $elem.Argument.Value.Trim()
+                                if ($argVal) { Add-Unique $ir.paths $argVal }
+                            }
+                            continue
+                        }
+                        # Positional argument — collect if it's a string literal
+                        if ($elem -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                            $argVal = $elem.Value.Trim()
+                            if ($argVal) { Add-Unique $ir.paths $argVal }
+                        }
+                    }
                 }
             }
             if ($node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand) {
@@ -109,6 +127,10 @@ function Invoke-Parse {
 
         if ($node -is [System.Management.Automation.Language.FileRedirectionAst]) {
             Add-Unique $ir.redirects "FileRedirection"
+            if ($node.Location -and $node.Location -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                $fileVal = $node.Location.Value.Trim()
+                if ($fileVal) { Add-Unique $ir.paths $fileVal }
+            }
             continue
         }
 
@@ -196,6 +218,7 @@ function Write-IR {
         has_stop_parsing = $ir.has_stop_parsing
         has_control_flow = $ir.has_control_flow
         command_args     = $cmdArgsOut
+        paths            = @($ir.paths)
     }
     [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 3))
     [Console]::Out.Flush()

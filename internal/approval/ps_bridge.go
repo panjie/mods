@@ -35,6 +35,7 @@ type psBridgeIR struct {
 	HasStopParsing bool                `json:"has_stop_parsing"`
 	HasControlFlow bool                `json:"has_control_flow"`
 	CommandArgs    map[string][]string `json:"command_args"`
+	Paths          []string            `json:"paths"`
 }
 
 type bridgeProcess struct {

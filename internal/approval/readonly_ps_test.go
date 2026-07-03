@@ -47,7 +47,7 @@ func TestIsReadOnlyPowerShellReadOnly(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, _ := IsReadOnlyPowerShell(c.cmd)
+			got, _, _ := IsReadOnlyPowerShell(c.cmd)
 			require.Truef(t, got, "cmd=%q should be read-only", c.cmd)
 		})
 	}
@@ -104,7 +104,7 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, _ := IsReadOnlyPowerShell(c.cmd)
+			got, _, _ := IsReadOnlyPowerShell(c.cmd)
 			require.Falsef(t, got, "cmd=%q should NOT be read-only", c.cmd)
 		})
 	}

@@ -111,3 +111,42 @@ func TestParseWithBridgeCloseBridgeCleanup(t *testing.T) {
 	require.NoError(t, err)
 	CloseBridge()
 }
+
+func TestParseWithBridgePathExtraction(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge("Get-Content -Path C:\\Users\\file.txt")
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.Contains(t, ir.Paths, "C:\\Users\\file.txt")
+}
+
+func TestParseWithBridgePositionalPathExtraction(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge("Get-Content C:\\Users\\file.txt")
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.Contains(t, ir.Paths, "C:\\Users\\file.txt")
+}
+
+func TestParseWithBridgeRedirectPathExtraction(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge("Get-Process > C:\\Users\\out.txt")
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.Contains(t, ir.Paths, "C:\\Users\\out.txt")
+}
+
+func TestParseWithBridgeNonPathArgNotCollected(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	// "Name" is a positional arg of Sort-Object, not a path
+	ir, err := parseWithBridge("Get-ChildItem | Sort-Object Name")
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	// "Name" will be in paths, but the Go-side filterArgPaths will exclude it
+	// because it doesn't look like a path. Just verify the bridge collects it.
+	require.Contains(t, ir.Paths, "Name")
+}

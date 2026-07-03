@@ -42,6 +42,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	}
 
 	externalPaths := extractExternalPaths(command, ws)
+	var psArgPaths []string
 
 	// Tier 1: AST-based read-only classifier.
 	// POSIX: handles pipes, &&/||, subshells, command substitution, subcommand tables.
@@ -49,11 +50,14 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// Both cover workspace-local and external-path read-only commands;
 	// the approval matrix decides whether external reads need review.
 	if tool == "powershell_run" {
-		if ro, reason := approval.IsReadOnlyPowerShell(command); ro {
+		ro, reason, psPaths := approval.IsReadOnlyPowerShell(command)
+		psArgPaths = psPaths
+		if ro {
+			psExternal := filterArgPaths(psPaths, ws)
 			debug.Printf("analyzeShellCommand: cmd=%q -> PS AST: read-only", debug.Truncate(command, 80))
 			return shellCommandAnalysis{
 				NeedsReview:  false,
-				AffectedDirs: externalPaths,
+				AffectedDirs: psExternal,
 				Reason:       reason,
 			}
 		}
@@ -93,6 +97,20 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// so external access is never silently dropped when the LLM omits dirs
 	// (read-only commands) or fails entirely.
 	for _, p := range externalPaths {
+		found := false
+		for _, d := range result.AffectedDirs {
+			if d == p {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result.AffectedDirs = append(result.AffectedDirs, p)
+		}
+	}
+	// Also merge AST-extracted PowerShell argument paths for write commands
+	// that fell through to the LLM — the LLM may miss path arguments.
+	for _, p := range filterArgPaths(psArgPaths, ws) {
 		found := false
 		for _, d := range result.AffectedDirs {
 			if d == p {
@@ -526,3 +544,25 @@ func (c *shellClassifyLRU) Len() int {
 }
 
 var shellClassifyCache = newShellClassifyLRU(shellClassifyCacheCapacity)
+
+// filterArgPaths filters a list of argument values to only those that
+// reference paths external to the workspace. It reuses extractExternalPaths
+// on each argument individually, which is more precise than scanning the
+// full command text because it only considers actual AST-extracted argument
+// values, not arbitrary substrings.
+func filterArgPaths(args []string, workspaceDir string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	var result []string
+	seen := map[string]bool{}
+	for _, arg := range args {
+		for _, p := range extractExternalPaths(arg, workspaceDir) {
+			if !seen[p] {
+				seen[p] = true
+				result = append(result, p)
+			}
+		}
+	}
+	return result
+}

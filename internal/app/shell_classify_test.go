@@ -345,3 +345,21 @@ func TestAnalyzeShellCommandPowerShellWriteGoesToLLM(t *testing.T) {
 	require.True(t, result.NeedsReview, "Set-Content should require review")
 	require.True(t, called, "LLM classifier should be called for write commands")
 }
+
+func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell AST classifier requires Windows")
+	}
+	// Read-only PowerShell command with external path: AST classifier
+	// says read-only, AST-extracted paths provide AffectedDirs, no LLM call.
+	mods := &Mods{
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	result := mods.analyzeShellCommand("powershell_run", "Get-Content C:\\Users\\Public\\file.txt")
+	require.False(t, result.NeedsReview, "Get-Content should be read-only")
+	require.NotEmpty(t, result.AffectedDirs, "should have affected dirs from AST")
+}

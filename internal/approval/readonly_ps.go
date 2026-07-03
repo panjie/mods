@@ -6,82 +6,84 @@ import (
 
 // IsReadOnlyPowerShell analyzes a PowerShell command using a persistent
 // pwsh.exe bridge process that calls System.Management.Automation.Language.Parser.
-// Returns (true, reason) when read-only; (false, "") when not or inconclusive
-// (fail-closed — caller degrades to LLM classifier).
-func IsReadOnlyPowerShell(command string) (bool, string) {
+// Returns (true, reason, paths) when read-only; (false, "", nil) when not or
+// inconclusive (fail-closed — caller degrades to LLM classifier). The paths
+// return value contains AST-extracted string literal argument values that the
+// caller can filter to external paths for AffectedDirs.
+func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return false, ""
+		return false, "", nil
 	}
 
 	ir, err := parseWithBridge(command)
 	if err != nil {
-		return false, ""
+		return false, "", nil
 	}
 
 	// Parse errors → fail-closed
 	if len(ir.ParseErrors) > 0 {
-		return false, ""
+		return false, "", nil
 	}
 
 	// Security flags — any hit means not read-only
 	if ir.HasScriptBlock {
-		return false, ""
+		return false, "", nil
 	}
 	if ir.HasAssignment {
-		return false, ""
+		return false, "", nil
 	}
 	if ir.HasControlFlow {
-		return false, ""
+		return false, "", nil
 	}
 	if ir.HasBackground {
-		return false, ""
+		return false, "", nil
 	}
 	if ir.HasStopParsing {
-		return false, ""
+		return false, "", nil
 	}
 
 	// File redirection → writes to filesystem
 	for _, r := range ir.Redirects {
 		if r == "FileRedirection" {
-			return false, ""
+			return false, "", nil
 		}
 	}
 
 	// Subexpression $(...) → can execute arbitrary code
 	for _, e := range ir.Expansions {
 		if e == "subshell" {
-			return false, ""
+			return false, "", nil
 		}
 	}
 
 	// Variable args → may leak secrets via error messages
 	for _, e := range ir.Expansions {
 		if e == "var" {
-			return false, ""
+			return false, "", nil
 		}
 	}
 
 	// Encoded command → hides intent
 	for _, rf := range ir.RiskFlags {
 		if rf == "invoke_expression" {
-			return false, ""
+			return false, "", nil
 		}
 	}
 
 	// No commands → fail-closed (empty or expression-only)
 	if len(ir.Commands) == 0 {
-		return false, ""
+		return false, "", nil
 	}
 
 	// All commands must be in the read-only allowlist
 	for _, cmd := range ir.Commands {
 		if !readOnlyPowerShellCmdlets[cmd] {
-			return false, ""
+			return false, "", nil
 		}
 	}
 
-	return true, "read-only PowerShell command (AST analysis)"
+	return true, "read-only PowerShell command (AST analysis)", ir.Paths
 }
 
 // readOnlyPowerShellCmdlets is the allowlist of PowerShell cmdlets and

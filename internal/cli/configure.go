@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -418,6 +419,50 @@ func RunConfigWizard() error {
 		return fmt.Errorf("config wizard: %w", err)
 	}
 
+	// Form 3: config file location (Standard vs Portable). Skipped when the
+	// executable directory cannot be determined (e.g. `go run`), since
+	// portable mode needs a real on-disk binary location to write next to.
+	savePath := config.SettingsPath
+	if exeDir := cfgpkg.ExeDir(); exeDir != "" {
+		saveLocation := "standard"
+		if config.PortableDir != "" {
+			saveLocation = "portable"
+		}
+		portablePath := filepath.Join(exeDir, "mods.yml")
+		form3 := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Config file location").
+					Description("Portable stores the config and sessions next to this executable, so the whole folder is self-contained.").
+					Options(
+						huh.NewOption(fmt.Sprintf("Standard — %s", config.SettingsPath), "standard"),
+						huh.NewOption(fmt.Sprintf("Portable — %s", portablePath), "portable"),
+					).
+					Value(&saveLocation),
+			).
+				Title("storage").
+				Description("Choose where mods writes its configuration file."),
+		).
+			WithTheme(configWizardTheme(config.Theme)).
+			WithKeyMap(keymap).
+			WithEscapeAbortConfirmation("Press Esc again to exit.")
+		if err := form3.Run(); err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				fmt.Fprintln(os.Stderr, "\nCanceled.")
+				return nil
+			}
+			return fmt.Errorf("config wizard: %w", err)
+		}
+		if saveLocation == "portable" {
+			savePath = portablePath
+		}
+	}
+
+	// Reflect the chosen path so the summary, save, and post-save message
+	// all report the destination the user picked.
+	previousPath := config.SettingsPath
+	config.SettingsPath = savePath
+
 	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
 
 	// Build the summary.
@@ -462,11 +507,29 @@ func RunConfigWizard() error {
 		addedModel:             addedModel,
 	})
 
-	if err := SaveFieldPaths(config.SettingsPath, updates); err != nil {
+	// Seed the target file when it doesn't yet exist (the common case when
+	// bootstrapping portable mode for the first time). SaveFieldPaths is a
+	// round-trip update and errors on a missing file, so ensure one exists.
+	// WriteDefaultFile is a no-op when the file is already present.
+	if err := WriteDefaultFile(savePath); err != nil {
+		return fmt.Errorf("prepare config file: %w", err)
+	}
+	if err := SaveFieldPaths(savePath, updates); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(config.SettingsPath))
+	// If Ensure auto-created the standard config during this run (it did
+	// not exist before) and the user switched to portable, remove the
+	// stray default file so the XDG location stays clean.
+	if savePath != previousPath && !config.SettingsExisted {
+		_ = os.Remove(previousPath)
+	}
+
+	fmt.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(savePath))
+
+	if savePath != previousPath {
+		fmt.Fprintln(os.Stderr, "Portable mode will be active on the next launch.")
+	}
 
 	if keyStorage == "env" && apiName != "ollama" {
 		fmt.Fprintf(os.Stderr, "\nRemember to export your key:\n  export %s=sk-...\n",

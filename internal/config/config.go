@@ -280,6 +280,7 @@ type Config struct {
 	User                                                     string
 	OpenEditor                                               bool
 	SessionDir                                               string
+	PortableDir                                              string
 	SessionReadFromID, SessionWriteToID, SessionWriteToTitle string
 }
 
@@ -436,6 +437,11 @@ func Ensure() (Config, error) {
 	}
 	c.SettingsPath = sp
 	fallback.SettingsPath = sp
+	if portableActive() {
+		exeDir := executableDir()
+		c.PortableDir = exeDir
+		fallback.PortableDir = exeDir
+	}
 
 	dir := filepath.Dir(sp)
 	if dirErr := os.MkdirAll(dir, 0o700); dirErr != nil { //nolint:mnd
@@ -557,11 +563,27 @@ func validateReasoningMode(mode ReasoningMode) error {
 // flows.
 func applySessionDirDefault(c *Config) {
 	if c.SessionDir == "" {
-		c.SessionDir = filepath.Join(xdg.DataHome, "mods", "sessions")
+		c.SessionDir = defaultSessionDir()
 	}
 }
 
+// defaultSessionDir resolves the session storage directory. In portable
+// mode (mods.yml next to the executable) it lives next to the binary so
+// the whole folder is self-contained; otherwise it follows the XDG data
+// home. Portable mode intentionally ignores XDG_DATA_HOME.
+func defaultSessionDir() string {
+	if portableActive() {
+		return filepath.Join(executableDir(), "sessions")
+	}
+	return filepath.Join(xdg.DataHome, "mods", "sessions")
+}
+
 func settingsFilePath() (string, error) {
+	// Portable mode: a mods.yml next to the executable takes precedence
+	// over XDG/home resolution and ignores XDG_CONFIG_HOME.
+	if p, ok := portableConfigPath(); ok {
+		return p, nil
+	}
 	relPath := filepath.Join("mods", "mods.yml")
 	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
 		return filepath.Join(configHome, relPath), nil

@@ -322,6 +322,9 @@ func execute() {
 	debug.Printf("API: %s, Model: %s", config.API, config.Model)
 	debug.Printf("Role: %s, Format: %v, Format-as: %s, Raw: %v, Quiet: %v", config.Role, config.Format, config.FormatAs, config.Raw, config.Quiet)
 	debug.Printf("Session dir: %s", config.SessionDir)
+	if config.PortableDir != "" {
+		debug.Printf("Portable mode: %s", config.PortableDir)
+	}
 
 	// XXX: this must come after creating the config.
 	initFlags()

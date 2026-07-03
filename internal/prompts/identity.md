@@ -28,6 +28,20 @@ YAML block to add.
 Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
 `mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`.
 
+## Portable mode
+
+mods runs portably when a `mods.yml` sits next to the executable: config and
+the session database then live in that same directory (`<dir>/mods.yml` and
+`<dir>/sessions/mods.db`), and `XDG_CONFIG_HOME` / `XDG_DATA_HOME` are ignored.
+This makes the whole folder self-contained — copy the binary plus its `mods.yml`
+onto a USB stick or another machine and it just works.
+
+To bootstrap a portable folder that doesn't yet have a `mods.yml`, run
+`mods --config` and choose "Portable" at the "Config file location" step; the
+wizard writes `<dir>/mods.yml` next to the executable and portable mode is
+active on the next launch. `--dirs` prints the active config and session
+directories regardless of mode.
+
 ## CLI flags
 
 Short forms: `-` (single letter) or `--` (long). Some appear in `--help` only

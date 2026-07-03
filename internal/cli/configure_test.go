@@ -231,6 +231,34 @@ func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testin
 	requireUpdateValue(t, updates, []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "max-input-chars"}, defaultNewModelInputChars)
 }
 
+// TestSeedThenSaveBootstrapsPortableConfig exercises the seed-then-save
+// sequence the wizard uses when the user picks a config location whose file
+// does not yet exist (the portable bootstrap case). SaveFieldPaths is a
+// round-trip update and errors on a missing file, so WriteDefaultFile must
+// seed the target first.
+func TestSeedThenSaveBootstrapsPortableConfig(t *testing.T) {
+	// Target file does not exist yet, mirroring a fresh <exeDir>/mods.yml.
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	_, statErr := os.Stat(path)
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+
+	// SaveFieldPaths alone would fail (no file to read).
+	updates := []FieldUpdate{
+		{Path: []string{"default-api"}, Value: "groq"},
+		{Path: []string{"default-model"}, Value: "llama-3.3-70b-versatile"},
+	}
+	require.Error(t, SaveFieldPaths(path, updates))
+
+	// Seed first, then save — the wizard's actual sequence.
+	require.NoError(t, WriteDefaultFile(path))
+	require.FileExists(t, path)
+	require.NoError(t, SaveFieldPaths(path, updates))
+
+	m := loadCLIConfig(t, path)
+	require.Equal(t, "groq", m["default-api"])
+	require.Equal(t, "llama-3.3-70b-versatile", m["default-model"])
+}
+
 func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 	output := captureStderr(t, func() {
 		printConfigSummary(summaryData{

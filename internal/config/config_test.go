@@ -140,7 +140,9 @@ func TestSessionSaveConfig(t *testing.T) {
 }
 
 func TestSessionDirIsFixed(t *testing.T) {
+	defer swapExecutableDir("")()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("MODS_CACHE_PATH", filepath.Join(t.TempDir(), "old-cache"))
 	t.Setenv("MODS_SESSION_DIR", filepath.Join(t.TempDir(), "session-dir"))
 
@@ -287,6 +289,7 @@ func TestFilesystemModeYAML(t *testing.T) {
 }
 
 func TestSettingsFilePathDarwin(t *testing.T) {
+	defer swapExecutableDir("")()
 	if runtime.GOOS != "darwin" {
 		t.Skip("darwin-specific default config path")
 	}

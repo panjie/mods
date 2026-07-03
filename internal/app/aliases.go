@@ -1,13 +1,17 @@
 package app
 
-import "github.com/panjie/mods/internal/approval"
-import "github.com/panjie/mods/internal/apperr"
-import cfgpkg "github.com/panjie/mods/internal/config"
-import "github.com/panjie/mods/internal/conversation"
-import debugpkg "github.com/panjie/mods/internal/debug"
-import "github.com/panjie/mods/internal/platform"
-import "github.com/panjie/mods/internal/tooling"
-import "github.com/panjie/mods/internal/ui"
+import (
+	"github.com/panjie/mods/internal/apperr"
+	"github.com/panjie/mods/internal/approval"
+
+	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/conversation"
+
+	debugpkg "github.com/panjie/mods/internal/debug"
+	"github.com/panjie/mods/internal/platform"
+	"github.com/panjie/mods/internal/tooling"
+	"github.com/panjie/mods/internal/ui"
+)
 
 type modsError = apperr.Error
 type Config = cfgpkg.Config

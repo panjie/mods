@@ -37,8 +37,8 @@ with `--help-all` (marked [advanced]).
 
 ### Session
 - `--chat` — Start a continuous conversation; type /exit or /quit to quit
-- `-c`, `--continue <title>` — Continue from a saved conversation by title
-- `-C`, `--continue-last` — Continue from the last response
+- `-C`, `--continue <title>` — Continue from a saved conversation by title
+- `-c`, `--continue-last` — Continue from the last response
 - `-t`, `--title <title>` — Saves the current conversation with the given title
 - `-l`, `--list` — Lists saved conversations
 - `-s`, `--show <title>` — Show a saved conversation with the given title or ID

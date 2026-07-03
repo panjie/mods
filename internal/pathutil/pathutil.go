@@ -86,7 +86,7 @@ func NormalizePath(token string, opts Options) string {
 	if opts.Workspace == "" {
 		return cleanPath(expanded)
 	}
-	return cleanPath(filepath.Join(opts.Workspace, expanded))
+	return joinPath(opts.Workspace, expanded)
 }
 
 func NormalizeShellPath(token string, opts Options) string {
@@ -229,6 +229,9 @@ func Location(target, workspace string, safeDirs []string) LocationKind {
 }
 
 func IsAbs(p string) bool {
+	if strings.HasPrefix(p, "/") {
+		return true
+	}
 	if filepath.IsAbs(p) {
 		return true
 	}
@@ -393,7 +396,17 @@ func joinHome(home, rest string) string {
 	if windowsStylePath(home) {
 		return cleanPath(home + `\` + rest)
 	}
-	return cleanPath(filepath.Join(home, strings.ReplaceAll(rest, `\`, string(filepath.Separator))))
+	return cleanPath(path.Join(home, strings.ReplaceAll(rest, `\`, "/")))
+}
+
+func joinPath(base, elem string) string {
+	if base == "" {
+		return cleanPath(elem)
+	}
+	if windowsStylePath(base) {
+		return cleanPath(strings.TrimRight(base, `/\`) + `\` + strings.TrimLeft(elem, `/\`))
+	}
+	return cleanPath(path.Join(base, strings.ReplaceAll(elem, `\`, "/")))
 }
 
 func literalWorkspaceTilde(token string) bool {
@@ -418,7 +431,7 @@ func cleanPath(p string) string {
 	if windowsStylePath(p) {
 		return cleanWindowsPath(p)
 	}
-	return filepath.Clean(p)
+	return path.Clean(p)
 }
 
 func windowsStylePath(p string) bool {

@@ -39,8 +39,8 @@ Command playbook:
 - Search text: rg "pattern" path
 - List files: rg --files path
 - Find files by name: rg --files | rg "name-or-extension"
-- Show file ranges: sed -n 'START,ENDp' file; on PowerShell use Get-Content file | Select-Object -Skip N -First M
-- Count matches: rg -n "pattern" path | wc -l; on PowerShell pipe to Measure-Object
+- Show file ranges: sed -n 'START,ENDp' file (POSIX) or Get-Content file | Select-Object -Skip N -First M (PowerShell)
+- Count matches: rg -n "pattern" path | wc -l (POSIX) or (rg -n "pattern" path).Count (PowerShell)
 - Git status: git status --short
 - Git diff: git diff -- path
 - Git recent history: git log --oneline -n 20
@@ -49,7 +49,7 @@ Command playbook:
 - Python tests: prefer project tooling if configured; otherwise pytest or python -m pytest.
 - Rust tests: cargo test; focused test: cargo test test_name.
 - JSON: use jq when available; otherwise use the language/tooling already present in the project.
-- Sorting/unique/counting: use sort, uniq, wc; on PowerShell use Sort-Object, Get-Unique, Measure-Object.
+- Sorting/unique/counting: sort, uniq, wc (POSIX) or Sort-Object, Get-Unique, Measure-Object (PowerShell).
 
 Failure handling:
 - If a command is missing, inspect project files for the intended tool or script before retrying.

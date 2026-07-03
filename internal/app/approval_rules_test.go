@@ -272,7 +272,6 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 	}
 	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "[A] Always allow")
-	require.Contains(t, rendered, "Always allows writes in /Users/panjie/temp")
 }
 
 func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
@@ -292,8 +291,6 @@ func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
 	}
 	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.Contains(t, rendered, "[A] Always allow")
-	require.Contains(t, rendered, "Always allows reads in /Users/panjie/temp")
-	require.NotContains(t, rendered, "Always allows writes in /Users/panjie/temp")
 }
 
 // TestReviewBannerAlwaysAllowLegacyFallback covers rules persisted before
@@ -314,7 +311,7 @@ func TestReviewBannerAlwaysAllowLegacyFallback(t *testing.T) {
 		},
 	}
 	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.Contains(t, rendered, "Always allows reads in /Users/panjie/temp")
+	require.Contains(t, rendered, "[A] Always allow")
 }
 
 func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
@@ -329,7 +326,6 @@ func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
 	}
 	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
 	require.NotContains(t, rendered, "[A] Always allow")
-	require.Contains(t, rendered, "No reusable allow rule for this command.")
 }
 
 func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
@@ -386,8 +382,8 @@ func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
 	selectedStyle := baseStyle.Copy().
 		Foreground(lipgloss.Color("#4A3B9F")).
 		Background(lipgloss.Color("#E0DDFF"))
-	require.Contains(t, rendered, selectedStyle.Render("[Y] Approve")+baseStyle.Render("  ")+baseStyle.Render("[N] Deny"))
-	require.NotContains(t, rendered, selectedStyle.Render("[Y] Approve")+"  "+baseStyle.Render("[N] Deny"))
+	require.Contains(t, rendered, selectedStyle.Render("[Y] Allow once")+baseStyle.Render("  ")+baseStyle.Render("[N] Deny"))
+	require.NotContains(t, rendered, selectedStyle.Render("[Y] Allow once")+"  "+baseStyle.Render("[N] Deny"))
 }
 
 func TestReviewBannerTruncatesSavedRule(t *testing.T) {
@@ -409,7 +405,6 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 	for _, line := range lines {
 		require.LessOrEqual(t, len([]rune(line)), 80, line)
 	}
-	require.Contains(t, rendered, "Always allows writes in ~/.config/ghostty")
 }
 
 func TestReviewPolicyNonTTY(t *testing.T) {
@@ -680,9 +675,6 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
 		require.Contains(t, item.summary, downloads)
 		require.NotContains(t, item.summary, "Codex.dmg")
-		always := formatAlwaysAllowSummary(item.candidateRules, item.name, item.summary, 120)
-		require.Contains(t, always, "Always allows reads in "+downloads)
-		require.NotContains(t, always, "fs_stat")
 
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)

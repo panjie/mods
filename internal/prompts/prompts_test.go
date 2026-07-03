@@ -137,6 +137,8 @@ func TestIdentityCoversConfigKeys(t *testing.T) {
 func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Identity, "fs_read_file ~/.config/mods/mods.yml",
 		"must instruct LLM how to read config")
+	require.Contains(t, Identity, `Get-Content (Join-Path $env:USERPROFILE ".config\mods\mods.yml")`,
+		"must give Windows config examples in PowerShell syntax")
 	require.Contains(t, Identity, "Self-help policy",
 		"must have a self-help section")
 }

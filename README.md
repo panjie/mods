@@ -214,7 +214,7 @@ mods -I "describe the image on my clipboard"
 # Save and resume conversations
 mods --title release-notes "draft v1.1 release notes from CHANGELOG.md"
 mods --continue release-notes "turn those into a Twitter thread"
-mods --list
+mods --list-sessions
 
 # Start a continuous conversation
 mods --chat

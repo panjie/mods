@@ -45,10 +45,6 @@ func isPassiveAutoConfigSkippedAction(args []string) bool {
 		config.List ||
 		config.ListRoles ||
 		config.ListPrompts ||
-		config.Show != "" ||
-		config.ShowLast ||
-		len(config.Delete) > 0 ||
-		config.DeleteOlderThan != 0 ||
 		config.MCPList ||
 		config.MCPListTools
 }
@@ -72,10 +68,6 @@ func isAutoConfigSkippedAction() bool {
 		config.List ||
 		config.ListRoles ||
 		config.ListPrompts ||
-		config.Show != "" ||
-		config.ShowLast ||
-		len(config.Delete) > 0 ||
-		config.DeleteOlderThan != 0 ||
 		config.MCPList ||
 		config.MCPListTools
 }

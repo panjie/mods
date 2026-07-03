@@ -14,12 +14,12 @@ import (
 func (m *Mods) findCacheOpsDetails() tea.Cmd {
 	return func() tea.Msg {
 		continueLast := m.Config.ContinueLast || (m.Config.Continue != "" && m.Config.Title == "")
-		readID := ordered.First(m.Config.Continue, m.Config.Show)
+		readID := m.Config.Continue
 		writeID := ordered.First(m.Config.Title, m.Config.Continue)
 		title := writeID
 		var rules []Rule
 
-		if readID != "" || continueLast || m.Config.ShowLast {
+		if readID != "" || continueLast {
 			found, err := m.findReadID(readID)
 			if err != nil {
 				return modsError{
@@ -77,7 +77,7 @@ func (m *Mods) findReadID(in string) (*Conversation, error) {
 	if in != "" {
 		return m.db.Find(in)
 	}
-	if (m.Config.ContinueLast || m.Config.ShowLast || m.Config.Continue != "") && m.Config.Show == "" {
+	if m.Config.ContinueLast || m.Config.Continue != "" {
 		convo, err := m.db.FindHEAD()
 		if err != nil {
 			return nil, err

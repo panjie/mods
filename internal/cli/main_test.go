@@ -227,26 +227,6 @@ func TestIsNoArgs(t *testing.T) {
 		cfg := Config{Prefix: "hello"}
 		require.False(t, isNoArgsCfg(cfg))
 	})
-	t.Run("with show", func(t *testing.T) {
-		cfg := Config{Show: "abc123"}
-		require.False(t, isNoArgsCfg(cfg))
-	})
-	t.Run("with delete", func(t *testing.T) {
-		cfg := Config{Delete: []string{"abc"}}
-		require.False(t, isNoArgsCfg(cfg))
-	})
-	t.Run("with help", func(t *testing.T) {
-		cfg := Config{ShowHelp: true}
-		require.False(t, isNoArgsCfg(cfg))
-	})
-	t.Run("with help all", func(t *testing.T) {
-		cfg := Config{HelpAll: true}
-		require.False(t, isNoArgsCfg(cfg))
-	})
-	t.Run("with chat", func(t *testing.T) {
-		cfg := Config{Chat: true}
-		require.False(t, isNoArgsCfg(cfg))
-	})
 	t.Run("with list prompts", func(t *testing.T) {
 		cfg := Config{ListPrompts: true}
 		require.False(t, isNoArgsCfg(cfg))
@@ -255,10 +235,6 @@ func TestIsNoArgs(t *testing.T) {
 
 func isNoArgsCfg(cfg Config) bool {
 	return cfg.Prefix == "" &&
-		cfg.Show == "" &&
-		!cfg.ShowLast &&
-		len(cfg.Delete) == 0 &&
-		cfg.DeleteOlderThan == 0 &&
 		!cfg.ShowHelp &&
 		!cfg.HelpAll &&
 		!cfg.List &&

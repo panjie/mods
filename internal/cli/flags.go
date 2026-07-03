@@ -38,19 +38,15 @@ var flagCategoryOrder = []string{
 }
 
 // Names of session-action flags. These are the flags that select a single
-// side-effect (open settings, list/delete/show conversations, MCP listing,
-// reset settings) instead of starting a chat. They are mutually exclusive with
+// side-effect (open settings, browse conversations, MCP listing, reset
+// settings) instead of starting a chat. They are mutually exclusive with
 // each other and several of them share completion/suggestion logic, so the
 // canonical lists live here to avoid the four-way duplication that previously
-// existed between initFlags, MarkFlagsMutuallyExclusive, isNoArgs and
-// selectFromList.
+// existed between initFlags, MarkFlagsMutuallyExclusive, isNoArgs and the
+// conversation browser.
 const (
 	flagSettings      = "settings"
-	flagShow          = "show"
-	flagShowLast      = "show-last"
-	flagDelete        = "delete"
-	flagDeleteOlder   = "delete-older-than"
-	flagList          = "list"
+	flagListSessions  = "list-sessions"
 	flagChat          = "chat"
 	flagContinue      = "continue"
 	flagContinueLast  = "continue-last"
@@ -65,11 +61,7 @@ const (
 // invocation. MarkFlagsMutuallyExclusive consumes this slice verbatim.
 var sessionActionFlags = []string{
 	flagSettings,
-	flagShow,
-	flagShowLast,
-	flagDelete,
-	flagDeleteOlder,
-	flagList,
+	flagListSessions,
 	flagContinue,
 	flagContinueLast,
 	flagResetSettings,
@@ -80,11 +72,8 @@ var sessionActionFlags = []string{
 }
 
 // conversationCompleteFlags take a conversation id or title as their value and
-// therefore participate in shell completion and the selectFromList follow-up
-// suggestions.
+// therefore participate in shell completion.
 var conversationCompleteFlags = []string{
-	flagShow,
-	flagDelete,
 	flagContinue,
 }
 

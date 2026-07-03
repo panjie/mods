@@ -60,26 +60,6 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Empty(t, dets.Title)
 	})
 
-	t.Run("show id", func(t *testing.T) {
-		mods := newMods(t)
-		id := newConversationID()
-		require.NoError(t, mods.db.Save(id, "message", "openai", "gpt-4"))
-		mods.Config.Show = id[:8]
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
-		require.Equal(t, id, dets.ReadID)
-	})
-
-	t.Run("show title", func(t *testing.T) {
-		mods := newMods(t)
-		id := newConversationID()
-		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
-		mods.Config.Show = "message 1"
-		msg := mods.findCacheOpsDetails()()
-		dets := msg.(cacheDetailsMsg)
-		require.Equal(t, id, dets.ReadID)
-	})
-
 	t.Run("continue id", func(t *testing.T) {
 		mods := newMods(t)
 		id := newConversationID()
@@ -247,19 +227,7 @@ func TestFindCacheOpsDetails(t *testing.T) {
 		require.Equal(t, "some title", dets.Title)
 	})
 
-	t.Run("show invalid", func(t *testing.T) {
-		mods := newMods(t)
-		mods.Config.Show = "aaa"
-		msg := mods.findCacheOpsDetails()()
-		err := msg.(modsError)
-		require.Equal(t, "Could not find the conversation.", err.ReasonText)
-		// Error() now composes the reason and inner detail so the chain
-		// preserves both layers across additional wrapping. The previous
-		// "no conversations found: aaa" message is still in the suffix.
-		require.EqualError(t, err, "Could not find the conversation.: no conversations found: aaa")
-	})
-
-	t.Run("uses config model and api not global config", func(t *testing.T) {
+	t.Run("continue id and write with title", func(t *testing.T) {
 		mods := newMods(t)
 		mods.Config.Model = "claude-3.7-sonnet"
 		mods.Config.API = "anthropic"

@@ -12,13 +12,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/atotto/clipboard"
 	timeago "github.com/caarlos0/timea.go"
 	"github.com/charmbracelet/bubbles/key"
 	glamour "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/editor"
-	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 )
 
@@ -147,13 +145,9 @@ func initFlags() {
 	regBool(flags, &config.Raw, "raw", "r", config.Raw)
 	regStr(flags, &config.Continue, "continue", "C", "")
 	regBool(flags, &config.ContinueLast, "continue-last", "c", false)
-	regBool(flags, &config.List, "list", "l", config.List)
+	regBool(flags, &config.List, flagListSessions, "l", config.List)
 	regBool(flags, &config.Chat, flagChat, "", false)
 	regStr(flags, &config.Title, "title", "t", config.Title)
-	regStrArr(flags, &config.Delete, "delete", "d", config.Delete)
-	flags.Var(newDurationFlag(config.DeleteOlderThan, &config.DeleteOlderThan), flagDeleteOlder, flagDesc(flagDeleteOlder))
-	regStr(flags, &config.Show, "show", "s", config.Show)
-	regBool(flags, &config.ShowLast, "show-last", "S", false)
 	regBool(flags, &config.Quiet, "quiet", "q", config.Quiet)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
 	regBool(flags, &config.HideToolResults, "hide-tool-results", "", config.HideToolResults)
@@ -235,14 +229,10 @@ func initFlags() {
 		flags,
 		flagCategorySession,
 		"title",
-		"list",
+		flagListSessions,
 		flagChat,
 		"continue",
 		"continue-last",
-		"show",
-		"show-last",
-		"delete",
-		flagDeleteOlder,
 		"no-cache",
 		"cache-path",
 	)
@@ -582,87 +572,6 @@ func nextBackupPath(base string) (string, error) {
 	return "", fmt.Errorf("could not find an unused backup name starting at %q", base)
 }
 
-func deleteConversationOlderThan() error {
-	conversations, err := db.ListOlderThan(config.DeleteOlderThan)
-	if err != nil {
-		return modsError{Err: err, ReasonText: "Couldn't find conversation to delete."}
-	}
-
-	if len(conversations) == 0 {
-		if !config.Quiet {
-			fmt.Fprintln(os.Stderr, "No conversations found.")
-			return nil
-		}
-		return nil
-	}
-
-	if !config.Quiet {
-		printList(conversations)
-
-		if !IsOutputTTY() || !IsInputTTY() {
-			fmt.Fprintln(os.Stderr)
-			return newUserErrorf(
-				"To delete the conversations above, run: %s",
-				strings.Join(append(os.Args, "--quiet"), " "),
-			)
-		}
-		var confirm bool
-		if err := huh.Run(
-			huh.NewConfirm().
-				Title(fmt.Sprintf("Delete conversations older than %s?", config.DeleteOlderThan)).
-				Description(fmt.Sprintf("This will delete all the %d conversations listed above.", len(conversations))).
-				Value(&confirm),
-		); err != nil {
-			return modsError{Err: err, ReasonText: "Couldn't delete old conversations."}
-		}
-		if !confirm {
-			return newUserErrorf("Aborted by user")
-		}
-	}
-
-	for _, c := range conversations {
-		if err := db.Delete(c.ID); err != nil {
-			return modsError{Err: err, ReasonText: "Couldn't delete conversation."}
-		}
-		if err := removeLegacyConversationFile(c.ID); err != nil {
-			return modsError{Err: err, ReasonText: "Couldn't delete legacy conversation data."}
-		}
-
-		if !config.Quiet {
-			fmt.Fprintln(os.Stderr, "Conversation deleted:", c.ID[:MinIDLength])
-		}
-	}
-
-	return nil
-}
-
-func deleteConversations() error {
-	for _, del := range config.Delete {
-		convo, err := db.Find(del)
-		if err != nil {
-			return modsError{Err: err, ReasonText: "Couldn't find conversation to delete."}
-		}
-		if err := deleteConversation(convo); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func deleteConversation(convo *Conversation) error {
-	if err := db.Delete(convo.ID); err != nil {
-		return modsError{Err: err, ReasonText: "Couldn't delete conversation."}
-	}
-	if err := removeLegacyConversationFile(convo.ID); err != nil {
-		return modsError{Err: err, ReasonText: "Couldn't delete legacy conversation data."}
-	}
-
-	if !config.Quiet {
-		fmt.Fprintln(os.Stderr, "Conversation deleted:", convo.ID[:MinIDLength])
-	}
-	return nil
-}
-
 func removeLegacyConversationFile(id string) error {
 	path := filepath.Join(config.CachePath, "conversations", id+".gob")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -683,8 +592,7 @@ func listConversations(raw bool) error {
 	}
 
 	if IsInputTTY() && IsOutputTTY() && !raw {
-		selectFromList(conversations)
-		return nil
+		return runConversationBrowser(conversations)
 	}
 	printList(conversations)
 	return nil
@@ -709,55 +617,6 @@ func listRoles() {
 			s = role + StdoutStyles().Timeago.Render(" (default)")
 		}
 		fmt.Println(s)
-	}
-}
-
-func makeOptions(conversations []Conversation) []huh.Option[string] {
-	opts := make([]huh.Option[string], 0, len(conversations))
-	for _, c := range conversations {
-		timea := StdoutStyles().Timeago.Render(timeago.Of(c.UpdatedAt))
-		left := StdoutStyles().ShaHash.Render(c.ID[:ShortIDLength])
-		right := StdoutStyles().ConversationList.Render(c.Title, timea)
-		if c.Model != nil {
-			right += StdoutStyles().Comment.Render(*c.Model)
-		}
-		if c.API != nil {
-			right += StdoutStyles().Comment.Render(" (" + *c.API + ")")
-		}
-		opts = append(opts, huh.NewOption(left+" "+right, c.ID))
-	}
-	return opts
-}
-
-func selectFromList(conversations []Conversation) {
-	var selected string
-	if err := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Conversations").
-				Value(&selected).
-				Options(makeOptions(conversations)...),
-		),
-	).Run(); err != nil {
-		if !errors.Is(err, huh.ErrUserAborted) {
-			fmt.Fprintln(os.Stderr, err.Error())
-		}
-		return
-	}
-
-	_ = clipboard.WriteAll(selected)
-	termenv.Copy(selected)
-	PrintConfirmation("COPIED", selected)
-	// suggest actions to use this conversation ID
-	fmt.Println(StdoutStyles().Comment.Render(
-		"You can use this conversation ID with the following commands:",
-	))
-	for _, flag := range conversationCompleteFlags {
-		fmt.Printf(
-			"  %-44s %s\n",
-			StdoutStyles().Flag.Render("--"+flag),
-			StdoutStyles().FlagDesc.Render(Help[flag]),
-		)
 	}
 }
 
@@ -829,10 +688,6 @@ func saveConversation(mods *Mods) error {
 // in sync with sessionActionFlags when adding a new session action.
 func isNoArgs() bool {
 	return config.Prefix == "" &&
-		config.Show == "" &&
-		!config.ShowLast &&
-		len(config.Delete) == 0 &&
-		config.DeleteOlderThan == 0 &&
 		!config.ShowHelp &&
 		!config.HelpAll &&
 		!config.List &&

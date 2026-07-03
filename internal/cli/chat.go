@@ -83,13 +83,9 @@ func validateChatMode() error {
 }
 
 func hasChatSessionAction() bool {
-	return config.Show != "" ||
-		config.ShowLast ||
-		config.List ||
+	return config.List ||
 		config.ListRoles ||
 		config.ListPrompts ||
-		len(config.Delete) > 0 ||
-		config.DeleteOlderThan != 0 ||
 		config.Settings ||
 		config.ConfigSetup ||
 		config.ResetSettings ||

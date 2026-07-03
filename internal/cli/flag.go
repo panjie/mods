@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
-
-	"github.com/caarlos0/duration"
 )
 
 func newFlagParseError(err error) flagParseError {
@@ -16,15 +13,15 @@ func newFlagParseError(err error) flagParseError {
 	case strings.HasPrefix(s, "flag needs an argument:"):
 		reason = "Flag %s needs an argument."
 		// pflag emits two shapes:
-		//   "flag needs an argument: --delete-older-than"  (long flag)
-		//   "flag needs an argument: 'd' in -d"            (short flag in a cluster)
+		//   "flag needs an argument: --cache-path"  (long flag)
+		//   "flag needs an argument: 'a' in -a"      (short flag in a cluster)
 		// TrimPrefix handles arbitrary multi-hyphen long flag names; the previous
 		// strings.Split(s, "-") approach broke on any flag containing a hyphen.
 		rest := strings.TrimSpace(strings.TrimPrefix(s, "flag needs an argument:"))
 		if idx := strings.Index(rest, " in -"); idx >= 0 {
 			flag = rest[idx+len(" in "):] // short cluster, e.g. "-d"
 		} else {
-			flag = rest // long flag, e.g. "--delete-older-than"
+			flag = rest // long flag, e.g. "--cache-path"
 		}
 	case strings.HasPrefix(s, "unknown flag:"):
 		reason = "Unknown flag %s."
@@ -72,28 +69,6 @@ func (f flagParseError) ReasonFormat() string {
 
 func (f flagParseError) Flag() string {
 	return f.flag
-}
-
-func newDurationFlag(val time.Duration, p *time.Duration) *durationFlag {
-	*p = val
-	return (*durationFlag)(p)
-}
-
-type durationFlag time.Duration
-
-func (d *durationFlag) Set(s string) error {
-	v, err := duration.Parse(s)
-	*d = durationFlag(v)
-	//nolint: wrapcheck
-	return err
-}
-
-func (d *durationFlag) String() string {
-	return time.Duration(*d).String()
-}
-
-func (*durationFlag) Type() string {
-	return "duration"
 }
 
 func newReasoningFlag(val ReasoningMode, p *ReasoningMode) *reasoningFlag {

@@ -31,32 +31,14 @@ var flagParseErrorTests = []struct {
 		"Short flag %s is missing.",
 	},
 	{
-		"flag needs an argument: --delete",
-		"--delete",
-		"Flag %s needs an argument.",
-	},
-	{
-		// Multi-hyphen long flag: the previous strings.Split(s, "-") approach
-		// produced >3 parts and left `flag` empty, yielding "Flag  is missing."
-		// in the UI. TrimPrefix handles arbitrary hyphens.
-		"flag needs an argument: --delete-older-than",
-		"--delete-older-than",
-		"Flag %s needs an argument.",
-	},
-	{
 		"flag needs an argument: --format-as",
 		"--format-as",
 		"Flag %s needs an argument.",
 	},
 	{
-		"flag needs an argument: 'd' in -d",
-		"-d",
+		"flag needs an argument: 'a' in -a",
+		"-a",
 		"Flag %s needs an argument.",
-	},
-	{
-		`invalid argument "20dd" for "--delete-older-than" flag: time: unknown unit "dd" in duration "20dd"`,
-		"--delete-older-than",
-		"Flag %s have an invalid argument.",
 	},
 	{
 		`invalid argument "sdfjasdl" for "--max-tokens" flag: strconv.ParseInt: parsing "sdfjasdl": invalid syntax`,

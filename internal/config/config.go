@@ -13,9 +13,7 @@ import (
 	_ "embed"
 
 	"github.com/adrg/xdg"
-	"github.com/caarlos0/duration"
 	"github.com/caarlos0/env/v9"
-	"github.com/charmbracelet/x/exp/strings"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/tools"
 	"gopkg.in/yaml.v3"
@@ -97,12 +95,8 @@ var Help = map[string]string{
 	"cache-path":             "Path to store conversation cache (defaults to XDG_DATA_HOME/mods)",
 	"chat":                   "Start a continuous conversation; type /exit or /quit to quit",
 	"title":                  "Saves the current conversation with the given title",
-	"list":                   "Lists saved conversations",
-	"delete":                 "Deletes one or more saved conversations with the given titles or IDs",
-	"delete-older-than":      "Deletes all saved conversations older than the specified duration; valid values are " + strings.EnglishJoin(duration.ValidUnits(), true),
-	"show":                   "Show a saved conversation with the given title or ID",
+	"list-sessions":          "Interactively browse, view, and delete saved conversations",
 	"theme":                  "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
-	"show-last":              "Show the last saved conversation",
 	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":            "MCP Servers configurations",
 	"mcp-enable":             "Enable only specific MCP servers (whitelist, overrides disable list)",
@@ -268,30 +262,26 @@ type Config struct {
 	PersistentConfig `yaml:",inline"`
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
-	AskModel        bool
-	Chat            bool
-	Plan            bool
-	ShowHelp        bool
-	HelpAll         bool
-	ResetSettings   bool
-	Version         bool
-	Settings        bool
-	ConfigSetup     bool
-	Dirs            bool
-	ContinueLast    bool
-	Continue        string
-	Title           string
-	ShowLast        bool
-	Show            string
-	List            bool
-	ListRoles       bool
-	ListPrompts     bool
-	Delete          []string
-	DeleteOlderThan time.Duration
-	MCPList         bool
-	MCPListTools    bool
-	MCPEnable       []string
-	MCPDisable      []string
+	AskModel      bool
+	Chat          bool
+	Plan          bool
+	ShowHelp      bool
+	HelpAll       bool
+	ResetSettings bool
+	Version       bool
+	Settings      bool
+	ConfigSetup   bool
+	Dirs          bool
+	ContinueLast  bool
+	Continue      string
+	Title         string
+	List          bool
+	ListRoles     bool
+	ListPrompts   bool
+	MCPList       bool
+	MCPListTools  bool
+	MCPEnable     []string
+	MCPDisable    []string
 
 	// Runtime state (computed internally, never persisted).
 	Prefix                                             string

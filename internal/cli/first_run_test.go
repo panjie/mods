@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -43,21 +42,17 @@ func TestShouldAutoConfigSkipsNonRequestActions(t *testing.T) {
 		args []string
 		cfg  Config
 	}{
-		"help":              {args: []string{"mods", "--help"}},
-		"version":           {args: []string{"mods", "--version"}},
-		"completion":        {args: []string{"mods", "completion", "bash"}},
-		"dirs":              {args: []string{"mods", "--dirs"}, cfg: Config{Dirs: true}},
-		"settings":          {args: []string{"mods", "--settings"}, cfg: Config{Settings: true}},
-		"config":            {args: []string{"mods", "--config"}, cfg: Config{ConfigSetup: true}},
-		"list":              {args: []string{"mods", "--list"}, cfg: Config{List: true}},
-		"show":              {args: []string{"mods", "--show", "abc"}, cfg: Config{Show: "abc"}},
-		"show last":         {args: []string{"mods", "--show-last"}, cfg: Config{ShowLast: true}},
-		"delete":            {args: []string{"mods", "--delete", "abc"}, cfg: Config{Delete: []string{"abc"}}},
-		"delete older than": {args: []string{"mods", "--delete-older-than", "1d"}, cfg: Config{DeleteOlderThan: time.Hour}},
-		"list roles":        {args: []string{"mods", "--list-roles"}, cfg: Config{ListRoles: true}},
-		"list prompts":      {args: []string{"mods", "--list-prompts"}, cfg: Config{ListPrompts: true}},
-		"mcp list":          {args: []string{"mods", "--mcp-list"}, cfg: Config{MCPList: true}},
-		"mcp list tools":    {args: []string{"mods", "--mcp-list-tools"}, cfg: Config{MCPListTools: true}},
+		"help":           {args: []string{"mods", "--help"}},
+		"version":        {args: []string{"mods", "--version"}},
+		"completion":     {args: []string{"mods", "completion", "bash"}},
+		"dirs":           {args: []string{"mods", "--dirs"}, cfg: Config{Dirs: true}},
+		"settings":       {args: []string{"mods", "--settings"}, cfg: Config{Settings: true}},
+		"config":         {args: []string{"mods", "--config"}, cfg: Config{ConfigSetup: true}},
+		"list-sessions":  {args: []string{"mods", "--list-sessions"}, cfg: Config{List: true}},
+		"list roles":     {args: []string{"mods", "--list-roles"}, cfg: Config{ListRoles: true}},
+		"list prompts":   {args: []string{"mods", "--list-prompts"}, cfg: Config{ListPrompts: true}},
+		"mcp list":       {args: []string{"mods", "--mcp-list"}, cfg: Config{MCPList: true}},
+		"mcp list tools": {args: []string{"mods", "--mcp-list-tools"}, cfg: Config{MCPListTools: true}},
 	}
 
 	for name, tc := range tests {

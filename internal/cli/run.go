@@ -124,14 +124,6 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		return ListTools(ctx, &config)
 	}
 
-	if len(config.Delete) > 0 {
-		return deleteConversations()
-	}
-
-	if config.DeleteOlderThan > 0 {
-		return deleteConversationOlderThan()
-	}
-
 	// raw mode already prints the output, no need to print it again
 	if IsOutputTTY() && !config.Raw {
 		switch {
@@ -140,10 +132,6 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		case mods.Output != "":
 			fmt.Print(mods.Output)
 		}
-	}
-
-	if config.Show != "" || config.ShowLast {
-		return nil
 	}
 
 	if config.CacheWriteToID != "" {

@@ -218,12 +218,10 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stdinImageInput:
 		m.stdinImageData = msg.data
-		if m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
+		if m.Config.Prefix == "" {
 			return m, m.quit
 		}
 		if m.Config.Dirs ||
-			len(m.Config.Delete) > 0 ||
-			m.Config.DeleteOlderThan != 0 ||
 			m.Config.ShowHelp ||
 			m.Config.List ||
 			m.Config.ListRoles ||
@@ -249,12 +247,10 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.content != "" {
 			m.Input = RemoveWhitespace(msg.content)
 		}
-		if m.Input == "" && m.Config.Prefix == "" && m.Config.Show == "" && !m.Config.ShowLast {
+		if m.Input == "" && m.Config.Prefix == "" {
 			return m, m.quit
 		}
 		if m.Config.Dirs ||
-			len(m.Config.Delete) > 0 ||
-			m.Config.DeleteOlderThan != 0 ||
 			m.Config.ShowHelp ||
 			m.Config.List ||
 			m.Config.ListRoles ||

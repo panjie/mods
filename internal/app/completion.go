@@ -40,10 +40,6 @@ func (m *Mods) retry(content string, err modsError) tea.Msg {
 }
 
 func (m *Mods) startCompletionCmd(content string) tea.Cmd {
-	if m.Config.Show != "" || m.Config.ShowLast {
-		return m.readFromCache()
-	}
-
 	// Release any prior request's resources before starting a new one. The
 	// cancel slice and the active streamRunner can both linger if a previous
 	// stream is in flight (e.g. retry path); close them explicitly so HTTP

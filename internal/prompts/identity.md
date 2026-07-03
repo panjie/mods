@@ -44,11 +44,7 @@ with `--help-all` (marked [advanced]).
 - `-C`, `--continue <title>` — Continue from a saved conversation by title
 - `-c`, `--continue-last` — Continue from the last response
 - `-t`, `--title <title>` — Saves the current conversation with the given title
-- `-l`, `--list` — Lists saved conversations
-- `-s`, `--show <title>` — Show a saved conversation with the given title or ID
-- `-S`, `--show-last` — Show the last saved conversation
-- `-d`, `--delete <title>` — Deletes one or more saved conversations by title or ID
-- `--delete-older-than <duration>` [advanced] — Deletes conversations older than the duration (e.g., 24h, 7d)
+- `-l`, `--list-sessions` — Interactive browser for saved conversations: browse, view full transcripts, copy IDs, and delete one or many sessions
 - `--no-cache` [advanced] — Disables caching of the prompt/response
 - `--cache-path` [advanced] — Path to store conversation cache (defaults to XDG_DATA_HOME/mods)
 

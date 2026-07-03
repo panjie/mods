@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -38,7 +39,7 @@ func TestIsSimpleReadOnly(t *testing.T) {
 		{"realpath link", true},
 		{"readlink link", true},
 		{"grep pattern file", true},
-		{"egrep 'a|b' file", false},  // | metacharacter, send to LLM
+		{"egrep 'a|b' file", false}, // | metacharacter, send to LLM
 		{"fgrep literal file", true},
 
 		// Not in allowlist.
@@ -103,8 +104,22 @@ func TestExtractExternalPaths(t *testing.T) {
 	})
 
 	t.Run("tilde home path", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
 		got := extractExternalPaths("cat ~/Downloads/secret", ws)
-		require.Equal(t, []string{"~/Downloads/secret"}, got)
+		require.Equal(t, []string{filepath.Join(home, "Downloads", "secret")}, got)
+	})
+
+	t.Run("tilde downloads directory normalizes for read commands", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		want := []string{filepath.Join(home, "Downloads")}
+		require.Equal(t, want, extractExternalPaths("find ~/Downloads -type f -printf '%s %p\\n'", ws))
+		require.Equal(t, want, extractExternalPaths("du -sh ~/Downloads", ws))
 	})
 
 	t.Run("tilde other user path", func(t *testing.T) {

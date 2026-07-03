@@ -286,6 +286,7 @@ func classifyResponse(raw string) bool {
 var reYes = regexp.MustCompile(`\bYES\b`)
 var reNo = regexp.MustCompile(`\bNO\b`)
 var reJSONFence = regexp.MustCompile("(?is)```(?:json)?\\s*(.*?)\\s*```")
+
 // readOnlyCommands is a conservative allowlist of shell commands whose basic
 // form is read-only and has no file-modifying flags. Only commands in this
 // set may skip the LLM classifier — and even then only when the command
@@ -319,10 +320,10 @@ func isSimpleReadOnly(command string) bool {
 // Path-extraction patterns for extractExternalPaths. The *Path variants
 // capture the full token so it can be populated into AffectedDirs.
 var (
-	reParentPath   = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
-	reHomePath     = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
-	reUnixAbsPath  = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
-	reWinAbsPath   = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
+	reParentPath  = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
+	reHomePath    = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
+	reUnixAbsPath = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
+	reWinAbsPath  = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
 )
 
 // extractExternalPaths returns path tokens from the command that reference
@@ -331,13 +332,16 @@ var (
 // The results populate AffectedDirs so ClassifyAccess and risk labels can
 // correctly identify external access even when the LLM omits them.
 func extractExternalPaths(command, workspaceDir string) []string {
-	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+	homeDir := ""
+	if dir, err := os.UserHomeDir(); err == nil && dir != "" {
+		homeDir = dir
 		command = expandHomeVars(command, homeDir)
 	}
 	dirClean := filepath.Clean(workspaceDir)
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
+		p = expandCurrentUserHomePath(p, homeDir)
 		if p == "" || seen[p] {
 			return
 		}
@@ -361,6 +365,19 @@ func extractExternalPaths(command, workspaceDir string) []string {
 		add(m)
 	}
 	return paths
+}
+
+func expandCurrentUserHomePath(path, homeDir string) string {
+	if homeDir == "" {
+		return path
+	}
+	if path == "~" {
+		return homeDir
+	}
+	if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		return filepath.Clean(filepath.Join(homeDir, path[2:]))
+	}
+	return path
 }
 
 // mentionsExternalPath reports whether the command text references any path

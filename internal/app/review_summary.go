@@ -15,10 +15,14 @@ type patchFileChange struct {
 }
 
 func formatReviewSummary(name string, args []byte, analysis shellCommandAnalysis, scope Scope) string {
+	return formatReviewSummaryWithIntent(name, args, analysis, scope, AccessIntent{})
+}
+
+func formatReviewSummaryWithIntent(name string, args []byte, analysis shellCommandAnalysis, scope Scope, intent AccessIntent) string {
 	parsed := ToolOperationArgs(args)
 	switch name {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search":
-		return fmt.Sprintf("Target: %s - external read", OneLinePreview(ArgString(parsed, "path")))
+		return fmt.Sprintf("Target: %s - external read", OneLinePreview(readReviewTarget(parsed, scope, intent)))
 	case "fs_write_file":
 		path := ArgString(parsed, "path")
 		content := ArgString(parsed, "content")
@@ -32,6 +36,31 @@ func formatReviewSummary(name string, args []byte, analysis shellCommandAnalysis
 	default:
 		return ""
 	}
+}
+
+func readReviewTarget(parsed map[string]any, scope Scope, intent AccessIntent) string {
+	if len(intent.Dirs) == 1 {
+		return intent.Dirs[0]
+	}
+	if len(intent.Dirs) > 1 {
+		return summarizeAffectedDirs(intent.Dirs)
+	}
+	path := ArgString(parsed, "path")
+	if path == "" {
+		return ""
+	}
+	target := path
+	if !filepath.IsAbs(target) && scope.Value != "" {
+		target = filepath.Join(scope.Value, target)
+	}
+	target = filepath.Clean(target)
+	if info, err := os.Stat(target); err == nil {
+		if info.IsDir() {
+			return target
+		}
+		return filepath.Dir(target)
+	}
+	return filepath.Dir(target)
 }
 
 func writeTargetMode(path string, scope Scope) string {

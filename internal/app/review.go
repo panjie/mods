@@ -241,8 +241,12 @@ func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name st
 // known dirs so the approval matrix asks for review.
 func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, analyze func(string, string) shellCommandAnalysis) AccessIntent {
 	if registry != nil && registry.ShellExecution(name) {
+		if analyze == nil {
+			a := defaultShellCommandAnalysis()
+			return AccessIntent{Class: shellAccessMode(a)}
+		}
 		a := analyze(name, ExtractShellCommand(data))
-		return AccessIntent{Class: shellAccessMode(a), Dirs: a.AffectedDirs}
+		return AccessIntent{Class: shellAccessMode(a), Dirs: normalizeAffectedDirs(a.AffectedDirs)}
 	}
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
@@ -272,9 +276,14 @@ func normalizeAffectedDirs(dirs []string) []string {
 	if len(dirs) == 0 {
 		return nil
 	}
+	homeDir := ""
+	if dir, err := os.UserHomeDir(); err == nil {
+		homeDir = dir
+	}
 	seen := make(map[string]bool, len(dirs))
 	resolved := make([]string, 0, len(dirs))
 	for _, d := range dirs {
+		d = expandCurrentUserHomePath(d, homeDir)
 		d = filepath.Clean(d)
 		if d == "" || d == "." {
 			continue
@@ -334,29 +343,36 @@ type reviewerDeps struct {
 	ctx              context.Context
 	isShellExecution func(name string) bool
 	analyzeShell     func(tool, command string) shellCommandAnalysis
+	accessIntent     AccessIntent
 }
 
 func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []byte) error {
 	debug.Printf("requestApproval called: name=%s", name)
 	shellExecution := deps.isShellExecution != nil && deps.isShellExecution(name)
+	intent := deps.accessIntent
 	var analysis shellCommandAnalysis
-	var opMode AccessClass
 	if shellExecution {
-		if cmd := extractShellCommand(data); cmd != "" {
+		if intent.Class != "" {
+			analysis = shellCommandAnalysis{
+				NeedsReview:  intent.Class == AccessWrite,
+				AffectedDirs: normalizeAffectedDirs(intent.Dirs),
+			}
+			intent.Dirs = analysis.AffectedDirs
+		} else if cmd := extractShellCommand(data); cmd != "" && deps.analyzeShell != nil {
 			analysis = deps.analyzeShell(name, cmd)
 			analysis.AffectedDirs = normalizeAffectedDirs(analysis.AffectedDirs)
-			debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", cmd, analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
-			opMode = shellAccessMode(analysis)
-			if RulesAllowDirs(r.rules.Snapshot(), analysis.AffectedDirs, r.scope, opMode) {
-				debug.Printf("requestApproval: matched LLM affected dirs against saved approval rule")
-				return nil
-			}
+			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs}
 		} else {
 			analysis = defaultShellCommandAnalysis()
-			opMode = shellAccessMode(analysis)
+			intent = AccessIntent{Class: shellAccessMode(analysis)}
 		}
+		debug.Printf("shell analysis: needsReview=%v dirs=%v reason=%q", analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 	}
-	if !shellExecution && r.rules.Allows(name, data, r.scope) {
+	if intent.Class != "" && RulesAllowDirs(r.rules.Snapshot(), intent.Dirs, r.scope, intent.Class) {
+		debug.Printf("requestApproval: matched affected dirs against saved approval rule")
+		return nil
+	}
+	if intent.Class == "" && !shellExecution && r.rules.Allows(name, data, r.scope) {
 		debug.Printf("requestApproval: matched conversation approval rule, auto-approving")
 		return nil
 	}
@@ -364,14 +380,9 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		debug.Printf("requestApproval: target is within safe workspace, auto-approving")
 		return nil
 	}
-	if r.reviewMode != ReviewAlways && shellExecution && !analysis.NeedsReview {
-		// Even when the LLM says the command is read-only and not mutable,
-		// consult the approval matrix for external-path access. A read-only
-		// command like 'cat /etc/passwd' should still trigger review when it
-		// reads outside the workspace.
-		intent := AccessIntent{Class: AccessRead, Dirs: analysis.AffectedDirs}
+	if r.reviewMode != ReviewAlways && intent.Class != "" {
 		if ClassifyAccess(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
-			debug.Printf("shell classifier result: NOT mutable, auto-approving")
+			debug.Printf("requestApproval: approval matrix allowed access")
 			return nil
 		}
 	}
@@ -384,15 +395,17 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		)
 	}
 	respCh := make(chan reviewResponse, 1)
-	candidateRules := RulesFor(name, data, r.scope)
-	if shellExecution {
-		candidateRules = RulesForDirs(analysis.AffectedDirs, r.scope, opMode)
+	var candidateRules []Rule
+	if intent.Class != "" {
+		candidateRules = RulesForDirs(intent.Dirs, r.scope, intent.Class)
+	} else {
+		candidateRules = RulesFor(name, data, r.scope)
 	}
 	item := toolReviewItem{
 		name:           name,
 		args:           data,
 		candidateRules: candidateRules,
-		summary:        formatReviewSummary(name, data, analysis, r.scope),
+		summary:        formatReviewSummaryWithIntent(name, data, analysis, r.scope, intent),
 		resp:           respCh,
 	}
 	// Snapshot the channel under the lock so a concurrent reset() that

@@ -286,6 +286,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 				ctx:              m.ctx,
 				isShellExecution: registry.ShellExecution,
 				analyzeShell:     m.analyzeShellCommand,
+				accessIntent:     intent,
 			}, name, data); err != nil {
 				return "", err
 			}

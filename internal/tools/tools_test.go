@@ -465,8 +465,12 @@ func TestResolveWorkspacePathAuthorizesApprovedExternal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("approved external path must resolve: %v", err)
 	}
-	if got != target {
-		t.Fatalf("resolved=%q want %q", got, target)
+	want, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatalf("eval target: %v", err)
+	}
+	if got != want {
+		t.Fatalf("resolved=%q want %q", got, want)
 	}
 }
 
@@ -493,6 +497,10 @@ func TestResolveWorkspacePathRejectsSymlinkEscapeFromAuthorized(t *testing.T) {
 
 func TestFilesystemIntentExtractor(t *testing.T) {
 	root := t.TempDir()
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("eval root: %v", err)
+	}
 	registry := NewRegistry()
 	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
 		t.Fatalf("register: %v", err)
@@ -506,9 +514,25 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	if intent.Class != approval.AccessRead {
 		t.Fatalf("fs_read_file class=%q want read", intent.Class)
 	}
-	wantDir := filepath.Join(root, "sub")
+	wantDir := filepath.Join(canonicalRoot, "sub")
 	if len(intent.Dirs) != 1 || intent.Dirs[0] != wantDir {
 		t.Fatalf("fs_read_file dirs=%v want [%s]", intent.Dirs, wantDir)
+	}
+
+	dirTarget := filepath.Join(canonicalRoot, "existing-dir")
+	if err := os.MkdirAll(dirTarget, 0o755); err != nil {
+		t.Fatalf("mkdir dir target: %v", err)
+	}
+	extList, ok := registry.IntentExtractor("fs_list_dir")
+	if !ok {
+		t.Fatal("fs_list_dir must have an intent extractor")
+	}
+	intentList := extList([]byte(`{"path":"existing-dir"}`))
+	if intentList.Class != approval.AccessRead {
+		t.Fatalf("fs_list_dir class=%q want read", intentList.Class)
+	}
+	if len(intentList.Dirs) != 1 || intentList.Dirs[0] != dirTarget {
+		t.Fatalf("fs_list_dir dirs=%v want [%s]", intentList.Dirs, dirTarget)
 	}
 
 	extW, ok := registry.IntentExtractor("fs_write_file")
@@ -519,8 +543,8 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	if intentW.Class != approval.AccessWrite {
 		t.Fatalf("fs_write_file class=%q want write", intentW.Class)
 	}
-	if len(intentW.Dirs) != 1 || intentW.Dirs[0] != root {
-		t.Fatalf("fs_write_file dirs=%v want [%s]", intentW.Dirs, root)
+	if len(intentW.Dirs) != 1 || intentW.Dirs[0] != canonicalRoot {
+		t.Fatalf("fs_write_file dirs=%v want [%s]", intentW.Dirs, canonicalRoot)
 	}
 
 	extP, ok := registry.IntentExtractor("fs_apply_patch")
@@ -531,8 +555,8 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	if intentP.Class != approval.AccessWrite {
 		t.Fatalf("fs_apply_patch class=%q want write", intentP.Class)
 	}
-	if len(intentP.Dirs) != 1 || intentP.Dirs[0] != root {
-		t.Fatalf("fs_apply_patch dirs=%v want [%s]", intentP.Dirs, root)
+	if len(intentP.Dirs) != 1 || intentP.Dirs[0] != canonicalRoot {
+		t.Fatalf("fs_apply_patch dirs=%v want [%s]", intentP.Dirs, canonicalRoot)
 	}
 
 	if _, ok := registry.IntentExtractor("fs_read_file_nonexistent"); ok {

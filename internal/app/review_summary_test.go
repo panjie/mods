@@ -55,5 +55,6 @@ func TestFormatReviewSummaryExternalRead(t *testing.T) {
 	scope := WorkspaceScope(t.TempDir())
 	got := formatReviewSummary("fs_read_file", []byte(`{"path":"/etc/passwd"}`), shellCommandAnalysis{}, scope)
 	require.Contains(t, got, "external read")
-	require.Contains(t, got, "passwd")
+	require.Contains(t, got, "/etc")
+	require.NotContains(t, got, "passwd")
 }

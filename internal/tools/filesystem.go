@@ -35,8 +35,8 @@ type FilesystemConfig struct {
 }
 
 // pathParentIntent builds an AccessIntent extractor for single-path tools.
-// The path argument is resolved against root and its parent directory is
-// reported as the touched directory.
+// Writes touch the parent directory. Reads touch the target directory when
+// the path exists as a directory, otherwise the containing directory.
 func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval.AccessIntent {
 	class := approval.AccessWrite
 	if readOnly {
@@ -48,10 +48,20 @@ func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval
 		}
 		_ = json.Unmarshal(data, &args)
 		p := args.Path
+		if p == "" {
+			return approval.AccessIntent{Class: class}
+		}
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(root, p)
 		}
-		return approval.AccessIntent{Class: class, Dirs: []string{filepath.Dir(filepath.Clean(p))}}
+		p = filepath.Clean(p)
+		dir := filepath.Dir(p)
+		if readOnly {
+			if info, err := os.Stat(p); err == nil && info.IsDir() {
+				dir = p
+			}
+		}
+		return approval.AccessIntent{Class: class, Dirs: []string{dir}}
 	}
 }
 

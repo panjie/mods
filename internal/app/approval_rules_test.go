@@ -649,6 +649,71 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})
+
+	t.Run("fs external read offers directory read rule", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		downloads := filepath.Join(home, "Downloads")
+		target := filepath.Join(downloads, "Codex.dmg")
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		deps := reviewerDeps{
+			ctx:          context.Background(),
+			accessIntent: AccessIntent{Class: AccessRead, Dirs: []string{downloads}},
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(deps, "fs_stat", []byte(fmt.Sprintf(`{"path":%q}`, target)))
+		}()
+
+		item := <-reviewer.reviewChan
+		require.Equal(t, "fs_stat", item.name)
+		require.Len(t, item.candidateRules, 1)
+		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
+		require.Equal(t, AccessRead, item.candidateRules[0].Mode)
+		require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
+		require.Contains(t, item.summary, downloads)
+		require.NotContains(t, item.summary, "Codex.dmg")
+		always := formatAlwaysAllowSummary(item.candidateRules, item.name, item.summary, 120)
+		require.Contains(t, always, "Always allows reads in "+downloads)
+		require.NotContains(t, always, "fs_stat")
+
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
+	t.Run("saved fs directory read rule does not allow writes", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		downloads := filepath.Join(home, "Downloads")
+		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{
+			Type:  approvalDirAllow,
+			Paths: []string{downloads},
+			Mode:  AccessRead,
+		}))
+
+		readDeps := reviewerDeps{
+			ctx:          context.Background(),
+			accessIntent: AccessIntent{Class: AccessRead, Dirs: []string{downloads}},
+		}
+		require.NoError(t, reviewer.requestApproval(readDeps, "fs_stat", []byte(`{"path":"/unused/file"}`)))
+
+		writeDeps := reviewerDeps{
+			ctx:          context.Background(),
+			accessIntent: AccessIntent{Class: AccessWrite, Dirs: []string{downloads}},
+		}
+		err = reviewer.requestApproval(writeDeps, "fs_write_file", []byte(`{"path":"/unused/file","content":"x"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
 }
 
 func TestReviewUnavailableIsFatal(t *testing.T) {

@@ -706,6 +706,40 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.NoError(t, <-errCh)
 	})
 
+	t.Run("redirection target dirs fill unknown shell risk", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+		targetDir := filepath.Join(home, "dev", "myconfigs", "nvim")
+
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+			shellAnalyzer: func(string, string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: true, Reason: "writes heredoc"}
+			},
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat > ~/dev/myconfigs/nvim/.gitignore <<'EOF'\nignored\nEOF"}`))
+		}()
+
+		item := receiveReviewItem(t, reviewer.reviewChan)
+		require.Contains(t, item.summary, "external mutation")
+		require.Contains(t, item.summary, targetDir)
+		require.NotContains(t, item.summary, "unknown")
+		require.Len(t, item.candidateRules, 1)
+		require.Equal(t, []string{targetDir}, item.candidateRules[0].Paths)
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
 	t.Run("always still prompts when LLM says no review", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),

@@ -244,6 +244,19 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
+func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T) {
+	mods := &Mods{
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			return shellCommandAnalysis{NeedsReview: true, Reason: "writes heredoc"}
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+	result := mods.analyzeShellCommand("shell_run", "cat > ~/dev/myconfigs/nvim/.gitignore <<'EOF'\nignored\nEOF")
+	require.True(t, result.NeedsReview)
+	require.Contains(t, result.AffectedDirs, "~/dev/myconfigs/nvim")
+}
+
 func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
 	// PowerShell AST classifier requires Windows + powershell.exe. On other
 	// platforms IsReadOnlyPowerShell fail-closes, so read-only commands

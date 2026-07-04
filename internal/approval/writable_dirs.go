@@ -12,6 +12,13 @@ import (
 // approved directory. POSIX commands go through the mvdan parser;
 // PowerShell / Windows commands use the simple tokenizer.
 
+// ExtractWritableDirs returns filesystem directories that a shell command can
+// create, modify, or delete. The result is best-effort and may be empty when
+// the command is not statically understood.
+func ExtractWritableDirs(command string, posix bool) []string {
+	return extractWritableDirs(command, posix)
+}
+
 func extractWritableDirs(command string, posix bool) []string {
 	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {

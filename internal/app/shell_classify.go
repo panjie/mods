@@ -83,48 +83,50 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 			}
 		}
 	}
+	writableDirs := approval.ExtractWritableDirs(command, !shellToolUsesPowerShell(tool))
 
 	// Test seam: short-circuits the LLM classifier. The AST read-only
 	// classifier runs first so read-only commands never reach this path;
 	// everything else delegates to the seam or the LLM.
 	if m.shellAnalyzer != nil {
-		return m.shellAnalyzer(tool, command)
+		result := m.shellAnalyzer(tool, command)
+		if len(result.AffectedDirs) == 0 {
+			result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
+		}
+		return result
 	}
 
 	// LLM classifier
 	result := m.classifyShellWithLLM(tool, command)
+	if len(result.AffectedDirs) == 0 {
+		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
+	}
 
 	// Post-process: merge regex-detected external paths into AffectedDirs
 	// so external access is never silently dropped when the LLM omits dirs
 	// (read-only commands) or fails entirely.
-	for _, p := range externalPaths {
-		found := false
-		for _, d := range result.AffectedDirs {
-			if d == p {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result.AffectedDirs = append(result.AffectedDirs, p)
-		}
-	}
+	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, externalPaths)
 	// Also merge AST-extracted PowerShell argument paths for write commands
 	// that fell through to the LLM — the LLM may miss path arguments.
-	for _, p := range filterArgPaths(psArgPaths, ws, flavor) {
+	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, ws, flavor))
+
+	return result
+}
+
+func appendMissingShellDirs(dirs []string, extra []string) []string {
+	for _, p := range extra {
 		found := false
-		for _, d := range result.AffectedDirs {
+		for _, d := range dirs {
 			if d == p {
 				found = true
 				break
 			}
 		}
 		if !found {
-			result.AffectedDirs = append(result.AffectedDirs, p)
+			dirs = append(dirs, p)
 		}
 	}
-
-	return result
+	return dirs
 }
 
 // classifyShellWithLLM sends the tool+command to the configured LLM for

@@ -78,6 +78,7 @@ var Help = map[string]string{
 	"version":                "Show version and exit",
 	"max-retries":            "Maximum number of times to retry API calls",
 	"no-limit":               "Turn off the client-side limit on the size of the input into the model",
+	"no-instructions":        "Disable auto-loading AGENTS.md from the workspace root as project context",
 	"word-wrap":              "Wrap formatted output at specific width (default is 80)",
 	"max-tokens":             "Maximum number of tokens in response",
 	"status-text":            "Text to show while generating",
@@ -214,6 +215,7 @@ type PersistentConfig struct {
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
 	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
 	NoLimit             bool       `yaml:"no-limit" env:"NO_LIMIT"`
+	NoInstructions      bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
 	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
 	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
 	StatusText          string     `yaml:"status-text" env:"STATUS_TEXT"`

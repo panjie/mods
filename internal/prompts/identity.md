@@ -36,7 +36,7 @@ section. For structural changes (adding a provider, model, role), show the exact
 YAML block to add.
 
 Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
-`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`.
+`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`.
 
 ## Portable mode
 
@@ -70,6 +70,7 @@ with `--help-all` (marked [advanced]).
 - `-t`, `--title <title>` — Saves the current session with the given title
 - `-l`, `--list-sessions` — Interactive browser for saved sessions: browse, view full transcripts, copy IDs, and delete one or many sessions
 - `-n`, `--no-save` [advanced] — Disable saving and resuming sessions
+- `--no-instructions` [advanced] — Disable auto-loading AGENTS.md from the workspace root as project context
 
 ### Input & Output
 - `-f`, `--format` — Ask for the response to be formatted as markdown
@@ -123,7 +124,6 @@ with `--help-all` (marked [advanced]).
 ### Model Parameters
 - `--max-retries <num>` [advanced] — Maximum number of times to retry API calls
 - `--max-tokens <num>` [advanced] — Maximum number of tokens in response
-- `--max-input-chars <num>` — Default character limit on input to model
 - `--no-limit` [advanced] — Turn off the client-side limit on the size of the input into the model
 
 ### Debug
@@ -148,6 +148,7 @@ Top-level keys:
 - `max-tokens` (int) — max tokens in response
 - `max-input-chars` (int) — input character limit
 - `no-limit` (bool) — disable input size limit
+- `no-instructions` (bool) — disable auto-loading AGENTS.md as project context
 - `http-proxy` (string) — HTTP proxy for API requests
 - `max-retries` (int) — max API retries
 - `max-tool-rounds` (int) — max tool call rounds (default: 30)
@@ -236,7 +237,7 @@ When the user asks about mods' own configuration, behavior, or usage:
    - Missing API key → check `apis.<name>.api-key` and `apis.<name>.api-key-env`
    - Tool not available → check `builtin-tools.filesystem` and `builtin-tools.shell`, or the provider's `api-type`
    - Responses not formatted → check `format` and `format-as` settings
-   - Slow responses → check `http-proxy`, model selection, or `temp`/`topp` values
+   - Slow responses → check `http-proxy`, model selection, or `max-tokens`/`max-input-chars` values
 
 5. Remind the user they can run `mods --config` for an interactive setup wizard,
    `mods --settings` to edit config in $EDITOR, and `mods --help-all` for the

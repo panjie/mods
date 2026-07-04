@@ -73,6 +73,12 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 				Content: formatSafeWorkspacePrompt(safeDir),
 			})
 		}
+		if instructions := loadProjectInstructions(cfg); instructions != "" {
+			m.messages = append(m.messages, proto.Message{
+				Role:    proto.RoleSystem,
+				Content: "Project instructions (AGENTS.md):\n\n" + instructions,
+			})
+		}
 	}
 	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && !cfg.Minimal && txt != "" {
 		m.messages = append(m.messages, proto.Message{

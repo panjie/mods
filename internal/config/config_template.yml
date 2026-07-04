@@ -77,6 +77,9 @@ max-input-chars: 12250
 # {{ index .Help "no-limit" }}
 no-limit: false
 
+# {{ index .Help "no-instructions" }}
+no-instructions: false
+
 # {{ index .Help "http-proxy" }}
 # http-proxy: ""  # HTTP proxy for API requests
 

@@ -57,6 +57,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"title",
 		"list-sessions",
 		"no-save",
+		"no-instructions",
 		"format",
 		"format-as",
 		"minimal",
@@ -96,7 +97,6 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"disable-mcp",
 		"max-retries",
 		"max-tokens",
-		"max-input-chars",
 		"no-limit",
 		"debug",
 	} {

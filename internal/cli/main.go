@@ -161,6 +161,7 @@ func initFlags() {
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
 	regStr(flags, &config.StatusText, "status-text", "", config.StatusText)
 	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
+	regBool(flags, &config.NoInstructions, "no-instructions", "", config.NoInstructions)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
 	regBool(flags, &config.Settings, "settings", "", false)
 	regBool(flags, &config.ConfigSetup, "config", "", false)
@@ -213,6 +214,7 @@ func initFlags() {
 		"clipboard-image",
 		"format-as",
 		"no-save",
+		"no-instructions",
 	)
 	markCategory(flags, flagCategoryModelAPI, "api", "model", "ask-model", "http-proxy")
 	markCategory(
@@ -224,6 +226,7 @@ func initFlags() {
 		"continue",
 		"continue-last",
 		"no-save",
+		"no-instructions",
 	)
 	markCategory(
 		flags,

@@ -103,6 +103,13 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if cfg.Plan {
 		err = m.setupPlanContext(content, mod)
 	} else {
+		// Plan -> execution transition: snapshot the plan-phase conversation
+		// before setupStreamContext resets m.messages, so the investigation
+		// can be re-injected into the execution turn. Gated on planContent so
+		// ordinary (non-plan) turns are unaffected.
+		if m.planContent != "" {
+			m.capturePlanHistory()
+		}
 		err = m.setupStreamContext(content, mod)
 	}
 	if err != nil {
@@ -111,6 +118,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		return requestSession{}, err
 	}
 	if !cfg.Plan {
+		m.injectPlanHistory()
 		m.injectApprovedPlan()
 	}
 	if err := rejectUnsupportedImages(mod.API, m.messages); err != nil {
@@ -212,16 +220,10 @@ func (m *Mods) injectApprovedPlan() {
 	if m.planContent == "" {
 		return
 	}
-	planMsg := proto.Message{
+	m.messages = append(m.messages, proto.Message{
 		Role:    proto.RoleSystem,
 		Content: formatApprovedPlanPrompt(m.planContent),
-	}
-	if len(m.messages) > 0 {
-		last := m.messages[len(m.messages)-1]
-		m.messages = append(m.messages[:len(m.messages)-1], planMsg, last)
-	} else {
-		m.messages = append(m.messages, planMsg)
-	}
+	})
 	m.planContent = ""
 }
 

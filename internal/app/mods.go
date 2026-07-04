@@ -63,7 +63,14 @@ type Mods struct {
 	// observes them through Bubble Tea's internal channel send/receive.
 	// There is intentionally no per-field mutex; callers must not introduce
 	// new background goroutines that touch m.messages outside this pattern.
-	messages                []proto.Message
+	messages []proto.Message
+	// planHistory snapshots the plan-phase conversation (user request +
+	// investigation + proposed plan) when an approved plan transitions to
+	// execution, so the execution turn keeps the context gathered during
+	// planning instead of re-investigating from scratch after setupStreamContext
+	// resets m.messages. System messages are excluded (captured as non-system),
+	// which also strips the plan-mode "PLANNING PHASE ONLY" prompt.
+	planHistory             []proto.Message
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
 	anim                    tea.Model

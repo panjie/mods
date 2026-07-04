@@ -241,6 +241,40 @@ func (m *Mods) renderPlanFeedbackInput(content string) string {
 	return strings.TrimRight(content, "\r\n") + "\n" + block
 }
 
+// capturePlanHistory snapshots the non-system messages from the plan-phase
+// conversation so they can be carried into the execution turn. System messages
+// are excluded on purpose: setupStreamContext rebuilds the system block fresh
+// for execution, and the plan-mode prompt ("PLANNING PHASE ONLY, do not
+// execute") must not leak into the execution request.
+func (m *Mods) capturePlanHistory() {
+	m.planHistory = nil
+	for _, msg := range m.messages {
+		if msg.Role == proto.RoleSystem {
+			continue
+		}
+		m.planHistory = append(m.planHistory, msg)
+	}
+}
+
+// injectPlanHistory appends the captured plan-phase investigation to the
+// execution request after setupStreamContext has rebuilt the system block.
+// The leading user request is dropped because setupStreamContext just
+// re-appended the fresh request (with current images/truncation); the
+// remaining assistant turns, tool results, and proposed plan are carried so
+// the model retains the context it gathered while planning instead of
+// re-investigating from scratch.
+func (m *Mods) injectPlanHistory() {
+	if len(m.planHistory) == 0 {
+		return
+	}
+	history := m.planHistory
+	for len(history) > 0 && history[0].Role == proto.RoleUser {
+		history = history[1:]
+	}
+	m.planHistory = nil
+	m.messages = append(m.messages, history...)
+}
+
 func (m *Mods) approvedPlanTranscript() string {
 	content := m.glamOutput
 	if content == "" {

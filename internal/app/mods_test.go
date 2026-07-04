@@ -641,12 +641,61 @@ func TestInjectApprovedPlanGuidance(t *testing.T) {
 	m.injectApprovedPlan()
 
 	require.Len(t, m.messages, 3)
-	require.Equal(t, proto.RoleSystem, m.messages[1].Role)
-	require.Contains(t, m.messages[1].Content, "The user has approved the following plan for execution:")
-	require.Contains(t, m.messages[1].Content, "Follow this approved plan during execution.")
-	require.Contains(t, m.messages[1].Content, "If new information requires changing it")
-	require.Equal(t, proto.RoleUser, m.messages[2].Role)
+	require.Equal(t, proto.RoleUser, m.messages[1].Role)
+	require.Equal(t, proto.RoleSystem, m.messages[2].Role)
+	require.Contains(t, m.messages[2].Content, "The user has approved the following plan for execution:")
+	require.Contains(t, m.messages[2].Content, "Follow this approved plan during execution.")
+	require.Contains(t, m.messages[2].Content, "If new information requires changing it")
 	require.Empty(t, m.planContent)
+}
+
+func TestPlanHistoryCarriedIntoExecution(t *testing.T) {
+	// Plan-phase conversation: system block (including the plan-mode prompt
+	// that forbids execution) + user request + investigation + proposed plan.
+	m := &Mods{
+		Config:      &Config{},
+		planContent: "1. Do the approved thing",
+		messages: []proto.Message{
+			{Role: proto.RoleSystem, Content: "CRITICAL - PLANNING PHASE ONLY, do not execute"},
+			{Role: proto.RoleUser, Content: "refactor the foo function"},
+			{Role: proto.RoleAssistant, Content: "Investigation: foo.go defines bar() at line 12."},
+			{Role: proto.RoleTool, Content: "<file contents of foo.go>"},
+			{Role: proto.RoleAssistant, Content: "# Plan\n1. Do the approved thing"},
+		},
+	}
+
+	// Approval transitions to execution: snapshot before the rebuild resets.
+	m.capturePlanHistory()
+	// System messages (incl. the plan-mode prompt) must be excluded.
+	require.Len(t, m.planHistory, 4) // user + assistant + tool + plan
+	for _, msg := range m.planHistory {
+		require.NotContains(t, msg.Content, "PLANNING PHASE ONLY")
+	}
+
+	// Execution rebuilds the system block fresh and re-appends the request.
+	m.messages = []proto.Message{
+		{Role: proto.RoleSystem, Content: "sysInfo"},
+		{Role: proto.RoleSystem, Content: "identity"},
+		{Role: proto.RoleUser, Content: "refactor the foo function"},
+	}
+	m.injectPlanHistory()
+	m.injectApprovedPlan()
+
+	// The investigation must be carried; the plan-mode prompt must not leak.
+	found := false
+	for _, msg := range m.messages {
+		require.NotContains(t, msg.Content, "PLANNING PHASE ONLY",
+			"execution must not carry the plan-mode prompt")
+		if msg.Content == "Investigation: foo.go defines bar() at line 12." {
+			found = true
+		}
+	}
+	require.True(t, found, "execution must carry the plan-phase investigation")
+	// The approved-plan instruction lands last (after the proposed plan).
+	last := m.messages[len(m.messages)-1]
+	require.Equal(t, proto.RoleSystem, last.Role)
+	require.Contains(t, last.Content, "approved")
+	require.Empty(t, m.planHistory)
 }
 
 func TestProbeWindowsPowerShellCapabilities(t *testing.T) {

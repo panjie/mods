@@ -41,7 +41,7 @@ func stmtIsReadOnly(stmt *syntax.Stmt) (bool, string) {
 		if redir == nil {
 			continue
 		}
-		if redirectionWrites(redir.Op) {
+		if redirectionWritesPersistent(redir) {
 			return false, ""
 		}
 		if redir.Word != nil && wordHasProcSubst(redir.Word) {

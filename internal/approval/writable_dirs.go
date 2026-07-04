@@ -51,7 +51,7 @@ func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string) {
 		return
 	}
 	for _, redir := range stmt.Redirs {
-		if redir == nil || redir.Word == nil || !redirectionWrites(redir.Op) {
+		if redir == nil || redir.Word == nil || !redirectionWritesPersistent(redir) {
 			continue
 		}
 		target, ok := staticShellWord(redir.Word)
@@ -113,7 +113,15 @@ func writableDirsFromTokens(args []string, posix bool) []string {
 		command = strings.ToLower(command)
 	}
 	switch command {
-	case "rm", "rmdir", "unlink", "touch", "chmod", "chown":
+	case "rm":
+		operands := commandOperands(args[1:])
+		if removeTargetsAreDirs(args[1:]) {
+			return targetDirs(operands)
+		}
+		return parentDirs(operands)
+	case "rmdir":
+		return targetDirs(commandOperands(args[1:]))
+	case "unlink", "touch", "chmod", "chown":
 		return parentDirs(commandOperands(args[1:]))
 	case "mkdir":
 		return parentDirs(commandOperands(args[1:]))
@@ -209,6 +217,37 @@ func commandOperands(args []string) []string {
 	return operands
 }
 
+func removeTargetsAreDirs(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return false
+		}
+		if strings.HasPrefix(arg, "--recursive") || arg == "--dir" {
+			return true
+		}
+		if strings.HasPrefix(arg, "-") && strings.ContainsAny(strings.TrimLeft(arg, "-"), "rR") {
+			return true
+		}
+	}
+	return false
+}
+
+func targetDirs(paths []string) []string {
+	dirs := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		trimmed := strings.TrimRight(path, `/\`)
+		if trimmed == "" {
+			trimmed = path
+		}
+		dirs = append(dirs, trimmed)
+	}
+	return dirs
+}
+
 func parentDirs(paths []string) []string {
 	dirs := make([]string, 0, len(paths))
 	for _, path := range paths {
@@ -230,6 +269,9 @@ func writableDirsFromRedirection(command string) []string {
 	dirs := make([]string, 0)
 	for i, token := range tokens {
 		if !isRedirectionToken(token) || i+1 >= len(tokens) {
+			continue
+		}
+		if isNullRedirectionTarget(tokens[i+1]) {
 			continue
 		}
 		dirs = append(dirs, parentDir(tokens[i+1]))

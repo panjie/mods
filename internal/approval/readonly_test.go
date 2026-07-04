@@ -65,6 +65,7 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 
 		// --- Input redirect ---
 		{"input redirect", "tr a-z A-Z < input", true},
+		{"stderr redirect to dev null", "ls missing 2>/dev/null", true},
 
 		// --- ParamExp ---
 		{"param exp", "echo $VAR", true},

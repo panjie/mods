@@ -256,7 +256,8 @@ func TestExtractExternalPathsIgnoresHeredocBody(t *testing.T) {
 func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T) {
 	mods := &Mods{
 		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
-			return shellCommandAnalysis{NeedsReview: true, Reason: "writes heredoc"}
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
 		},
 	}
 	t.Cleanup(func() { mods.shellAnalyzer = nil })
@@ -264,6 +265,51 @@ func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T
 	result := mods.analyzeShellCommand("shell_run", "cat > ~/dev/myconfigs/nvim/.gitignore <<'EOF'\nignored\nEOF")
 	require.True(t, result.NeedsReview)
 	require.Contains(t, result.AffectedDirs, "~/dev/myconfigs/nvim")
+}
+
+func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  string
+		dir  string
+	}{
+		{"heredoc redirection", "cat > /tmp/out <<'EOF'\nhello\nEOF", "/tmp"},
+		{"touch", "touch file", "."},
+		{"rm", "rm /tmp/file", "/tmp"},
+		{"cp", "cp a b", "."},
+		{"mv", "mv a b", "."},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := &Mods{
+				shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+					t.Fatalf("LLM classifier should not be called for %q", command)
+					return defaultShellCommandAnalysis()
+				},
+			}
+			t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+			result := mods.analyzeShellCommand("shell_run", c.cmd)
+			require.Truef(t, result.NeedsReview, "cmd=%q should require review", c.cmd)
+			require.Contains(t, result.AffectedDirs, c.dir)
+			require.Contains(t, result.Reason, "static analysis")
+		})
+	}
+}
+
+func TestAnalyzeShellCommandUnknownFallsThroughToLLM(t *testing.T) {
+	called := false
+	mods := &Mods{
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			called = true
+			return shellCommandAnalysis{NeedsReview: true, Reason: "unknown writer"}
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+	result := mods.analyzeShellCommand("shell_run", "some unsupported writer")
+	require.True(t, result.NeedsReview)
+	require.True(t, called, "unknown commands should still reach the LLM seam")
 }
 
 func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
@@ -301,26 +347,19 @@ func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
 	}
 }
 
-func TestAnalyzeShellCommandPowerShellWriteGoesToLLM(t *testing.T) {
-	// PowerShell AST classifier requires Windows + powershell.exe. On other
-	// platforms the classifier fail-closes and all PowerShell commands
-	// reach the LLM seam, so this test still passes but for a different
-	// reason — skip to avoid testing the wrong code path.
-	if runtime.GOOS != "windows" {
-		t.Skip("PowerShell AST classifier requires Windows")
-	}
-	// Write PowerShell commands should fall through to the LLM (test seam).
-	called := false
+func TestAnalyzeShellCommandPowerShellWriteSkipsLLM(t *testing.T) {
 	mods := &Mods{
 		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
-			called = true
-			return shellCommandAnalysis{NeedsReview: true, Reason: "write command"}
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
 		},
 	}
 	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
 	result := mods.analyzeShellCommand("powershell_run", "Set-Content file.txt 'hello'")
 	require.True(t, result.NeedsReview, "Set-Content should require review")
-	require.True(t, called, "LLM classifier should be called for write commands")
+	require.Contains(t, result.AffectedDirs, ".")
+	require.Contains(t, result.Reason, "static analysis")
 }
 
 func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {

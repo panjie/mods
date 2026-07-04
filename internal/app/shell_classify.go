@@ -55,48 +55,51 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 
 	flavor := shellPathFlavor(tool)
 	externalPaths := extractExternalPathsWithFlavor(command, ws, flavor)
-	var psArgPaths []string
 
-	// Tier 1: AST-based read-only classifier.
-	// POSIX: handles pipes, &&/||, subshells, command substitution, subcommand tables.
-	// PowerShell: uses a persistent pwsh.exe bridge to call Parser::ParseInput.
-	// Both cover workspace-local and external-path read-only commands;
-	// the approval matrix decides whether external reads need review.
-	if shellToolUsesPowerShell(tool) {
-		ro, reason, psPaths := approval.IsReadOnlyPowerShell(command)
-		psArgPaths = psPaths
-		if ro {
-			psExternal := filterArgPaths(psPaths, ws, flavor)
-			debug.Printf("analyzeShellCommand: cmd=%q -> PS AST: read-only", debug.Truncate(command, 80))
-			return shellCommandAnalysis{
-				NeedsReview:  false,
-				AffectedDirs: psExternal,
-				Reason:       reason,
-			}
+	// Tier 1: static shell classifier. POSIX uses the mvdan shell AST for
+	// read-only classification and write-target extraction. PowerShell uses
+	// its parser bridge for read-only commands and the local tokenizer for
+	// common write targets. Unknown commands fall through to the LLM.
+	static := approval.AnalyzeShellStatic(command, !shellToolUsesPowerShell(tool))
+	switch static.Class {
+	case approval.ShellStaticRead:
+		affected := externalPaths
+		if shellToolUsesPowerShell(tool) {
+			affected = appendMissingShellDirs(affected, filterArgPaths(static.AffectedDirs, ws, flavor))
 		}
-	} else {
-		if ro, reason := approval.IsReadOnlyPOSIX(command); ro {
-			debug.Printf("analyzeShellCommand: cmd=%q -> AST: read-only", debug.Truncate(command, 80))
-			return shellCommandAnalysis{
-				NeedsReview:  false,
-				AffectedDirs: externalPaths,
-				Reason:       reason,
-			}
+		debug.Printf("analyzeShellCommand: cmd=%q -> static: read-only", debug.Truncate(command, 80))
+		return shellCommandAnalysis{
+			NeedsReview:  false,
+			AffectedDirs: affected,
+			Reason:       static.Reason,
 		}
+	case approval.ShellStaticWrite:
+		debug.Printf("analyzeShellCommand: cmd=%q -> static: write dirs=%v", debug.Truncate(command, 80), static.AffectedDirs)
+		return finalizeShellAnalysis(
+			shellCommandAnalysis{
+				NeedsReview:  true,
+				AffectedDirs: static.AffectedDirs,
+				Reason:       static.Reason,
+			},
+			nil,
+			externalPaths,
+			nil,
+			ws,
+			flavor,
+		)
 	}
-	writableDirs := approval.ExtractWritableDirs(command, !shellToolUsesPowerShell(tool))
 
-	// Test seam: short-circuits the LLM classifier. The AST read-only
-	// classifier runs first so read-only commands never reach this path;
-	// everything else delegates to the seam or the LLM.
+	// Test seam: short-circuits the LLM classifier. The static classifier runs
+	// first so known read/write commands never reach this path; everything else
+	// delegates to the seam or the LLM.
 	if m.shellAnalyzer != nil {
 		result := m.shellAnalyzer(tool, command)
-		return finalizeShellAnalysis(result, writableDirs, externalPaths, psArgPaths, ws, flavor)
+		return finalizeShellAnalysis(result, nil, externalPaths, nil, ws, flavor)
 	}
 
 	// LLM classifier
 	result := m.classifyShellWithLLM(tool, command)
-	return finalizeShellAnalysis(result, writableDirs, externalPaths, psArgPaths, ws, flavor)
+	return finalizeShellAnalysis(result, nil, externalPaths, nil, ws, flavor)
 }
 
 func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {

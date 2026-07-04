@@ -198,3 +198,19 @@ func redirectionWrites(op syntax.RedirOperator) bool {
 		return false
 	}
 }
+
+func redirectionWritesPersistent(redir *syntax.Redirect) bool {
+	if redir == nil || !redirectionWrites(redir.Op) {
+		return false
+	}
+	target, ok := staticShellWord(redir.Word)
+	if ok && isNullRedirectionTarget(target) {
+		return false
+	}
+	return true
+}
+
+func isNullRedirectionTarget(target string) bool {
+	target = strings.TrimSpace(target)
+	return target == "/dev/null" || strings.EqualFold(target, "NUL")
+}

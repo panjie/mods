@@ -175,6 +175,16 @@ func workspaceRel(root, path string) string {
 	return filepath.ToSlash(rel)
 }
 
+// displayPath renders a filesystem path for tool output: workspace-relative
+// (slash-separated) when it lives inside the workspace, otherwise the path
+// itself in slash-separated form.
+func displayPath(root, path string) string {
+	if contains(root, path) {
+		return workspaceRel(root, path)
+	}
+	return filepath.ToSlash(path)
+}
+
 func ensureInsideRoot(root, path string) error {
 	if !contains(root, path) {
 		return fmt.Errorf("path %q is outside workspace; approval required to access paths outside the workspace", path)

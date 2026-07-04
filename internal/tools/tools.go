@@ -160,6 +160,43 @@ func (r *Registry) IntentExtractor(name string) (func(json.RawMessage) approval.
 	return tool.IntentExtractor, true
 }
 
+// ValidateRequiredArgs reports whether data supplies every field the tool's
+// schema marks as required. String fields must be present and non-empty;
+// other field types need only be present. Unknown tools and tools whose
+// schema has no "required" entry pass unchanged. Malformed JSON is left for
+// the tool's own decodeArgs to report, so this only enforces presence and
+// string emptiness.
+//
+// Intended to run before approval: it lets a malformed tool call (e.g. a
+// missing required path) fail fast with a clear error instead of rendering a
+// misleading review prompt for an operation that could never succeed.
+func (r *Registry) ValidateRequiredArgs(name string, data []byte) error {
+	tool, ok := r.Tool(name)
+	if !ok {
+		return nil
+	}
+	required, _ := tool.Spec.InputSchema["required"].([]string)
+	if len(required) == 0 {
+		return nil
+	}
+	var args map[string]any
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &args); err != nil {
+			return nil
+		}
+	}
+	for _, field := range required {
+		value, present := args[field]
+		if !present {
+			return fmt.Errorf("tool %q: %s is required", name, field)
+		}
+		if s, ok := value.(string); ok && s == "" {
+			return fmt.Errorf("tool %q: %s is required", name, field)
+		}
+	}
+	return nil
+}
+
 // Len returns the number of registered tools.
 func (r *Registry) Len() int {
 	return len(r.tools)

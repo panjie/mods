@@ -8,133 +8,32 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/pathutil"
+	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 )
 
-const (
-	defaultLargestResults = 10
-	maxLargestResults     = 100
-)
-
-type largestEntry struct {
-	path string
-	kind string
-	size int64
-}
-
-func pathSelfIntent(root string, class approval.AccessClass) func(json.RawMessage) approval.AccessIntent {
-	return func(data json.RawMessage) approval.AccessIntent {
-		var args struct {
-			Path string `json:"path"`
-		}
-		_ = json.Unmarshal(data, &args)
-		if args.Path == "" {
-			return approval.AccessIntent{Class: class}
-		}
-		path := pathutil.NormalizePath(args.Path, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
-		return approval.AccessIntent{Class: class, Dirs: []string{path}}
-	}
-}
-
-func filesystemCopyIntent(root string) func(json.RawMessage) approval.AccessIntent {
-	return func(data json.RawMessage) approval.AccessIntent {
-		var args struct {
-			SourcePath string `json:"source_path"`
-			DestPath   string `json:"dest_path"`
-		}
-		_ = json.Unmarshal(data, &args)
-		dirs := make([]string, 0, 2)
-		seen := map[string]struct{}{}
-		addIntentDir(&dirs, seen, sourceIntentDir(root, args.SourcePath))
-		addIntentDir(&dirs, seen, destIntentDir(root, args.SourcePath, args.DestPath))
-		return approval.AccessIntent{Class: approval.AccessWrite, Dirs: dirs}
-	}
-}
-
-func filesystemMoveIntent(root string) func(json.RawMessage) approval.AccessIntent {
-	return func(data json.RawMessage) approval.AccessIntent {
-		var args struct {
-			SourcePath string `json:"source_path"`
-			DestPath   string `json:"dest_path"`
-		}
-		_ = json.Unmarshal(data, &args)
-		dirs := make([]string, 0, 2)
-		seen := map[string]struct{}{}
-		addIntentDir(&dirs, seen, sourceIntentDir(root, args.SourcePath))
-		addIntentDir(&dirs, seen, destIntentDir(root, args.SourcePath, args.DestPath))
-		return approval.AccessIntent{Class: approval.AccessWrite, Dirs: dirs}
-	}
-}
-
-func addIntentDir(dirs *[]string, seen map[string]struct{}, dir string) {
-	if dir == "" {
-		return
-	}
-	if _, ok := seen[dir]; ok {
-		return
-	}
-	seen[dir] = struct{}{}
-	*dirs = append(*dirs, dir)
-}
-
-func sourceIntentDir(root, input string) string {
-	if input == "" {
-		return ""
-	}
-	path := pathutil.NormalizePath(input, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return path
-	}
-	return pathutil.ParentDir(path)
-}
-
-func destIntentDir(root, source, dest string) string {
-	if dest == "" {
-		return ""
-	}
-	sourcePath := ""
-	if source != "" {
-		sourcePath = pathutil.NormalizePath(source, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
-	}
-	destPath := pathutil.NormalizePath(dest, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
-	if info, err := os.Stat(destPath); err == nil && info.IsDir() {
-		return destPath
-	}
-	if sourcePath != "" {
-		if info, err := os.Stat(sourcePath); err == nil && info.IsDir() {
-			return destPath
-		}
-	}
-	return pathutil.ParentDir(destPath)
-}
-
-func filesystemLargestTool(root string, safeDirs []string) Tool {
+func filesystemWriteFileTool(root string, safeDirs []string) Tool {
 	return Tool{
 		Kind:            ToolKindBuiltin,
-		Capabilities:    ToolCapabilities{ReadOnly: true},
-		IntentExtractor: pathParentIntent(root, true),
+		Capabilities:    ToolCapabilities{Mutable: true},
+		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
-			Name:        "fs_largest",
-			Description: "Find the largest files or directories under a path. Use kind=file for requests that specifically ask for files. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Name:        "fs_write_file",
+			Description: "Write a UTF-8 text file, replacing existing content. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory or file path to inspect, relative to the workspace, absolute, or using the current user's home directory."),
-				"kind":        stringProp("What to rank: file, dir, or both. Defaults to file."),
-				"max_results": integerProp("Maximum entries to return, up to 100. Defaults to 10."),
-				"max_depth":   integerProp("Maximum directory depth to descend from path. Omit or use a negative value for unlimited depth."),
-			}, "path"),
+				"path":    stringProp("Path to write, relative to the workspace, absolute, or using the current user's home directory."),
+				"content": stringProp("Complete file content to write."),
+			}, "path", "content"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
-				Path       string `json:"path"`
-				Kind       string `json:"kind"`
-				MaxResults int    `json:"max_results"`
-				MaxDepth   *int   `json:"max_depth"`
+				Path    string `json:"path"`
+				Content string `json:"content"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
@@ -143,18 +42,13 @@ func filesystemLargestTool(root string, safeDirs []string) Tool {
 			if err != nil {
 				return "", err
 			}
-			limit := args.MaxResults
-			if limit <= 0 {
-				limit = defaultLargestResults
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return "", err
 			}
-			if limit > maxLargestResults {
-				limit = maxLargestResults
+			if err := os.WriteFile(path, []byte(args.Content), 0o644); err != nil {
+				return "", err
 			}
-			maxDepth := -1
-			if args.MaxDepth != nil {
-				maxDepth = *args.MaxDepth
-			}
-			return largestPaths(ctx, root, path, args.Kind, limit, maxDepth)
+			return fmt.Sprintf("Wrote %d bytes to %s", len(args.Content), displayPath(root, path)), nil
 		},
 	}
 }
@@ -243,6 +137,47 @@ func filesystemDeleteDirTool(root string, safeDirs []string) Tool {
 	}
 }
 
+func filesystemMkdirTool(root string, safeDirs []string) Tool {
+	return Tool{
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{Mutable: true},
+		IntentExtractor: pathSelfIntent(root, approval.AccessWrite),
+		Spec: proto.ToolSpec{
+			Name:        "fs_mkdir",
+			Description: "Create a directory. Parent directories are created by default; set parents=false to require the immediate parent to already exist.",
+			InputSchema: objectSchema(map[string]any{
+				"path":    stringProp("Directory path to create, relative to the workspace, absolute, or using the current user's home directory."),
+				"parents": booleanProp("Create missing parent directories. Defaults to true."),
+			}, "path"),
+		},
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
+			var args struct {
+				Path    string `json:"path"`
+				Parents *bool  `json:"parents"`
+			}
+			if err := decodeArgs(data, &args); err != nil {
+				return "", err
+			}
+			path, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.Path, safeDirs)
+			if err != nil {
+				return "", err
+			}
+			parents := true
+			if args.Parents != nil {
+				parents = *args.Parents
+			}
+			if parents {
+				if err := os.MkdirAll(path, 0o755); err != nil {
+					return "", err
+				}
+			} else if err := os.Mkdir(path, 0o755); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Created directory %s", displayPath(root, path)), nil
+		},
+	}
+}
+
 func filesystemMoveTool(root string, safeDirs []string) Tool {
 	return Tool{
 		Kind:            ToolKindBuiltin,
@@ -325,172 +260,42 @@ func filesystemCopyTool(root string, safeDirs []string) Tool {
 	}
 }
 
-func filesystemMkdirTool(root string, safeDirs []string) Tool {
+func filesystemApplyPatchTool(root string, safeDirs []string) Tool {
 	return Tool{
 		Kind:            ToolKindBuiltin,
 		Capabilities:    ToolCapabilities{Mutable: true},
-		IntentExtractor: pathSelfIntent(root, approval.AccessWrite),
+		IntentExtractor: patchIntent(root),
 		Spec: proto.ToolSpec{
-			Name:        "fs_mkdir",
-			Description: "Create a directory. Parent directories are created by default; set parents=false to require the immediate parent to already exist.",
+			Name:        "fs_apply_patch",
+			Description: "Apply a unified diff patch to files inside the workspace.",
 			InputSchema: objectSchema(map[string]any{
-				"path":    stringProp("Directory path to create, relative to the workspace, absolute, or using the current user's home directory."),
-				"parents": booleanProp("Create missing parent directories. Defaults to true."),
-			}, "path"),
+				"patch": stringProp("Unified diff patch text."),
+			}, "patch"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
-				Path    string `json:"path"`
-				Parents *bool  `json:"parents"`
+				Patch string `json:"patch"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.Path, safeDirs)
+			if strings.TrimSpace(args.Patch) == "" {
+				return "", fmt.Errorf("patch is required")
+			}
+			if err := validatePatchPaths(ctx, root, args.Patch); err != nil {
+				return "", err
+			}
+			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn")
+			platform.HideCommandWindow(cmd)
+			cmd.Dir = root
+			cmd.Stdin = strings.NewReader(args.Patch)
+			out, err := cmd.CombinedOutput()
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("git apply failed: %w\n%s", err, strings.TrimSpace(string(out)))
 			}
-			parents := true
-			if args.Parents != nil {
-				parents = *args.Parents
-			}
-			if parents {
-				if err := os.MkdirAll(path, 0o755); err != nil {
-					return "", err
-				}
-			} else if err := os.Mkdir(path, 0o755); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("Created directory %s", displayPath(root, path)), nil
+			return "Patch applied", nil
 		},
 	}
-}
-
-func largestPaths(ctx context.Context, root, path, kind string, limit, maxDepth int) (string, error) {
-	kind = strings.ToLower(strings.TrimSpace(kind))
-	if kind == "" {
-		kind = "file"
-	}
-	wantFiles := kind == "file" || kind == "both"
-	wantDirs := kind == "dir" || kind == "both"
-	if !wantFiles && !wantDirs {
-		return "", fmt.Errorf("kind must be file, dir, or both")
-	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() {
-		if wantFiles && info.Mode().IsRegular() {
-			return formatLargestEntries(root, []largestEntry{{path: path, kind: "file", size: info.Size()}}, limit, 0), nil
-		}
-		return "No matching entries found", nil
-	}
-
-	var entries []largestEntry
-	dirSizes := map[string]int64{}
-	seenDirs := map[string]struct{}{}
-	var skipped []string
-	skippedCount := 0
-
-	err = filepath.WalkDir(path, func(current string, d fs.DirEntry, walkErr error) error {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		if walkErr != nil {
-			skippedCount++
-			if len(skipped) < 3 {
-				skipped = append(skipped, fmt.Sprintf("%s: %v", displayPath(root, current), walkErr))
-			}
-			return nil
-		}
-		if d.IsDir() {
-			if current != path && maxDepth >= 0 && relativeDepth(path, current) > maxDepth {
-				return fs.SkipDir
-			}
-			if wantDirs && current != path {
-				seenDirs[current] = struct{}{}
-			}
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			skippedCount++
-			if len(skipped) < 3 {
-				skipped = append(skipped, fmt.Sprintf("%s: %v", displayPath(root, current), err))
-			}
-			return nil
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		if wantFiles {
-			entries = append(entries, largestEntry{path: current, kind: "file", size: info.Size()})
-		}
-		for dir := filepath.Dir(current); contains(path, dir); dir = filepath.Dir(dir) {
-			dirSizes[dir] += info.Size()
-			if dir == path {
-				break
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if wantDirs {
-		for dir := range seenDirs {
-			entries = append(entries, largestEntry{path: dir, kind: "dir", size: dirSizes[dir]})
-		}
-	}
-	return formatLargestEntries(root, entries, limit, skippedCount, skipped...), nil
-}
-
-func formatLargestEntries(root string, entries []largestEntry, limit, skippedCount int, skipped ...string) string {
-	if len(entries) == 0 {
-		out := "No matching entries found"
-		if skippedCount > 0 {
-			out += fmt.Sprintf("\n[Skipped %d paths due to errors.]", skippedCount)
-		}
-		return out
-	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].size != entries[j].size {
-			return entries[i].size > entries[j].size
-		}
-		if entries[i].kind != entries[j].kind {
-			return entries[i].kind < entries[j].kind
-		}
-		return entries[i].path < entries[j].path
-	})
-	if limit > len(entries) {
-		limit = len(entries)
-	}
-	var sb strings.Builder
-	sb.WriteString("size_bytes\tkind\tpath\n")
-	for i := 0; i < limit; i++ {
-		entry := entries[i]
-		sb.WriteString(fmt.Sprintf("%d\t%s\t%s\n", entry.size, entry.kind, displayPath(root, entry.path)))
-	}
-	if len(entries) > limit {
-		sb.WriteString(fmt.Sprintf("[Output truncated. %d entries omitted.]\n", len(entries)-limit))
-	}
-	if skippedCount > 0 {
-		sb.WriteString(fmt.Sprintf("[Skipped %d paths due to errors.]\n", skippedCount))
-		for _, item := range skipped {
-			sb.WriteString("[Skipped] " + item + "\n")
-		}
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func relativeDepth(base, path string) int {
-	rel, err := filepath.Rel(base, path)
-	if err != nil || rel == "." {
-		return 0
-	}
-	return len(strings.Split(filepath.Clean(rel), string(os.PathSeparator)))
 }
 
 func copyPath(source, dest string, recursive, overwrite bool) (string, error) {
@@ -654,11 +459,4 @@ func movePath(source, dest string, overwrite bool) (string, error) {
 		return "", err
 	}
 	return dest, nil
-}
-
-func displayPath(root, path string) string {
-	if contains(root, path) {
-		return workspaceRel(root, path)
-	}
-	return filepath.ToSlash(path)
 }

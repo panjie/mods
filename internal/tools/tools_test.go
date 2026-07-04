@@ -86,6 +86,176 @@ func TestFilesystemToolsStayInsideRoot(t *testing.T) {
 	}
 }
 
+func TestValidateRequiredArgs(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		tool    string
+		data    string
+		wantErr string // substring expected; empty means expect nil
+	}{
+		{"write missing path", "fs_write_file", `{"content":"x"}`, "path is required"},
+		{"write empty path", "fs_write_file", `{"path":"","content":"x"}`, "path is required"},
+		{"write missing content", "fs_write_file", `{"path":"a.txt"}`, "content is required"},
+		{"read missing path", "fs_read_file", `{"offset":0}`, "path is required"},
+		{"copy missing dest", "fs_copy", `{"source_path":"a"}`, "dest_path is required"},
+		{"valid write", "fs_write_file", `{"path":"a.txt","content":"x"}`, ""},
+		{"unknown tool passes", "fs_unknown", `{}`, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := registry.ValidateRequiredArgs(tc.tool, []byte(tc.data))
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected nil error, got %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestSearchSkipsSymlinks(t *testing.T) {
+	// Regression: fs_search must not follow in-workspace symlinks. Before the
+	// fix, os.Open followed the link and read its (possibly out-of-workspace)
+	// target, bypassing the boundary check applied only to the search root.
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks not reliably supported on this Windows build")
+	}
+	secretDir := t.TempDir()
+	root := t.TempDir()
+	secret := filepath.Join(secretDir, "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOPSECRET-line\n"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	link := filepath.Join(root, "leak.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	got, err := registry.Call(context.Background(), "fs_search", []byte(`{"path":".","query":"TOPSECRET"}`))
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if strings.Contains(got, "TOPSECRET") {
+		t.Fatalf("fs_search followed symlink and leaked out-of-workspace content: %q", got)
+	}
+}
+
+func TestFilesystemReadByLines(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	// 5-line file with lines "L1".."L5".
+	if _, err := registry.Call(context.Background(), "fs_write_file", []byte(`{"path":"f.txt","content":"L1\nL2\nL3\nL4\nL5\n"}`)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		data    string
+		want    string
+		wantErr string
+	}{
+		{"full from line 1", `{"path":"f.txt","start_line":1}`, "1: L1\n2: L2\n3: L3\n4: L4\n5: L5", ""},
+		{"window 2-3", `{"path":"f.txt","start_line":2,"end_line":3}`, "2: L2\n3: L3", ""},
+		{"single line", `{"path":"f.txt","start_line":4,"end_line":4}`, "4: L4", ""},
+		{"end clamps at EOF", `{"path":"f.txt","start_line":4,"end_line":99}`, "4: L4\n5: L5", ""},
+		{"start beyond EOF", `{"path":"f.txt","start_line":9}`, "", "beyond file length"},
+		{"end < start", `{"path":"f.txt","start_line":3,"end_line":1}`, "", "end_line must be >= start_line"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := registry.Call(context.Background(), "fs_read_file", []byte(tc.data))
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil (output=%q)", tc.wantErr, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFilesystemReadByLinesTruncation(t *testing.T) {
+	// When the file has more lines than the default window and the caller did
+	// not set end_line, the output must report truncation and point at the
+	// next line so the caller can page. (Setting end_line suppresses this.)
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	var content strings.Builder
+	for i := 1; i <= defaultReadLines+10; i++ {
+		content.WriteString("line ")
+		content.WriteString(strconv.Itoa(i))
+		content.WriteString("\n")
+	}
+	if err := os.WriteFile(filepath.Join(root, "big.txt"), []byte(content.String()), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// Default window (no end_line) -> truncates at defaultReadLines.
+	got, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"big.txt","start_line":1}`))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(got, "1: line 1") {
+		t.Fatalf("missing first line in output")
+	}
+	if !strings.Contains(got, strconv.Itoa(defaultReadLines)+": line "+strconv.Itoa(defaultReadLines)) {
+		t.Fatalf("missing line %d (window edge)", defaultReadLines)
+	}
+	if !strings.Contains(got, "[Output truncated") || !strings.Contains(got, "continue from line "+strconv.Itoa(defaultReadLines+1)) {
+		t.Fatalf("expected truncation message pointing at line %d; tail=%q", defaultReadLines+1, tailForTest(got))
+	}
+
+	// Explicit end_line at EOF -> no truncation message.
+	got, err = registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"big.txt","start_line":1,"end_line":5}`))
+	if err != nil {
+		t.Fatalf("read window: %v", err)
+	}
+	if strings.Contains(got, "[Output truncated") {
+		t.Fatalf("explicit end_line must not report truncation; got %q", tailForTest(got))
+	}
+}
+
+// tailForTest returns the last ~120 bytes of s for compact assertion failures.
+func tailForTest(s string) string {
+	if len(s) <= 120 {
+		return s
+	}
+	return s[len(s)-120:]
+}
+
 func TestFilesystemReadWriteSearch(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

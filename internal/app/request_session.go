@@ -256,6 +256,14 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		defer cancel()
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 
+		// Reject malformed calls (missing/empty required args) before computing
+		// access intent or asking for approval. Without this, a call that omits
+		// a required path renders a misleading "unknown target" review prompt
+		// for an operation that would fail in Call anyway.
+		if err := registry.ValidateRequiredArgs(name, data); err != nil {
+			return "", err
+		}
+
 		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
 		scope := m.reviewer.scope
 		safeDirs := []string{os.TempDir()}

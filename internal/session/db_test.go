@@ -520,3 +520,93 @@ func TestMigrateLegacySessions(t *testing.T) {
 		require.Equal(t, newer, loaded)
 	})
 }
+
+func TestMigrateLegacySchemaResumesAfterPartialMigration(t *testing.T) {
+	// Simulate a DB left half-migrated by a crash mid-migration (or by an
+	// older, non-atomic build): the table renames already completed
+	// (sessions exists, conversations gone) but the conversation_id columns
+	// in session_messages and approval_rules were not yet renamed to
+	// session_id. The migration must resume and finish atomically without
+	// error and without losing approval rules. This locks the resumability
+	// property that the transactional migrateLegacySessionSchema relies on,
+	// which was previously load-bearing and unverified.
+	path := filepath.Join(t.TempDir(), "mods.db")
+	raw, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	_, err = raw.Exec(`
+		CREATE TABLE sessions (
+			id string NOT NULL PRIMARY KEY,
+			title string NOT NULL,
+			updated_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			CHECK (id <> ''),
+			CHECK (title <> '')
+		);
+		CREATE TABLE session_messages (
+			conversation_id string NOT NULL PRIMARY KEY,
+			messages blob NOT NULL,
+			FOREIGN KEY (conversation_id) REFERENCES sessions (id) ON DELETE CASCADE
+		);
+		CREATE TABLE approval_rules (
+			conversation_id string NOT NULL,
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (conversation_id, rule_type, tool_name, pattern),
+			FOREIGN KEY (conversation_id) REFERENCES sessions (id) ON DELETE CASCADE
+		);
+		INSERT INTO sessions (id, title) VALUES ('abc', 'half-migrated');
+		INSERT INTO approval_rules (conversation_id, rule_type, tool_name, pattern)
+		VALUES ('abc', 'edit_all', 'file_edit', '');
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	db, err := openDB(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	// The approval rule must survive the conversation_id -> session_id column
+	// rename (the FK follows the renamed column under legacy_alter_table=OFF).
+	rules, err := db.ApprovalRules("abc")
+	require.NoError(t, err)
+	require.Equal(t, []ApprovalRule{{Type: approvalEditAll, Tool: "file_edit"}}, rules)
+
+	// Re-opening a fully-migrated DB is a no-op, locking idempotency.
+	require.NoError(t, db.Close())
+	db2, err := openDB(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db2.Close()) })
+	rules2, err := db2.ApprovalRules("abc")
+	require.NoError(t, err)
+	require.Equal(t, rules, rules2)
+}
+
+func TestMigrateDefaultStorageMovesCompanions(t *testing.T) {
+	// WAL/-shm companions must move alongside the main DB. An orphaned -wal
+	// left at the old path would discard uncheckpointed transactions, which
+	// can include recently-saved approval rules. This locks companion
+	// preservation (and the companions-first move ordering) against regressions.
+	dataHome := t.TempDir()
+	sessionDir := filepath.Join(dataHome, "sessions")
+	legacyDir := filepath.Join(dataHome, "conversations")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o700))
+
+	legacyDB := filepath.Join(legacyDir, "mods.db")
+	db, err := openDB(legacyDB)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+
+	// Simulate WAL/-shm companions left by a prior run.
+	require.NoError(t, os.WriteFile(legacyDB+"-wal", []byte("wal-contents"), 0o600))
+	require.NoError(t, os.WriteFile(legacyDB+"-shm", []byte("shm-contents"), 0o600))
+
+	require.NoError(t, MigrateDefaultStorage(sessionDir))
+
+	require.NoFileExists(t, legacyDB)
+	require.NoFileExists(t, legacyDB+"-wal")
+	require.NoFileExists(t, legacyDB+"-shm")
+	require.FileExists(t, filepath.Join(sessionDir, "mods.db"))
+	require.FileExists(t, filepath.Join(sessionDir, "mods.db-wal"))
+	require.FileExists(t, filepath.Join(sessionDir, "mods.db-shm"))
+}

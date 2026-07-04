@@ -52,15 +52,23 @@ func MigrateDefaultStorage(sessionDir string) error {
 	if err := os.MkdirAll(sessionDir, 0o700); err != nil { //nolint:mnd
 		return fmt.Errorf("create session dir: %w", err)
 	}
-	if err := os.Rename(oldDB, newDB); err != nil {
-		return fmt.Errorf("move legacy session db: %w", err)
-	}
+	// Move WAL/-shm companions BEFORE the main DB. The main .db file is
+	// self-consistent without them, but a -wal orphaned at the old path while
+	// the main DB moves would discard uncheckpointed transactions, which can
+	// include recently-saved approval rules. Because this function early-
+	// returns when newDB already exists, the old main-first ordering was
+	// unrecoverable on a companion-move failure (the next run would see newDB
+	// and skip the orphaned WAL). Companions-first leaves a still-openable
+	// main DB at the old path on partial failure, so the next run retries.
 	for _, suffix := range []string{"-wal", "-shm"} {
 		oldCompanion := oldDB + suffix
 		newCompanion := newDB + suffix
 		if err := os.Rename(oldCompanion, newCompanion); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("move legacy session db companion: %w", err)
 		}
+	}
+	if err := os.Rename(oldDB, newDB); err != nil {
+		return fmt.Errorf("move legacy session db: %w", err)
 	}
 	return nil
 }
@@ -173,9 +181,19 @@ func Open(ds string) (*DB, error) {
 	return &DB{db: db}, nil
 }
 
-func hasColumn(db *sqlx.DB, table, col string) bool {
+// schemaQuerier is satisfied by both *sqlx.DB and *sqlx.Tx so schema-introspection
+// guards can run inside a transaction. This is required because Open caps the
+// connection pool at one (SetMaxOpenConns(1)): a *sqlx.DB guard query issued
+// while a *sqlx.Tx holds the sole connection would deadlock, so guards must
+// execute on the tx itself.
+type schemaQuerier interface {
+	Get(dest any, query string, args ...any) error
+	Rebind(query string) string
+}
+
+func hasColumn(q schemaQuerier, table, col string) bool {
 	var count int
-	if err := db.Get(&count, db.Rebind(`
+	if err := q.Get(&count, q.Rebind(`
 		SELECT count(*)
 		FROM pragma_table_info(?) c
 		WHERE c.name = ?
@@ -185,9 +203,9 @@ func hasColumn(db *sqlx.DB, table, col string) bool {
 	return count > 0
 }
 
-func tableExists(db *sqlx.DB, table string) bool {
+func tableExists(q schemaQuerier, table string) bool {
 	var count int
-	if err := db.Get(&count, db.Rebind(`
+	if err := q.Get(&count, q.Rebind(`
 		SELECT count(*)
 		FROM sqlite_master
 		WHERE type = 'table' AND name = ?
@@ -198,29 +216,45 @@ func tableExists(db *sqlx.DB, table string) bool {
 }
 
 func migrateLegacySessionSchema(db *sqlx.DB) error {
-	if tableExists(db, "conversations") && !tableExists(db, "sessions") {
-		if _, err := db.Exec(`ALTER TABLE conversations RENAME TO sessions`); err != nil {
-			return err
+	// Run all legacy rename ALTERs in a single transaction so the migration
+	// is atomic: a crash or mid-migration failure leaves the DB either fully
+	// migrated or fully unmigrated, never half-renamed. SQLite supports
+	// transactional DDL. Guards run on the tx itself because Open sets
+	// SetMaxOpenConns(1); a *sqlx.DB guard query would deadlock against the
+	// connection held by this tx.
+	tx, err := db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin legacy schema migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
+
+	if tableExists(tx, "conversations") && !tableExists(tx, "sessions") {
+		if _, err := tx.Exec(`ALTER TABLE conversations RENAME TO sessions`); err != nil {
+			return fmt.Errorf("rename conversations table: %w", err)
 		}
 	}
-	if tableExists(db, "conversation_messages") && !tableExists(db, "session_messages") {
-		if _, err := db.Exec(`ALTER TABLE conversation_messages RENAME TO session_messages`); err != nil {
-			return err
+	if tableExists(tx, "conversation_messages") && !tableExists(tx, "session_messages") {
+		if _, err := tx.Exec(`ALTER TABLE conversation_messages RENAME TO session_messages`); err != nil {
+			return fmt.Errorf("rename conversation_messages table: %w", err)
 		}
 	}
-	if tableExists(db, "session_messages") &&
-		hasColumn(db, "session_messages", "conversation_id") &&
-		!hasColumn(db, "session_messages", "session_id") {
-		if _, err := db.Exec(`ALTER TABLE session_messages RENAME COLUMN conversation_id TO session_id`); err != nil {
-			return err
+	if tableExists(tx, "session_messages") &&
+		hasColumn(tx, "session_messages", "conversation_id") &&
+		!hasColumn(tx, "session_messages", "session_id") {
+		if _, err := tx.Exec(`ALTER TABLE session_messages RENAME COLUMN conversation_id TO session_id`); err != nil {
+			return fmt.Errorf("rename session_messages column: %w", err)
 		}
 	}
-	if tableExists(db, "approval_rules") &&
-		hasColumn(db, "approval_rules", "conversation_id") &&
-		!hasColumn(db, "approval_rules", "session_id") {
-		if _, err := db.Exec(`ALTER TABLE approval_rules RENAME COLUMN conversation_id TO session_id`); err != nil {
-			return err
+	if tableExists(tx, "approval_rules") &&
+		hasColumn(tx, "approval_rules", "conversation_id") &&
+		!hasColumn(tx, "approval_rules", "session_id") {
+		if _, err := tx.Exec(`ALTER TABLE approval_rules RENAME COLUMN conversation_id TO session_id`); err != nil {
+			return fmt.Errorf("rename approval_rules column: %w", err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit legacy schema migration: %w", err)
 	}
 	return nil
 }

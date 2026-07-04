@@ -32,16 +32,10 @@ const (
 func RunConfigWizard() error {
 	// Pre-fill with current config values.
 	chosenAPI := config.API
-	chosenModel := config.Model
 	var apiKey, keyStorage, baseURL, newProviderName string
 	// apiType is the protocol chosen for a newly added provider (the page is
 	// only shown then). "openai" means OpenAI-compatible and writes nothing.
 	apiType := "openai"
-	// modelSource decides how models are added: "manual" (type names) or
-	// "discover" (fetch the list from the provider's API after the key is
-	// entered). Only consulted when adding a provider or a model. Discovery is
-	// the default/preferred path; the user can switch to manual on the page.
-	modelSource := "discover"
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -98,17 +92,15 @@ func RunConfigWizard() error {
 		if derr != nil || len(discovered) == 0 {
 			return nil
 		}
-		existing := existingModelNames(api)
+		// Show every fetched model; already-configured ones are picked out
+		// only at save time, so their curated metadata is preserved.
 		const maxPickerModels = 200
-		opts := make([]huh.Option[string], 0, len(discovered))
-		for _, m := range discovered {
-			if _, ok := existing[m]; ok {
-				continue
-			}
-			opts = append(opts, huh.NewOption(m, m))
-			if len(opts) >= maxPickerModels {
+		opts := make([]huh.Option[string], 0, min(len(discovered), maxPickerModels))
+		for i, m := range discovered {
+			if i >= maxPickerModels {
 				break
 			}
+			opts = append(opts, huh.NewOption(m, m))
 		}
 		return opts
 	}
@@ -174,22 +166,6 @@ func RunConfigWizard() error {
 			Title("provider endpoint").
 			Description("Set or update the provider base URL before choosing models."),
 
-		// Page 4: Model for existing provider
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				TitleFunc(func() string {
-					return fmt.Sprintf("Model for %s", chosenAPI)
-				}, &chosenAPI).
-				Description("Choose a model on this provider, or add another model that reuses this provider endpoint.").
-				OptionsFunc(func() []huh.Option[string] {
-					return buildModelOptions(chosenAPI)
-				}, &chosenAPI).
-				Value(&chosenModel),
-		).
-			Title("model").
-			Description("Choose an existing model or add one to this provider.").
-			WithHideFunc(func() bool { return chosenAPI == addProviderOption }),
-
 		// Page 6: API key storage method (skip for ollama)
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -223,29 +199,9 @@ func RunConfigWizard() error {
 				return wizardProviderName(chosenAPI, newProviderName) == "ollama" || keyStorage != "config"
 			}),
 
-		// Page 4b: Model source — discover from API or enter manually.
-		// Placed after the key pages so the following discover page can fetch.
-		// Shown whenever models are being added.
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Model source").
-				Description("Discover fetches the model list from the provider's API. Manual lets you type identifiers.").
-				Options(
-					huh.NewOption("Discover models from API", "discover"),
-					huh.NewOption("Enter model names manually", "manual"),
-				).
-				Value(&modelSource),
-		).
-			Title("model source").
-			Description("Discovery is best-effort; if the provider doesn't list models, you'll fall back to manual entry.").
-			WithHideFunc(func() bool {
-				return chosenAPI != addProviderOption && chosenModel != addModelOption
-			}),
-
-		// Page 4c: Discover models (live fetch with a spinner). Shown only when
-		// adding models and the user chose "discover". An empty list (fetch
-		// failed or every model is already configured) lets the user press on
-		// to the manual page.
+		// Discover models: live fetch with a spinner. Every provider goes
+		// through this page; an empty list (fetch failed or the provider
+		// doesn't implement a model-list endpoint) falls through to manual.
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				TitleFunc(func() string {
@@ -256,14 +212,10 @@ func RunConfigWizard() error {
 				Value(&discoveredPick),
 		).
 			Title("discover models").
-			Description("Fetch the model list from the provider's API now.").
-			WithHideFunc(func() bool {
-				adding := chosenAPI == addProviderOption || chosenModel == addModelOption
-				return !adding || modelSource != "discover"
-			}),
+			Description("Fetch the model list from the provider's API now."),
 
-		// Page 4d: Manual model entry. Shown when adding via "manual", or when
-		// discovery was chosen but yielded nothing the user picked.
+		// Manual model entry: fallback shown only when discovery came back empty
+		// (or the user picked nothing), so the user can always finish setup.
 		huh.NewGroup(
 			huh.NewText().
 				TitleFunc(func() string {
@@ -281,16 +233,7 @@ func RunConfigWizard() error {
 		).
 			Title("new models").
 			Description("Type model identifiers manually.").
-			WithHideFunc(func() bool {
-				adding := chosenAPI == addProviderOption || chosenModel == addModelOption
-				if !adding {
-					return true
-				}
-				if modelSource == "manual" {
-					return false
-				}
-				return len(discoveredPick) > 0
-			}),
+			WithHideFunc(func() bool { return len(discoveredPick) > 0 }),
 
 		// Page 8: Built-in tools
 		huh.NewGroup(
@@ -422,20 +365,10 @@ func RunConfigWizard() error {
 		return fmt.Errorf("config wizard: %w", err)
 	}
 
-	// Resolve provider identity and base URL (model names are filled below via
-	// discovery or manual entry, so parsing is skipped here).
-	apiName, _, _, providerBaseURL, addedModel, err := resolveWizardProviderModel(
-		chosenAPI,
-		chosenModel,
-		newProviderName,
-		"",
-		baseURL,
-		"discover", // skip manual parsing; models discovered after the form
-	)
-	if err != nil {
-		return err
-	}
+	// Resolve provider identity and base URL.
+	apiName := wizardProviderName(chosenAPI, newProviderName)
 	envVarName := resolveEnvVar(apiName)
+	providerBaseURL := strings.TrimSpace(baseURL)
 	if providerBaseURL == "" {
 		providerBaseURL = findBaseURL(apiName)
 	}
@@ -451,28 +384,22 @@ func RunConfigWizard() error {
 		effType = at
 	}
 
-	// Model selection resolves from the form: either the discovered-model
-	// picker (discover) or the manual text box (manual, or discover that came
-	// back empty). Runs after the main form, before the connection test.
+	// Models always come from the discover picker, falling back to the manual
+	// text box when discovery yielded nothing. The first entry becomes the
+	// default model.
 	var addedModelNames []string
-	var modelName string
-	if addedModel {
-		if modelSource == "discover" && len(discoveredPick) > 0 {
-			// The MultiSelect value is in option (fetched/sorted) order, so the
-			// first entry is a deterministic default.
-			addedModelNames = discoveredPick
-			modelName = addedModelNames[0]
-		} else {
-			parsed, perr := parseNewModelNames(apiName, manualModelsText)
-			if perr != nil {
-				return perr
-			}
-			addedModelNames = parsed
-			modelName = addedModelNames[0]
-		}
+	if len(discoveredPick) > 0 {
+		// The MultiSelect value is in option (fetched) order, so the first
+		// entry is a deterministic default.
+		addedModelNames = discoveredPick
 	} else {
-		modelName = strings.TrimSpace(chosenModel)
+		parsed, perr := parseNewModelNames(apiName, manualModelsText)
+		if perr != nil {
+			return perr
+		}
+		addedModelNames = parsed
 	}
+	modelName := addedModelNames[0]
 
 	// Connection test. Only the OpenAI-compatible adapter exposes a simple
 	// /chat/completions probe; a newly added Anthropic provider is skipped
@@ -581,7 +508,6 @@ func RunConfigWizard() error {
 		envVarName:             envVarName,
 		baseURLInput:           baseURL,
 		addedModelNames:        addedModelNames,
-		addedModel:             addedModel,
 	})
 
 	// Seed the target file when it doesn't yet exist (the common case when
@@ -748,27 +674,6 @@ func configWizardTheme(theme string) *huh.Theme {
 	return t
 }
 
-// buildModelOptions returns sorted model options for the given provider.
-func buildModelOptions(apiName string) []huh.Option[string] {
-	for _, api := range config.APIs {
-		if api.Name != apiName {
-			continue
-		}
-		names := make([]string, 0, len(api.Models))
-		for name := range api.Models {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		opts := make([]huh.Option[string], 0, len(names)+1)
-		for _, name := range names {
-			opts = append(opts, huh.NewOption(name, name))
-		}
-		opts = append(opts, huh.NewOption("Add new model", addModelOption))
-		return opts
-	}
-	return nil
-}
-
 func wizardProviderName(chosenAPI, newProviderName string) string {
 	if chosenAPI == addProviderOption {
 		return strings.TrimSpace(newProviderName)
@@ -853,26 +758,6 @@ func validateWizardBaseURL(chosenAPI, value string) error {
 		return fmt.Errorf("base URL must start with http:// or https://")
 	}
 	return nil
-}
-
-func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newModelNames, baseURL, modelSource string) (string, string, []string, string, bool, error) {
-	apiName := wizardProviderName(chosenAPI, newProviderName)
-	addedModel := chosenAPI == addProviderOption || chosenModel == addModelOption
-	modelName := strings.TrimSpace(chosenModel)
-	addedModelNames := []string(nil)
-	if addedModel && modelSource != "discover" {
-		var err error
-		addedModelNames, err = parseNewModelNames(apiName, newModelNames)
-		if err != nil {
-			return "", "", nil, "", false, err
-		}
-		modelName = addedModelNames[0]
-	}
-	providerBaseURL := strings.TrimSpace(baseURL)
-	if providerBaseURL == "" {
-		providerBaseURL = findBaseURL(apiName)
-	}
-	return apiName, modelName, addedModelNames, providerBaseURL, addedModel, nil
 }
 
 // resolveEnvVar returns the configured api-key-env for the provider, or
@@ -969,7 +854,7 @@ type configWizardSaveData struct {
 	webSearchAPIKeyEnv                              string
 	keyStorage, apiKey, envVarName, baseURLInput    string
 	addedModelNames                                 []string
-	shellOn, thinkingOn, webSearchOn, addedModel    bool
+	shellOn, thinkingOn, webSearchOn                bool
 }
 
 func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
@@ -1011,21 +896,21 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-type"}, Value: d.apiType})
 	}
 
-	if d.addedModel {
-		modelNames := d.addedModelNames
-		if len(modelNames) == 0 {
-			modelNames = []string{d.modelName}
+	// Add a max-input-chars default for each chosen model that isn't already
+	// configured, so previously curated model entries keep their metadata.
+	existing := existingModelNames(d.apiName)
+	for _, modelName := range d.addedModelNames {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
 		}
-		for _, modelName := range modelNames {
-			modelName = strings.TrimSpace(modelName)
-			if modelName == "" {
-				continue
-			}
-			updates = append(updates, FieldUpdate{
-				Path:  []string{"apis", d.apiName, "models", modelName, "max-input-chars"},
-				Value: defaultNewModelInputChars,
-			})
+		if _, ok := existing[modelName]; ok {
+			continue
 		}
+		updates = append(updates, FieldUpdate{
+			Path:  []string{"apis", d.apiName, "models", modelName, "max-input-chars"},
+			Value: defaultNewModelInputChars,
+		})
 	}
 
 	return updates

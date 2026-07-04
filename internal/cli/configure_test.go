@@ -27,23 +27,6 @@ func TestBuildProviderOptionsIncludesAddProvider(t *testing.T) {
 	})
 }
 
-func TestBuildModelOptionsIncludesAddModel(t *testing.T) {
-	withTestConfig(t, Config{
-		PersistentConfig: PersistentConfig{
-			APIs: []API{{
-				Name: "openai",
-				Models: map[string]Model{
-					"gpt-5.5": {},
-				},
-			}},
-		},
-	}, func() {
-		opts := buildModelOptions("openai")
-		require.NotEmpty(t, opts)
-		require.Equal(t, addModelOption, opts[len(opts)-1].Value)
-	})
-}
-
 func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 	keymap := configWizardKeyMap()
 	esc := tea.KeyMsg{Type: tea.KeyEsc}
@@ -65,76 +48,6 @@ func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 	}
 }
 
-func TestResolveWizardProviderModel(t *testing.T) {
-	withTestConfig(t, Config{
-		PersistentConfig: PersistentConfig{
-			APIs: []API{{Name: "openrouter", BaseURL: "https://openrouter.ai/api/v1"}},
-		},
-	}, func() {
-		apiName, modelName, addedModelNames, baseURL, addedModel, err := resolveWizardProviderModel(
-			addProviderOption,
-			"",
-			"groq",
-			"llama-3.3-70b-versatile\nllama-3.1-8b-instant",
-			"https://api.groq.com/openai/v1",
-			"manual",
-		)
-		require.NoError(t, err)
-		require.Equal(t, "groq", apiName)
-		require.Equal(t, "llama-3.3-70b-versatile", modelName)
-		require.Equal(t, []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"}, addedModelNames)
-		require.Equal(t, "https://api.groq.com/openai/v1", baseURL)
-		require.True(t, addedModel)
-
-		apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
-			"openrouter",
-			addModelOption,
-			"",
-			"vendor/gpt-5.5:latest",
-			"",
-			"manual",
-		)
-		require.NoError(t, err)
-		require.Equal(t, "openrouter", apiName)
-		require.Equal(t, "vendor/gpt-5.5:latest", modelName)
-		require.Equal(t, []string{"vendor/gpt-5.5:latest"}, addedModelNames)
-		require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
-		require.True(t, addedModel)
-
-		apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
-			"openrouter",
-			"anthropic/claude-sonnet-4-6",
-			"",
-			"",
-			"",
-			"manual",
-		)
-		require.NoError(t, err)
-		require.Equal(t, "openrouter", apiName)
-		require.Equal(t, "anthropic/claude-sonnet-4-6", modelName)
-		require.Nil(t, addedModelNames)
-		require.Equal(t, "https://openrouter.ai/api/v1", baseURL)
-		require.False(t, addedModel)
-
-		// Discovery skips manual parsing; models are filled in later by the
-		// post-form discovery flow, so names stay empty and addedModel is true.
-		apiName, modelName, addedModelNames, baseURL, addedModel, err = resolveWizardProviderModel(
-			addProviderOption,
-			"",
-			"acme",
-			"",
-			"https://acme.example.com/v1",
-			"discover",
-		)
-		require.NoError(t, err)
-		require.Equal(t, "acme", apiName)
-		require.Empty(t, modelName)
-		require.Nil(t, addedModelNames)
-		require.Equal(t, "https://acme.example.com/v1", baseURL)
-		require.True(t, addedModel)
-	})
-}
-
 func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "groq",
@@ -147,7 +60,6 @@ func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) 
 		envVarName:             "GROQ_API_KEY",
 		baseURLInput:           " https://api.groq.com/openai/v1 ",
 		addedModelNames:        []string{"llama-3.3-70b-versatile", "llama-3.1-8b-instant"},
-		addedModel:             true,
 	})
 
 	requireUpdateValue(t, updates, []string{"apis", "groq", "base-url"}, "https://api.groq.com/openai/v1")
@@ -185,7 +97,6 @@ func TestBuildConfigWizardUpdatesWritesAPITypeForAnthropic(t *testing.T) {
 		envVarName:      "ACME_CLAUDE_API_KEY",
 		baseURLInput:    "https://acme.example.com/v1",
 		addedModelNames: []string{"claude-sonnet-4"},
-		addedModel:      true,
 	})
 
 	requireUpdateValue(t, updates, []string{"apis", "acme-claude", "api-type"}, "anthropic")
@@ -207,7 +118,6 @@ func TestBuildConfigWizardUpdatesOmitsAPITypeForOpenAI(t *testing.T) {
 		keyStorage:      "env",
 		envVarName:      "GROQ_API_KEY",
 		addedModelNames: []string{"llama"},
-		addedModel:      true,
 	})
 	requireNoUpdatePath(t, updates, []string{"apis", "groq", "api-type"})
 }
@@ -223,7 +133,6 @@ func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testin
 		keyStorage:             "env",
 		envVarName:             "OPENROUTER_API_KEY",
 		addedModelNames:        []string{"vendor/gpt-5.5:latest"},
-		addedModel:             true,
 	})
 
 	requireNoUpdatePath(t, updates, []string{"apis", "openrouter", "base-url"})

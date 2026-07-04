@@ -24,7 +24,7 @@ const (
 Priority order:
 1. Use fs_* tools for files inside the configured workspace; they are auto-approved for reads and reviewed only for writes.
 2. fs_* tools may also access files outside the workspace (Downloads, Desktop, system temp, etc.); such access triggers an approval prompt. Prefer workspace-local paths to minimize interruptions.
-3. Prefer native filesystem tools over shell for common file operations: fs_largest for largest-file/largest-directory requests, fs_delete_file when the user asks to delete a file, fs_delete_dir when the user asks to delete a directory, fs_copy for copying, fs_move for moving or renaming, and fs_mkdir for directory creation. Do not use rm -rf for a "file" request.
+3. Prefer native filesystem tools over shell for common file operations: fs_read_file for reading file contents, fs_largest for largest-file/largest-directory requests, fs_delete_file when the user asks to delete a file, fs_delete_dir when the user asks to delete a directory, fs_copy for copying, fs_move for moving or renaming, and fs_mkdir for directory creation. Do not use rm -rf for a "file" request.
 4. Use shell tools for repository-wide inspection, test/build commands, git commands, package manager scripts, and data-processing pipelines.
 5. Minimize tool calls by using one well-formed command instead of repeated small retries.
 6. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review.
@@ -37,10 +37,11 @@ Platform rules:
 - On Windows, pass only the PowerShell command to powershell_run or shell_run, without powershell, powershell.exe, pwsh, or -Command prefixes.
 
 Command playbook:
+- Read a file: fs_read_file path. Read line ranges with start_line/end_line (1-based, inclusive); page large files by bytes with offset/limit.
+- Slice by line number (shell fallback when fs tools are unavailable): sed -n 'START,ENDp' file (POSIX) or Get-Content file | Select-Object -Skip N -First M (PowerShell).
 - Search text: rg "pattern" path
 - List files: rg --files path
 - Find files by name: rg --files | rg "name-or-extension"
-- Show file ranges: sed -n 'START,ENDp' file (POSIX) or Get-Content file | Select-Object -Skip N -First M (PowerShell)
 - Count matches: rg -n "pattern" path | wc -l (POSIX) or (rg -n "pattern" path).Count (PowerShell)
 - Git status: git status --short
 - Git diff: git diff -- path

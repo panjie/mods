@@ -707,10 +707,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	})
 
 	t.Run("redirection target dirs fill unknown shell risk", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-		require.NotEmpty(t, home)
-		targetDir := filepath.Join(home, "dev", "myconfigs", "nvim")
+		targetDir := "/home/panjie/dev/myconfigs/vim"
 
 		mods := &Mods{
 			ctx:                 context.Background(),
@@ -727,12 +724,13 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat > ~/dev/myconfigs/nvim/.gitignore <<'EOF'\nignored\nEOF"}`))
+			errCh <- reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat > /home/panjie/dev/myconfigs/vim/vimrc <<'EOF'\nset path=/\n/this/looks/like/a/path\nEOF"}`))
 		}()
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Contains(t, item.summary, "external mutation")
 		require.Contains(t, item.summary, targetDir)
+		require.NotEqual(t, "Risk: external mutation - affects /", item.summary)
 		require.NotContains(t, item.summary, "unknown")
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, []string{targetDir}, item.candidateRules[0].Paths)

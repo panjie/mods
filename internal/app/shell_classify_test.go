@@ -244,6 +244,15 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
+func TestExtractExternalPathsIgnoresHeredocBody(t *testing.T) {
+	cmd := "cat > /home/panjie/dev/myconfigs/vim/vimrc <<'EOF'\nset path=/\n/this/looks/like/a/path\nEOF"
+
+	got := extractExternalPaths(cmd, "/workspace")
+	require.Contains(t, got, "/home/panjie/dev/myconfigs/vim/vimrc")
+	require.NotContains(t, got, "/")
+	require.NotContains(t, got, "/this/looks/like/a/path")
+}
+
 func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T) {
 	mods := &Mods{
 		shellAnalyzer: func(tool, command string) shellCommandAnalysis {

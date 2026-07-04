@@ -17,6 +17,7 @@ import (
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const defaultShellClassifyPrompt = prompts.ShellClassifier
@@ -90,14 +91,15 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// everything else delegates to the seam or the LLM.
 	if m.shellAnalyzer != nil {
 		result := m.shellAnalyzer(tool, command)
-		if len(result.AffectedDirs) == 0 {
-			result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
-		}
-		return result
+		return finalizeShellAnalysis(result, writableDirs, externalPaths, psArgPaths, ws, flavor)
 	}
 
 	// LLM classifier
 	result := m.classifyShellWithLLM(tool, command)
+	return finalizeShellAnalysis(result, writableDirs, externalPaths, psArgPaths, ws, flavor)
+}
+
+func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {
 	if len(result.AffectedDirs) == 0 {
 		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
 	}
@@ -108,7 +110,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, externalPaths)
 	// Also merge AST-extracted PowerShell argument paths for write commands
 	// that fell through to the LLM — the LLM may miss path arguments.
-	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, ws, flavor))
+	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, workspaceDir, flavor))
 
 	return result
 }
@@ -361,6 +363,9 @@ func extractExternalPaths(command, workspaceDir string) []string {
 
 func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
 	opts := pathutil.DefaultOptions(workspaceDir, flavor)
+	if flavor == pathutil.FlavorPOSIX {
+		command = blankPOSIXHeredocBodies(command)
+	}
 	// Strip single-quoted segments before matching. These carry shell-program
 	// literals (awk/sed/perl scripts) whose "/", "$", and "~" tokens are
 	// syntax, not filesystem paths, and caused widespread false positives —
@@ -401,6 +406,47 @@ func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathuti
 		add(m)
 	}
 	return paths
+}
+
+func blankPOSIXHeredocBodies(command string) string {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
+	file, err := parser.Parse(strings.NewReader(command), "")
+	if err != nil {
+		return command
+	}
+
+	buf := []byte(command)
+	syntax.Walk(file, func(node syntax.Node) bool {
+		redir, ok := node.(*syntax.Redirect)
+		if !ok || redir.Hdoc == nil {
+			return true
+		}
+		startPos := redir.Hdoc.Pos()
+		endPos := redir.Hdoc.End()
+		if !startPos.IsValid() || !endPos.IsValid() {
+			return true
+		}
+		blankRangePreserveLines(buf, int(startPos.Offset()), int(endPos.Offset()))
+		return true
+	})
+	return string(buf)
+}
+
+func blankRangePreserveLines(buf []byte, start, end int) {
+	if start < 0 {
+		start = 0
+	}
+	if end > len(buf) {
+		end = len(buf)
+	}
+	if start >= end {
+		return
+	}
+	for i := start; i < end; i++ {
+		if buf[i] != '\n' && buf[i] != '\r' {
+			buf[i] = ' '
+		}
+	}
 }
 
 // mentionsExternalPath reports whether the command text references any path

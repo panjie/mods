@@ -100,3 +100,52 @@ func PromptLooksFileRelated(prompt string) bool {
 	}
 	return filesystemPathPattern.MatchString(prompt)
 }
+
+// BuiltinToolInfo describes one built-in tool for listing/discovery.
+type BuiltinToolInfo struct {
+	Name        string
+	Description string
+	Kind        toolregistry.ToolKind
+	ReadOnly    bool
+	Mutable     bool
+	Shell       bool
+}
+
+// BuiltinSpecs enumerates every built-in tool mods can provide, independent of
+// runtime enablement (which depends on prompt and config). It powers
+// --list-tools' built-in catalogue. Tools are registered into a throwaway
+// registry (their Call closures are never invoked) purely to harvest specs and
+// capabilities, so this works offline and without API keys.
+func BuiltinSpecs() ([]BuiltinToolInfo, error) {
+	root, err := os.MkdirTemp("", "mods-list-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(root)
+	registry := toolregistry.NewRegistry()
+	// Best-effort registration; listing must not fail if one tool errors.
+	_ = toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: root})
+	_ = toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: root})
+	if runtime.GOOS == "windows" {
+		_ = toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{Root: root})
+	}
+	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
+	_ = toolregistry.RegisterThinking(registry)
+
+	infos := make([]BuiltinToolInfo, 0, registry.Len())
+	for _, spec := range registry.Specs() {
+		tool, ok := registry.Tool(spec.Name)
+		if !ok {
+			continue
+		}
+		infos = append(infos, BuiltinToolInfo{
+			Name:        spec.Name,
+			Description: spec.Description,
+			Kind:        tool.Kind,
+			ReadOnly:    tool.Capabilities.ReadOnly,
+			Mutable:     tool.Capabilities.Mutable,
+			Shell:       tool.Capabilities.ShellExecution,
+		})
+	}
+	return infos, nil
+}

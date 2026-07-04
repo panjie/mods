@@ -121,7 +121,7 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 	if config.MCPListTools {
 		ctx, cancel := context.WithTimeout(ctx, config.MCPTimeout)
 		defer cancel()
-		return ListTools(ctx, &config)
+		return listAllTools(ctx, &config)
 	}
 
 	// raw mode already prints the output, no need to print it again

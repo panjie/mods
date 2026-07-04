@@ -1028,6 +1028,30 @@ func TestEscapeDoesNotArmAbortConfirmationWhenSelectFilterConsumesIt(t *testing.
 	}
 }
 
+func TestSelectShortListStaysFullyVisible(t *testing.T) {
+	// A select rendered in a viewport taller than its option list (OptionsFunc
+	// selects get a default height) must keep every option visible: moving the
+	// cursor to the last option must not scroll earlier options out of view on
+	// a subsequent update.
+	f := NewForm(NewGroup(
+		NewSelect[string]().Height(10).Options(NewOptions("Alpha", "Bravo")...).Title("Choose"),
+	))
+	f.Update(f.Init())
+
+	f.Update(tea.KeyMsg{Type: tea.KeyDown})        // move to the last option (index 1)
+	m, _ := f.Update(tea.KeyMsg{Type: tea.KeyF12}) // inert update; previously recentered on the selection
+
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "Alpha") {
+		t.Log(pretty.Render(view))
+		t.Error("expected the first option (Alpha) to remain visible after moving to the last option")
+	}
+	if !strings.Contains(view, "Bravo") {
+		t.Log(pretty.Render(view))
+		t.Error("expected the last option (Bravo) to be visible")
+	}
+}
+
 func escapeBackTestKeyMap() *KeyMap {
 	keymap := NewDefaultKeyMap()
 	back := func() key.Binding {

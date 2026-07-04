@@ -540,7 +540,21 @@ func (s *Select[T]) updateViewportHeight() {
 	}
 
 	s.viewport.Height = max(minHeight, s.height-offset)
-	s.viewport.YOffset = s.selected
+	// Keep the selected option visible without recentering on every update.
+	// When the whole list fits in the viewport, stay pinned to the top so that
+	// moving the cursor to a later option doesn't scroll earlier options out of
+	// view (a problem for short OptionsFunc selects rendered in a tall viewport).
+	// Otherwise, scroll only far enough to bring the selection back into view.
+	if n := len(s.filteredOptions); n > s.viewport.Height {
+		switch {
+		case s.selected < s.viewport.YOffset:
+			s.viewport.YOffset = s.selected
+		case s.selected >= s.viewport.YOffset+s.viewport.Height:
+			s.viewport.YOffset = s.selected - s.viewport.Height + 1
+		}
+	} else {
+		s.viewport.YOffset = 0
+	}
 }
 
 func (s *Select[T]) activeStyles() *FieldStyles {

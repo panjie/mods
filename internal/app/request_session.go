@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/anthropic"
@@ -268,7 +267,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 
 		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
 		scope := m.reviewer.scope
-		safeDirs := []string{os.TempDir()}
+		safeDirs := safeDirs()
 		if len(intent.Dirs) > 0 {
 			if registry.ShellExecution(name) {
 				intent.Dirs = normalizeShellAffectedDirsForTool(intent.Dirs, scope.Value, name)

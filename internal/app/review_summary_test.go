@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -66,4 +67,41 @@ func TestFormatReviewSummaryExternalRead(t *testing.T) {
 	require.Contains(t, got, "external read")
 	require.Contains(t, got, "/etc")
 	require.NotContains(t, got, "passwd")
+}
+
+func TestFormatReviewLabelReadTools(t *testing.T) {
+	// Regression: read tools used to fall through to the generic
+	// "Execute <name> (<args>)" label while write/delete/move/copy/shell had
+	// dedicated labels. Read tools must now use dedicated terse labels too.
+	cases := []struct {
+		name   string
+		args   string
+		wantIn string
+	}{
+		{"fs_read_file", `{"path":"src/foo.go"}`, "Read"},
+		{"fs_list_dir", `{"path":"src"}`, "List"},
+		{"fs_stat", `{"path":"a.txt"}`, "Stat"},
+		{"fs_search", `{"path":"src","query":"foo"}`, "Search"},
+		{"fs_largest", `{"path":"."}`, "Largest"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := formatReviewLabel(c.name, []byte(c.args))
+			require.Contains(t, got, c.wantIn)
+			require.NotContains(t, got, "Execute", "read tool must not use the generic Execute label")
+		})
+	}
+}
+
+func TestSafeDirsIncludesTmp(t *testing.T) {
+	// /tmp must be a safe dir on POSIX so reads/writes there don't trigger
+	// approval. On macOS os.TempDir() is a per-user /var/folders path, not
+	// /tmp, so without /tmp in safeDirs those operations get flagged.
+	if runtime.GOOS == "windows" {
+		t.Skip("/tmp is not a POSIX safe dir on Windows")
+	}
+	require.True(t, isUnderSafeDir("/tmp/git-mcp-v2/src/utils/command.ts"))
+	require.True(t, isUnderSafeDir(filepath.Join("/tmp", "scratch.txt")))
+	require.True(t, isUnderSafeDir(os.TempDir()))   // per-user temp still safe
+	require.False(t, isUnderSafeDir("/etc/passwd")) // outside any safe dir
 }

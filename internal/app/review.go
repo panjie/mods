@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -398,7 +399,15 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 }
 
 func safeDirs() []string {
-	return []string{os.TempDir()}
+	dirs := []string{os.TempDir()}
+	if runtime.GOOS != "windows" {
+		// /tmp is the conventional shared scratch directory on POSIX. Users
+		// and models intuitively place work there, but on macOS os.TempDir()
+		// is a per-user /var/folders path, so without /tmp here those reads
+		// and writes trigger approval even though /tmp is intuitively safe.
+		dirs = append(dirs, "/tmp")
+	}
+	return dirs
 }
 
 func isUnderSafeDir(path string) bool {
@@ -527,6 +536,16 @@ func formatReviewLabel(name string, args []byte) string {
 		return fmt.Sprintf("Move %s to %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
 	case "fs_apply_patch":
 		return "Apply patch to workspace files"
+	case "fs_read_file":
+		return fmt.Sprintf("Read %s", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_list_dir":
+		return fmt.Sprintf("List %s", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_stat":
+		return fmt.Sprintf("Stat %s", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_search":
+		return fmt.Sprintf("Search %q in %s", ArgString(parsed, "query"), OneLinePreview(ArgString(parsed, "path")))
+	case "fs_largest":
+		return fmt.Sprintf("Largest in %s", OneLinePreview(ArgString(parsed, "path")))
 	case "shell_run":
 		cmd := ShellCommandPreview(ArgString(parsed, "command"))
 		return fmt.Sprintf("Run: %s", cmd)

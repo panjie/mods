@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- Dropped the unused `--temp`, `--topp`, `--topk`, and `--stop` flags, their config keys/env vars, and the matching provider request fields. mods no longer sends any sampling temperature, top-p, top-k, or stop sequences on model requests, so providers now use their own defaults. (`proto.Request.Temperature` is retained internally for the shell classifier, which pins it to `0` for deterministic classification.)
+
+### Fixed
+- Windows `shell_run` now classifies under the same Windows PowerShell 5.1 grammar that executes it, closing a classifier/executor divergence where PS7-only operators (`&&`, `||`, `??`) could bypass the read-only fast-path under a `pwsh.exe` classifier but then fail under the `powershell.exe` executor.
+- Legacy session-schema migration now runs in a single transaction, and default-storage relocation moves WAL/-shm companions before the main DB to avoid orphaning uncheckpointed approval rules.
+
 ## [3.0.0] - 2026-07-03
 
 ### Added

@@ -520,9 +520,15 @@ func RunConfigWizard() error {
 
 	// If Ensure auto-created the standard config during this run (it did
 	// not exist before) and the user switched to portable, remove the
-	// stray default file so the XDG location stays clean.
+	// stray default file so the XDG location stays clean. This is best-effort
+	// cleanup; surface non-NotExist failures so a permission issue is not
+	// silently masked (the user would otherwise wonder why the old file
+	// lingers and which location is authoritative).
 	if savePath != previousPath && !config.SettingsExisted {
-		_ = os.Remove(previousPath)
+		if err := os.Remove(previousPath); err != nil && !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Warning: could not remove auto-created config %s: %v\n",
+				StderrStyles().InlineCode.Render(previousPath), err)
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(savePath))

@@ -585,20 +585,3 @@ func TestExistingModelNames(t *testing.T) {
 		require.Empty(t, existingModelNames("unknown"))
 	})
 }
-
-// TestPromptDiscoveredModelsAllConfigured locks in the fix for the
-// "Configuration wizard failed" bug: when every discovered model is already on
-// the provider, the picker returns (nil, nil) WITHOUT erroring or showing a
-// form, so the wizard can fall back to manual entry.
-func TestPromptDiscoveredModelsAllConfigured(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		APIs: []API{{
-			Name:   "deepseek",
-			Models: map[string]Model{"deepseek-chat": {}, "deepseek-reasoner": {}},
-		}},
-	}}, func() {
-		picked, err := promptDiscoveredModels("deepseek", []string{"deepseek-chat", "deepseek-reasoner"})
-		require.NoError(t, err)
-		require.Nil(t, picked)
-	})
-}

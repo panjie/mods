@@ -39,8 +39,9 @@ func RunConfigWizard() error {
 	apiType := "openai"
 	// modelSource decides how models are added: "manual" (type names) or
 	// "discover" (fetch the list from the provider's API after the key is
-	// entered). Only consulted when adding a provider or a model.
-	modelSource := "manual"
+	// entered). Only consulted when adding a provider or a model. Discovery is
+	// the default/preferred path; the user can switch to manual on the page.
+	modelSource := "discover"
 	fsMode := string(config.BuiltinTools.Filesystem)
 	if fsMode == "" {
 		fsMode = "auto"
@@ -72,10 +73,47 @@ func RunConfigWizard() error {
 
 	keymap := configWizardKeyMap()
 
-	// Form 1: provider connection + credentials + model source.
-	// Model discovery needs the API key, so the model-source choice is placed
-	// after the key pages; discovery runs between form 1 and form 2.
-	form1 := huh.NewForm(
+	// Model discovery happens inside the form: the "discover models" page
+	// fetches the list via OptionsFunc, which huh runs asynchronously with a
+	// spinner. discoveredPick/manualModelsText are bound to the model-entry
+	// pages and read after the form. (The MultiSelect preserves option order,
+	// so discoveredPick is already in fetched/sorted order.)
+	var (
+		discoveredPick   []string
+		manualModelsText string
+	)
+	discoverOptions := func() []huh.Option[string] {
+		api := wizardProviderName(chosenAPI, newProviderName)
+		eff := api
+		if chosenAPI == addProviderOption {
+			eff = apiType
+		} else if at := findAPIType(api); at != "" {
+			eff = at
+		}
+		base := strings.TrimSpace(baseURL)
+		if base == "" {
+			base = findBaseURL(api)
+		}
+		discovered, derr := discoverModels(eff, base, resolveKeyForDiscovery(api, apiKey))
+		if derr != nil || len(discovered) == 0 {
+			return nil
+		}
+		existing := existingModelNames(api)
+		const maxPickerModels = 200
+		opts := make([]huh.Option[string], 0, len(discovered))
+		for _, m := range discovered {
+			if _, ok := existing[m]; ok {
+				continue
+			}
+			opts = append(opts, huh.NewOption(m, m))
+			if len(opts) >= maxPickerModels {
+				break
+			}
+		}
+		return opts
+	}
+
+	form := huh.NewForm(
 		// Page 1: Provider
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -186,12 +224,12 @@ func RunConfigWizard() error {
 			}),
 
 		// Page 4b: Model source — discover from API or enter manually.
-		// Placed after the key pages so discovery can run immediately next,
-		// between form 1 and form 2. Shown whenever models are being added.
+		// Placed after the key pages so the following discover page can fetch.
+		// Shown whenever models are being added.
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Model source").
-				Description("Discover fetches the model list from the provider's API now. Manual lets you type identifiers.").
+				Description("Discover fetches the model list from the provider's API. Manual lets you type identifiers.").
 				Options(
 					huh.NewOption("Discover models from API", "discover"),
 					huh.NewOption("Enter model names manually", "manual"),
@@ -203,92 +241,57 @@ func RunConfigWizard() error {
 			WithHideFunc(func() bool {
 				return chosenAPI != addProviderOption && chosenModel != addModelOption
 			}),
-	).
-		WithTheme(configWizardTheme(config.Theme)).
-		WithKeyMap(keymap).
-		WithEscapeAbortConfirmation("Press Esc again to exit.")
 
-	if err := form1.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			fmt.Fprintln(os.Stderr, "\nCanceled.")
-			return nil
-		}
-		return fmt.Errorf("config wizard: %w", err)
-	}
+		// Page 4c: Discover models (live fetch with a spinner). Shown only when
+		// adding models and the user chose "discover". An empty list (fetch
+		// failed or every model is already configured) lets the user press on
+		// to the manual page.
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				TitleFunc(func() string {
+					return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
+				}, []any{&chosenAPI, &newProviderName}).
+				Description("Select models to add. The first selected becomes the default. If the list is empty, continue to type names manually.").
+				OptionsFunc(discoverOptions, []any{&chosenAPI, &newProviderName, &apiType, &baseURL, &apiKey}).
+				Value(&discoveredPick),
+		).
+			Title("discover models").
+			Description("Fetch the model list from the provider's API now.").
+			WithHideFunc(func() bool {
+				adding := chosenAPI == addProviderOption || chosenModel == addModelOption
+				return !adding || modelSource != "discover"
+			}),
 
-	// Resolve provider identity and base URL (model names are filled below via
-	// discovery or manual entry, so parsing is skipped here).
-	apiName, _, _, providerBaseURL, addedModel, err := resolveWizardProviderModel(
-		chosenAPI,
-		chosenModel,
-		newProviderName,
-		"",
-		baseURL,
-		"discover", // skip manual parsing; models handled between forms
-	)
-	if err != nil {
-		return err
-	}
-	envVarName := resolveEnvVar(apiName)
-	if providerBaseURL == "" {
-		providerBaseURL = findBaseURL(apiName)
-	}
+		// Page 4d: Manual model entry. Shown when adding via "manual", or when
+		// discovery was chosen but yielded nothing the user picked.
+		huh.NewGroup(
+			huh.NewText().
+				TitleFunc(func() string {
+					return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
+				}, []any{&chosenAPI, &newProviderName}).
+				Description("Enter one model identifier per line. The first model becomes the default.").
+				Placeholder("llama-3.3-70b-versatile\nllama-3.1-8b-instant").
+				Lines(6).
+				ExternalEditor(false).
+				Value(&manualModelsText).
+				Validate(func(value string) error {
+					_, err := parseNewModelNames(wizardProviderName(chosenAPI, newProviderName), value)
+					return err
+				}),
+		).
+			Title("new models").
+			Description("Type model identifiers manually.").
+			WithHideFunc(func() bool {
+				adding := chosenAPI == addProviderOption || chosenModel == addModelOption
+				if !adding {
+					return true
+				}
+				if modelSource == "manual" {
+					return false
+				}
+				return len(discoveredPick) > 0
+			}),
 
-	// Effective adapter protocol: built-in providers carry it in their name;
-	// a newly added provider declares it via the api-type selection, and an
-	// existing custom provider may declare it via its configured api-type.
-	effType := apiName
-	newProvider := chosenAPI == addProviderOption
-	if newProvider {
-		effType = apiType
-	} else if at := findAPIType(apiName); at != "" {
-		effType = at
-	}
-
-	// Model selection: discover from the API or enter manually. Runs now (after
-	// the key is available) and before the connection test + preferences form.
-	// Best-effort — discovery falls back to manual entry on any failure.
-	var addedModelNames []string
-	var modelName string
-	if addedModel {
-		names, cerr := chooseModels(apiName, modelSource, effType, providerBaseURL, resolveKeyForDiscovery(apiName, apiKey))
-		if cerr != nil {
-			return cerr
-		}
-		if names == nil { // user pressed Esc during discovery or manual entry
-			fmt.Fprintln(os.Stderr, "\nCanceled.")
-			return nil
-		}
-		addedModelNames = names
-		modelName = addedModelNames[0]
-	} else {
-		modelName = strings.TrimSpace(chosenModel)
-	}
-
-	// Connection test. Only the OpenAI-compatible adapter exposes a simple
-	// /chat/completions probe; a newly added Anthropic provider is skipped
-	// with a note (probing it with an OpenAI request would always fail).
-	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
-		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
-		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
-			var saveAnyway bool
-			if err := huh.NewConfirm().
-				Title("Connection test failed. Save configuration anyway?").
-				Value(&saveAnyway).
-				Run(); err != nil || !saveAnyway {
-				fmt.Fprintln(os.Stderr, "Not saved.")
-				return nil
-			}
-		} else {
-			fmt.Fprintln(os.Stderr, "✓ OK")
-		}
-	} else if newProvider && apiKey != "" && providerBaseURL != "" && !isOpenAICompatible(effType) {
-		fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, effType)
-	}
-
-	// Form 2: preferences (built-in tools, web search, review).
-	form2 := huh.NewForm(
 		// Page 8: Built-in tools
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -411,12 +414,86 @@ func RunConfigWizard() error {
 		WithKeyMap(keymap).
 		WithEscapeAbortConfirmation("Press Esc again to exit.")
 
-	if err := form2.Run(); err != nil {
+	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			fmt.Fprintln(os.Stderr, "\nCanceled.")
 			return nil
 		}
 		return fmt.Errorf("config wizard: %w", err)
+	}
+
+	// Resolve provider identity and base URL (model names are filled below via
+	// discovery or manual entry, so parsing is skipped here).
+	apiName, _, _, providerBaseURL, addedModel, err := resolveWizardProviderModel(
+		chosenAPI,
+		chosenModel,
+		newProviderName,
+		"",
+		baseURL,
+		"discover", // skip manual parsing; models discovered after the form
+	)
+	if err != nil {
+		return err
+	}
+	envVarName := resolveEnvVar(apiName)
+	if providerBaseURL == "" {
+		providerBaseURL = findBaseURL(apiName)
+	}
+
+	// Effective adapter protocol: built-in providers carry it in their name;
+	// a newly added provider declares it via the api-type selection, and an
+	// existing custom provider may declare it via its configured api-type.
+	effType := apiName
+	newProvider := chosenAPI == addProviderOption
+	if newProvider {
+		effType = apiType
+	} else if at := findAPIType(apiName); at != "" {
+		effType = at
+	}
+
+	// Model selection resolves from the form: either the discovered-model
+	// picker (discover) or the manual text box (manual, or discover that came
+	// back empty). Runs after the main form, before the connection test.
+	var addedModelNames []string
+	var modelName string
+	if addedModel {
+		if modelSource == "discover" && len(discoveredPick) > 0 {
+			// The MultiSelect value is in option (fetched/sorted) order, so the
+			// first entry is a deterministic default.
+			addedModelNames = discoveredPick
+			modelName = addedModelNames[0]
+		} else {
+			parsed, perr := parseNewModelNames(apiName, manualModelsText)
+			if perr != nil {
+				return perr
+			}
+			addedModelNames = parsed
+			modelName = addedModelNames[0]
+		}
+	} else {
+		modelName = strings.TrimSpace(chosenModel)
+	}
+
+	// Connection test. Only the OpenAI-compatible adapter exposes a simple
+	// /chat/completions probe; a newly added Anthropic provider is skipped
+	// with a note (probing it with an OpenAI request would always fail).
+	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
+		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
+		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
+			var saveAnyway bool
+			if err := huh.NewConfirm().
+				Title("Connection test failed. Save configuration anyway?").
+				Value(&saveAnyway).
+				Run(); err != nil || !saveAnyway {
+				fmt.Fprintln(os.Stderr, "Not saved.")
+				return nil
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, "✓ OK")
+		}
+	} else if newProvider && apiKey != "" && providerBaseURL != "" && !isOpenAICompatible(effType) {
+		fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, effType)
 	}
 
 	// Form 3: config file location (Standard vs Portable). Skipped when the
@@ -796,134 +873,6 @@ func resolveWizardProviderModel(chosenAPI, chosenModel, newProviderName, newMode
 		providerBaseURL = findBaseURL(apiName)
 	}
 	return apiName, modelName, addedModelNames, providerBaseURL, addedModel, nil
-}
-
-// chooseModels resolves which model names to add for a provider. With
-// source=="discover" it fetches the provider's model list and presents a
-// multi-select; on any failure (API error, or every discovered model already
-// configured) it falls back to manual entry. source=="manual" goes straight to
-// manual entry. Returns (nil, nil) if the user cancels via Esc.
-func chooseModels(apiName, source, effType, baseURL, apiKey string) ([]string, error) {
-	if source == "discover" {
-		if effType != "ollama" && strings.TrimSpace(apiKey) == "" {
-			fmt.Fprintf(os.Stderr, "\n⚠ No API key available for %s discovery (set the env var or save the key in config); falling back to manual entry.\n", apiName)
-		} else {
-			fmt.Fprintf(os.Stderr, "\nDiscovering models for %s... ", apiName)
-		}
-		discovered, derr := discoverModels(effType, baseURL, apiKey)
-		switch {
-		case derr != nil:
-			fmt.Fprintf(os.Stderr, "\n⚠ Could not discover models for %s: %s\nFalling back to manual entry.\n", apiName, derr)
-		default:
-			picked, perr := promptDiscoveredModels(apiName, discovered)
-			if perr != nil {
-				if errors.Is(perr, huh.ErrUserAborted) {
-					return nil, nil
-				}
-				return nil, perr
-			}
-			if len(picked) > 0 {
-				return picked, nil
-			}
-			fmt.Fprintf(os.Stderr, "\nAll discovered models for %s are already configured; add any extra names manually.\n", apiName)
-		}
-	}
-	// Manual entry — also the fallback when discovery is unavailable or yields
-	// nothing new. Esc cancels cleanly.
-	names, merr := promptManualModelNames(apiName)
-	if merr != nil {
-		if errors.Is(merr, huh.ErrUserAborted) {
-			return nil, nil
-		}
-		return nil, merr
-	}
-	return names, nil
-}
-
-// promptDiscoveredModels runs a second form letting the user pick which
-// discovered model IDs to add. Returns the selected IDs in display order.
-// Models already configured on the provider are filtered out so selecting one
-// can't silently overwrite an existing model's settings.
-func promptDiscoveredModels(apiName string, models []string) ([]string, error) {
-	existing := existingModelNames(apiName)
-	opts := make([]huh.Option[string], 0, len(models))
-	for _, m := range models {
-		if _, ok := existing[m]; ok {
-			continue
-		}
-		opts = append(opts, huh.NewOption(m, m))
-	}
-	if len(opts) == 0 {
-		return nil, nil
-	}
-	// Cap the picker so huge catalogs (e.g. OpenRouter's 300+) stay usable;
-	// the user can add anything beyond the cap via manual entry.
-	const maxPickerModels = 200
-	if len(opts) > maxPickerModels {
-		fmt.Fprintf(os.Stderr, "\nShowing the first %d of %d available models; enter any others manually if needed.\n", maxPickerModels, len(opts))
-		opts = opts[:maxPickerModels]
-	}
-	var picked []string
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title(fmt.Sprintf("Models for %s", apiName)).
-				Description("Select models to add. The first selected becomes the default.").
-				Options(opts...).
-				Value(&picked).
-				Validate(func(s []string) error {
-					if len(s) == 0 {
-						return fmt.Errorf("select at least one model")
-					}
-					return nil
-				}),
-		).Title("discover models"),
-	).
-		WithTheme(configWizardTheme(config.Theme)).
-		WithEscapeAbortConfirmation("Press Esc again to exit.")
-	if err := form.Run(); err != nil {
-		return nil, err
-	}
-	// Preserve the discovered (sorted) order rather than selection order so
-	// the default (first) is deterministic.
-	selected := make(map[string]struct{}, len(picked))
-	for _, m := range picked {
-		selected[m] = struct{}{}
-	}
-	ordered := make([]string, 0, len(picked))
-	for _, m := range models {
-		if _, ok := selected[m]; ok {
-			ordered = append(ordered, m)
-		}
-	}
-	return ordered, nil
-}
-
-// promptManualModelNames runs a second form for manual model entry, used as a
-// fallback when discovery fails or is unavailable.
-func promptManualModelNames(apiName string) ([]string, error) {
-	var text string
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewText().
-				Title(fmt.Sprintf("Models for %s", apiName)).
-				Description("Enter one model identifier per line. The first model becomes the default.").
-				Placeholder("llama-3.3-70b-versatile\nllama-3.1-8b-instant").
-				Lines(6).
-				ExternalEditor(false).
-				Value(&text).
-				Validate(func(value string) error {
-					_, err := parseNewModelNames(apiName, value)
-					return err
-				}),
-		).Title("new models"),
-	).
-		WithTheme(configWizardTheme(config.Theme)).
-		WithEscapeAbortConfirmation("Press Esc again to exit.")
-	if err := form.Run(); err != nil {
-		return nil, err
-	}
-	return parseNewModelNames(apiName, text)
 }
 
 // resolveEnvVar returns the configured api-key-env for the provider, or

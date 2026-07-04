@@ -10,75 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsSimpleReadOnly(t *testing.T) {
-	cases := []struct {
-		cmd  string
-		want bool
-	}{
-		// Allowlisted commands, no metacharacters.
-		{"ls", true},
-		{"ls -la", true},
-		{"cat README.md", true},
-		{"cat file1 file2", true},
-		{"head -n 5 log.txt", true},
-		{"tail -f out.log", true},
-		{"wc -l *.go", true},
-		{"file /bin/ls", true},
-		{"stat report.pdf", true},
-		{"pwd", true},
-		{"echo hello world", true},
-		{"date", true},
-		{"whoami", true},
-		{"hostname", true},
-		{"uname -a", true},
-		{"du -sh .", true},
-		{"df -h", true},
-		{"which go", true},
-		{"env", true},
-		{"printenv PATH", true},
-		{"basename /path/to/file", true},
-		{"dirname /path/to/file", true},
-		{"realpath link", true},
-		{"readlink link", true},
-		{"grep pattern file", true},
-		{"egrep 'a|b' file", false}, // | metacharacter, send to LLM
-		{"fgrep literal file", true},
-
-		// Not in allowlist.
-		{"find . -name '*.go'", false},
-		{"sed 's/a/b/' file", false},
-		{"awk '{print $1}'", false},
-		{"sort file", false},
-		{"tr a-z A-Z", false},
-		{"cut -d: -f1 /etc/passwd", false},
-		{"diff a b", false},
-		{"tar tf archive.tar", false},
-		{"curl https://example.com", false},
-		{"wget https://example.com", false},
-		{"rm file", false},
-		{"cp src dst", false},
-		{"mv old new", false},
-		{"git status", false},
-		{"make", false},
-
-		// Metacharacters disqualify even allowlisted commands.
-		{"cat file | grep foo", false},
-		{"echo hello > out.txt", false},
-		{"ls -la > /dev/null", false},
-		{"cat a; rm b", false},
-		{"grep foo && echo found", false},
-		{"ls -la `pwd`", false},
-		{"echo $(date)", false},
-
-		// Full path to allowlisted command still works.
-		{"/bin/ls", true},
-		{"/usr/bin/cat file", true},
-	}
-	for _, c := range cases {
-		require.Equalf(t, c.want, isSimpleReadOnly(c.cmd), "cmd=%q", c.cmd)
-	}
-}
-
 func TestExtractExternalPaths(t *testing.T) {
 	ws := filepath.Clean(t.TempDir())
 	ext := filepath.Clean(t.TempDir())
@@ -386,4 +317,32 @@ func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {
 	result := mods.analyzeShellCommand("powershell_run", "Get-Content C:\\Users\\Public\\file.txt")
 	require.False(t, result.NeedsReview, "Get-Content should be read-only")
 	require.NotEmpty(t, result.AffectedDirs, "should have affected dirs from AST")
+}
+
+func TestExtractExternalPathsIgnoresBareSlash(t *testing.T) {
+	ws := filepath.Clean(t.TempDir())
+	// Single-quoted shell-program literals (awk/sed/perl scripts) contain
+	// "/", "$", and "~" tokens that are syntax, not paths, and must not be
+	// extracted. Previously this produced spurious "Risk: external read -
+	// affects /" reviews for commands like `find . -exec awk '/re/{ ... }'`.
+	for _, cmd := range []string{
+		`awk '{print $1 / $2}' file`,                 // division inside quotes
+		`awk '/^[[:space:]]*$/ {next}' file`,         // regex delimiter inside quotes
+		`find . -exec awk '{n++} END{print n}' {} +`, // quoted awk program
+	} {
+		got := extractExternalPaths(cmd, ws)
+		for _, p := range got {
+			require.NotEqual(t, "/", p, "bare '/' inside quoted program must not be extracted for cmd=%q; got %v", cmd, got)
+		}
+	}
+
+	// A bare UNQUOTED root argument is still detected (e.g. destructive
+	// `find / -delete`), so stripping quoted programs does not weaken root
+	// detection.
+	require.Equal(t, []string{"/"}, extractExternalPaths("find / -delete", ws))
+
+	// Positive control: a real unquoted absolute path is still extracted.
+	ext := filepath.Clean(t.TempDir())
+	secret := filepath.Join(ext, "secret")
+	require.Equal(t, []string{secret}, extractExternalPaths("cat "+secret, ws))
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -85,20 +84,9 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		}
 	}
 
-	// Tier 2: conservative allowlist fallback for commands the AST parser
-	// can't handle. Only matches commands
-	// with no shell metacharacters and no external-path references.
-	if isSimpleReadOnly(command) && len(externalPaths) == 0 {
-		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, workspace-local", debug.Truncate(command, 80))
-		return shellCommandAnalysis{
-			NeedsReview: false,
-			Reason:      "read-only command, workspace-local (local heuristic)",
-		}
-	}
-
-	// Test seam: short-circuits the LLM classifier. Local heuristics (AST
-	// and simple allowlist) run first so read-only commands never reach
-	// this path; everything else delegates to the seam or the LLM.
+	// Test seam: short-circuits the LLM classifier. The AST read-only
+	// classifier runs first so read-only commands never reach this path;
+	// everything else delegates to the seam or the LLM.
 	if m.shellAnalyzer != nil {
 		return m.shellAnalyzer(tool, command)
 	}
@@ -348,45 +336,16 @@ var reYes = regexp.MustCompile(`\bYES\b`)
 var reNo = regexp.MustCompile(`\bNO\b`)
 var reJSONFence = regexp.MustCompile("(?is)```(?:json)?\\s*(.*?)\\s*```")
 
-// readOnlyCommands is a conservative allowlist of shell commands whose basic
-// form is read-only and has no file-modifying flags. Only commands in this
-// set may skip the LLM classifier — and even then only when the command
-// contains no shell metacharacters and touches no external paths.
-var readOnlyCommands = map[string]bool{
-	"ls": true, "cat": true, "head": true, "tail": true,
-	"wc": true, "file": true, "stat": true, "pwd": true,
-	"echo": true, "date": true, "whoami": true, "hostname": true,
-	"uname": true, "du": true, "df": true, "which": true,
-	"env": true, "printenv": true, "basename": true, "dirname": true,
-	"realpath": true, "readlink": true,
-	"grep": true, "egrep": true, "fgrep": true,
-}
-
-// reShellMetacharacters matches shell metacharacters that can alter the
-// semantics of an otherwise-safe command (redirection, piping, command
-// chaining, substitution). Any hit forces the LLM classifier.
-var reShellMetacharacters = regexp.MustCompile(`[>|;` + "`" + `]|&&|\$\(`)
-
-func isSimpleReadOnly(command string) bool {
-	if reShellMetacharacters.MatchString(command) {
-		return false
-	}
-	fields := strings.Fields(command)
-	if len(fields) == 0 {
-		return false
-	}
-	return readOnlyCommands[filepath.Base(fields[0])]
-}
-
 // Path-extraction patterns for extractExternalPaths. The *Path variants
 // capture the full token so it can be populated into AffectedDirs.
 var (
-	reParentPath  = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
-	reHomePath    = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
-	reHomeVarPath = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/][^\s'"<>|;,&(){}]*`)
-	reCMDHomePath = regexp.MustCompile(`(?i)%(?:USERPROFILE|HOMEDRIVE%%HOMEPATH)%[\\/][^\s'"<>|;,&(){}]*`)
-	reUnixAbsPath = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
-	reWinAbsPath  = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
+	reParentPath   = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
+	reHomePath     = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
+	reHomeVarPath  = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/][^\s'"<>|;,&(){}]*`)
+	reCMDHomePath  = regexp.MustCompile(`(?i)%(?:USERPROFILE|HOMEDRIVE%%HOMEPATH)%[\\/][^\s'"<>|;,&(){}]*`)
+	reUnixAbsPath  = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
+	reSingleQuoted = regexp.MustCompile(`'[^']*'`)
+	reWinAbsPath   = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
 )
 
 // extractExternalPaths returns path tokens from the command that reference
@@ -400,6 +359,14 @@ func extractExternalPaths(command, workspaceDir string) []string {
 
 func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
 	opts := pathutil.DefaultOptions(workspaceDir, flavor)
+	// Strip single-quoted segments before matching. These carry shell-program
+	// literals (awk/sed/perl scripts) whose "/", "$", and "~" tokens are
+	// syntax, not filesystem paths, and caused widespread false positives —
+	// e.g. `find . -exec awk '/re/{ ... }'` was flagged "affects /". A bare
+	// root argument like `find / -delete` is unquoted, so it is still
+	// detected. The rare habit of single-quoting an absolute path argument
+	// (e.g. `cat '/etc/passwd'`) is an accepted gap.
+	command = reSingleQuoted.ReplaceAllString(command, " ")
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {

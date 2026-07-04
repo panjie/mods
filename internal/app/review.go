@@ -464,8 +464,13 @@ func (r *toolReviewer) renderBanner(width int, reviewPrompt, reviewChoices lipgl
 		width = 80
 	}
 	label := formatReviewLabel(r.reviewItem.name, r.reviewItem.args)
+	// Bound the Review line to the terminal width with an ellipsis, symmetric
+	// with the summary line below. Without this, long shell commands render
+	// full-length and lipgloss's Width() hard-truncates them mid-token with no
+	// "..." cue, leaving the user unable to tell the command continues.
+	reviewLine := TruncateOperationStatus("  Review: "+label, width)
 	promptLine := reviewPrompt.Copy().Width(width).Render(
-		padRight("  Review: "+label, width-4),
+		padRight(reviewLine, width-4),
 	)
 	baseStyle := reviewChoices.Copy().Padding(0, 0)
 	selectedStyle := baseStyle.Copy().

@@ -407,6 +407,33 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 	}
 }
 
+func TestReviewBannerTruncatesLongCommandWithEllipsis(t *testing.T) {
+	// A long shell command must render within the terminal width and signal
+	// truncation with "..." rather than being hard-cut mid-token, which left
+	// users unable to tell the command continued past the visible cut point.
+	long := "find . -name '*.go' -not -path './.git/*' -exec awk '{print $1 / $2}' {} +"
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         testApprovalScope,
+		reviewItem: &toolReviewItem{
+			name:    "shell_run",
+			args:    []byte(`{"command":"` + long + `"}`),
+			summary: "Risk: read-only",
+		},
+	}
+	const width = 60
+	rendered := reviewer.renderBanner(width, lipgloss.NewStyle(), lipgloss.NewStyle())
+	lines := strings.Split(rendered, "\n")
+
+	// The Review label is the first rendered line.
+	reviewLine := lines[0]
+	require.LessOrEqual(t, len([]rune(reviewLine)), width, "Review line must fit the terminal width")
+
+	// The command is signaled as truncated and its tail is not shown.
+	require.Contains(t, reviewLine, "...", `truncated Review line should end with "..."`)
+	require.NotContains(t, reviewLine, "{} +", "the command tail should be truncated away")
+}
+
 func TestReviewPolicyNonTTY(t *testing.T) {
 	oldIsInputTTY := isInputTTY
 	oldInputTTY := IsInputTTY

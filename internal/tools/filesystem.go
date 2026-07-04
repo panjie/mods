@@ -349,6 +349,19 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		return err
 	}
 
+	for _, tool := range []Tool{
+		filesystemLargestTool(root, safeDirs),
+		filesystemDeleteFileTool(root, safeDirs),
+		filesystemDeleteDirTool(root, safeDirs),
+		filesystemMoveTool(root, safeDirs),
+		filesystemCopyTool(root, safeDirs),
+		filesystemMkdirTool(root, safeDirs),
+	} {
+		if err := register(tool); err != nil {
+			return err
+		}
+	}
+
 	return register(Tool{
 		Kind:            ToolKindBuiltin,
 		Capabilities:    ToolCapabilities{Mutable: true},

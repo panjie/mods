@@ -22,13 +22,23 @@ func formatReviewSummary(name string, args []byte, analysis shellCommandAnalysis
 func formatReviewSummaryWithIntent(name string, args []byte, analysis shellCommandAnalysis, scope Scope, intent AccessIntent) string {
 	parsed := ToolOperationArgs(args)
 	switch name {
-	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search":
+	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
 		return fmt.Sprintf("Target: %s - external read", OneLinePreview(readReviewTarget(parsed, scope, intent)))
 	case "fs_write_file":
 		path := ArgString(parsed, "path")
 		content := ArgString(parsed, "content")
 		mode := writeTargetMode(path, scope)
 		return fmt.Sprintf("Target: %s - %s - %d bytes", OneLinePreview(path), mode, len(content))
+	case "fs_delete_file":
+		return fmt.Sprintf("Target: %s - delete file", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_delete_dir":
+		return fmt.Sprintf("Target: %s - delete directory", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_mkdir":
+		return fmt.Sprintf("Target: %s - create directory", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_copy":
+		return fmt.Sprintf("Copy: %s -> %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
+	case "fs_move":
+		return fmt.Sprintf("Move: %s -> %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
 	case "fs_apply_patch":
 		return patchSummary(ArgString(parsed, "patch"))
 	case "shell_run", "powershell_run":

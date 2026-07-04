@@ -515,6 +515,16 @@ func formatReviewLabel(name string, args []byte) string {
 		content := ArgString(parsed, "content")
 		size := len(content)
 		return fmt.Sprintf("Write %s (%d bytes)", path, size)
+	case "fs_delete_file":
+		return fmt.Sprintf("Delete file %s", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_delete_dir":
+		return fmt.Sprintf("Delete directory %s", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_mkdir":
+		return fmt.Sprintf("Create directory %s", OneLinePreview(ArgString(parsed, "path")))
+	case "fs_copy":
+		return fmt.Sprintf("Copy %s to %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
+	case "fs_move":
+		return fmt.Sprintf("Move %s to %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
 	case "fs_apply_patch":
 		return "Apply patch to workspace files"
 	case "shell_run":

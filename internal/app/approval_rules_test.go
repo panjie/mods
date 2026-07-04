@@ -190,6 +190,11 @@ func TestApprovalRuleSet(t *testing.T) {
 	rules.Add(scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}))
 	require.True(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), testApprovalScope))
 	require.True(t, rules.Allows("fs_apply_patch", []byte(`{"patch":"..."}`), testApprovalScope))
+	require.True(t, rules.Allows("fs_delete_file", []byte(`{"path":"a.txt"}`), testApprovalScope))
+	require.True(t, rules.Allows("fs_delete_dir", []byte(`{"path":"a"}`), testApprovalScope))
+	require.True(t, rules.Allows("fs_move", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), testApprovalScope))
+	require.True(t, rules.Allows("fs_copy", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), testApprovalScope))
+	require.True(t, rules.Allows("fs_mkdir", []byte(`{"path":"a"}`), testApprovalScope))
 	require.False(t, rules.Allows("shell_run", []byte(`{"command":"rm a.txt"}`), testApprovalScope))
 	require.False(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), WorkspaceScope("/other")))
 

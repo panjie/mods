@@ -30,6 +30,15 @@ func TestFormatReviewSummary(t *testing.T) {
 		require.Equal(t, "Patch: a.txt (+2 -1)", summary)
 	})
 
+	t.Run("new filesystem mutations summarize action", func(t *testing.T) {
+		scope := WorkspaceScope(t.TempDir())
+		require.Contains(t, formatReviewSummary("fs_delete_file", []byte(`{"path":"old.txt"}`), shellCommandAnalysis{}, scope), "delete file")
+		require.Contains(t, formatReviewSummary("fs_delete_dir", []byte(`{"path":"old-dir"}`), shellCommandAnalysis{}, scope), "delete directory")
+		require.Contains(t, formatReviewSummary("fs_mkdir", []byte(`{"path":"new-dir"}`), shellCommandAnalysis{}, scope), "create directory")
+		require.Contains(t, formatReviewSummary("fs_copy", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), shellCommandAnalysis{}, scope), "a.txt -> b.txt")
+		require.Contains(t, formatReviewSummary("fs_move", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), shellCommandAnalysis{}, scope), "a.txt -> b.txt")
+	})
+
 	t.Run("shell risk uses affected dirs", func(t *testing.T) {
 		scope := WorkspaceScope("/workspace")
 		require.Contains(t,

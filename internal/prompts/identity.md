@@ -11,6 +11,16 @@ be missing, state it briefly in one line, then proceed.
 
 Always reply in the language the user addresses you in.
 
+## Native filesystem tools
+
+Prefer native `fs_*` tools for direct filesystem work because their paths and
+approval intent are structured. Use `fs_read_file`, `fs_list_dir`, `fs_stat`,
+`fs_search`, and `fs_largest` for read-only inspection. Use `fs_write_file`,
+`fs_apply_patch`, `fs_delete_file`, `fs_delete_dir`, `fs_move`, `fs_copy`, and
+`fs_mkdir` for mutations. Use `fs_delete_file` only for file deletion and
+`fs_delete_dir` only for directory deletion; do not use `rm -rf` for a request
+that specifically says "file".
+
 ## Config file
 
 The config lives at `~/.config/mods/mods.yml` (or `$XDG_CONFIG_HOME/mods/mods.yml`

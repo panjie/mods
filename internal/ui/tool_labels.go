@@ -83,6 +83,40 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 		case path != "":
 			return TruncateOperationStatus("Searching files in: "+path, width)
 		}
+	case "fs_largest":
+		path := OneLinePreview(ArgString(args, "path"))
+		kind := OneLinePreview(ArgString(args, "kind"))
+		if kind == "" {
+			kind = "files"
+		}
+		if path != "" {
+			return TruncateOperationStatus("Finding largest "+kind+" in: "+path, width)
+		}
+		return TruncateOperationStatus("Finding largest "+kind, width)
+	case "fs_delete_file":
+		if path := OneLinePreview(ArgString(args, "path")); path != "" {
+			return TruncateOperationStatus("Deleting file: "+path, width)
+		}
+	case "fs_delete_dir":
+		if path := OneLinePreview(ArgString(args, "path")); path != "" {
+			return TruncateOperationStatus("Deleting directory: "+path, width)
+		}
+	case "fs_mkdir":
+		if path := OneLinePreview(ArgString(args, "path")); path != "" {
+			return TruncateOperationStatus("Creating directory: "+path, width)
+		}
+	case "fs_copy":
+		source := OneLinePreview(ArgString(args, "source_path"))
+		dest := OneLinePreview(ArgString(args, "dest_path"))
+		if source != "" && dest != "" {
+			return TruncateOperationStatus("Copying: "+source+" to "+dest, width)
+		}
+	case "fs_move":
+		source := OneLinePreview(ArgString(args, "source_path"))
+		dest := OneLinePreview(ArgString(args, "dest_path"))
+		if source != "" && dest != "" {
+			return TruncateOperationStatus("Moving: "+source+" to "+dest, width)
+		}
 	case "fs_apply_patch":
 		return TruncateOperationStatus("Applying patch", width)
 	case "thinking_note":
@@ -109,7 +143,7 @@ func ToolArgsSummary(args map[string]any) string {
 	if len(args) == 0 {
 		return ""
 	}
-	preferred := []string{"query", "command", "path", "url", "repo", "repository", "file", "filename", "name"}
+	preferred := []string{"query", "command", "path", "source_path", "dest_path", "url", "repo", "repository", "file", "filename", "name"}
 	parts := make([]string, 0, 3)
 	seen := map[string]bool{}
 	for _, key := range preferred {

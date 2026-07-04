@@ -24,11 +24,12 @@ const (
 Priority order:
 1. Use fs_* tools for files inside the configured workspace; they are auto-approved for reads and reviewed only for writes.
 2. fs_* tools may also access files outside the workspace (Downloads, Desktop, system temp, etc.); such access triggers an approval prompt. Prefer workspace-local paths to minimize interruptions.
-3. Use shell tools for repository-wide inspection, test/build commands, git commands, package manager scripts, and data-processing pipelines.
-4. Minimize tool calls by using one well-formed command instead of repeated small retries.
-5. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review.
-6. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review.
-7. Mutating and destructive shell commands (delete, move, rename, overwrite) are automatically routed through mods' review step - when the user requests such an action, attempt it directly rather than asking for permission first.
+3. Prefer native filesystem tools over shell for common file operations: fs_largest for largest-file/largest-directory requests, fs_delete_file when the user asks to delete a file, fs_delete_dir when the user asks to delete a directory, fs_copy for copying, fs_move for moving or renaming, and fs_mkdir for directory creation. Do not use rm -rf for a "file" request.
+4. Use shell tools for repository-wide inspection, test/build commands, git commands, package manager scripts, and data-processing pipelines.
+5. Minimize tool calls by using one well-formed command instead of repeated small retries.
+6. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review.
+7. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review.
+8. Mutating and destructive shell commands (delete, move, rename, overwrite) are automatically routed through mods' review step - when the user requests such an action, attempt it directly rather than asking for permission first.
 
 Platform rules:
 - On macOS/Linux/POSIX, prefer portable sh commands and common project tools.
@@ -71,7 +72,7 @@ CRITICAL — PLANNING PHASE ONLY. You are NOT authorized to:
 
 Investigation means READING, not BUILDING. If you catch yourself writing a script, STOP — that script belongs in the plan, not in your current tool calls.
 
-Valid investigation means read-only inspection. Use platform-appropriate read-only commands for listing directories, reading files, searching text, and checking metadata; do not redirect output to files. Built-in read-only tools such as fs_list_dir, fs_read_file, fs_stat, and fs_search are allowed.
+Valid investigation means read-only inspection. Use platform-appropriate read-only commands for listing directories, reading files, searching text, and checking metadata; do not redirect output to files. Built-in read-only tools such as fs_list_dir, fs_read_file, fs_stat, fs_search, and fs_largest are allowed.
 
 When you have enough context, output the plan IMMEDIATELY. Do not over-investigate. Do not include investigation notes, tool call results, or running commentary — just the plan itself.
 

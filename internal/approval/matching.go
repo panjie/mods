@@ -17,11 +17,12 @@ import (
 
 func (s *RuleSet) Allows(name string, data []byte, scope Scope) bool {
 	rules := rulesForScope(s.Snapshot(), scope)
-	switch name {
-	case "fs_write_file", "fs_apply_patch":
+	if isBuiltinFilesystemEditTool(name) {
 		return slices.ContainsFunc(rules, func(rule Rule) bool {
 			return rule.Type == EditAll
 		})
+	}
+	switch name {
 	case "shell_run", "powershell_run":
 		command := ExtractShellCommand(data)
 		if command == "" {
@@ -40,12 +41,13 @@ func RulesFor(name string, data []byte, scope Scope) []Rule {
 }
 
 func rulesForTool(name string, data []byte) []Rule {
-	switch name {
-	case "fs_write_file", "fs_apply_patch":
+	if isBuiltinFilesystemEditTool(name) {
 		return []Rule{{
 			Type: EditAll,
 			Tool: "file_edit",
 		}}
+	}
+	switch name {
 	case "shell_run", "powershell_run":
 		return nil
 	default:
@@ -53,6 +55,15 @@ func rulesForTool(name string, data []byte) []Rule {
 			Type: ToolAll,
 			Tool: name,
 		}}
+	}
+}
+
+func isBuiltinFilesystemEditTool(name string) bool {
+	switch name {
+	case "fs_write_file", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir":
+		return true
+	default:
+		return false
 	}
 }
 

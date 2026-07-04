@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -115,6 +116,166 @@ func TestFilesystemReadWriteSearch(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(root, "notes", "a.txt")); err != nil {
 		t.Fatalf("written file missing: %v", err)
+	}
+}
+
+func TestFilesystemLargestFileKindIgnoresDirectoryEntries(t *testing.T) {
+	root := t.TempDir()
+	downloads := filepath.Join(root, "Downloads")
+	courseDir := filepath.Join(downloads, "course")
+	if err := os.MkdirAll(courseDir, 0o755); err != nil {
+		t.Fatalf("mkdir course: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(courseDir, "material.mov"), []byte(strings.Repeat("x", 4096)), 0o644); err != nil {
+		t.Fatalf("seed material: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(downloads, "loose.zip"), []byte(strings.Repeat("x", 1024)), 0o644); err != nil {
+		t.Fatalf("seed loose file: %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	files, err := registry.Call(context.Background(), "fs_largest", []byte(`{"path":"Downloads","kind":"file","max_results":1}`))
+	if err != nil {
+		t.Fatalf("largest files: %v", err)
+	}
+	if !strings.Contains(files, "file\tDownloads/course/material.mov") {
+		t.Fatalf("expected largest file entry, got: %q", files)
+	}
+	if strings.Contains(files, "\tdir\tDownloads/course") {
+		t.Fatalf("file search must not return directory entries: %q", files)
+	}
+
+	dirs, err := registry.Call(context.Background(), "fs_largest", []byte(`{"path":"Downloads","kind":"dir","max_results":1}`))
+	if err != nil {
+		t.Fatalf("largest dirs: %v", err)
+	}
+	if !strings.Contains(dirs, "dir\tDownloads/course") {
+		t.Fatalf("expected largest directory entry, got: %q", dirs)
+	}
+}
+
+func TestFilesystemDeleteFileAndDirBoundaries(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	dir := filepath.Join(root, "target-dir")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_delete_file", []byte(`{"path":"target-dir"}`)); err == nil {
+		t.Fatal("fs_delete_file must refuse directories")
+	}
+
+	file := filepath.Join(root, "target.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_delete_file", []byte(`{"path":"target.txt"}`)); err != nil {
+		t.Fatalf("delete file: %v", err)
+	}
+	if _, err := os.Stat(file); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("file should be deleted, stat err=%v", err)
+	}
+
+	nested := filepath.Join(root, "non-empty", "child.txt")
+	if err := os.MkdirAll(filepath.Dir(nested), 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+	if err := os.WriteFile(nested, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed nested: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_delete_dir", []byte(`{"path":"non-empty"}`)); err == nil {
+		t.Fatal("non-recursive fs_delete_dir must refuse non-empty directories")
+	}
+	if _, err := os.Stat(nested); err != nil {
+		t.Fatalf("non-recursive delete should leave contents in place: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_delete_dir", []byte(`{"path":"non-empty","recursive":true}`)); err != nil {
+		t.Fatalf("recursive delete dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "non-empty")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("directory should be deleted, stat err=%v", err)
+	}
+}
+
+func TestFilesystemDeleteFileDeletesSymlinkItself(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	target := filepath.Join(outside, "target.txt")
+	if err := os.WriteFile(target, []byte("keep"), 0o644); err != nil {
+		t.Fatalf("seed outside target: %v", err)
+	}
+	link := filepath.Join(root, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink creation not supported: %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_delete_file", []byte(`{"path":"link.txt"}`)); err != nil {
+		t.Fatalf("delete symlink: %v", err)
+	}
+	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("symlink should be deleted, lstat err=%v", err)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "keep" {
+		t.Fatalf("symlink target should remain, content=%q err=%v", got, err)
+	}
+}
+
+func TestFilesystemCopyMoveMkdir(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+
+	if _, err := registry.Call(context.Background(), "fs_mkdir", []byte(`{"path":"nested/out"}`)); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "source.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("seed source: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"source.txt","dest_path":"nested/out"}`)); err != nil {
+		t.Fatalf("copy file into dir: %v", err)
+	}
+	copied := filepath.Join(root, "nested", "out", "source.txt")
+	if got, err := os.ReadFile(copied); err != nil || string(got) != "hello" {
+		t.Fatalf("copied file content=%q err=%v", got, err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_move", []byte(`{"source_path":"nested/out/source.txt","dest_path":"renamed.txt"}`)); err != nil {
+		t.Fatalf("move file: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "renamed.txt")); err != nil || string(got) != "hello" {
+		t.Fatalf("moved file content=%q err=%v", got, err)
+	}
+	if _, err := os.Stat(copied); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("source after move should be gone, stat err=%v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, "tree", "sub"), 0o755); err != nil {
+		t.Fatalf("mkdir tree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "tree", "sub", "data.txt"), []byte("tree"), 0o644); err != nil {
+		t.Fatalf("seed tree: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy"}`)); err == nil {
+		t.Fatal("directory copy must require recursive=true")
+	}
+	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy","recursive":true}`)); err != nil {
+		t.Fatalf("copy dir: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "tree-copy", "sub", "data.txt")); err != nil || string(got) != "tree" {
+		t.Fatalf("copied dir content=%q err=%v", got, err)
 	}
 }
 
@@ -567,6 +728,44 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	wantLiteralGlobDir := filepath.Join(canonicalRoot, "literal*")
 	if len(intentLiteralGlob.Dirs) != 1 || intentLiteralGlob.Dirs[0] != wantLiteralGlobDir {
 		t.Fatalf("fs_write_file literal glob dirs=%v want [%s]", intentLiteralGlob.Dirs, wantLiteralGlobDir)
+	}
+
+	extLargest, ok := registry.IntentExtractor("fs_largest")
+	if !ok {
+		t.Fatal("fs_largest must have an intent extractor")
+	}
+	intentLargest := extLargest([]byte(`{"path":"existing-dir","kind":"file"}`))
+	if intentLargest.Class != approval.AccessRead {
+		t.Fatalf("fs_largest class=%q want read", intentLargest.Class)
+	}
+	if len(intentLargest.Dirs) != 1 || intentLargest.Dirs[0] != dirTarget {
+		t.Fatalf("fs_largest dirs=%v want [%s]", intentLargest.Dirs, dirTarget)
+	}
+
+	extDeleteDir, ok := registry.IntentExtractor("fs_delete_dir")
+	if !ok {
+		t.Fatal("fs_delete_dir must have an intent extractor")
+	}
+	intentDeleteDir := extDeleteDir([]byte(`{"path":"old-dir","recursive":true}`))
+	wantDeleteDir := filepath.Join(canonicalRoot, "old-dir")
+	if intentDeleteDir.Class != approval.AccessWrite {
+		t.Fatalf("fs_delete_dir class=%q want write", intentDeleteDir.Class)
+	}
+	if len(intentDeleteDir.Dirs) != 1 || intentDeleteDir.Dirs[0] != wantDeleteDir {
+		t.Fatalf("fs_delete_dir dirs=%v want [%s]", intentDeleteDir.Dirs, wantDeleteDir)
+	}
+
+	extCopy, ok := registry.IntentExtractor("fs_copy")
+	if !ok {
+		t.Fatal("fs_copy must have an intent extractor")
+	}
+	intentCopy := extCopy([]byte(`{"source_path":"out.txt","dest_path":"copies/out.txt"}`))
+	wantCopyDest := filepath.Join(canonicalRoot, "copies")
+	if intentCopy.Class != approval.AccessWrite {
+		t.Fatalf("fs_copy class=%q want write", intentCopy.Class)
+	}
+	if len(intentCopy.Dirs) != 2 || intentCopy.Dirs[0] != canonicalRoot || intentCopy.Dirs[1] != wantCopyDest {
+		t.Fatalf("fs_copy dirs=%v want [%s %s]", intentCopy.Dirs, canonicalRoot, wantCopyDest)
 	}
 
 	extP, ok := registry.IntentExtractor("fs_apply_patch")

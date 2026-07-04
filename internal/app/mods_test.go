@@ -382,6 +382,21 @@ func TestToolOperationLabel(t *testing.T) {
 		require.Equal(t, "Searching files: toolOperationLabel in internal", got)
 	})
 
+	t.Run("largest files path", func(t *testing.T) {
+		got := toolOperationLabel("fs_largest", []byte(`{"path":"Downloads","kind":"file"}`), 80)
+		require.Equal(t, "Finding largest file in: Downloads", got)
+	})
+
+	t.Run("copy path", func(t *testing.T) {
+		got := toolOperationLabel("fs_copy", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), 80)
+		require.Equal(t, "Copying: a.txt to b.txt", got)
+	})
+
+	t.Run("move path", func(t *testing.T) {
+		got := toolOperationLabel("fs_move", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), 80)
+		require.Equal(t, "Moving: a.txt to b.txt", got)
+	})
+
 	t.Run("thinking note", func(t *testing.T) {
 		got := toolOperationLabel("thinking_note", []byte(`{"thought":"checking the next step","done":false}`), 80)
 		require.Equal(t, "Thinking: checking the next step", got)

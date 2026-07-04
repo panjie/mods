@@ -45,3 +45,10 @@ func integerProp(description string) map[string]any {
 		"description": description,
 	}
 }
+
+func booleanProp(description string) map[string]any {
+	return map[string]any{
+		"type":        "boolean",
+		"description": description,
+	}
+}

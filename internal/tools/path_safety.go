@@ -71,6 +71,46 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	return resolved, nil
 }
 
+func resolveWorkspacePathNoFollowLeaf(ctx context.Context, root, input string, safeDirs []string) (string, error) {
+	if input == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	path := pathutil.NormalizePath(input, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
+	if pathutil.IsUnresolvedHomePath(path) {
+		return "", fmt.Errorf("path %q uses an unsupported user-home form; use an absolute path for that user", input)
+	}
+
+	boundary := root
+	if err := ensureInsideRoot(root, path); err != nil {
+		if safe, ok := matchSafeDir(path, safeDirs); ok {
+			boundary = safe
+		} else if approved, ok := matchAuthorizedDir(ctx, path); ok {
+			boundary = approved
+		} else {
+			return "", err
+		}
+	}
+
+	parent := filepath.Dir(path)
+	parentEval, err := evalPathThroughExistingParent(parent)
+	if err != nil {
+		return "", err
+	}
+
+	boundaryEval := boundary
+	if absBoundary, absErr := filepath.Abs(boundary); absErr == nil {
+		boundaryEval = absBoundary
+	}
+	if eval, evalErr := evalPathThroughExistingParent(boundaryEval); evalErr == nil {
+		boundaryEval = eval
+	}
+	resolved := filepath.Join(parentEval, filepath.Base(path))
+	if err := ensureInsideRoot(boundaryEval, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
 func evalPathThroughExistingParent(path string) (string, error) {
 	existing := path
 	var missing []string

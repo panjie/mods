@@ -358,7 +358,11 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
 	if intent.Class != "" {
-		candidateRules = RulesForDirs(intent.Dirs, r.scope, intent.Class)
+		ruleDirs := intent.Dirs
+		if shellExecution && intent.Class == AccessRead {
+			ruleDirs = ExternalDirs(intent, r.scope, safeDirs())
+		}
+		candidateRules = RulesForDirs(ruleDirs, r.scope, intent.Class)
 	} else {
 		candidateRules = RulesFor(name, data, r.scope)
 	}

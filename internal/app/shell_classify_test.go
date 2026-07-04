@@ -244,6 +244,75 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
+func TestAnalyzeShellCommandReadOnlyWorkspaceAffectedDirs(t *testing.T) {
+	workspace := canonicalTestPath(t, t.TempDir())
+	externalDir := canonicalTestPath(t, t.TempDir())
+	externalFile := filepath.Join(externalDir, "passwd")
+
+	t.Run("workspace command falls back to cwd", func(t *testing.T) {
+		mods := &Mods{
+			Config: testConfigForWorkspace(workspace),
+			shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
+			},
+		}
+		t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+		result := mods.analyzeShellCommand("shell_run", "git status")
+		require.False(t, result.NeedsReview)
+		require.Equal(t, []string{workspace}, result.AffectedDirs)
+	})
+
+	t.Run("cd workspace command falls back to cwd", func(t *testing.T) {
+		mods := &Mods{
+			Config: testConfigForWorkspace(workspace),
+			shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
+			},
+		}
+		t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+		cmd := "cd " + workspace + " && git tag --list 'v*' --sort=-v:refname | head -20"
+		result := mods.analyzeShellCommand("shell_run", cmd)
+		require.False(t, result.NeedsReview)
+		require.Equal(t, []string{workspace}, result.AffectedDirs)
+	})
+
+	t.Run("external read does not add workspace", func(t *testing.T) {
+		mods := &Mods{
+			Config: testConfigForWorkspace(workspace),
+			shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
+			},
+		}
+		t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+		result := mods.analyzeShellCommand("shell_run", "cat "+externalFile)
+		require.False(t, result.NeedsReview)
+		require.NotEmpty(t, result.AffectedDirs)
+		require.True(t, hasPathUnder(result.AffectedDirs, externalDir), "affected dirs should include external path under %s: %v", externalDir, result.AffectedDirs)
+		require.NotContains(t, result.AffectedDirs, workspace)
+	})
+}
+
+func hasPathUnder(paths []string, dir string) bool {
+	for _, p := range paths {
+		if p == dir || pathutil.Contains(dir, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalTestPath(t *testing.T, path string) string {
+	t.Helper()
+	cleaned := filepath.Clean(path)
+	if eval, err := filepath.EvalSymlinks(cleaned); err == nil {
+		return filepath.Clean(eval)
+	}
+	return cleaned
+}
+
 func TestExtractExternalPathsIgnoresHeredocBody(t *testing.T) {
 	cmd := "cat > /home/panjie/dev/myconfigs/vim/vimrc <<'EOF'\nset path=/\n/this/looks/like/a/path\nEOF"
 

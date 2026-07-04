@@ -68,11 +68,18 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 			affected = appendMissingShellDirs(affected, filterArgPaths(static.AffectedDirs, ws, flavor))
 		}
 		debug.Printf("analyzeShellCommand: cmd=%q -> static: read-only", debug.Truncate(command, 80))
-		return shellCommandAnalysis{
-			NeedsReview:  false,
-			AffectedDirs: affected,
-			Reason:       static.Reason,
-		}
+		return finalizeShellAnalysis(
+			shellCommandAnalysis{
+				NeedsReview:  false,
+				AffectedDirs: affected,
+				Reason:       static.Reason,
+			},
+			nil,
+			nil,
+			nil,
+			ws,
+			flavor,
+		)
 	case approval.ShellStaticWrite:
 		debug.Printf("analyzeShellCommand: cmd=%q -> static: write dirs=%v", debug.Truncate(command, 80), static.AffectedDirs)
 		return finalizeShellAnalysis(
@@ -114,6 +121,9 @@ func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPa
 	// Also merge AST-extracted PowerShell argument paths for write commands
 	// that fell through to the LLM — the LLM may miss path arguments.
 	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, workspaceDir, flavor))
+	if !result.NeedsReview && len(result.AffectedDirs) == 0 && strings.TrimSpace(workspaceDir) != "" {
+		result.AffectedDirs = []string{workspaceDir}
+	}
 
 	return result
 }

@@ -22,6 +22,12 @@ import (
 
 var testApprovalScope = WorkspaceScope("/workspace")
 
+func testConfigForWorkspace(workspace string) *Config {
+	cfg := &Config{}
+	cfg.BuiltinTools.Workspace = workspace
+	return cfg
+}
+
 func scopedRule(rule ApprovalRule) ApprovalRule {
 	rule.ScopeKind = testApprovalScope.Kind
 	rule.ScopeValue = testApprovalScope.Value
@@ -449,7 +455,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 
 	mods := &Mods{
 		ctx:    context.Background(),
-		Config: &Config{},
+		Config: testConfigForWorkspace(testApprovalScope.Value),
 	}
 	registry := testReviewRegistry(t)
 	mods.currentToolRegistry = registry
@@ -595,7 +601,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	t.Run("mutable skips review when LLM says no review", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
-			Config:              &Config{},
+			Config:              testConfigForWorkspace(testApprovalScope.Value),
 			currentToolRegistry: registry,
 			shellAnalyzer: func(string, string) shellCommandAnalysis {
 				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
@@ -746,7 +752,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	t.Run("always still prompts when LLM says no review", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
-			Config:              &Config{},
+			Config:              testConfigForWorkspace(testApprovalScope.Value),
 			currentToolRegistry: registry,
 			shellAnalyzer: func(string, string) shellCommandAnalysis {
 				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
@@ -764,6 +770,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Empty(t, item.candidateRules)
+		require.Equal(t, "Risk: read-only - affects /workspace", item.summary)
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})
@@ -833,6 +840,10 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		// read" because the LLM classified it as not mutable but it touches
 		// /etc — outside the test scope /workspace.
 		require.Contains(t, item.summary, "external read")
+		require.Len(t, item.candidateRules, 1)
+		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
+		require.Equal(t, AccessRead, item.candidateRules[0].Mode)
+		require.Equal(t, []string{"/etc"}, item.candidateRules[0].Paths)
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})

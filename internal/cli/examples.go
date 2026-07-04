@@ -21,8 +21,8 @@ var examples = map[string]string{
 	"Use a custom role":                `mods --role shell "list the largest files in the current directory"`,
 	"Review file edits":                `mods --review mutable --workspace . "Read README.md and write docs/cli-notes.md with a short usage guide"`,
 	"Plan before acting":               `mods --plan --workspace . "Refactor the CLI examples to cover more features"`,
-	"Inspect MCP servers":              `mods --mcp-list`,
-	"Inspect MCP tools":                `mods --mcp-list-tools`,
+	"Inspect MCP servers":              `mods --list-mcps`,
+	"Inspect tools":                    `mods --list-tools`,
 	"Debug reasoning":                  `mods --reasoning on --debug "When should I use each review mode?"`,
 }
 

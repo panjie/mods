@@ -339,7 +339,7 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	groups := groupedUsageFlags(rootCmd.Flags(), true)
 	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
 	require.True(t, groupHasFlag(groups, flagCategorySession, "no-save"))
-	require.True(t, groupHasFlag(groups, flagCategoryMCP, "mcp-list"))
+	require.True(t, groupHasFlag(groups, flagCategoryMCP, "list-mcps"))
 	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
 	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
 	require.False(t, groupHasFlag(groups, flagCategoryInputOutput, "hide-tool-results"))

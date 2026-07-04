@@ -312,8 +312,8 @@ mcp-servers:
       - "ghcr.io/github/github-mcp-server"
 ```
 
-Inspect what's available with `mods --mcp-list` and `mods --mcp-list-tools`, and
-scope a run with `--mcp-enable` / `--mcp-disable`.
+Inspect what's available with `mods --list-mcps` and `mods --list-tools`, and
+scope a run with `--enable-mcp` / `--disable-mcp`.
 
 ## Supported Providers
 

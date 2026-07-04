@@ -115,10 +115,10 @@ with `--help-all` (marked [advanced]).
 - `--max-tool-rounds <num>` [advanced] — Maximum total tool call rounds (0 = default of 30)
 
 ### MCP (Model Context Protocol)
-- `--mcp-list` [advanced] — List all available MCP servers
-- `--mcp-list-tools` [advanced] — List all available tools from enabled MCP servers
-- `--mcp-enable <server>` [advanced] — Enable only specific MCP servers (whitelist)
-- `--mcp-disable <server>` [advanced] — Disable specific MCP servers
+- `--list-mcps` [advanced] — List all available MCP servers
+- `--list-tools` [advanced] — List all available tools (built-in and MCP), with built-in tools annotated
+- `--enable-mcp <server>` [advanced] — Enable only specific MCP servers (whitelist)
+- `--disable-mcp <server>` [advanced] — Disable specific MCP servers
 
 ### Model Parameters
 - `--max-retries <num>` [advanced] — Maximum number of times to retry API calls

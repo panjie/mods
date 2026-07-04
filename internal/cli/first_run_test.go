@@ -51,8 +51,8 @@ func TestShouldAutoConfigSkipsNonRequestActions(t *testing.T) {
 		"list-sessions":  {args: []string{"mods", "--list-sessions"}, cfg: Config{List: true}},
 		"list roles":     {args: []string{"mods", "--list-roles"}, cfg: Config{ListRoles: true}},
 		"list prompts":   {args: []string{"mods", "--list-prompts"}, cfg: Config{ListPrompts: true}},
-		"mcp list":       {args: []string{"mods", "--mcp-list"}, cfg: Config{MCPList: true}},
-		"mcp list tools": {args: []string{"mods", "--mcp-list-tools"}, cfg: Config{MCPListTools: true}},
+		"mcp list":       {args: []string{"mods", "--list-mcps"}, cfg: Config{MCPList: true}},
+		"mcp list tools": {args: []string{"mods", "--list-tools"}, cfg: Config{MCPListTools: true}},
 	}
 
 	for name, tc := range tests {

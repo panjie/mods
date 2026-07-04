@@ -171,10 +171,10 @@ func initFlags() {
 	flags.Var(newThemeFlag(config.Theme, &config.Theme), "theme", flagDesc("theme"))
 	regBool(flags, &config.OpenEditor, "editor", "e", false)
 	regBool(flags, &config.Plan, "plan", "p", config.Plan)
-	regBool(flags, &config.MCPList, "mcp-list", "", false)
-	regBool(flags, &config.MCPListTools, "mcp-list-tools", "", false)
-	regStrArr(flags, &config.MCPDisable, "mcp-disable", "", nil)
-	regStrArr(flags, &config.MCPEnable, "mcp-enable", "", nil)
+	regBool(flags, &config.MCPList, "list-mcps", "", false)
+	regBool(flags, &config.MCPListTools, "list-tools", "", false)
+	regStrArr(flags, &config.MCPDisable, "disable-mcp", "", nil)
+	regStrArr(flags, &config.MCPEnable, "enable-mcp", "", nil)
 	regBool(flags, &config.WebSearch, "web-search", "", config.WebSearch)
 	regStr(flags, &config.WebSearchProvider, "web-search-provider", "", config.WebSearchProvider)
 	regStr(flags, &config.WebSearchAPIKey, "web-search-api-key", "", config.WebSearchAPIKey)
@@ -204,10 +204,10 @@ func initFlags() {
 		"web-search-provider",
 		"web-search-api-key",
 		"max-tool-rounds",
-		"mcp-enable",
-		"mcp-disable",
-		"mcp-list",
-		"mcp-list-tools",
+		"enable-mcp",
+		"disable-mcp",
+		"list-mcps",
+		"list-tools",
 		"debug",
 		"stdin-image",
 		"clipboard-image",
@@ -247,7 +247,7 @@ func initFlags() {
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key", "web-search-api-key-env")
 	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review", "max-tool-rounds")
-	markCategory(flags, flagCategoryMCP, "mcp-list", "mcp-list-tools", "mcp-enable", "mcp-disable")
+	markCategory(flags, flagCategoryMCP, "list-mcps", "list-tools", "enable-mcp", "disable-mcp")
 	markCategory(
 		flags,
 		flagCategoryModelParams,

@@ -3,6 +3,7 @@
 package approval
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -149,4 +150,47 @@ func TestParseWithBridgeNonPathArgNotCollected(t *testing.T) {
 	// "Name" will be in paths, but the Go-side filterArgPaths will exclude it
 	// because it doesn't look like a path. Just verify the bridge collects it.
 	require.Contains(t, ir.Paths, "Name")
+}
+
+// TestGetWindowsShellPathPinnedToPowerShell locks in that the classification
+// bridge uses Windows PowerShell (powershell.exe), matching the shell that
+// actually executes shell_run / powershell_run commands. Parsing under
+// pwsh.exe (PowerShell 7) instead would accept PS7-only operators that the
+// PS5.1 executor cannot run — a classifier/executor divergence. GitHub
+// Actions Windows runners ship pwsh.exe on PATH, so this assertion proves the
+// pin holds even when both hosts are installed.
+func TestGetWindowsShellPathPinnedToPowerShell(t *testing.T) {
+	p := getWindowsShellPath()
+	if p == "" {
+		t.Skip("powershell.exe not on PATH")
+	}
+	require.Equal(t, "powershell.exe", filepath.Base(p),
+		"classifier bridge must use powershell.exe to match the PS5.1 executor")
+}
+
+// TestIsReadOnlyPowerShellPS7OperatorsFailClosed ensures PS7-only syntax
+// (pipeline-chain && / ||, null-coalescing ??) does NOT bypass the read-only
+// fast-path. Under the pinned powershell.exe (PS5.1) bridge these are parse
+// errors, so the classifier fail-closes and routes the command to review —
+// matching the PS5.1 executor, which cannot run them either. This guards
+// against regressing back to a pwsh.exe classifier that would accept them:
+// e.g. "Get-Content a && Get-Content b" parses read-only under PS7 but would
+// then fail under the PS5.1 executor.
+func TestIsReadOnlyPowerShellPS7OperatorsFailClosed(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	cases := []struct {
+		name string
+		cmd  string
+	}{
+		{"pipeline chain &&", "Get-Content a && Get-Content b"},
+		{"pipeline chain ||", "Get-Content a || Get-Content b"},
+		{"null coalescing ??", "$x ?? 'default'"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, _, _ := IsReadOnlyPowerShell(c.cmd)
+			require.Falsef(t, got, "PS7-only cmd=%q must NOT be read-only under the PS5.1 classifier", c.cmd)
+		})
+	}
 }

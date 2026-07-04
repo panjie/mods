@@ -314,7 +314,7 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
-	// PowerShell AST classifier requires Windows + pwsh.exe. On other
+	// PowerShell AST classifier requires Windows + powershell.exe. On other
 	// platforms IsReadOnlyPowerShell fail-closes, so read-only commands
 	// reach the LLM seam and t.Fatalf would fire.
 	if runtime.GOOS != "windows" {
@@ -349,7 +349,7 @@ func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandPowerShellWriteGoesToLLM(t *testing.T) {
-	// PowerShell AST classifier requires Windows + pwsh.exe. On other
+	// PowerShell AST classifier requires Windows + powershell.exe. On other
 	// platforms the classifier fail-closes and all PowerShell commands
 	// reach the LLM seam, so this test still passes but for a different
 	// reason — skip to avoid testing the wrong code path.

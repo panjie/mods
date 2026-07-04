@@ -72,12 +72,20 @@ var (
 	winEncodedBridgeOnce sync.Once
 )
 
+// getWindowsShellPath resolves the PowerShell binary that runs the
+// classification bridge. It MUST match the shell that actually executes
+// shell_run / powershell_run commands (internal/tools.powerShellCommand uses
+// powershell.exe), so the bridge parses under the same Windows PowerShell 5.1
+// grammar that will run. Pinning to powershell.exe is intentional: parsing
+// under pwsh.exe (PowerShell 7) instead would accept PS7-only operators
+// (??, ??=, ?:, &&, ||) that then fail or behave differently under the PS5.1
+// executor — a classifier/executor divergence that could let such commands
+// bypass the read-only fast-path. pwsh.exe is deliberately not used even when
+// installed; if powershell.exe is absent the bridge fails to start and
+// IsReadOnlyPowerShell fails closed. If the executor is ever changed to use a
+// different host, update this resolver to match.
 func getWindowsShellPath() string {
 	winPSPathOnce.Do(func() {
-		if p, err := exec.LookPath("pwsh.exe"); err == nil {
-			winPSPath = p
-			return
-		}
 		if p, err := exec.LookPath("powershell.exe"); err == nil {
 			winPSPath = p
 			return
@@ -155,7 +163,7 @@ func CloseBridge() {
 func startBridgeProcess() (*bridgeProcess, error) {
 	shell := getWindowsShellPath()
 	if shell == "" {
-		return nil, fmt.Errorf("pwsh not available")
+		return nil, fmt.Errorf("powershell.exe not available")
 	}
 	cmd := exec.Command(
 		shell,
@@ -219,7 +227,7 @@ func (bp *bridgeProcess) roundTrip(command string) ([]byte, error) {
 }
 
 // parseWithBridge sends a command to the persistent PowerShell bridge and
-// returns the parsed IR. On any error (non-Windows, no pwsh, transport
+// returns the parsed IR. On any error (non-Windows, no powershell.exe, transport
 // failure, JSON decode error) it returns a non-nil error so the caller
 // can fail-closed. One automatic restart is attempted on transport failure.
 func parseWithBridge(command string) (*psBridgeIR, error) {

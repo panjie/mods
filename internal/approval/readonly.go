@@ -190,6 +190,10 @@ var readOnlyCommands = map[string]bool{
 	"paste": true, "expand": true, "unexpand": true, "nl": true,
 	"rev": true, "tac": true, "fold": true, "fmt": true,
 	"join": true,
+	// Shell builtins that only affect shell state, never the filesystem.
+	// Recognising cd as read-only lets the common "cd /path && cmd" pattern
+	// pass the static classifier instead of falling through to the LLM.
+	"cd": true,
 }
 
 // subcommandReadOnly maps a tool to its read-only subcommands.

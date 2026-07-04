@@ -37,6 +37,7 @@ Platform rules:
 - On Windows, pass only the PowerShell command to powershell_run or shell_run, without powershell, powershell.exe, pwsh, or -Command prefixes.
 
 Command playbook:
+- Shell commands execute in the cwd shown in system info; never prefix them with cd to the cwd.
 - Read a file: fs_read_file path. Read line ranges with start_line/end_line (1-based, inclusive); page large files by bytes with offset/limit.
 - Slice by line number (shell fallback when fs tools are unavailable): sed -n 'START,ENDp' file (POSIX) or Get-Content file | Select-Object -Skip N -First M (PowerShell).
 - Search text: rg "pattern" path

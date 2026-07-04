@@ -35,6 +35,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 	sysParts := []string{
 		fmt.Sprintf("workspace=%s", root),
+		fmt.Sprintf("cwd=%s", root),
 		fmt.Sprintf("user=%s", user),
 		fmt.Sprintf("host=%s", hostname),
 		fmt.Sprintf("os=%s/%s", runtime.GOOS, runtime.GOARCH),

@@ -540,11 +540,13 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 		m.thoughtFlushed = true
 	}
 	m.appendToOutput(content)
-	if m.Config.Plan {
-		m.state = planState
-	} else {
-		m.state = responseState
-	}
+	// Always use responseState while streaming, even in plan mode. The
+	// planState View renders only the "Generating…" spinner until planContent
+	// is set (by planCompleteMsg), which would hide the streaming output.
+	// startToolCalls also uses responseState, so using it here keeps the state
+	// stable across text→tool→text rounds instead of flickering between
+	// planState (output hidden) and responseState (output shown).
+	m.state = responseState
 	return msg.runner.receiveCmd()
 }
 

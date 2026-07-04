@@ -38,6 +38,12 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"and git", "git status && git diff", true},
 		{"or true false", "true || false", true},
 		{"and test echo", "test -f x && echo y", true},
+		{"cd then git", "cd /repo && git describe --tags --always", true},
+		{"cd then ls", "cd /repo && ls -la", true},
+
+		// --- Shell builtins (filesystem-safe) ---
+		{"cd alone", "cd /repo", true},
+		{"cd home", "cd ~", true},
 
 		// --- Subcommands ---
 		{"git status", "git status", true},

@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -934,6 +936,57 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		m.Config.Quiet = true
 		require.NotContains(t, m.View(), "Generating")
 	})
+}
+
+// TestPlanStreamingStaysInResponseState locks in the fix for the plan-mode
+// flicker: while the model streams text (with or without interleaved tool
+// calls), the state must stay in responseState so the streaming output stays
+// visible. Switching to planState mid-stream hid the accumulated output behind
+// the "Generating…" spinner, then startToolCalls switched back to responseState
+// (revealing it), producing a visible flicker on every text→tool→text round.
+func TestPlanStreamingStaysInResponseState(t *testing.T) {
+	oldIsOutputTTY := isOutputTTY
+	oldExportedIsOutputTTY := IsOutputTTY
+	isOutputTTY = func() bool { return true }
+	IsOutputTTY = func() bool { return true }
+	defer func() {
+		isOutputTTY = oldIsOutputTTY
+		IsOutputTTY = oldExportedIsOutputTTY
+	}()
+
+	gr, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"))
+	require.NoError(t, err)
+
+	m := &Mods{
+		Config:              &Config{Plan: true},
+		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		anim:                staticModel("Generating"),
+		state:               planState,
+		showOperationStatus: true,
+		width:               80,
+		reviewer:            &toolReviewer{},
+		contentMutex:        &sync.Mutex{},
+		renderer:            lipgloss.NewRenderer(nil),
+		glam:                gr,
+		glamViewport:        viewport.New(80, 20),
+	}
+	runner := newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return modsError{Err: err} })
+
+	_, _ = m.Update(streamEventMsg{
+		kind:   streamEventChunk,
+		chunk:  proto.Chunk{Content: "Investigating the codebase..."},
+		runner: runner,
+	})
+
+	require.Equal(t, responseState, m.state,
+		"plan-mode streaming must stay in responseState so the output stays visible")
+	require.True(t, m.responseOutputStarted)
+	require.Contains(t, m.Output, "Investigating the codebase...")
+	// The streamed text must be visible in the View, not hidden behind the spinner.
+	// Glamour wraps words in ANSI spans, so check a fragment that stays within one span.
+	require.Contains(t, m.View(), "Investigating")
+	require.NotContains(t, m.View(), "Generating",
+		"once output starts streaming, the Generating spinner must not be shown")
 }
 
 func TestViewportNeeded(t *testing.T) {

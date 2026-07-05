@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-07-05
+
 ### Removed
 - Dropped the unused `--temp`, `--topp`, `--topk`, and `--stop` flags, their config keys/env vars, and the matching provider request fields. mods no longer sends any sampling temperature, top-p, top-k, or stop sequences on model requests, so providers now use their own defaults. (`proto.Request.Temperature` is retained internally for the shell classifier, which pins it to `0` for deterministic classification.)
 
@@ -111,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Review deadlock in pipe mode and Ctrl+C deadlock on review channel.
 - Cross-platform compatibility; glamour newline collapsing; empty LLM response due to low MaxTokens.
 
+[3.2.0]: https://github.com/panjie/mods/compare/v3.0.0...v3.2.0
 [3.0.0]: https://github.com/panjie/mods/compare/v2.5.0...v3.0.0
 [2.5.0]: https://github.com/panjie/mods/compare/v2.0.0...v2.5.0
 [2.0.0]: https://github.com/panjie/mods/compare/v1.0.1...v2.0.0

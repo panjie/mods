@@ -63,6 +63,7 @@ type Part struct {
 	FunctionCall     *FunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *FunctionResponse `json:"functionResponse,omitempty"`
 	Thought          *bool             `json:"thought,omitempty"`
+	ThoughtSignature string            `json:"thoughtSignature,omitempty"`
 }
 
 // Blob contains raw media bytes to be sent inline to the model.
@@ -79,9 +80,10 @@ type Content struct {
 
 // FunctionCall is a model-requested client-side function call.
 type FunctionCall struct {
-	ID   string         `json:"id,omitempty"`
-	Name string         `json:"name,omitempty"`
-	Args map[string]any `json:"args,omitempty"`
+	ID               string         `json:"id,omitempty"`
+	Name             string         `json:"name,omitempty"`
+	Args             map[string]any `json:"args,omitempty"`
+	ThoughtSignature string         `json:"thoughtSignature,omitempty"`
 }
 
 // FunctionResponse is the result of a client-side function call.
@@ -466,8 +468,9 @@ func (s *Stream) addFunctionCall(call *FunctionCall) {
 	s.message.ToolCalls = append(s.message.ToolCalls, proto.ToolCall{
 		ID: id,
 		Function: proto.Function{
-			Name:      call.Name,
-			Arguments: args,
+			Name:             call.Name,
+			Arguments:        args,
+			ThoughtSignature: call.ThoughtSignature,
 		},
 	})
 }

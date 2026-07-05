@@ -359,6 +359,71 @@ func TestStreamParsesFunctionCallsAndPreservesText(t *testing.T) {
 	require.JSONEq(t, `{"path":"README.md"}`, string(messages[0].ToolCalls[0].Function.Arguments))
 }
 
+func TestStreamParsesThoughtSignatureFromFunctionCall(t *testing.T) {
+	st := &Stream{
+		reader: bufio.NewReader(bytes.NewBufferString(
+			"data: {\"candidates\":[{\"content\":{\"parts\":[" +
+				"{\"text\":\"thinking\",\"thought\":true,\"thoughtSignature\":\"sig_abc\"}," +
+				"{\"functionCall\":{\"name\":\"thinking_note\",\"args\":{\"thought\":\"step\"},\"thoughtSignature\":\"sig_def\"}}" +
+				"]}}]}\n\n",
+		)),
+		unmarshaler: &JSONUnmarshaler{},
+	}
+
+	_, err := st.Current()
+	require.NoError(t, err)
+
+	messages := st.Messages()
+	require.Len(t, messages, 1)
+	require.Len(t, messages[0].ToolCalls, 1)
+	require.Equal(t, "thinking_note", messages[0].ToolCalls[0].Function.Name)
+	require.Equal(t, "sig_def", messages[0].ToolCalls[0].Function.ThoughtSignature,
+		"thoughtSignature from functionCall must be preserved in proto.ToolCall")
+}
+
+func TestFromProtoMessagePreservesThoughtSignature(t *testing.T) {
+	content, ok := fromProtoMessageOK(proto.Message{
+		Role: proto.RoleAssistant,
+		ToolCalls: []proto.ToolCall{{
+			ID: "call_1",
+			Function: proto.Function{
+				Name:             "thinking_note",
+				Arguments:        []byte(`{"thought":"step"}`),
+				ThoughtSignature: "sig_xyz",
+			},
+		}},
+	})
+	require.True(t, ok)
+
+	// The thought part must carry the signature back as an empty thought.
+	require.Len(t, content.Parts, 2, "expected thought part + functionCall part")
+	require.NotNil(t, content.Parts[0].Thought)
+	require.True(t, *content.Parts[0].Thought)
+	require.Empty(t, content.Parts[0].Text, "thought text is discarded; only signature preserved")
+	require.Equal(t, "sig_xyz", content.Parts[0].ThoughtSignature)
+
+	// The functionCall part must also carry the signature.
+	require.NotNil(t, content.Parts[1].FunctionCall)
+	require.Equal(t, "sig_xyz", content.Parts[1].FunctionCall.ThoughtSignature)
+}
+
+func TestFromProtoMessageOmitsThoughtPartWhenNoSignature(t *testing.T) {
+	content, ok := fromProtoMessageOK(proto.Message{
+		Role: proto.RoleAssistant,
+		ToolCalls: []proto.ToolCall{{
+			ID: "call_1",
+			Function: proto.Function{
+				Name:      "read_file",
+				Arguments: []byte(`{"path":"."}`),
+			},
+		}},
+	})
+	require.True(t, ok)
+	require.Len(t, content.Parts, 1, "no thought part when ThoughtSignature is empty")
+	require.NotNil(t, content.Parts[0].FunctionCall)
+	require.Empty(t, content.Parts[0].FunctionCall.ThoughtSignature)
+}
+
 func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	client, captured, closeServer := newCapturingSequenceServer(t, []string{
 		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"call_1\",\"name\":\"read_file\",\"args\":{\"path\":\"README.md\"}}}]}}]}\n\n",

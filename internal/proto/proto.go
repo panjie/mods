@@ -100,6 +100,11 @@ type ToolCall struct {
 type Function struct {
 	Name      string
 	Arguments []byte
+	// ThoughtSignature carries Google Gemini's thought_signature for
+	// function calls when thinking is enabled. The API requires it to be
+	// sent back verbatim in subsequent requests. Opaque to other providers;
+	// json:"-" keeps it out of OpenAI/Anthropic-style serialization.
+	ThoughtSignature string `json:"-"`
 }
 
 // ToolSpec is a provider-neutral function/tool definition.

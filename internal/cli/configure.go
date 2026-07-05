@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -88,6 +89,9 @@ func RunConfigWizard() error {
 		if base == "" {
 			base = findBaseURL(api)
 		}
+		if base == "" {
+			base = builtinBaseURL(api)
+		}
 		discovered, derr := discoverModels(eff, base, resolveKeyForDiscovery(api, apiKey))
 		if derr != nil || len(discovered) == 0 {
 			return nil
@@ -152,12 +156,12 @@ func RunConfigWizard() error {
 					return fmt.Sprintf("Base URL for %s", wizardProviderName(chosenAPI, newProviderName))
 				}, []any{&chosenAPI, &newProviderName}).
 				Description("Provider-level API endpoint shared by all models on this provider.").
-				PlaceholderFunc(func() string {
-					if url := findBaseURL(chosenAPI); url != "" {
-						return url
-					}
-					return "https://your-server.com/v1"
-				}, &chosenAPI).
+			PlaceholderFunc(func() string {
+				if url := findBaseURL(chosenAPI); url != "" {
+					return url
+				}
+				return builtinBaseURL(chosenAPI)
+			}, &chosenAPI).
 				Value(&baseURL).
 				Validate(func(value string) error {
 					return validateWizardBaseURL(chosenAPI, value)
@@ -784,6 +788,26 @@ func findBaseURL(apiName string) string {
 	return ""
 }
 
+// builtinBaseURL returns the official default endpoint for a built-in
+// provider. Used as a placeholder/hint in the --config wizard and as a
+// fallback for model discovery when the user has not yet configured a
+// base-url. Google's default URL embeds {model} — applyGoogleBaseURLOverride
+// (internal/app/provider.go) substitutes it at runtime.
+func builtinBaseURL(apiName string) string {
+	switch apiName {
+	case "google":
+		return "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
+	case "openai":
+		return "https://api.openai.com/v1"
+	case "anthropic":
+		return "https://api.anthropic.com/v1"
+	case "ollama":
+		return "http://localhost:11434"
+	default:
+		return "https://your-server.com/v1"
+	}
+}
+
 // findAPIType returns the configured api-type (wire protocol) for the provider,
 // or "" if unset (meaning name-based routing / OpenAI-compatible default).
 func findAPIType(apiName string) string {
@@ -994,6 +1018,8 @@ func discoverModels(apiType, baseURL, apiKey string) ([]string, error) {
 			return ids2, nil
 		}
 		return nil, fmt.Errorf("%w (also tried /models: %v)", err, err2)
+	case "google":
+		return fetchGoogleModels(googleListModelsBase(baseURL) + "/models?key=" + url.QueryEscape(apiKey))
 	default:
 		// OpenAI-compatible: base URL typically ends in /v1; append /models.
 		return fetchModelIDs(baseURL+"/models", "Authorization", "Bearer "+apiKey, nil)
@@ -1063,6 +1089,94 @@ func fetchModelIDs(url, authHeader, authValue string, extraHeaders map[string]st
 	}
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("no models returned")
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+// googleListModelsBase normalizes a Google base URL to the API root used for
+// listing models. The --config wizard's fallback (builtinBaseURL) returns the
+// full streamGenerateContent endpoint with a {model} placeholder, and users
+// may paste a similar URL. This function strips any /models/... suffix and
+// query/fragment so discoverModels can append /models?key=... cleanly.
+// An empty base returns the public default root.
+func googleListModelsBase(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "https://generativelanguage.googleapis.com/v1beta"
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "https://generativelanguage.googleapis.com/v1beta"
+	}
+	path := u.Path
+	if idx := strings.Index(path, "/models"); idx >= 0 {
+		rest := path[idx+len("/models"):]
+		if rest == "" || strings.HasPrefix(rest, "/") {
+			path = path[:idx]
+		}
+	}
+	u.Path = path
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
+// fetchGoogleModels queries the Google Generative Language list-models endpoint
+// and returns model IDs that support generateContent (filtering out embedding
+// and text-only models). Auth is via the key= query parameter, not a header.
+func fetchGoogleModels(urlStr string) ([]string, error) {
+	req, err := http.NewRequest("GET", urlStr, nil) //nolint:gosec,noctx
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("network error: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch {
+	case resp.StatusCode == 401 || resp.StatusCode == 403:
+		return nil, fmt.Errorf("invalid API key (HTTP %d)", resp.StatusCode)
+	case resp.StatusCode >= 400:
+		return nil, fmt.Errorf("API error (HTTP %d)", resp.StatusCode)
+	}
+
+	var body struct {
+		Models []struct {
+			Name                      string   `json:"name"`
+			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	ids := make([]string, 0, len(body.Models))
+	for _, m := range body.Models {
+		name := strings.TrimPrefix(m.Name, "models/")
+		if name == "" {
+			continue
+		}
+		// Only keep models that support generateContent (chat/generation),
+		// filtering out embedding, text-suffix, and other non-generative models.
+		supportsGenerate := false
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				supportsGenerate = true
+				break
+			}
+		}
+		if !supportsGenerate {
+			continue
+		}
+		ids = append(ids, name)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("no generative models returned")
 	}
 	sort.Strings(ids)
 	return ids, nil

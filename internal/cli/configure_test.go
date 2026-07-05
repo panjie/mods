@@ -409,6 +409,103 @@ func TestDiscoverModelsOllama(t *testing.T) {
 	require.Equal(t, []string{"llama3.1:latest", "qwen2.5:7b"}, ids)
 }
 
+func TestDiscoverModelsGoogle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1beta/models", r.URL.Path)
+		require.Equal(t, "test-key", r.URL.Query().Get("key"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"models": []map[string]any{
+				{
+					"name":                      "models/gemini-2.5-pro",
+					"supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"},
+				},
+				{
+					"name":                      "models/gemini-2.5-flash",
+					"supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"},
+				},
+				{
+					"name":                      "models/text-embedding-004",
+					"supportedGenerationMethods": []string{"embedContent"},
+				},
+				{
+					"name":                      "models/gemini-2.0-flash",
+					"supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	ids, err := discoverModels("google", srv.URL+"/v1beta", "test-key")
+	require.NoError(t, err)
+	require.Equal(t, []string{"gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"}, ids)
+}
+
+func TestDiscoverModelsGoogleFiltersNonGenerative(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"models": []map[string]any{
+				{
+					"name":                      "models/text-embedding-004",
+					"supportedGenerationMethods": []string{"embedContent"},
+				},
+				{
+					"name":                      "models/aqa",
+					"supportedGenerationMethods": []string{"generateAnswer"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	_, err := discoverModels("google", srv.URL, "test-key")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no generative models")
+}
+
+func TestBuiltinBaseURL(t *testing.T) {
+	cases := []struct {
+		name    string
+		apiName string
+		want    string
+	}{
+		{"google", "google", "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"},
+		{"openai", "openai", "https://api.openai.com/v1"},
+		{"anthropic", "anthropic", "https://api.anthropic.com/v1"},
+		{"ollama", "ollama", "http://localhost:11434"},
+		{"unknown", "acme", "https://your-server.com/v1"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, builtinBaseURL(c.apiName))
+		})
+	}
+}
+
+func TestGoogleListModelsBase(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty uses default", "", "https://generativelanguage.googleapis.com/v1beta"},
+		{"bare root unchanged", "https://generativelanguage.googleapis.com/v1beta", "https://generativelanguage.googleapis.com/v1beta"},
+		{"full stream endpoint stripped", "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse", "https://generativelanguage.googleapis.com/v1beta"},
+		{"concrete model endpoint stripped", "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse", "https://generativelanguage.googleapis.com/v1beta"},
+		{"trailing /models stripped", "https://generativelanguage.googleapis.com/v1beta/models", "https://generativelanguage.googleapis.com/v1beta"},
+		{"custom proxy preserved", "https://my-vertex-proxy.example.com/v1beta", "https://my-vertex-proxy.example.com/v1beta"},
+		{"custom proxy with model path stripped", "https://my-vertex-proxy.example.com/v1beta/models/{model}:streamGenerateContent", "https://my-vertex-proxy.example.com/v1beta"},
+		{"whitespace trimmed", "  https://generativelanguage.googleapis.com/v1beta  ", "https://generativelanguage.googleapis.com/v1beta"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, googleListModelsBase(c.in))
+		})
+	}
+}
+
 func TestDiscoverModelsAuthError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

@@ -247,7 +247,7 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 			return AccessIntent{Class: shellAccessMode(a)}
 		}
 		a := analyze(name, ExtractShellCommand(data))
-		return AccessIntent{Class: shellAccessMode(a), Dirs: normalizeShellAffectedDirsForTool(a.AffectedDirs, "", name)}
+		return AccessIntent{Class: shellAccessMode(a), Dirs: normalizeShellAffectedDirsForTool(a.AffectedDirs, "", name), Reason: a.Reason}
 	}
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
@@ -317,6 +317,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			analysis = shellCommandAnalysis{
 				NeedsReview:  intent.Class == AccessWrite,
 				AffectedDirs: normalizeShellAffectedDirsForTool(intent.Dirs, r.scope.Value, name),
+				Reason:       intent.Reason,
 			}
 			intent.Dirs = analysis.AffectedDirs
 		} else if cmd := extractShellCommand(data); cmd != "" && deps.analyzeShell != nil {

@@ -91,10 +91,19 @@ func writeTargetMode(path string, scope Scope) string {
 func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope) string {
 	risk := shellRiskLevel(analysis, scope)
 	dirs := summarizeAffectedDirs(analysis.AffectedDirs)
+	reason := strings.TrimSpace(analysis.Reason)
 	if dirs == "" {
-		return fmt.Sprintf("Risk: %s - %s", risk, ShellCommandPreview(command))
+		s := fmt.Sprintf("Risk: %s - %s", risk, ShellCommandPreview(command))
+		if reason != "" {
+			s = fmt.Sprintf("Risk: %s (%s) - %s", risk, OneLinePreview(reason), ShellCommandPreview(command))
+		}
+		return s
 	}
-	return fmt.Sprintf("Risk: %s - affects %s", risk, dirs)
+	s := fmt.Sprintf("Risk: %s - affects %s", risk, dirs)
+	if reason != "" {
+		s = fmt.Sprintf("Risk: %s - affects %s (%s)", risk, dirs, OneLinePreview(reason))
+	}
+	return s
 }
 
 func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {

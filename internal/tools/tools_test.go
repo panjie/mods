@@ -777,10 +777,11 @@ func TestPowerShellRun(t *testing.T) {
 func TestShellCommandUsesPowerShellOnWindows(t *testing.T) {
 	cmd := shellCommand(context.Background(), "Write-Output ok")
 	if runtime.GOOS == "windows" {
-		if filepath.Base(cmd.Path) != "powershell.exe" {
-			t.Fatalf("expected shell_run to use powershell.exe on Windows, got %q", cmd.Path)
+		base := filepath.Base(cmd.Path)
+		if base != "pwsh.exe" && base != "powershell.exe" {
+			t.Fatalf("expected shell_run to use pwsh.exe or powershell.exe on Windows, got %q", cmd.Path)
 		}
-		wantArgs := []string{"powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "Write-Output ok"}
+		wantArgs := []string{cmd.Path, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "Write-Output ok"}
 		if strings.Join(cmd.Args, "\x00") != strings.Join(wantArgs, "\x00") {
 			t.Fatalf("unexpected PowerShell args: %#v", cmd.Args)
 		}

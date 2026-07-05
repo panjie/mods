@@ -59,6 +59,29 @@ func TestFormatReviewSummary(t *testing.T) {
 			"unknown",
 		)
 	})
+
+	t.Run("shell risk surfaces LLM reason when dirs empty", func(t *testing.T) {
+		scope := WorkspaceScope("/workspace")
+		got := formatReviewSummary("shell_run", []byte(`{"command":"scoop install nodejs"}`),
+			shellCommandAnalysis{NeedsReview: true, Reason: "installs nodejs via scoop"}, scope)
+		require.Contains(t, got, "unknown")
+		require.Contains(t, got, "installs nodejs via scoop")
+	})
+
+	t.Run("shell risk surfaces LLM reason when dirs present", func(t *testing.T) {
+		scope := WorkspaceScope("/workspace")
+		got := formatReviewSummary("shell_run", []byte(`{"command":"scoop install nodejs"}`),
+			shellCommandAnalysis{NeedsReview: true, AffectedDirs: []string{"/home/user/scoop"}, Reason: "modifies system state"}, scope)
+		require.Contains(t, got, "external mutation")
+		require.Contains(t, got, "modifies system state")
+	})
+
+	t.Run("shell risk omits reason when empty", func(t *testing.T) {
+		scope := WorkspaceScope("/workspace")
+		got := formatReviewSummary("shell_run", []byte(`{"command":"unknown"}`),
+			shellCommandAnalysis{NeedsReview: true}, scope)
+		require.NotContains(t, got, "(")
+	})
 }
 
 func TestFormatReviewSummaryExternalRead(t *testing.T) {

@@ -74,18 +74,22 @@ var (
 
 // getWindowsShellPath resolves the PowerShell binary that runs the
 // classification bridge. It MUST match the shell that actually executes
-// shell_run / powershell_run commands (internal/tools.powerShellCommand uses
-// powershell.exe), so the bridge parses under the same Windows PowerShell 5.1
-// grammar that will run. Pinning to powershell.exe is intentional: parsing
-// under pwsh.exe (PowerShell 7) instead would accept PS7-only operators
-// (??, ??=, ?:, &&, ||) that then fail or behave differently under the PS5.1
-// executor — a classifier/executor divergence that could let such commands
-// bypass the read-only fast-path. pwsh.exe is deliberately not used even when
-// installed; if powershell.exe is absent the bridge fails to start and
-// IsReadOnlyPowerShell fails closed. If the executor is ever changed to use a
-// different host, update this resolver to match.
+// shell_run / powershell_run commands (internal/tools.windowsPowerShellExe
+// prefers pwsh.exe and falls back to powershell.exe), so the bridge parses
+// under the same PowerShell grammar that will run. PowerShell 7 (pwsh.exe)
+// is preferred when on PATH: it ships Get-FileHash as a core cmdlet and
+// avoids the PS5.1 -NoProfile module auto-load timing issues that break
+// scoop's hash verification on some locales. When pwsh.exe is absent the
+// bridge falls back to Windows PowerShell 5.1 (powershell.exe); if neither
+// is available the bridge fails to start and IsReadOnlyPowerShell fails
+// closed. If the executor is ever changed to use a different host, update
+// this resolver to match.
 func getWindowsShellPath() string {
 	winPSPathOnce.Do(func() {
+		if p, err := exec.LookPath("pwsh.exe"); err == nil {
+			winPSPath = p
+			return
+		}
 		if p, err := exec.LookPath("powershell.exe"); err == nil {
 			winPSPath = p
 			return
@@ -163,7 +167,7 @@ func CloseBridge() {
 func startBridgeProcess() (*bridgeProcess, error) {
 	shell := getWindowsShellPath()
 	if shell == "" {
-		return nil, fmt.Errorf("powershell.exe not available")
+		return nil, fmt.Errorf("PowerShell host not available (neither pwsh.exe nor powershell.exe found on PATH)")
 	}
 	cmd := exec.Command(
 		shell,

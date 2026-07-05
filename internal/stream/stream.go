@@ -94,6 +94,7 @@ func CallTool(
 		proto.ToolCallStatus{
 			Name:      name,
 			Arguments: data,
+			Output:    content,
 			Err:       err,
 		}
 }

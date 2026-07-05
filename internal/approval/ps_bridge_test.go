@@ -3,6 +3,7 @@
 package approval
 
 import (
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -152,33 +153,58 @@ func TestParseWithBridgeNonPathArgNotCollected(t *testing.T) {
 	require.Contains(t, ir.Paths, "Name")
 }
 
-// TestGetWindowsShellPathPinnedToPowerShell locks in that the classification
-// bridge uses Windows PowerShell (powershell.exe), matching the shell that
-// actually executes shell_run / powershell_run commands. Parsing under
-// pwsh.exe (PowerShell 7) instead would accept PS7-only operators that the
-// PS5.1 executor cannot run — a classifier/executor divergence. GitHub
-// Actions Windows runners ship pwsh.exe on PATH, so this assertion proves the
-// pin holds even when both hosts are installed.
-func TestGetWindowsShellPathPinnedToPowerShell(t *testing.T) {
+// TestGetWindowsShellPathResolvesHost locks in that the classification
+// bridge resolves the same PowerShell host that executes shell_run /
+// powershell_run commands (pwsh.exe if present, otherwise powershell.exe).
+// The bridge MUST match the executor so AST parsing reflects the grammar
+// that will actually run. GitHub Actions Windows runners ship pwsh.exe on
+// PATH, so this assertion proves the resolver picks pwsh.exe when available.
+func TestGetWindowsShellPathResolvesHost(t *testing.T) {
 	p := getWindowsShellPath()
 	if p == "" {
-		t.Skip("powershell.exe not on PATH")
+		t.Skip("no PowerShell host on PATH")
 	}
-	require.Equal(t, "powershell.exe", filepath.Base(p),
-		"classifier bridge must use powershell.exe to match the PS5.1 executor")
+	base := filepath.Base(p)
+	if base != "pwsh.exe" && base != "powershell.exe" {
+		t.Fatalf("expected pwsh.exe or powershell.exe, got %q", base)
+	}
+	// When pwsh.exe is on PATH, it must be preferred.
+	if pwshPath, err := exec.LookPath("pwsh.exe"); err == nil {
+		require.Equal(t, filepath.Base(pwshPath), base,
+			"classifier bridge must prefer pwsh.exe when present to match the executor")
+	}
 }
 
-// TestIsReadOnlyPowerShellPS7OperatorsFailClosed ensures PS7-only syntax
-// (pipeline-chain && / ||, null-coalescing ??) does NOT bypass the read-only
-// fast-path. Under the pinned powershell.exe (PS5.1) bridge these are parse
-// errors, so the classifier fail-closes and routes the command to review —
-// matching the PS5.1 executor, which cannot run them either. This guards
-// against regressing back to a pwsh.exe classifier that would accept them:
-// e.g. "Get-Content a && Get-Content b" parses read-only under PS7 but would
-// then fail under the PS5.1 executor.
-func TestIsReadOnlyPowerShellPS7OperatorsFailClosed(t *testing.T) {
+// TestIsReadOnlyPowerShellPipelineChainSemantics guards the classifier's
+// handling of PS7-only pipeline-chain operators (&&, ||) and null-coalescing
+// (??). Under pwsh.exe these parse as PipelineChainAst; the bridge extracts
+// the operator and each chained command, and readonly_ps.go checks that every
+// command is in the read-only allowlist — so a chain of read-only commands
+// is read-only, while a chain containing a writer (Remove-Item) is not. Under
+// powershell.exe (PS5.1) these are parse errors, so the classifier fail-closes
+// (not read-only). Both hosts converge on the same safe outcome for mixed
+// chains: a writer in the chain triggers review.
+func TestIsReadOnlyPowerShellPipelineChainSemantics(t *testing.T) {
 	t.Cleanup(func() { CloseBridge() })
 
+	pwshAvailable := func() bool {
+		_, err := exec.LookPath("pwsh.exe")
+		return err == nil
+	}
+
+	if pwshAvailable() {
+		// Under pwsh.exe: read-only chain is read-only.
+		got, _, _ := IsReadOnlyPowerShell("Get-Content a && Get-Content b")
+		require.Truef(t, got, "read-only chain under pwsh.exe must be read-only")
+		// Under pwsh.exe: chain with a writer is NOT read-only.
+		got, _, _ = IsReadOnlyPowerShell("Get-Content a && Remove-Item b")
+		require.Falsef(t, got, "chain with Remove-Item under pwsh.exe must NOT be read-only")
+		return
+	}
+
+	// Under powershell.exe (PS5.1) only: PS7-only operators are parse errors,
+	// so the classifier fail-closes (not read-only), matching the PS5.1
+	// executor which cannot run them either.
 	cases := []struct {
 		name string
 		cmd  string

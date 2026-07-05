@@ -644,6 +644,43 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.NoError(t, <-errCh)
 	})
 
+	t.Run("review summary surfaces LLM reason via accessIntent", func(t *testing.T) {
+		// Regression for P7: when requestApproval receives an accessIntent
+		// with a non-empty Class (the common path via buildAccessIntent),
+		// the Reason field must propagate into the review summary so the
+		// user sees *why* the command needs review instead of a bare
+		// "Risk: unknown".
+		mods := &Mods{
+			ctx:                 context.Background(),
+			Config:              &Config{},
+			currentToolRegistry: registry,
+		}
+		intent := AccessIntent{
+			Class:  AccessWrite,
+			Reason: "installs nodejs via scoop",
+		}
+		reviewer := &toolReviewer{
+			reviewMode: ReviewMutable,
+			scope:      testApprovalScope,
+			reviewChan: make(chan toolReviewItem, 1),
+		}
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- reviewer.requestApproval(reviewerDeps{
+				ctx:              mods.ctx,
+				isShellExecution: registry.ShellExecution,
+				analyzeShell:     mods.analyzeShellCommand,
+				accessIntent:     intent,
+			}, "powershell_run", []byte(`{"command":"scoop install nodejs"}`))
+		}()
+
+		item := receiveReviewItem(t, reviewer.reviewChan)
+		require.Contains(t, item.summary, "installs nodejs via scoop",
+			"review summary must surface the LLM reason carried by accessIntent")
+		item.resp <- reviewResponse{approved: true}
+		require.NoError(t, <-errCh)
+	})
+
 	t.Run("candidate dirs expand tilde before saving", func(t *testing.T) {
 		home, err := os.UserHomeDir()
 		require.NoError(t, err)

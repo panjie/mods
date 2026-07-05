@@ -594,7 +594,13 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			m.appendShellResult(call.Name, call.Arguments, call.Err)
 		}
 		if call.Err != nil {
-			debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+			var exitErr shellExitCoder
+			if errors.As(call.Err, &exitErr) {
+				debug.Printf("Tool non-zero exit: %s -> status %d, output: %s",
+					call.Name, exitErr.ExitCode(), debug.Truncate(call.Output, 500))
+			} else {
+				debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
+			}
 			if errors.Is(call.Err, errReviewUnavailable) {
 				msg.runner.close()
 				m.currentToolRegistry = nil
@@ -606,10 +612,19 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			continue
 		}
 		argPreview := debug.Truncate(string(call.Arguments), 120)
+		outputPreview := debug.Truncate(call.Output, 200)
 		if argPreview != "" {
-			debug.Printf("Tool call: %s(%s)", call.Name, argPreview)
+			if outputPreview != "" {
+				debug.Printf("Tool call: %s(%s) -> output: %s", call.Name, argPreview, outputPreview)
+			} else {
+				debug.Printf("Tool call: %s(%s)", call.Name, argPreview)
+			}
 		} else {
-			debug.Printf("Tool call: %s", call.Name)
+			if outputPreview != "" {
+				debug.Printf("Tool call: %s -> output: %s", call.Name, outputPreview)
+			} else {
+				debug.Printf("Tool call: %s", call.Name)
+			}
 		}
 	}
 	if len(msg.results) == 0 {

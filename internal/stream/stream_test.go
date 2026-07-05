@@ -77,6 +77,9 @@ func TestCallTool_truncatesLongResults(t *testing.T) {
 		if status.Err == nil {
 			t.Error("expected status to have error")
 		}
+		if status.Output != msg.Content {
+			t.Errorf("expected status.Output to mirror content, got %q", status.Output)
+		}
 	})
 
 	t.Run("arguments are stored in status", func(t *testing.T) {

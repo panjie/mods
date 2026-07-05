@@ -77,6 +77,7 @@ type Chunk struct {
 type ToolCallStatus struct {
 	Name      string
 	Arguments []byte
+	Output    string
 	Err       error
 }
 

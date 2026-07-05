@@ -24,8 +24,9 @@ const (
 // invocation touches: an access class plus the absolute directories it
 // operates on. It is the sole input to the approval matrix.
 type AccessIntent struct {
-	Class AccessClass
-	Dirs  []string
+	Class  AccessClass
+	Dirs   []string
+	Reason string
 }
 
 // Decision is the outcome of the approval matrix.

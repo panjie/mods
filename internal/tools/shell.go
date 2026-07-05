@@ -238,7 +238,33 @@ func shellCommand(ctx context.Context, command string) *exec.Cmd {
 }
 
 func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command)
+	cmd := exec.CommandContext(ctx, windowsPowerShellExe(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command)
 	platform.HideCommandWindow(cmd)
 	return cmd
+}
+
+var (
+	winPwshExe     string
+	winPwshExeOnce sync.Once
+)
+
+// windowsPowerShellExe resolves the PowerShell host that executes shell_run /
+// powershell_run commands. PowerShell 7 (pwsh.exe) is preferred when on PATH:
+// it ships Get-FileHash as a core cmdlet (scoop and other package managers
+// rely on it for hash verification, and the PS5.1 -NoProfile auto-load timing
+// is unreliable on some locales). When pwsh.exe is absent it falls back to
+// Windows PowerShell 5.1 (powershell.exe). The classification bridge
+// (internal/approval.getWindowsShellPath) must resolve to the same host so
+// AST parsing matches execution semantics.
+func windowsPowerShellExe() string {
+	winPwshExeOnce.Do(func() {
+		if p, err := exec.LookPath("pwsh.exe"); err == nil {
+			winPwshExe = p
+			return
+		}
+		if p, err := exec.LookPath("powershell.exe"); err == nil {
+			winPwshExe = p
+		}
+	})
+	return winPwshExe
 }

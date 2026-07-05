@@ -12,6 +12,17 @@ type Layout interface {
 	GroupWidth(f *Form, g *Group, w int) int
 }
 
+type fieldWidthLayout interface {
+	FieldWidth(f *Form, g *Group, groupWidth int) int
+}
+
+func layoutFieldWidth(layout Layout, form *Form, group *Group, groupWidth int) int {
+	if layout, ok := layout.(fieldWidthLayout); ok {
+		return layout.FieldWidth(form, group, groupWidth)
+	}
+	return groupWidth
+}
+
 // LayoutDefault is the default layout shows a single group at a time.
 var LayoutDefault Layout = &layoutDefault{}
 

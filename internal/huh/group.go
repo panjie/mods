@@ -123,6 +123,14 @@ func (g *Group) WithWidth(width int) *Group {
 	return g
 }
 
+func (g *Group) withFieldWidth(width int) *Group {
+	g.selector.Range(func(_ int, field Field) bool {
+		field.WithWidth(width)
+		return true
+	})
+	return g
+}
+
 // WithHeight sets the height on a group.
 func (g *Group) WithHeight(height int) *Group {
 	g.height = height

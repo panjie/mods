@@ -310,11 +310,16 @@ func (f *Form) WithWidth(width int) *Form {
 	}
 	f.width = width
 	f.selector.Range(func(_ int, group *Group) bool {
-		width := f.layout.GroupWidth(f, group, width)
-		group.WithWidth(width)
+		f.applyGroupWidth(group, width)
 		return true
 	})
 	return f
+}
+
+func (f *Form) applyGroupWidth(group *Group, width int) {
+	groupWidth := f.layout.GroupWidth(f, group, width)
+	group.WithWidth(groupWidth)
+	group.withFieldWidth(layoutFieldWidth(f.layout, f, group, groupWidth))
 }
 
 // WithHeight sets the height of a form.
@@ -544,8 +549,7 @@ func (f *Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		if f.width == 0 {
 			f.selector.Range(func(_ int, group *Group) bool {
-				width := f.layout.GroupWidth(f, group, msg.Width)
-				group.WithWidth(width)
+				f.applyGroupWidth(group, msg.Width)
 				return true
 			})
 		}

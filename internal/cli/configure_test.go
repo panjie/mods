@@ -7,10 +7,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -46,6 +50,44 @@ func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 		require.True(t, key.Matches(esc, binding))
 		require.True(t, key.Matches(shiftTab, binding))
 	}
+}
+
+func TestConfigWizardLayoutKeepsFocusedBorderWithinWindow(t *testing.T) {
+	const windowWidth = 64
+	provider := "openai"
+	theme := configWizardTheme("charm")
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Provider").
+				Description("Choose the API backend mods should use by default.").
+				Options(huh.NewOption("OpenAI", "openai")).
+				Value(&provider),
+		).
+			Title("mods setup").
+			Description("Connect a provider and pick the model you want to start with."),
+	).
+		WithTheme(theme).
+		WithLayout(configWizardLayoutForTheme(theme)).
+		WithShowHelp(false)
+
+	form.Init()
+	model, _ := form.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
+	form = model.(*huh.Form)
+	view := ansi.Strip(form.View())
+
+	for _, line := range strings.Split(view, "\n") {
+		require.LessOrEqual(t, lipgloss.Width(line), windowWidth, line)
+	}
+
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "╭") {
+			require.Contains(t, line, "╮")
+			require.LessOrEqual(t, lipgloss.Width(line), windowWidth)
+			return
+		}
+	}
+	require.Fail(t, "focused field border was not rendered")
 }
 
 func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) {
@@ -417,19 +459,19 @@ func TestDiscoverModelsGoogle(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"models": []map[string]any{
 				{
-					"name":                      "models/gemini-2.5-pro",
+					"name":                       "models/gemini-2.5-pro",
 					"supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"},
 				},
 				{
-					"name":                      "models/gemini-2.5-flash",
+					"name":                       "models/gemini-2.5-flash",
 					"supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"},
 				},
 				{
-					"name":                      "models/text-embedding-004",
+					"name":                       "models/text-embedding-004",
 					"supportedGenerationMethods": []string{"embedContent"},
 				},
 				{
-					"name":                      "models/gemini-2.0-flash",
+					"name":                       "models/gemini-2.0-flash",
 					"supportedGenerationMethods": []string{"generateContent", "streamGenerateContent"},
 				},
 			},
@@ -448,11 +490,11 @@ func TestDiscoverModelsGoogleFiltersNonGenerative(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"models": []map[string]any{
 				{
-					"name":                      "models/text-embedding-004",
+					"name":                       "models/text-embedding-004",
 					"supportedGenerationMethods": []string{"embedContent"},
 				},
 				{
-					"name":                      "models/aqa",
+					"name":                       "models/aqa",
 					"supportedGenerationMethods": []string{"generateAnswer"},
 				},
 			},

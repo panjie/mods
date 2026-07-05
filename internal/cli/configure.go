@@ -109,6 +109,7 @@ func RunConfigWizard() error {
 		return opts
 	}
 
+	wizardTheme := configWizardTheme(config.Theme)
 	form := huh.NewForm(
 		// Page 1: Provider
 		huh.NewGroup(
@@ -156,12 +157,12 @@ func RunConfigWizard() error {
 					return fmt.Sprintf("Base URL for %s", wizardProviderName(chosenAPI, newProviderName))
 				}, []any{&chosenAPI, &newProviderName}).
 				Description("Provider-level API endpoint shared by all models on this provider.").
-			PlaceholderFunc(func() string {
-				if url := findBaseURL(chosenAPI); url != "" {
-					return url
-				}
-				return builtinBaseURL(chosenAPI)
-			}, &chosenAPI).
+				PlaceholderFunc(func() string {
+					if url := findBaseURL(chosenAPI); url != "" {
+						return url
+					}
+					return builtinBaseURL(chosenAPI)
+				}, &chosenAPI).
 				Value(&baseURL).
 				Validate(func(value string) error {
 					return validateWizardBaseURL(chosenAPI, value)
@@ -357,7 +358,8 @@ func RunConfigWizard() error {
 			Title("review").
 			Description("Tune the approval behavior for tool execution."),
 	).
-		WithTheme(configWizardTheme(config.Theme)).
+		WithTheme(wizardTheme).
+		WithLayout(configWizardLayoutForTheme(wizardTheme)).
 		WithKeyMap(keymap).
 		WithEscapeAbortConfirmation("Press Esc again to exit.")
 
@@ -437,6 +439,7 @@ func RunConfigWizard() error {
 			saveLocation = "portable"
 		}
 		portablePath := filepath.Join(exeDir, "mods.yml")
+		storageTheme := configWizardTheme(config.Theme)
 		form3 := huh.NewForm(
 			huh.NewGroup(
 				huh.NewSelect[string]().
@@ -451,7 +454,8 @@ func RunConfigWizard() error {
 				Title("storage").
 				Description("Choose where mods writes its configuration file."),
 		).
-			WithTheme(configWizardTheme(config.Theme)).
+			WithTheme(storageTheme).
+			WithLayout(configWizardLayoutForTheme(storageTheme)).
 			WithKeyMap(keymap).
 			WithEscapeAbortConfirmation("Press Esc again to exit.")
 		if err := form3.Run(); err != nil {
@@ -605,6 +609,49 @@ func buildProviderOptions() []huh.Option[string] {
 	}
 	opts = append(opts, huh.NewOption("Add new provider", addProviderOption))
 	return opts
+}
+
+const minConfigWizardFieldWidth = 20
+
+type configWizardLayout struct {
+	formHorizontalFrame  int
+	fieldHorizontalFrame int
+}
+
+func configWizardLayoutForTheme(theme *huh.Theme) huh.Layout {
+	formFrame := 0
+	fieldFrame := 0
+	if theme != nil {
+		formFrame = theme.Form.Base.GetHorizontalFrameSize()
+		fieldFrame = max(
+			theme.Focused.Base.GetHorizontalFrameSize(),
+			theme.Blurred.Base.GetHorizontalFrameSize(),
+		)
+	}
+	return configWizardLayout{
+		formHorizontalFrame:  formFrame,
+		fieldHorizontalFrame: fieldFrame,
+	}
+}
+
+func (l configWizardLayout) View(form *huh.Form) string {
+	return huh.LayoutDefault.View(form)
+}
+
+func (l configWizardLayout) GroupWidth(_ *huh.Form, _ *huh.Group, width int) int {
+	adjusted := width - l.formHorizontalFrame
+	if adjusted < minConfigWizardFieldWidth {
+		return minConfigWizardFieldWidth
+	}
+	return adjusted
+}
+
+func (l configWizardLayout) FieldWidth(_ *huh.Form, _ *huh.Group, groupWidth int) int {
+	adjusted := groupWidth - l.fieldHorizontalFrame
+	if adjusted < minConfigWizardFieldWidth {
+		return minConfigWizardFieldWidth
+	}
+	return adjusted
 }
 
 func configWizardTheme(theme string) *huh.Theme {
@@ -1147,7 +1194,7 @@ func fetchGoogleModels(urlStr string) ([]string, error) {
 
 	var body struct {
 		Models []struct {
-			Name                      string   `json:"name"`
+			Name                       string   `json:"name"`
 			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
 		} `json:"models"`
 	}

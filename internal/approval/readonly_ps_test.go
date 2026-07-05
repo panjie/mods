@@ -41,6 +41,8 @@ func TestIsReadOnlyPowerShellReadOnly(t *testing.T) {
 
 		// Multiple read-only commands with ;
 		{"semicolon", "Get-Date; Get-Process"},
+		{"set-location then git log", "Set-Location C:\\repo; git log --oneline -1 -- docs/superpowers/plans/2026-07-02-unified-directory-approval.md"},
+		{"cd then git status", "cd C:\\repo; git status"},
 
 		// Out-Null (discard)
 		{"out-null", "Get-Process | Out-Null"},
@@ -90,6 +92,8 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 		{"set-content", "Set-Content file.txt 'hello'"},
 		{"remove-item", "Remove-Item file.txt"},
 		{"new-item", "New-Item -Path x"},
+		{"set-location then git push", "Set-Location C:\\repo; git push"},
+		{"set-location then remove-item", "Set-Location C:\\repo; Remove-Item x"},
 
 		// Excluded cmdlets (security traps)
 		{"get-command", "Get-Command"},

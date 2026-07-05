@@ -23,6 +23,7 @@ function New-IR {
         has_control_flow  = $false
         command_args      = @{}
         paths             = [System.Collections.Generic.List[string]]::new()
+        command_invocations = [System.Collections.Generic.List[object]]::new()
     }
 }
 
@@ -75,8 +76,12 @@ function Invoke-Parse {
                     if (-not $ir.command_args.ContainsKey($cmdName)) {
                         $ir.command_args[$cmdName] = [System.Collections.Generic.List[string]]::new()
                     }
+                    $argv = [System.Collections.Generic.List[string]]::new()
                     for ($i = 1; $i -lt $elems.Count; $i++) {
                         $argText = $elems[$i].ToString().Trim()
+                        if ($argText -ne '') {
+                            $argv.Add($argText) | Out-Null
+                        }
                         if ($argText.StartsWith('-')) {
                             $colonIdx = $argText.IndexOf(':')
                             if ($colonIdx -gt 0) { $argText = $argText.Substring(0, $colonIdx) }
@@ -85,6 +90,10 @@ function Invoke-Parse {
                             }
                         }
                     }
+                    $ir.command_invocations.Add([ordered]@{
+                        name = $cmdName
+                        args = @($argv)
+                    }) | Out-Null
                     # Collect string literal argument values as potential paths
                     for ($i = 1; $i -lt $elems.Count; $i++) {
                         $elem = $elems[$i]
@@ -219,6 +228,7 @@ function Write-IR {
         has_control_flow = $ir.has_control_flow
         command_args     = $cmdArgsOut
         paths            = @($ir.paths)
+        command_invocations = @($ir.command_invocations)
     }
     [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 3))
     [Console]::Out.Flush()

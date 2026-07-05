@@ -195,6 +195,9 @@ func TestShellRunPathFlavor(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
+	}
 	// These commands would previously fall through to the LLM classifier
 	// because of shell metacharacters (|, &&, $()) or missing from the
 	// simple allowlist. The AST classifier should catch them locally.
@@ -447,6 +450,26 @@ func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {
 	result := mods.analyzeShellCommand("powershell_run", "Get-Content C:\\Users\\Public\\file.txt")
 	require.False(t, result.NeedsReview, "Get-Content should be read-only")
 	require.NotEmpty(t, result.AffectedDirs, "should have affected dirs from AST")
+}
+
+func TestAnalyzeShellCommandPowerShellSetLocationGitLogWorkspaceDirs(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell AST classifier requires Windows")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+	cmd := "Set-Location " + workspace + "; git log --oneline -1 -- docs/superpowers/plans/2026-07-02-unified-directory-approval.md"
+	result := mods.analyzeShellCommand("powershell_run", cmd)
+	require.False(t, result.NeedsReview, "Set-Location to workspace followed by git log should be read-only")
+	require.Equal(t, []string{workspace}, result.AffectedDirs)
 }
 
 func TestExtractExternalPathsIgnoresBareSlash(t *testing.T) {

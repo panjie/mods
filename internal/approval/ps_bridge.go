@@ -22,20 +22,26 @@ var psBridgeScript []byte
 // bridge script after parsing a command. The Go-side classifier consumes
 // this to determine read-only status.
 type psBridgeIR struct {
-	Version        string              `json:"version"`
-	Commands       []string            `json:"commands"`
-	Operators      []string            `json:"operators"`
-	Redirects      []string            `json:"redirects"`
-	Expansions     []string            `json:"expansions"`
-	RiskFlags      []string            `json:"risk_flags"`
-	ParseErrors    []string            `json:"parse_errors"`
-	HasScriptBlock bool                `json:"has_script_block"`
-	HasAssignment  bool                `json:"has_assignment"`
-	HasBackground  bool                `json:"has_background"`
-	HasStopParsing bool                `json:"has_stop_parsing"`
-	HasControlFlow bool                `json:"has_control_flow"`
-	CommandArgs    map[string][]string `json:"command_args"`
-	Paths          []string            `json:"paths"`
+	Version        string                `json:"version"`
+	Commands       []string              `json:"commands"`
+	Operators      []string              `json:"operators"`
+	Redirects      []string              `json:"redirects"`
+	Expansions     []string              `json:"expansions"`
+	RiskFlags      []string              `json:"risk_flags"`
+	ParseErrors    []string              `json:"parse_errors"`
+	HasScriptBlock bool                  `json:"has_script_block"`
+	HasAssignment  bool                  `json:"has_assignment"`
+	HasBackground  bool                  `json:"has_background"`
+	HasStopParsing bool                  `json:"has_stop_parsing"`
+	HasControlFlow bool                  `json:"has_control_flow"`
+	CommandArgs    map[string][]string   `json:"command_args"`
+	Paths          []string              `json:"paths"`
+	Invocations    []psCommandInvocation `json:"command_invocations"`
+}
+
+type psCommandInvocation struct {
+	Name string   `json:"name"`
+	Args []string `json:"args"`
 }
 
 type bridgeProcess struct {

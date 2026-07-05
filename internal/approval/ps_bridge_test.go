@@ -132,6 +132,34 @@ func TestParseWithBridgePositionalPathExtraction(t *testing.T) {
 	require.Contains(t, ir.Paths, "C:\\Users\\file.txt")
 }
 
+func TestParseWithBridgeCommandInvocations(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	docPath := "docs/superpowers/plans/2026-07-02-unified-directory-approval.md"
+	ir, err := parseWithBridge("git log --oneline -1 -- " + docPath)
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.Contains(t, ir.Commands, "git")
+	require.Len(t, ir.Invocations, 1)
+	require.Equal(t, "git", ir.Invocations[0].Name)
+	require.Equal(t, []string{"log", "--oneline", "-1", "--", docPath}, ir.Invocations[0].Args)
+}
+
+func TestParseWithBridgeCommandInvocationsAfterSetLocation(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	docPath := "docs/superpowers/plans/2026-07-02-unified-directory-approval.md"
+	ir, err := parseWithBridge("Set-Location C:\\repo; git log --oneline -1 -- " + docPath)
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.Len(t, ir.Invocations, 2)
+	require.Equal(t, "set-location", ir.Invocations[0].Name)
+	require.Equal(t, []string{"C:\\repo"}, ir.Invocations[0].Args)
+	require.Equal(t, "git", ir.Invocations[1].Name)
+	require.Equal(t, []string{"log", "--oneline", "-1", "--", docPath}, ir.Invocations[1].Args)
+	require.Contains(t, ir.Paths, "C:\\repo")
+}
+
 func TestParseWithBridgeRedirectPathExtraction(t *testing.T) {
 	t.Cleanup(func() { CloseBridge() })
 

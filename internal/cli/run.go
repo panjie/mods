@@ -176,7 +176,6 @@ func runSettingsEditorAction() error {
 			ReasonText: "Could not edit your settings file.",
 		}
 	}
-	HideCommandWindow(c)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

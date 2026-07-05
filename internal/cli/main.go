@@ -849,7 +849,6 @@ func prefixFromEditor() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not open editor: %w", err)
 	}
-	HideCommandWindow(cmd)
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout

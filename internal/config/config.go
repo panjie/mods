@@ -101,7 +101,7 @@ var Help = map[string]string{
 	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
 	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
 	"builtin-tools":          "Native tool configuration for filesystem, shell, and sequential thinking tools",
-	"web-search":             "Enable web search for up-to-date information (uses DuckDuckGo by default)",
+	"web-search":             "Enable or disable the web_search tool",
 	"web-search-provider":    "Web search provider: duckduckgo (default), tavily, or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",

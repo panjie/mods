@@ -104,10 +104,7 @@ with `--help-all` (marked [advanced]).
 - `--list-roles` — List the roles defined in your configuration file
 
 ### Web Search
-- `--web-search` — Enable web search for up-to-date information (uses DuckDuckGo by default)
-- `--web-search-provider <name>` [advanced] — Web search provider: duckduckgo (default), tavily, or custom
-- `--web-search-api-key <key>` [advanced] — API key for the web search provider (required for tavily)
-- `--web-search-api-key-env <env>` [advanced] — Environment variable name that holds the API key (default: TAVILY_API_KEY)
+- `--web-search` — Enable or disable the web_search tool
 
 ### Tools, Review & Reasoning
 - `-p`, `--plan` — Plan mode: generates a detailed plan for user approval before executing any changes

@@ -74,8 +74,9 @@ func RunConfigWizard() error {
 	// pages and read after the form. (The MultiSelect preserves option order,
 	// so discoveredPick is already in fetched/sorted order.)
 	var (
-		discoveredPick   []string
-		manualModelsText string
+		discoveredPick     []string
+		manualModelsText   string
+		discoverySucceeded bool
 	)
 	discoverOptions := func() []huh.Option[string] {
 		api := wizardProviderName(chosenAPI, newProviderName)
@@ -94,8 +95,10 @@ func RunConfigWizard() error {
 		}
 		discovered, derr := discoverModels(eff, base, resolveKeyForDiscovery(api, apiKey))
 		if derr != nil || len(discovered) == 0 {
+			discoverySucceeded = false
 			return nil
 		}
+		discoverySucceeded = true
 		// Show every fetched model; already-configured ones are picked out
 		// only at save time, so their curated metadata is preserved.
 		const maxPickerModels = 200
@@ -204,17 +207,24 @@ func RunConfigWizard() error {
 				return wizardProviderName(chosenAPI, newProviderName) == "ollama" || keyStorage != "config"
 			}),
 
-		// Discover models: live fetch with a spinner. Every provider goes
-		// through this page; an empty list (fetch failed or the provider
-		// doesn't implement a model-list endpoint) falls through to manual.
+		// Discover models: live fetch with a spinner. A successful
+		// discovery requires at least one model to be selected. An
+		// empty list (fetch failed or the provider doesn't implement a
+		// model-list endpoint) falls through to manual entry.
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				TitleFunc(func() string {
 					return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
 				}, []any{&chosenAPI, &newProviderName}).
-				Description("Select models to add. The first selected becomes the default. If the list is empty, continue to type names manually.").
+				Description("Select at least one model to add. The first selected becomes the default.").
 				OptionsFunc(discoverOptions, []any{&chosenAPI, &newProviderName, &apiType, &baseURL, &apiKey}).
-				Value(&discoveredPick),
+				Value(&discoveredPick).
+				Validate(func(v []string) error {
+					if discoverySucceeded && len(v) == 0 {
+						return fmt.Errorf("select at least one model")
+					}
+					return nil
+				}),
 		).
 			Title("discover models").
 			Description("Fetch the model list from the provider's API now."),
@@ -238,7 +248,7 @@ func RunConfigWizard() error {
 		).
 			Title("new models").
 			Description("Type model identifiers manually.").
-			WithHideFunc(func() bool { return len(discoveredPick) > 0 }),
+			WithHideFunc(func() bool { return discoverySucceeded }),
 
 		// Page 8: Built-in tools
 		huh.NewGroup(
@@ -691,10 +701,10 @@ func configWizardTheme(theme string) *huh.Theme {
 		Bold(true)
 	t.Focused.SelectedPrefix = lipgloss.NewStyle().
 		Foreground(success).
-		SetString("✓ ")
+		SetString("[✓] ")
 	t.Focused.UnselectedPrefix = lipgloss.NewStyle().
 		Foreground(muted).
-		SetString("  ")
+		SetString("[ ] ")
 	t.Focused.FocusedButton = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Background(accent).

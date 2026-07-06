@@ -319,7 +319,7 @@ func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
 	require.True(t, flagVisibleInUsage(flags.Lookup("help-all"), false))
 	require.True(t, flagVisibleInUsage(flags.Lookup("workspace"), false))
 
-	for _, name := range []string{"word-wrap", "max-tool-rounds", "web-search-provider"} {
+	for _, name := range []string{"word-wrap", "max-tool-rounds", "hide-tool-status"} {
 		flag := flags.Lookup(name)
 		require.NotNil(t, flag)
 		require.False(t, flagVisibleInUsage(flag, false), name)
@@ -383,10 +383,8 @@ func TestDirsActionUsesSessions(t *testing.T) {
 func TestAdvancedFlagsStillParse(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
-		require.NoError(t, rootCmd.Flags().Set("web-search-provider", "tavily"))
 
 		require.Equal(t, 12, config.MaxToolRounds)
-		require.Equal(t, "tavily", config.WebSearchProvider)
 	})
 }
 

@@ -155,7 +155,7 @@ func TestCompletionOutputThoughtField(t *testing.T) {
 		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
 		state:               requestState,
 		contentMutex:        &sync.Mutex{},
-		reasoningActive:     true,
+		thinkActive:         true,
 		showOperationStatus: true,
 		reviewer:            &toolReviewer{},
 	}
@@ -194,7 +194,7 @@ func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
 		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
 		state:               requestState,
 		contentMutex:        &sync.Mutex{},
-		reasoningActive:     false,
+		thinkActive:         false,
 		showOperationStatus: true,
 		reviewer:            &toolReviewer{},
 	}

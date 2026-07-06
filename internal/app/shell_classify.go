@@ -178,7 +178,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 	cccfg := cfgs.Cohere
 	occfg := cfgs.Ollama
 	ccfg := cfgs.OpenAI
-	applyReasoningConfigs(mod, &gccfg, &accfg, &ccfg, false)
+	applyThinkConfigs(mod, &gccfg, &accfg, &ccfg, false)
 
 	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()

@@ -35,12 +35,12 @@ const (
 	ToolSelectionRules        = prompts.ToolSelection
 )
 
-// ReasoningMode controls whether the LLM should use deep reasoning.
-type ReasoningMode string
+// ThinkMode controls whether the LLM should use extended thinking.
+type ThinkMode string
 
 const (
-	ReasoningOff ReasoningMode = "off"
-	ReasoningOn  ReasoningMode = "on"
+	ThinkOff ThinkMode = "off"
+	ThinkOn  ThinkMode = "on"
 )
 
 // ReviewMode controls whether mods prompts for confirmation before executing tools.
@@ -108,7 +108,7 @@ var Help = map[string]string{
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
-	"reasoning":              "Enables deep reasoning mode: off or on",
+	"think":                  "Enables extended thinking mode: off or on",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
@@ -124,8 +124,8 @@ type Model struct {
 	Fallback       string         `yaml:"fallback"`
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
-	// ThinkingType is the value to set thinking.type to when reasoning is
-	// enabled via -r / --reasoning. Defaults to "adaptive" (MiniMax) when
+	// ThinkingType is the value to set thinking.type to when thinking is
+	// enabled via -t / --think. Defaults to "adaptive" (MiniMax) when
 	// extra-params.thinking already exists; use "enabled" for GLM and
 	// Anthropic-compatible APIs.
 	ThinkingType string `yaml:"thinking-type,omitempty"`
@@ -134,9 +134,9 @@ type Model struct {
 	// [reasoning_content, reasoning, thinking, thinking_content].
 	ThinkFields []string `yaml:"thought-fields,omitempty"`
 	// ThinkTag overrides the inline reasoning tag name. Defaults to "think"
-	// (rendered as <think>...</think>). Only consulted when reasoning is on.
+	// (rendered as <think>...</think>). Only consulted when thinking is on.
 	ThinkTag string `yaml:"think-tag,omitempty"`
-	// ReasoningEffort is the target reasoning_effort value when reasoning
+	// ReasoningEffort is the target reasoning_effort value when thinking
 	// is enabled. Defaults to "medium".
 	ReasoningEffort string `yaml:"reasoning-effort,omitempty"`
 }
@@ -232,7 +232,7 @@ type PersistentConfig struct {
 	Images              []string                   `yaml:"images" env:"IMAGES"`
 	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
-	Reasoning           ReasoningMode              `yaml:"reasoning" env:"REASONING"`
+	Think               ThinkMode                  `yaml:"think" env:"THINK"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
@@ -474,7 +474,7 @@ func Ensure() (Config, error) {
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
-	validateReasoningMode(&c)
+	validateThinkMode(&c)
 	validateReviewMode(&c)
 
 	applySessionDirDefault(&c)
@@ -543,13 +543,13 @@ func defaultFormatTextFor(format string) string {
 	}
 }
 
-func validateReasoningMode(c *Config) {
-	switch c.Reasoning {
-	case "", ReasoningOff, ReasoningOn:
+func validateThinkMode(c *Config) {
+	switch c.Think {
+	case "", ThinkOff, ThinkOn:
 		return
 	default:
-		fmt.Fprintf(os.Stderr, "Warning: invalid reasoning mode %q, defaulting to \"off\"\n", c.Reasoning)
-		c.Reasoning = ReasoningOff
+		fmt.Fprintf(os.Stderr, "Warning: invalid think mode %q, defaulting to \"off\"\n", c.Think)
+		c.Think = ThinkOff
 	}
 }
 
@@ -650,7 +650,7 @@ func Default() Config {
 				"markdown": defaultMarkdownFormatText,
 				"json":     defaultJSONFormatText,
 			},
-			Reasoning:          ReasoningOff,
+			Think:              ThinkOff,
 			ReviewMode:         ReviewAuto,
 			WordWrap:           80,
 			StatusText:         "Generating",

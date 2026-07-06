@@ -48,26 +48,26 @@ func TestPromptConfig(t *testing.T) {
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
 }
 
-func TestValidateReasoningMode(t *testing.T) {
+func TestValidateThinkMode(t *testing.T) {
 	cfg := &Config{}
-	cfg.Reasoning = ""
-	validateReasoningMode(cfg)
-	require.Equal(t, ReasoningMode(""), cfg.Reasoning) // empty is valid, left alone
+	cfg.Think = ""
+	validateThinkMode(cfg)
+	require.Equal(t, ThinkMode(""), cfg.Think) // empty is valid, left alone
 
 	cfg = &Config{}
-	cfg.Reasoning = ReasoningOff
-	validateReasoningMode(cfg)
-	require.Equal(t, ReasoningOff, cfg.Reasoning)
+	cfg.Think = ThinkOff
+	validateThinkMode(cfg)
+	require.Equal(t, ThinkOff, cfg.Think)
 
 	cfg = &Config{}
-	cfg.Reasoning = ReasoningOn
-	validateReasoningMode(cfg)
-	require.Equal(t, ReasoningOn, cfg.Reasoning)
+	cfg.Think = ThinkOn
+	validateThinkMode(cfg)
+	require.Equal(t, ThinkOn, cfg.Think)
 
 	cfg = &Config{}
-	cfg.Reasoning = "auto"
-	validateReasoningMode(cfg)
-	require.Equal(t, ReasoningOff, cfg.Reasoning) // invalid resets to default
+	cfg.Think = "auto"
+	validateThinkMode(cfg)
+	require.Equal(t, ThinkOff, cfg.Think) // invalid resets to default
 }
 
 func TestValidateReviewMode(t *testing.T) {

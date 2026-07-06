@@ -180,7 +180,7 @@ func initFlags() {
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
 	regBool(flags, &config.Debug, "debug", "D", config.Debug)
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
-	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "r", flagDesc("reasoning"))
+	f := flags.VarPF(newThinkFlag(config.Think, &config.Think), "think", "t", flagDesc("think"))
 	f.NoOptDefVal = "on"
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
 
@@ -238,7 +238,7 @@ func initFlags() {
 	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "help", "help-all", "version", flagListPrompts)
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search")
-	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review-mode", "max-tool-rounds")
+	markCategory(flags, flagCategoryToolsReview, "plan", "think", "review-mode", "max-tool-rounds")
 	markCategory(flags, flagCategoryMCP, "list-mcps", "list-tools", "enable-mcp", "disable-mcp")
 	markCategory(
 		flags,
@@ -350,7 +350,7 @@ func execute() {
 		rootCmd.InitDefaultCompletionCmd()
 	}
 
-	rootCmd.SetArgs(normalizeOptionalReasoningValueArgs(os.Args[1:]))
+	rootCmd.SetArgs(normalizeOptionalThinkValueArgs(os.Args[1:]))
 
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
@@ -361,7 +361,7 @@ func execute() {
 	}
 }
 
-func normalizeOptionalReasoningValueArgs(args []string) []string {
+func normalizeOptionalThinkValueArgs(args []string) []string {
 	if len(args) == 0 {
 		return args
 	}
@@ -373,7 +373,7 @@ func normalizeOptionalReasoningValueArgs(args []string) []string {
 			out = append(out, args[i:]...)
 			break
 		}
-		if (arg == "--reasoning" || arg == "-r") && i+1 < len(args) && isReasoningValue(args[i+1]) {
+		if (arg == "--think" || arg == "-t") && i+1 < len(args) && isThinkValue(args[i+1]) {
 			out = append(out, arg+"="+args[i+1])
 			i++
 			continue
@@ -383,11 +383,11 @@ func normalizeOptionalReasoningValueArgs(args []string) []string {
 	return out
 }
 
-func isReasoningValue(value string) bool {
+func isThinkValue(value string) bool {
 	switch value {
 	case "off", "on", "auto":
-		// "auto" is no longer accepted by reasoningFlag.Set, but keeping it
-		// here preserves an explicit error for "--reasoning auto" instead of
+		// "auto" is no longer accepted by thinkFlag.Set, but keeping it
+		// here preserves an explicit error for "--think auto" instead of
 		// treating "auto" as prompt text.
 		return true
 	default:

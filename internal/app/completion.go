@@ -52,7 +52,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	for _, cancel := range cancels {
 		cancel()
 	}
-	m.reasoningActive = false
+	m.thinkActive = false
 	m.responseOutputStarted = false
 	m.responseBoundaryPending = false
 	m.Thought = ""

@@ -83,7 +83,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"list-roles",
 		"web-search",
 		"plan",
-		"reasoning",
+		"think",
 		"review-mode",
 		"max-tool-rounds",
 		"list-mcps",

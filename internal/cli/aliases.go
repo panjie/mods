@@ -12,17 +12,17 @@ import (
 )
 
 type (
-	modsError     = apperr.Error
-	Config        = cfgpkg.Config
-	API           = cfgpkg.API
-	Model         = cfgpkg.Model
-	FieldUpdate   = cfgpkg.FieldUpdate
-	ReasoningMode = cfgpkg.ReasoningMode
-	ReviewMode    = cfgpkg.ReviewMode
-	DB            = session.DB
-	Session       = session.Session
-	Mods          = app.Mods
-	Styles        = ui.Styles
+	modsError   = apperr.Error
+	Config      = cfgpkg.Config
+	API         = cfgpkg.API
+	Model       = cfgpkg.Model
+	FieldUpdate = cfgpkg.FieldUpdate
+	ThinkMode   = cfgpkg.ThinkMode
+	ReviewMode  = cfgpkg.ReviewMode
+	DB          = session.DB
+	Session     = session.Session
+	Mods        = app.Mods
+	Styles      = ui.Styles
 )
 
 var (
@@ -57,8 +57,8 @@ const (
 	ReviewNever  = cfgpkg.ReviewNever
 	ReviewAuto   = cfgpkg.ReviewAuto
 	ReviewAlways = cfgpkg.ReviewAlways
-	ReasoningOff = cfgpkg.ReasoningOff
-	ReasoningOn  = cfgpkg.ReasoningOn
+	ThinkOff     = cfgpkg.ThinkOff
+	ThinkOn      = cfgpkg.ThinkOn
 
 	ShortIDLength = session.ShortIDLength
 	MinIDLength   = session.MinIDLength

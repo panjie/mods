@@ -111,12 +111,12 @@ func TestReasoningShortFlagUsesLowercaseR(t *testing.T) {
 		require.NotNil(t, rawFlag)
 		require.Empty(t, rawFlag.Shorthand)
 
-		reasoningFlag := rootCmd.Flags().Lookup("reasoning")
-		require.NotNil(t, reasoningFlag)
-		require.Equal(t, "r", reasoningFlag.Shorthand)
+		thinkFlag := rootCmd.Flags().Lookup("think")
+		require.NotNil(t, thinkFlag)
+		require.Equal(t, "t", thinkFlag.Shorthand)
 
-		require.NoError(t, rootCmd.Flags().Parse(normalizeOptionalReasoningValueArgs([]string{"-r", "on"})))
-		require.Equal(t, ReasoningOn, config.Reasoning)
+		require.NoError(t, rootCmd.Flags().Parse(normalizeOptionalThinkValueArgs([]string{"-t", "on"})))
+		require.Equal(t, ThinkOn, config.Think)
 	})
 
 	withTestConfig(t, Config{}, func() {
@@ -182,36 +182,36 @@ func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
 	})
 }
 
-func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
+func TestNormalizeOptionalThinkValueArgs(t *testing.T) {
 	tests := map[string]struct {
 		in   []string
 		want []string
 	}{
 		"short flag consumes valid spaced value": {
-			in:   []string{"-r", "off", "hello"},
-			want: []string{"-r=off", "hello"},
+			in:   []string{"-t", "off", "hello"},
+			want: []string{"-t=off", "hello"},
 		},
 		"bare long flag keeps prompt text": {
-			in:   []string{"--reasoning", "hello"},
-			want: []string{"--reasoning", "hello"},
+			in:   []string{"--think", "hello"},
+			want: []string{"--think", "hello"},
 		},
 		"bare short flag keeps prompt text": {
-			in:   []string{"-r", "hello"},
-			want: []string{"-r", "hello"},
+			in:   []string{"-t", "hello"},
+			want: []string{"-t", "hello"},
 		},
 		"old short flag is unchanged": {
 			in:   []string{"-T", "off", "hello"},
 			want: []string{"-T", "off", "hello"},
 		},
 		"end of options stops normalization": {
-			in:   []string{"--", "--reasoning", "auto"},
-			want: []string{"--", "--reasoning", "auto"},
+			in:   []string{"--", "--think", "auto"},
+			want: []string{"--", "--think", "auto"},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, normalizeOptionalReasoningValueArgs(tc.in))
+			require.Equal(t, tc.want, normalizeOptionalThinkValueArgs(tc.in))
 		})
 	}
 }

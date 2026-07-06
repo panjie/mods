@@ -55,7 +55,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		requestUser = api.User
 	}
 
-	reasoningActive, err := m.resolveReasoning(&mod, &accfg, &gccfg, &ccfg)
+	thinkActive, err := m.resolveThink(&mod, &accfg, &gccfg, &ccfg)
 	if err != nil {
 		return requestSession{}, err
 	}
@@ -142,7 +142,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 
 	debugRequest(cfg, &mod, &m.messages, tools, &request)
-	m.reasoningActive = reasoningActive
+	m.thinkActive = thinkActive
 	// Derive a cancellable context for the stream so quit() / a subsequent
 	// start*Cmd can tear down the in-flight HTTP/SSE request rather than
 	// waiting for it to finish on its own. The cancel is owned by the

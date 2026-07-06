@@ -105,7 +105,7 @@ with `--help-all` (marked [advanced]).
 
 ### Tools, Review & Reasoning
 - `-p`, `--plan` — Plan mode: generates a detailed plan for user approval before executing any changes
-- `-r`, `--reasoning` — Enables deep reasoning mode: off or on
+- `-t`, `--think` — Enables extended thinking mode: off or on
 - `-V`, `--review-mode <mode>` — Set tool review mode: auto (default), always, or never
 - `--max-tool-rounds <num>` [advanced] — Maximum total tool call rounds (0 = default of 30)
 
@@ -147,7 +147,7 @@ Top-level keys:
 - `max-tool-rounds` (int) — max tool call rounds (default: 30)
 - `theme` (string) — form theme: charm, catppuccin, dracula, base16
 - `review-mode` (string) — review mode: auto, always, never
-- `reasoning` (string) — deep reasoning: off or on
+- `think` (string) — extended thinking: off or on
 - `shell-classify-prompt` (string) — legacy custom classifier prompt; prefer prompts.shell-classifier
 
 - `role` (string) — active role name

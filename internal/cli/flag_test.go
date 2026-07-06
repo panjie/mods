@@ -41,8 +41,8 @@ var flagParseErrorTests = []struct {
 		"Flag %s have an invalid argument.",
 	},
 	{
-		`invalid argument "nope" for "-r, --reasoning" flag: invalid reasoning mode "nope", must be off or on`,
-		"-r, --reasoning",
+		`invalid argument "nope" for "-t, --think" flag: invalid think mode "nope", must be off or on`,
+		"-t, --think",
 		"Flag %s have an invalid argument.",
 	},
 }
@@ -58,16 +58,16 @@ func TestFlagParseError(t *testing.T) {
 	}
 }
 
-func TestReasoningFlagRejectsAuto(t *testing.T) {
-	var mode ReasoningMode
-	flag := newReasoningFlag(ReasoningOff, &mode)
+func TestThinkFlagRejectsAuto(t *testing.T) {
+	var mode ThinkMode
+	flag := newThinkFlag(ThinkOff, &mode)
 
 	require.NoError(t, flag.Set("on"))
-	require.Equal(t, ReasoningOn, mode)
+	require.Equal(t, ThinkOn, mode)
 
 	err := flag.Set("auto")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), `invalid reasoning mode "auto"`)
+	require.Contains(t, err.Error(), `invalid think mode "auto"`)
 	require.Contains(t, err.Error(), "must be off or on")
 }
 

@@ -75,7 +75,7 @@ type Mods struct {
 	cancelMu                sync.Mutex
 	anim                    tea.Model
 	activeOperation         string
-	reasoningActive         bool
+	thinkActive             bool
 	responseOutputStarted   bool
 	responseBoundaryPending bool
 	width                   int
@@ -281,7 +281,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case streamEventChunk:
 			if msg.chunk.Thought != "" {
 				m.Thought += msg.chunk.Thought
-				if m.reasoningActive {
+				if m.thinkActive {
 					debug.Printf("Thought: %s", msg.chunk.Thought)
 				}
 			}
@@ -533,10 +533,10 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 	}
 	m.responseOutputStarted = true
 	m.setActiveOperation("")
-	if m.reasoningActive && !m.thoughtFlushed {
+	if m.thinkActive && !m.thoughtFlushed {
 		m.flushThought()
-	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-		debug.Printf("Reasoning: model emitted %d chars of thinking without -r (discarded; pass -r to display)", len(strings.TrimSpace(m.Thought)))
+	} else if !m.thinkActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
+		debug.Printf("Think: model emitted %d chars of thinking without -t (discarded; pass -t to display)", len(strings.TrimSpace(m.Thought)))
 		m.thoughtFlushed = true
 	}
 	m.appendToOutput(content)
@@ -553,10 +553,10 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 	// The model may reason and then immediately call a tool without emitting any
 	// answer text; flush the thought so it is still shown.
-	if m.reasoningActive && !m.thoughtFlushed {
+	if m.thinkActive && !m.thoughtFlushed {
 		m.flushThought()
-	} else if !m.reasoningActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-		debug.Printf("Reasoning: model emitted %d chars of thinking without -r (discarded; pass -r to display)", len(strings.TrimSpace(m.Thought)))
+	} else if !m.thinkActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
+		debug.Printf("Think: model emitted %d chars of thinking without -t (discarded; pass -t to display)", len(strings.TrimSpace(m.Thought)))
 		m.thoughtFlushed = true
 	}
 	ch := make(chan toolOperationStatusMsg, 8)

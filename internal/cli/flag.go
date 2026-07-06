@@ -71,29 +71,29 @@ func (f flagParseError) Flag() string {
 	return f.flag
 }
 
-func newReasoningFlag(val ReasoningMode, p *ReasoningMode) *reasoningFlag {
+func newThinkFlag(val ThinkMode, p *ThinkMode) *thinkFlag {
 	*p = val
-	return (*reasoningFlag)(p)
+	return (*thinkFlag)(p)
 }
 
-type reasoningFlag ReasoningMode
+type thinkFlag ThinkMode
 
-func (r *reasoningFlag) Set(s string) error {
+func (r *thinkFlag) Set(s string) error {
 	switch s {
 	case "off", "on":
-		*r = reasoningFlag(s)
+		*r = thinkFlag(s)
 		return nil
 	default:
-		return fmt.Errorf("invalid reasoning mode %q, must be off or on", s)
+		return fmt.Errorf("invalid think mode %q, must be off or on", s)
 	}
 }
 
-func (r *reasoningFlag) String() string {
+func (r *thinkFlag) String() string {
 	return string(*r)
 }
 
-func (*reasoningFlag) Type() string {
-	return "reasoning"
+func (*thinkFlag) Type() string {
+	return "think"
 }
 
 func newReviewFlag(val ReviewMode, p *ReviewMode) *reviewFlag {

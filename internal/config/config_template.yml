@@ -86,8 +86,8 @@ max-retries: 5
 # {{ index .Help "max-tool-rounds" }}
 max-tool-rounds: 30
 
-# {{ index .Help "reasoning" }}
-reasoning: off
+# {{ index .Help "think" }}
+think: off
 
 # {{ index .Help "review-mode" }}
 review-mode: auto
@@ -254,8 +254,8 @@ apis:
     api-key-env: DEEPSEEK_API_KEY
     models:
       # DeepSeek models default to thinking ENABLED. mods actively sends
-      # thinking.type: disabled when -r is off, and thinking.type: enabled
-      # (the value below) when -r is on. No extra-params boilerplate needed.
+      # thinking.type: disabled when -t is off, and thinking.type: enabled
+      # (the value below) when -t is on. No extra-params boilerplate needed.
       # See: https://api-docs.deepseek.com/guides/thinking_mode
       deepseek-reasoner:
         aliases: ["r1", "reasoner"]
@@ -310,7 +310,7 @@ apis:
       qwen-plus:
         aliases: ["qwen", "qp"]
         max-input-chars: 131072
-        # enable_thinking toggles reasoning on this model; -r does not
+        # enable_thinking toggles reasoning on this model; -t does not
         # toggle it for OpenAI-compatible endpoints. Switch to qwq-plus
         # for a model that only thinks on demand.
         extra-params:
@@ -379,10 +379,10 @@ apis:
   #       max-input-chars: 100000
   #
   #       # ── Reasoning / Thinking configuration ──
-  #       # These fields control how -r / --reasoning on interacts with
+  #       # These fields control how -t / --think on interacts with
   #       # the provider. All are optional with sensible defaults.
   #
-  #       # thinking-type: the value to set thinking.type to when -r is on.
+  #       # thinking-type: the value to set thinking.type to when -t is on.
   #       # Default "adaptive" (MiniMax). Use "enabled" for GLM/Anthropic.
   #       thinking-type: enabled
   #
@@ -398,10 +398,10 @@ apis:
   #       # thought-fields: [my_custom_field]
   #
   #       # think-tag: override the inline reasoning tag name.
-  #       # Default "think" → <think>...</think>. Only parsed when -r is on.
+  #       # Default "think" → <think>...</think>. Only parsed when -t is on.
   #       # think-tag: reasoning
   #
-  #       # reasoning-effort: target reasoning_effort value for -r.
+  #       # reasoning-effort: target reasoning_effort value for -t.
   #       # Default "medium". Options: low, medium, high.
   #       # reasoning-effort: high
 

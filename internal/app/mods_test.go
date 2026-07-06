@@ -798,7 +798,7 @@ func TestOperationStatusView(t *testing.T) {
 
 	t.Run("reasoning alone does not show status", func(t *testing.T) {
 		m := newAnimatingMods()
-		m.reasoningActive = true
+		m.thinkActive = true
 		view := m.renderWithOperation("answer")
 		require.Equal(t, "answer", view)
 		require.NotContains(t, view, "[R]")
@@ -807,7 +807,7 @@ func TestOperationStatusView(t *testing.T) {
 
 	t.Run("active operation while reasoning renders without reasoning badge", func(t *testing.T) {
 		m := newAnimatingMods()
-		m.reasoningActive = true
+		m.thinkActive = true
 		m.setActiveOperation("Running command: go test ./...")
 		view := m.renderWithOperation("answer")
 		require.Contains(t, view, "Running command: go test ./...")

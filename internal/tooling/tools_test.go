@@ -1,8 +1,16 @@
 package tooling
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"sort"
 	"testing"
+
+	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/skills"
+	"github.com/panjie/mods/internal/websearch"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuiltinSpecs(t *testing.T) {
@@ -50,4 +58,42 @@ func TestBuiltinSpecs(t *testing.T) {
 	}
 	sort.Strings(names)
 	t.Logf("builtins (%d): %v", len(got), names)
+}
+
+func TestBuildRegistryRegistersLoadSkillWhenCatalogNonEmpty(t *testing.T) {
+	root := t.TempDir()
+	skillPath := filepath.Join(root, "demo", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o700))
+	require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: demo\ndescription: Demo.\n---\n\nbody.\n"), 0o600))
+	catalog, err := skills.Scan(root)
+	require.NoError(t, err)
+	require.Len(t, catalog, 1)
+
+	cfg := cfgpkg.Default()
+	cfg.SkillsDir = root
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", catalog)
+	require.NoError(t, err)
+	_, ok := reg.Tool("load_skill")
+	require.True(t, ok, "load_skill must be registered when catalog is non-empty")
+}
+
+func TestBuildRegistrySkipsLoadSkillWhenCatalogEmpty(t *testing.T) {
+	cfg := cfgpkg.Default()
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil)
+	require.NoError(t, err)
+	_, ok := reg.Tool("load_skill")
+	require.False(t, ok, "load_skill must NOT be registered when catalog is empty")
+}
+
+func TestBuiltinSpecsIncludesLoadSkill(t *testing.T) {
+	specs, err := BuiltinSpecs()
+	require.NoError(t, err)
+	found := false
+	for _, s := range specs {
+		if s.Name == "load_skill" {
+			found = true
+			require.True(t, s.ReadOnly, "load_skill must be ReadOnly")
+		}
+	}
+	require.True(t, found, "load_skill must appear in --list-tools output")
 }

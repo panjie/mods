@@ -639,12 +639,12 @@ func setupSkillFixture(t *testing.T) (string, []skills.Skill) {
 	// Flat skill.
 	flatDir := filepath.Join(root, "flat", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(flatDir), 0o700))
-	require.NoError(t, os.WriteFile(flatDir, []byte("---\nname: flat\ndescription: A flat skill.\n\nFlat body.\n"), 0o600))
+	require.NoError(t, os.WriteFile(flatDir, []byte("---\nname: flat\ndescription: A flat skill.\n---\n\nFlat body.\n"), 0o600))
 	// Multi-file skill with reference/ and scripts/.
 	multiDir := filepath.Join(root, "multi")
 	require.NoError(t, os.MkdirAll(filepath.Join(multiDir, "reference"), 0o700))
 	require.NoError(t, os.MkdirAll(filepath.Join(multiDir, "scripts"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "SKILL.md"), []byte("---\nname: multi\ndescription: A multi-file skill.\n\nSee reference/detail.md.\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "SKILL.md"), []byte("---\nname: multi\ndescription: A multi-file skill.\n---\n\nSee reference/detail.md.\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "reference", "detail.md"), []byte("Detail content.\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "scripts", "run.py"), []byte("print('hi')\n"), 0o600))
 	catalog, err := skills.Scan(root)
@@ -780,7 +780,7 @@ func TestLoadSkillLargeFileRejected(t *testing.T) {
 	root := t.TempDir()
 	multiDir := filepath.Join(root, "multi", "scripts")
 	require.NoError(t, os.MkdirAll(multiDir, 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "multi", "SKILL.md"), []byte("---\nname: multi\ndescription: m.\n\nbody.\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "multi", "SKILL.md"), []byte("---\nname: multi\ndescription: m.\n---\n\nbody.\n"), 0o600))
 	// Write a file just over the 256 KB cap.
 	big := strings.Repeat("x", SkillFileMaxBytes+1)
 	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "big.txt"), []byte(big), 0o600))
@@ -970,7 +970,7 @@ func TestBuildRegistryRegistersLoadSkillWhenCatalogNonEmpty(t *testing.T) {
 	root := t.TempDir()
 	skillDir := filepath.Join(root, "demo", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(skillDir), 0o700))
-	require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo.\n\nbody.\n"), 0o600))
+	require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo.\n---\n\nbody.\n"), 0o600))
 	catalog, err := skills.Scan(root)
 	require.NoError(t, err)
 	require.Len(t, catalog, 1)
@@ -1104,7 +1104,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 	root := t.TempDir()
 	skillDir := filepath.Join(root, "demo", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(skillDir), 0o700))
-	require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo skill.\n\nbody.\n"), 0o600))
+	require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo skill.\n---\n\nbody.\n"), 0o600))
 	catalog, err := skills.Scan(root)
 	require.NoError(t, err)
 
@@ -1130,7 +1130,7 @@ func TestSetupStreamContextNoCatalogInMinimalMode(t *testing.T) {
 	root := t.TempDir()
 	skillDir := filepath.Join(root, "demo", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(skillDir), 0o700))
-	require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo.\n\nbody.\n"), 0o600))
+	require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo.\n---\n\nbody.\n"), 0o600))
 	catalog, err := skills.Scan(root)
 	require.NoError(t, err)
 

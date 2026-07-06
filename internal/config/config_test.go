@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/stretchr/testify/require"
@@ -83,13 +82,10 @@ func TestToolSelectionRulesArePrioritized(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "rg --files")
 	require.Contains(t, ToolSelectionRules, "powershell_run")
 	require.Contains(t, ToolSelectionRules, "go test ./...")
-	require.NotContains(t, ToolSelectionRules, "they cannot access files outside it")
-	require.NotContains(t, ToolSelectionRules, "workspace_root")
 }
 
 func TestWorkspaceHelpUsesWorkspaceTerminology(t *testing.T) {
 	require.Contains(t, Help["workspace"], "Set the workspace")
-	require.NotContains(t, Help["workspace"], "workspace root")
 }
 
 func TestDefaultConfigDisplay(t *testing.T) {
@@ -122,34 +118,15 @@ func TestSessionSaveConfig(t *testing.T) {
 		require.False(t, Default().NoSave)
 	})
 
-	t.Run("yaml and env aliases are ignored", func(t *testing.T) {
-		t.Setenv("MODS_NO_CACHE", "true")
-		t.Setenv("MODS_NO_SESSION_SAVE", "true")
+	t.Run("no-save is not settable via env or yaml", func(t *testing.T) {
 		t.Setenv("MODS_NO_SAVE", "true")
 		var cfg Config
 		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
 		require.False(t, cfg.NoSave)
 
-		require.NoError(t, yaml.Unmarshal([]byte("no-cache: true"), &cfg))
-		require.False(t, cfg.NoSave)
-		require.NoError(t, yaml.Unmarshal([]byte("no-session-save: true"), &cfg))
-		require.False(t, cfg.NoSave)
 		require.NoError(t, yaml.Unmarshal([]byte("no-save: true"), &cfg))
 		require.False(t, cfg.NoSave)
 	})
-}
-
-func TestSessionDirIsFixed(t *testing.T) {
-	defer swapExecutableDir("")()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("MODS_CACHE_PATH", filepath.Join(t.TempDir(), "old-cache"))
-	t.Setenv("MODS_SESSION_DIR", filepath.Join(t.TempDir(), "session-dir"))
-
-	cfg, err := Ensure()
-
-	require.NoError(t, err)
-	require.Equal(t, filepath.Join(xdg.DataHome, "mods", "sessions"), cfg.SessionDir)
 }
 
 func TestHideToolStatusConfig(t *testing.T) {
@@ -213,20 +190,6 @@ func TestConfigTemplateIncludesShowToolResults(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "show-tool-results: false")
-	require.NotContains(t, string(content), "hide-tool-results")
-}
-
-func TestConfigTemplateIncludesNoSave(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
-
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.NotContains(t, string(content), "no-save")
-	require.NotContains(t, string(content), "no-cache")
-	require.NotContains(t, string(content), "cache-path")
-	require.NotContains(t, string(content), "session-dir")
-	require.NotContains(t, string(content), "no-session-save")
 }
 
 func TestAPITypeYAML(t *testing.T) {

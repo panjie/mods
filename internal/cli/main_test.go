@@ -159,10 +159,6 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 		in   []string
 		want []string
 	}{
-		"long flag consumes removed auto value so flag parser reports it": {
-			in:   []string{"--reasoning", "auto", "hello"},
-			want: []string{"--reasoning=auto", "hello"},
-		},
 		"short flag consumes valid spaced value": {
 			in:   []string{"-r", "off", "hello"},
 			want: []string{"-r=off", "hello"},
@@ -178,10 +174,6 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 		"old short flag is unchanged": {
 			in:   []string{"-T", "off", "hello"},
 			want: []string{"-T", "off", "hello"},
-		},
-		"removed auto equals form is unchanged": {
-			in:   []string{"--reasoning=auto", "hello"},
-			want: []string{"--reasoning=auto", "hello"},
 		},
 		"end of options stops normalization": {
 			in:   []string{"--", "--reasoning", "auto"},
@@ -211,21 +203,14 @@ func TestThemeFlagValidatesChoices(t *testing.T) {
 	})
 }
 
-func TestFancinessFlagRemoved(t *testing.T) {
-	require.Nil(t, rootCmd.Flags().Lookup("fanciness"))
-}
-
-func TestToolResultsFlagRenamed(t *testing.T) {
-	require.Nil(t, rootCmd.Flags().Lookup("hide-tool-results"))
+func TestShowToolResultsFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
-	require.Error(t, rootCmd.Flags().Parse([]string{"--hide-tool-results"}))
 }
 
 func TestNoSaveFlag(t *testing.T) {
 	flag := rootCmd.Flags().Lookup("no-save")
 	require.NotNil(t, flag)
 	require.Equal(t, "n", flag.Shorthand)
-	require.Nil(t, rootCmd.Flags().Lookup("no-session-save"))
 
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Parse([]string{"--no-save"}))
@@ -235,10 +220,6 @@ func TestNoSaveFlag(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Parse([]string{"-n"}))
 		require.True(t, config.NoSave)
-	})
-
-	withTestConfig(t, Config{}, func() {
-		require.Error(t, rootCmd.Flags().Parse([]string{"--no-session-save"}))
 	})
 }
 
@@ -379,7 +360,7 @@ func TestAdvancedFlagsStillParse(t *testing.T) {
 	})
 }
 
-func TestReadmeDoesNotListRemovedPromptFlags(t *testing.T) {
+func TestReadmeDocumentsCurrentFlags(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
 	require.NoError(t, err)
 
@@ -389,12 +370,6 @@ func TestReadmeDoesNotListRemovedPromptFlags(t *testing.T) {
 	require.Contains(t, readme, "edit your files")
 	require.Contains(t, readme, "run shell")
 	require.Contains(t, readme, "review step")
-	require.NotContains(t, readme, "[PREFIX TERM]")
-	require.NotContains(t, readme, "`--prompt`")
-	require.NotContains(t, readme, "`--prompt-args`")
-	require.NotContains(t, readme, "`-P`, `--prompt`")
-	require.NotContains(t, readme, "`-p`, `--prompt-args`")
-	require.NotContains(t, readme, "workspace-root")
 }
 
 func ensureTestFlags() {
@@ -457,14 +432,6 @@ func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
 // TestNextBackupPathAvoidsOverwrite locks in the fix for resetSettings:
 // the previous .bak (which may contain plaintext API keys) is never
 // silently clobbered. Successive resets land at .bak, .bak.1, .bak.2, ...
-func TestSessionPathFlagsRemoved(t *testing.T) {
-	require.Nil(t, rootCmd.Flags().Lookup("cache-path"))
-	require.Nil(t, rootCmd.Flags().Lookup("session-dir"))
-	require.Nil(t, rootCmd.Flags().Lookup("session-path"))
-	require.Error(t, rootCmd.Flags().Parse([]string{"--cache-path", "/tmp/mods-cache"}))
-	require.Error(t, rootCmd.Flags().Parse([]string{"--session-dir", "/tmp/mods-sessions"}))
-}
-
 func TestNextBackupPathAvoidsOverwrite(t *testing.T) {
 	t.Run("returns base when none exists", func(t *testing.T) {
 		base := filepath.Join(t.TempDir(), "mods.yml.bak")

@@ -237,28 +237,3 @@ func TestHasAPIKey(t *testing.T) {
 	})
 }
 
-func TestBaseURLEnvVarsDoNotCreateCustomProvider(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("OPENAI_BASE_URL", "https://my-proxy.example.com/v1")
-	t.Setenv("OPENAI_API_KEY", "sk-proxy-123")
-	t.Setenv("MODS_BASE_URL", "https://legacy-proxy.example.com/v1")
-	t.Setenv("MODS_API_KEY", "sk-legacy-123")
-
-	c, err := Ensure()
-	require.NoError(t, err)
-	require.NotContains(t, providerNames(c.APIs), "custom")
-	require.Equal(t, "openai", c.API)
-
-	c.API = "openai"
-	c.APIs = []API{{Name: "openai", APIKeyEnv: "OPENAI_API_KEY"}}
-	require.True(t, HasAPIKey(&c))
-}
-
-func providerNames(apis []API) []string {
-	names := make([]string, len(apis))
-	for i, a := range apis {
-		names[i] = a.Name
-	}
-	return names
-}

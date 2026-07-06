@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/anthropic"
-	"github.com/panjie/mods/internal/cohere"
 	"github.com/panjie/mods/internal/google"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/ollama"
@@ -46,7 +45,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	accfg := cfgs.Anthropic
 	gccfg := cfgs.Google
-	cccfg := cfgs.Cohere
 	occfg := cfgs.Ollama
 	ccfg := cfgs.OpenAI
 
@@ -59,7 +57,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if err != nil {
 		return requestSession{}, err
 	}
-	if err := applyHTTPProxy(cfg, &accfg, &gccfg, &cccfg, &occfg, &ccfg); err != nil {
+	if err := applyHTTPProxy(cfg, &accfg, &gccfg, &occfg, &ccfg); err != nil {
 		return requestSession{}, err
 	}
 	if mod.MaxChars == 0 {
@@ -82,7 +80,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// instead of an app-layer string switch keyed on the API name. The
 	// client has no side effects until Request is called, so creating it
 	// here (rather than after the registry) does not change behavior.
-	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
+	client, err := newStreamClient(mod.API, accfg, gccfg, occfg, ccfg)
 	if err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
@@ -119,11 +117,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if !cfg.Plan {
 		m.injectPlanHistory()
 		m.injectApprovedPlan()
-	}
-	if err := rejectUnsupportedImages(mod.API, m.messages); err != nil {
-		_ = registry.Close()
-		m.currentToolRegistry = nil
-		return requestSession{}, err
 	}
 
 	request := proto.Request{
@@ -188,7 +181,7 @@ func (m *Mods) apiNotConfiguredError(cfg *Config, api API) modsError {
 	}
 }
 
-func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, cccfg *cohere.Config, occfg *ollama.Config, ccfg *openai.Config) error {
+func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, occfg *ollama.Config, ccfg *openai.Config) error {
 	if cfg.HTTPProxy == "" {
 		return nil
 	}
@@ -200,7 +193,6 @@ func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, 
 	ccfg.HTTPClient = httpClient
 	accfg.HTTPClient = httpClient
 	gccfg.HTTPClient = httpClient
-	cccfg.HTTPClient = httpClient
 	occfg.HTTPClient = httpClient
 	return nil
 }
@@ -226,24 +218,9 @@ func (m *Mods) injectApprovedPlan() {
 	m.planContent = ""
 }
 
-func rejectUnsupportedImages(api string, messages []proto.Message) error {
-	if api != "cohere" {
-		return nil
-	}
-	for _, msg := range messages {
-		if len(msg.Images) > 0 {
-			return modsError{
-				Err:        fmt.Errorf("image attachments are not supported for Cohere models"),
-				ReasonText: "Image attachments are not supported for this provider",
-			}
-		}
-	}
-	return nil
-}
-
 func supportsJSONResponseFormat(api string) bool {
 	switch api {
-	case "anthropic", "google", "cohere", "ollama":
+	case "anthropic", "google", "ollama":
 		return false
 	default:
 		return true

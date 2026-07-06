@@ -605,7 +605,6 @@ func buildProviderOptions() []huh.Option[string] {
 		"minimax":    "MiniMax M3",
 		"openrouter": "Multi-provider aggregator",
 		"ollama":     "Local models (no API key needed)",
-		"cohere":     "Cohere Command",
 		"azure":      "Azure OpenAI",
 	}
 
@@ -1006,7 +1005,7 @@ func isHTTPURL(value string) bool {
 // OpenAI-compatible /chat/completions endpoint.
 func isOpenAICompatible(apiName string) bool {
 	switch apiName {
-	case "anthropic", "google", "cohere", "ollama", "azure", "azure-ad":
+	case "anthropic", "google", "ollama", "azure", "azure-ad":
 		return false
 	default:
 		return true

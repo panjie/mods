@@ -175,7 +175,6 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 	}
 	accfg := cfgs.Anthropic
 	gccfg := cfgs.Google
-	cccfg := cfgs.Cohere
 	occfg := cfgs.Ollama
 	ccfg := cfgs.OpenAI
 	applyThinkConfigs(mod, &gccfg, &accfg, &ccfg, false)
@@ -196,7 +195,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 		MaxTokens:   &maxTokens,
 	}
 
-	client, err := newStreamClient(mod.API, accfg, gccfg, cccfg, occfg, ccfg)
+	client, err := newStreamClient(mod.API, accfg, gccfg, occfg, ccfg)
 	if err != nil {
 		return defaultShellCommandAnalysis()
 	}

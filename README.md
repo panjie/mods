@@ -17,14 +17,13 @@ and edit your files, run shell commands, search the web, and iterate across many
 tool calls to actually finish a task. A built-in review step keeps you in charge
 of anything risky before it happens.
 
-It works with [OpenAI], [Anthropic], [Gemini], [Cohere], [Azure OpenAI],
+It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
 [DeepSeek], [GLM], [Qwen], [Kimi], [MiniMax], [OpenRouter], and local
 [Ollama] models. Any OpenAI-compatible endpoint can be added in `mods.yml`.
 
 [OpenAI]: https://platform.openai.com/account/api-keys
 [Anthropic]: https://console.anthropic.com/settings/keys
 [Gemini]: https://aistudio.google.com/apikey
-[Cohere]: https://dashboard.cohere.com/api-keys
 [Azure OpenAI]: https://azure.microsoft.com/en-us/products/cognitive-services/openai-service
 [DeepSeek]: https://platform.deepseek.com/api_keys
 [OpenRouter]: https://openrouter.ai/settings/keys
@@ -327,7 +326,6 @@ manually and select a model with `--api` and `--model`.
 | Anthropic    | `anthropic`    | `ANTHROPIC_API_KEY`          | [console.anthropic.com][Anthropic]            |
 | Google       | `google`       | `GOOGLE_API_KEY`             | [aistudio.google.com][Gemini]                 |
 | Azure OpenAI | `azure`        | `AZURE_OPENAI_KEY`           | [azure.microsoft.com][Azure OpenAI]           |
-| Cohere       | `cohere`       | `COHERE_API_KEY`             | [dashboard.cohere.com][Cohere]                |
 | DeepSeek     | `deepseek`     | `DEEPSEEK_API_KEY`           | [platform.deepseek.com][DeepSeek]             |
 | OpenRouter   | `openrouter`   | `OPENROUTER_API_KEY`         | [openrouter.ai][OpenRouter]                   |
 | Ollama       | `ollama`       | — (local)                    | [ollama.com][Ollama]                          |

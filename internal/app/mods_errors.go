@@ -8,7 +8,6 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/cohere-ai/cohere-go/v2/core"
 	"github.com/ollama/ollama/api"
 	"github.com/openai/openai-go"
 	"github.com/panjie/mods/internal/google"
@@ -29,11 +28,6 @@ func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg 
 	if errors.As(err, &anth) {
 		debug.Printf("Anthropic API error: HTTP %d, message=%q", anth.StatusCode, anth.Error())
 		return m.handleAnthropicAPIError(anth, mod, content)
-	}
-	co := &core.APIError{}
-	if errors.As(err, &co) {
-		debug.Printf("Cohere API error: HTTP %d, message=%q", co.StatusCode, co.Error())
-		return m.handleCohereAPIError(co, mod, content)
 	}
 	se := &api.StatusError{}
 	if errors.As(err, &se) {
@@ -219,22 +213,6 @@ func (m *Mods) handleAnthropicAPIError(err *anthropic.Error, mod Model, content 
 			isContextLength: func(ae appAPIError) bool {
 				return strings.Contains(ae.Message, "prompt is too long") ||
 					strings.Contains(ae.Message, "number of tokens")
-			},
-			badRequestReason: func(mod Model, ae appAPIError) string {
-				return fmt.Sprintf("%s API request error: %s", mod.API, ae.Message)
-			},
-		},
-	)
-}
-
-func (m *Mods) handleCohereAPIError(err *core.APIError, mod Model, content string) tea.Msg {
-	return m.dispatchAPIError(
-		appAPIError{StatusCode: err.StatusCode, Message: err.Error(), Err: err},
-		mod, content,
-		errorPolicy{
-			isContextLength: func(ae appAPIError) bool {
-				return strings.Contains(ae.Message, "token limit") ||
-					strings.Contains(ae.Message, "too many tokens")
 			},
 			badRequestReason: func(mod Model, ae appAPIError) string {
 				return fmt.Sprintf("%s API request error: %s", mod.API, ae.Message)

@@ -130,7 +130,7 @@ func TestApplyThinkConfigs(t *testing.T) {
 		require.Equal(t, "high", string(ccfg.ReasoningEffort))
 	})
 
-	// ── native anthropic / google / cohere / ollama ──
+	// ── native anthropic / google / ollama ──
 
 	t.Run("anthropic api path uses ThinkingBudget and ignores extra-params", func(t *testing.T) {
 		accfg := anthropic.Config{}
@@ -164,19 +164,17 @@ func TestApplyThinkConfigs(t *testing.T) {
 		require.Equal(t, 2048, gccfg.ThinkingBudget)
 	})
 
-	t.Run("cohere and ollama skip reasoning entirely", func(t *testing.T) {
-		for _, api := range []string{"cohere", "ollama"} {
-			ccfg := openai.Config{
-				ExtraParams: map[string]any{
-					"thinking": map[string]any{"type": "disabled"},
-				},
-			}
-
-			applyThinkConfigs(Model{API: api}, nil, nil, &ccfg, true)
-
-			require.Empty(t, ccfg.ReasoningEffort)
-			require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
+	t.Run("ollama skips thinking entirely", func(t *testing.T) {
+		ccfg := openai.Config{
+			ExtraParams: map[string]any{
+				"thinking": map[string]any{"type": "disabled"},
+			},
 		}
+
+		applyThinkConfigs(Model{API: "ollama"}, nil, nil, &ccfg, true)
+
+		require.Empty(t, ccfg.ReasoningEffort)
+		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
 	})
 
 	// ── ThinkTags enabled for openai-compatible providers when thinking on ──

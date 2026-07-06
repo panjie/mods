@@ -41,7 +41,7 @@ const (
 const numPlanReviewOptions = 4
 
 // Mods is the Bubble Tea model that manages reading stdin and querying
-// LLM APIs (OpenAI, Anthropic, Google, Cohere, Ollama, and others).
+// LLM APIs (OpenAI, Anthropic, Google, Ollama, and others).
 type Mods struct {
 	outputRenderer
 	Input          string

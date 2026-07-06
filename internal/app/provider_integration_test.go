@@ -28,7 +28,6 @@ var providerTests = []providerTest{
 	{api: "openai", model: "gpt-4o-mini", envKey: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1"},
 	{api: "google", model: "gemini-2.5-flash", envKey: "GOOGLE_API_KEY"},
 	{api: "anthropic", model: "claude-3-5-haiku-20241022", envKey: "ANTHROPIC_API_KEY", baseURL: "https://api.anthropic.com/v1"},
-	{api: "cohere", model: "command-r-plus", envKey: "COHERE_API_KEY"},
 	{api: "ollama", model: "llama3.1"},
 }
 
@@ -85,12 +84,6 @@ func TestGoogleIntegration(t *testing.T) {
 func TestAnthropicIntegration(t *testing.T) {
 	skipIfNoKey(t, "ANTHROPIC_API_KEY", "anthropic")
 	m := testIntegrationModsWithBaseURL(t, "anthropic", "claude-3-5-haiku-20241022", "https://api.anthropic.com/v1")
-	runIntegrationPrompt(t, m, "say hello")
-}
-
-func TestCohereIntegration(t *testing.T) {
-	skipIfNoKey(t, "COHERE_API_KEY", "cohere")
-	m := testIntegrationMods(t, "cohere", "command-r-plus")
 	runIntegrationPrompt(t, m, "say hello")
 }
 

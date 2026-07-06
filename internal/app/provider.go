@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/panjie/mods/internal/anthropic"
-	"github.com/panjie/mods/internal/cohere"
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
@@ -16,7 +15,6 @@ import (
 type providerConfigs struct {
 	Anthropic anthropic.Config
 	Google    google.Config
-	Cohere    cohere.Config
 	Ollama    ollama.Config
 	OpenAI    openai.Config
 }
@@ -28,7 +26,6 @@ var knownAPITypes = map[string]bool{
 	"openai":    true,
 	"anthropic": true,
 	"google":    true,
-	"cohere":    true,
 	"ollama":    true,
 	"azure":     true,
 	"azure-ad":  true,
@@ -60,15 +57,6 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		cfgs.Google.ThinkingBudget = mod.ThinkingBudget
 		if api.BaseURL != "" {
 			cfgs.Google.BaseURL = applyGoogleBaseURLOverride(api.BaseURL, mod.Name)
-		}
-	case "cohere":
-		key, err := m.ensureKey(api, "COHERE_API_KEY", "https://dashboard.cohere.com/api-keys")
-		if err != nil {
-			return cfgs, modsError{Err: err, ReasonText: "Cohere authentication failed"}
-		}
-		cfgs.Cohere = cohere.DefaultConfig(key)
-		if api.BaseURL != "" {
-			cfgs.Cohere.BaseURL = api.BaseURL
 		}
 	case "azure", "azure-ad":
 		key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
@@ -107,15 +95,13 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 // backend. This consolidates the provider switch that was duplicated in
 // startCompletionCmd.
 func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
-	cccfg cohere.Config, occfg ollama.Config, ccfg openai.Config,
+	occfg ollama.Config, ccfg openai.Config,
 ) (stream.Client, error) {
 	switch api {
 	case "anthropic":
 		return anthropic.New(accfg), nil
 	case "google":
 		return google.New(gccfg), nil
-	case "cohere":
-		return cohere.New(cccfg), nil
 	case "ollama":
 		c, err := ollama.New(occfg)
 		if err != nil {

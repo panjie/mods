@@ -195,7 +195,7 @@ Top-level keys:
       api-key: ""
       api-key-env: EXAMPLE_API_KEY   # env var holding the key
       api-key-cmd: ""                # shell command to retrieve the key
-      api-type: ""                   # wire protocol: openai, anthropic, ollama, google, cohere, azure, azure-ad
+      api-type: ""                   # wire protocol: openai, anthropic, ollama, google, azure, azure-ad
       models:
         <model-name>:
           aliases: ["short"]

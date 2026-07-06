@@ -424,7 +424,7 @@ apis:
   #       max-input-chars: 800000
   #
   # api-type also works for the other native adapters: ollama, google,
-  # cohere, azure, azure-ad. Omit it to use the OpenAI-compatible
+  # azure, azure-ad. Omit it to use the OpenAI-compatible
   # adapter (the default for any unrecognized provider name).
 
   # Example: a service that splits models across TWO protocols. OpenCode's

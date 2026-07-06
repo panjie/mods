@@ -43,7 +43,7 @@ func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config,
 			debug.Printf("Think: anthropic thinking_budget=%d", accfg.ThinkingBudget)
 		}
 		// off: Anthropic defaults to thinking OFF, so no-op.
-	case mod.API == "cohere" || mod.API == "ollama":
+	case mod.API == "ollama":
 		debug.Printf("Think: %s does not support thinking, skipped", mod.API)
 	default:
 		// OpenAI-compatible providers (e.g. MiniMax, GLM) may inline their

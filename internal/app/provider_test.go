@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/anthropic"
-	"github.com/panjie/mods/internal/cohere"
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
@@ -91,16 +90,14 @@ func TestApplyHTTPProxyAlsoConfiguresGoogle(t *testing.T) {
 	var (
 		accfg anthropic.Config
 		gccfg google.Config
-		cccfg cohere.Config
 		occfg ollama.Config
 		ccfg  openai.Config
 	)
-	require.NoError(t, applyHTTPProxy(cfg, &accfg, &gccfg, &cccfg, &occfg, &ccfg))
+	require.NoError(t, applyHTTPProxy(cfg, &accfg, &gccfg, &occfg, &ccfg))
 	require.NotNil(t, gccfg.HTTPClient,
 		"applyHTTPProxy must wire a proxy-aware http.Client for Google too")
 	require.Same(t, accfg.HTTPClient, gccfg.HTTPClient,
 		"every provider must share the same proxy-configured client")
-	require.Same(t, cccfg.HTTPClient, gccfg.HTTPClient)
 	require.Same(t, occfg.HTTPClient, gccfg.HTTPClient)
 }
 
@@ -112,14 +109,12 @@ func TestApplyHTTPProxyNoopWhenUnset(t *testing.T) {
 	var (
 		accfg anthropic.Config
 		gccfg google.Config
-		cccfg cohere.Config
 		occfg ollama.Config
 		ccfg  openai.Config
 	)
-	require.NoError(t, applyHTTPProxy(cfg, &accfg, &gccfg, &cccfg, &occfg, &ccfg))
+	require.NoError(t, applyHTTPProxy(cfg, &accfg, &gccfg, &occfg, &ccfg))
 	require.Nil(t, gccfg.HTTPClient)
 	require.Nil(t, accfg.HTTPClient)
-	require.Nil(t, cccfg.HTTPClient)
 	require.Nil(t, occfg.HTTPClient)
 	require.Nil(t, ccfg.HTTPClient)
 }

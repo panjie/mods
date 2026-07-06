@@ -883,14 +883,14 @@ func readAuxFile(skillDir, file string) (string, error) {
 		return "", fmt.Errorf("invalid file path: %s", file)
 	}
 	cleaned := filepath.Clean(file)
-	// Reject any '..' components.
-	for _, part := range filepath.SplitList(cleaned) {
+	// Reject any '..' path components. filepath.SplitList splits on the
+	// PATH-list separator (':' on Unix), NOT path components, so it cannot
+	// be used here. Split on '/' (after normalizing to slash form) to walk
+	// components cross-platform.
+	for _, part := range strings.Split(filepath.ToSlash(cleaned), "/") {
 		if part == ".." {
 			return "", fmt.Errorf("invalid file path: %s", file)
 		}
-	}
-	if strings.Contains(filepath.ToSlash(cleaned), "/../") || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("invalid file path: %s", file)
 	}
 	resolved := filepath.Join(skillDir, cleaned)
 	// Defense-in-depth: resolved path must stay inside skillDir.

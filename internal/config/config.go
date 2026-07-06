@@ -101,6 +101,7 @@ var Help = map[string]string{
 	"think":                  "Enables extended thinking mode",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
+	"skills-dir":             "Directory containing user-defined skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.config/mods/skills (or next to the executable in portable mode).",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
@@ -223,6 +224,7 @@ type PersistentConfig struct {
 	Think               bool                       `yaml:"think" env:"THINK"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
+	SkillsDir           string                     `yaml:"skills-dir" env:"SKILLS_DIR"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
@@ -419,6 +421,8 @@ func Ensure() (Config, error) {
 	c := Default()
 	applySessionDirDefault(&c)
 	applySessionDirDefault(&fallback)
+	applySkillsDirDefault(&c)
+	applySkillsDirDefault(&fallback)
 
 	sp, err := settingsFilePath()
 	if err != nil {
@@ -465,6 +469,7 @@ func Ensure() (Config, error) {
 	validateReviewMode(&c)
 
 	applySessionDirDefault(&c)
+	applySkillsDirDefault(&c)
 
 	if err := os.MkdirAll(
 		c.SessionDir,
@@ -561,6 +566,27 @@ func defaultSessionDir() string {
 		return filepath.Join(executableDir(), "sessions")
 	}
 	return filepath.Join(xdg.DataHome, "mods", "sessions")
+}
+
+// defaultSkillsDir resolves the user-defined skills directory. In portable
+// mode (mods.yml next to the executable) it lives next to the binary so the
+// whole folder is self-contained; otherwise it follows the XDG config home,
+// sitting beside mods.yml. Mirrors defaultSessionDir.
+func defaultSkillsDir() string {
+	if portableActive() {
+		return filepath.Join(executableDir(), "skills")
+	}
+	return filepath.Join(xdg.ConfigHome, "mods", "skills")
+}
+
+// applySkillsDirDefault ensures c.SkillsDir always points at the skills
+// directory. The default lives outside Default() for the same reason as
+// applySessionDirDefault: the XDG lookup depends on environment variables
+// resolved at Ensure() time.
+func applySkillsDirDefault(c *Config) {
+	if c.SkillsDir == "" {
+		c.SkillsDir = defaultSkillsDir()
+	}
 }
 
 func settingsFilePath() (string, error) {

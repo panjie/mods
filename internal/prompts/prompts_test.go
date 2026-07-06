@@ -111,6 +111,7 @@ func TestIdentityCoversConfigKeys(t *testing.T) {
 		"apis",
 		"review-mode",
 		"shell-classify-prompt",
+		"skills-dir",
 		"~/.config/mods/mods.yml",
 	} {
 		require.Contains(t, Identity, key,

@@ -36,7 +36,23 @@ section. For structural changes (adding a provider, model, role), show the exact
 YAML block to add.
 
 Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
-`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`.
+`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`, `skills-dir`.
+
+## Skills
+
+When the user's request matches an available skill's description, call the
+`load_skill` tool with that skill's name to load its full instructions, then
+follow them. Skills live in `~/.config/mods/skills/<name>/SKILL.md`. Loaded
+skill content stays in the conversation; do not reload the same skill twice.
+
+Some skills reference auxiliary files in `scripts/` or `reference/`
+subdirectories (e.g. "see reference/foo.md"). When a skill's body tells you
+to consult such a file, call `load_skill` again with the same `name` and a
+`file` parameter set to the relative path (e.g.
+`load_skill("mcp-builder", "reference/mcp_best_practices.md")`). Fetch only
+the files you actually need.
+
+Skip skills when their description does not match the request.
 
 ## Portable mode
 

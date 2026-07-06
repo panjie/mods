@@ -378,3 +378,33 @@ func TestCreateConfigFilePermissionsOnUnix(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
+
+func TestSkillsDirDefault(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	cfg := Default()
+	applySkillsDirDefault(&cfg)
+	require.NotEmpty(t, cfg.SkillsDir)
+	require.Contains(t, cfg.SkillsDir, filepath.Join("mods", "skills"))
+}
+
+func TestSkillsDirEnvOverride(t *testing.T) {
+	t.Setenv("MODS_SKILLS_DIR", "/custom/skills/dir")
+	cfg := Default()
+	// env is parsed in Ensure; for a unit test, simulate by setting the
+	// field the way env.ParseWithOptions would. applySkillsDirDefault
+	// must not clobber a non-empty value.
+	cfg.SkillsDir = "/custom/skills/dir"
+	applySkillsDirDefault(&cfg)
+	require.Equal(t, "/custom/skills/dir", cfg.SkillsDir)
+}
+
+func TestSkillsDirYAMLOverride(t *testing.T) {
+	dir := t.TempDir()
+	skillsDir := filepath.Join(dir, "from-yaml")
+	yamlContent := "skills-dir: " + skillsDir
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte(yamlContent), &cfg))
+	applySkillsDirDefault(&cfg)
+	require.Equal(t, skillsDir, cfg.SkillsDir)
+}

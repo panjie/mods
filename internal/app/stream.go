@@ -16,6 +16,7 @@ import (
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/skills"
 )
 
 func (m *Mods) setupStreamContext(content string, mod Model) error {
@@ -78,6 +79,13 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			m.messages = append(m.messages, proto.Message{
 				Role:    proto.RoleSystem,
 				Content: "Project instructions (AGENTS.md):\n\n" + instructions,
+			})
+		}
+		if len(m.skillCatalog) > 0 {
+			debug.Printf("Skills: injected catalog (%d skill(s)) into system prompt", len(m.skillCatalog))
+			m.messages = append(m.messages, proto.Message{
+				Role:    proto.RoleSystem,
+				Content: skills.CatalogPrompt(m.skillCatalog),
 			})
 		}
 	}

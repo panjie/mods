@@ -9,13 +9,14 @@ import (
 
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/mcpclient"
+	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
 )
 
 var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[\w./-]+|[\w.-]+\.(go|ts|tsx|js|jsx|py|rs|java|c|cc|cpp|h|hpp|md|txt|json|yaml|yml|toml|mod|sum|sh|sql))($|\s|[,.，。:：;；])`)
 
-func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string) (*toolregistry.Registry, error) {
+func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string, skillCatalog []skills.Skill) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
 
 	workspace := cfg.ResolveWorkspace()
@@ -63,6 +64,12 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	if err := mcpclient.RegisterTools(ctx, cfg, registry); err != nil {
 		return nil, err
+	}
+
+	if len(skillCatalog) > 0 {
+		if err := toolregistry.RegisterSkill(registry, skillCatalog); err != nil {
+			return nil, err
+		}
 	}
 
 	return registry, nil
@@ -131,6 +138,7 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 	}
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterThinking(registry)
+	_ = toolregistry.RegisterSkill(registry, nil)
 
 	infos := make([]BuiltinToolInfo, 0, registry.Len())
 	for _, spec := range registry.Specs() {

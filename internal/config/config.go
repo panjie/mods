@@ -90,7 +90,6 @@ var Help = map[string]string{
 	"continue-last":          "Continue from the last response",
 	"no-save":                "Disable saving and resuming sessions",
 	"chat":                   "Start a continuous session; type /exit or /quit to quit",
-	"title":                  "Saves the current session with the given title",
 	"list-sessions":          "Interactively browse, view, and delete saved sessions",
 	"theme":                  "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
 	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
@@ -265,7 +264,6 @@ type Config struct {
 	Dirs          bool
 	ContinueLast  bool
 	Continue      string
-	Title         string
 	List          bool
 	ListRoles     bool
 	ListPrompts   bool

@@ -41,7 +41,6 @@ func TestRunChatUsesArgsBeforePromptedInput(t *testing.T) {
 
 func TestRunChatPreservesSessionID(t *testing.T) {
 	withChatTest(t, "second\n/exit\n", func(calls *[]string) {
-		config.Title = "my chat"
 		var continues []string
 		chatTurn = func(_ context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
 			*calls = append(*calls, prompt)
@@ -54,7 +53,6 @@ func TestRunChatPreservesSessionID(t *testing.T) {
 
 		require.Equal(t, []string{"first", "second"}, *calls)
 		require.Equal(t, []string{"", "df31ae23ab8b75b5643c2f846c570997edc71333"}, continues)
-		require.Empty(t, config.Title)
 	})
 }
 

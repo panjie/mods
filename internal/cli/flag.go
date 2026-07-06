@@ -120,28 +120,3 @@ func (r *reviewFlag) String() string {
 func (*reviewFlag) Type() string {
 	return "review-mode"
 }
-
-func newThemeFlag(val string, p *string) *themeFlag {
-	*p = val
-	return (*themeFlag)(p)
-}
-
-type themeFlag string
-
-func (t *themeFlag) Set(s string) error {
-	switch s {
-	case "charm", "catppuccin", "dracula", "base16":
-		*t = themeFlag(s)
-		return nil
-	default:
-		return fmt.Errorf("invalid theme %q, must be charm, catppuccin, dracula, or base16", s)
-	}
-}
-
-func (t *themeFlag) String() string {
-	return string(*t)
-}
-
-func (*themeFlag) Type() string {
-	return "theme"
-}

@@ -216,21 +216,6 @@ func TestNormalizeOptionalReasoningValueArgs(t *testing.T) {
 	}
 }
 
-func TestThemeFlagValidatesChoices(t *testing.T) {
-	withTestConfig(t, Config{}, func() {
-		for _, theme := range []string{"charm", "catppuccin", "dracula", "base16"} {
-			t.Run(theme, func(t *testing.T) {
-				require.NoError(t, rootCmd.Flags().Set("theme", theme))
-				require.Equal(t, theme, config.Theme)
-			})
-		}
-
-		t.Run("invalid", func(t *testing.T) {
-			require.Error(t, rootCmd.Flags().Set("theme", "solarized"))
-		})
-	})
-}
-
 func TestShowToolResultsFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
 }

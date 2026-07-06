@@ -7,15 +7,14 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/ordered"
 	"github.com/panjie/mods/internal/proto"
 )
 
 func (m *Mods) findSessionDetails() tea.Cmd {
 	return func() tea.Msg {
-		continueLast := m.Config.ContinueLast || (m.Config.Continue != "" && m.Config.Title == "")
+		continueLast := m.Config.ContinueLast || m.Config.Continue != ""
 		readID := m.Config.Continue
-		writeID := ordered.First(m.Config.Title, m.Config.Continue)
+		writeID := m.Config.Continue
 		title := writeID
 		var rules []Rule
 
@@ -29,7 +28,7 @@ func (m *Mods) findSessionDetails() tea.Cmd {
 			}
 			if found != nil {
 				readID = found.ID
-				if m.Config.Continue != "" && m.Config.Title == "" {
+				if m.Config.Continue != "" {
 					title = found.Title
 				}
 				if !m.Config.NoSave {

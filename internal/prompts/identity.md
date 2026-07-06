@@ -67,7 +67,6 @@ with `--help-all` (marked [advanced]).
 - `--chat` — Start a continuous session; type /exit or /quit to quit
 - `-C`, `--continue <title>` — Continue from a saved session by title
 - `-c`, `--continue-last` — Continue from the last response
-- `-t`, `--title <title>` — Saves the current session with the given title
 - `-l`, `--list-sessions` — Interactive browser for saved sessions: browse, view full transcripts, copy IDs, and delete one or many sessions
 - `-n`, `--no-save` [advanced] — Disable saving and resuming sessions
 - `--no-instructions` [advanced] — Disable auto-loading AGENTS.md from the workspace root as project context
@@ -93,7 +92,6 @@ with `--help-all` (marked [advanced]).
 - `--config` — Interactive setup wizard for provider, model, API key, and tools
 - `--dirs` — Print the directories in which mods store its data
 - `--reset-settings` — Backup your old settings file and reset everything to the defaults
-- `--theme <name>` [advanced] — Theme to use in the forms: charm, catppuccin, dracula, base16
 - `-h`, `--help` — Show Help and exit
 - `--help-all` — Show Help with advanced and configuration-first options
 - `-v`, `--version` — Show version and exit

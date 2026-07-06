@@ -212,14 +212,13 @@ mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
 
 # Save and resume sessions
-mods --title release-notes "draft v1.1 release notes from CHANGELOG.md"
-mods --continue release-notes "turn those into a Twitter thread"
+mods "draft v1.1 release notes from CHANGELOG.md"
+mods --continue-last "turn those into a Twitter thread"
 mods --list-sessions
 
 # Start a continuous session
 mods --chat
-mods --chat --title release-notes
-mods --chat --continue release-notes
+mods --chat --continue-last
 ```
 
 Use `--chat` for a REPL-style session when one prompt is not enough. Type

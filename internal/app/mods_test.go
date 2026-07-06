@@ -162,37 +162,11 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("write", func(t *testing.T) {
 		mods := newMods(t)
-		mods.Config.Title = "some title"
 		msg := mods.findSessionDetails()()
 		dets := msg.(sessionDetailsMsg)
 		require.Empty(t, dets.ReadID)
 		require.NotEmpty(t, dets.WriteID)
-		require.NotEqual(t, "some title", dets.WriteID)
-		require.Equal(t, "some title", dets.Title)
-	})
-
-	t.Run("continue id and write with title", func(t *testing.T) {
-		mods := newMods(t)
-		id := newSessionID()
-		rules := []ApprovalRule{scopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"})}
-		require.NoError(t, mods.db.SaveSession(
-			id,
-			"message 1",
-			"openai",
-			"gpt-4",
-			[]proto.Message{{Role: proto.RoleUser, Content: "message"}},
-			rules,
-		))
-		mods.Config.Title = "some title"
-		mods.Config.Continue = id[:10]
-		msg := mods.findSessionDetails()()
-		dets := msg.(sessionDetailsMsg)
-		require.Equal(t, id, dets.ReadID)
-		require.NotEmpty(t, dets.WriteID)
-		require.NotEqual(t, id, dets.WriteID)
-		require.NotEqual(t, "some title", dets.WriteID)
-		require.Equal(t, "some title", dets.Title)
-		require.Equal(t, rules, dets.Rules)
+		require.Empty(t, dets.Title)
 	})
 
 	t.Run("no session save does not restore rules", func(t *testing.T) {
@@ -212,21 +186,6 @@ func TestFindSessionDetails(t *testing.T) {
 		msg := mods.findSessionDetails()()
 		dets := msg.(sessionDetailsMsg)
 		require.Empty(t, dets.Rules)
-	})
-
-	t.Run("continue title and write with title", func(t *testing.T) {
-		mods := newMods(t)
-		id := newSessionID()
-		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
-		mods.Config.Title = "some title"
-		mods.Config.Continue = "message 1"
-		msg := mods.findSessionDetails()()
-		dets := msg.(sessionDetailsMsg)
-		require.Equal(t, id, dets.ReadID)
-		require.NotEmpty(t, dets.WriteID)
-		require.NotEqual(t, id, dets.WriteID)
-		require.NotEqual(t, "some title", dets.WriteID)
-		require.Equal(t, "some title", dets.Title)
 	})
 
 	t.Run("continue id and write with title", func(t *testing.T) {

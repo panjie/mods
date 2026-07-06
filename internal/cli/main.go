@@ -147,7 +147,6 @@ func initFlags() {
 	regBool(flags, &config.ContinueLast, "continue-last", "c", false)
 	regBool(flags, &config.List, flagListSessions, "l", config.List)
 	regBool(flags, &config.Chat, flagChat, "", false)
-	regStr(flags, &config.Title, "title", "t", config.Title)
 	regBool(flags, &config.Quiet, "quiet", "q", config.Quiet)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
 	regBool(flags, &config.ShowToolResults, "show-tool-results", "", config.ShowToolResults)
@@ -169,7 +168,6 @@ func initFlags() {
 	regStr(flags, &config.Role, "role", "R", config.Role)
 	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
 	regBool(flags, &config.ListPrompts, flagListPrompts, "", config.ListPrompts)
-	flags.Var(newThemeFlag(config.Theme, &config.Theme), "theme", flagDesc("theme"))
 	regBool(flags, &config.OpenEditor, "editor", "e", false)
 	regBool(flags, &config.Plan, "plan", "p", config.Plan)
 	regBool(flags, &config.MCPList, "list-mcps", "", false)
@@ -196,7 +194,6 @@ func initFlags() {
 		"no-limit",
 		"word-wrap",
 		"status-text",
-		"theme",
 		"hide-tool-status",
 		"show-tool-results",
 		"max-tool-rounds",
@@ -215,7 +212,6 @@ func initFlags() {
 	markCategory(
 		flags,
 		flagCategorySession,
-		"title",
 		flagListSessions,
 		flagChat,
 		"continue",
@@ -241,7 +237,7 @@ func initFlags() {
 		"stdin-image",
 		"clipboard-image",
 	)
-	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "theme", "help", "help-all", "version", flagListPrompts)
+	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "help", "help-all", "version", flagListPrompts)
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search")
 	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review-mode", "max-tool-rounds")

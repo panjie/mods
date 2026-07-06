@@ -126,7 +126,6 @@ func prepareNextChatTurn() {
 	}
 	config.Continue = config.SessionWriteToID
 	config.ContinueLast = false
-	config.Title = ""
 	config.SessionReadFromID = ""
 	config.SessionWriteToID = ""
 	config.SessionWriteToTitle = ""

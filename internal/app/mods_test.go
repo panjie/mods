@@ -364,6 +364,21 @@ func TestToolOperationLabel(t *testing.T) {
 		require.Equal(t, "Thinking: checking the next step", got)
 	})
 
+	t.Run("skill load body", func(t *testing.T) {
+		got := toolOperationLabel("load_skill", []byte(`{"name":"mcp-builder"}`), 80)
+		require.Equal(t, "Loading skill: mcp-builder", got)
+	})
+
+	t.Run("skill load aux file", func(t *testing.T) {
+		got := toolOperationLabel("load_skill", []byte(`{"name":"mcp-builder","file":"reference/foo.md"}`), 80)
+		require.Equal(t, "Loading skill: mcp-builder (reference/foo.md)", got)
+	})
+
+	t.Run("skill load no name", func(t *testing.T) {
+		got := toolOperationLabel("load_skill", []byte(`{}`), 80)
+		require.Equal(t, "Loading skill", got)
+	})
+
 	t.Run("unknown tool preferred fields", func(t *testing.T) {
 		got := toolOperationLabel("github_search", []byte(`{"query":"mods status bar","repo":"panjie/mods","irrelevant":"x"}`), 120)
 		require.Equal(t, "Running tool: github_search (query=mods status bar, repo=panjie/mods)", got)

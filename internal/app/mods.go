@@ -151,6 +151,7 @@ func New(
 	if scanErr != nil {
 		debug.Printf("skills: scan %q failed: %v (proceeding with empty catalog)", cfg.SkillsDir, scanErr)
 	}
+	debug.Printf("Skills: loaded %d skill(s) from %s", len(skillCatalog), cfg.SkillsDir)
 	return &Mods{
 		Styles:              MakeStyles(r),
 		glam:                gr,

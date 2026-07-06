@@ -124,6 +124,16 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 			return TruncateOperationStatus("Thinking: "+thought, width)
 		}
 		return TruncateOperationStatus("Thinking note", width)
+	case "load_skill":
+		skillName := OneLinePreview(ArgString(args, "name"))
+		file := OneLinePreview(ArgString(args, "file"))
+		if skillName != "" && file != "" {
+			return TruncateOperationStatus("Loading skill: "+skillName+" ("+file+")", width)
+		}
+		if skillName != "" {
+			return TruncateOperationStatus("Loading skill: "+skillName, width)
+		}
+		return TruncateOperationStatus("Loading skill", width)
 	}
 	if summary := ToolArgsSummary(args); summary != "" {
 		return TruncateOperationStatus("Running tool: "+name+" ("+summary+")", width)

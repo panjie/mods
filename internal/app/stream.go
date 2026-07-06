@@ -82,6 +82,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			})
 		}
 		if len(m.skillCatalog) > 0 {
+			debug.Printf("Skills: injected catalog (%d skill(s)) into system prompt", len(m.skillCatalog))
 			m.messages = append(m.messages, proto.Message{
 				Role:    proto.RoleSystem,
 				Content: skills.CatalogPrompt(m.skillCatalog),

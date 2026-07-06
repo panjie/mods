@@ -14,8 +14,8 @@ import (
 	"sync"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
@@ -782,13 +782,6 @@ func TestOperationStatusView(t *testing.T) {
 		require.NotContains(t, m.View(), "Running tool: fs_read_file")
 	})
 
-	t.Run("quiet hides active operation", func(t *testing.T) {
-		m := newAnimatingMods()
-		m.Config.Quiet = true
-		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
-		require.NotContains(t, m.View(), "Running command: go test ./...")
-	})
-
 	t.Run("hide tool status hides active operation", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.Config.HideToolStatus = true
@@ -939,12 +932,6 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		require.True(t, m.responseOutputStarted)
 		require.Contains(t, m.Output, "hello")
 		require.NotContains(t, m.renderWithOperation(m.Output), "Generating")
-	})
-
-	t.Run("quiet hides generating", func(t *testing.T) {
-		m := newAnimatingMods()
-		m.Config.Quiet = true
-		require.NotContains(t, m.View(), "Generating")
 	})
 }
 

@@ -82,10 +82,6 @@ var (
 				return cmd.Usage()
 			}
 
-			if os.Getenv("VIMRUNTIME") != "" {
-				config.Quiet = true
-			}
-
 			opts := buildTeaProgramOptions()
 
 			if autoConfig, err := maybeRunAutoConfig(os.Args); autoConfig || err != nil {
@@ -147,7 +143,6 @@ func initFlags() {
 	regBool(flags, &config.ContinueLast, "continue-last", "c", false)
 	regBool(flags, &config.List, flagListSessions, "l", config.List)
 	regBool(flags, &config.Chat, flagChat, "", false)
-	regBool(flags, &config.Quiet, "quiet", "q", config.Quiet)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
 	regBool(flags, &config.ShowToolResults, "show-tool-results", "", config.ShowToolResults)
 	regBool(flags, &config.ShowHelp, "help", "h", false)
@@ -223,7 +218,6 @@ func initFlags() {
 		"format",
 		"minimal",
 		"raw",
-		"quiet",
 		"hide-tool-status",
 		"show-tool-results",
 		"word-wrap",
@@ -311,7 +305,7 @@ func execute() {
 
 	debug.Printf("Config loaded from: %s", config.SettingsPath)
 	debug.Printf("API: %s, Model: %s", config.API, config.Model)
-	debug.Printf("Role: %s, Format: %s, Raw: %v, Quiet: %v", config.Role, config.Format, config.Raw, config.Quiet)
+	debug.Printf("Role: %s, Format: %s, Raw: %v", config.Role, config.Format, config.Raw)
 	debug.Printf("Session dir: %s", config.SessionDir)
 	if config.PortableDir != "" {
 		debug.Printf("Portable mode: %s", config.PortableDir)
@@ -494,14 +488,12 @@ func resetSettings() error {
 	if err != nil {
 		return modsError{Err: err, ReasonText: "Couldn't write new config file."}
 	}
-	if !config.Quiet {
-		fmt.Fprintln(os.Stderr, "\nSettings restored to defaults!")
-		fmt.Fprintf(os.Stderr,
-			"\n  %s %s\n\n",
-			StderrStyles().Comment.Render("Your old settings have been saved to:"),
-			StderrStyles().Link.Render(backupPath),
-		)
-	}
+	fmt.Fprintln(os.Stderr, "\nSettings restored to defaults!")
+	fmt.Fprintf(os.Stderr,
+		"\n  %s %s\n\n",
+		StderrStyles().Comment.Render("Your old settings have been saved to:"),
+		StderrStyles().Link.Render(backupPath),
+	)
 	return nil
 }
 
@@ -586,13 +578,11 @@ func printList(sessions []Session) {
 
 func saveSession(mods *Mods) error {
 	if config.NoSave {
-		if !config.Quiet {
-			fmt.Fprintf(
-				os.Stderr,
-				"\nSession was not saved because %s is enabled.\n",
-				StderrStyles().InlineCode.Render("--no-save"),
-			)
-		}
+		fmt.Fprintf(
+			os.Stderr,
+			"\nSession was not saved because %s is enabled.\n",
+			StderrStyles().InlineCode.Render("--no-save"),
+		)
 		return nil
 	}
 
@@ -620,14 +610,12 @@ func saveSession(mods *Mods) error {
 		return modsError{Err: err, ReasonText: errReason}
 	}
 
-	if !config.Quiet {
-		fmt.Fprintln(
-			os.Stderr,
-			"\nSession saved:",
-			StderrStyles().InlineCode.Render(config.SessionWriteToID[:ShortIDLength]),
-			StderrStyles().Comment.Render(title),
-		)
-	}
+	fmt.Fprintln(
+		os.Stderr,
+		"\nSession saved:",
+		StderrStyles().InlineCode.Render(config.SessionWriteToID[:ShortIDLength]),
+		StderrStyles().Comment.Render(title),
+	)
 	return nil
 }
 

@@ -75,7 +75,6 @@ with `--help-all` (marked [advanced]).
 - `-f`, `--format [markdown|json|<custom>]` — Ask for the response to be formatted; bare `-f` defaults to markdown
 - `--minimal` — Output only the final result, optimized for pipelines
 - `--raw` — Render output as raw text when connected to a TTY
-- `-q`, `--quiet` — Quiet mode (hide the spinner while loading and stderr messages)
 - `--hide-tool-status` [advanced] — Hide the bottom status line while tools are running
 - `--show-tool-results` [advanced] — Show the completed shell-command result blocks
 - `--word-wrap <width>` [advanced] — Wrap formatted output at specific width (default is 80)
@@ -133,7 +132,6 @@ Top-level keys:
 - `format-text` (map) — custom format prompts keyed by format name
 - `minimal` (bool) — pipeline-friendly output by default
 - `raw` (bool) — raw text output
-- `quiet` (bool) — hide spinner and stderr messages
 - `hide-tool-status` (bool) — hide tool status line
 - `show-tool-results` (bool) — show completed tool result blocks
 - `word-wrap` (int) — output width (default: 80)

@@ -189,8 +189,6 @@ func runSettingsEditorAction() error {
 		}
 	}
 
-	if !config.Quiet {
-		fmt.Fprintln(os.Stderr, "Wrote config file to:", config.SettingsPath)
-	}
+	fmt.Fprintln(os.Stderr, "Wrote config file to:", config.SettingsPath)
 	return nil
 }

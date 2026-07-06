@@ -135,20 +135,6 @@ func TestRunChatPrintsBannerAndPrompt(t *testing.T) {
 	})
 }
 
-func TestRunChatQuietSuppressesBanner(t *testing.T) {
-	var output bytes.Buffer
-	withChatTest(t, "/exit\n", func(_ *[]string) {
-		config.Quiet = true
-		chatOutput = &output
-
-		require.NoError(t, runChat(context.Background(), nil, nil))
-
-		got := output.String()
-		require.NotContains(t, got, "mods chat:")
-		require.Contains(t, got, "mods> ")
-	})
-}
-
 func withChatTest(t *testing.T, input string, fn func(calls *[]string)) {
 	t.Helper()
 

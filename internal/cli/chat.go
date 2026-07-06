@@ -141,9 +141,6 @@ func isChatExit(input string) bool {
 }
 
 func chatBanner() {
-	if config.Quiet {
-		return
-	}
 	fmt.Fprintln(chatOutput, "mods chat: type /exit or /quit to quit.")
 }
 

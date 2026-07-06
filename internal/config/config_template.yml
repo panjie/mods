@@ -45,9 +45,6 @@ prompts:
 # {{ index .Help "raw" }}
 raw: false
 
-# {{ index .Help "quiet" }}
-quiet: false
-
 # {{ index .Help "hide-tool-status" }}
 hide-tool-status: false
 

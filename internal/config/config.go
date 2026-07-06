@@ -61,7 +61,6 @@ var Help = map[string]string{
 	"list-prompts":           "List built-in prompts and prompt templates",
 	"prompts":                "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":                    "Render output as raw text when connected to a TTY",
-	"quiet":                  "Quiet mode (hide the spinner while loading and stderr messages for success)",
 	"hide-tool-status":       "Hide the bottom status line while tools are running",
 	"show-tool-results":      "Show completed shell-command result blocks in the output",
 	"help":                   "Show Help and exit",
@@ -198,7 +197,6 @@ type PersistentConfig struct {
 	FormatText          FormatText `yaml:"format-text"`
 	Minimal             bool       `yaml:"minimal" env:"MINIMAL"`
 	Raw                 bool       `yaml:"raw" env:"RAW"`
-	Quiet               bool       `yaml:"quiet" env:"QUIET"`
 	HideToolStatus      bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
 	ShowToolResults     bool       `yaml:"show-tool-results" env:"SHOW_TOOL_RESULTS"`
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`

@@ -216,10 +216,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.SessionReadFromID = msg.ReadID
 		m.reviewer.rules.Replace(msg.Rules)
 
-		if !m.Config.Quiet {
-			m.anim = NewAnim(defaultFanciness, m.Config.StatusText, m.renderer, m.Styles)
-			cmds = append(cmds, m.anim.Init())
-		}
+		m.anim = NewAnim(defaultFanciness, m.Config.StatusText, m.renderer, m.Styles)
+		cmds = append(cmds, m.anim.Init())
 		m.state = configLoadedState
 		cmds = append(cmds, m.readStdinCmd)
 
@@ -425,7 +423,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Mods) shouldUpdateAnimation() bool {
-	return !m.Config.Quiet && !debug.Enabled() &&
+	return !debug.Enabled() &&
 		m.anim != nil &&
 		(m.state == configLoadedState ||
 			(m.state == planState && m.planContent == "") ||

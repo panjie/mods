@@ -1,0 +1,154 @@
+// Package skills scans user-defined skill directories and renders the
+// system-prompt catalog. A skill is a directory under the configured
+// skills-dir containing a SKILL.md file with YAML frontmatter (name,
+// description) and a markdown body. Unknown frontmatter fields are
+// ignored so mods stays compatible with the broader Claude Skills
+// ecosystem (license, requires, etc.) without understanding them.
+package skills
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/panjie/mods/internal/debug"
+)
+
+// Skill is the parsed result of one skill directory.
+type Skill struct {
+	Name        string // frontmatter.name, or directory name fallback
+	Description string // frontmatter.description, or "(no description)" fallback
+	Body        string // markdown body after frontmatter (content of SKILL.md)
+	Dir         string // absolute path of the skill directory (for auxiliary file reads)
+}
+
+// Scan walks dir for */SKILL.md (one level, non-recursive) and returns
+// skills sorted by Name. Parse failures are skipped with a debug warning;
+// other skills continue. Returns nil, nil if dir does not exist or
+// contains no SKILL.md.
+func Scan(dir string) ([]Skill, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var found []Skill
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		skillPath := filepath.Join(dir, entry.Name(), "SKILL.md")
+		data, readErr := os.ReadFile(skillPath)
+		if readErr != nil {
+			continue // no SKILL.md in this directory; skip silently
+		}
+		skill, parseErr := parseSkill(string(data), filepath.Join(dir, entry.Name()))
+		if parseErr != nil {
+			debug.Printf("skills: skipping %q: %v", entry.Name(), parseErr)
+			continue
+		}
+		found = append(found, skill)
+	}
+	if len(found) == 0 {
+		return nil, nil
+	}
+	// Deduplicate by Name: later entries (lexical directory order) overwrite
+	// earlier ones. Warn on collision.
+	byName := make(map[string]int, len(found))
+	result := found[:0]
+	for _, s := range found {
+		if idx, ok := byName[s.Name]; ok {
+			debug.Printf("skills: name collision %q (dir %q overwrites %q)", s.Name, s.Dir, found[idx].Dir)
+			result[idx] = s
+			continue
+		}
+		byName[s.Name] = len(result)
+		result = append(result, s)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	return result, nil
+}
+
+// parseSkill parses SKILL.md content into a Skill. dir is the absolute
+// path of the skill directory (stored on Skill.Dir for auxiliary file
+// reads). The directory name is the fallback for a missing frontmatter
+// name.
+func parseSkill(content, dir string) (Skill, error) {
+	skill := Skill{Dir: dir}
+	name, desc, body, ok := splitFrontmatter(content)
+	if !ok {
+		// No frontmatter; whole file is body, name from directory.
+		skill.Name = filepath.Base(dir)
+		skill.Description = "(no description)"
+		skill.Body = strings.TrimSpace(content)
+		return skill, nil
+	}
+	skill.Name = strings.TrimSpace(name)
+	skill.Description = strings.TrimSpace(desc)
+	skill.Body = strings.TrimSpace(body)
+	if skill.Name == "" {
+		skill.Name = filepath.Base(dir)
+	}
+	if skill.Description == "" {
+		skill.Description = "(no description)"
+	}
+	return skill, nil
+}
+
+// splitFrontmatter extracts the YAML frontmatter block from content.
+// Returns (name, description, body, ok). ok is false when content does
+// not start with a frontmatter delimiter. The parser only reads the two
+// fields mods cares about (name, description); all other lines in the
+// block are ignored so unknown fields (license, requires, ...) don't
+// break parsing.
+func splitFrontmatter(content string) (name, description, body string, ok bool) {
+	const marker = "---"
+	// Frontmatter must be the very first thing in the file.
+	if !strings.HasPrefix(content, marker+"\n") && content != marker {
+		return "", "", "", false
+	}
+	rest := strings.TrimPrefix(content, marker+"\n")
+	rest = strings.TrimPrefix(rest, marker)
+	// Find the closing marker on its own line.
+	lines := strings.Split(rest, "\n")
+	closeIdx := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == marker {
+			closeIdx = i
+			break
+		}
+	}
+	if closeIdx == -1 {
+		// Unterminated frontmatter; caller treats whole file as body.
+		return "", "", "", false
+	}
+	fmBlock := lines[:closeIdx]
+	bodyLines := lines[closeIdx+1:]
+	body = strings.Join(bodyLines, "\n")
+	for _, line := range fmBlock {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, ":")
+		if !found {
+			continue
+		}
+		key = strings.ToLower(strings.TrimSpace(key))
+		value = strings.TrimSpace(value)
+		// Strip surrounding quotes if present.
+		value = strings.Trim(value, "\"'")
+		switch key {
+		case "name":
+			name = value
+		case "description":
+			description = value
+		}
+	}
+	return name, description, body, true
+}

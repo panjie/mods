@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -569,6 +570,63 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		}})
 		require.NoError(t, m.setupStreamContext("hello", model))
 		require.Contains(t, systemContents(m.messages), "identity from file")
+	})
+}
+
+func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
+	newTestMods := func(cfg Config) *Mods {
+		if cfg.Roles == nil {
+			cfg.Roles = map[string][]string{}
+		}
+		if cfg.FormatText == nil {
+			cfg.FormatText = defaultConfig().FormatText
+		}
+		return &Mods{
+			Config: &cfg,
+			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			ctx:    context.Background(),
+		}
+	}
+	model := Model{MaxChars: 1000}
+
+	t.Run("non-empty catalog injects Available skills section", func(t *testing.T) {
+		root := t.TempDir()
+		skillDir := filepath.Join(root, "demo", "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillDir), 0o700))
+		require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo skill.\n---\n\nbody.\n"), 0o600))
+		catalog, err := skills.Scan(root)
+		require.NoError(t, err)
+		require.Len(t, catalog, 1)
+
+		m := newTestMods(Config{})
+		m.skillCatalog = catalog
+		require.NoError(t, m.setupStreamContext("hello", model))
+		joined := strings.Join(systemContents(m.messages), "\n")
+		require.Contains(t, joined, "## Available skills")
+		require.Contains(t, joined, "demo: Demo skill.")
+	})
+
+	t.Run("empty catalog skips injection", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		joined := strings.Join(systemContents(m.messages), "\n")
+		require.NotContains(t, joined, "Available skills")
+	})
+
+	t.Run("minimal mode skips injection even with non-empty catalog", func(t *testing.T) {
+		root := t.TempDir()
+		skillDir := filepath.Join(root, "demo", "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillDir), 0o700))
+		require.NoError(t, os.WriteFile(skillDir, []byte("---\nname: demo\ndescription: Demo.\n---\n\nbody.\n"), 0o600))
+		catalog, err := skills.Scan(root)
+		require.NoError(t, err)
+		require.Len(t, catalog, 1)
+
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
+		m.skillCatalog = catalog
+		require.NoError(t, m.setupStreamContext("hello", model))
+		joined := strings.Join(systemContents(m.messages), "\n")
+		require.NotContains(t, joined, "Available skills")
 	})
 }
 

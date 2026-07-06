@@ -45,7 +45,7 @@ func (m *Mods) buildToolRegistryForProvider(
 	client stream.Client,
 ) (*toolregistry.Registry, error) {
 	if client.Capabilities().Tools {
-		return BuildRegistry(ctx, cfg, wscfg, prompt)
+		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog)
 	}
 	if explicitlyEnabledTools(cfg) {
 		return nil, modsError{

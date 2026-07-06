@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/skills"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 )
@@ -119,6 +120,12 @@ type Mods struct {
 
 	feedbackInput textinput.Model
 	feedbackMode  bool
+
+	// skillCatalog is the result of skills.Scan(cfg.SkillsDir) at New()
+	// time. Empty when the skills directory is absent or has no skills;
+	// in that case no catalog is injected and load_skill is not
+	// registered. See docs/superpowers/specs/2026-07-06-skills-system-design.md.
+	skillCatalog []skills.Skill
 }
 
 func New(
@@ -140,6 +147,10 @@ func New(
 	}
 	vp := viewport.New(0, 0)
 	vp.GotoBottom()
+	skillCatalog, scanErr := skills.Scan(cfg.SkillsDir)
+	if scanErr != nil {
+		debug.Printf("skills: scan %q failed: %v (proceeding with empty catalog)", cfg.SkillsDir, scanErr)
+	}
 	return &Mods{
 		Styles:              MakeStyles(r),
 		glam:                gr,
@@ -152,6 +163,7 @@ func New(
 		Config:              cfg,
 		reviewer:            newToolReviewer(cfg),
 		ctx:                 ctx,
+		skillCatalog:        skillCatalog,
 	}, nil
 }
 

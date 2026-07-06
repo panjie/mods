@@ -63,7 +63,7 @@ func TestBuildToolRegistryPowerShellRun(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.BuiltinTools.Shell = true
 	cfg.WebSearch = false
-	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello")
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestToolCallContextTimeoutPolicy(t *testing.T) {
 	cfg.BuiltinTools.SequentialThinking = true
 	cfg.WebSearch = false
 
-	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello")
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestToolCapabilities(t *testing.T) {
 	cfg.BuiltinTools.Shell = true
 	cfg.BuiltinTools.SequentialThinking = true
 	cfg.WebSearch = true
-	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello")
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 	cfg.BuiltinTools.Shell = true
 	cfg.BuiltinTools.SequentialThinking = true
 	cfg.WebSearch = true
-	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello")
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}

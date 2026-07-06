@@ -12,33 +12,51 @@ When a user asks mods to do something, mods should be able to load a relevant "s
 
 - No bundled skills ship with mods. Users author or install their own.
 - No project-local skills (no `.mods/skills/`). Only the user-level directory.
-- No tool/permission/MCP bindings declared by skills. A skill is pure prompt content.
+- No tool/permission/MCP bindings declared by skills. A skill is pure prompt content. The `requires:` frontmatter field some skills declare (e.g. awesome-claude-skills' composio skills require `mcp: [rube]`) is parsed-but-ignored — mods does not gate skill loading on MCP availability. The LLM discovers a missing MCP server naturally when it tries to use it.
 - No automatic discovery via keyword/embedding. The LLM is the matcher.
 - No CLI flag for skills (`--list-skills`, etc. can be added later if needed).
-- No multi-file skills in this iteration (a future extension can add a `file` parameter to `load_skill`).
+- No recursive catalog scanning. Only top-level `*/SKILL.md` is scanned. Users copy individual skill directories into `~/.config/mods/skills/` (the awesome-claude-skills usage pattern).
+- No catalog truncation. The user curates which skills are present; if they copy too many, that's their call.
 
 ## User Experience
 
-A user creates `~/.config/mods/skills/git-conflict-resolver/SKILL.md`:
+A user copies a skill directory (e.g. from [awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills)) into `~/.config/mods/skills/`:
+
+```
+~/.config/mods/skills/
+  git-conflict-resolver/
+    SKILL.md
+  mcp-builder/
+    SKILL.md
+    scripts/
+      connections.py
+      evaluation.py
+    reference/
+      mcp_best_practices.md
+      python_mcp_server.md
+```
+
+`SKILL.md` has YAML frontmatter (`name`, `description`) and a markdown body:
 
 ```markdown
 ---
-name: git-conflict-resolver
-description: Resolves Git merge conflicts by reading conflict markers, analyzing both sides, and writing resolved files.
+name: mcp-builder
+description: Guide for creating high-quality MCP servers that enable LLMs to interact with external services.
+license: Complete terms in LICENSE.txt
 ---
 
-When asked to resolve merge conflicts:
-1. Read the conflicted file with fs_read_file.
-2. Identify the <<<<<<<, =======, >>>>>>> markers.
-3. ...
+# MCP Server Development Guide
+... see reference/mcp_best_practices.md for details ...
 ```
 
-Later, when the user asks mods "resolve the merge conflicts in main.go", the LLM sees the skill in the system-prompt catalog, calls `load_skill("git-conflict-resolver")`, receives the body of the markdown as a tool result, and follows those instructions for the rest of the conversation.
+When the user asks mods to "build an MCP server for the GitHub API", the LLM sees `mcp-builder` in the system-prompt catalog, calls `load_skill("mcp-builder")` to get the body, then calls `load_skill("mcp-builder", "reference/mcp_best_practices.md")` to fetch the referenced detail. Both results stay in the conversation as tool results; the LLM follows the instructions for the rest of the session.
+
+Unknown frontmatter fields (`license`, `requires`, etc.) are ignored by the parser — they don't break loading and don't impose any tool/MCP gating. This makes mods compatible with the broader Claude Skills ecosystem (Anthropic's open standard, awesome-claude-skills, obra/superpowers, etc.) without mods having to understand every field.
 
 ## Architecture
 
 ```
-~/.config/mods/skills/<name>/SKILL.md
+~/.config/mods/skills/<name>/SKILL.md  (+ optional scripts/, reference/, etc.)
             │
             ▼
 internal/skills.Scan()  ──► []Skill{name, description, body, dir}
@@ -53,10 +71,10 @@ internal/skills.Scan()  ──► []Skill{name, description, body, dir}
   BuildRegistry ──► register load_skill (only when catalog non-empty)
             │
             ▼
-  LLM reads catalog → calls load_skill("name")
+  LLM reads catalog → calls load_skill("name") and optionally load_skill("name", "reference/foo.md")
             │
             ▼
-  Tool returns body from in-memory catalog (map lookup)
+  Tool returns body / file content from in-memory catalog + on-disk read
             │
             ▼
   Subsequent turns: tool result already in history, no reload needed
@@ -73,13 +91,14 @@ internal/skills.Scan()  ──► []Skill{name, description, body, dir}
 type Skill struct {
     Name        string // frontmatter.name, or directory name fallback
     Description string // frontmatter.description, or "(no description)" fallback
-    Body        string // markdown body after frontmatter
-    Dir         string // absolute path of the skill directory
+    Body        string // markdown body after frontmatter (content of SKILL.md)
+    Dir         string // absolute path of the skill directory (for auxiliary file reads)
 }
 
-// Scan walks dir for */SKILL.md and returns skills sorted by Name.
-// Parse failures are skipped with a debug warning; other skills continue.
-// Returns nil, nil if dir does not exist or contains no SKILL.md.
+// Scan walks dir for */SKILL.md (one level, non-recursive) and returns
+// skills sorted by Name. Parse failures are skipped with a debug warning;
+// other skills continue. Returns nil, nil if dir does not exist or
+// contains no SKILL.md.
 func Scan(dir string) ([]Skill, error)
 
 // CatalogPrompt renders the system-prompt section listing available skills.
@@ -111,21 +130,29 @@ Tool spec:
 | Field | Value |
 |---|---|
 | Name | `load_skill` |
-| Description | `Load a skill's full instructions by name. Available skills are listed in the system prompt under "Available skills".` |
-| Input schema | `{ "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }` |
-| Output | The skill's `Body` text |
+| Description | `Load a skill's full instructions by name, or fetch an auxiliary file from a skill's directory. Available skills are listed in the system prompt under "Available skills".` |
+| Input schema | `{ "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "description": "Skill name as listed in the system prompt." }, "file": { "type": "string", "description": "Optional. Relative path to an auxiliary file inside the skill directory (e.g. 'reference/foo.md', 'scripts/run.py'). Omit to load the skill's SKILL.md body." } } }` |
+| Output | The skill's `Body` text (when `file` omitted), or the file's text content (when `file` provided) |
 | `Capabilities.ReadOnly` | `true` |
 | `TimeoutPolicy` | `TimeoutPolicyCaller` |
 | `Kind` | `ToolKindBuiltin` |
 
 **Behavior:**
 
-- The catalog passed to `RegisterSkill` is the in-memory `[]Skill` produced by `Scan`, which already holds each skill's parsed `Body`. The tool builds a `map[string]string` (name → body) from this slice at registration time.
-- `load_skill(name)` performs a map lookup. On hit, returns the cached `Body`. On miss (including when the catalog is empty), returns the error string: `skill not found: <name>. Available: <comma-separated list>` (the list is empty when the catalog itself is empty). The list helps the LLM self-correct.
-- The `name` input is treated purely as a map key — it is never used to construct a filesystem path. This eliminates path-escape risk by construction: there is no path to escape. Empty input or input containing path separators simply fails the map lookup and returns the not-found error.
-- Idempotency is automatic: the same `name` always returns the same `Body` from the same in-memory map, with no side effects and no disk access at call time.
+- The catalog passed to `RegisterSkill` is the in-memory `[]Skill` produced by `Scan`, which holds each skill's `Name`, `Dir`, and parsed `Body`. The tool builds a `map[string]*Skill` (name → skill pointer) at registration time.
+- **`file` omitted (load SKILL.md body):** `load_skill(name)` performs a map lookup. On hit, returns the cached `Body` from the in-memory catalog — no disk access. On miss (including empty catalog), returns the error string: `skill not found: <name>. Available: <comma-separated list>` (the list helps the LLM self-correct).
+- **`file` provided (load auxiliary file):** `load_skill(name, file)` looks up the skill by name (same not-found error if missing). On hit, resolves the path `filepath.Join(skill.Dir, file)` and reads it from disk. This is on-demand because auxiliary files can be large and most skills never need them.
+- **Path safety for `file`:** the `file` input is validated before any disk access:
+  1. Must be non-empty.
+  2. Must not be absolute (no leading `/` or drive letter on Windows).
+  3. `filepath.Clean(file)` must not contain `..` components (rejects `../etc/passwd`, `a/../../b`, etc.).
+  4. The fully-cleaned resolved path `filepath.Join(skill.Dir, filepath.Clean(file))` must begin with `skill.Dir` + path separator. This is a defense-in-depth check; steps 2–3 already prevent escape, but step 4 catches any remaining edge case.
+  5. On validation failure, return `"invalid file path: <file>"` — no disk read occurs.
+- **File read:** the resolved path is read via `os.ReadFile`. A size cap (default 256 KB, see `SkillFileMaxBytes` constant) prevents accidentally loading huge files into context. If the file exceeds the cap, return `"file too large: <file> (<size> bytes, limit <limit>)"`. If the file does not exist or is not readable, return `"could not read file: <file>: <error>"`. No validation of file type/extension — the LLM can handle whatever comes back, including source code, JSON, YAML, plain text. Binary files will appear as garbage; that's acceptable (the LLM will note it and move on).
+- The `name` input is treated as a map key — never used to construct a filesystem path. Empty input or input with path separators simply fails the map lookup.
+- Idempotency: `load_skill(name)` always returns the same `Body` from memory (no side effects). `load_skill(name, file)` re-reads the file each call — cheap, and lets users edit auxiliary files mid-session if they want to.
 
-The tool does not go through the `requestApproval` review flow because it has no side effects and touches no user data — it only returns text that was already read from a trusted directory at scan time.
+The tool does not go through the `requestApproval` review flow because it is read-only and bounded to the user-configured skills directory.
 
 ### Integration points
 
@@ -168,6 +195,14 @@ When the user's request matches an available skill's description, call the
 `load_skill` tool with that skill's name to load its full instructions, then
 follow them. Skills live in `~/.config/mods/skills/<name>/SKILL.md`. Loaded
 skill content stays in the conversation; do not reload the same skill twice.
+
+Some skills reference auxiliary files in `scripts/` or `reference/`
+subdirectories (e.g. "see reference/foo.md"). When a skill's body tells you
+to consult such a file, call `load_skill` again with the same `name` and a
+`file` parameter set to the relative path (e.g.
+`load_skill("mcp-builder", "reference/mcp_best_practices.md")`). Fetch only
+the files you actually need.
+
 Skip skills when their description does not match the request.
 ```
 
@@ -196,10 +231,14 @@ One line per skill, sorted alphabetically by `Name` (the `Scan` contract). No tr
 | `SKILL.md` missing frontmatter | Whole file treated as body; `Name` falls back to directory name; warn via `debug` |
 | `SKILL.md` frontmatter missing `name` | Fall back to directory name; warn |
 | `SKILL.md` frontmatter missing `description` | Use `"(no description)"` placeholder; warn |
+| `SKILL.md` frontmatter has unknown fields (`license`, `requires`, etc.) | Ignored by parser; skill loads normally |
 | Frontmatter parse error (e.g. unterminated `---`) | Treat whole file as body with directory-name fallback; warn |
 | Name collision (two directories resolve to same `Name`) | Later entry (by directory walk order) overwrites earlier; warn once at scan time |
 | `load_skill("nonexistent")` | Map lookup misses; returns `"skill not found: nonexistent. Available: a, b, c"` |
-| `load_skill("../etc/passwd")` or any path-escape attempt | Not a special case: the input is a map key, never a path. Map lookup misses; returns the same not-found error as above. No filesystem access occurs. |
+| `load_skill("../etc/passwd")` (name is path-escape attempt) | Not a special case: `name` is a map key, never a path. Map lookup misses; returns the same not-found error as above. No filesystem access occurs. |
+| `load_skill("mcp-builder", "../etc/passwd")` (file path escape) | Validation rejects before any disk read; returns `"invalid file path: ../etc/passwd"` |
+| `load_skill("mcp-builder", "reference/missing.md")` | `os.ReadFile` fails; returns `"could not read file: reference/missing.md: <fs error>"` |
+| `load_skill("mcp-builder", "scripts/huge.py")` where file > 256 KB | Returns `"file too large: scripts/huge.py (<size> bytes, limit 262144)"` |
 | Minimal mode | No catalog injection, no tool registration (matches identity.md skipping) |
 
 All warnings go through the existing `debug` logger so they appear only when `MODS_DEBUG` is set.
@@ -221,11 +260,21 @@ All warnings go through the existing `debug` logger so they appear only when `MO
 
 ### `internal/tools/skill_test.go`
 
+**Body loading (`file` omitted):**
 - Normal load returns body
 - Nonexistent name returns error string with available list
-- Path-escape inputs (`".."`, `"../etc"`, `"/etc/passwd"`, `"a/b"`) are treated as ordinary not-found lookups (no special error, no panic)
+- Path-escape inputs as `name` (`".."`, `"../etc"`, `"/etc/passwd"`, `"a/b"`) are treated as ordinary not-found lookups (no special error, no panic, no disk access)
 - Empty catalog: `RegisterSkill` still registers the tool; calling it returns `"skill not found: <name>. Available: "` (empty list)
-- Idempotency: two calls for the same name return identical output (the body comes from the same in-memory map; no disk access at call time to verify)
+- Idempotency: two calls for the same name return identical output (body comes from the in-memory catalog)
+
+**Auxiliary file loading (`file` provided):**
+- Existing file returns content (e.g. `load_skill("mcp-builder", "reference/mcp_best_practices.md")`)
+- Nonexistent file returns `"could not read file: ..."` error
+- Path-escape `file` inputs rejected before disk read: `"../etc/passwd"`, `"a/../../b"`, `"/etc/passwd"`, `"*"` wildcards if they survive clean
+- Absolute path rejected (Linux `/etc/passwd` and Windows-style `C:\...`)
+- File exceeding size cap returns `"file too large: ..."` error
+- `name` not in catalog returns the same not-found error as body loading (no file access attempted)
+- Subdirectory paths work: `"reference/sub/deep.md"` resolves correctly
 
 ### `internal/app/*_test.go`
 
@@ -246,21 +295,42 @@ All warnings go through the existing `debug` logger so they appear only when `MO
 
 ## Out of Scope / Future Extensions
 
-- **Multi-file skills**: allow `load_skill(name, file?)` to fetch additional `.md` files from the skill directory. The `file` parameter is intentionally omitted from the input schema now; adding it later is backward-compatible.
 - **Bundled skills**: embed a curated set in the binary via `embed.FS`.
 - **Project-local skills**: scan `.mods/skills/` in the workspace.
+- **Recursive catalog scanning**: scan `**/SKILL.md` so a user can point `skills-dir` at a collection like `composio-skills/` wholesale. Currently the user copies individual skill dirs to the top level.
+- **Multiple `skills-dir` paths**: support a list of directories.
 - **`--list-skills` CLI flag**: print available skills and exit.
-- **Truncation/summarization**: cap catalog size when the user has dozens of skills.
-- **Skill-declared tool bindings**: frontmatter `tools:` allow/deny lists. Rejected for now to keep the security model unchanged.
+- **Catalog truncation/summarization**: cap catalog size when the user has dozens of skills. Currently the user curates the set.
+- **`list_skills` tool**: on-demand browsing for large catalogs. Not needed while the user curates a small set.
+- **Skill-declared tool/MCP bindings**: honoring `requires: { mcp: [...] }` frontmatter to gate skill loading on MCP availability, or `tools:` allow/deny lists. Rejected for now to keep the security model unchanged; `requires` is parsed-but-ignored.
+
+## awesome-claude-skills Compatibility
+
+The [awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) repo (and the broader Anthropic Claude Skills open standard it follows) uses the same format this spec targets:
+
+- `SKILL.md` with YAML frontmatter (`name`, `description`)
+- Optional `scripts/` and `reference/` subdirectories for auxiliary files
+- Optional frontmatter fields like `license`, `requires`
+
+Mods is compatible with this format by construction:
+
+1. **Frontmatter parser** ignores unknown fields, so `license`, `requires`, etc. don't break loading.
+2. **`load_skill(name, file?)`** fetches both the SKILL.md body and auxiliary files in `scripts/`/`reference/`, matching the progressive-loading model the standard expects.
+3. **Non-recursive scan** means the user copies individual skill directories (e.g. `cp -r awesome-claude-skills/mcp-builder ~/.config/mods/skills/`) rather than pointing at the whole repo. This avoids the 800+ skill catalog-explosion problem.
+4. **`requires` field** is ignored — skills that declare MCP dependencies still load; the LLM discovers a missing MCP server when it tries to call it.
+
+The user flow is: clone awesome-claude-skills, copy the specific skill directory wanted into `~/.config/mods/skills/`, restart mods. The skill appears in the catalog and is loadable.
 
 ## Open Questions Resolved During Brainstorming
 
 1. *Where do skills live?* → User directory only (`~/.config/mods/skills/`).
-2. *What is a skill?* → Markdown with frontmatter (`name`, `description`), body is the instruction text.
+2. *What is a skill?* → Markdown with frontmatter (`name`, `description`), body is the instruction text. Unknown frontmatter fields ignored.
 3. *How does mods decide which to load?* → LLM autonomous selection from a system-prompt catalog.
 4. *How is skill content delivered?* → `load_skill` tool returns the body as a tool result.
-5. *Can skills bind tools/permissions?* → No, pure prompt content.
+5. *Can skills bind tools/permissions?* → No, pure prompt content. `requires` field ignored.
 6. *How does the LLM see the catalog?* → Static list injected into the system prompt.
 7. *Frontmatter parser?* → Hand-rolled minimal parser, no YAML library.
 8. *CLI flag?* → None in this iteration.
 9. *Injection position?* → After the identity prompt, inside the `!cfg.Minimal` branch.
+10. *awesome-claude-skills support?* → Yes. User copies individual skill dirs into `~/.config/mods/skills/`. Non-recursive scan (no catalog explosion). Multi-file skills supported via `load_skill(name, file?)` for `scripts/`/`reference/` aux files.
+11. *Multi-file skills?* → In scope. `load_skill` takes optional `file` parameter; path-escape rejected via `filepath.Clean` + prefix check; 256 KB size cap.

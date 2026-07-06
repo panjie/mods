@@ -363,6 +363,7 @@ const (
 )
 
 // UnmarshalYAML accepts both the new string modes and old boolean values.
+// Invalid values cause a warning and fall back to "auto".
 func (m *FilesystemMode) UnmarshalYAML(node *yaml.Node) error {
 	if node.Tag == "!!bool" {
 		var enabled bool
@@ -383,7 +384,9 @@ func (m *FilesystemMode) UnmarshalYAML(node *yaml.Node) error {
 	}
 	mode, err := parseFilesystemMode(value)
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "Warning: invalid builtin-tools.filesystem %q, defaulting to \"auto\"\n", value)
+		*m = FilesystemAuto
+		return nil
 	}
 	*m = mode
 	return nil
@@ -475,12 +478,8 @@ func Ensure() (Config, error) {
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
-	if err := validateReasoningMode(c.Reasoning); err != nil {
-		return fallback, modsError{Err: err, ReasonText: "Could not use reasoning setting."}
-	}
-	if err := validateReviewMode(c.ReviewMode); err != nil {
-		return fallback, modsError{Err: err, ReasonText: "Could not use review-mode setting."}
-	}
+	validateReasoningMode(&c)
+	validateReviewMode(&c)
 
 	applySessionDirDefault(&c)
 
@@ -551,21 +550,23 @@ func defaultFormatTextFor(formatAs string) string {
 	}
 }
 
-func validateReasoningMode(mode ReasoningMode) error {
-	switch mode {
+func validateReasoningMode(c *Config) {
+	switch c.Reasoning {
 	case "", ReasoningOff, ReasoningOn:
-		return nil
+		return
 	default:
-		return fmt.Errorf("invalid reasoning mode %q, must be off or on", mode)
+		fmt.Fprintf(os.Stderr, "Warning: invalid reasoning mode %q, defaulting to \"off\"\n", c.Reasoning)
+		c.Reasoning = ReasoningOff
 	}
 }
 
-func validateReviewMode(mode ReviewMode) error {
-	switch mode {
+func validateReviewMode(c *Config) {
+	switch c.ReviewMode {
 	case "", ReviewAuto, ReviewAlways, ReviewNever:
-		return nil
+		return
 	default:
-		return fmt.Errorf("invalid review mode %q, must be auto, always, or never", mode)
+		fmt.Fprintf(os.Stderr, "Warning: invalid review mode %q, defaulting to \"auto\"\n", c.ReviewMode)
+		c.ReviewMode = ReviewAuto
 	}
 }
 

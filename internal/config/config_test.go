@@ -49,24 +49,52 @@ func TestPromptConfig(t *testing.T) {
 }
 
 func TestValidateReasoningMode(t *testing.T) {
-	require.NoError(t, validateReasoningMode(""))
-	require.NoError(t, validateReasoningMode(ReasoningOff))
-	require.NoError(t, validateReasoningMode(ReasoningOn))
+	cfg := &Config{}
+	cfg.Reasoning = ""
+	validateReasoningMode(cfg)
+	require.Equal(t, ReasoningMode(""), cfg.Reasoning) // empty is valid, left alone
 
-	err := validateReasoningMode("auto")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "must be off or on")
+	cfg = &Config{}
+	cfg.Reasoning = ReasoningOff
+	validateReasoningMode(cfg)
+	require.Equal(t, ReasoningOff, cfg.Reasoning)
+
+	cfg = &Config{}
+	cfg.Reasoning = ReasoningOn
+	validateReasoningMode(cfg)
+	require.Equal(t, ReasoningOn, cfg.Reasoning)
+
+	cfg = &Config{}
+	cfg.Reasoning = "auto"
+	validateReasoningMode(cfg)
+	require.Equal(t, ReasoningOff, cfg.Reasoning) // invalid resets to default
 }
 
 func TestValidateReviewMode(t *testing.T) {
-	require.NoError(t, validateReviewMode(""))
-	require.NoError(t, validateReviewMode(ReviewAuto))
-	require.NoError(t, validateReviewMode(ReviewAlways))
-	require.NoError(t, validateReviewMode(ReviewNever))
+	cfg := &Config{}
+	cfg.ReviewMode = ""
+	validateReviewMode(cfg)
+	require.Equal(t, ReviewMode(""), cfg.ReviewMode) // empty is valid, left alone
 
-	err := validateReviewMode("mutable")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "must be auto, always, or never")
+	cfg = &Config{}
+	cfg.ReviewMode = ReviewAuto
+	validateReviewMode(cfg)
+	require.Equal(t, ReviewAuto, cfg.ReviewMode)
+
+	cfg = &Config{}
+	cfg.ReviewMode = ReviewAlways
+	validateReviewMode(cfg)
+	require.Equal(t, ReviewAlways, cfg.ReviewMode)
+
+	cfg = &Config{}
+	cfg.ReviewMode = ReviewNever
+	validateReviewMode(cfg)
+	require.Equal(t, ReviewNever, cfg.ReviewMode)
+
+	cfg = &Config{}
+	cfg.ReviewMode = "mutable"
+	validateReviewMode(cfg)
+	require.Equal(t, ReviewAuto, cfg.ReviewMode) // invalid resets to default
 }
 
 func TestDefaultPromptText(t *testing.T) {
@@ -310,7 +338,7 @@ func TestEnsureReportsSettingsExistedTrueWhenFileAlreadyExists(t *testing.T) {
 	require.Equal(t, first.SettingsPath, second.SettingsPath)
 }
 
-func TestEnsureRejectsLegacyReviewMode(t *testing.T) {
+func TestEnsureResetsInvalidReviewMode(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
@@ -319,11 +347,10 @@ func TestEnsureRejectsLegacyReviewMode(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 	require.NoError(t, os.WriteFile(path, []byte("review-mode: mutable\n"), 0o600))
 
-	_, err := Ensure()
+	cfg, err := Ensure()
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), `invalid review mode "mutable"`)
-	require.Contains(t, err.Error(), "must be auto, always, or never")
+	require.NoError(t, err)
+	require.Equal(t, ReviewAuto, cfg.ReviewMode)
 }
 
 // TestEnsureReturnsCompleteConfigOnError pins the invariant that every

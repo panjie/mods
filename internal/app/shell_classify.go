@@ -121,7 +121,7 @@ func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPa
 	// Also merge AST-extracted PowerShell argument paths for write commands
 	// that fell through to the LLM — the LLM may miss path arguments.
 	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, workspaceDir, flavor))
-	if !result.NeedsReview && len(result.AffectedDirs) == 0 && strings.TrimSpace(workspaceDir) != "" {
+	if len(result.AffectedDirs) == 0 && strings.TrimSpace(workspaceDir) != "" {
 		result.AffectedDirs = []string{workspaceDir}
 	}
 
@@ -362,6 +362,14 @@ var (
 	reUnixAbsPath  = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
 	reSingleQuoted = regexp.MustCompile(`'[^']*'`)
 	reWinAbsPath   = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
+
+	// Windows/PowerShell-specific Unix-style path patterns. On Windows,
+	// single-segment tokens like /out, /target, /reference are compiler
+	// flags, not filesystem paths. Only multi-segment paths (/etc/passwd,
+	// /mnt/c/Users) and bare root (/) are meaningful filesystem references.
+	// ':' is excluded to skip flags like /out:value, /reference:dll.
+	reUnixMultiSegPath = regexp.MustCompile(`(?:^|[\s="'"])(/[A-Za-z0-9._][^\s'"<>|;,&(){}:]*/[^\s'"<>|;,&(){}]*)`)
+	reUnixBareRootWin  = regexp.MustCompile(`(?:^|[\s="'"])(/)(?:[\s'"<>|;,&(){}]|$)`)
 )
 
 // extractExternalPaths returns path tokens from the command that reference
@@ -375,17 +383,6 @@ func extractExternalPaths(command, workspaceDir string) []string {
 
 func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
 	opts := pathutil.DefaultOptions(workspaceDir, flavor)
-	if flavor == pathutil.FlavorPOSIX {
-		command = blankPOSIXHeredocBodies(command)
-	}
-	// Strip single-quoted segments before matching. These carry shell-program
-	// literals (awk/sed/perl scripts) whose "/", "$", and "~" tokens are
-	// syntax, not filesystem paths, and caused widespread false positives —
-	// e.g. `find . -exec awk '/re/{ ... }'` was flagged "affects /". A bare
-	// root argument like `find / -delete` is unquoted, so it is still
-	// detected. The rare habit of single-quoting an absolute path argument
-	// (e.g. `cat '/etc/passwd'`) is an accepted gap.
-	command = reSingleQuoted.ReplaceAllString(command, " ")
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
@@ -399,6 +396,44 @@ func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathuti
 		seen[p] = true
 		paths = append(paths, p)
 	}
+
+	if flavor == pathutil.FlavorPowerShell {
+		// Windows/PowerShell branch: compiler flags (/out, /target,
+		// /reference) share leading-slash syntax with Unix absolute paths
+		// but are always single-segment. Only match multi-segment Unix
+		// paths, bare root, and Windows-native patterns. Single-quoted
+		// strings are stripped to avoid false positives from script literals.
+		command = reSingleQuoted.ReplaceAllString(command, " ")
+		for _, m := range reWinAbsPath.FindAllStringSubmatch(command, -1) {
+			add(m[1])
+		}
+		for _, m := range reUnixMultiSegPath.FindAllStringSubmatch(command, -1) {
+			add(m[1])
+		}
+		for _, m := range reUnixBareRootWin.FindAllStringSubmatch(command, -1) {
+			add(m[1])
+		}
+		for _, m := range reHomePath.FindAllString(command, -1) {
+			add(m)
+		}
+		for _, m := range reHomeVarPath.FindAllString(command, -1) {
+			add(m)
+		}
+		for _, m := range reCMDHomePath.FindAllString(command, -1) {
+			add(m)
+		}
+		for _, m := range reParentPath.FindAllString(command, -1) {
+			add(m)
+		}
+		return paths
+	}
+
+	// POSIX branch: Unix absolute paths (including single-segment like
+	// /etc, /tmp) are valid filesystem references. Heredoc bodies are
+	// blanked first so embedded path-like tokens don't produce false
+	// positives, then single-quoted script literals are stripped.
+	command = blankPOSIXHeredocBodies(command)
+	command = reSingleQuoted.ReplaceAllString(command, " ")
 	for _, m := range reUnixAbsPath.FindAllStringSubmatch(command, -1) {
 		add(m[1])
 	}

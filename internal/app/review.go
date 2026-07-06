@@ -313,6 +313,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	intent := deps.accessIntent
 	var analysis shellCommandAnalysis
 	if shellExecution {
+		cmd := extractShellCommand(data)
 		if intent.Class != "" {
 			analysis = shellCommandAnalysis{
 				NeedsReview:  intent.Class == AccessWrite,
@@ -320,7 +321,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 				Reason:       intent.Reason,
 			}
 			intent.Dirs = analysis.AffectedDirs
-		} else if cmd := extractShellCommand(data); cmd != "" && deps.analyzeShell != nil {
+		} else if cmd != "" && deps.analyzeShell != nil {
 			analysis = deps.analyzeShell(name, cmd)
 			analysis.AffectedDirs = normalizeShellAffectedDirsForTool(analysis.AffectedDirs, r.scope.Value, name)
 			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs}
@@ -328,7 +329,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			analysis = defaultShellCommandAnalysis()
 			intent = AccessIntent{Class: shellAccessMode(analysis)}
 		}
-		debug.Printf("shell analysis: needsReview=%v dirs=%v reason=%q", analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
+		debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", debug.Truncate(cmd, 500), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 	}
 	if intent.Class != "" && RulesAllowDirs(r.rules.Snapshot(), intent.Dirs, r.scope, intent.Class) {
 		debug.Printf("requestApproval: matched affected dirs against saved approval rule")

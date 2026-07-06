@@ -152,3 +152,25 @@ func splitFrontmatter(content string) (name, description, body string, ok bool) 
 	}
 	return name, description, body, true
 }
+
+// CatalogPrompt renders the system-prompt section listing available skills.
+// Returns "" for an empty slice (caller skips injection entirely). The
+// caller is expected to pass a slice already sorted by Name (Scan does
+// this); CatalogPrompt does not re-sort.
+func CatalogPrompt(skills []Skill) string {
+	if len(skills) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("## Available skills\n\n")
+	sb.WriteString("Call load_skill(<name>) to load a skill's full instructions.\n")
+	sb.WriteString("To fetch an auxiliary file (e.g. reference/foo.md), pass it as the optional second argument: load_skill(<name>, \"<file>\").\n")
+	for _, s := range skills {
+		sb.WriteString("- ")
+		sb.WriteString(s.Name)
+		sb.WriteString(": ")
+		sb.WriteString(s.Description)
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}

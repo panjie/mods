@@ -3,6 +3,7 @@ package skills
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -128,4 +129,23 @@ func TestScanSkipsDirsLackingSkillMd(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, skills, 1)
 	require.Equal(t, "real", skills[0].Name)
+}
+
+func TestCatalogPromptEmptyReturnsEmpty(t *testing.T) {
+	require.Equal(t, "", CatalogPrompt(nil))
+	require.Equal(t, "", CatalogPrompt([]Skill{}))
+}
+
+func TestCatalogPromptFormat(t *testing.T) {
+	skills := []Skill{
+		{Name: "alpha", Description: "Alpha skill."},
+		{Name: "bravo", Description: "Bravo skill."},
+	}
+	got := CatalogPrompt(skills)
+	require.Contains(t, got, "## Available skills")
+	require.Contains(t, got, "load_skill")
+	require.Contains(t, got, "- alpha: Alpha skill.")
+	require.Contains(t, got, "- bravo: Bravo skill.")
+	// Alpha must appear before bravo (caller passes pre-sorted slice).
+	require.Less(t, strings.Index(got, "alpha"), strings.Index(got, "bravo"))
 }

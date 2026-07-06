@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/panjie/mods/internal/proto"
@@ -52,6 +53,7 @@ func RegisterSkill(reg *Registry, catalog []skills.Skill) error {
 				for n := range index {
 					names = append(names, n)
 				}
+				sort.Strings(names)
 				return fmt.Sprintf("skill not found: %s. Available: %s", args.Name, strings.Join(names, ", ")), nil
 			}
 			if args.File == "" {

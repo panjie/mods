@@ -68,10 +68,7 @@ func TestLoadSkillNotFound(t *testing.T) {
 	_, catalog := setupSkillFixture(t)
 	reg, _ := loadSkillTool(t, catalog)
 	got := callLoadSkill(t, reg, `{"name":"nonexistent"}`)
-	require.Contains(t, got, "skill not found: nonexistent")
-	require.Contains(t, got, "Available:")
-	require.Contains(t, got, "flat")
-	require.Contains(t, got, "multi")
+	require.Equal(t, "skill not found: nonexistent. Available: flat, multi", got)
 }
 
 func TestLoadSkillNamePathEscapeIsOrdinaryNotFound(t *testing.T) {

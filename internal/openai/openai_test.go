@@ -1,10 +1,17 @@
 package openai
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/openai/openai-go"
+	"github.com/panjie/mods/internal/proto"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPendingToolCallsEmptyChoices(t *testing.T) {
@@ -256,4 +263,66 @@ func TestPartialTagSuffixLen(t *testing.T) {
 			t.Errorf("partialTagSuffixLen(%q, %q) = %d, want %d", c.s, c.tag, got, c.want)
 		}
 	}
+}
+
+// newCapturingServer starts a fake SSE server that records the request body
+// and immediately ends the stream, returning a capturing openai client.
+func newCapturingServer(t *testing.T) (client *Client, captured *[]byte, closeServer func()) {
+	t.Helper()
+	var buf []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	cfg := Config{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		AuthToken:  "k",
+	}
+	return New(cfg), &buf, server.Close
+}
+
+// TestResponseFormatEmittedForNonOpenAIAPI asserts that the JSON
+// response_format is sent in the wire body for any OpenAI-compatible
+// provider (not just api=="openai"). DeepSeek, Azure, and other
+// OpenAI-compatible endpoints support response_format=json_object.
+func TestResponseFormatEmittedForNonOpenAIAPI(t *testing.T) {
+	jsonFmt := "json"
+	client, captured, closeServer := newCapturingServer(t)
+	defer closeServer()
+
+	_ = client.Request(context.Background(), proto.Request{
+		API:            "deepseek",
+		Model:          "deepseek-chat",
+		ResponseFormat: &jsonFmt,
+		Messages:       []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+
+	require.NotEmpty(t, *captured, "no request body was captured")
+	require.True(t, bytes.Contains(*captured, []byte(`"response_format"`)),
+		"wire JSON must contain response_format for non-openai API: %s", *captured)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(*captured, &body))
+	rf, ok := body["response_format"].(map[string]any)
+	require.True(t, ok, "response_format must be an object")
+	require.Equal(t, "json_object", rf["type"],
+		"response_format.type must be json_object")
+}
+
+func TestResponseFormatOmittedWhenNotJSON(t *testing.T) {
+	client, captured, closeServer := newCapturingServer(t)
+	defer closeServer()
+
+	_ = client.Request(context.Background(), proto.Request{
+		API:      "deepseek",
+		Model:    "deepseek-chat",
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+
+	require.NotEmpty(t, *captured, "no request body was captured")
+	require.False(t, bytes.Contains(*captured, []byte(`"response_format"`)),
+		"wire JSON must not contain response_format when unset: %s", *captured)
 }

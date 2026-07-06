@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-07-06
+
+### Added
+- Google model discovery and base-url defaults for the `--config` wizard via provider API listing.
+- Always-on phased spinner with per-phase colors for streaming responses.
+
+### Changed
+- Renamed `--reasoning`/`-r` to `--think`/`-t` and unified the think toggle to a boolean (`true`/`false`).
+- Merged `--format-as` into `--format` as a valued flag (deprecating the old boolean format).
+- Simplified web-search CLI flags and improved config wizard UX.
+- Renamed `detect` review mode to `auto`.
+
+### Removed
+- Removed Cohere provider support.
+- Removed `--quiet`/`-q`, `--title`, and `--theme` flags.
+
+### Fixed
+- Enforced `response_format` for all OpenAI-compatible providers to avoid model-side schema drift.
+- Gracefully handle invalid config values instead of failing entirely.
+- Classify PowerShell cwd-prefixed read-only commands correctly.
+- Preserve `thought_signature` across Google/Gemini tool-call turns.
+- Do not hide editor window on Windows when opening the external editor.
+- Prefer PowerShell 7 and surface LLM classification reason in shell review prompts.
+- Fixed config wizard border width.
+
 ## [3.2.0] - 2026-07-05
 
 ### Removed

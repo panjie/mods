@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/panjie/mods/internal/pathutil"
@@ -147,6 +148,83 @@ func TestExtractExternalPaths(t *testing.T) {
 	t.Run("PowerShell drive glob collapses to containing directory", func(t *testing.T) {
 		got := extractExternalPathsWithFlavor(`Get-Content C:\Users\Test\Downloads\*`, ws, pathutil.FlavorPowerShell)
 		require.Equal(t, []string{`C:\Users\Test\Downloads`}, got)
+	})
+}
+
+func TestExtractExternalPathsWindowsFlavor(t *testing.T) {
+	ws := filepath.Clean(t.TempDir())
+
+	t.Run("compiler flags with colon are not paths", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`csc /out:C:\out\program.exe /reference:System.Drawing.dll /reference:System.Windows.Forms.dll source.cs`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		for _, p := range got {
+			require.NotContains(t, p, "/out:", "compiler flag /out: should not be extracted")
+			require.NotContains(t, p, "/reference:", "compiler flag /reference: should not be extracted")
+		}
+	})
+
+	t.Run("compiler flags without colon are not paths", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`csc /out /target /reference /optimize src.cs`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.NotContains(t, got, "/out", "single-segment flag /out should not be extracted")
+		require.NotContains(t, got, "/target", "single-segment flag /target should not be extracted")
+		require.NotContains(t, got, "/reference", "single-segment flag /reference should not be extracted")
+		require.NotContains(t, got, "/optimize", "single-segment flag /optimize should not be extracted")
+	})
+
+	t.Run("cmd flags are not paths", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(`cmd /c dir`, ws, pathutil.FlavorPowerShell)
+		require.NotContains(t, got, "/c", "cmd flag /c should not be extracted")
+	})
+
+	t.Run("compiler flags do not hide real paths", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`csc /out:C:\out\program.exe /reference:System.Drawing.dll C:\src\app.cs`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Contains(t, got, `C:\src\app.cs`, "real Windows path should still be detected")
+		for _, p := range got {
+			require.NotContains(t, p, "/out:")
+			require.NotContains(t, p, "/reference:")
+		}
+	})
+
+	t.Run("multi-segment Unix paths are detected", func(t *testing.T) {
+		require.Equal(t, []string{"/etc/passwd"},
+			extractExternalPathsWithFlavor("cat /etc/passwd", ws, pathutil.FlavorPowerShell))
+		require.Equal(t, []string{"/usr/local/bin"},
+			extractExternalPathsWithFlavor("ls /usr/local/bin", ws, pathutil.FlavorPowerShell))
+	})
+
+	t.Run("bare root is detected", func(t *testing.T) {
+		require.Equal(t, []string{"/"},
+			extractExternalPathsWithFlavor("find / -delete", ws, pathutil.FlavorPowerShell))
+		require.Equal(t, []string{"/"},
+			extractExternalPathsWithFlavor("rm -rf /", ws, pathutil.FlavorPowerShell))
+	})
+
+	t.Run("compound: flags and real paths mixed", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`csc /out:$out /target:winexe /reference:System.dll src.cs && ls /etc/passwd`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Contains(t, got, "/etc/passwd", "real multi-segment path should be detected")
+		for _, p := range got {
+			require.False(t, strings.HasPrefix(p, "/out"), "compiler flag should not appear: %s", p)
+			require.False(t, strings.HasPrefix(p, "/target"), "compiler flag should not appear: %s", p)
+			require.False(t, strings.HasPrefix(p, "/reference"), "compiler flag should not appear: %s", p)
+		}
+	})
+
+	t.Run("semicolon-delimited paths are not concatenated", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor("cmd /c set PATH=C:\\bin;C:\\tools", ws, pathutil.FlavorPowerShell)
+		for _, p := range got {
+			require.False(t, strings.Contains(p, ";"), "semicolon-delimited paths should not be concatenated: %s", p)
+		}
 	})
 }
 

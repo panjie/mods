@@ -13,19 +13,13 @@ func (m *Mods) resolveThink(
 	gccfg *google.Config,
 	ccfg *openai.Config,
 ) (bool, error) {
-	cfg := m.Config
-	switch cfg.Think {
-	case ThinkOn:
+	if m.Config.Think {
 		applyThinkConfigs(*mod, gccfg, accfg, ccfg, true)
 		debug.Printf("Think: enabled for %s/%s", mod.API, mod.Name)
 		return true, nil
-	case ThinkOff:
-		applyThinkConfigs(*mod, gccfg, accfg, ccfg, false)
-		return false, nil
-	default:
-		applyThinkConfigs(*mod, gccfg, accfg, ccfg, false)
-		return false, nil
 	}
+	applyThinkConfigs(*mod, gccfg, accfg, ccfg, false)
+	return false, nil
 }
 
 func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config, enabled bool) {

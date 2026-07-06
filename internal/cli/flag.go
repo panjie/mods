@@ -71,31 +71,6 @@ func (f flagParseError) Flag() string {
 	return f.flag
 }
 
-func newThinkFlag(val ThinkMode, p *ThinkMode) *thinkFlag {
-	*p = val
-	return (*thinkFlag)(p)
-}
-
-type thinkFlag ThinkMode
-
-func (r *thinkFlag) Set(s string) error {
-	switch s {
-	case "off", "on":
-		*r = thinkFlag(s)
-		return nil
-	default:
-		return fmt.Errorf("invalid think mode %q, must be off or on", s)
-	}
-}
-
-func (r *thinkFlag) String() string {
-	return string(*r)
-}
-
-func (*thinkFlag) Type() string {
-	return "think"
-}
-
 func newReviewFlag(val ReviewMode, p *ReviewMode) *reviewFlag {
 	*p = val
 	return (*reviewFlag)(p)

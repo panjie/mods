@@ -48,28 +48,6 @@ func TestPromptConfig(t *testing.T) {
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
 }
 
-func TestValidateThinkMode(t *testing.T) {
-	cfg := &Config{}
-	cfg.Think = ""
-	validateThinkMode(cfg)
-	require.Equal(t, ThinkMode(""), cfg.Think) // empty is valid, left alone
-
-	cfg = &Config{}
-	cfg.Think = ThinkOff
-	validateThinkMode(cfg)
-	require.Equal(t, ThinkOff, cfg.Think)
-
-	cfg = &Config{}
-	cfg.Think = ThinkOn
-	validateThinkMode(cfg)
-	require.Equal(t, ThinkOn, cfg.Think)
-
-	cfg = &Config{}
-	cfg.Think = "auto"
-	validateThinkMode(cfg)
-	require.Equal(t, ThinkOff, cfg.Think) // invalid resets to default
-}
-
 func TestValidateReviewMode(t *testing.T) {
 	cfg := &Config{}
 	cfg.ReviewMode = ""

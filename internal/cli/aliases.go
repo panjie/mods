@@ -17,7 +17,6 @@ type (
 	API         = cfgpkg.API
 	Model       = cfgpkg.Model
 	FieldUpdate = cfgpkg.FieldUpdate
-	ThinkMode   = cfgpkg.ThinkMode
 	ReviewMode  = cfgpkg.ReviewMode
 	DB          = session.DB
 	Session     = session.Session
@@ -57,8 +56,6 @@ const (
 	ReviewNever  = cfgpkg.ReviewNever
 	ReviewAuto   = cfgpkg.ReviewAuto
 	ReviewAlways = cfgpkg.ReviewAlways
-	ThinkOff     = cfgpkg.ThinkOff
-	ThinkOn      = cfgpkg.ThinkOn
 
 	ShortIDLength = session.ShortIDLength
 	MinIDLength   = session.MinIDLength

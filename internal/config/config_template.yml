@@ -87,7 +87,7 @@ max-retries: 5
 max-tool-rounds: 30
 
 # {{ index .Help "think" }}
-think: off
+think: false
 
 # {{ index .Help "review-mode" }}
 review-mode: auto

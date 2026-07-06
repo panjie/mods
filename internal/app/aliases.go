@@ -18,7 +18,6 @@ type Config = cfgpkg.Config
 type API = cfgpkg.API
 type Model = cfgpkg.Model
 type ReviewMode = cfgpkg.ReviewMode
-type ThinkMode = cfgpkg.ThinkMode
 type DB = session.DB
 type Session = session.Session
 type Rule = approval.Rule
@@ -71,8 +70,6 @@ const (
 	ReviewNever  = cfgpkg.ReviewNever
 	ReviewAuto   = cfgpkg.ReviewAuto
 	ReviewAlways = cfgpkg.ReviewAlways
-	ThinkOff     = cfgpkg.ThinkOff
-	ThinkOn      = cfgpkg.ThinkOn
 
 	ShortIDLength = session.ShortIDLength
 	MinIDLength   = session.MinIDLength

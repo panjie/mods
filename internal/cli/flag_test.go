@@ -40,11 +40,6 @@ var flagParseErrorTests = []struct {
 		"--max-tokens",
 		"Flag %s have an invalid argument.",
 	},
-	{
-		`invalid argument "nope" for "-t, --think" flag: invalid think mode "nope", must be off or on`,
-		"-t, --think",
-		"Flag %s have an invalid argument.",
-	},
 }
 
 func TestFlagParseError(t *testing.T) {
@@ -56,19 +51,6 @@ func TestFlagParseError(t *testing.T) {
 			require.Equal(t, tf.in, err.Error())
 		})
 	}
-}
-
-func TestThinkFlagRejectsAuto(t *testing.T) {
-	var mode ThinkMode
-	flag := newThinkFlag(ThinkOff, &mode)
-
-	require.NoError(t, flag.Set("on"))
-	require.Equal(t, ThinkOn, mode)
-
-	err := flag.Set("auto")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), `invalid think mode "auto"`)
-	require.Contains(t, err.Error(), "must be off or on")
 }
 
 func TestReviewFlagUsesAutoMode(t *testing.T) {

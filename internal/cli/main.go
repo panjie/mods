@@ -180,8 +180,7 @@ func initFlags() {
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
 	regBool(flags, &config.Debug, "debug", "D", config.Debug)
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
-	f := flags.VarPF(newThinkFlag(config.Think, &config.Think), "think", "t", flagDesc("think"))
-	f.NoOptDefVal = "on"
+	regBool(flags, &config.Think, "think", "t", config.Think)
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
@@ -350,7 +349,7 @@ func execute() {
 		rootCmd.InitDefaultCompletionCmd()
 	}
 
-	rootCmd.SetArgs(normalizeOptionalThinkValueArgs(os.Args[1:]))
+	rootCmd.SetArgs(os.Args[1:])
 
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
@@ -358,40 +357,6 @@ func execute() {
 			_ = db.Close()
 		}
 		os.Exit(1)
-	}
-}
-
-func normalizeOptionalThinkValueArgs(args []string) []string {
-	if len(args) == 0 {
-		return args
-	}
-
-	out := make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			out = append(out, args[i:]...)
-			break
-		}
-		if (arg == "--think" || arg == "-t") && i+1 < len(args) && isThinkValue(args[i+1]) {
-			out = append(out, arg+"="+args[i+1])
-			i++
-			continue
-		}
-		out = append(out, arg)
-	}
-	return out
-}
-
-func isThinkValue(value string) bool {
-	switch value {
-	case "off", "on", "auto":
-		// "auto" is no longer accepted by thinkFlag.Set, but keeping it
-		// here preserves an explicit error for "--think auto" instead of
-		// treating "auto" as prompt text.
-		return true
-	default:
-		return false
 	}
 }
 

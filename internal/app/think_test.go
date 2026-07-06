@@ -10,8 +10,8 @@ import (
 )
 
 func TestResolveThink(t *testing.T) {
-	t.Run("on enables reasoning", func(t *testing.T) {
-		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: ThinkOn}}}
+	t.Run("on enables thinking", func(t *testing.T) {
+		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: true}}}
 		ccfg := openai.Config{}
 
 		active, err := m.resolveThink(&Model{API: "openai"}, nil, nil, &ccfg)
@@ -21,8 +21,8 @@ func TestResolveThink(t *testing.T) {
 		require.Equal(t, openai.ReasoningEffortMedium, ccfg.ReasoningEffort)
 	})
 
-	t.Run("off disables reasoning", func(t *testing.T) {
-		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: ThinkOff}}}
+	t.Run("off disables thinking", func(t *testing.T) {
+		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: false}}}
 		ccfg := openai.Config{}
 
 		active, err := m.resolveThink(&Model{API: "openai"}, nil, nil, &ccfg)

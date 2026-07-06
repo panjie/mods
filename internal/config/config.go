@@ -35,14 +35,6 @@ const (
 	ToolSelectionRules        = prompts.ToolSelection
 )
 
-// ThinkMode controls whether the LLM should use extended thinking.
-type ThinkMode string
-
-const (
-	ThinkOff ThinkMode = "off"
-	ThinkOn  ThinkMode = "on"
-)
-
 // ReviewMode controls whether mods prompts for confirmation before executing tools.
 type ReviewMode string
 
@@ -108,7 +100,7 @@ var Help = map[string]string{
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
-	"think":                  "Enables extended thinking mode: off or on",
+	"think":                  "Enables extended thinking mode",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
@@ -232,7 +224,7 @@ type PersistentConfig struct {
 	Images              []string                   `yaml:"images" env:"IMAGES"`
 	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
 	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
-	Think               ThinkMode                  `yaml:"think" env:"THINK"`
+	Think               bool                       `yaml:"think" env:"THINK"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
@@ -474,7 +466,6 @@ func Ensure() (Config, error) {
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
-	validateThinkMode(&c)
 	validateReviewMode(&c)
 
 	applySessionDirDefault(&c)
@@ -540,16 +531,6 @@ func defaultFormatTextFor(format string) string {
 		return defaultJSONFormatText
 	default:
 		return defaultMarkdownFormatText
-	}
-}
-
-func validateThinkMode(c *Config) {
-	switch c.Think {
-	case "", ThinkOff, ThinkOn:
-		return
-	default:
-		fmt.Fprintf(os.Stderr, "Warning: invalid think mode %q, defaulting to \"off\"\n", c.Think)
-		c.Think = ThinkOff
 	}
 }
 
@@ -650,7 +631,6 @@ func Default() Config {
 				"markdown": defaultMarkdownFormatText,
 				"json":     defaultJSONFormatText,
 			},
-			Think:              ThinkOff,
 			ReviewMode:         ReviewAuto,
 			WordWrap:           80,
 			StatusText:         "Generating",

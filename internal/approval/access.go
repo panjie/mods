@@ -7,9 +7,9 @@ import "github.com/panjie/mods/internal/pathutil"
 type ReviewMode string
 
 const (
-	ReviewNever   ReviewMode = "never"
-	ReviewMutable ReviewMode = "mutable"
-	ReviewAlways  ReviewMode = "always"
+	ReviewNever  ReviewMode = "never"
+	ReviewAuto   ReviewMode = "auto"
+	ReviewAlways ReviewMode = "always"
 )
 
 // AccessClass describes whether a tool invocation reads or writes.
@@ -65,7 +65,7 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 
 // ClassifyAccess applies the directory-centric approval matrix.
 //
-//	default mutable mode:
+//	default auto mode:
 //	  workspace: read=allow, write=ask
 //	  temp dir:  read=allow, write=allow
 //	  external:  read=ask,   write=ask

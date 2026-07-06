@@ -242,12 +242,12 @@ Always allows writes in /path/to/workspace
 - `A` — save a per-session rule for the current workspace so similar calls skip the prompt from now on
 - `Ctrl+C` — cancel the whole run
 
-Pick the mode that fits the task with `-V` / `--review` (or `review-mode` in
+Pick the mode that fits the task with `-V` / `--review-mode` (or `review-mode` in
 `mods.yml`, or the `MODS_REVIEW_MODE` env var):
 
 | Mode       | Behavior                                                          |
 |------------|-------------------------------------------------------------------|
-| `mutable`  | Default. Reviews file writes and shell commands flagged as risky. |
+| `auto`     | Default. Reviews file writes and shell commands flagged as risky. |
 | `always`   | Reviews **every** tool call, including reads and searches.        |
 | `never`    | Disables review entirely. Use only for trusted, automated runs.   |
 
@@ -255,7 +255,7 @@ Want a heads-up before any tool fires at all? `--plan` makes Mods draft a
 step-by-step plan for your approval first, then executes once you accept.
 
 ```sh
-mods --review always "rename the fn to calculateTotal across the repo"
+mods --review-mode always "rename the fn to calculateTotal across the repo"
 mods --plan "refactor the examples to cover more features"
 ```
 

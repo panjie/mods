@@ -47,9 +47,9 @@ const (
 type ReviewMode string
 
 const (
-	ReviewNever   ReviewMode = "never"
-	ReviewMutable ReviewMode = "mutable"
-	ReviewAlways  ReviewMode = "always"
+	ReviewNever  ReviewMode = "never"
+	ReviewAuto   ReviewMode = "auto"
+	ReviewAlways ReviewMode = "always"
 )
 
 var Help = map[string]string{
@@ -111,7 +111,7 @@ var Help = map[string]string{
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
 	"reasoning":              "Enables deep reasoning mode: off or on",
-	"review":                 "Review tool execution before running: never, mutable (default), or always",
+	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
@@ -478,6 +478,9 @@ func Ensure() (Config, error) {
 	if err := validateReasoningMode(c.Reasoning); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not use reasoning setting."}
 	}
+	if err := validateReviewMode(c.ReviewMode); err != nil {
+		return fallback, modsError{Err: err, ReasonText: "Could not use review-mode setting."}
+	}
 
 	applySessionDirDefault(&c)
 
@@ -554,6 +557,15 @@ func validateReasoningMode(mode ReasoningMode) error {
 		return nil
 	default:
 		return fmt.Errorf("invalid reasoning mode %q, must be off or on", mode)
+	}
+}
+
+func validateReviewMode(mode ReviewMode) error {
+	switch mode {
+	case "", ReviewAuto, ReviewAlways, ReviewNever:
+		return nil
+	default:
+		return fmt.Errorf("invalid review mode %q, must be auto, always, or never", mode)
 	}
 }
 
@@ -646,7 +658,7 @@ func Default() Config {
 				"json":     defaultJSONFormatText,
 			},
 			Reasoning:          ReasoningOff,
-			ReviewMode:         ReviewMutable,
+			ReviewMode:         ReviewAuto,
 			WordWrap:           80,
 			StatusText:         "Generating",
 			MCPTimeout:         15 * time.Second,

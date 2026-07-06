@@ -44,7 +44,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentWeb := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), regFs, nil)
 	require.Equal(t, AccessRead, intentWeb.Class)
 	require.Empty(t, intentWeb.Dirs)
-	require.Equal(t, DecisionAllow, ClassifyAccess(intentWeb, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewMutable)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intentWeb, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// registered tools without extractor and without read-only capability
 	// still fail closed to writes.
@@ -55,7 +55,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentCustom := buildAccessIntent("custom_tool", []byte(`{}`), regFs, nil)
 	require.Equal(t, AccessWrite, intentCustom.Class)
 	require.Empty(t, intentCustom.Dirs)
-	require.Equal(t, DecisionAsk, ClassifyAccess(intentCustom, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewMutable)))
+	require.Equal(t, DecisionAsk, ClassifyAccess(intentCustom, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// unknown tool -> write fallback (fail-closed).
 	intentUnk := buildAccessIntent("mcp_x", []byte(`{}`), regFs, nil)

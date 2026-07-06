@@ -129,6 +129,34 @@ func TestReasoningShortFlagUsesLowercaseR(t *testing.T) {
 	})
 }
 
+func TestReviewModeFlagUsesClearNameAndRejectsOldName(t *testing.T) {
+	flag := rootCmd.Flags().Lookup("review-mode")
+	require.NotNil(t, flag)
+	require.Equal(t, "V", flag.Shorthand)
+
+	require.Nil(t, rootCmd.Flags().Lookup("review"))
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--review-mode", "auto"}))
+		require.Equal(t, ReviewAuto, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--review-mode", "always"}))
+		require.Equal(t, ReviewAlways, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-V", "never"}))
+		require.Equal(t, ReviewNever, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.Error(t, rootCmd.Flags().Parse([]string{"--review", "auto"}))
+		require.Error(t, rootCmd.Flags().Parse([]string{"--review", "mutable"}))
+	})
+}
+
 func TestClipboardImageShortFlag(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		flag := rootCmd.Flags().Lookup("clipboard-image")
@@ -323,7 +351,9 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	require.True(t, groupHasFlag(groups, flagCategoryMCP, "list-mcps"))
 	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
 	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
+	require.True(t, groupHasFlag(groups, flagCategoryToolsReview, "review-mode"))
 	require.False(t, groupHasFlag(groups, flagCategoryInputOutput, "hide-tool-results"))
+	require.False(t, groupHasFlag(groups, flagCategoryToolsReview, "review"))
 
 	for category, flags := range groups {
 		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))

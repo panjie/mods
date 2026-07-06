@@ -105,11 +105,11 @@ type reviewFlag ReviewMode
 
 func (r *reviewFlag) Set(s string) error {
 	switch s {
-	case "never", "mutable", "always":
+	case "never", "auto", "always":
 		*r = reviewFlag(s)
 		return nil
 	default:
-		return fmt.Errorf("invalid review mode %q, must be never, mutable, or always", s)
+		return fmt.Errorf("invalid review mode %q, must be auto, always, or never", s)
 	}
 }
 
@@ -118,7 +118,7 @@ func (r *reviewFlag) String() string {
 }
 
 func (*reviewFlag) Type() string {
-	return "review"
+	return "review-mode"
 }
 
 func newThemeFlag(val string, p *string) *themeFlag {

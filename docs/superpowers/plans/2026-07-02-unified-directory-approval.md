@@ -14,7 +14,7 @@
 
 - 配置先验：CLI flags > mods.yml > MODS_ env > defaults（勿破坏）。
 - 平台：Windows/macOS/Linux 都须过；路径比较用现有 `cleanDir`/`dirWithinPaths`/`ensureInsideRoot` 助手，勿自造。
-- ReviewMode 三值：`ReviewNever`/`ReviewMutable`(默认)/`ReviewAlways`（定义于 `internal/config`，`internal/app/aliases.go` 别名导出）。
+- ReviewMode 三值：`ReviewNever`/`ReviewAuto`(默认)/`ReviewAlways`（定义于 `internal/config`，`internal/app/aliases.go` 别名导出）。
 - 不引入 `.env` 读保护；不改 MCP 工具审批（默认 Write+未知 Dirs fail-closed）。
 - TDD：每个任务先写失败测试再实现；每任务结束 `go build ./...` + 相关包 `go test`。
 - Lint：`.golangci.yml` v2（govet/ineffassign + gofmt/goimports），`golangci-lint run ./...`。
@@ -92,7 +92,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			require.Equal(t, c.want, ClassifyAccess(c.intent, ws, safeDirs, ReviewMutable))
+			require.Equal(t, c.want, ClassifyAccess(c.intent, ws, safeDirs, ReviewAuto))
 		})
 	}
 }
@@ -105,7 +105,7 @@ func TestClassifyAccessModeOverride(t *testing.T) {
 }
 ```
 
-> 注：`ReviewNever`/`ReviewMutable` 须在 `approval` 包可见。当前它们定义在 `internal/config`。在 Task 1 同时于 `internal/approval` 增加本地 `ReviewMode` 类型与常量（与 config 解耦），见 Step 3。
+> 注：`ReviewNever`/`ReviewAuto` 须在 `approval` 包可见。当前它们定义在 `internal/config`。在 Task 1 同时于 `internal/approval` 增加本地 `ReviewMode` 类型与常量（与 config 解耦），见 Step 3。
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -129,7 +129,7 @@ type ReviewMode string
 
 const (
 	ReviewNever   ReviewMode = "never"
-	ReviewMutable ReviewMode = "mutable"
+	ReviewAuto    ReviewMode = "auto"
 	ReviewAlways  ReviewMode = "always"
 )
 

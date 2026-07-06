@@ -187,7 +187,7 @@ func initFlags() {
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
 	f := flags.VarPF(newReasoningFlag(config.Reasoning, &config.Reasoning), "reasoning", "r", flagDesc("reasoning"))
 	f.NoOptDefVal = "on"
-	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review", "V", flagDesc("review"))
+	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")
@@ -249,7 +249,7 @@ func initFlags() {
 	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "theme", "help", "help-all", "version", flagListPrompts)
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search", "web-search-provider", "web-search-api-key", "web-search-api-key-env")
-	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review", "max-tool-rounds")
+	markCategory(flags, flagCategoryToolsReview, "plan", "reasoning", "review-mode", "max-tool-rounds")
 	markCategory(flags, flagCategoryMCP, "list-mcps", "list-tools", "enable-mcp", "disable-mcp")
 	markCategory(
 		flags,

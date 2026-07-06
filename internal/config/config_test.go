@@ -58,6 +58,17 @@ func TestValidateReasoningMode(t *testing.T) {
 	require.Contains(t, err.Error(), "must be off or on")
 }
 
+func TestValidateReviewMode(t *testing.T) {
+	require.NoError(t, validateReviewMode(""))
+	require.NoError(t, validateReviewMode(ReviewAuto))
+	require.NoError(t, validateReviewMode(ReviewAlways))
+	require.NoError(t, validateReviewMode(ReviewNever))
+
+	err := validateReviewMode("mutable")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be auto, always, or never")
+}
+
 func TestDefaultPromptText(t *testing.T) {
 	cfg := defaultConfig()
 
@@ -297,6 +308,22 @@ func TestEnsureReportsSettingsExistedTrueWhenFileAlreadyExists(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, second.SettingsExisted)
 	require.Equal(t, first.SettingsPath, second.SettingsPath)
+}
+
+func TestEnsureRejectsLegacyReviewMode(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	path := filepath.Join(configHome, "mods", "mods.yml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("review-mode: mutable\n"), 0o600))
+
+	_, err := Ensure()
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `invalid review mode "mutable"`)
+	require.Contains(t, err.Error(), "must be auto, always, or never")
 }
 
 // TestEnsureReturnsCompleteConfigOnError pins the invariant that every

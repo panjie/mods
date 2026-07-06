@@ -351,7 +351,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if !IsInputTTY() {
 		debug.Printf("Review denied: stdin is not a TTY (tool=%s)", name)
 		return fmt.Errorf(
-			"%w: %s requires approval, but stdin is not a TTY; run interactively or use --review never if non-interactive execution is intentional",
+			"%w: %s requires approval, but stdin is not a TTY; run interactively or use --review-mode never if non-interactive execution is intentional",
 			errReviewUnavailable,
 			name,
 		)

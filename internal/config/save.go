@@ -27,7 +27,7 @@ type FieldUpdate struct {
 //	SaveFields(path, map[string]any{
 //	    "default-api":               "deepseek",
 //	    "default-model":             "deepseek-v4-flash",
-//	    "review-mode":               "mutable",
+//	    "review-mode":               "auto",
 //	    "builtin-tools.filesystem":  "auto",
 //	    "builtin-tools.shell":       false,
 //	    "apis.openai.api-key-env":   "OPENAI_API_KEY",

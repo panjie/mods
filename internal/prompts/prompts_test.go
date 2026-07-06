@@ -90,7 +90,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"web-search-api-key-env",
 		"plan",
 		"reasoning",
-		"review",
+		"review-mode",
 		"max-tool-rounds",
 		"list-mcps",
 		"list-tools",

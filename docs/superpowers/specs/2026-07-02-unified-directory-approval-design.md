@@ -15,7 +15,7 @@ mods 当前对"工具访问文件系统"存在两套粒度不一致的机制：
 
 ## 2. 目标矩阵
 
-默认 `ReviewMode = mutable` 下：
+默认 `ReviewMode = auto` 下：
 
 | Class ＼ 位置 | workspace 内 | temp dir (safeDir) | 外部 |
 |---|---|---|---|
@@ -23,7 +23,7 @@ mods 当前对"工具访问文件系统"存在两套粒度不一致的机制：
 | **写** | **Ask** | Allow | **Ask** |
 
 - `ReviewNever`：全局 Allow（覆盖矩阵）。
-- `ReviewAlways`：强制走审批（覆盖矩阵；仍只对 mutable 工具生效，非 mutable 内部工具不被拖入）。
+- `ReviewAlways`：强制走审批（覆盖矩阵；仍只对会改变状态的工具生效，内部只读工具不被拖入）。
 - temp dir（`os.TempDir()`）保留为免审安全区，矩阵 Allow 格。
 
 ## 3. 关键决策（已确认）
@@ -68,7 +68,7 @@ type AccessIntent struct {
  ├─③ decision = ClassifyAccess(intent, scope, safeDirs, mode)
  ├─ Allow → registry.Call(ctx, data)
  └─ Ask:
-      if savedDirAllow命中(intent.Dirs) || (mode==Always && !mutable) → Call(ctx)
+      if savedDirAllow命中(intent.Dirs) || (mode==Always && !mutatingTool) → Call(ctx)
       else if !IsInputTTY() → error (fail)
       else → review:
             once  → Call(ctx)            // ctx 已授权本次
@@ -140,7 +140,7 @@ if !isObviouslyMutable(command) {
     }
     // 有外部迹象 → 落入 LLM 分类器拿准确 affected_dirs
 }
-// LLM 分类器(mutable 命令 + 外部只读命令)
+// LLM 分类器(会改变状态的命令 + 外部只读命令)
 ```
 
 `mentionsExternalPath`：本地正则匹配 workspace 外绝对路径迹象（`~/`、`/etc`、`C:\Users` 等不在 scope.Value 之下）。**宽进严出**：怀疑即升级 LLM 确认；成本由现有 `shellClassifyCache`（LRU 256）兜底。

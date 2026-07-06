@@ -94,7 +94,7 @@ func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) 
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "groq",
 		modelName:              "llama-3.3-70b-versatile",
-		reviewMode:             "mutable",
+		reviewMode:             "auto",
 		fsMode:                 "auto",
 		webSearchProvider:      "duckduckgo",
 		webSearchProviderValue: "duckduckgo",
@@ -133,7 +133,7 @@ func TestBuildConfigWizardUpdatesWritesAPITypeForAnthropic(t *testing.T) {
 		apiName:         "acme-claude",
 		apiType:         "anthropic",
 		modelName:       "claude-sonnet-4",
-		reviewMode:      "mutable",
+		reviewMode:      "auto",
 		fsMode:          "auto",
 		keyStorage:      "env",
 		envVarName:      "ACME_CLAUDE_API_KEY",
@@ -155,7 +155,7 @@ func TestBuildConfigWizardUpdatesOmitsAPITypeForOpenAI(t *testing.T) {
 		apiName:         "groq",
 		apiType:         "openai",
 		modelName:       "llama",
-		reviewMode:      "mutable",
+		reviewMode:      "auto",
 		fsMode:          "auto",
 		keyStorage:      "env",
 		envVarName:      "GROQ_API_KEY",
@@ -168,7 +168,7 @@ func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testin
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "openrouter",
 		modelName:              "vendor/gpt-5.5:latest",
-		reviewMode:             "mutable",
+		reviewMode:             "auto",
 		fsMode:                 "auto",
 		webSearchProvider:      "duckduckgo",
 		webSearchProviderValue: "duckduckgo",
@@ -222,7 +222,7 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 			fsMode:              "auto",
 			webSearchProvider:   "duckduckgo",
 			webSearchKeyStorage: "env",
-			reviewMode:          "mutable",
+			reviewMode:          "auto",
 			settingsPath:        "/tmp/mods.yml",
 		})
 	})
@@ -245,7 +245,7 @@ func TestPrintConfigSummaryShowsAPITypeForAnthropic(t *testing.T) {
 			envVarName:   "ACME_CLAUDE_API_KEY",
 			baseURL:      "https://acme.example.com/v1",
 			fsMode:       "auto",
-			reviewMode:   "mutable",
+			reviewMode:   "auto",
 			settingsPath: "/tmp/mods.yml",
 		})
 	})

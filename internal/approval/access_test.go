@@ -36,7 +36,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			require.Equal(t, c.want, ClassifyAccess(c.intent, ws, safeDirs, ReviewMutable))
+			require.Equal(t, c.want, ClassifyAccess(c.intent, ws, safeDirs, ReviewAuto))
 		})
 	}
 }

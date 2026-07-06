@@ -19,7 +19,7 @@ var examples = map[string]string{
 	"Continue a session":               `mods --continue project-summary "Turn that summary into release notes"`,
 	"Show recent sessions":             `mods --list-sessions`,
 	"Use a custom role":                `mods --role shell "list the largest files in the current directory"`,
-	"Review file edits":                `mods --review mutable --workspace . "Read README.md and write docs/cli-notes.md with a short usage guide"`,
+	"Review file edits":                `mods --review-mode auto --workspace . "Read README.md and write docs/cli-notes.md with a short usage guide"`,
 	"Plan before acting":               `mods --plan --workspace . "Refactor the CLI examples to cover more features"`,
 	"Inspect MCP servers":              `mods --list-mcps`,
 	"Inspect tools":                    `mods --list-tools`,

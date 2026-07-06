@@ -281,7 +281,7 @@ func TestSessionOutputFlushesForNonTTY(t *testing.T) {
 // output, it's shown above the prompt as context.
 func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 	pendingReviewer := &toolReviewer{
-		reviewMode:    ReviewMutable,
+		reviewMode:    ReviewAuto,
 		reviewPending: true,
 		reviewItem: &toolReviewItem{
 			name: "shell_run",

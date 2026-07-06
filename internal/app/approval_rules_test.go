@@ -478,20 +478,20 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.False(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
 	})
 
-	t.Run("mutable denies write without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto denies write without interactive approval", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "fs_write_file"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable allows read-only filesystem tool", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto allows read-only filesystem tool", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.False(t, reviewer.shouldReviewTool(registry, "fs_read_file"))
 	})
 
-	t.Run("mutable allows read-only tool without directory intent", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto allows read-only tool without directory intent", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.False(t, reviewer.shouldReviewTool(registry, "web_search"))
 		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
 		require.Equal(t, AccessRead, intent.Class)
@@ -499,8 +499,8 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("mutable requires review for shell command when classifier unavailable", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto requires review for shell command when classifier unavailable", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		command := "echo ok"
 		if runtime.GOOS == "windows" {
@@ -510,50 +510,50 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("mutable requires approval for read-only shell parent traversal in non-TTY", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto requires approval for read-only shell parent traversal in non-TTY", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat ../sibling/file"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable requires approval for read-only shell tilde path in non-TTY", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto requires approval for read-only shell tilde path in non-TTY", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"cat ~/Downloads/file"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable denies compound shell after read-only prefix", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto denies compound shell after read-only prefix", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "shell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable requires approval for read-only powershell touching external path in non-TTY", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto requires approval for read-only powershell touching external path in non-TTY", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable denies nested powershell", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto denies nested powershell", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable requires approval for read-only powershell pipeline touching external path in non-TTY", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto requires approval for read-only powershell pipeline touching external path in non-TTY", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("mutable denies mutating powershell command without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: scope}
+	t.Run("auto denies mutating powershell command without interactive approval", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		require.True(t, reviewer.shouldReviewTool(registry, "powershell_run"))
 		err := reviewer.requestApproval(testReviewerDeps(mods), "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
@@ -616,7 +616,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	registry := testReviewRegistry(t)
 	workspaceScope := testShellWorkspaceScope(t)
 
-	t.Run("mutable skips review when LLM says no review", func(t *testing.T) {
+	t.Run("auto skips review when LLM says no review", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
 			Config:              testConfigForWorkspace(workspaceScope.Value),
@@ -625,7 +625,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 				return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
 			},
 		}
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: workspaceScope}
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: workspaceScope}
 		err := reviewer.requestApproval(testReviewerDeps(mods), "shell_run", []byte(`{"command":"ls"}`))
 		require.NoError(t, err)
 	})
@@ -645,7 +645,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			},
 		}
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -678,7 +678,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			Reason: "installs nodejs via scoop",
 		}
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -717,7 +717,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			},
 		}
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -752,7 +752,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			},
 		}
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -787,7 +787,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			},
 		}
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -883,7 +883,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			},
 		}
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -914,7 +914,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		downloads := filepath.Join(home, "Downloads")
 		target := filepath.Join(downloads, "Codex.dmg")
 		reviewer := &toolReviewer{
-			reviewMode: ReviewMutable,
+			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
@@ -947,7 +947,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.NotEmpty(t, home)
 
 		downloads := filepath.Join(home, "Downloads")
-		reviewer := &toolReviewer{reviewMode: ReviewMutable, scope: testApprovalScope}
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{
 			Type:  approvalDirAllow,
 			Paths: []string{downloads},
@@ -1318,7 +1318,7 @@ func TestToolReviewerSnapshotChanRaceFree(t *testing.T) {
 // out with errReviewUnavailable when no review session is active, instead of
 // panicking on a nil channel send.
 func TestRequestApprovalAfterResetIsUnavailable(t *testing.T) {
-	r := &toolReviewer{reviewMode: ReviewMutable}
+	r := &toolReviewer{reviewMode: ReviewAuto}
 	_ = r.startSession()
 	r.reset()
 

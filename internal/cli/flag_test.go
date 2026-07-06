@@ -75,3 +75,21 @@ func TestReasoningFlagRejectsAuto(t *testing.T) {
 	require.Contains(t, err.Error(), `invalid reasoning mode "auto"`)
 	require.Contains(t, err.Error(), "must be off or on")
 }
+
+func TestReviewFlagUsesAutoMode(t *testing.T) {
+	var mode ReviewMode
+	flag := newReviewFlag(ReviewAuto, &mode)
+
+	require.Equal(t, "review-mode", flag.Type())
+	require.NoError(t, flag.Set("auto"))
+	require.Equal(t, ReviewAuto, mode)
+	require.NoError(t, flag.Set("always"))
+	require.Equal(t, ReviewAlways, mode)
+	require.NoError(t, flag.Set("never"))
+	require.Equal(t, ReviewNever, mode)
+
+	err := flag.Set("mutable")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `invalid review mode "mutable"`)
+	require.Contains(t, err.Error(), "must be auto, always, or never")
+}

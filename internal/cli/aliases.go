@@ -54,11 +54,11 @@ var (
 )
 
 const (
-	ReviewNever   = cfgpkg.ReviewNever
-	ReviewMutable = cfgpkg.ReviewMutable
-	ReviewAlways  = cfgpkg.ReviewAlways
-	ReasoningOff  = cfgpkg.ReasoningOff
-	ReasoningOn   = cfgpkg.ReasoningOn
+	ReviewNever  = cfgpkg.ReviewNever
+	ReviewAuto   = cfgpkg.ReviewAuto
+	ReviewAlways = cfgpkg.ReviewAlways
+	ReasoningOff = cfgpkg.ReasoningOff
+	ReasoningOn  = cfgpkg.ReasoningOn
 
 	ShortIDLength = session.ShortIDLength
 	MinIDLength   = session.MinIDLength

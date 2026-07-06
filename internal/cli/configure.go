@@ -58,7 +58,7 @@ func RunConfigWizard() error {
 	}
 	reviewMode := string(config.ReviewMode)
 	if reviewMode == "" {
-		reviewMode = "mutable"
+		reviewMode = "auto"
 	}
 
 	// Default storage: "env" (recommended), unless a key is already saved.
@@ -349,7 +349,7 @@ func RunConfigWizard() error {
 				Title("Tool review").
 				Description("Choose how often mods asks before running tools.").
 				Options(
-					huh.NewOption("Mutable — review risky actions (default)", "mutable"),
+					huh.NewOption("Auto — review risky actions (default)", "auto"),
 					huh.NewOption("Always — review every tool call", "always"),
 					huh.NewOption("Never — no review (automation only)", "never"),
 				).

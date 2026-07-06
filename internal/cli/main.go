@@ -139,8 +139,8 @@ func initFlags() {
 	regBool(flags, &config.AskModel, "ask-model", "M", config.AskModel)
 	regStr(flags, &config.API, "api", "a", config.API)
 	regStr(flags, &config.HTTPProxy, "http-proxy", "x", config.HTTPProxy)
-	regBool(flags, &config.Format, "format", "f", config.Format)
-	regStr(flags, &config.FormatAs, "format-as", "", config.FormatAs)
+	fF := flags.VarPF(newFormatFlag(config.Format, &config.Format), "format", "f", flagDesc("format"))
+	fF.NoOptDefVal = "markdown"
 	regBool(flags, &config.Minimal, "minimal", "", config.Minimal)
 	regBool(flags, &config.Raw, "raw", "", config.Raw)
 	regStr(flags, &config.Continue, "continue", "C", "")
@@ -204,7 +204,6 @@ func initFlags() {
 		"debug",
 		"stdin-image",
 		"clipboard-image",
-		"format-as",
 		"no-save",
 		"no-instructions",
 	)
@@ -223,7 +222,6 @@ func initFlags() {
 		flags,
 		flagCategoryInputOutput,
 		"format",
-		"format-as",
 		"minimal",
 		"raw",
 		"quiet",
@@ -262,7 +260,7 @@ func initFlags() {
 	})
 
 	// Default-value normalization (WordWrap, MCPTimeout, FormatText,
-	// FormatAs, WebSearchAPIKeyEnv, WebSearchAPIKey) is performed once in
+	// Format, WebSearchAPIKeyEnv, WebSearchAPIKey) is performed once in
 	// Config.applyDefaults via Ensure(). The CLI flag defaults are
 	// registered from the already-normalized config below, so they
 	// inherit those canonical values without re-deriving them here.
@@ -314,7 +312,7 @@ func execute() {
 
 	debug.Printf("Config loaded from: %s", config.SettingsPath)
 	debug.Printf("API: %s, Model: %s", config.API, config.Model)
-	debug.Printf("Role: %s, Format: %v, Format-as: %s, Raw: %v, Quiet: %v", config.Role, config.Format, config.FormatAs, config.Raw, config.Quiet)
+	debug.Printf("Role: %s, Format: %s, Raw: %v, Quiet: %v", config.Role, config.Format, config.Raw, config.Quiet)
 	debug.Printf("Session dir: %s", config.SessionDir)
 	if config.PortableDir != "" {
 		debug.Printf("Portable mode: %s", config.PortableDir)

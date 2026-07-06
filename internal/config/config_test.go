@@ -383,7 +383,7 @@ func TestEnsureReturnsCompleteConfigOnError(t *testing.T) {
 	require.Equal(t, Default().ReviewMode, cfg.ReviewMode,
 		"non-failure fields must keep their Default() value")
 	require.Equal(t, Default().WordWrap, cfg.WordWrap)
-	require.Equal(t, Default().FormatAs, cfg.FormatAs)
+	require.Equal(t, Default().Format, cfg.Format)
 	require.Equal(t, Default().MCPTimeout, cfg.MCPTimeout)
 }
 func TestCreateConfigFileRefusesToOverwrite(t *testing.T) {

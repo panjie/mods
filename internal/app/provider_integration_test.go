@@ -61,7 +61,7 @@ func testIntegrationModsWithBaseURL(t *testing.T, api, model, baseURL string) *M
 				Model:      model,
 				API:        api,
 				APIs:       apis,
-				FormatAs:   "markdown",
+				Format:     "markdown",
 				MCPTimeout: 30 * time.Second,
 				MaxRetries: 1,
 				StatusText: "Generating",

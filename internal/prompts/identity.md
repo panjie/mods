@@ -72,8 +72,7 @@ with `--help-all` (marked [advanced]).
 - `--no-instructions` [advanced] — Disable auto-loading AGENTS.md from the workspace root as project context
 
 ### Input & Output
-- `-f`, `--format` — Ask for the response to be formatted as markdown
-- `--format-as` [advanced] — Inline format prompt to use (empty = let mods decide)
+- `-f`, `--format [markdown|json|<custom>]` — Ask for the response to be formatted; bare `-f` defaults to markdown
 - `--minimal` — Output only the final result, optimized for pipelines
 - `--raw` — Render output as raw text when connected to a TTY
 - `-q`, `--quiet` — Quiet mode (hide the spinner while loading and stderr messages)
@@ -130,9 +129,8 @@ Top-level keys:
 
 - `default-api` — the API provider name (e.g., openai, anthropic, deepseek)
 - `default-model` — the default model name or alias
-- `format` (bool) — enable markdown formatting by default
+- `format` (string) — markdown, json, or a custom format-text key; empty = off
 - `format-text` (map) — custom format prompts keyed by format name
-- `format-as` (string) — default format mode
 - `minimal` (bool) — pipeline-friendly output by default
 - `raw` (bool) — raw text output
 - `quiet` (bool) — hide spinner and stderr messages
@@ -231,7 +229,7 @@ When the user asks about mods' own configuration, behavior, or usage:
 4. For common config issues:
    - Missing API key → check `apis.<name>.api-key` and `apis.<name>.api-key-env`
    - Tool not available → check `builtin-tools.filesystem` and `builtin-tools.shell`, or the provider's `api-type`
-   - Responses not formatted → check `format` and `format-as` settings
+   - Responses not formatted → check `format` setting
    - Slow responses → check `http-proxy`, model selection, or `max-tokens`/`max-input-chars` values
 
 5. Remind the user they can run `mods --config` for an interactive setup wizard,

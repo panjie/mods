@@ -41,6 +41,7 @@ const (
 	FilesystemNever           = cfgpkg.FilesystemNever
 	minimalSystemPrompt       = cfgpkg.MinimalSystemPrompt
 	defaultMarkdownFormatText = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
+	defaultJSONFormatText     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
 )
 
 type approvalRuleSet = approval.RuleSet
@@ -48,5 +49,6 @@ type ApprovalRule = approval.Rule
 type PersistentConfig = cfgpkg.PersistentConfig
 type PromptConfig = cfgpkg.PromptConfig
 type APIs = cfgpkg.APIs
+type FormatText = cfgpkg.FormatText
 
 var testDB = testutil.OpenTestDB

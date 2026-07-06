@@ -81,11 +81,17 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			})
 		}
 	}
-	if txt := cfg.FormatText[cfg.FormatAs]; cfg.Format && !cfg.Minimal && txt != "" {
-		m.messages = append(m.messages, proto.Message{
-			Role:    proto.RoleSystem,
-			Content: txt,
-		})
+	if cfg.Format != "" && !cfg.Minimal {
+		txt := cfg.FormatText[cfg.Format]
+		if txt == "" {
+			txt = fallbackFormatText(cfg.Format)
+		}
+		if txt != "" {
+			m.messages = append(m.messages, proto.Message{
+				Role:    proto.RoleSystem,
+				Content: txt,
+			})
+		}
 	}
 
 	if cfg.Role != "" {
@@ -335,4 +341,15 @@ func messageSize(msg proto.Message) int {
 		size += len(call.ID) + len(call.Function.Name) + len(call.Function.Arguments)
 	}
 	return size
+}
+
+func fallbackFormatText(format string) string {
+	switch format {
+	case "json":
+		return prompts.JSONFormat
+	case "markdown":
+		return prompts.MarkdownFormat
+	default:
+		return prompts.MarkdownFormat
+	}
 }

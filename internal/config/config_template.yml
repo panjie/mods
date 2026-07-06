@@ -11,10 +11,7 @@ format-text:
   json: '{{ index .Config.FormatText "json" }}'
 
 # {{ index .Help "format" }}
-format: false
-
-# {{ index .Help "format-as" }}
-# format-as: ""  # empty = let mods decide based on format-text keys
+# format: markdown  # markdown, json, or a custom format-text key; empty = off
 
 # {{ index .Help "minimal" }}
 minimal: false

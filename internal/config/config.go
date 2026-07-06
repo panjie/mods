@@ -60,8 +60,7 @@ var Help = map[string]string{
 	"model":                  "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
 	"ask-model":              "Ask which model to use via interactive prompt",
 	"max-input-chars":        "Default character limit on input to model",
-	"format":                 "Ask for the response to be formatted as markdown unless otherwise set",
-	"format-as":              "Inline format prompt to use (empty = let mods decide based on format-text keys)",
+	"format":                 "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
 	"format-text":            "Text to append when using the -f flag",
 	"minimal":                "Output only the final result, optimized for pipelines",
 	"role":                   "System role to use",
@@ -203,9 +202,8 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 type PersistentConfig struct {
 	API                 string     `yaml:"default-api" env:"API"`
 	Model               string     `yaml:"default-model" env:"MODEL"`
-	Format              bool       `yaml:"format" env:"FORMAT"`
+	Format              string     `yaml:"format" env:"FORMAT"`
 	FormatText          FormatText `yaml:"format-text"`
-	FormatAs            string     `yaml:"format-as" env:"FORMAT_AS"`
 	Minimal             bool       `yaml:"minimal" env:"MINIMAL"`
 	Raw                 bool       `yaml:"raw" env:"RAW"`
 	Quiet               bool       `yaml:"quiet" env:"QUIET"`
@@ -522,11 +520,8 @@ func (c *Config) applyDefaults() {
 			"json":     defaultJSONFormatText,
 		}
 	}
-	if c.Format && c.FormatAs == "" {
-		c.FormatAs = "markdown"
-	}
-	if c.Format && c.FormatAs != "" && c.FormatText[c.FormatAs] == "" {
-		c.FormatText[c.FormatAs] = defaultFormatTextFor(c.FormatAs)
+	if c.Format != "" && c.FormatText[c.Format] == "" {
+		c.FormatText[c.Format] = defaultFormatTextFor(c.Format)
 	}
 	if c.WebSearchAPIKeyEnv == "" {
 		c.WebSearchAPIKeyEnv = DefaultWebSearchAPIKeyEnv
@@ -537,10 +532,10 @@ func (c *Config) applyDefaults() {
 }
 
 // defaultFormatTextFor returns the canonical FormatText body for the
-// given format-as key. Unknown keys fall back to the markdown body so
+// given format key. Unknown keys fall back to the markdown body so
 // downstream format-text lookups never silently produce empty output.
-func defaultFormatTextFor(formatAs string) string {
-	switch formatAs {
+func defaultFormatTextFor(format string) string {
+	switch format {
 	case "json":
 		return defaultJSONFormatText
 	default:
@@ -651,7 +646,6 @@ func createConfigFile(path string) error {
 func Default() Config {
 	return Config{
 		PersistentConfig: PersistentConfig{
-			FormatAs: "markdown",
 			FormatText: FormatText{
 				"markdown": defaultMarkdownFormatText,
 				"json":     defaultJSONFormatText,

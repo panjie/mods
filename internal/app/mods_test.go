@@ -421,7 +421,7 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 	})
 
 	t.Run("minimal suppresses format prompt", func(t *testing.T) {
-		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true, Format: true}})
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true, Format: "markdown"}})
 		require.NoError(t, m.setupStreamContext("hello", model))
 		systemMessages := systemContents(m.messages)
 		require.Contains(t, systemMessages, minimalSystemPrompt)
@@ -443,6 +443,57 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 		require.NotEqual(t, -1, roleIndex)
 		require.NotEqual(t, -1, minimalIndex)
 		require.Less(t, roleIndex, minimalIndex)
+	})
+}
+
+func TestSetupStreamContextFormatFallback(t *testing.T) {
+	newTestMods := func(cfg Config) *Mods {
+		if cfg.Roles == nil {
+			cfg.Roles = map[string][]string{}
+		}
+		if cfg.FormatText == nil {
+			cfg.FormatText = defaultConfig().FormatText
+		}
+		return &Mods{
+			Config: &cfg,
+			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			ctx:    context.Background(),
+		}
+	}
+	model := Model{MaxChars: 1000}
+
+	t.Run("defined format injects its format-text", func(t *testing.T) {
+		cfg := Config{PersistentConfig: PersistentConfig{Format: "csv"}}
+		cfg.FormatText = FormatText{"csv": "Return CSV only."}
+		m := newTestMods(cfg)
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, systemContents(m.messages), "Return CSV only.")
+	})
+
+	t.Run("undefined format falls back to markdown text", func(t *testing.T) {
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Format: "xml"}})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, systemContents(m.messages), defaultMarkdownFormatText)
+	})
+
+	t.Run("json format injects json text from format-text", func(t *testing.T) {
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{Format: "json"}})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, systemContents(m.messages), defaultJSONFormatText)
+	})
+
+	t.Run("json format falls back when format-text has no json entry", func(t *testing.T) {
+		cfg := Config{PersistentConfig: PersistentConfig{Format: "json"}}
+		cfg.FormatText = FormatText{}
+		m := newTestMods(cfg)
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.Contains(t, systemContents(m.messages), defaultJSONFormatText)
+	})
+
+	t.Run("empty format injects nothing", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NotContains(t, systemContents(m.messages), defaultMarkdownFormatText)
 	})
 }
 
@@ -525,7 +576,7 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 	cfg := Config{}
 	cfg.Roles = map[string][]string{}
 	cfg.FormatText = defaultConfig().FormatText
-	cfg.FormatAs = "markdown"
+	cfg.Format = "markdown"
 	m := &Mods{
 		Config: &cfg,
 		Styles: makeStyles(lipgloss.NewRenderer(nil)),
@@ -548,7 +599,7 @@ func TestSetupPlanContextPromptOverride(t *testing.T) {
 	}}
 	cfg.Roles = map[string][]string{}
 	cfg.FormatText = defaultConfig().FormatText
-	cfg.FormatAs = "markdown"
+	cfg.Format = "markdown"
 	m := &Mods{
 		Config: &cfg,
 		Styles: makeStyles(lipgloss.NewRenderer(nil)),
@@ -692,7 +743,7 @@ func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
 	cfg := Config{}
 	cfg.Roles = map[string][]string{}
 	cfg.FormatText = defaultConfig().FormatText
-	cfg.FormatAs = "markdown"
+	cfg.Format = "markdown"
 	m := &Mods{
 		Config: &cfg,
 		Styles: makeStyles(lipgloss.NewRenderer(nil)),

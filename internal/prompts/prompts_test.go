@@ -59,7 +59,6 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"no-save",
 		"no-instructions",
 		"format",
-		"format-as",
 		"minimal",
 		"raw",
 		"quiet",

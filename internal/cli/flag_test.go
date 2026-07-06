@@ -31,11 +31,6 @@ var flagParseErrorTests = []struct {
 		"Short flag %s is missing.",
 	},
 	{
-		"flag needs an argument: --format-as",
-		"--format-as",
-		"Flag %s needs an argument.",
-	},
-	{
 		"flag needs an argument: 'a' in -a",
 		"-a",
 		"Flag %s needs an argument.",

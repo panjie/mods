@@ -120,3 +120,23 @@ func (r *reviewFlag) String() string {
 func (*reviewFlag) Type() string {
 	return "review-mode"
 }
+
+func newFormatFlag(val string, p *string) *formatFlag {
+	*p = val
+	return (*formatFlag)(p)
+}
+
+type formatFlag string
+
+func (f *formatFlag) Set(s string) error {
+	*f = formatFlag(s)
+	return nil
+}
+
+func (f *formatFlag) String() string {
+	return string(*f)
+}
+
+func (*formatFlag) Type() string {
+	return "format"
+}

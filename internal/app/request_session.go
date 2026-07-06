@@ -137,8 +137,8 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if maxTokens > 0 {
 		request.MaxTokens = &maxTokens
 	}
-	if supportsJSONResponseFormat(mod.API) && cfg.Format && cfg.FormatAs == "json" {
-		request.ResponseFormat = &cfg.FormatAs
+	if supportsJSONResponseFormat(mod.API) && cfg.Format == "json" {
+		request.ResponseFormat = &cfg.Format
 	}
 
 	debugRequest(cfg, &mod, &m.messages, tools, &request)

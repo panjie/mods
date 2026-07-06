@@ -183,7 +183,7 @@ Top-level keys:
 - `builtin-tools` — native tool configuration:
   ```yaml
   builtin-tools:
-    filesystem: auto        # auto, true, or false
+    filesystem: true        # true, false, or auto
     shell: false            # enable shell tool
     sequential-thinking: false   # enable sequential thinking
     shell-timeout: 30s      # max shell command duration

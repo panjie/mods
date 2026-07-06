@@ -125,7 +125,7 @@ mcp-timeout: 15s
 
 # {{ index .Help "builtin-tools" }}
 builtin-tools:
-  filesystem: auto
+  filesystem: true
   shell: false
   sequential-thinking: false
   shell-timeout: 30s

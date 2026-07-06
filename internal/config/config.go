@@ -370,8 +370,8 @@ func (m *FilesystemMode) UnmarshalYAML(node *yaml.Node) error {
 	}
 	mode, err := parseFilesystemMode(value)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: invalid builtin-tools.filesystem %q, defaulting to \"auto\"\n", value)
-		*m = FilesystemAuto
+		fmt.Fprintf(os.Stderr, "Warning: invalid builtin-tools.filesystem %q, defaulting to \"true\"\n", value)
+		*m = FilesystemAlways
 		return nil
 	}
 	*m = mode
@@ -658,7 +658,7 @@ func Default() Config {
 			MCPTimeout:         15 * time.Second,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
-				Filesystem:         FilesystemAuto,
+				Filesystem:         FilesystemAlways,
 				Shell:              false,
 				SequentialThinking: false,
 				// Reference the canonical tools-package defaults so the

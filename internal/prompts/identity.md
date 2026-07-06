@@ -75,10 +75,9 @@ with `--help-all` (marked [advanced]).
 - `-f`, `--format [markdown|json|<custom>]` — Ask for the response to be formatted; bare `-f` defaults to markdown
 - `--minimal` — Output only the final result, optimized for pipelines
 - `--raw` — Render output as raw text when connected to a TTY
-- `--hide-tool-status` [advanced] — Hide the bottom status line while tools are running
+- `--hide-tool-status` [advanced] — Hide the tool-operation label while tools run (the spinner stays visible)
 - `--show-tool-results` [advanced] — Show the completed shell-command result blocks
 - `--word-wrap <width>` [advanced] — Wrap formatted output at specific width (default is 80)
-- `--status-text <text>` [advanced] — Text to show while generating (default: "Generating")
 - `--workspace <dir>` — Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory
 - `-e`, `--editor` — Edit the prompt in your $EDITOR (only when STDIN is a TTY and no other args)
 - `-i`, `--image <path>` — Attach one or more images to the prompt (png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths
@@ -132,10 +131,9 @@ Top-level keys:
 - `format-text` (map) — custom format prompts keyed by format name
 - `minimal` (bool) — pipeline-friendly output by default
 - `raw` (bool) — raw text output
-- `hide-tool-status` (bool) — hide tool status line
+- `hide-tool-status` (bool) — hide the tool-operation label (the spinner stays visible)
 - `show-tool-results` (bool) — show completed tool result blocks
 - `word-wrap` (int) — output width (default: 80)
-- `status-text` (string) — text shown while generating
 - `max-tokens` (int) — max tokens in response
 - `max-input-chars` (int) — input character limit
 - `no-limit` (bool) — disable input size limit

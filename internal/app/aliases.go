@@ -28,6 +28,8 @@ type AccessClass = approval.AccessClass
 type Decision = approval.Decision
 type ApprovalReviewMode = approval.ReviewMode
 type Styles = ui.Styles
+type Anim = ui.Anim
+type SpinnerPhase = ui.SpinnerPhase
 
 var newUserErrorf = apperr.NewUserErrorf
 var NewID = session.NewID
@@ -76,6 +78,10 @@ const (
 
 	ToolSelectionRules  = cfgpkg.ToolSelectionRules
 	MinimalSystemPrompt = cfgpkg.MinimalSystemPrompt
+
+	PhaseConnecting = ui.PhaseConnecting
+	PhaseStreaming  = ui.PhaseStreaming
+	PhaseTool       = ui.PhaseTool
 )
 
 var debug = debugpkg.FacadeInstance

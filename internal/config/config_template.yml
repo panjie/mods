@@ -57,9 +57,6 @@ word-wrap: 80
 # {{ index .Help "theme" }}
 theme: charm
 
-# {{ index .Help "status-text" }}
-status-text: Generating
-
 # ── Model Parameters ──────────────────────────────────────────────
 
 # {{ index .Help "max-input-chars" }}

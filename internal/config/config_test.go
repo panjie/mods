@@ -105,16 +105,6 @@ func TestWorkspaceHelpUsesWorkspaceTerminology(t *testing.T) {
 	require.Contains(t, Help["workspace"], "Set the workspace")
 }
 
-func TestDefaultConfigDisplay(t *testing.T) {
-	cfg := defaultConfig()
-	require.Equal(t, "Generating", cfg.StatusText)
-
-	var fromYAML Config
-	fromYAML.PersistentConfig = defaultConfig().PersistentConfig
-	require.NoError(t, yaml.Unmarshal([]byte("minimal: true"), &fromYAML))
-	require.Equal(t, "Generating", fromYAML.StatusText)
-}
-
 func TestMinimalConfig(t *testing.T) {
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config

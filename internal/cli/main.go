@@ -153,7 +153,6 @@ func initFlags() {
 	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
-	regStr(flags, &config.StatusText, "status-text", "", config.StatusText)
 	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
 	regBool(flags, &config.NoInstructions, "no-instructions", "", config.NoInstructions)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
@@ -187,7 +186,6 @@ func initFlags() {
 		"max-tokens",
 		"no-limit",
 		"word-wrap",
-		"status-text",
 		"hide-tool-status",
 		"show-tool-results",
 		"max-tool-rounds",
@@ -221,7 +219,6 @@ func initFlags() {
 		"hide-tool-status",
 		"show-tool-results",
 		"word-wrap",
-		"status-text",
 		"workspace",
 		"editor",
 		"image",

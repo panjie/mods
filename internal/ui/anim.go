@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lucasb-eyer/go-colorful"
@@ -25,12 +24,10 @@ type charState int
 const (
 	charInitialState charState = iota
 	charCyclingState
-	charEndOfLifeState
 )
 
 // cyclingChar is a single animated character.
 type cyclingChar struct {
-	finalValue   rune // if < 0 cycle forever
 	currentValue rune
 	initialDelay time.Duration
 }
@@ -43,9 +40,6 @@ func (c cyclingChar) state(start time.Time) charState {
 	now := time.Now()
 	if now.Before(start.Add(c.initialDelay)) {
 		return charInitialState
-	}
-	if c.finalValue > 0 && now.After(start.Add(c.initialDelay)) {
-		return charEndOfLifeState
 	}
 	return charCyclingState
 }
@@ -69,48 +63,30 @@ func cycleColors() tea.Cmd {
 // anim is the model that manages the animation that displays while the
 // output is being generated.
 type Anim struct {
-	start           time.Time
-	cyclingChars    []cyclingChar
-	labelChars      []cyclingChar
-	ramp            []lipgloss.Style
-	label           []rune
-	ellipsis        spinner.Model
-	ellipsisStarted bool
-	Styles          Styles
+	start        time.Time
+	size         int
+	phase        SpinnerPhase
+	renderer     *lipgloss.Renderer
+	cyclingChars []cyclingChar
+	ramp         []lipgloss.Style
+	Styles       Styles
 }
 
-func NewAnim(cyclingCharsSize uint, label string, r *lipgloss.Renderer, s Styles) Anim {
+func NewAnim(cyclingCharsSize uint, r *lipgloss.Renderer, s Styles) Anim {
 	// #nosec G115
 	n := int(cyclingCharsSize)
 	if n > maxCyclingChars {
 		n = maxCyclingChars
 	}
 
-	gap := " "
-	if n == 0 {
-		gap = ""
-	}
-
 	c := Anim{
 		start:    time.Now(),
-		label:    []rune(gap + label),
-		ellipsis: spinner.New(spinner.WithSpinner(spinner.Ellipsis)),
+		size:     n,
+		phase:    PhaseConnecting,
+		renderer: r,
 		Styles:   s,
 	}
-
-	// If we're in truecolor mode (and there are enough cycling characters)
-	// color the cycling characters with a gradient ramp.
-	const minRampSize = 3
-	if n >= minRampSize && r.ColorProfile() == termenv.TrueColor {
-		// Note: double capacity for color cycling as we'll need to reverse and
-		// append the ramp for seamless transitions.
-		c.ramp = make([]lipgloss.Style, n, n*2) //nolint:mnd
-		ramp := makeGradientRamp(n)
-		for i, color := range ramp {
-			c.ramp[i] = r.NewStyle().Foreground(color)
-		}
-		c.ramp = append(c.ramp, reverse(c.ramp)...) // reverse and append for color cycling
-	}
+	c.rebuildRamp()
 
 	makeDelay := func(a int32, b time.Duration) time.Duration {
 		return time.Duration(rand.Int31n(a)) * (time.Millisecond * b) //nolint:gosec
@@ -120,27 +96,49 @@ func NewAnim(cyclingCharsSize uint, label string, r *lipgloss.Renderer, s Styles
 		return makeDelay(8, 60) //nolint:mnd
 	}
 
-	// Initial characters that cycle forever.
+	// Characters that cycle forever.
 	c.cyclingChars = make([]cyclingChar, n)
 
-	for i := 0; i < n; i++ {
+	for i := range c.cyclingChars {
 		c.cyclingChars[i] = cyclingChar{
-			finalValue:   -1, // cycle forever
-			initialDelay: makeInitialDelay(),
-		}
-	}
-
-	// Label text that only cycles for a little while.
-	c.labelChars = make([]cyclingChar, len(c.label))
-
-	for i, r := range c.label {
-		c.labelChars[i] = cyclingChar{
-			finalValue:   r,
 			initialDelay: makeInitialDelay(),
 		}
 	}
 
 	return c
+}
+
+// SetPhase switches the animation's color palette. It is a no-op when the
+// phase is unchanged, so callers can safely invoke it every frame. The ramp
+// is rebuilt (in truecolor mode) from the new phase's gradient endpoints.
+func (a *Anim) SetPhase(p SpinnerPhase) {
+	if a.phase == p {
+		return
+	}
+	a.phase = p
+	a.rebuildRamp()
+}
+
+// rebuildRamp (re)builds the color-cycling ramp from the current phase's
+// gradient. It is built for any profile that supports color (TrueColor,
+// ANSI256, ANSI); lipgloss/termenv downsample the hex endpoints to the detected
+// profile on render, so WSL/256-color terminals still get a colored spinner
+// even when COLORTERM isn't set. Only truly monochrome (Ascii) profiles skip it.
+// The slice is allocated at 2x capacity so Update can rotate it seamlessly.
+func (a *Anim) rebuildRamp() {
+	n := a.size
+	a.ramp = nil
+	const minRampSize = 3
+	if n < minRampSize || a.renderer == nil || a.renderer.ColorProfile() == termenv.Ascii {
+		return
+	}
+	startHex, endHex := a.phase.gradient()
+	ramp := gradientRamp(n, startHex, endHex)
+	a.ramp = make([]lipgloss.Style, n, n*2) //nolint:mnd
+	for i, color := range ramp {
+		a.ramp[i] = a.renderer.NewStyle().Foreground(color)
+	}
+	a.ramp = append(a.ramp, reverse(a.ramp)...) // reverse and append for color cycling
 }
 
 // Init initializes the animation.
@@ -150,30 +148,10 @@ func (Anim) Init() tea.Cmd {
 
 // Update handles messages.
 func (a Anim) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
 	switch msg.(type) {
 	case stepCharsMsg:
 		a.updateChars(&a.cyclingChars)
-		a.updateChars(&a.labelChars)
-
-		if !a.ellipsisStarted {
-			var eol int
-			for _, c := range a.labelChars {
-				if c.state(a.start) == charEndOfLifeState {
-					eol++
-				}
-			}
-			if eol == len(a.label) {
-				// If our entire label has reached end of life, start the
-				// ellipsis "spinner" after a short pause.
-				a.ellipsisStarted = true
-				cmd = tea.Tick(time.Millisecond*220, func(time.Time) tea.Msg { //nolint:mnd
-					return a.ellipsis.Tick()
-				})
-			}
-		}
-
-		return a, tea.Batch(stepChars(), cmd)
+		return a, stepChars()
 	case colorCycleMsg:
 		const minColorCycleSize = 2
 		if len(a.ramp) < minColorCycleSize {
@@ -181,10 +159,6 @@ func (a Anim) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.ramp = append(a.ramp[1:], a.ramp[0])
 		return a, cycleColors()
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		a.ellipsis, cmd = a.ellipsis.Update(msg)
-		return a, cmd
 	default:
 		return a, nil
 	}
@@ -197,8 +171,6 @@ func (a *Anim) updateChars(chars *[]cyclingChar) {
 			(*chars)[i].currentValue = '.'
 		case charCyclingState:
 			(*chars)[i].currentValue = c.randomRune()
-		case charEndOfLifeState:
-			(*chars)[i].currentValue = c.finalValue
 		}
 	}
 }
@@ -215,26 +187,55 @@ func (a Anim) View() string {
 		b.WriteRune(c.currentValue)
 	}
 
-	for _, c := range a.labelChars {
-		b.WriteRune(c.currentValue)
-	}
-
-	return b.String() + a.ellipsis.View()
+	return b.String()
 }
 
-func makeGradientRamp(length int) []lipgloss.Color {
-	const startColor = "#F967DC"
-	const endColor = "#6B50FF"
+// Default gradient endpoints (the Connecting-phase palette). Kept as
+// constants so MakeGradientText and any default callers share one source.
+const (
+	defaultGradientStart = "#F967DC"
+	defaultGradientEnd   = "#6B50FF"
+)
+
+// SpinnerPhase selects the color palette the animation renders in. The phase
+// is derived at render time from the app's runtime state (see app.spinnerPhase)
+// and pushed into the Anim via SetPhase; only the palette changes, the cycling
+// mechanism is identical across phases.
+type SpinnerPhase int
+
+const (
+	PhaseConnecting SpinnerPhase = iota // warming up / waiting for first token
+	PhaseStreaming                      // model is emitting text (incl. thinking)
+	PhaseTool                           // a tool / web_search is executing
+)
+
+// gradient returns the [start, end] hex colors for this phase's ramp.
+func (p SpinnerPhase) gradient() (start, end string) {
+	switch p {
+	case PhaseStreaming:
+		return "#3DDC97", "#3DC6DC"
+	case PhaseTool:
+		return "#F5A524", "#FF6B35"
+	default:
+		return defaultGradientStart, defaultGradientEnd
+	}
+}
+
+func gradientRamp(length int, startHex, endHex string) []lipgloss.Color {
 	var (
 		c        = make([]lipgloss.Color, length)
-		start, _ = colorful.Hex(startColor)
-		end, _   = colorful.Hex(endColor)
+		start, _ = colorful.Hex(startHex)
+		end, _   = colorful.Hex(endHex)
 	)
 	for i := 0; i < length; i++ {
 		step := start.BlendLuv(end, float64(i)/float64(length))
 		c[i] = lipgloss.Color(step.Hex())
 	}
 	return c
+}
+
+func makeGradientRamp(length int) []lipgloss.Color {
+	return gradientRamp(length, defaultGradientStart, defaultGradientEnd)
 }
 
 func MakeGradientText(baseStyle lipgloss.Style, str string) string {

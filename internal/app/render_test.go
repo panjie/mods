@@ -276,10 +276,14 @@ func TestSessionOutputFlushesForNonTTY(t *testing.T) {
 
 // TestRenderWithOperationDropsSpinnerDuringPreOutputReview locks in fix ②:
 // when a tool approval is pending and the model hasn't emitted any text yet,
-// the "Generating…" spinner must not appear above the approval prompt (it's
+// the spinner must not appear above the approval prompt (it's
 // misleading — we're waiting on the user, not generating). Once there is model
 // output, it's shown above the prompt as context.
 func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
+	oldTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldTTY })
+
 	pendingReviewer := &toolReviewer{
 		reviewMode:    ReviewAuto,
 		reviewPending: true,
@@ -297,12 +301,13 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		width:               60,
 		showOperationStatus: true,
 		reviewer:            pendingReviewer,
+		anim:                staticModel("animating"),
 	}
 
-	t.Run("no model output yet: spinner dropped, review prompt shown", func(t *testing.T) {
+	t.Run("no model output yet: spinner paused, review prompt shown", func(t *testing.T) {
 		m.responseOutputStarted = false
-		got := m.renderWithOperation("✶ Generating...")
-		require.NotContains(t, got, "Generating", "spinner must not appear above the approval prompt")
+		got := m.renderWithOperation("")
+		require.NotContains(t, got, "animating", "spinner must not appear above the approval prompt")
 		require.Contains(t, got, "Review:")
 	})
 
@@ -311,10 +316,15 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		got := m.renderWithOperation("partial answer so far")
 		require.Contains(t, got, "partial answer so far")
 		require.Contains(t, got, "Review:")
+		require.NotContains(t, got, "animating", "spinner stays paused while approval is pending")
 	})
 }
 
-func TestRenderWithOperationSuppressesSpinnerDuringToolRun(t *testing.T) {
+func TestRenderWithOperationShowsSpinnerAndToolLabel(t *testing.T) {
+	oldTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldTTY })
+
 	m := &Mods{
 		Config:              &Config{},
 		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
@@ -323,21 +333,31 @@ func TestRenderWithOperationSuppressesSpinnerDuringToolRun(t *testing.T) {
 		width:               60,
 		showOperationStatus: true,
 		reviewer:            &toolReviewer{},
+		anim:                staticModel("animating"),
 	}
 	m.setActiveOperation("Run: find . -name '*.go'")
 
-	t.Run("no model output yet: spinner dropped, only the tool label shows", func(t *testing.T) {
+	t.Run("no model output yet: spinner and tool label both shown", func(t *testing.T) {
 		m.responseOutputStarted = false
-		got := m.renderWithOperation("✶ Generating...")
-		require.NotContains(t, got, "Generating", "spinner must not appear while a tool is running")
+		got := m.renderWithOperation("")
+		require.Contains(t, got, "animating", "spinner stays on while a tool is running")
 		require.Contains(t, got, "Run: find")
 	})
 
-	t.Run("model output present: output kept above the tool label", func(t *testing.T) {
+	t.Run("model output present: output kept above spinner and tool label", func(t *testing.T) {
 		m.responseOutputStarted = true
 		got := m.renderWithOperation("partial answer so far")
 		require.Contains(t, got, "partial answer so far")
+		require.Contains(t, got, "animating")
 		require.Contains(t, got, "Run: find")
+	})
+
+	t.Run("hide-tool-status hides the label but keeps the spinner", func(t *testing.T) {
+		m.Config.HideToolStatus = true
+		m.responseOutputStarted = false
+		got := m.renderWithOperation("")
+		require.Contains(t, got, "animating", "spinner stays on even with --hide-tool-status")
+		require.NotContains(t, got, "Run: find", "tool label hidden by --hide-tool-status")
 	})
 }
 

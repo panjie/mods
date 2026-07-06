@@ -61,7 +61,7 @@ var Help = map[string]string{
 	"list-prompts":           "List built-in prompts and prompt templates",
 	"prompts":                "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":                    "Render output as raw text when connected to a TTY",
-	"hide-tool-status":       "Hide the bottom status line while tools are running",
+	"hide-tool-status":       "Hide the tool-operation label while tools run (the spinner stays visible)",
 	"show-tool-results":      "Show completed shell-command result blocks in the output",
 	"help":                   "Show Help and exit",
 	"help-all":               "Show Help with advanced and configuration-first options",
@@ -71,7 +71,6 @@ var Help = map[string]string{
 	"no-instructions":        "Disable auto-loading AGENTS.md from the workspace root as project context",
 	"word-wrap":              "Wrap formatted output at specific width (default is 80)",
 	"max-tokens":             "Maximum number of tokens in response",
-	"status-text":            "Text to show while generating",
 	"settings":               "Open settings in your $EDITOR",
 	"config":                 "Interactive setup wizard for provider, model, API key, and tools",
 	"dirs":                   "Print the directories in which mods store its data",
@@ -205,7 +204,6 @@ type PersistentConfig struct {
 	NoInstructions      bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
 	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
 	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
-	StatusText          string     `yaml:"status-text" env:"STATUS_TEXT"`
 	HTTPProxy           string     `yaml:"http-proxy" env:"HTTP_PROXY"`
 	APIs                APIs       `yaml:"apis"`
 	Role                string     `yaml:"role" env:"ROLE"`
@@ -631,7 +629,6 @@ func Default() Config {
 			},
 			ReviewMode:         ReviewAuto,
 			WordWrap:           80,
-			StatusText:         "Generating",
 			MCPTimeout:         15 * time.Second,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{

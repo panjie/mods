@@ -759,7 +759,7 @@ func newAnimatingMods() *Mods {
 	return &Mods{
 		Config:              &Config{},
 		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
-		anim:                staticModel("Generating"),
+		anim:                staticModel("animating"),
 		state:               requestState,
 		showOperationStatus: true,
 		width:               80,
@@ -878,9 +878,13 @@ func TestPlanExecutionStartResetsOutput(t *testing.T) {
 }
 
 func TestGeneratingViewBeforeOutput(t *testing.T) {
-	t.Run("request state shows generating", func(t *testing.T) {
+	oldTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldTTY })
+
+	t.Run("request state shows spinner", func(t *testing.T) {
 		m := newAnimatingMods()
-		require.Contains(t, m.View(), "Generating")
+		require.Contains(t, m.View(), "animating")
 	})
 
 	t.Run("request state does not show approved plan", func(t *testing.T) {
@@ -888,40 +892,36 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		m.Output = "approved plan"
 		m.glamOutput = "rendered approved plan"
 		view := m.View()
-		require.Contains(t, view, "Generating")
+		require.Contains(t, view, "animating")
 		require.NotContains(t, view, "approved plan")
 		require.NotContains(t, view, "rendered approved plan")
 	})
 
-	t.Run("response state before output shows generating", func(t *testing.T) {
+	t.Run("response state before output shows spinner", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.state = responseState
-		require.Contains(t, m.View(), "Generating")
+		require.Contains(t, m.View(), "animating")
 	})
 
-	t.Run("response state before output shows operation, not generating", func(t *testing.T) {
+	t.Run("response state before output shows operation and spinner", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.state = responseState
 		m.setActiveOperation("Searching web: Go latest release")
 		view := m.View()
 		require.Contains(t, view, "Searching web: Go latest release")
-		require.NotContains(t, view, "Generating",
-			"the spinner is suppressed while a tool/search operation is the active status (unified status bar)")
+		require.Contains(t, view, "animating",
+			"the spinner stays on alongside the tool/search operation label")
 	})
 
-	t.Run("response state before output renders fancy animation prefix", func(t *testing.T) {
+	t.Run("response state before output renders the animation", func(t *testing.T) {
 		m := newAnimatingMods()
-		m.Config = &Config{PersistentConfig: PersistentConfig{StatusText: "Generating"}}
-		m.anim = staticModel("***** Generating")
 		m.state = responseState
 
 		view := m.View()
-		idx := strings.Index(view, "Generating")
-		require.Greater(t, idx, 0)
-		require.NotEmpty(t, strings.TrimSpace(view[:idx]))
+		require.NotEmpty(t, strings.TrimSpace(view))
 	})
 
-	t.Run("first output hides generating", func(t *testing.T) {
+	t.Run("first output hides spinner", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.Config.Raw = true
 		_, _ = m.Update(streamEventMsg{
@@ -931,15 +931,63 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		})
 		require.True(t, m.responseOutputStarted)
 		require.Contains(t, m.Output, "hello")
-		require.NotContains(t, m.renderWithOperation(m.Output), "Generating")
+		require.NotContains(t, m.renderWithOperation(m.Output), "animating")
 	})
+}
+
+func TestSpinnerPhaseDerivation(t *testing.T) {
+	m := &Mods{
+		Config:   &Config{},
+		reviewer: &toolReviewer{},
+	}
+
+	// No output, no operation, not thinking -> connecting.
+	require.Equal(t, PhaseConnecting, m.spinnerPhase())
+
+	// First token streamed -> streaming.
+	m.responseOutputStarted = true
+	require.Equal(t, PhaseStreaming, m.spinnerPhase())
+
+	// Reasoning (-t) also counts as streaming before any answer token.
+	m.responseOutputStarted = false
+	m.thinkActive = true
+	require.Equal(t, PhaseStreaming, m.spinnerPhase())
+	m.thinkActive = false
+
+	// An active tool/search operation wins over streaming.
+	m.responseOutputStarted = true
+	m.setActiveOperation("Running: go test ./...")
+	require.Equal(t, PhaseTool, m.spinnerPhase())
+}
+
+// TestShouldUpdateAnimationTicksDuringStreaming locks in the always-on change:
+// the spinner used to stop ticking the moment responseOutputStarted flipped
+// true. It must now keep ticking through every running phase and only pause in
+// terminal states.
+func TestShouldUpdateAnimationTicksDuringStreaming(t *testing.T) {
+	oldTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldTTY })
+
+	m := &Mods{
+		Config:   &Config{},
+		state:    responseState,
+		anim:     staticModel("animating"),
+		reviewer: &toolReviewer{},
+	}
+
+	require.True(t, m.shouldUpdateAnimation(), "pre-output ticks")
+	m.responseOutputStarted = true
+	require.True(t, m.shouldUpdateAnimation(), "streaming still ticks (regression)")
+	m.state = doneState
+	require.False(t, m.shouldUpdateAnimation(), "terminal state stops ticking")
 }
 
 // TestPlanStreamingStaysInResponseState locks in the fix for the plan-mode
 // flicker: while the model streams text (with or without interleaved tool
 // calls), the state must stay in responseState so the streaming output stays
 // visible. Switching to planState mid-stream hid the accumulated output behind
-// the "Generating…" spinner, then startToolCalls switched back to responseState
+// the spinner, then startToolCalls switched back to responseState
 // (revealing it), producing a visible flicker on every text→tool→text round.
 func TestPlanStreamingStaysInResponseState(t *testing.T) {
 	oldIsOutputTTY := isOutputTTY
@@ -957,7 +1005,7 @@ func TestPlanStreamingStaysInResponseState(t *testing.T) {
 	m := &Mods{
 		Config:              &Config{Plan: true},
 		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
-		anim:                staticModel("Generating"),
+		anim:                staticModel("animating"),
 		state:               planState,
 		showOperationStatus: true,
 		width:               80,
@@ -979,11 +1027,14 @@ func TestPlanStreamingStaysInResponseState(t *testing.T) {
 		"plan-mode streaming must stay in responseState so the output stays visible")
 	require.True(t, m.responseOutputStarted)
 	require.Contains(t, m.Output, "Investigating the codebase...")
-	// The streamed text must be visible in the View, not hidden behind the spinner.
-	// Glamour wraps words in ANSI spans, so check a fragment that stays within one span.
-	require.Contains(t, m.View(), "Investigating")
-	require.NotContains(t, m.View(), "Generating",
-		"once output starts streaming, the Generating spinner must not be shown")
+	// The streamed text must be visible in the View, not hidden. With the
+	// always-on spinner the animation renders on the line below the output;
+	// verify the output text still appears (Glamour wraps words in ANSI spans,
+	// so check a fragment that stays within one span) and that the spinner
+	// renders beneath it rather than replacing the output.
+	view := m.View()
+	require.Contains(t, view, "Investigating")
+	require.Contains(t, view, "animating")
 }
 
 func TestViewportNeeded(t *testing.T) {

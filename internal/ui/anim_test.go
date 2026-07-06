@@ -1,61 +1,123 @@
 package ui
 
 import (
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMakeGradientRamp(t *testing.T) {
-	t.Run("length 2", func(t *testing.T) {
-		ramp := makeGradientRamp(2)
-		require.Len(t, ramp, 2)
-		require.NotEmpty(t, ramp[0])
-		require.NotEmpty(t, ramp[1])
+func trueColorRenderer() *lipgloss.Renderer {
+	r := lipgloss.NewRenderer(io.Discard)
+	r.SetColorProfile(termenv.TrueColor)
+	return r
+}
+
+// ansi256Renderer simulates a 256-color terminal (e.g. WSL under Windows
+// Terminal when COLORTERM isn't propagated): termenv reports ANSI256, which is
+// below TrueColor but still color-capable.
+func ansi256Renderer() *lipgloss.Renderer {
+	r := lipgloss.NewRenderer(io.Discard)
+	r.SetColorProfile(termenv.ANSI256)
+	return r
+}
+
+// monochromeRenderer simulates a terminal with no color support at all.
+func monochromeRenderer() *lipgloss.Renderer {
+	r := lipgloss.NewRenderer(io.Discard)
+	r.SetColorProfile(termenv.Ascii)
+	return r
+}
+
+func TestSpinnerPhaseGradient(t *testing.T) {
+	cases := []struct {
+		phase            SpinnerPhase
+		wantStart, wantEnd string
+	}{
+		{PhaseConnecting, defaultGradientStart, defaultGradientEnd},
+		{PhaseStreaming, "#3DDC97", "#3DC6DC"},
+		{PhaseTool, "#F5A524", "#FF6B35"},
+	}
+	seen := map[string]bool{}
+	for _, c := range cases {
+		start, end := c.phase.gradient()
+		require.Equal(t, c.wantStart, start, "phase %d start color", c.phase)
+		require.Equal(t, c.wantEnd, end, "phase %d end color", c.phase)
+		// Each phase must have a distinct palette.
+		key := start + end
+		require.False(t, seen[key], "phase %d palette duplicates another phase", c.phase)
+		seen[key] = true
+	}
+}
+
+func TestNewAnimRampForColorProfiles(t *testing.T) {
+	t.Run("truecolor builds a doubled ramp and emits color", func(t *testing.T) {
+		const size = 6
+		a := NewAnim(size, trueColorRenderer(), Styles{})
+		require.Len(t, a.ramp, size*2, "ramp is doubled (forward + reversed) for color cycling")
+		view := a.View()
+		require.NotEmpty(t, view, "cycling chars render even before ticks")
+		require.Contains(t, view, "\x1b[", "truecolor must emit ANSI color escapes")
 	})
 
-	t.Run("length 5", func(t *testing.T) {
-		ramp := makeGradientRamp(5)
-		require.Len(t, ramp, 5)
+	t.Run("256-color profile also builds the ramp and emits color", func(t *testing.T) {
+		const size = 6
+		a := NewAnim(size, ansi256Renderer(), Styles{})
+		require.Len(t, a.ramp, size*2,
+			"the ramp must be built for any color profile so WSL/256-color terminals still get color")
+		view := a.View()
+		require.NotEmpty(t, view)
+		require.Contains(t, view, "\x1b[", "256-color must downsample and emit ANSI color escapes")
 	})
 
-	t.Run("length 0 returns empty", func(t *testing.T) {
-		ramp := makeGradientRamp(0)
-		require.Empty(t, ramp)
+	t.Run("below min ramp size renders plain chars", func(t *testing.T) {
+		a := NewAnim(2, trueColorRenderer(), Styles{}) // minRampSize == 3
+		require.Empty(t, a.ramp, "no ramp below the minimum visible width")
+		require.NotEmpty(t, a.View())
+		require.NotContains(t, a.View(), "\x1b[", "no color styling without a ramp")
+	})
+
+	t.Run("monochrome leaves the ramp empty and emits no escapes", func(t *testing.T) {
+		a := NewAnim(6, monochromeRenderer(), Styles{})
+		require.Empty(t, a.ramp, "only truly colorless (Ascii) profiles skip the ramp")
+		view := a.View()
+		require.NotEmpty(t, view)
+		require.NotContains(t, view, "\x1b[", "Ascii must not emit color escapes")
+		// Sanity: the monochrome view is just the raw cycling chars.
+		require.True(t, strings.IndexAny(view, "\x1b") == -1)
 	})
 }
 
-func TestReverse(t *testing.T) {
-	t.Run("ints", func(t *testing.T) {
-		require.Equal(t, []int{3, 2, 1}, reverse([]int{1, 2, 3}))
-	})
-	t.Run("strings", func(t *testing.T) {
-		require.Equal(t, []string{"c", "b", "a"}, reverse([]string{"a", "b", "c"}))
-	})
-	t.Run("single element", func(t *testing.T) {
-		require.Equal(t, []int{1}, reverse([]int{1}))
-	})
-	t.Run("empty", func(t *testing.T) {
-		require.Empty(t, reverse([]int{}))
-	})
+func TestSetPhaseRebuildsRamp(t *testing.T) {
+	const size = 6
+	a := NewAnim(size, trueColorRenderer(), Styles{})
+	require.Equal(t, PhaseConnecting, a.phase)
+	require.Len(t, a.ramp, size*2)
+
+	// Switching phase rebuilds the ramp with the new palette and records the phase.
+	a.SetPhase(PhaseStreaming)
+	require.Equal(t, PhaseStreaming, a.phase)
+	require.Len(t, a.ramp, size*2, "rebuilt ramp keeps the doubled layout")
+	require.NotEmpty(t, a.View())
+
+	// Switching to yet another phase keeps the ramp consistent.
+	a.SetPhase(PhaseTool)
+	require.Equal(t, PhaseTool, a.phase)
+	require.Len(t, a.ramp, size*2)
 }
 
-func TestMakeGradientText(t *testing.T) {
-	baseStyle := lipgloss.NewStyle()
+func TestSetPhaseNoOpWhenUnchanged(t *testing.T) {
+	const size = 6
+	a := NewAnim(size, trueColorRenderer(), Styles{})
+	a.SetPhase(PhaseTool)
+	before := append([]lipgloss.Style(nil), a.ramp...)
 
-	t.Run("single char returns unchanged", func(t *testing.T) {
-		result := makeGradientText(baseStyle, "a")
-		require.Equal(t, "a", result)
-	})
-
-	t.Run("empty returns empty", func(t *testing.T) {
-		result := makeGradientText(baseStyle, "")
-		require.Empty(t, result)
-	})
-
-	t.Run("multi-char returns styled text", func(t *testing.T) {
-		result := makeGradientText(baseStyle, "abc")
-		require.NotEmpty(t, result)
-	})
+	// Calling SetPhase with the current phase must be a no-op: the ramp is
+	// not rebuilt, so its contents are byte-for-byte identical.
+	a.SetPhase(PhaseTool)
+	require.Equal(t, before, a.ramp)
+	require.Equal(t, PhaseTool, a.phase)
 }

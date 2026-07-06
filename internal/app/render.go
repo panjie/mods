@@ -62,17 +62,14 @@ func (m *Mods) View() string {
 			return m.renderPlanReviewBanner(content)
 		}
 		if !debug.Enabled() {
-			return m.renderWithOperation(m.anim.View())
+			return m.renderWithOperation("")
 		}
 	case requestState:
 		if !debug.Enabled() {
-			return m.renderWithOperation(m.anim.View())
+			return m.renderWithOperation("")
 		}
 	case responseState:
 		m.flushRender()
-		if !debug.Enabled() && !m.responseOutputStarted && m.anim != nil {
-			return m.renderWithOperation(m.anim.View())
-		}
 		if !m.Config.Raw && IsOutputTTY() {
 			if m.viewportNeeded() {
 				return m.renderWithOperation(m.glamViewport.View())
@@ -110,40 +107,96 @@ func (m *Mods) renderWithOperation(content string) string {
 	if footer == "" {
 		return content
 	}
-	// A non-empty footer means active tool activity (a running tool or a
-	// pending approval), not generation. While the model hasn't emitted any
-	// text yet, `content` is just the "Generating…" spinner — drop it so the
-	// spinner can never appear alongside the footer. This is what makes the
-	// status surfaces mutually exclusive by construction.
-	//
-	// Safe because View() passes real model output as `content` only once
-	// responseOutputStarted is true (the pre-output branch passes the spinner);
-	// so when this gate fires, `content` is the spinner — never output.
-	if !m.responseOutputStarted {
-		content = ""
-	}
 	if strings.TrimSpace(content) == "" {
 		return footer
 	}
 	return strings.TrimRight(content, "\r\n") + "\n" + footer
 }
 
-// footerView is the single source of truth for the status line shown beneath
-// the main content. At most one footer is ever returned: a pending tool
-// approval takes precedence over the current tool/web-search operation label.
-// renderWithOperation composes the footer below the main content and suppresses
-// the "Generating…" spinner whenever a footer is active.
+// footerView is the single source of truth for the bottom status line. It is
+// the union of two independent surfaces:
+//
+//  1. The operation-status label ("Running: …") — gated by showOperationStatus
+//     (which encodes TTY + !raw + !hide-tool-status in production), exactly as
+//     before. This keeps showing even if the spinner itself can't render.
+//  2. The always-on spinner — gated by spinnerVisible (running phase, TTY,
+//     non-debug, anim present). Its palette reflects the current phase.
+//
+// A pending tool approval takes over the footer with its review banner (that is
+// a "waiting on the user" state, not a running phase, so the spinner pauses).
+// In the Tool phase both surfaces are active and composed as "spinner  label".
 func (m *Mods) footerView() string {
 	if m.reviewer.isPending() {
 		return m.reviewer.renderBanner(m.width, m.Styles.ReviewPrompt, m.Styles.ReviewChoices)
 	}
-	if m.Config.HideToolStatus || !m.showOperationStatus {
-		return ""
+
+	var opLine string
+	if m.showOperationStatus && !m.Config.HideToolStatus {
+		if op := strings.TrimSpace(m.getActiveOperation()); op != "" {
+			opLine = m.operationStatusLine()
+		}
 	}
-	if strings.TrimSpace(m.getActiveOperation()) == "" {
-		return ""
+
+	if m.spinnerVisible() {
+		spin := m.spinnerLine()
+		if spin == "" {
+			return opLine
+		}
+		if opLine != "" {
+			return spin + " " + opLine
+		}
+		return spin
 	}
-	return m.operationStatusLine()
+	return opLine
+}
+
+// spinnerPhase derives the animation palette from the current runtime state.
+// The three phases are mutually exclusive in time: a tool/search operation is
+// only "active" while the model is paused waiting for its result, and
+// responseOutputStarted flips true once the first token of an answer streams.
+// Thinking (-t) is treated as Streaming since the model is producing tokens.
+func (m *Mods) spinnerPhase() SpinnerPhase {
+	if strings.TrimSpace(m.getActiveOperation()) != "" {
+		return PhaseTool
+	}
+	if m.responseOutputStarted || m.thinkActive {
+		return PhaseStreaming
+	}
+	return PhaseConnecting
+}
+
+// spinnerVisible reports whether the bottom spinner should render right now.
+// It is false for terminal states, plan review (banner surface), pending
+// approval, debug, raw, and non-TTY — all the cases that previously suppressed
+// the spinner. It is the single shared gate for both rendering and ticking.
+func (m *Mods) spinnerVisible() bool {
+	if debug.Enabled() || m.Config.Raw || !IsOutputTTY() || m.anim == nil {
+		return false
+	}
+	switch m.state {
+	case doneState, errorState:
+		return false
+	case planState:
+		// Plan review shows its own banner; the spinner only shows while the
+		// plan is still being generated (no planContent yet).
+		return strings.TrimSpace(m.planContent) == ""
+	default:
+		return true
+	}
+}
+
+// spinnerLine renders the phase-colored spinner, pushing the derived phase into
+// the Anim so its ramp uses the right palette. The Anim is stored as tea.Model
+// (to allow test fakes), so this type-asserts to the concrete Anim; test fakes
+// fall through and render via their own View. The reassigment persists the
+// rebuilt ramp so the color-cycling rotation in Update keeps the new colors.
+func (m *Mods) spinnerLine() string {
+	phase := m.spinnerPhase()
+	if a, ok := m.anim.(Anim); ok {
+		a.SetPhase(phase)
+		m.anim = a
+	}
+	return m.anim.View()
 }
 
 func (m *Mods) operationStatusLine() string {

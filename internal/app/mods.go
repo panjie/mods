@@ -216,7 +216,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.SessionReadFromID = msg.ReadID
 		m.reviewer.rules.Replace(msg.Rules)
 
-		m.anim = NewAnim(defaultFanciness, m.Config.StatusText, m.renderer, m.Styles)
+		m.anim = NewAnim(defaultFanciness, m.renderer, m.Styles)
 		cmds = append(cmds, m.anim.Init())
 		m.state = configLoadedState
 		cmds = append(cmds, m.readStdinCmd)
@@ -423,12 +423,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Mods) shouldUpdateAnimation() bool {
-	return !debug.Enabled() &&
-		m.anim != nil &&
-		(m.state == configLoadedState ||
-			(m.state == planState && m.planContent == "") ||
-			m.state == requestState ||
-			(m.state == responseState && !m.responseOutputStarted))
+	return m.spinnerVisible()
 }
 
 func msgCmd(msg tea.Msg) tea.Cmd {
@@ -539,7 +534,7 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 	}
 	m.appendToOutput(content)
 	// Always use responseState while streaming, even in plan mode. The
-	// planState View renders only the "Generating…" spinner until planContent
+	// planState View renders only the spinner animation until planContent
 	// is set (by planCompleteMsg), which would hide the streaming output.
 	// startToolCalls also uses responseState, so using it here keeps the state
 	// stable across text→tool→text rounds instead of flickering between
@@ -630,9 +625,9 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		m.messages = msg.runner.messages()
 		m.toolCallRounds = 0
 		m.totalRounds = 0
-		// The next generation round renders the "Generating…" spinner on its
-		// own; mirroring StatusText in the operation-status line here produced
-		// a duplicate "Generating" row while waiting for the model to respond.
+		// The next generation round renders the spinner animation on its
+		// own; mirroring a status line here would produce a duplicate row
+		// while waiting for the model to respond.
 		m.setActiveOperation("")
 		return msgCmd(msg.runner.doneMsg())
 	}

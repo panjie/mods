@@ -431,12 +431,12 @@ func TestScanSources(t *testing.T) {
 
 func TestSearchRanksNameHitsFirst(t *testing.T) {
 	cat := []SourceSkill{
-		{Name: "alpha", Description: "mentions test here"},
-		{Name: "other", Description: "a test description"},
+		{Name: "alpha", Description: "mentions test here"},   // description hit only
+		{Name: "testing", Description: "no keyword here"},     // name hit → ranks first
 	}
 	got := Search(cat, "test", 10)
 	require.Len(t, got, 2)
-	require.Equal(t, "other", got[0].Name) // name hit ranks first
+	require.Equal(t, "testing", got[0].Name) // name hit ranks before description-only
 	require.Equal(t, "alpha", got[1].Name)
 }
 

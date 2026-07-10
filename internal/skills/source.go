@@ -101,3 +101,116 @@ func gitPull(ctx context.Context, dir string) error {
 	}
 	return nil
 }
+
+// ScanSources scans each clone's configured <path> and returns the combined
+// installable catalog. Reuses skills.Scan per clone. Clones whose path yields
+// no skills (or fails to scan) contribute nothing.
+func ScanSources(clones map[Source]string) []SourceSkill {
+	var out []SourceSkill
+	for src, clonePath := range clones {
+		found, err := Scan(filepath.Join(clonePath, src.Path))
+		if err != nil {
+			debug.Printf("skills: scan source %q failed: %v", src.URL, err)
+			continue
+		}
+		for _, s := range found {
+			out = append(out, SourceSkill{
+				Source:      src,
+				Name:        s.Name,
+				Description: s.Description,
+				Dir:         s.Dir,
+			})
+		}
+	}
+	return out
+}
+
+// Search returns up to limit SourceSkills whose name or description contains
+// query (case-insensitive). An empty query returns all (browsing). Name
+// matches always rank before description-only matches.
+func Search(catalog []SourceSkill, query string, limit int) []SourceSkill {
+	q := strings.ToLower(query)
+	var nameHits, descHits []SourceSkill
+	for _, s := range catalog {
+		if q == "" || strings.Contains(strings.ToLower(s.Name), q) {
+			nameHits = append(nameHits, s)
+			continue
+		}
+		if strings.Contains(strings.ToLower(s.Description), q) {
+			descHits = append(descHits, s)
+		}
+	}
+	merged := append(nameHits, descHits...)
+	if limit > 0 && len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged
+}
+
+// Install copies the skill directory at match.Dir into skillsDir and parses
+// the SKILL.md. If skillsDir/<name> already exists it is a no-op: the existing
+// SKILL.md body is returned (idempotent). The destination name is derived from
+// the skill's directory name and validated.
+func Install(match SourceSkill, skillsDir string) (Skill, error) {
+	destName := filepath.Base(match.Dir)
+	if !validDestName(destName) {
+		return Skill{}, fmt.Errorf("invalid skill directory name: %s", destName)
+	}
+	dest := filepath.Join(skillsDir, destName)
+	if info, err := os.Stat(dest); err == nil {
+		if !info.IsDir() {
+			return Skill{}, fmt.Errorf("destination exists and is not a directory: %s", dest)
+		}
+		return parseSkillFile(dest)
+	}
+	if err := os.MkdirAll(skillsDir, 0o700); err != nil {
+		return Skill{}, fmt.Errorf("could not create skills dir %q: %w", skillsDir, err)
+	}
+	if err := copyDir(match.Dir, dest); err != nil {
+		return Skill{}, fmt.Errorf("could not install skill %q: %w", match.Name, err)
+	}
+	return parseSkillFile(dest)
+}
+
+func validDestName(name string) bool {
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsRune(name, '/') || strings.ContainsRune(name, filepath.Separator) {
+		return false
+	}
+	return name != "\\"
+}
+
+func parseSkillFile(skillDir string) (Skill, error) {
+	data, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		return Skill{}, fmt.Errorf("could not read SKILL.md in %q: %w", skillDir, err)
+	}
+	skill, err := parseSkill(string(data), skillDir)
+	if err != nil {
+		return Skill{}, err
+	}
+	return skill, nil
+}
+
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		return os.WriteFile(target, data, info.Mode())
+	})
+}

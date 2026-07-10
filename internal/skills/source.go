@@ -87,7 +87,7 @@ func syncOne(ctx context.Context, url, clonePath string) error {
 }
 
 func gitClone(ctx context.Context, url, dir string) error {
-	out, err := exec.CommandContext(ctx, "git", "clone", "--depth", "1", url, dir).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--", url, dir).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone %s: %w: %s", url, err, strings.TrimSpace(string(out)))
 	}
@@ -161,7 +161,10 @@ func Install(match SourceSkill, skillsDir string) (Skill, error) {
 		if !info.IsDir() {
 			return Skill{}, fmt.Errorf("destination exists and is not a directory: %s", dest)
 		}
-		return parseSkillFile(dest)
+		if existing, perr := parseSkillFile(dest); perr == nil {
+			return existing, nil // idempotent: real, complete prior install
+		}
+		// dest exists but is corrupt/partial — fall through to a clean reinstall.
 	}
 	if err := os.MkdirAll(skillsDir, 0o700); err != nil {
 		return Skill{}, fmt.Errorf("could not create skills dir %q: %w", skillsDir, err)
@@ -189,13 +192,20 @@ func parseSkillFile(skillDir string) (Skill, error) {
 	}
 	skill, err := parseSkill(string(data), skillDir)
 	if err != nil {
-		return Skill{}, err
+		return Skill{}, fmt.Errorf("could not parse SKILL.md in %q: %w", skillDir, err)
 	}
 	return skill, nil
 }
 
 func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+	parent := filepath.Dir(dst)
+	base := filepath.Base(dst)
+	tmp, err := os.MkdirTemp(parent, "."+base+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(tmp) }
+	walkErr := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -203,7 +213,7 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(dst, rel)
+		target := filepath.Join(tmp, rel)
 		if info.IsDir() {
 			return os.MkdirAll(target, info.Mode())
 		}
@@ -213,4 +223,21 @@ func copyDir(src, dst string) error {
 		}
 		return os.WriteFile(target, data, info.Mode())
 	})
+	if walkErr != nil {
+		cleanup()
+		return walkErr
+	}
+	// Replace any pre-existing destination (e.g. corrupt partial state) only
+	// AFTER the walk fully succeeded, so a copy failure never disturbs dst.
+	if _, statErr := os.Stat(dst); statErr == nil {
+		if rmErr := os.RemoveAll(dst); rmErr != nil {
+			cleanup()
+			return fmt.Errorf("remove existing destination: %w", rmErr)
+		}
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		cleanup()
+		return fmt.Errorf("rename into place: %w", err)
+	}
+	return nil
 }

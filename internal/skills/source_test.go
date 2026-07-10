@@ -144,3 +144,20 @@ func TestInstallIdempotent(t *testing.T) {
 	require.Equal(t, "Original.", s2.Body)
 	require.Equal(t, s1.Body, s2.Body)
 }
+
+func TestInstallOverwritesCorruptDestination(t *testing.T) {
+	srcRoot := t.TempDir()
+	writeSkill(t, srcRoot, "my", "---\nname: my\ndescription: My.\n---\n\nMy body.\n")
+	skillsDir := t.TempDir()
+	// Simulate a leftover partial/corrupt destination (dir exists, no SKILL.md).
+	corrupt := filepath.Join(skillsDir, "my")
+	require.NoError(t, os.MkdirAll(corrupt, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(corrupt, "junk"), []byte("partial"), 0o600))
+
+	match := SourceSkill{Name: "my", Dir: filepath.Join(srcRoot, "my")}
+	skill, err := Install(match, skillsDir)
+	require.NoError(t, err)
+	require.Equal(t, "My body.", skill.Body)
+	// A proper install landed; the corrupt partial state is gone.
+	require.FileExists(t, filepath.Join(skillsDir, "my", "SKILL.md"))
+}

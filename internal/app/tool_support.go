@@ -6,6 +6,7 @@ import (
 
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/mcpclient"
+	"github.com/panjie/mods/internal/skills"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -45,7 +46,11 @@ func (m *Mods) buildToolRegistryForProvider(
 	client stream.Client,
 ) (*toolregistry.Registry, error) {
 	if client.Capabilities().Tools {
-		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog)
+		sources := make([]skills.Source, 0, len(cfg.SkillSources))
+		for _, s := range cfg.SkillSources {
+			sources = append(sources, skills.Source{URL: s.URL, Path: s.Path})
+		}
+		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog, sources)
 	}
 	if explicitlyEnabledTools(cfg) {
 		return nil, modsError{

@@ -36,7 +36,7 @@ section. For structural changes (adding a provider, model, role), show the exact
 YAML block to add.
 
 Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
-`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`, `skills-dir`.
+`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`, `skills-dir`, `skill-sources`.
 
 ## Skills
 
@@ -53,6 +53,16 @@ to consult such a file, call `load_skill` again with the same `name` and a
 the files you actually need.
 
 Skip skills when their description does not match the request.
+
+If a relevant skill is not installed locally, you can discover and install one
+from the configured remote sources: call `search_skills("<keywords>")` to list
+matching skills (each result names its source), then call
+`install_skill("<name>")` to install it. The user must approve the install;
+once approved the skill's instructions are returned and can be followed
+immediately, and the skill is available to `load_skill` in future sessions.
+Configure sources via the `skill-sources` config key (a list of git `url` +
+optional `path` entries). Only search/install skills when the request clearly
+needs one that is not already present.
 
 ## Portable mode
 

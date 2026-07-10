@@ -102,6 +102,7 @@ var Help = map[string]string{
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dir":             "Directory containing user-defined skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.config/mods/skills (or next to the executable in portable mode).",
+	"skill-sources":          "List of remote git repositories mods can search and install skills from. Each entry has a git 'url' and an optional 'path' (subdir containing skill directories; defaults to the repo root).",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
@@ -187,6 +188,13 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
+// SkillSource is one configured remote git repository that mods can search
+// and install skills from.
+type SkillSource struct {
+	URL  string `yaml:"url"`
+	Path string `yaml:"path"`
+}
+
 // PersistentConfig holds configuration that is persisted to the YAML settings
 // file and loaded from environment variables. It is embedded in Config so all
 // fields are promoted and accessible directly on Config.
@@ -225,6 +233,7 @@ type PersistentConfig struct {
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
 	SkillsDir           string                     `yaml:"skills-dir" env:"SKILLS_DIR"`
+	SkillSources        []SkillSource              `yaml:"skill-sources"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
@@ -423,6 +432,8 @@ func Ensure() (Config, error) {
 	applySessionDirDefault(&fallback)
 	applySkillsDirDefault(&c)
 	applySkillsDirDefault(&fallback)
+	applySkillSourcesDefault(&c)
+	applySkillSourcesDefault(&fallback)
 
 	sp, err := settingsFilePath()
 	if err != nil {
@@ -470,6 +481,7 @@ func Ensure() (Config, error) {
 
 	applySessionDirDefault(&c)
 	applySkillsDirDefault(&c)
+	applySkillSourcesDefault(&c)
 
 	if err := os.MkdirAll(
 		c.SessionDir,
@@ -587,6 +599,41 @@ func applySkillsDirDefault(c *Config) {
 	if c.SkillsDir == "" {
 		c.SkillsDir = defaultSkillsDir()
 	}
+}
+
+// defaultSkillSources returns the built-in list of remote skill sources used
+// when the user has not configured any.
+func defaultSkillSources() []SkillSource {
+	return []SkillSource{
+		{URL: "https://github.com/obra/superpowers.git", Path: "skills"},
+	}
+}
+
+// applySkillSourcesDefault ensures c.SkillSources is non-empty, applying the
+// built-in default when the user has not configured any source. Each source is
+// normalized: an empty Path becomes "." and trailing slashes are stripped from
+// the URL. Idempotent, mirroring applySkillsDirDefault.
+func applySkillSourcesDefault(c *Config) {
+	if len(c.SkillSources) == 0 {
+		c.SkillSources = defaultSkillSources()
+	}
+	for i := range c.SkillSources {
+		if c.SkillSources[i].Path == "" {
+			c.SkillSources[i].Path = "."
+		}
+		c.SkillSources[i].URL = stdstrings.TrimRight(c.SkillSources[i].URL, "/")
+	}
+}
+
+// DefaultSkillSourcesCacheDir resolves the directory where remote skill source
+// repos are shallow-cloned. It is regenerable, so it lives under the cache
+// home. Portable mode: next to the executable (self-contained), mirroring the
+// skills/sessions defaults.
+func DefaultSkillSourcesCacheDir() string {
+	if portableActive() {
+		return filepath.Join(executableDir(), "skill-sources")
+	}
+	return filepath.Join(xdg.CacheHome, "mods", "skill-sources")
 }
 
 func settingsFilePath() (string, error) {

@@ -408,3 +408,27 @@ func TestSkillsDirYAMLOverride(t *testing.T) {
 	applySkillsDirDefault(&cfg)
 	require.Equal(t, skillsDir, cfg.SkillsDir)
 }
+
+func TestSkillSourcesDefault(t *testing.T) {
+	cfg := Default()
+	applySkillSourcesDefault(&cfg)
+	require.Len(t, cfg.SkillSources, 1)
+	require.Equal(t, "https://github.com/obra/superpowers.git", cfg.SkillSources[0].URL)
+	require.Equal(t, "skills", cfg.SkillSources[0].Path)
+}
+
+func TestSkillSourcesYAMLOverride(t *testing.T) {
+	yamlContent := "skill-sources:\n  - url: https://example.com/a.git\n    path: subdir\n  - url: https://example.com/b.git\n"
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte(yamlContent), &cfg))
+	applySkillSourcesDefault(&cfg)
+	require.Len(t, cfg.SkillSources, 2)
+	require.Equal(t, "subdir", cfg.SkillSources[0].Path)
+	require.Equal(t, ".", cfg.SkillSources[1].Path) // empty path normalized to "."
+}
+
+func TestDefaultSkillSourcesCacheDir(t *testing.T) {
+	dir := DefaultSkillSourcesCacheDir()
+	require.NotEmpty(t, dir)
+	require.Contains(t, dir, filepath.Join("mods", "skill-sources"))
+}

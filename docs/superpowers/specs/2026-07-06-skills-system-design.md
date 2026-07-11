@@ -1,7 +1,7 @@
 # Skills System — Design
 
 **Date:** 2026-07-06
-**Status:** Approved (brainstorming complete)
+**Status:** Current (local loading only; discovery and installation are external)
 **Scope:** Add a built-in skills system to mods that lets the LLM autonomously load user-defined skill instructions based on the user's request.
 
 ## Goal
@@ -14,16 +14,19 @@ When a user asks mods to do something, mods should be able to load a relevant "s
 - No project-local skills (no `.mods/skills/`). Only the user-level directory.
 - No tool/permission/MCP bindings declared by skills. A skill is pure prompt content. The `requires:` frontmatter field some skills declare (e.g. awesome-claude-skills' composio skills require `mcp: [rube]`) is parsed-but-ignored — mods does not gate skill loading on MCP availability. The LLM discovers a missing MCP server naturally when it tries to use it.
 - No automatic discovery via keyword/embedding. The LLM is the matcher.
-- No CLI flag for skills (`--list-skills`, etc. can be added later if needed).
-- No recursive catalog scanning. Only top-level `*/SKILL.md` is scanned. Users copy individual skill directories into `~/.config/mods/skills/` (the awesome-claude-skills usage pattern).
+- No skill mutation commands. `--skills-dir` selects the local directory to scan,
+  and `--list-skills` prints the installed skill names and descriptions.
+  Interactive terminals render the list as Markdown with the same Glamour
+  renderer used for responses; `--raw` and non-TTY output preserve Markdown.
+- No recursive catalog scanning. Only top-level `*/SKILL.md` is scanned. Users copy individual skill directories into `~/.agents/skills/` (the awesome-claude-skills usage pattern).
 - No catalog truncation. The user curates which skills are present; if they copy too many, that's their call.
 
 ## User Experience
 
-A user copies a skill directory (e.g. from [awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills)) into `~/.config/mods/skills/`:
+A user copies a skill directory (e.g. from [awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills)) into `~/.agents/skills/`:
 
 ```
-~/.config/mods/skills/
+~/.agents/skills/
   git-conflict-resolver/
     SKILL.md
   mcp-builder/
@@ -56,7 +59,7 @@ Unknown frontmatter fields (`license`, `requires`, etc.) are ignored by the pars
 ## Architecture
 
 ```
-~/.config/mods/skills/<name>/SKILL.md  (+ optional scripts/, reference/, etc.)
+~/.agents/skills/<name>/SKILL.md  (+ optional scripts/, reference/, etc.)
             │
             ▼
 internal/skills.Scan()  ──► []Skill{name, description, body, dir}
@@ -166,23 +169,11 @@ The tool does not go through the `requestApproval` review flow because it is rea
 
 ### Config
 
-New config-file-only key (no CLI flag):
-
-```yaml
-# skills-dir: /home/you/.config/mods/skills   # absolute path; ~ is NOT expanded
-```
-
-- `internal/config/config.go`: add `SkillsDir string` field, yaml tag `skills-dir`, env `MODS_SKILLS_DIR`.
-- Default value: resolved via the same pattern as `defaultSessionDir()` — `filepath.Join(xdg.ConfigHome, "mods", "skills")` in standard mode, `filepath.Join(executableDir(), "skills")` in portable mode. Human-readable description in docs/help is `~/.config/mods/skills` (Linux).
-- `internal/config/config_template.yml`: add as a commented-out key (matching the `# web-search-api-key:` pattern for optional path keys):
-  ```yaml
-  # {{ index .Help "skills-dir" }}
-  # skills-dir:
-  ```
-  The default is applied at `Ensure` time, not stored in the template.
-- Default application: add an `applySkillsDirDefault(c *Config)` function called from `Ensure` (mirroring `applySessionDirDefault`). When `c.SkillsDir == ""`, set it to `defaultSkillsDir()` which returns `filepath.Join(executableDir(), "skills")` in portable mode or `filepath.Join(xdg.ConfigHome, "mods", "skills")` otherwise.
-- `Help` map: add `"skills-dir": "Directory containing user-defined skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.config/mods/skills (or next to the executable in portable mode)."`.
-- Tilde expansion: none. Go's `filepath` functions do not expand `~`, and the existing config code does not either. Users who want a home-relative path must use `$HOME` or an absolute path. This matches the behavior of every other path-valued config key in mods.
+The directory is selectable through `--skills-dir`, the `skills-dir` YAML key,
+or `MODS_SKILLS_DIR`, with normal precedence (`CLI > YAML > env > default`). The
+default is `~/.agents/skills` in both standard and portable mode. A leading `~`
+or `~/` is expanded to the current user's home directory; other relative paths
+retain their existing current-working-directory semantics.
 
 ### Identity prompt
 
@@ -193,7 +184,7 @@ Add a section to `internal/prompts/identity.md`:
 
 When the user's request matches an available skill's description, call the
 `load_skill` tool with that skill's name to load its full instructions, then
-follow them. Skills live in `~/.config/mods/skills/<name>/SKILL.md`. Loaded
+follow them. Skills live in `~/.agents/skills/<name>/SKILL.md`. Loaded
 skill content stays in the conversation; do not reload the same skill twice.
 
 Some skills reference auxiliary files in `scripts/` or `reference/`
@@ -299,7 +290,6 @@ All warnings go through the existing `debug` logger so they appear only when `MO
 - **Project-local skills**: scan `.mods/skills/` in the workspace.
 - **Recursive catalog scanning**: scan `**/SKILL.md` so a user can point `skills-dir` at a collection like `composio-skills/` wholesale. Currently the user copies individual skill dirs to the top level.
 - **Multiple `skills-dir` paths**: support a list of directories.
-- **`--list-skills` CLI flag**: print available skills and exit.
 - **Catalog truncation/summarization**: cap catalog size when the user has dozens of skills. Currently the user curates the set.
 - **`list_skills` tool**: on-demand browsing for large catalogs. Not needed while the user curates a small set.
 - **Skill-declared tool/MCP bindings**: honoring `requires: { mcp: [...] }` frontmatter to gate skill loading on MCP availability, or `tools:` allow/deny lists. Rejected for now to keep the security model unchanged; `requires` is parsed-but-ignored.
@@ -316,14 +306,14 @@ Mods is compatible with this format by construction:
 
 1. **Frontmatter parser** ignores unknown fields, so `license`, `requires`, etc. don't break loading.
 2. **`load_skill(name, file?)`** fetches both the SKILL.md body and auxiliary files in `scripts/`/`reference/`, matching the progressive-loading model the standard expects.
-3. **Non-recursive scan** means the user copies individual skill directories (e.g. `cp -r awesome-claude-skills/mcp-builder ~/.config/mods/skills/`) rather than pointing at the whole repo. This avoids the 800+ skill catalog-explosion problem.
+3. **Non-recursive scan** means the user copies individual skill directories (e.g. `cp -r awesome-claude-skills/mcp-builder ~/.agents/skills/`) rather than pointing at the whole repo. This avoids the 800+ skill catalog-explosion problem.
 4. **`requires` field** is ignored — skills that declare MCP dependencies still load; the LLM discovers a missing MCP server when it tries to call it.
 
-The user flow is: clone awesome-claude-skills, copy the specific skill directory wanted into `~/.config/mods/skills/`, restart mods. The skill appears in the catalog and is loadable.
+The user flow is: clone awesome-claude-skills, copy the specific skill directory wanted into `~/.agents/skills/`, restart mods. The skill appears in the catalog and is loadable.
 
 ## Open Questions Resolved During Brainstorming
 
-1. *Where do skills live?* → User directory only (`~/.config/mods/skills/`).
+1. *Where do skills live?* → User directory only (`~/.agents/skills/`).
 2. *What is a skill?* → Markdown with frontmatter (`name`, `description`), body is the instruction text. Unknown frontmatter fields ignored.
 3. *How does mods decide which to load?* → LLM autonomous selection from a system-prompt catalog.
 4. *How is skill content delivered?* → `load_skill` tool returns the body as a tool result.
@@ -332,5 +322,5 @@ The user flow is: clone awesome-claude-skills, copy the specific skill directory
 7. *Frontmatter parser?* → Hand-rolled minimal parser, no YAML library.
 8. *CLI flag?* → None in this iteration.
 9. *Injection position?* → After the identity prompt, inside the `!cfg.Minimal` branch.
-10. *awesome-claude-skills support?* → Yes. User copies individual skill dirs into `~/.config/mods/skills/`. Non-recursive scan (no catalog explosion). Multi-file skills supported via `load_skill(name, file?)` for `scripts/`/`reference/` aux files.
+10. *awesome-claude-skills support?* → Yes. User copies individual skill dirs into `~/.agents/skills/`. Non-recursive scan (no catalog explosion). Multi-file skills supported via `load_skill(name, file?)` for `scripts/`/`reference/` aux files.
 11. *Multi-file skills?* → In scope. `load_skill` takes optional `file` parameter; path-escape rejected via `filepath.Clean` + prefix check; 256 KB size cap.

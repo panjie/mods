@@ -82,6 +82,19 @@ func TestRunChatRejectsSessionActions(t *testing.T) {
 	})
 }
 
+func TestRunChatRejectsListSkills(t *testing.T) {
+	withChatTest(t, "/exit\n", func(_ *[]string) {
+		config.ListSkills = true
+
+		err := runChat(context.Background(), nil, nil)
+
+		require.Error(t, err)
+		merr, ok := err.(modsError)
+		require.True(t, ok)
+		require.Equal(t, "Chat mode cannot be combined with one-shot session actions.", merr.ReasonText)
+	})
+}
+
 func TestValidateChatModeRejectsConfigSetup(t *testing.T) {
 	withChatTest(t, "/exit\n", func(_ *[]string) {
 		config.Chat = true

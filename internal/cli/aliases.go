@@ -33,6 +33,7 @@ var (
 	SaveFields            = cfgpkg.SaveFields
 	SaveFieldPaths        = cfgpkg.SaveFieldPaths
 	HasAPIKey             = cfgpkg.HasAPIKey
+	NormalizeSkillsDir    = cfgpkg.NormalizeSkillsDir
 	Help                  = cfgpkg.Help
 	Open                  = session.Open
 	MigrateDefaultStorage = session.MigrateDefaultStorage

@@ -36,14 +36,17 @@ section. For structural changes (adding a provider, model, role), show the exact
 YAML block to add.
 
 Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
-`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`, `skills-dir`, `skill-sources`.
+`mcp-timeout`, `builtin-tools`, `format-text`, `shell-classify-prompt`, `max-input-chars`.
 
 ## Skills
 
 When the user's request matches an available skill's description, call the
 `load_skill` tool with that skill's name to load its full instructions, then
-follow them. Skills live in `~/.config/mods/skills/<name>/SKILL.md`. Loaded
-skill content stays in the conversation; do not reload the same skill twice.
+follow them. By default, skills live in `~/.agents/skills/<name>/SKILL.md`;
+users can select another directory with `--skills-dir` or the `skills-dir`
+config key. mods only loads skills already installed in that directory; it
+does not search for or install skills. Loaded skill content stays in the
+conversation; do not reload the same skill twice.
 
 Some skills reference auxiliary files in `scripts/` or `reference/`
 subdirectories (e.g. "see reference/foo.md"). When a skill's body tells you
@@ -53,16 +56,6 @@ to consult such a file, call `load_skill` again with the same `name` and a
 the files you actually need.
 
 Skip skills when their description does not match the request.
-
-If a relevant skill is not installed locally, you can discover and install one
-from the configured remote sources: call `search_skills("<keywords>")` to list
-matching skills (each result names its source), then call
-`install_skill("<name>")` to install it. The user must approve the install;
-once approved the skill's instructions are returned and can be followed
-immediately, and the skill is available to `load_skill` in future sessions.
-Configure sources via the `skill-sources` config key (a list of git `url` +
-optional `path` entries). Only search/install skills when the request clearly
-needs one that is not already present.
 
 ## Portable mode
 
@@ -119,6 +112,7 @@ with `--help-all` (marked [advanced]).
 - `--help-all` — Show Help with advanced and configuration-first options
 - `-v`, `--version` — Show version and exit
 - `--list-prompts` — List built-in prompts and prompt templates
+- `--list-skills` — List installed skills from the configured skills directory
 
 ### Roles
 - `-R`, `--role <name>` — System role to use (defined in mods.yml as roles.<name>)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/stretchr/testify/require"
@@ -380,21 +381,15 @@ func TestCreateConfigFilePermissionsOnUnix(t *testing.T) {
 }
 
 func TestSkillsDirDefault(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	cfg := Default()
 	applySkillsDirDefault(&cfg)
-	require.NotEmpty(t, cfg.SkillsDir)
-	require.Contains(t, cfg.SkillsDir, filepath.Join("mods", "skills"))
+	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), cfg.SkillsDir)
 }
 
 func TestSkillsDirEnvOverride(t *testing.T) {
 	t.Setenv("MODS_SKILLS_DIR", "/custom/skills/dir")
 	cfg := Default()
-	// env is parsed in Ensure; for a unit test, simulate by setting the
-	// field the way env.ParseWithOptions would. applySkillsDirDefault
-	// must not clobber a non-empty value.
-	cfg.SkillsDir = "/custom/skills/dir"
+	require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
 	applySkillsDirDefault(&cfg)
 	require.Equal(t, "/custom/skills/dir", cfg.SkillsDir)
 }
@@ -409,26 +404,25 @@ func TestSkillsDirYAMLOverride(t *testing.T) {
 	require.Equal(t, skillsDir, cfg.SkillsDir)
 }
 
-func TestSkillSourcesDefault(t *testing.T) {
-	cfg := Default()
-	applySkillSourcesDefault(&cfg)
-	require.Len(t, cfg.SkillSources, 1)
-	require.Equal(t, "https://github.com/obra/superpowers.git", cfg.SkillSources[0].URL)
-	require.Equal(t, "skills", cfg.SkillSources[0].Path)
+func TestSkillsDirExpandsHome(t *testing.T) {
+	require.Equal(t, xdg.Home, NormalizeSkillsDir("~"))
+	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), NormalizeSkillsDir("~/.agents/skills"))
 }
 
-func TestSkillSourcesYAMLOverride(t *testing.T) {
-	yamlContent := "skill-sources:\n  - url: https://example.com/a.git\n    path: subdir\n  - url: https://example.com/b.git\n"
+func TestSkillsDirYAMLExpandsHome(t *testing.T) {
 	var cfg Config
-	require.NoError(t, yaml.Unmarshal([]byte(yamlContent), &cfg))
-	applySkillSourcesDefault(&cfg)
-	require.Len(t, cfg.SkillSources, 2)
-	require.Equal(t, "subdir", cfg.SkillSources[0].Path)
-	require.Equal(t, ".", cfg.SkillSources[1].Path) // empty path normalized to "."
+	require.NoError(t, yaml.Unmarshal([]byte("skills-dir: ~/.agents/skills\n"), &cfg))
+	applySkillsDirDefault(&cfg)
+	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), cfg.SkillsDir)
 }
 
-func TestDefaultSkillSourcesCacheDir(t *testing.T) {
-	dir := DefaultSkillSourcesCacheDir()
-	require.NotEmpty(t, dir)
-	require.Contains(t, dir, filepath.Join("mods", "skill-sources"))
+func TestSkillsDirLeavesRelativePathUnchanged(t *testing.T) {
+	require.Equal(t, filepath.Join("relative", "skills"), NormalizeSkillsDir(filepath.Join("relative", "skills")))
+}
+
+func TestRemovedSkillSourcesYAMLIsIgnored(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte("skill-sources:\n  - url: https://example.com/skills.git\n"), &cfg))
+	applySkillsDirDefault(&cfg)
+	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), cfg.SkillsDir)
 }

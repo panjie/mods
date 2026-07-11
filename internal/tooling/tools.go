@@ -16,7 +16,7 @@ import (
 
 var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[\w./-]+|[\w.-]+\.(go|ts|tsx|js|jsx|py|rs|java|c|cc|cpp|h|hpp|md|txt|json|yaml|yml|toml|mod|sum|sh|sql))($|\s|[,.，。:：;；])`)
 
-func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string, skillCatalog []skills.Skill, skillSources []skills.Source) (*toolregistry.Registry, error) {
+func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string, skillCatalog []skills.Skill) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
 
 	workspace := cfg.ResolveWorkspace()
@@ -68,21 +68,6 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	if len(skillCatalog) > 0 {
 		if err := toolregistry.RegisterSkill(registry, skillCatalog); err != nil {
-			return nil, err
-		}
-	}
-
-	if len(skillSources) > 0 {
-		installCfg := toolregistry.SkillInstallConfig{
-			Sources:   skillSources,
-			CacheDir:  cfgpkg.DefaultSkillSourcesCacheDir(),
-			SkillsDir: cfg.SkillsDir,
-			Cache:     toolregistry.NewSourceCache(),
-		}
-		if err := toolregistry.RegisterSearchSkill(registry, installCfg); err != nil {
-			return nil, err
-		}
-		if err := toolregistry.RegisterInstallSkill(registry, installCfg); err != nil {
 			return nil, err
 		}
 	}
@@ -154,8 +139,6 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterThinking(registry)
 	_ = toolregistry.RegisterSkill(registry, nil)
-	_ = toolregistry.RegisterSearchSkill(registry, toolregistry.SkillInstallConfig{Cache: toolregistry.NewSourceCache()})
-	_ = toolregistry.RegisterInstallSkill(registry, toolregistry.SkillInstallConfig{Cache: toolregistry.NewSourceCache()})
 
 	infos := make([]BuiltinToolInfo, 0, registry.Len())
 	for _, spec := range registry.Specs() {

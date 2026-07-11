@@ -79,6 +79,14 @@ func TestDefaultSessionDirFallsBackToXDG(t *testing.T) {
 	require.Equal(t, filepath.Join(xdg.DataHome, "mods", "sessions"), defaultSessionDir())
 }
 
+func TestDefaultSkillsDirPortableStillUsesUserHome(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "mods.yml"), []byte(""), 0o600))
+	defer swapExecutableDir(dir)()
+
+	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), defaultSkillsDir())
+}
+
 func TestEnsurePortableModePopulatesFields(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mods.yml"), []byte("default-api: openai\n"), 0o600))

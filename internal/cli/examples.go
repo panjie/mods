@@ -23,6 +23,7 @@ var examples = map[string]string{
 	"Plan before acting":               `mods --plan --workspace . "Refactor the CLI examples to cover more features"`,
 	"Inspect MCP servers":              `mods --list-mcps`,
 	"Inspect tools":                    `mods --list-tools`,
+	"List installed skills":            `mods --list-skills`,
 	"Debug reasoning":                  `mods --reasoning on --debug "When should I use each review mode?"`,
 }
 

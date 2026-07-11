@@ -176,6 +176,13 @@ func (m *Mods) RenderedOutput() string {
 	return m.glamOutput
 }
 
+// RenderMarkdown renders standalone Markdown with the same Glamour renderer
+// and word-wrap configuration used for model responses. It does not mutate
+// the conversation's accumulated or rendered output.
+func (m *Mods) RenderMarkdown(content string) (string, error) {
+	return m.glam.Render(content)
+}
+
 func (m *Mods) Messages() []proto.Message {
 	return append([]proto.Message(nil), m.messages...)
 }
@@ -244,6 +251,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Config.List ||
 			m.Config.ListRoles ||
 			m.Config.ListPrompts ||
+			m.Config.ListSkills ||
 			m.Config.Settings ||
 			m.Config.ConfigSetup ||
 			m.Config.ResetSettings {
@@ -273,6 +281,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Config.List ||
 			m.Config.ListRoles ||
 			m.Config.ListPrompts ||
+			m.Config.ListSkills ||
 			m.Config.Settings ||
 			m.Config.ConfigSetup ||
 			m.Config.ResetSettings {

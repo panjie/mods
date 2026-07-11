@@ -76,6 +76,7 @@ var (
 		Example:       randomExample(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			debug.SetEnabled(config.Debug)
+			config.SkillsDir = NormalizeSkillsDir(config.SkillsDir)
 			config.Prefix = RemoveWhitespace(strings.Join(args, " "))
 
 			if config.ShowHelp || config.HelpAll {
@@ -153,6 +154,7 @@ func initFlags() {
 	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
+	regStr(flags, &config.SkillsDir, "skills-dir", "", config.SkillsDir)
 	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
 	regBool(flags, &config.NoInstructions, "no-instructions", "", config.NoInstructions)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
@@ -162,6 +164,7 @@ func initFlags() {
 	regStr(flags, &config.Role, "role", "R", config.Role)
 	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
 	regBool(flags, &config.ListPrompts, flagListPrompts, "", config.ListPrompts)
+	regBool(flags, &config.ListSkills, flagListSkills, "", config.ListSkills)
 	regBool(flags, &config.OpenEditor, "editor", "e", false)
 	regBool(flags, &config.Plan, "plan", "p", config.Plan)
 	regBool(flags, &config.MCPList, "list-mcps", "", false)
@@ -225,7 +228,7 @@ func initFlags() {
 		"stdin-image",
 		"clipboard-image",
 	)
-	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "reset-settings", "help", "help-all", "version", flagListPrompts)
+	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "skills-dir", "reset-settings", "help", "help-all", "version", flagListPrompts, flagListSkills)
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search")
 	markCategory(flags, flagCategoryToolsReview, "plan", "think", "review-mode", "max-tool-rounds")
@@ -629,6 +632,7 @@ func isNoArgs() bool {
 		!config.Chat &&
 		!config.ListRoles &&
 		!config.ListPrompts &&
+		!config.ListSkills &&
 		!config.MCPList &&
 		!config.MCPListTools &&
 		!config.Dirs &&

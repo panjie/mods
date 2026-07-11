@@ -28,6 +28,32 @@ func newRenderTestMods(t *testing.T, thought string) *Mods {
 	return m
 }
 
+func TestRenderMarkdownUsesConfiguredRendererWithoutMutatingOutput(t *testing.T) {
+	gr, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("notty"),
+		glamour.WithWordWrap(30),
+	)
+	require.NoError(t, err)
+	m := &Mods{
+		glam: gr,
+		outputRenderer: outputRenderer{
+			Output:     "original",
+			glamOutput: "rendered original",
+		},
+	}
+
+	got, err := m.RenderMarkdown("# Skills\n\n- **alpha** — a description with enough words to wrap\n")
+
+	require.NoError(t, err)
+	require.Contains(t, got, "Skills")
+	require.Contains(t, got, "alpha")
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		require.LessOrEqual(t, lipgloss.Width(line), 30)
+	}
+	require.Equal(t, "original", m.Output)
+	require.Equal(t, "rendered original", m.glamOutput)
+}
+
 func TestThoughtMarkdown(t *testing.T) {
 	t.Run("renders a labelled blockquote and a horizontal rule", func(t *testing.T) {
 		got := thoughtMarkdown("The user is asking about X.\nI should consider Y.")

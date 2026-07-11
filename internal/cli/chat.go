@@ -86,6 +86,7 @@ func hasChatSessionAction() bool {
 	return config.List ||
 		config.ListRoles ||
 		config.ListPrompts ||
+		config.ListSkills ||
 		config.Settings ||
 		config.ConfigSetup ||
 		config.ResetSettings ||

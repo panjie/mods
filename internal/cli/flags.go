@@ -55,6 +55,7 @@ const (
 	flagListMCPs      = "list-mcps"
 	flagListTools     = "list-tools"
 	flagListPrompts   = "list-prompts"
+	flagListSkills    = "list-skills"
 )
 
 // sessionActionFlags are mutually exclusive: at most one may be passed per
@@ -69,6 +70,7 @@ var sessionActionFlags = []string{
 	flagListMCPs,
 	flagListTools,
 	flagListPrompts,
+	flagListSkills,
 }
 
 // sessionCompleteFlags take a session id or title as their value and

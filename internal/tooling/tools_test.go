@@ -71,7 +71,7 @@ func TestBuildRegistryRegistersLoadSkillWhenCatalogNonEmpty(t *testing.T) {
 
 	cfg := cfgpkg.Default()
 	cfg.SkillsDir = root
-	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", catalog, nil)
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", catalog)
 	require.NoError(t, err)
 	_, ok := reg.Tool("load_skill")
 	require.True(t, ok, "load_skill must be registered when catalog is non-empty")
@@ -79,7 +79,7 @@ func TestBuildRegistryRegistersLoadSkillWhenCatalogNonEmpty(t *testing.T) {
 
 func TestBuildRegistrySkipsLoadSkillWhenCatalogEmpty(t *testing.T) {
 	cfg := cfgpkg.Default()
-	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil, nil)
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil)
 	require.NoError(t, err)
 	_, ok := reg.Tool("load_skill")
 	require.False(t, ok, "load_skill must NOT be registered when catalog is empty")
@@ -98,34 +98,13 @@ func TestBuiltinSpecsIncludesLoadSkill(t *testing.T) {
 	require.True(t, found, "load_skill must appear in --list-tools output")
 }
 
-func TestBuildRegistryRegistersSkillToolsWhenSourcesNonEmpty(t *testing.T) {
-	cfg := cfgpkg.Default()
-	sources := []skills.Source{{URL: "https://example.com/s.git", Path: "."}}
-	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil, sources)
-	require.NoError(t, err)
-	_, okSearch := reg.Tool("search_skills")
-	require.True(t, okSearch, "search_skills must be registered when sources are configured")
-	_, okInstall := reg.Tool("install_skill")
-	require.True(t, okInstall, "install_skill must be registered when sources are configured")
-}
-
-func TestBuildRegistrySkipsSkillToolsWhenSourcesEmpty(t *testing.T) {
-	cfg := cfgpkg.Default()
-	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil, nil)
-	require.NoError(t, err)
-	_, okSearch := reg.Tool("search_skills")
-	require.False(t, okSearch, "search_skills must NOT be registered when sources are empty")
-	_, okInstall := reg.Tool("install_skill")
-	require.False(t, okInstall)
-}
-
-func TestBuiltinSpecsIncludesSkillTools(t *testing.T) {
+func TestBuiltinSpecsExcludesSkillDiscoveryAndInstallTools(t *testing.T) {
 	specs, err := BuiltinSpecs()
 	require.NoError(t, err)
 	have := map[string]bool{}
 	for _, s := range specs {
 		have[s.Name] = true
 	}
-	require.True(t, have["search_skills"], "search_skills must appear in --list-tools")
-	require.True(t, have["install_skill"], "install_skill must appear in --list-tools")
+	require.False(t, have["search_skills"], "search_skills must not appear in --list-tools")
+	require.False(t, have["install_skill"], "install_skill must not appear in --list-tools")
 }

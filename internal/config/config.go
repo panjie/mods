@@ -59,6 +59,7 @@ var Help = map[string]string{
 	"roles":                  "List of predefined system messages that can be used as roles",
 	"list-roles":             "List the roles defined in your configuration file",
 	"list-prompts":           "List built-in prompts and prompt templates",
+	"list-skills":            "List installed skills from the configured skills directory",
 	"prompts":                "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":                    "Render output as raw text when connected to a TTY",
 	"hide-tool-status":       "Hide the tool-operation label while tools run (the spinner stays visible)",
@@ -101,8 +102,7 @@ var Help = map[string]string{
 	"think":                  "Enables extended thinking mode",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
-	"skills-dir":             "Directory containing user-defined skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.config/mods/skills (or next to the executable in portable mode).",
-	"skill-sources":          "List of remote git repositories mods can search and install skills from. Each entry has a git 'url' and an optional 'path' (subdir containing skill directories; defaults to the repo root).",
+	"skills-dir":             "Directory containing installed skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.agents/skills.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
@@ -188,13 +188,6 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// SkillSource is one configured remote git repository that mods can search
-// and install skills from.
-type SkillSource struct {
-	URL  string `yaml:"url"`
-	Path string `yaml:"path"`
-}
-
 // PersistentConfig holds configuration that is persisted to the YAML settings
 // file and loaded from environment variables. It is embedded in Config so all
 // fields are promoted and accessible directly on Config.
@@ -233,7 +226,6 @@ type PersistentConfig struct {
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
 	SkillsDir           string                     `yaml:"skills-dir" env:"SKILLS_DIR"`
-	SkillSources        []SkillSource              `yaml:"skill-sources"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
@@ -264,6 +256,7 @@ type Config struct {
 	List          bool
 	ListRoles     bool
 	ListPrompts   bool
+	ListSkills    bool
 	MCPList       bool
 	MCPListTools  bool
 	MCPEnable     []string
@@ -432,8 +425,6 @@ func Ensure() (Config, error) {
 	applySessionDirDefault(&fallback)
 	applySkillsDirDefault(&c)
 	applySkillsDirDefault(&fallback)
-	applySkillSourcesDefault(&c)
-	applySkillSourcesDefault(&fallback)
 
 	sp, err := settingsFilePath()
 	if err != nil {
@@ -481,7 +472,6 @@ func Ensure() (Config, error) {
 
 	applySessionDirDefault(&c)
 	applySkillsDirDefault(&c)
-	applySkillSourcesDefault(&c)
 
 	if err := os.MkdirAll(
 		c.SessionDir,
@@ -580,60 +570,33 @@ func defaultSessionDir() string {
 	return filepath.Join(xdg.DataHome, "mods", "sessions")
 }
 
-// defaultSkillsDir resolves the user-defined skills directory. In portable
-// mode (mods.yml next to the executable) it lives next to the binary so the
-// whole folder is self-contained; otherwise it follows the XDG config home,
-// sitting beside mods.yml. Mirrors defaultSessionDir.
+// defaultSkillsDir resolves the shared user-level skills directory. Unlike
+// session and config storage, skills remain in the user's home directory in
+// portable mode so external skill managers can use the same location.
 func defaultSkillsDir() string {
-	if portableActive() {
-		return filepath.Join(executableDir(), "skills")
-	}
-	return filepath.Join(xdg.ConfigHome, "mods", "skills")
+	return filepath.Join(xdg.Home, ".agents", "skills")
 }
 
-// applySkillsDirDefault ensures c.SkillsDir always points at the skills
-// directory. The default lives outside Default() for the same reason as
-// applySessionDirDefault: the XDG lookup depends on environment variables
-// resolved at Ensure() time.
+// NormalizeSkillsDir expands a leading home-directory marker in a skills
+// path. It intentionally leaves relative paths and ~user syntax unchanged.
+func NormalizeSkillsDir(path string) string {
+	if path == "~" {
+		return xdg.Home
+	}
+	if stdstrings.HasPrefix(path, "~/") ||
+		(runtime.GOOS == "windows" && stdstrings.HasPrefix(path, `~\`)) {
+		return filepath.Join(xdg.Home, path[2:])
+	}
+	return path
+}
+
+// applySkillsDirDefault ensures c.SkillsDir always points at a normalized
+// skills directory.
 func applySkillsDirDefault(c *Config) {
 	if c.SkillsDir == "" {
 		c.SkillsDir = defaultSkillsDir()
 	}
-}
-
-// defaultSkillSources returns the built-in list of remote skill sources used
-// when the user has not configured any.
-func defaultSkillSources() []SkillSource {
-	return []SkillSource{
-		{URL: "https://github.com/obra/superpowers.git", Path: "skills"},
-	}
-}
-
-// applySkillSourcesDefault ensures c.SkillSources is non-empty, applying the
-// built-in default when the user has not configured any source. Each source is
-// normalized: an empty Path becomes "." and trailing slashes are stripped from
-// the URL. Idempotent, mirroring applySkillsDirDefault.
-func applySkillSourcesDefault(c *Config) {
-	if len(c.SkillSources) == 0 {
-		c.SkillSources = defaultSkillSources()
-	}
-	for i := range c.SkillSources {
-		if c.SkillSources[i].Path == "" {
-			c.SkillSources[i].Path = "."
-		}
-		c.SkillSources[i].URL = stdstrings.TrimRight(c.SkillSources[i].URL, "/")
-	}
-}
-
-// DefaultSkillSourcesCacheDir resolves the directory where remote skill source
-// repos are shallow-cloned. It is regenerable, so it lives under the cache
-// home. Portable mode: next to the executable (self-contained), mirroring the
-// skills/sessions defaults.
-func DefaultSkillSourcesCacheDir() string {
-	if portableActive() {
-		return filepath.Join(executableDir(), "skill-sources")
-	}
-	return filepath.Join(xdg.CacheHome, "mods", "skill-sources")
+	c.SkillsDir = NormalizeSkillsDir(c.SkillsDir)
 }
 
 func settingsFilePath() (string, error) {

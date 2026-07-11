@@ -246,6 +246,10 @@ func TestIsNoArgs(t *testing.T) {
 		cfg := Config{ListPrompts: true}
 		require.False(t, isNoArgsCfg(cfg))
 	})
+	t.Run("with list skills", func(t *testing.T) {
+		cfg := Config{ListSkills: true}
+		require.False(t, isNoArgsCfg(cfg))
+	})
 }
 
 func isNoArgsCfg(cfg Config) bool {
@@ -255,6 +259,7 @@ func isNoArgsCfg(cfg Config) bool {
 		!cfg.List &&
 		!cfg.ListRoles &&
 		!cfg.ListPrompts &&
+		!cfg.ListSkills &&
 		!cfg.MCPList &&
 		!cfg.MCPListTools &&
 		!cfg.Dirs &&
@@ -303,12 +308,23 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
 	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
 	require.True(t, groupHasFlag(groups, flagCategoryToolsReview, "review-mode"))
+	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "skills-dir"))
+	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "list-skills"))
 	require.False(t, groupHasFlag(groups, flagCategoryInputOutput, "hide-tool-results"))
 	require.False(t, groupHasFlag(groups, flagCategoryToolsReview, "review"))
 
 	for category, flags := range groups {
 		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))
 	}
+}
+
+func TestListSkillsIsMutuallyExclusiveWithSessionActions(t *testing.T) {
+	flag := rootCmd.Flags().Lookup(flagListSkills)
+	require.NotNil(t, flag)
+	groups := flag.Annotations["cobra_annotation_mutually_exclusive"]
+	require.Len(t, groups, 1)
+	require.Contains(t, groups[0], flagListPrompts)
+	require.Contains(t, groups[0], flagListTools)
 }
 
 func TestDirsActionUsesSessions(t *testing.T) {
@@ -336,6 +352,15 @@ func TestAdvancedFlagsStillParse(t *testing.T) {
 		require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
 
 		require.Equal(t, 12, config.MaxToolRounds)
+	})
+}
+
+func TestSkillsDirFlagOverridesConfig(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{SkillsDir: "/from-config"}}, func() {
+		dir := filepath.Join(t.TempDir(), "skills")
+		require.NoError(t, rootCmd.Flags().Set("skills-dir", dir))
+
+		require.Equal(t, dir, config.SkillsDir)
 	})
 }
 

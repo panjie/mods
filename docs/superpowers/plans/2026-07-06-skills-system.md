@@ -1,10 +1,15 @@
 # Skills System Implementation Plan
 
+> **Historical note (2026-07-11):** The local loading architecture remains,
+> but the default is now `~/.agents/skills`, `--skills-dir` is available, and
+> leading `~` is expanded. Remote search and installation are intentionally not
+> part of mods.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a built-in skills system to mods so the LLM can autonomously load user-defined skill instructions (markdown + frontmatter) from `~/.config/mods/skills/`, compatible with the awesome-claude-skills format.
+**Goal:** Add a built-in skills system to mods so the LLM can autonomously load user-defined skill instructions (markdown + frontmatter) from `~/.agents/skills/`, compatible with the awesome-claude-skills format.
 
-**Architecture:** `internal/skills.Scan()` walks `~/.config/mods/skills/*/SKILL.md` once per conversation, parses YAML frontmatter (`name`, `description`) with a hand-rolled parser, and caches the result on `Mods.skillCatalog`. The catalog is injected into the system prompt and a `load_skill(name, file?)` tool is registered. The LLM calls the tool to load a skill's body or auxiliary files from `scripts/`/`reference/` subdirectories.
+**Architecture:** `internal/skills.Scan()` walks `~/.agents/skills/*/SKILL.md` once per conversation, parses YAML frontmatter (`name`, `description`) with a hand-rolled parser, and caches the result on `Mods.skillCatalog`. The catalog is injected into the system prompt and a `load_skill(name, file?)` tool is registered. The LLM calls the tool to load a skill's body or auxiliary files from `scripts/`/`reference/` subdirectories.
 
 **Tech Stack:** Go 1.22+, `github.com/adrg/xdg` (already a dependency), `github.com/panjie/mods/internal/{config,proto,tools,app,prompts,debug}`. No new external dependencies.
 
@@ -13,8 +18,8 @@
 - No new external dependencies. Hand-rolled frontmatter parser (no `gopkg.in/yaml.v3`).
 - Tool naming follows existing convention: snake_case (`load_skill`, matching `fs_read_file`, `web_search`, `shell_run`, `thinking_note`).
 - Config precedence: CLI flags > mods.yml > MODS_ env > defaults. `skills-dir` uses yaml tag `skills-dir` + env `MODS_SKILLS_DIR`.
-- Portable mode: `skills-dir` default is `<exe-dir>/skills` when portable mode is active, else `xdg.ConfigHome/mods/skills`.
-- No tilde expansion on user-supplied values (matches all other path-valued config keys).
+- Portable mode uses the same `~/.agents/skills` default as standard mode.
+- `--skills-dir`, YAML, and environment values expand a leading `~` or `~/`.
 - Skills are pure prompt content; `requires`/`license`/other frontmatter fields are parsed-but-ignored.
 - `load_skill` is `ReadOnly: true`, does not go through `requestApproval`.
 - Catalog empty → no system-prompt injection, no tool registration (zero overhead).
@@ -158,7 +163,7 @@ And after the second call site (~line 467, after `applySessionDirDefault(&c)` po
 In `internal/config/config.go`, find `var Help = map[string]string{` (~line 47). Add a new entry (place near `shell-classify-prompt` to group with other path-ish keys, or alphabetically):
 
 ```go
-	"skills-dir":             "Directory containing user-defined skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.config/mods/skills (or next to the executable in portable mode).",
+	"skills-dir":             "Directory containing user-defined skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.agents/skills (or next to the executable in portable mode).",
 ```
 
 - [ ] **Step 7: Add the commented-out key to the config template**
@@ -1284,7 +1289,7 @@ In `internal/prompts/identity.md`, find a good insertion point — after the `##
 
 When the user's request matches an available skill's description, call the
 `load_skill` tool with that skill's name to load its full instructions, then
-follow them. Skills live in `~/.config/mods/skills/<name>/SKILL.md`. Loaded
+follow them. Skills live in `~/.agents/skills/<name>/SKILL.md`. Loaded
 skill content stays in the conversation; do not reload the same skill twice.
 
 Some skills reference auxiliary files in `scripts/` or `reference/`
@@ -1335,8 +1340,8 @@ Expected: `bin/mods` written, no errors.
 - [ ] **Step 2: Create a test skill**
 
 ```bash
-mkdir -p ~/.config/mods/skills/demo
-cat > ~/.config/mods/skills/demo/SKILL.md <<'EOF'
+mkdir -p ~/.agents/skills/demo
+cat > ~/.agents/skills/demo/SKILL.md <<'EOF'
 ---
 name: demo
 description: A demo skill that uppercases text. Use when the user asks to uppercase something.
@@ -1363,8 +1368,8 @@ Expected: The LLM calls `load_skill("demo")`, then responds with "HELLO" and men
 
 ```bash
 cd /tmp/opencode && rm -rf awesome-claude-skills && git clone --depth 1 https://github.com/ComposioHQ/awesome-claude-skills
-cp -r /tmp/opencode/awesome-claude-skills/changelog-generator ~/.config/mods/skills/
-rm -rf ~/.config/mods/skills/demo
+cp -r /tmp/opencode/awesome-claude-skills/changelog-generator ~/.agents/skills/
+rm -rf ~/.agents/skills/demo
 ./bin/mods "generate a changelog from the last 3 git commits in /home/panjie/dev/mods"
 ```
 Expected: The LLM calls `load_skill("changelog-generator")` and produces a changelog. If the skill body references auxiliary files, the LLM calls `load_skill("changelog-generator", "<path>")` to fetch them.
@@ -1372,7 +1377,7 @@ Expected: The LLM calls `load_skill("changelog-generator")` and produces a chang
 - [ ] **Step 6: Clean up test skills**
 
 ```bash
-rm -rf ~/.config/mods/skills/changelog-generator ~/.config/mods/skills/demo
+rm -rf ~/.agents/skills/changelog-generator ~/.agents/skills/demo
 ```
 
 - [ ] **Step 7: Final full CI mirror**

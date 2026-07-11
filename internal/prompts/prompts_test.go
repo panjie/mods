@@ -65,6 +65,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"show-tool-results",
 		"word-wrap",
 		"workspace",
+		"skills-dir",
 		"editor",
 		"image",
 		"stdin-image",
@@ -77,6 +78,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"help-all",
 		"version",
 		"list-prompts",
+		"list-skills",
 		"role",
 		"list-roles",
 		"web-search",
@@ -112,7 +114,6 @@ func TestIdentityCoversConfigKeys(t *testing.T) {
 		"review-mode",
 		"shell-classify-prompt",
 		"skills-dir",
-		"skill-sources",
 		"~/.config/mods/mods.yml",
 	} {
 		require.Contains(t, Identity, key,

@@ -109,6 +109,9 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		listPrompts()
 		return nil
 	}
+	if config.ListSkills {
+		return listSkills(mods, config.SkillsDir)
+	}
 	if config.List {
 		return listSessions(config.Raw)
 	}

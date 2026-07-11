@@ -143,12 +143,7 @@ web-search-provider: duckduckgo
 # web-search-api-key:
 
 # {{ index .Help "skills-dir" }}
-# skills-dir:
-
-# {{ index .Help "skill-sources" }}
-# skill-sources:
-#   - url: https://github.com/obra/superpowers.git
-#     path: skills
+# skills-dir: ~/.agents/skills
 
 # {{ index .Help "web-search-api-key-env" }}
 # web-search-api-key-env: TAVILY_API_KEY

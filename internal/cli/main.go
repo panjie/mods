@@ -586,6 +586,21 @@ func saveSession(mods *Mods) error {
 		return nil
 	}
 
+	id, title, err := persistSession(mods)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(
+		os.Stderr,
+		"\nSession saved:",
+		StderrStyles().InlineCode.Render(id[:ShortIDLength]),
+		StderrStyles().Comment.Render(title),
+	)
+	return nil
+}
+
+func persistSession(mods *Mods) (string, string, error) {
 	// if message is a sha1, use the last prompt instead.
 	id := config.SessionWriteToID
 	title := strings.TrimSpace(config.SessionWriteToTitle)
@@ -607,16 +622,9 @@ func saveSession(mods *Mods) error {
 		mods.Messages(),
 		mods.ApprovalRules(),
 	); err != nil {
-		return modsError{Err: err, ReasonText: errReason}
+		return "", "", modsError{Err: err, ReasonText: errReason}
 	}
-
-	fmt.Fprintln(
-		os.Stderr,
-		"\nSession saved:",
-		StderrStyles().InlineCode.Render(config.SessionWriteToID[:ShortIDLength]),
-		StderrStyles().Comment.Render(title),
-	)
-	return nil
+	return id, title, nil
 }
 
 // isNoArgs reports whether the invocation is effectively empty (no prompt and

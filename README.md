@@ -220,9 +220,11 @@ mods --chat
 mods --chat --continue-last
 ```
 
-Use `--chat` for a REPL-style session when one prompt is not enough. Type
-`/exit` or `/quit` to leave; each turn is saved to the same session so you
-can resume it later with `--continue`.
+Use `--chat` for a terminal-native conversation when one prompt is not enough.
+The inline composer supports multi-line prompts: press `Enter` to send and
+`Ctrl+J` to add a new line. Type `/exit` or `/quit` (or press `Ctrl+C` while
+composing) to leave. Each turn is saved to the same session so you can resume
+it later with `--continue`.
 
 ## Safety & Review
 

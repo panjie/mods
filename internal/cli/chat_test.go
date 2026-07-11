@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,24 +150,127 @@ func TestRunChatPrintsBannerAndPrompt(t *testing.T) {
 	})
 }
 
+func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
+	withChatTest(t, "", func(calls *[]string) {
+		config.API = "openai"
+		config.Model = "gpt-5"
+		config.Role = "reviewer"
+		IsErrorTTY = func() bool { return true }
+		chatTerminalWidth = func() int { return 80 }
+		prompts := []string{"/quit"}
+		chatPromptInput = func() (string, bool, error) {
+			prompt := prompts[0]
+			prompts = prompts[1:]
+			return prompt, false, nil
+		}
+
+		stdout := captureStdout(t, func() {
+			require.NoError(t, runChat(context.Background(), []string{"hello"}, nil))
+		})
+
+		require.Empty(t, stdout)
+		require.Equal(t, []string{"hello"}, *calls)
+		got := ansi.Strip(chatOutput.(*bytes.Buffer).String())
+		require.Contains(t, got, "MODS CHAT")
+		require.Contains(t, got, "openai / gpt-5")
+		require.Contains(t, got, "role: reviewer")
+		require.Contains(t, got, "YOU\n")
+		require.Contains(t, got, "hello")
+		require.Contains(t, got, "MODS")
+		require.Contains(t, got, "saved · df31ae2")
+		require.NotContains(t, got, "Session saved:")
+	})
+}
+
+func TestChatBannerHidesSecondaryMetadataWhenNarrow(t *testing.T) {
+	saveConfig := config
+	t.Cleanup(func() { config = saveConfig })
+	config.API = "anthropic"
+	config.Model = "claude-sonnet"
+	config.Role = "default"
+
+	wide := ansi.Strip(renderChatBanner(80))
+	require.Contains(t, wide, "anthropic / claude-sonnet")
+	require.NotContains(t, wide, "role:")
+
+	narrow := ansi.Strip(renderChatBanner(30))
+	require.Contains(t, narrow, "MODS CHAT")
+	require.NotContains(t, narrow, "claude-sonnet")
+	require.Contains(t, narrow, "Enter send")
+}
+
+func TestChatPromptEnterSubmitsAndCtrlJAddsNewline(t *testing.T) {
+	model := newChatPromptModel()
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("world")})
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyEnter})
+
+	require.True(t, model.done)
+	require.False(t, model.exit)
+	require.Equal(t, "hello\nworld", model.prompt)
+}
+
+func TestChatPromptIgnoresBlankSubmitAndCtrlCExits(t *testing.T) {
+	model := newChatPromptModel()
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyEnter})
+	require.False(t, model.done)
+
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlC})
+	require.True(t, model.done)
+	require.True(t, model.exit)
+	require.Empty(t, model.prompt)
+}
+
+func TestChatPromptResizesWithinBounds(t *testing.T) {
+	model := newChatPromptModel()
+	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
+	model.textarea.SetValue(strings.Repeat("a long wrapped line ", 12))
+	model.resizeHeight()
+	require.Equal(t, chatMaxHeight, model.textarea.Height())
+
+	for _, line := range strings.Split(model.View(), "\n") {
+		require.LessOrEqual(t, lipgloss.Width(line), 28)
+	}
+
+	model.textarea.SetValue("short")
+	model.resizeHeight()
+	require.Equal(t, chatMinHeight, model.textarea.Height())
+}
+
+func updateChatPrompt(t *testing.T, model chatPromptModel, msg tea.Msg) chatPromptModel {
+	t.Helper()
+	updated, _ := model.Update(msg)
+	result, ok := updated.(chatPromptModel)
+	require.True(t, ok)
+	return result
+}
+
 func withChatTest(t *testing.T, input string, fn func(calls *[]string)) {
 	t.Helper()
 
 	saveConfig := config
 	saveIsInputTTY := IsInputTTY
+	saveIsErrorTTY := IsErrorTTY
 	saveChatTurn := chatTurn
+	saveChatPromptInput := chatPromptInput
+	saveChatTerminalWidth := chatTerminalWidth
 	saveChatInput := chatInput
 	saveChatOutput := chatOutput
 	defer func() {
 		config = saveConfig
 		IsInputTTY = saveIsInputTTY
+		IsErrorTTY = saveIsErrorTTY
 		chatTurn = saveChatTurn
+		chatPromptInput = saveChatPromptInput
+		chatTerminalWidth = saveChatTerminalWidth
 		chatInput = saveChatInput
 		chatOutput = saveChatOutput
 	}()
 
 	config = Config{Chat: true}
 	IsInputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return false }
 	chatInput = strings.NewReader(input)
 	chatOutput = &bytes.Buffer{}
 	calls := []string{}

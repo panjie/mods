@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	chatInput  io.Reader = os.Stdin
-	chatOutput io.Writer = os.Stderr
-	chatTurn             = runChatTurn
-	oneTurn              = runOneTurn
+	chatInput       io.Reader = os.Stdin
+	chatOutput      io.Writer = os.Stderr
+	chatTurn                  = runChatTurn
+	chatPromptInput           = runInteractiveChatPrompt
+	oneTurn                   = runOneTurn
 )
 
 func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error {
@@ -32,23 +33,20 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 	chatBanner()
 	firstPrompt := strings.TrimSpace(strings.Join(args, " "))
 	if firstPrompt != "" {
-		if _, err := chatTurn(ctx, firstPrompt, opts); err != nil {
+		if err := runChatMessage(ctx, firstPrompt, opts); err != nil {
 			return err
 		}
-		prepareNextChatTurn()
 	}
 
 	scanner := bufio.NewScanner(chatInput)
 	for {
-		chatPrompt()
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return modsError{Err: err, ReasonText: "Could not read chat input."}
-			}
+		prompt, exit, err := readChatPrompt(scanner)
+		if err != nil {
+			return err
+		}
+		if exit {
 			return nil
 		}
-
-		prompt := strings.TrimSpace(scanner.Text())
 		if prompt == "" {
 			continue
 		}
@@ -56,11 +54,40 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 			return nil
 		}
 
-		if _, err := chatTurn(ctx, prompt, opts); err != nil {
+		if err := runChatMessage(ctx, prompt, opts); err != nil {
 			return err
 		}
-		prepareNextChatTurn()
 	}
+}
+
+func readChatPrompt(scanner *bufio.Scanner) (string, bool, error) {
+	if IsErrorTTY() {
+		prompt, exit, err := chatPromptInput()
+		if err != nil {
+			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
+		}
+		return strings.TrimSpace(prompt), exit, nil
+	}
+
+	chatPrompt()
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
+		}
+		return "", true, nil
+	}
+	return strings.TrimSpace(scanner.Text()), false, nil
+}
+
+func runChatMessage(ctx context.Context, prompt string, opts []tea.ProgramOption) error {
+	renderChatUser(prompt)
+	renderChatAssistant()
+	if _, err := chatTurn(ctx, prompt, opts); err != nil {
+		return err
+	}
+	renderChatSaved(config.SessionWriteToID)
+	prepareNextChatTurn()
+	return nil
 }
 
 func validateChatMode() error {
@@ -103,7 +130,7 @@ func runChatTurn(ctx context.Context, prompt string, opts []tea.ProgramOption) (
 	}
 	printChatTurnOutput(mods)
 	if config.SessionWriteToID != "" {
-		if err := saveSession(mods); err != nil {
+		if _, _, err := persistSession(mods); err != nil {
 			return mods, err
 		}
 	}
@@ -142,7 +169,11 @@ func isChatExit(input string) bool {
 }
 
 func chatBanner() {
-	fmt.Fprintln(chatOutput, "mods chat: type /exit or /quit to quit.")
+	if !IsErrorTTY() {
+		fmt.Fprintln(chatOutput, "mods chat: type /exit or /quit to quit.")
+		return
+	}
+	fmt.Fprintln(chatOutput, renderChatBanner(chatTerminalWidth()))
 }
 
 func chatPrompt() {

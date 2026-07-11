@@ -35,11 +35,12 @@ type streamEventMsg struct {
 // path (receiveCmd returning streamEventDone/streamEventError) and the user
 // quit path can both invoke it without double-close issues.
 type streamRunner struct {
-	stream  stream.Stream
-	cleanup *toolregistry.Registry
-	errh    func(error) tea.Msg
-	cancel  context.CancelFunc
-	closed  atomic.Bool
+	stream     stream.Stream
+	cleanup    *toolregistry.Registry
+	errh       func(error) tea.Msg
+	cancel     context.CancelFunc
+	closed     atomic.Bool
+	usageTaken atomic.Bool
 }
 
 func newStreamRunner(st stream.Stream, cleanup *toolregistry.Registry, cancel context.CancelFunc, errh func(error) tea.Msg) *streamRunner {
@@ -83,6 +84,16 @@ func (r *streamRunner) doneMsg() streamEventMsg {
 
 func (r *streamRunner) messages() []proto.Message {
 	return r.stream.Messages()
+}
+
+func (r *streamRunner) takeUsage() proto.TokenUsage {
+	if r == nil || r.stream == nil {
+		return proto.TokenUsage{}
+	}
+	if !r.usageTaken.CompareAndSwap(false, true) {
+		return proto.TokenUsage{}
+	}
+	return r.stream.Usage()
 }
 
 // close releases the stream's context, the underlying HTTP/SSE body, and any

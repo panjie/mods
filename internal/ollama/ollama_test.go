@@ -72,3 +72,19 @@ func TestCurrentBlocksUntilResponse(t *testing.T) {
 		t.Fatal("Current did not return after response")
 	}
 }
+
+func TestCurrentCollectsFinalTokenUsage(t *testing.T) {
+	s := &Stream{respCh: make(chan api.ChatResponse, 1), trackUsage: true}
+	s.respCh <- api.ChatResponse{
+		Done:    true,
+		Metrics: api.Metrics{PromptEvalCount: 11, EvalCount: 6},
+	}
+	_, err := s.Current()
+	if err != nil {
+		t.Fatalf("Current returned error: %v", err)
+	}
+	want := proto.TokenUsage{InputTokens: 11, OutputTokens: 6, TotalTokens: 17}
+	if got := s.Usage(); got != want {
+		t.Fatalf("Usage() = %#v, want %#v", got, want)
+	}
+}

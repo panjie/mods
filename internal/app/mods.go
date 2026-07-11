@@ -84,6 +84,7 @@ type Mods struct {
 	showOperationStatus     bool
 	Thought                 string
 	thoughtFlushed          bool
+	tokenUsage              proto.TokenUsage
 
 	db     *DB
 	Config *Config
@@ -186,6 +187,9 @@ func (m *Mods) RenderMarkdown(content string) (string, error) {
 func (m *Mods) Messages() []proto.Message {
 	return append([]proto.Message(nil), m.messages...)
 }
+
+// TokenUsage returns token consumption accumulated for this interaction.
+func (m *Mods) TokenUsage() proto.TokenUsage { return m.tokenUsage }
 
 func (m *Mods) ApprovalRules() []Rule {
 	return m.reviewer.rules.Snapshot()
@@ -315,6 +319,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case streamEventToolCalls:
 			return m, m.handleToolCallsDone(msg)
 		case streamEventDone:
+			m.tokenUsage.Add(msg.runner.takeUsage())
 			if m.Config.Plan {
 				return m, msgCmd(planCompleteMsg{plan: m.Output})
 			}

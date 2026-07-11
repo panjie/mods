@@ -64,6 +64,7 @@ var Help = map[string]string{
 	"raw":                    "Render output as raw text when connected to a TTY",
 	"hide-tool-status":       "Hide the tool-operation label while tools run (the spinner stays visible)",
 	"show-tool-results":      "Show completed shell-command result blocks in the output",
+	"show-token-usage":       "Show input, output, and total token usage after each interaction",
 	"help":                   "Show Help and exit",
 	"help-all":               "Show Help with advanced and configuration-first options",
 	"version":                "Show version and exit",
@@ -200,6 +201,7 @@ type PersistentConfig struct {
 	Raw                 bool       `yaml:"raw" env:"RAW"`
 	HideToolStatus      bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
 	ShowToolResults     bool       `yaml:"show-tool-results" env:"SHOW_TOOL_RESULTS"`
+	ShowTokenUsage      bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
 	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
 	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
 	NoLimit             bool       `yaml:"no-limit" env:"NO_LIMIT"`

@@ -50,10 +50,11 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	}
 
 	s := &Stream{
-		stream:   c.Messages.NewStreaming(ctx, body),
-		request:  body,
-		toolCall: request.ToolCaller,
-		messages: request.Messages,
+		stream:     c.Messages.NewStreaming(ctx, body),
+		request:    body,
+		toolCall:   request.ToolCaller,
+		messages:   request.Messages,
+		trackUsage: request.TrackUsage,
 	}
 
 	s.factory = func() *ssestream.Stream[anthropic.MessageStreamEventUnion] {
@@ -115,13 +116,15 @@ func NormalizeBaseURL(base string) string {
 
 // Stream represents a stream for chat completion.
 type Stream struct {
-	done     bool
-	stream   *ssestream.Stream[anthropic.MessageStreamEventUnion]
-	request  anthropic.MessageNewParams
-	factory  func() *ssestream.Stream[anthropic.MessageStreamEventUnion]
-	message  anthropic.Message
-	toolCall func(name string, data []byte) (string, error)
-	messages []proto.Message
+	done       bool
+	stream     *ssestream.Stream[anthropic.MessageStreamEventUnion]
+	request    anthropic.MessageNewParams
+	factory    func() *ssestream.Stream[anthropic.MessageStreamEventUnion]
+	message    anthropic.Message
+	toolCall   func(name string, data []byte) (string, error)
+	messages   []proto.Message
+	trackUsage bool
+	usage      proto.TokenUsage
 }
 
 // CallTools implements stream.Stream.
@@ -182,6 +185,21 @@ func (s *Stream) Err() error { return s.stream.Err() } //nolint:wrapcheck
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message { return s.messages }
 
+// Usage implements stream.Stream.
+func (s *Stream) Usage() proto.TokenUsage { return s.usage }
+
+func tokenUsageFromMessage(message anthropic.Message) proto.TokenUsage {
+	input := message.Usage.InputTokens +
+		message.Usage.CacheCreationInputTokens +
+		message.Usage.CacheReadInputTokens
+	output := message.Usage.OutputTokens
+	return proto.TokenUsage{
+		InputTokens:  input,
+		OutputTokens: output,
+		TotalTokens:  input + output,
+	}
+}
+
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
 	if s.done {
@@ -195,6 +213,9 @@ func (s *Stream) Next() bool {
 	}
 
 	s.done = true
+	if s.trackUsage {
+		s.usage.Add(tokenUsageFromMessage(s.message))
+	}
 	s.request.Messages = append(s.request.Messages, s.message.ToParam())
 	s.messages = append(s.messages, toProtoMessage(s.message.ToParam()))
 

@@ -129,6 +129,7 @@ func runChatTurn(ctx context.Context, prompt string, opts []tea.ProgramOption) (
 		return mods, err
 	}
 	printChatTurnOutput(mods)
+	printTokenUsage(mods)
 	if config.SessionWriteToID != "" {
 		if _, _, err := persistSession(mods); err != nil {
 			return mods, err

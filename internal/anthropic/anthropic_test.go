@@ -1,6 +1,11 @@
 package anthropic
 
-import "testing"
+import (
+	"testing"
+
+	SDK "github.com/anthropics/anthropic-sdk-go"
+	"github.com/panjie/mods/internal/proto"
+)
 
 func TestNormalizeBaseURL(t *testing.T) {
 	cases := []struct {
@@ -24,5 +29,16 @@ func TestNormalizeBaseURL(t *testing.T) {
 				t.Errorf("NormalizeBaseURL(%q) = %q, want %q", c.in, got, c.want)
 			}
 		})
+	}
+}
+
+func TestTokenUsageFromMessageIncludesCacheTokens(t *testing.T) {
+	message := SDK.Message{Usage: SDK.Usage{
+		InputTokens: 7, CacheCreationInputTokens: 3,
+		CacheReadInputTokens: 5, OutputTokens: 4,
+	}}
+	want := proto.TokenUsage{InputTokens: 15, OutputTokens: 4, TotalTokens: 19}
+	if got := tokenUsageFromMessage(message); got != want {
+		t.Fatalf("tokenUsageFromMessage() = %#v, want %#v", got, want)
 	}
 }

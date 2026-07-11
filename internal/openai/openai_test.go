@@ -325,4 +325,36 @@ func TestResponseFormatOmittedWhenNotJSON(t *testing.T) {
 	require.NotEmpty(t, *captured, "no request body was captured")
 	require.False(t, bytes.Contains(*captured, []byte(`"response_format"`)),
 		"wire JSON must not contain response_format when unset: %s", *captured)
+	require.NotContains(t, string(*captured), `"stream_options"`,
+		"usage tracking must not change requests unless explicitly enabled")
+}
+
+func TestStreamingTokenUsage(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w,
+			"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}\n\n"+
+				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4,\"total_tokens\":14}}\n\n"+
+				"data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k"})
+	st := client.Request(context.Background(), proto.Request{
+		Model: "test", TrackUsage: true,
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+	var content string
+	for st.Next() {
+		chunk, err := st.Current()
+		if err == nil {
+			content += chunk.Content
+		}
+	}
+	require.NoError(t, st.Err())
+	require.Equal(t, "hello", content, "usage-only chunk must not become response content")
+	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14}, st.Usage())
+	require.Contains(t, string(captured), `"stream_options":{"include_usage":true}`)
 }

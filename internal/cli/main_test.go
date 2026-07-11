@@ -7,6 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
@@ -184,6 +188,107 @@ func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
 
 func TestShowToolResultsFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
+}
+
+func TestShowTokenUsageFlagAndFormatting(t *testing.T) {
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--show-token-usage"}))
+		require.True(t, config.ShowTokenUsage)
+	})
+	require.Equal(t, "Token usage: unavailable", tokenUsageLine(proto.TokenUsage{}))
+	require.Equal(t, "Token usage: input 7,735, output 9, total 7,744", tokenUsageLine(proto.TokenUsage{
+		InputTokens: 7735, OutputTokens: 9, TotalTokens: 7744,
+	}))
+}
+
+func TestFormatTokenCount(t *testing.T) {
+	for _, test := range []struct {
+		value int64
+		want  string
+	}{
+		{0, "0"},
+		{999, "999"},
+		{1000, "1,000"},
+		{7735, "7,735"},
+		{123456789, "123,456,789"},
+	} {
+		require.Equal(t, test.want, formatTokenCount(test.value))
+	}
+}
+
+func TestStyledTokenUsageLine(t *testing.T) {
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.TrueColor)
+	styles := Styles{
+		Comment: renderer.NewStyle().Foreground(lipgloss.Color("#757575")),
+		Flag: renderer.NewStyle().
+			Foreground(lipgloss.Color("#3EEFCF")).
+			Bold(true),
+	}
+
+	got := styledTokenUsageLine(proto.TokenUsage{
+		InputTokens: 7735, OutputTokens: 9, TotalTokens: 7744,
+	}, styles)
+	require.Equal(t, "  Tokens  7,735 input  ·  9 output  ·  7,744 total", ansi.Strip(got))
+	require.NotEqual(t, ansi.Strip(got), got, "TTY status line must contain styling")
+	require.Contains(t, got, styles.Flag.Render("7,735"))
+
+	unavailable := styledTokenUsageLine(proto.TokenUsage{}, styles)
+	require.Equal(t, "  Tokens  unavailable", ansi.Strip(unavailable))
+	require.NotEqual(t, ansi.Strip(unavailable), unavailable)
+}
+
+func TestPrintTokenUsageNonTTYUsesOnlyStderr(t *testing.T) {
+	savedConfig := config
+	savedIsErrorTTY := IsErrorTTY
+	defer func() {
+		config = savedConfig
+		IsErrorTTY = savedIsErrorTTY
+	}()
+	config.ShowTokenUsage = true
+	IsErrorTTY = func() bool { return false }
+
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() {
+			printTokenUsage(&Mods{})
+		})
+	})
+	require.Empty(t, stdout)
+	require.Equal(t, "Token usage: unavailable\n", stderr)
+	require.NotContains(t, stderr, "\x1b[")
+}
+
+func TestPrintTokenUsageTTYAddsSpacingAndStyle(t *testing.T) {
+	savedConfig := config
+	savedIsErrorTTY := IsErrorTTY
+	savedStderrStyles := StderrStyles
+	defer func() {
+		config = savedConfig
+		IsErrorTTY = savedIsErrorTTY
+		StderrStyles = savedStderrStyles
+	}()
+	config.ShowTokenUsage = true
+	IsErrorTTY = func() bool { return true }
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.TrueColor)
+	styles := Styles{
+		Comment: renderer.NewStyle().Foreground(lipgloss.Color("#757575")),
+		Flag: renderer.NewStyle().
+			Foreground(lipgloss.Color("#3EEFCF")).
+			Bold(true),
+	}
+	StderrStyles = func() Styles { return styles }
+
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() {
+			printTokenUsage(&Mods{})
+		})
+	})
+	require.Empty(t, stdout)
+	require.Equal(t, "\n  Tokens  unavailable\n", ansi.Strip(stderr))
+	require.NotEqual(t, ansi.Strip(stderr), stderr)
 }
 
 func TestNoSaveFlag(t *testing.T) {

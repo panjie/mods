@@ -55,7 +55,8 @@ func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	s := &Stream{
-		toolCall: request.ToolCaller,
+		toolCall:   request.ToolCaller,
+		trackUsage: request.TrackUsage,
 	}
 	body := newChatRequest(request)
 	s.request = body
@@ -101,18 +102,20 @@ func newChatRequest(request proto.Request) api.ChatRequest {
 
 // Stream ollama stream.
 type Stream struct {
-	mu       sync.Mutex
-	closed   bool
-	request  api.ChatRequest
-	err      error
-	done     bool
-	run      uint64
-	factory  func()
-	respCh   chan api.ChatResponse
-	message  api.Message
-	content  strings.Builder
-	toolCall func(name string, data []byte) (string, error)
-	messages []proto.Message
+	mu         sync.Mutex
+	closed     bool
+	request    api.ChatRequest
+	err        error
+	done       bool
+	run        uint64
+	factory    func()
+	respCh     chan api.ChatResponse
+	message    api.Message
+	content    strings.Builder
+	toolCall   func(name string, data []byte) (string, error)
+	messages   []proto.Message
+	trackUsage bool
+	usage      proto.TokenUsage
 }
 
 func (s *Stream) fn(run uint64, ch chan api.ChatResponse, resp api.ChatResponse) error {
@@ -196,6 +199,13 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	s.message.Content = s.content.String()
 	s.message.ToolCalls = append(s.message.ToolCalls, resp.Message.ToolCalls...)
 	if resp.Done {
+		if s.trackUsage {
+			s.usage.Add(proto.TokenUsage{
+				InputTokens:  int64(resp.PromptEvalCount),
+				OutputTokens: int64(resp.EvalCount),
+				TotalTokens:  int64(resp.PromptEvalCount + resp.EvalCount),
+			})
+		}
 		s.done = true
 	}
 	s.mu.Unlock()
@@ -211,6 +221,13 @@ func (s *Stream) Err() error {
 
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message { return s.messages }
+
+// Usage implements stream.Stream.
+func (s *Stream) Usage() proto.TokenUsage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.usage
+}
 
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {

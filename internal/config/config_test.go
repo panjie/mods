@@ -200,6 +200,27 @@ func TestConfigTemplateIncludesShowToolResults(t *testing.T) {
 	require.Contains(t, string(content), "show-tool-results: false")
 }
 
+func TestShowTokenUsageConfig(t *testing.T) {
+	require.False(t, Default().ShowTokenUsage)
+
+	var yamlCfg Config
+	require.NoError(t, yaml.Unmarshal([]byte("show-token-usage: true"), &yamlCfg))
+	require.True(t, yamlCfg.ShowTokenUsage)
+
+	t.Setenv("MODS_SHOW_TOKEN_USAGE", "true")
+	var envCfg Config
+	require.NoError(t, env.ParseWithOptions(&envCfg, env.Options{Prefix: "MODS_"}))
+	require.True(t, envCfg.ShowTokenUsage)
+}
+
+func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "show-token-usage: false")
+}
+
 func TestAPITypeYAML(t *testing.T) {
 	t.Run("decodes api-type on a custom provider", func(t *testing.T) {
 		var cfg Config

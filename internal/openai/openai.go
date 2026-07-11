@@ -96,6 +96,11 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		Messages: fromProtoMessages(request.Messages),
 		Tools:    fromToolSpecs(request.Tools),
 	}
+	if request.TrackUsage {
+		body.StreamOptions = openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		}
+	}
 
 	if c.config.ReasoningEffort != "" {
 		body.ReasoningEffort = c.config.ReasoningEffort
@@ -130,6 +135,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		request:       body,
 		toolCall:      request.ToolCaller,
 		messages:      request.Messages,
+		trackUsage:    request.TrackUsage,
 		parseThink:    c.config.ThinkTags,
 		thoughtFields: c.config.ThoughtFields,
 		think: thinkParser{
@@ -155,6 +161,9 @@ type Stream struct {
 	parseThink    bool
 	think         thinkParser
 	thoughtFields []string
+	trackUsage    bool
+	roundUsage    proto.TokenUsage
+	usage         proto.TokenUsage
 }
 
 func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
@@ -193,6 +202,17 @@ func (s *Stream) Close() error { return s.stream.Close() } //nolint:wrapcheck
 func (s *Stream) Current() (proto.Chunk, error) {
 	event := s.stream.Current()
 	s.message.AddChunk(event)
+	if s.trackUsage && event.JSON.Usage.Valid() {
+		total := event.Usage.TotalTokens
+		if total == 0 {
+			total = event.Usage.PromptTokens + event.Usage.CompletionTokens
+		}
+		s.roundUsage = proto.TokenUsage{
+			InputTokens:  event.Usage.PromptTokens,
+			OutputTokens: event.Usage.CompletionTokens,
+			TotalTokens:  total,
+		}
+	}
 	if len(event.Choices) == 0 {
 		return proto.Chunk{}, stream.ErrNoContent
 	}
@@ -322,6 +342,9 @@ func (s *Stream) Err() error { return s.stream.Err() } //nolint:wrapcheck
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message { return s.messages }
 
+// Usage implements stream.Stream.
+func (s *Stream) Usage() proto.TokenUsage { return s.usage }
+
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
 	if s.done {
@@ -335,6 +358,8 @@ func (s *Stream) Next() bool {
 	}
 
 	s.done = true
+	s.usage.Add(s.roundUsage)
+	s.roundUsage = proto.TokenUsage{}
 	if len(s.message.Choices) > 0 {
 		msg := s.message.Choices[0].Message.ToParam()
 		s.request.Messages = append(s.request.Messages, msg)

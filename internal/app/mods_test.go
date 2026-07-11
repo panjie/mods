@@ -32,7 +32,7 @@ func (s staticModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return s, nil }
 
 func (s staticModel) View() string { return string(s) }
 
-type staticStream struct{}
+type staticStream struct{ usage proto.TokenUsage }
 
 func (staticStream) Next() bool { return false }
 
@@ -43,6 +43,8 @@ func (staticStream) Close() error { return nil }
 func (staticStream) Err() error { return nil }
 
 func (staticStream) Messages() []proto.Message { return nil }
+
+func (s staticStream) Usage() proto.TokenUsage { return s.usage }
 
 func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 
@@ -1490,4 +1492,24 @@ func TestPlanModifyResetsRetries(t *testing.T) {
 	m.retries = 2
 	_, _ = m.Update(planModifyMsg{feedback: "redo", plan: "old plan"})
 	require.Equal(t, 0, m.retries, "planModifyMsg must reset m.retries before the revised plan")
+}
+
+func TestStreamDoneAccumulatesUsageAcrossLineagesOnce(t *testing.T) {
+	m := testMods(t)
+	first := newStreamRunner(staticStream{usage: proto.TokenUsage{
+		InputTokens: 10, OutputTokens: 4, TotalTokens: 14,
+	}}, nil, nil, func(error) tea.Msg { return nil })
+	second := newStreamRunner(staticStream{usage: proto.TokenUsage{
+		InputTokens: 20, OutputTokens: 6, TotalTokens: 26,
+	}}, nil, nil, func(error) tea.Msg { return nil })
+
+	m.Config.Plan = true
+	_, _ = m.Update(first.doneMsg())
+	_, _ = m.Update(first.doneMsg()) // duplicate delivery must not double count
+	m.Config.Plan = false
+	_, _ = m.Update(second.doneMsg())
+
+	require.Equal(t, proto.TokenUsage{
+		InputTokens: 30, OutputTokens: 10, TotalTokens: 40,
+	}, m.TokenUsage())
 }

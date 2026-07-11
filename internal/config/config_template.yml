@@ -51,6 +51,9 @@ hide-tool-status: false
 # {{ index .Help "show-tool-results" }}
 show-tool-results: false
 
+# {{ index .Help "show-token-usage" }}
+show-token-usage: false
+
 # {{ index .Help "word-wrap" }}
 word-wrap: 80
 

@@ -6,6 +6,21 @@ import (
 	"github.com/charmbracelet/x/exp/golden"
 )
 
+func TestTokenUsageAddAndAvailable(t *testing.T) {
+	var usage TokenUsage
+	if usage.Available() {
+		t.Fatal("zero usage must be unavailable")
+	}
+	usage.Add(TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14})
+	usage.Add(TokenUsage{InputTokens: 8, OutputTokens: 2, TotalTokens: 10})
+	if usage != (TokenUsage{InputTokens: 18, OutputTokens: 6, TotalTokens: 24}) {
+		t.Fatalf("unexpected accumulated usage: %#v", usage)
+	}
+	if !usage.Available() {
+		t.Fatal("non-zero usage must be available")
+	}
+}
+
 func TestStringer(t *testing.T) {
 	messages := []Message{
 		{

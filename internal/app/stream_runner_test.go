@@ -17,6 +17,7 @@ type scriptedStream struct {
 	idx      int
 	msgs     []proto.Message
 	tools    []proto.ToolCallStatus
+	usage    proto.TokenUsage
 	err      error
 	closed   bool
 	toolRuns int
@@ -38,6 +39,7 @@ func (s *scriptedStream) Close() error {
 func (s *scriptedStream) Err() error { return s.err }
 
 func (s *scriptedStream) Messages() []proto.Message { return s.msgs }
+func (s *scriptedStream) Usage() proto.TokenUsage   { return s.usage }
 
 func (s *scriptedStream) CallTools() []proto.ToolCallStatus {
 	s.toolRuns++
@@ -199,6 +201,7 @@ func (s *countingStream) Next() bool                        { return s.inner.Nex
 func (s *countingStream) Current() (proto.Chunk, error)     { return s.inner.Current() }
 func (s *countingStream) Err() error                        { return s.inner.Err() }
 func (s *countingStream) Messages() []proto.Message         { return s.inner.Messages() }
+func (s *countingStream) Usage() proto.TokenUsage           { return s.inner.Usage() }
 func (s *countingStream) CallTools() []proto.ToolCallStatus { return s.inner.CallTools() }
 func (s *countingStream) Close() error {
 	s.closes.Add(1)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/stream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -210,6 +211,25 @@ func TestCurrentRoutesThoughtSeparately(t *testing.T) {
 		require.Equal(t, "answer", chunk.Content)
 		require.Empty(t, chunk.Thought, "empty thought text must not produce a thought chunk")
 	})
+}
+
+func TestCurrentCollectsUsageOnlyChunk(t *testing.T) {
+	s := streamFromSSE(`data: {"candidates":[],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":3,"thoughtsTokenCount":2,"totalTokenCount":15}}` + "\n\n")
+	s.trackUsage = true
+
+	_, err := s.Current()
+	require.ErrorIs(t, err, stream.ErrNoContent)
+	_, err = s.Current() // consume EOF and commit the completed round
+	require.ErrorIs(t, err, stream.ErrNoContent)
+	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}, s.Usage())
+}
+
+func TestCurrentUsageFallsBackToComponentsWithoutTotal(t *testing.T) {
+	s := streamFromSSE(`data: {"candidates":[],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":3,"thoughtsTokenCount":1}}` + "\n\n")
+	s.trackUsage = true
+	_, _ = s.Current()
+	_, _ = s.Current()
+	require.Equal(t, proto.TokenUsage{InputTokens: 8, OutputTokens: 4, TotalTokens: 12}, s.Usage())
 }
 
 // TestCurrentDoesNotPolluteMessageHistory verifies that reasoning content is

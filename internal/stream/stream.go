@@ -57,6 +57,9 @@ type Stream interface {
 	// the whole conversation
 	Messages() []proto.Message
 
+	// cumulative token usage across all model calls in this stream
+	Usage() proto.TokenUsage
+
 	// handles any pending tool calls
 	CallTools() []proto.ToolCallStatus
 }

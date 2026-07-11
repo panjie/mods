@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/editor"
+	"github.com/panjie/mods/internal/proto"
 )
 
 // buildTeaProgramOptions assembles the Bubble Tea options for the current
@@ -136,12 +139,74 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 			fmt.Print(mods.Output)
 		}
 	}
+	printTokenUsage(mods)
 
 	if config.SessionWriteToID != "" {
 		return saveSession(mods)
 	}
 
 	return nil
+}
+
+func printTokenUsage(mods *Mods) {
+	if !config.ShowTokenUsage || mods == nil {
+		return
+	}
+	usage := mods.TokenUsage()
+	if IsErrorTTY() {
+		fmt.Fprintln(os.Stderr, "\n"+styledTokenUsageLine(usage, StderrStyles()))
+		return
+	}
+	fmt.Fprintln(os.Stderr, tokenUsageLine(usage))
+}
+
+func tokenUsageLine(usage proto.TokenUsage) string {
+	if !usage.Available() {
+		return "Token usage: unavailable"
+	}
+	return fmt.Sprintf("Token usage: input %s, output %s, total %s",
+		formatTokenCount(usage.InputTokens),
+		formatTokenCount(usage.OutputTokens),
+		formatTokenCount(usage.TotalTokens))
+}
+
+func styledTokenUsageLine(usage proto.TokenUsage, styles Styles) string {
+	if !usage.Available() {
+		return styles.Comment.Render("  Tokens  unavailable")
+	}
+	return styles.Comment.Render("  Tokens  ") +
+		styles.Flag.Render(formatTokenCount(usage.InputTokens)) +
+		styles.Comment.Render(" input  ·  ") +
+		styles.Flag.Render(formatTokenCount(usage.OutputTokens)) +
+		styles.Comment.Render(" output  ·  ") +
+		styles.Flag.Render(formatTokenCount(usage.TotalTokens)) +
+		styles.Comment.Render(" total")
+}
+
+func formatTokenCount(value int64) string {
+	digits := strconv.FormatInt(value, 10)
+	sign := ""
+	if strings.HasPrefix(digits, "-") {
+		sign = "-"
+		digits = digits[1:]
+	}
+	if len(digits) <= 3 {
+		return sign + digits
+	}
+
+	firstGroup := len(digits) % 3
+	if firstGroup == 0 {
+		firstGroup = 3
+	}
+	var result strings.Builder
+	result.Grow(len(digits) + len(digits)/3)
+	result.WriteString(sign)
+	result.WriteString(digits[:firstGroup])
+	for i := firstGroup; i < len(digits); i += 3 {
+		result.WriteByte(',')
+		result.WriteString(digits[i : i+3])
+	}
+	return result.String()
 }
 
 // runDirsAction prints either a single requested path (config | sessions) or

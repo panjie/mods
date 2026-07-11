@@ -222,6 +222,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	stream.client = c
 	stream.ctx = ctx
 	stream.toolCall = request.ToolCaller
+	stream.trackUsage = request.TrackUsage
 	return stream
 }
 
@@ -277,7 +278,18 @@ type Candidate struct {
 
 // CompletionMessageResponse represents a response to an Google completion message.
 type CompletionMessageResponse struct {
-	Candidates []Candidate `json:"candidates,omitempty"`
+	Candidates    []Candidate        `json:"candidates,omitempty"`
+	UsageMetadata TokenUsageMetadata `json:"usageMetadata,omitempty"`
+}
+
+// TokenUsageMetadata is the usage summary emitted by Gemini streaming
+// responses. TotalTokenCount is authoritative when present; older compatible
+// endpoints may only provide the component counts.
+type TokenUsageMetadata struct {
+	PromptTokenCount     int64 `json:"promptTokenCount,omitempty"`
+	CandidatesTokenCount int64 `json:"candidatesTokenCount,omitempty"`
+	TotalTokenCount      int64 `json:"totalTokenCount,omitempty"`
+	ThoughtsTokenCount   int64 `json:"thoughtsTokenCount,omitempty"`
 }
 
 // Stream struct represents a stream of messages from the Google API.
@@ -295,6 +307,9 @@ type Stream struct {
 	ctx         context.Context
 	toolCall    func(name string, data []byte) (string, error)
 	callSeq     int
+	trackUsage  bool
+	roundUsage  proto.TokenUsage
+	usage       proto.TokenUsage
 }
 
 // CallTools implements stream.Stream.
@@ -353,6 +368,14 @@ func (s *Stream) Messages() []proto.Message {
 	return messages
 }
 
+// Usage implements stream.Stream.
+func (s *Stream) Usage() proto.TokenUsage { return s.usage }
+
+func (s *Stream) finishUsageRound() {
+	s.usage.Add(s.roundUsage)
+	s.roundUsage = proto.TokenUsage{}
+}
+
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
 	return !s.isFinished
@@ -380,6 +403,7 @@ func (s *Stream) Current() (proto.Chunk, error) {
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) {
 				s.isFinished = true
+				s.finishUsageRound()
 				return proto.Chunk{}, stream.ErrNoContent // signals end of stream, not a real error
 			}
 			return proto.Chunk{}, fmt.Errorf("googleStreamReader.processLines: %w", readErr)
@@ -411,6 +435,22 @@ func (s *Stream) Current() (proto.Chunk, error) {
 		unmarshalErr := s.unmarshaler.Unmarshal(noPrefixLine, &chunk)
 		if unmarshalErr != nil {
 			return proto.Chunk{}, fmt.Errorf("googleStreamReader.processLines: %w", unmarshalErr)
+		}
+		if s.trackUsage {
+			meta := chunk.UsageMetadata
+			input := meta.PromptTokenCount
+			output := meta.CandidatesTokenCount + meta.ThoughtsTokenCount
+			total := meta.TotalTokenCount
+			if total > 0 && total >= input {
+				output = total - input
+			} else if total == 0 {
+				total = input + output
+			}
+			if input != 0 || output != 0 || total != 0 {
+				s.roundUsage = proto.TokenUsage{
+					InputTokens: input, OutputTokens: output, TotalTokens: total,
+				}
+			}
 		}
 		if len(chunk.Candidates) == 0 {
 			return proto.Chunk{}, stream.ErrNoContent

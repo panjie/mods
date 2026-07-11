@@ -125,6 +125,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		Model:      mod.Name,
 		User:       requestUser,
 		Tools:      tools,
+		TrackUsage: cfg.ShowTokenUsage,
 		ToolCaller: m.toolCaller(registry, cfg),
 	}
 	if maxTokens > 0 {

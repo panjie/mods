@@ -73,6 +73,29 @@ type Chunk struct {
 	Thought string // reasoning/thinking content from the model
 }
 
+// TokenUsage is provider-neutral token consumption for one or more model
+// calls. Providers accumulate usage across tool-call rounds before exposing it
+// to the application.
+type TokenUsage struct {
+	InputTokens  int64
+	OutputTokens int64
+	TotalTokens  int64
+}
+
+// Add accumulates another usage value.
+func (u *TokenUsage) Add(other TokenUsage) {
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.TotalTokens += other.TotalTokens
+}
+
+// Available reports whether a provider returned token usage. A successful
+// request always consumes input tokens, so an all-zero value means the
+// provider omitted usage metadata.
+func (u TokenUsage) Available() bool {
+	return u.InputTokens != 0 || u.OutputTokens != 0 || u.TotalTokens != 0
+}
+
 // ToolCallStatus is the status of a tool call.
 type ToolCallStatus struct {
 	Name      string
@@ -124,6 +147,7 @@ type Request struct {
 	Temperature    *float64
 	MaxTokens      *int64
 	ResponseFormat *string
+	TrackUsage     bool
 	ToolCaller     func(name string, data []byte) (string, error)
 }
 

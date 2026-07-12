@@ -27,6 +27,17 @@ func TestExtractExternalPaths(t *testing.T) {
 		require.Equal(t, []string{p}, got)
 	})
 
+	t.Run("single-quoted absolute external path", func(t *testing.T) {
+		p := filepath.Join(ext, "secret")
+		got := extractExternalPaths("cat '"+p+"'", ws)
+		require.Equal(t, []string{p}, got)
+	})
+
+	t.Run("single-quoted parent traversal", func(t *testing.T) {
+		got := extractExternalPaths("cat '../sibling/secret'", ws)
+		require.Equal(t, []string{filepath.Clean(filepath.Join(ws, "..", "sibling", "secret"))}, got)
+	})
+
 	t.Run("multiple external paths, deduplicated", func(t *testing.T) {
 		got := extractExternalPaths(
 			"cat "+filepath.Join(ext, "a")+" "+filepath.Join(ext, "b")+" "+filepath.Join(ext, "a"),
@@ -325,6 +336,19 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
+func TestAnalyzeShellCommandASTSingleQuotedExternalPath(t *testing.T) {
+	mods := &Mods{
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	result := mods.analyzeShellCommand("shell_run", "cat '/etc/passwd'")
+	require.False(t, result.NeedsReview)
+	require.Contains(t, result.AffectedDirs, "/etc/passwd")
+}
+
 func TestAnalyzeShellCommandReadOnlyWorkspaceAffectedDirs(t *testing.T) {
 	workspace := canonicalTestPath(t, t.TempDir())
 	externalDir := canonicalTestPath(t, t.TempDir())
@@ -428,6 +452,9 @@ func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
 		{"rm", "rm /tmp/file", "/tmp"},
 		{"cp", "cp a b", "."},
 		{"mv", "mv a b", "."},
+		{"env wrapped touch", "env touch file", "."},
+		{"git output", "git diff --output=diff.txt", "."},
+		{"xxd reverse output", "xxd -r input.hex output.bin", "."},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"path"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -108,11 +109,17 @@ func writableDirsFromTokens(args []string, posix bool) []string {
 	if len(args) == 0 {
 		return nil
 	}
-	command := args[0]
+	command := path.Base(args[0])
 	if !posix {
 		command = strings.ToLower(command)
 	}
 	switch command {
+	case "env":
+		nested, ok := envCommandArgs(args[1:])
+		if !ok || len(nested) == 0 {
+			return nil
+		}
+		return writableDirsFromTokens(nested, posix)
 	case "rm":
 		operands := commandOperands(args[1:])
 		if removeTargetsAreDirs(args[1:]) {
@@ -133,6 +140,20 @@ func writableDirsFromTokens(args []string, posix bool) []string {
 		return []string{destinationDir(operands[len(operands)-1])}
 	case "tee":
 		return parentDirs(commandOperands(args[1:]))
+	case "git":
+		if output := flagValue(args[1:], "--output"); output != "" {
+			return []string{parentDir(output)}
+		}
+		return nil
+	case "xxd":
+		if !hasAnyArg(args[1:], "-r", "--revert") {
+			return nil
+		}
+		operands := commandOperands(args[1:])
+		if len(operands) < 2 {
+			return nil
+		}
+		return []string{parentDir(operands[len(operands)-1])}
 	case "remove-item", "del", "erase", "rd":
 		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
 			return parentDirs(paths)
@@ -166,6 +187,77 @@ func writableDirsFromTokens(args []string, posix bool) []string {
 	default:
 		return nil
 	}
+}
+
+func flagValue(args []string, name string) string {
+	for i, arg := range args {
+		if value, ok := strings.CutPrefix(arg, name+"="); ok {
+			return value
+		}
+		if arg == name && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func hasKnownRiskyInvocation(args []string, posix bool) bool {
+	if len(args) == 0 {
+		return false
+	}
+	name := path.Base(args[0])
+	if !posix {
+		name = strings.ToLower(name)
+	}
+	switch name {
+	case "env":
+		nested, ok := envCommandArgs(args[1:])
+		return ok && hasKnownRiskyInvocation(nested, posix)
+	case "git":
+		return hasAnyArg(args[1:], "--output", "--ext-diff", "--textconv")
+	case "xxd":
+		return hasAnyArg(args[1:], "-r", "--revert")
+	default:
+		return false
+	}
+}
+
+func hasKnownRiskyShellCommand(command string, posix bool) bool {
+	if !posix {
+		for _, part := range splitSimpleCompound(normalizeSimpleCommand(command)) {
+			if hasKnownRiskyInvocation(tokenizeSimple(part), false) {
+				return true
+			}
+		}
+		return false
+	}
+	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
+	file, err := parser.Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	risky := false
+	syntax.Walk(file, func(node syntax.Node) bool {
+		if risky {
+			return false
+		}
+		if _, ok := node.(*syntax.ParamExp); ok {
+			// Runtime-expanded arguments may resolve to external paths that the
+			// approval matrix cannot derive from the command text.
+			risky = true
+			return false
+		}
+		call, ok := node.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		if args := shellWords(call.Args); len(args) > 0 && hasKnownRiskyInvocation(args, true) {
+			risky = true
+			return false
+		}
+		return true
+	})
+	return risky
 }
 
 func powerShellParamValues(args []string, names ...string) []string {

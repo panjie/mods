@@ -94,6 +94,7 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 		return false
 	}
 	scopedRules := rulesForScope(rules, scope)
+	var allowedPaths []string
 	for _, rule := range scopedRules {
 		if rule.Type != DirAllow {
 			continue
@@ -101,19 +102,32 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 		if rule.Mode != "" && rule.Mode != mode {
 			continue
 		}
-		rulePaths := normalizeShellDirsForWorkspace(rule.Paths, scope.Value)
-		allMatch := true
-		for _, dir := range dirs {
-			if !dirWithinPaths(rulePaths, dir) {
-				allMatch = false
-				break
-			}
-		}
-		if allMatch {
-			return true
+		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkspace(rule.Paths, scope.Value)...)
+	}
+	for _, dir := range dirs {
+		if !dirWithinPaths(allowedPaths, dir) {
+			return false
 		}
 	}
-	return false
+	return len(allowedPaths) > 0
+}
+
+// RulesAllowIntent reports whether saved rules cover every access group that
+// still requires approval under the current policy. Groups already allowed by
+// the matrix (for example a temp-directory write in auto mode) need no rule.
+func RulesAllowIntent(rules []Rule, intent AccessIntent, scope Scope, safeDirs []string, reviewMode ReviewMode) bool {
+	covered := false
+	for _, group := range intent.Groups() {
+		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
+		if reviewMode != ReviewAlways && ClassifyAccess(groupIntent, scope, safeDirs, reviewMode) == DecisionAllow {
+			continue
+		}
+		if !RulesAllowDirs(rules, group.Dirs, scope, group.Class) {
+			return false
+		}
+		covered = true
+	}
+	return covered
 }
 
 func RulesLabel(rules []Rule) string {

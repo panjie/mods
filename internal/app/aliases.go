@@ -54,9 +54,9 @@ var MakeStyles = ui.MakeStyles
 var NewAnim = ui.NewAnim
 var HideCommandWindow = platform.HideCommandWindow
 var BuildRegistry = tooling.BuildRegistry
-var RulesFor = approval.RulesFor
 var RulesForDirs = approval.RulesForDirs
 var RulesAllowDirs = approval.RulesAllowDirs
+var RulesAllowIntent = approval.RulesAllowIntent
 var RulesLabel = approval.RulesLabel
 var WorkspaceScope = approval.WorkspaceScope
 var ExtractShellCommand = approval.ExtractShellCommand
@@ -66,6 +66,7 @@ var DecisionAllow = approval.DecisionAllow
 var DecisionAsk = approval.DecisionAsk
 var ClassifyAccess = approval.ClassifyAccess
 var ExternalDirs = approval.ExternalDirs
+var safeDirs = approval.SafeDirs
 var ErrNoMatches = session.ErrNoMatches
 
 const (

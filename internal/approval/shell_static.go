@@ -37,7 +37,7 @@ func AnalyzeShellStatic(command string, posix bool) ShellStaticAnalysis {
 
 func analyzeShellStaticWrite(command string, posix bool) ShellStaticAnalysis {
 	dirs := ExtractWritableDirs(command, posix)
-	if len(dirs) == 0 {
+	if len(dirs) == 0 && !hasKnownRiskyShellCommand(command, posix) {
 		return ShellStaticAnalysis{Class: ShellStaticUnknown}
 	}
 	return ShellStaticAnalysis{

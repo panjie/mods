@@ -932,11 +932,11 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	}
 	intentCopy := extCopy([]byte(`{"source_path":"out.txt","dest_path":"copies/out.txt"}`))
 	wantCopyDest := filepath.Join(canonicalRoot, "copies")
-	if intentCopy.Class != approval.AccessWrite {
-		t.Fatalf("fs_copy class=%q want write", intentCopy.Class)
+	if len(intentCopy.ReadDirs) != 1 || intentCopy.ReadDirs[0] != canonicalRoot {
+		t.Fatalf("fs_copy read dirs=%v want [%s]", intentCopy.ReadDirs, canonicalRoot)
 	}
-	if len(intentCopy.Dirs) != 2 || intentCopy.Dirs[0] != canonicalRoot || intentCopy.Dirs[1] != wantCopyDest {
-		t.Fatalf("fs_copy dirs=%v want [%s %s]", intentCopy.Dirs, canonicalRoot, wantCopyDest)
+	if len(intentCopy.WriteDirs) != 1 || intentCopy.WriteDirs[0] != wantCopyDest {
+		t.Fatalf("fs_copy write dirs=%v want [%s]", intentCopy.WriteDirs, wantCopyDest)
 	}
 
 	extP, ok := registry.IntentExtractor("fs_apply_patch")

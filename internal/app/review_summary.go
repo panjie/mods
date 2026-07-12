@@ -50,11 +50,12 @@ func formatReviewSummaryWithIntent(name string, args []byte, analysis shellComma
 }
 
 func readReviewTarget(parsed map[string]any, scope Scope, intent AccessIntent) string {
-	if len(intent.Dirs) == 1 {
-		return intent.Dirs[0]
+	dirs := intent.AllDirs()
+	if len(dirs) == 1 {
+		return dirs[0]
 	}
-	if len(intent.Dirs) > 1 {
-		return summarizeAffectedDirs(intent.Dirs)
+	if len(dirs) > 1 {
+		return summarizeAffectedDirs(dirs)
 	}
 	path := ArgString(parsed, "path")
 	if path == "" {

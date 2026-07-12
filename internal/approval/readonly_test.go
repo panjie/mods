@@ -74,8 +74,9 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"stderr redirect to dev null", "ls missing 2>/dev/null", true},
 
 		// --- ParamExp ---
-		{"param exp", "echo $VAR", true},
-		{"param exp braced", "cat ${FILE}", true},
+		{"param exp", "echo $VAR", false},
+		{"param exp braced", "cat ${FILE}", false},
+		{"env wraps readonly command", "env LC_ALL=C git status", true},
 
 		// --- Multiple statements ---
 		{"multi stmt", "git status; git diff", true},
@@ -97,6 +98,12 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"for loop", "for f in *.go; do echo $f; done", false},
 		{"background", "ls &", false},
 		{"dynamic cmd name", "$CMD file", false},
+		{"env wraps writer", "env touch owned.txt", false},
+		{"env assignment wraps writer", "env LC_ALL=C rm -rf build", false},
+		{"git diff output file", "git diff --output=owned.txt", false},
+		{"git show output file", "git show --output owned.txt HEAD", false},
+		{"git diff external helper", "git diff --ext-diff", false},
+		{"xxd reverse writes output", "xxd -r input.hex output.bin", false},
 		{"empty", "", false},
 		{"bare git", "git", false},
 		{"bare docker", "docker", false},

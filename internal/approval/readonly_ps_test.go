@@ -94,6 +94,9 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 		{"new-item", "New-Item -Path x"},
 		{"set-location then git push", "Set-Location C:\\repo; git push"},
 		{"set-location then remove-item", "Set-Location C:\\repo; Remove-Item x"},
+		{"git diff output file", "git diff --output=owned.txt"},
+		{"git show output file", "git show --output owned.txt HEAD"},
+		{"git diff external helper", "git diff --ext-diff"},
 
 		// Excluded cmdlets (security traps)
 		{"get-command", "Get-Command"},

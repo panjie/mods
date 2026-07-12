@@ -382,6 +382,7 @@ func extractExternalPaths(command, workspaceDir string) []string {
 }
 
 func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
+	originalCommand := command
 	opts := pathutil.DefaultOptions(workspaceDir, flavor)
 	seen := map[string]bool{}
 	var paths []string
@@ -452,7 +453,28 @@ func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathuti
 	for _, m := range reParentPath.FindAllString(command, -1) {
 		add(m)
 	}
+	// The raw-text scan strips single-quoted programs to avoid interpreting
+	// awk/sed regex syntax as paths. Recover genuine quoted path arguments
+	// from the shell AST: only values that begin with explicit external-path
+	// syntax are considered, so quoted program bodies remain ignored.
+	if readOnly, _ := approval.IsReadOnlyPOSIX(originalCommand); readOnly {
+		for _, arg := range approval.StaticPOSIXLiteralArgs(originalCommand) {
+			if isExplicitShellPathArg(arg) {
+				add(arg)
+			}
+		}
+	}
 	return paths
+}
+
+func isExplicitShellPathArg(arg string) bool {
+	if arg == "~" || strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, `..\`) || strings.HasPrefix(arg, "~/") || strings.HasPrefix(arg, `~\`) {
+		return true
+	}
+	if reHomeVarPath.MatchString(arg) || reCMDHomePath.MatchString(arg) || reWinAbsPath.MatchString(" "+arg) {
+		return true
+	}
+	return strings.HasPrefix(arg, "~") && (strings.Contains(arg, "/") || strings.Contains(arg, `\`))
 }
 
 func blankPOSIXHeredocBodies(command string) string {

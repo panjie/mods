@@ -100,10 +100,7 @@ func readOnlyPowerShellInvocation(inv psCommandInvocation) bool {
 	if readOnlyPowerShellCmdlets[name] {
 		return true
 	}
-	if subcommands, ok := subcommandReadOnly[name]; ok {
-		return readOnlyPowerShellSubcommand(inv.Args, subcommands)
-	}
-	return false
+	return readOnlySubcommandInvocation(name, inv.Args)
 }
 
 func normalizePowerShellCommandName(name string) string {
@@ -116,17 +113,6 @@ func normalizePowerShellCommandName(name string) string {
 		name = strings.TrimSuffix(name, suffix)
 	}
 	return name
-}
-
-func readOnlyPowerShellSubcommand(args []string, subcommands map[string]bool) bool {
-	if len(args) == 0 {
-		return false
-	}
-	subcmd := strings.ToLower(trimPowerShellLiteral(args[0]))
-	if subcmd == "" || strings.HasPrefix(subcmd, "-") {
-		return false
-	}
-	return subcommands[subcmd]
 }
 
 func trimPowerShellLiteral(s string) string {

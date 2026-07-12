@@ -96,11 +96,15 @@ func filesystemCopyIntent(root string) func(json.RawMessage) approval.AccessInte
 			DestPath   string `json:"dest_path"`
 		}
 		_ = json.Unmarshal(data, &args)
-		dirs := make([]string, 0, 2)
-		seen := map[string]struct{}{}
-		addIntentDir(&dirs, seen, sourceIntentDir(root, args.SourcePath))
-		addIntentDir(&dirs, seen, destIntentDir(root, args.SourcePath, args.DestPath))
-		return approval.AccessIntent{Class: approval.AccessWrite, Dirs: dirs}
+		reads := []string{}
+		writes := []string{}
+		if source := sourceIntentDir(root, args.SourcePath); source != "" {
+			reads = append(reads, source)
+		}
+		if dest := destIntentDir(root, args.SourcePath, args.DestPath); dest != "" {
+			writes = append(writes, dest)
+		}
+		return approval.AccessIntent{ReadDirs: reads, WriteDirs: writes}
 	}
 }
 

@@ -91,27 +91,116 @@ func callIsReadOnly(call *syntax.CallExpr) (bool, string) {
 		return false, ""
 	}
 	name = path.Base(name)
-
-	if readOnlyCommands[name] {
+	if name != "env" && name != "xxd" && readOnlyCommands[name] {
 		return true, "read-only command: " + name
 	}
-	if subcommands, ok := subcommandReadOnly[name]; ok {
-		if len(call.Args) < 2 {
-			return false, ""
-		}
-		subcmd, ok := staticShellWord(call.Args[1])
-		if !ok || subcmd == "" {
-			return false, ""
-		}
-		if strings.HasPrefix(subcmd, "-") {
-			return false, ""
-		}
-		if subcommands[subcmd] {
-			return true, "read-only subcommand: " + name + " " + subcmd
-		}
-		return false, ""
+	args := shellWords(call.Args)
+	if len(args) > 0 {
+		args[0] = name
+	}
+	if readOnly, reason := invocationTokensReadOnly(args); readOnly {
+		return true, reason
 	}
 	return false, ""
+}
+
+// invocationTokensReadOnly classifies one statically tokenized command. It
+// validates arguments as well as the executable name so wrappers and
+// output-producing flags cannot inherit a read-only classification merely
+// from their first token.
+func invocationTokensReadOnly(args []string) (bool, string) {
+	if len(args) == 0 || args[0] == "" {
+		return false, ""
+	}
+	name := path.Base(args[0])
+	if name == "env" {
+		return envInvocationReadOnly(args[1:])
+	}
+	if readOnlyCommands[name] {
+		if name == "xxd" && hasAnyArg(args[1:], "-r", "--revert") {
+			return false, ""
+		}
+		return true, "read-only command: " + name
+	}
+	if readOnlySubcommandInvocation(name, args[1:]) {
+		return true, "read-only subcommand: " + name + " " + strings.ToLower(args[1])
+	}
+	return false, ""
+}
+
+func envInvocationReadOnly(args []string) (bool, string) {
+	nested, ok := envCommandArgs(args)
+	if !ok {
+		return false, ""
+	}
+	if len(nested) == 0 {
+		return true, "read-only command: env"
+	}
+	return invocationTokensReadOnly(nested)
+}
+
+func envCommandArgs(args []string) ([]string, bool) {
+	for len(args) > 0 {
+		arg := args[0]
+		switch {
+		case arg == "--":
+			if len(args) == 1 {
+				return nil, false
+			}
+			return args[1:], true
+		case isEnvAssignment(arg):
+			args = args[1:]
+		case strings.HasPrefix(arg, "-"):
+			// Options such as -S/--split-string can hide another command and
+			// require option-aware parsing. Treat them as unknown.
+			return nil, false
+		default:
+			return args, true
+		}
+	}
+	return nil, true
+}
+
+func isEnvAssignment(arg string) bool {
+	name, _, ok := strings.Cut(arg, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i, r := range name {
+		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func readOnlySubcommandInvocation(name string, args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	subcommands, ok := subcommandReadOnly[name]
+	if !ok {
+		return false
+	}
+	subcmd := strings.ToLower(args[0])
+	if subcmd == "" || strings.HasPrefix(subcmd, "-") || !subcommands[subcmd] {
+		return false
+	}
+	if name == "git" && hasAnyArg(args[1:], "--output", "--ext-diff", "--textconv") {
+		return false
+	}
+	return true
+}
+
+func hasAnyArg(args []string, unsafe ...string) bool {
+	for _, arg := range args {
+		for _, candidate := range unsafe {
+			if arg == candidate || strings.HasPrefix(arg, candidate+"=") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // wordIsReadOnly walks a word's parts. CmdSubst recurses into inner
@@ -134,6 +223,11 @@ func wordIsReadOnly(word *syntax.Word) bool {
 				readonly = false
 				return false
 			}
+			return false
+		case *syntax.ParamExp:
+			// Runtime values may resolve to paths outside the workspace. The
+			// approval layer cannot prove their access scope statically.
+			readonly = false
 			return false
 		default:
 			return true
@@ -176,7 +270,7 @@ var readOnlyCommands = map[string]bool{
 	"wc": true, "file": true, "stat": true, "pwd": true,
 	"echo": true, "date": true, "whoami": true, "hostname": true,
 	"uname": true, "du": true, "df": true, "which": true,
-	"env": true, "printenv": true, "basename": true, "dirname": true,
+	"printenv": true, "basename": true, "dirname": true,
 	"realpath": true, "readlink": true,
 	"grep": true, "egrep": true, "fgrep": true,
 	"diff": true, "uniq": true, "comm": true, "tr": true,

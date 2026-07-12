@@ -2,8 +2,10 @@ package tooling
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -83,6 +85,33 @@ func TestBuildRegistrySkipsLoadSkillWhenCatalogEmpty(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := reg.Tool("load_skill")
 	require.False(t, ok, "load_skill must NOT be registered when catalog is empty")
+}
+
+func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/tmp is a POSIX safe directory")
+	}
+
+	probe, err := os.CreateTemp("/tmp", "mods-safe-dir-*.txt")
+	require.NoError(t, err)
+	target := probe.Name()
+	require.NoError(t, probe.Close())
+	require.NoError(t, os.Remove(target))
+	t.Cleanup(func() { _ = os.Remove(target) })
+
+	cfg := cfgpkg.Default()
+	cfg.Plan = true // plan mode always registers filesystem tools
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil)
+	require.NoError(t, err)
+
+	args, err := json.Marshal(map[string]string{"path": target, "content": "safe-dir consistency"})
+	require.NoError(t, err)
+	_, err = reg.Call(context.Background(), "fs_write_file", args)
+	require.NoError(t, err, "a path treated as approval-safe must also be accepted by the filesystem tool")
+
+	got, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "safe-dir consistency", string(got))
 }
 
 func TestBuiltinSpecsIncludesLoadSkill(t *testing.T) {

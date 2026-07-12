@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -213,28 +211,6 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 	return append(options, reviewOption{label: "[Ctrl+C] Cancel", action: reviewOptionCancel})
 }
 
-func (r *toolReviewer) shouldReviewTool(registry *toolregistry.Registry, name string) bool {
-	switch r.reviewMode {
-	case ReviewNever:
-		debug.Printf("Review skipped: mode is never (tool=%s)", name)
-		return false
-	case ReviewAlways:
-		debug.Printf("Review required: mode is always (tool=%s)", name)
-		return true
-	default:
-		mutable := false
-		if registry != nil {
-			mutable = registry.Mutable(name)
-		}
-		if mutable {
-			debug.Printf("Review required: mutable tool '%s' with mode=%q", name, r.reviewMode)
-		} else {
-			debug.Printf("Review skipped: tool '%s' not in mutable whitelist", name)
-		}
-		return mutable
-	}
-}
-
 // buildAccessIntent derives the unified AccessIntent for a tool call. Shell
 // tools use the dynamic analyzer (class from NeedsReview, dirs from
 // AffectedDirs); tools with a registered IntentExtractor use that; read-only
@@ -292,6 +268,28 @@ func normalizeShellAffectedDirsForTool(dirs []string, workspace string, tool str
 	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, shellPathFlavor(tool)))
 }
 
+func normalizeAccessIntentDirs(intent AccessIntent, workspace, tool string, shell bool) AccessIntent {
+	normalize := func(dirs []string) []string {
+		if shell {
+			return normalizeShellAffectedDirsForTool(dirs, workspace, tool)
+		}
+		return normalizeAffectedDirsForWorkspace(dirs, workspace)
+	}
+	if intent.ReadDirs != nil || intent.WriteDirs != nil {
+		if intent.ReadDirs != nil {
+			intent.ReadDirs = normalize(intent.ReadDirs)
+		}
+		if intent.WriteDirs != nil {
+			intent.WriteDirs = normalize(intent.WriteDirs)
+		}
+		return intent
+	}
+	if len(intent.Dirs) > 0 {
+		intent.Dirs = normalize(intent.Dirs)
+	}
+	return intent
+}
+
 // reviewerDeps carries the three things requestApproval needs from its
 // caller. Keeping them in a struct (instead of reaching into *Mods)
 // lets the reviewer stay physically independent of the main model: it
@@ -314,13 +312,14 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	var analysis shellCommandAnalysis
 	if shellExecution {
 		cmd := extractShellCommand(data)
-		if intent.Class != "" {
+		if intent.HasAccess() {
+			class := intent.DominantClass()
 			analysis = shellCommandAnalysis{
-				NeedsReview:  intent.Class == AccessWrite,
-				AffectedDirs: normalizeShellAffectedDirsForTool(intent.Dirs, r.scope.Value, name),
+				NeedsReview:  class == AccessWrite,
+				AffectedDirs: normalizeShellAffectedDirsForTool(intent.AllDirs(), r.scope.Value, name),
 				Reason:       intent.Reason,
 			}
-			intent.Dirs = analysis.AffectedDirs
+			intent = AccessIntent{Class: class, Dirs: analysis.AffectedDirs, Reason: intent.Reason}
 		} else if cmd != "" && deps.analyzeShell != nil {
 			analysis = deps.analyzeShell(name, cmd)
 			analysis.AffectedDirs = normalizeShellAffectedDirsForTool(analysis.AffectedDirs, r.scope.Value, name)
@@ -331,19 +330,11 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		}
 		debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", debug.Truncate(cmd, 500), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 	}
-	if intent.Class != "" && RulesAllowDirs(r.rules.Snapshot(), intent.Dirs, r.scope, intent.Class) {
+	if intent.HasAccess() && RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode)) {
 		debug.Printf("requestApproval: matched affected dirs against saved approval rule")
 		return nil
 	}
-	if intent.Class == "" && !shellExecution && r.rules.Allows(name, data, r.scope) {
-		debug.Printf("requestApproval: matched session approval rule, auto-approving")
-		return nil
-	}
-	if isSafeWorkArea(name, data, analysis) {
-		debug.Printf("requestApproval: target is within safe workspace, auto-approving")
-		return nil
-	}
-	if r.reviewMode != ReviewAlways && intent.Class != "" {
+	if r.reviewMode != ReviewAlways && intent.HasAccess() {
 		if ClassifyAccess(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
 			debug.Printf("requestApproval: approval matrix allowed access")
 			return nil
@@ -359,14 +350,8 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	}
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
-	if intent.Class != "" {
-		ruleDirs := intent.Dirs
-		if shellExecution && intent.Class == AccessRead {
-			ruleDirs = ExternalDirs(intent, r.scope, safeDirs())
-		}
-		candidateRules = RulesForDirs(ruleDirs, r.scope, intent.Class)
-	} else {
-		candidateRules = RulesFor(name, data, r.scope)
+	if intent.HasAccess() {
+		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode), shellExecution)
 	}
 	item := toolReviewItem{
 		name:           name,
@@ -404,64 +389,20 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	}
 }
 
-func safeDirs() []string {
-	dirs := []string{os.TempDir()}
-	if runtime.GOOS != "windows" {
-		// /tmp is the conventional shared scratch directory on POSIX. Users
-		// and models intuitively place work there, but on macOS os.TempDir()
-		// is a per-user /var/folders path, so without /tmp here those reads
-		// and writes trigger approval even though /tmp is intuitively safe.
-		dirs = append(dirs, "/tmp")
+func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode, shell bool) []Rule {
+	var rules []Rule
+	for _, group := range intent.Groups() {
+		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
+		if reviewMode != ApprovalReviewMode(ReviewAlways) && ClassifyAccess(groupIntent, scope, safeDirs, reviewMode) != DecisionAsk {
+			continue
+		}
+		dirs := group.Dirs
+		if shell && group.Class == AccessRead {
+			dirs = ExternalDirs(groupIntent, scope, safeDirs)
+		}
+		rules = append(rules, RulesForDirs(dirs, scope, group.Class)...)
 	}
-	return dirs
-}
-
-func isUnderSafeDir(path string) bool {
-	cleaned := pathutil.NormalizePath(path, pathutil.DefaultOptions("", pathutil.FlavorPOSIX))
-	for _, safe := range safeDirs() {
-		if pathutil.Contains(safe, cleaned) {
-			return true
-		}
-	}
-	return false
-}
-
-// isSafeWorkArea reports whether a tool invocation may be auto-approved
-// because its real targets all live under a configured safe workspace
-// directory (typically the OS temp dir).
-//
-// Decision is intentionally fail-closed: when the shell classifier cannot
-// determine the affected directories (LLM timeout, empty result, parse
-// failure -> defaultShellCommandAnalysis), we return false so the request
-// falls through to the normal review flow. Previous versions retried with
-// a strings.Contains(command, safeDir) fallback, which let any command
-// auto-approve as long as it mentioned the safe dir name anywhere in its
-// text (including inside echo arguments, comments, or URLs).
-func isSafeWorkArea(name string, data []byte, analysis shellCommandAnalysis) bool {
-	switch name {
-	case "shell_run", "powershell_run":
-		if len(analysis.AffectedDirs) == 0 {
-			// No reliable signal about what the command will touch ->
-			// require explicit review rather than guessing.
-			return false
-		}
-		for _, d := range analysis.AffectedDirs {
-			if !isUnderSafeDir(d) {
-				return false
-			}
-		}
-		return true
-	case "fs_write_file":
-		var parsed struct {
-			Path string `json:"path"`
-		}
-		if err := json.Unmarshal(data, &parsed); err != nil || parsed.Path == "" {
-			return false
-		}
-		return isUnderSafeDir(parsed.Path)
-	default:
-		return false
-	}
+	return rules
 }
 
 func extractShellCommand(args []byte) string {

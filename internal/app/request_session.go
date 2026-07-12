@@ -246,13 +246,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
 		scope := m.reviewer.scope
 		safeDirs := safeDirs()
-		if len(intent.Dirs) > 0 {
-			if registry.ShellExecution(name) {
-				intent.Dirs = normalizeShellAffectedDirsForTool(intent.Dirs, scope.Value, name)
-			} else {
-				intent.Dirs = normalizeAffectedDirsForWorkspace(intent.Dirs, scope.Value)
-			}
-		}
+		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
 
 		// Inject authorized external directories so resolveWorkspacePath honors
 		// approval. This applies whether or not review is skipped below: a
@@ -262,24 +256,16 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			ctx = toolregistry.WithAuthorizedDirs(ctx, ext)
 		}
 
-		// Mutable tools always go through review. Read-only tools
-		// (shouldReviewTool=false) still require approval when the matrix says
-		// the access is external, so an out-of-workspace read is not silently
-		// allowed.
-		needsReview := m.reviewer.shouldReviewTool(registry, name)
-		if !needsReview && ClassifyAccess(intent, scope, safeDirs, ApprovalReviewMode(m.reviewer.reviewMode)) == DecisionAsk {
-			needsReview = true
-		}
-
-		if needsReview {
-			if err := m.reviewer.requestApproval(reviewerDeps{
-				ctx:              m.ctx,
-				isShellExecution: registry.ShellExecution,
-				analyzeShell:     m.analyzeShellCommand,
-				accessIntent:     intent,
-			}, name, data); err != nil {
-				return "", err
-			}
+		// Every call goes through one policy entry point. requestApproval
+		// performs saved-rule and access-matrix evaluation and returns
+		// immediately for calls that do not need an interactive prompt.
+		if err := m.reviewer.requestApproval(reviewerDeps{
+			ctx:              m.ctx,
+			isShellExecution: registry.ShellExecution,
+			analyzeShell:     m.analyzeShellCommand,
+			accessIntent:     intent,
+		}, name, data); err != nil {
+			return "", err
 		}
 
 		return registry.Call(ctx, name, data)

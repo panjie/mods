@@ -23,16 +23,20 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		intent AccessIntent
 		want   Decision
 	}{
-		{"read in workspace", AccessIntent{AccessRead, []string{ws.Value}, ""}, DecisionAllow},
-		{"write in workspace", AccessIntent{AccessWrite, []string{ws.Value}, ""}, DecisionAsk},
-		{"read in temp", AccessIntent{AccessRead, []string{tempDir}, ""}, DecisionAllow},
-		{"write in temp", AccessIntent{AccessWrite, []string{tempDir}, ""}, DecisionAllow},
-		{"read external", AccessIntent{AccessRead, []string{external}, ""}, DecisionAsk},
-		{"write external", AccessIntent{AccessWrite, []string{external}, ""}, DecisionAsk},
-		{"read empty dirs", AccessIntent{AccessRead, nil, ""}, DecisionAllow},
-		{"write empty dirs", AccessIntent{AccessWrite, nil, ""}, DecisionAsk},
-		{"mixed ws+external read", AccessIntent{AccessRead, []string{ws.Value, external}, ""}, DecisionAsk},
-		{"write spanning temp and external", AccessIntent{AccessWrite, []string{tempDir, external}, ""}, DecisionAsk},
+		{"read in workspace", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}}, DecisionAllow},
+		{"write in workspace", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}}, DecisionAsk},
+		{"read in temp", AccessIntent{Class: AccessRead, Dirs: []string{tempDir}}, DecisionAllow},
+		{"write in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}}, DecisionAllow},
+		{"read external", AccessIntent{Class: AccessRead, Dirs: []string{external}}, DecisionAsk},
+		{"write external", AccessIntent{Class: AccessWrite, Dirs: []string{external}}, DecisionAsk},
+		{"read empty dirs", AccessIntent{Class: AccessRead}, DecisionAllow},
+		{"write empty dirs", AccessIntent{Class: AccessWrite}, DecisionAsk},
+		{"mixed ws+external read", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value, external}}, DecisionAsk},
+		{"write spanning temp and external", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir, external}}, DecisionAsk},
+		{"copy external source to temp", AccessIntent{ReadDirs: []string{external}, WriteDirs: []string{tempDir}}, DecisionAsk},
+		{"copy workspace source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
+		{"copy workspace source to workspace", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
+		{"missing access intent fails closed", AccessIntent{}, DecisionAsk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -44,7 +48,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 func TestClassifyAccessModeOverride(t *testing.T) {
 	ws := wsScope(t)
 	external := filepath.Clean(t.TempDir())
-	read := AccessIntent{AccessRead, []string{external}, ""}
+	read := AccessIntent{Class: AccessRead, Dirs: []string{external}}
 	require.Equal(t, DecisionAllow, ClassifyAccess(read, ws, nil, ReviewNever))
 }
 

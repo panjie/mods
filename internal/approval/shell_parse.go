@@ -190,6 +190,33 @@ func shellWords(words []*syntax.Word) []string {
 	return args
 }
 
+// StaticPOSIXLiteralArgs returns statically known argument values from every
+// simple command in a POSIX shell expression. Quoting is removed by the AST,
+// while parameter expansions and other dynamic words are omitted. Callers use
+// this to recover quoted path arguments without treating quoted awk/sed
+// programs as raw shell text.
+func StaticPOSIXLiteralArgs(command string) []string {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
+	file, err := parser.Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	var args []string
+	syntax.Walk(file, func(node syntax.Node) bool {
+		call, ok := node.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		for _, word := range call.Args {
+			if value, ok := staticShellWord(word); ok && value != "" {
+				args = append(args, value)
+			}
+		}
+		return true
+	})
+	return args
+}
+
 func redirectionWrites(op syntax.RedirOperator) bool {
 	switch op {
 	case syntax.RdrOut, syntax.AppOut, syntax.ClbOut, syntax.RdrAll, syntax.AppAll, syntax.RdrInOut:

@@ -33,4 +33,32 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 		require.Empty(t, got.AffectedDirs)
 		require.Empty(t, got.Reason)
 	})
+
+	t.Run("env wrapped writer", func(t *testing.T) {
+		got := AnalyzeShellStatic("env touch owned.txt", true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Equal(t, []string{"."}, got.AffectedDirs)
+	})
+
+	t.Run("git output flag", func(t *testing.T) {
+		got := AnalyzeShellStatic("git diff --output=owned.txt", true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Equal(t, []string{"."}, got.AffectedDirs)
+	})
+
+	t.Run("git external diff helper", func(t *testing.T) {
+		got := AnalyzeShellStatic("git diff --ext-diff", true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+	})
+
+	t.Run("xxd reverse output", func(t *testing.T) {
+		got := AnalyzeShellStatic("xxd -r input.hex output.bin", true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Equal(t, []string{"."}, got.AffectedDirs)
+	})
+
+	t.Run("runtime-expanded path requires review", func(t *testing.T) {
+		got := AnalyzeShellStatic("cat ${FILE}", true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+	})
 }

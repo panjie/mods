@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/mcpclient"
 	"github.com/panjie/mods/internal/skills"
@@ -25,7 +26,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 	if ShouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
 			Root:     root,
-			SafeDirs: []string{os.TempDir()},
+			SafeDirs: approval.SafeDirs(),
 		}); err != nil {
 			return nil, err
 		}

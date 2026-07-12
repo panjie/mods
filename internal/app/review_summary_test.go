@@ -123,8 +123,7 @@ func TestSafeDirsIncludesTmp(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("/tmp is not a POSIX safe dir on Windows")
 	}
-	require.True(t, isUnderSafeDir("/tmp/git-mcp-v2/src/utils/command.ts"))
-	require.True(t, isUnderSafeDir(filepath.Join("/tmp", "scratch.txt")))
-	require.True(t, isUnderSafeDir(os.TempDir()))   // per-user temp still safe
-	require.False(t, isUnderSafeDir("/etc/passwd")) // outside any safe dir
+	dirs := safeDirs()
+	require.Contains(t, dirs, "/tmp")
+	require.Contains(t, dirs, os.TempDir())
 }

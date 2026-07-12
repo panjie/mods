@@ -21,12 +21,70 @@ const (
 )
 
 // AccessIntent is the unified, tool-neutral description of what a tool
-// invocation touches: an access class plus the absolute directories it
-// operates on. It is the sole input to the approval matrix.
+// invocation touches. Class/Dirs is the compact representation for a
+// single-mode operation. ReadDirs/WriteDirs represent mixed operations such
+// as copying from an external source into a writable destination. A non-nil
+// split slice declares that mode even when its directory set is unknown.
 type AccessIntent struct {
-	Class  AccessClass
-	Dirs   []string
-	Reason string
+	Class     AccessClass
+	Dirs      []string
+	ReadDirs  []string
+	WriteDirs []string
+	Reason    string
+}
+
+type AccessGroup struct {
+	Class AccessClass
+	Dirs  []string
+}
+
+func (intent AccessIntent) Groups() []AccessGroup {
+	if intent.ReadDirs != nil || intent.WriteDirs != nil {
+		groups := make([]AccessGroup, 0, 2)
+		if intent.ReadDirs != nil {
+			groups = append(groups, AccessGroup{Class: AccessRead, Dirs: intent.ReadDirs})
+		}
+		if intent.WriteDirs != nil {
+			groups = append(groups, AccessGroup{Class: AccessWrite, Dirs: intent.WriteDirs})
+		}
+		return groups
+	}
+	if intent.Class == "" {
+		return nil
+	}
+	return []AccessGroup{{Class: intent.Class, Dirs: intent.Dirs}}
+}
+
+func (intent AccessIntent) HasAccess() bool {
+	return len(intent.Groups()) > 0
+}
+
+func (intent AccessIntent) DominantClass() AccessClass {
+	groups := intent.Groups()
+	for _, group := range groups {
+		if group.Class == AccessWrite {
+			return AccessWrite
+		}
+	}
+	if len(groups) > 0 {
+		return groups[0].Class
+	}
+	return ""
+}
+
+func (intent AccessIntent) AllDirs() []string {
+	seen := map[string]struct{}{}
+	var dirs []string
+	for _, group := range intent.Groups() {
+		for _, dir := range group.Dirs {
+			if _, ok := seen[dir]; ok {
+				continue
+			}
+			seen[dir] = struct{}{}
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }
 
 // Decision is the outcome of the approval matrix.
@@ -75,36 +133,50 @@ func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode Re
 	if mode == ReviewNever {
 		return DecisionAllow
 	}
-	if len(intent.Dirs) == 0 {
-		if intent.Class == AccessRead {
-			return DecisionAllow
-		}
+	groups := intent.Groups()
+	if len(groups) == 0 {
 		return DecisionAsk
 	}
-	for _, d := range intent.Dirs {
-		switch locateDir(d, scope, safeDirs) {
-		case locExternal:
-			return DecisionAsk
-		case locWorkspace:
-			if intent.Class == AccessWrite {
+	for _, group := range groups {
+		if len(group.Dirs) == 0 {
+			if group.Class == AccessWrite {
 				return DecisionAsk
 			}
-		case locTemp:
-			// matrix allow cell, keep scanning
-		default:
-			return DecisionAsk
+			continue
+		}
+		for _, d := range group.Dirs {
+			switch locateDir(d, scope, safeDirs) {
+			case locExternal:
+				return DecisionAsk
+			case locWorkspace:
+				if group.Class == AccessWrite {
+					return DecisionAsk
+				}
+			case locTemp:
+				// matrix allow cell, keep scanning
+			default:
+				return DecisionAsk
+			}
 		}
 	}
 	return DecisionAllow
 }
 
-// ExternalDirs returns the subset of intent.Dirs that fall outside the
-// workspace and outside any safe directory. Callers inject these into the
-// tool-call context so resolveWorkspacePath can honor approval.
+// ExternalDirs returns the subset of all read and write directories that fall
+// outside the workspace and outside any safe directory. Callers inject these
+// into the tool-call context so resolveWorkspacePath can honor approval.
 func ExternalDirs(intent AccessIntent, scope Scope, safeDirs []string) []string {
+	seen := map[string]struct{}{}
 	var out []string
-	for _, d := range intent.Dirs {
-		if locateDir(d, scope, safeDirs) == locExternal {
+	for _, group := range intent.Groups() {
+		for _, d := range group.Dirs {
+			if locateDir(d, scope, safeDirs) != locExternal {
+				continue
+			}
+			if _, ok := seen[d]; ok {
+				continue
+			}
+			seen[d] = struct{}{}
 			out = append(out, d)
 		}
 	}

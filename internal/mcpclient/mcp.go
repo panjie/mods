@@ -124,7 +124,7 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 				Spec:          spec,
 				Kind:          toolregistry.ToolKindMCP,
 				TimeoutPolicy: toolregistry.TimeoutPolicyCaller,
-				Capabilities:  toolregistry.ToolCapabilities{ReadOnly: false, Mutable: true},
+				Capabilities:  inferCapabilities(tool),
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 					return session.ToolCall(ctx, capturedSname, capturedToolName, data)
 				},
@@ -135,6 +135,30 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 		}
 	}
 	return nil
+}
+
+// inferCapabilities maps an MCP tool's self-declared annotations to mods'
+// internal ToolCapabilities. The MCP protocol's readOnlyHint signals that a
+// tool does not modify its environment; when a server explicitly sets it to
+// true, mods treats the tool as read-only so it can skip interactive review
+// (matching built-in read-only tools like fs_read_file and web_search).
+//
+// When the hint is absent or false the tool degrades fail-closed to mutable,
+// preserving the conservative default so unannotated or write-capable tools
+// still require approval.
+func inferCapabilities(tool mcp.Tool) toolregistry.ToolCapabilities {
+	if hint := tool.Annotations.ReadOnlyHint; hint != nil && *hint {
+		return toolregistry.ToolCapabilities{ReadOnly: true}
+	}
+	return toolregistry.ToolCapabilities{Mutable: true}
+}
+
+// IsReadOnly reports whether an MCP tool self-declares as read-only via its
+// readOnlyHint annotation. It is the public projection of inferCapabilities
+// for callers (e.g. --list-tools) that only need the read/mutable distinction
+// without importing the tools registry types.
+func IsReadOnly(tool mcp.Tool) bool {
+	return inferCapabilities(tool).ReadOnly
 }
 
 type ToolSession struct {

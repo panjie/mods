@@ -202,7 +202,7 @@ Top-level keys:
 - `web-search-api-key` (string) — API key for the search provider
 - `web-search-api-key-env` (string) — environment variable for the API key (default: TAVILY_API_KEY)
 
-- `mcp-servers` (map) — MCP server configurations. Each server has `type` (stdio/sse/http), `command`, `args`, `env`, `url`, and `pass-env-all`.
+- `mcp-servers` (map) — MCP server configurations. Each server has `type` (stdio/sse/http), `command`, `args`, `env`, `url`, and `pass-env-all`. Tools that self-declare `readOnlyHint: true` in their MCP annotations are treated as read-only and skip approval in auto review mode; tools without the hint default to mutable and require review.
 - `mcp-timeout` (duration) — MCP server call timeout (default: 15s)
 
 - `apis` (map) — provider configurations. **Always within this section.** Each provider has:

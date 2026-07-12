@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/panjie/mods/internal/mcpclient"
 	"github.com/panjie/mods/internal/tooling"
 	"github.com/panjie/mods/internal/ui"
@@ -30,7 +31,7 @@ func listAllTools(ctx context.Context, cfg *Config) error {
 	mcpCount := 0
 	for sname, tools := range mcpServers {
 		for _, t := range tools {
-			fmt.Printf("%s > %s (MCP)\n", ui.StdoutStyles().Timeago.Render(sname), t.Name)
+			fmt.Printf("%s > %s (MCP%s)\n", ui.StdoutStyles().Timeago.Render(sname), t.Name, mcpCapabilityLabel(t))
 			mcpCount++
 		}
 	}
@@ -53,4 +54,15 @@ func builtinCapabilityLabel(b tooling.BuiltinToolInfo) string {
 	default:
 		return ""
 	}
+}
+
+// mcpCapabilityLabel renders the capability suffix shown after "MCP", mirroring
+// the built-in labels. A tool that self-declares readOnlyHint=true is shown as
+// "read"; everything else degrades to "write" so users can see at a glance
+// which MCP tools will require approval.
+func mcpCapabilityLabel(t mcp.Tool) string {
+	if mcpclient.IsReadOnly(t) {
+		return ", read"
+	}
+	return ", write"
 }

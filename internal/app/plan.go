@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 )
@@ -105,30 +104,20 @@ func (m *Mods) renderProposalSelectionBar(content string) string {
 	if m.width <= 0 {
 		m.width = 80
 	}
-	headerLine := m.Styles.ReviewPrompt.Copy().Width(m.width).Render(
-		padRight("  Plan Review - Select a Proposal", m.width-4),
-	)
-	navLabel := fmt.Sprintf("Proposal %d/%d", m.proposalSelected+1, len(m.proposals))
-	options := []string{
-		"[← →] Navigate",
-		"[Y/Enter] Select",
-		"[M] Modify",
-		"[N] Try again",
-		"[Ctrl+C] Cancel",
-	}
-	navStyle := m.Styles.ReviewChoices.Copy().Padding(0, 0)
-	// Render options as plain badges: every option maps to a direct key, so
-	// highlighting a single one based on m.planSelected (which has no key
-	// to advance it in proposal mode) would mislead the user.
-	optsLine := navStyle.Render(strings.Join(options, "  "))
-	navLine := navStyle.Copy().Width(m.width).Render(
-		navStyle.Render(navLabel) + "  " + optsLine,
-	)
-	block := headerLine + "\n" + navLine
-	if strings.TrimSpace(content) == "" {
-		return block
-	}
-	return strings.TrimRight(content, "\r\n") + "\n" + block
+	block := renderInteractionPanel(m.Styles.Interaction, m.width, interactionPanel{
+		Title:    "Plan ready",
+		Meta:     fmt.Sprintf("Proposal %d/%d", m.proposalSelected+1, len(m.proposals)),
+		Tone:     interactionToneInfo,
+		Headline: "Select the proposal to use for execution",
+		Actions: []interactionAction{
+			{Key: "← →", Label: "Navigate"},
+			{Key: "Y/Enter", Label: "Select"},
+			{Key: "M", Label: "Modify"},
+			{Key: "N", Label: "Try again"},
+			{Key: "Ctrl+C", Label: "Cancel"},
+		},
+	})
+	return appendInteractionPanel(content, block)
 }
 
 func (m *Mods) setupPlanContext(content string, mod Model) error {
@@ -186,59 +175,49 @@ func (m *Mods) renderPlanReviewBanner(content string) string {
 	if m.width <= 0 {
 		m.width = 80
 	}
-	promptLine := m.Styles.ReviewPrompt.Copy().Width(m.width).Render(
-		padRight("  Plan Review", m.width-4),
-	)
-	options := []string{
-		"[Y] Approve",
-		"[N] Try again",
-		"[M] Modify",
-		"[Ctrl+C] Cancel",
+	actions := []interactionAction{
+		{Key: "Y", Label: "Approve"},
+		{Key: "N", Label: "Try again"},
+		{Key: "M", Label: "Modify"},
+		{Key: "Ctrl+C", Label: "Cancel"},
 	}
-	baseStyle := m.Styles.ReviewChoices.Copy().Padding(0, 0)
-	choicesLine := m.Styles.ReviewChoices.Copy().Width(m.width).Render(
-		m.renderReviewOptions(options, m.planSelected, baseStyle),
-	)
-	block := promptLine + "\n" + choicesLine
-	if strings.TrimSpace(content) == "" {
-		return block
+	if m.planSelected < 0 || m.planSelected >= len(actions) {
+		m.planSelected = 0
 	}
-	return strings.TrimRight(content, "\r\n") + "\n" + block
-}
-
-func (m *Mods) renderReviewOptions(options []string, selected int, base lipgloss.Style) string {
-	highlight := base.Copy().
-		Foreground(lipgloss.Color("#4A3B9F")).
-		Background(lipgloss.Color("#E0DDFF"))
-	if selected >= len(options) {
-		selected = 0
-	}
-	var parts []string
-	for i, opt := range options {
-		if i == selected {
-			parts = append(parts, highlight.Render(opt))
-		} else {
-			parts = append(parts, base.Render(opt))
-		}
-	}
-	return strings.Join(parts, "  ")
+	actions[m.planSelected].Selected = true
+	block := renderInteractionPanel(m.Styles.Interaction, m.width, interactionPanel{
+		Title:    "Plan ready",
+		Tone:     interactionToneInfo,
+		Headline: "Review the proposed plan before execution",
+		Actions:  actions,
+	})
+	return appendInteractionPanel(content, block)
 }
 
 func (m *Mods) renderPlanFeedbackInput(content string) string {
 	if m.width <= 0 {
 		m.width = 80
 	}
-	promptLine := m.Styles.ReviewPrompt.Copy().Width(m.width).Render(
-		padRight("  Modification Feedback", m.width-4),
-	)
-	inputLine := m.Styles.ReviewChoices.Copy().Width(m.width).Render(
-		"  " + m.feedbackInput.View(),
-	)
-	block := promptLine + "\n" + inputLine
+	innerWidth := interactionPanelInnerWidth(m.Styles.Interaction, m.width)
+	// Reserve one cell for textinput's end-of-value cursor so the action row
+	// stays at a stable vertical position while feedback is typed.
+	m.feedbackInput.Width = max(1, innerWidth-m.Styles.Interaction.Input.GetHorizontalFrameSize()-3)
+	m.feedbackInput.Prompt = ""
+	block := renderInteractionPanel(m.Styles.Interaction, m.width, interactionPanel{
+		Title:    "Modification feedback",
+		Tone:     interactionToneInfo,
+		Headline: "Describe the changes you want in the plan",
+		Body:     []string{m.Styles.Interaction.Input.Render("› " + m.feedbackInput.View())},
+		Actions:  []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}},
+	})
+	return appendInteractionPanel(content, block)
+}
+
+func appendInteractionPanel(content, panel string) string {
 	if strings.TrimSpace(content) == "" {
-		return block
+		return panel
 	}
-	return strings.TrimRight(content, "\r\n") + "\n" + block
+	return strings.TrimRight(content, "\r\n") + "\n" + panel
 }
 
 // capturePlanHistory snapshots the non-system messages from the plan-phase

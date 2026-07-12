@@ -82,7 +82,7 @@ var Help = map[string]string{
 	"no-save":                "Disable saving and resuming sessions",
 	"chat":                   "Start a continuous session; type /exit or /quit to quit",
 	"list-sessions":          "Interactively browse, view, and delete saved sessions",
-	"theme":                  "Theme to use in the forms; valid choices are charm, catppuccin, dracula, and base16",
+	"theme":                  "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
 	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":            "MCP Servers configurations",
 	"enable-mcp":             "Enable only specific MCP servers (whitelist, overrides disable list)",

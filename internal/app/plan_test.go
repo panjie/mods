@@ -2,9 +2,11 @@ package app
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
@@ -179,6 +181,35 @@ func TestProposalSelectionBarNoMisleadingHighlight(t *testing.T) {
 
 	require.Equal(t, mA.renderProposalSelectionBar(""), mB.renderProposalSelectionBar(""),
 		"the proposal bar must be invariant under m.planSelected because no key advances it in proposal mode")
+}
+
+func TestPlanInteractionPanelsFitTerminalWidths(t *testing.T) {
+	for _, width := range []int{30, 60, 80, 120} {
+		t.Run(name("width=", width), func(t *testing.T) {
+			m := proposalModeMods(t,
+				proposal{title: "Proposal 1", content: "x"},
+				proposal{title: "Proposal 2", content: "y"},
+			)
+			m.width = width
+			m.proposalSelected = 0
+			outputs := []string{
+				m.renderProposalSelectionBar(""),
+				m.renderPlanReviewBanner(""),
+			}
+			ti := textinput.New()
+			ti.Placeholder = "Describe changes"
+			m.feedbackInput = ti
+			outputs = append(outputs, m.renderPlanFeedbackInput(""))
+			for _, output := range outputs {
+				for _, line := range strings.Split(output, "\n") {
+					require.LessOrEqual(t, lipgloss.Width(line), width, line)
+				}
+			}
+			require.Contains(t, outputs[0], "PLAN READY")
+			require.Contains(t, outputs[1], "Approve")
+			require.Contains(t, outputs[2], "MODIFICATION FEEDBACK")
+		})
+	}
 }
 
 func name(prefix string, n int) string {

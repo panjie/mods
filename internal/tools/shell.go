@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -40,6 +42,7 @@ type ShellConfig struct {
 	Root           string
 	Timeout        time.Duration
 	MaxOutputChars int
+	SudoPrompt     SecretPromptHandler
 }
 
 // RegisterShell registers the native shell tool.
@@ -66,17 +69,22 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			Name:        "shell_run",
 			Description: desc,
 			InputSchema: objectSchema(map[string]any{
-				"command": stringProp("Shell command to run."),
+				"command":    stringProp("Shell command to run."),
+				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 			}, "command"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
-				Command string `json:"command"`
+				Command   string            `json:"command"`
+				SecretEnv map[string]string `json:"secret_env"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, cfg, root, args.Command, shellCommand)
+			if err := validateSecretEnv(args.SecretEnv); err != nil {
+				return "", err
+			}
+			return runShellCommand(ctx, cfg, root, args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
 		},
 	})
 }
@@ -101,17 +109,22 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			Name:        "powershell_run",
 			Description: PowerShellRunDescription,
 			InputSchema: objectSchema(map[string]any{
-				"command": stringProp("PowerShell command to run directly."),
+				"command":    stringProp("PowerShell command to run directly."),
+				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 			}, "command"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
-				Command string `json:"command"`
+				Command   string            `json:"command"`
+				SecretEnv map[string]string `json:"secret_env"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, cfg, root, args.Command, powerShellCommand)
+			if err := validateSecretEnv(args.SecretEnv); err != nil {
+				return "", err
+			}
+			return runShellCommand(ctx, cfg, root, args.Command, args.SecretEnv, nil, powerShellCommand)
 		},
 	})
 }
@@ -134,6 +147,7 @@ type ShellRunner struct {
 	Timeout        time.Duration
 	MaxOutputChars int
 	BuildCommand   func(context.Context, string) *exec.Cmd
+	Env            map[string]string
 }
 
 func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
@@ -153,6 +167,12 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	defer cancel()
 	cmd := r.BuildCommand(runCtx, command)
 	cmd.Dir = r.Root
+	if len(r.Env) > 0 {
+		cmd.Env = os.Environ()
+		for key, value := range r.Env {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
+	}
 	out := newCappedOutput(r.MaxOutputChars)
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -169,13 +189,36 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	return text, nil
 }
 
-func runShellCommand(ctx context.Context, cfg ShellConfig, root, command string, buildCmd func(context.Context, string) *exec.Cmd) (string, error) {
+func runShellCommand(ctx context.Context, cfg ShellConfig, root, command string, env map[string]string, sudoPrompt SecretPromptHandler, buildCmd func(context.Context, string) *exec.Cmd) (string, error) {
+	prepared, cleanup, err := prepareSudoCommand(ctx, command, sudoPrompt)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+	for key, value := range prepared.Env {
+		if env == nil {
+			env = map[string]string{}
+		}
+		env[key] = value
+	}
 	return ShellRunner{
 		Root:           root,
 		Timeout:        cfg.Timeout,
 		MaxOutputChars: cfg.MaxOutputChars,
 		BuildCommand:   buildCmd,
-	}.Run(ctx, command)
+		Env:            env,
+	}.Run(ctx, prepared.Command)
+}
+
+var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validateSecretEnv(env map[string]string) error {
+	for name := range env {
+		if !envNamePattern.MatchString(name) {
+			return fmt.Errorf("invalid environment variable name %q", name)
+		}
+	}
+	return nil
 }
 
 type cappedOutput struct {

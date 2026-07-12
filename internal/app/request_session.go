@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -243,6 +245,10 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			return "", err
 		}
 
+		if registry.Interactive(name) {
+			return registry.Call(ctx, name, data)
+		}
+
 		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
 		scope := m.reviewer.scope
 		safeDirs := safeDirs()
@@ -267,7 +273,30 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		}, name, data); err != nil {
 			return "", err
 		}
+		if secrets.ContainsRef(data) {
+			if err := m.reviewer.requestSecretApproval(m.ctx, name, data); err != nil {
+				return "", err
+			}
+		}
 
-		return registry.Call(ctx, name, data)
+		callData := data
+		if m.secrets != nil {
+			var err error
+			callData, _, err = m.secrets.Resolve(name, data)
+			if err != nil {
+				return "", err
+			}
+		}
+		output, err := registry.Call(ctx, name, callData)
+		if m.secrets != nil {
+			output = m.secrets.Redact(output)
+		}
+		if err != nil && m.secrets != nil {
+			redacted := m.secrets.Redact(err.Error())
+			if redacted != err.Error() {
+				err = errors.New(redacted)
+			}
+		}
+		return output, err
 	}
 }

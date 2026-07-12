@@ -36,6 +36,7 @@ type ToolCapabilities struct {
 	ReadOnly       bool
 	Mutable        bool
 	ShellExecution bool
+	Interactive    bool
 }
 
 // Tool is a registered executable tool.
@@ -146,6 +147,13 @@ func (r *Registry) Mutable(name string) bool {
 // ShellExecution reports whether a tool executes shell commands.
 func (r *Registry) ShellExecution(name string) bool {
 	return r.Capabilities(name).ShellExecution
+}
+
+// Interactive reports whether the tool pauses execution to collect input
+// from the local terminal user. Interactive tools are not external access
+// operations and therefore bypass the ordinary approval matrix.
+func (r *Registry) Interactive(name string) bool {
+	return r.Capabilities(name).Interactive
 }
 
 // IntentExtractor returns the tool's access-intent extractor, which maps a

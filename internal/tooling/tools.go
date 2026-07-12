@@ -17,8 +17,12 @@ import (
 
 var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[\w./-]+|[\w.-]+\.(go|ts|tsx|js|jsx|py|rs|java|c|cc|cpp|h|hpp|md|txt|json|yaml|yml|toml|mod|sum|sh|sql))($|\s|[,.，。:：;；])`)
 
-func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string, skillCatalog []skills.Skill) (*toolregistry.Registry, error) {
+func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string, skillCatalog []skills.Skill, interaction ...toolregistry.InteractionHandlers) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
+	var handlers toolregistry.InteractionHandlers
+	if len(interaction) > 0 {
+		handlers = interaction[0]
+	}
 
 	workspace := cfg.ResolveWorkspace()
 	root := workspace.Canonical
@@ -43,6 +47,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 			Root:           root,
 			Timeout:        cfg.BuiltinTools.ShellTimeout,
 			MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
+			SudoPrompt:     handlers.SudoPrompt,
 		}); err != nil {
 			return nil, err
 		}
@@ -69,6 +74,12 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	if len(skillCatalog) > 0 {
 		if err := toolregistry.RegisterSkill(registry, skillCatalog); err != nil {
+			return nil, err
+		}
+	}
+
+	if handlers.UserInput != nil {
+		if err := toolregistry.RegisterUserInput(registry, handlers.UserInput); err != nil {
 			return nil, err
 		}
 	}
@@ -117,6 +128,7 @@ type BuiltinToolInfo struct {
 	ReadOnly    bool
 	Mutable     bool
 	Shell       bool
+	Interactive bool
 }
 
 // BuiltinSpecs enumerates every built-in tool mods can provide, independent of
@@ -140,6 +152,7 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterThinking(registry)
 	_ = toolregistry.RegisterSkill(registry, nil)
+	_ = toolregistry.RegisterUserInput(registry, nil)
 
 	infos := make([]BuiltinToolInfo, 0, registry.Len())
 	for _, spec := range registry.Specs() {
@@ -154,6 +167,7 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 			ReadOnly:    tool.Capabilities.ReadOnly,
 			Mutable:     tool.Capabilities.Mutable,
 			Shell:       tool.Capabilities.ShellExecution,
+			Interactive: tool.Capabilities.Interactive,
 		})
 	}
 	return infos, nil

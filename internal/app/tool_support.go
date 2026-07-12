@@ -45,6 +45,12 @@ func (m *Mods) buildToolRegistryForProvider(
 	client stream.Client,
 ) (*toolregistry.Registry, error) {
 	if client.Capabilities().Tools {
+		if m.userInput.available() {
+			return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog, toolregistry.InteractionHandlers{
+				UserInput:  m.handleUserInput,
+				SudoPrompt: m.handleSudoPrompt,
+			})
+		}
 		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog)
 	}
 	if explicitlyEnabledTools(cfg) {

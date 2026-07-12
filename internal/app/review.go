@@ -9,9 +9,9 @@ import (
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/pathutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/ui"
 )
 
 var errReviewUnavailable = errors.New("tool execution requires review but interactive approval is unavailable")
@@ -26,6 +26,7 @@ const (
 )
 
 type reviewOption struct {
+	key    string
 	label  string
 	action reviewOptionAction
 }
@@ -202,13 +203,13 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 
 func (r *toolReviewer) reviewOptions() []reviewOption {
 	options := []reviewOption{
-		{label: "[Y] Allow once", action: reviewOptionApprove},
-		{label: "[N] Deny", action: reviewOptionDeny},
+		{key: "Y", label: "Allow once", action: reviewOptionApprove},
+		{key: "N", label: "Deny", action: reviewOptionDeny},
 	}
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
-		options = append(options, reviewOption{label: "[A] Always allow", action: reviewOptionAlwaysAllow})
+		options = append(options, reviewOption{key: "A", label: "Always allow", action: reviewOptionAlwaysAllow})
 	}
-	return append(options, reviewOption{label: "[Ctrl+C] Cancel", action: reviewOptionCancel})
+	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel", action: reviewOptionCancel})
 }
 
 // buildAccessIntent derives the unified AccessIntent for a tool call. Shell
@@ -358,6 +359,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		args:           data,
 		candidateRules: candidateRules,
 		summary:        formatReviewSummaryWithIntent(name, data, analysis, r.scope, intent),
+		presentation:   formatReviewPresentationWithIntent(name, data, analysis, r.scope, intent),
 		resp:           respCh,
 	}
 	// Snapshot the channel under the lock so a concurrent reset() that
@@ -389,6 +391,49 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	}
 }
 
+// requestSecretApproval is an unpersistable, per-use confirmation. Secret
+// references are capabilities: saved directory/tool rules and ReviewNever do
+// not authorize sending one to an external process or MCP server.
+func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, data []byte) error {
+	if !IsInputTTY() {
+		return fmt.Errorf("%w: using a protected credential requires an interactive terminal", errReviewUnavailable)
+	}
+	respCh := make(chan reviewResponse, 1)
+	item := toolReviewItem{
+		name:    name,
+		args:    data,
+		summary: fmt.Sprintf("Use protected credential with %s\n\nArguments: %s", name, string(data)),
+		presentation: reviewPresentation{
+			tone:     interactionToneDanger,
+			toneText: "Danger",
+			headline: "Send a protected credential to an external tool",
+			rows: []interactionRow{
+				{Label: "Tool", Value: name},
+				{Label: "Target", Value: secretReferenceTargets(data)},
+			},
+		},
+		resp: respCh,
+	}
+	ch := r.snapshotChan()
+	if ch == nil {
+		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
+	}
+	select {
+	case ch <- item:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case response := <-respCh:
+		if response.approved {
+			return nil
+		}
+		return fmt.Errorf("protected credential use denied by user for: %s", name)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode, shell bool) []Rule {
 	var rules []Rule
 	for _, group := range intent.Groups() {
@@ -415,43 +460,38 @@ func extractShellCommand(args []byte) string {
 	return parsed.Command
 }
 
-func (r *toolReviewer) renderBanner(width int, reviewPrompt, reviewChoices lipgloss.Style) string {
+func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles) string {
 	if width <= 0 {
 		width = 80
 	}
-	label := formatReviewLabel(r.reviewItem.name, r.reviewItem.args)
-	// Bound the Review line to the terminal width with an ellipsis, symmetric
-	// with the summary line below. Without this, long shell commands render
-	// full-length and lipgloss's Width() hard-truncates them mid-token with no
-	// "..." cue, leaving the user unable to tell the command continues.
-	reviewLine := TruncateOperationStatus("  Review: "+label, width)
-	promptLine := reviewPrompt.Copy().Width(width).Render(
-		padRight(reviewLine, width-4),
-	)
-	baseStyle := reviewChoices.Copy().Padding(0, 0)
-	selectedStyle := baseStyle.Copy().
-		Foreground(lipgloss.Color("#4A3B9F")).
-		Background(lipgloss.Color("#E0DDFF"))
 	options := r.reviewOptions()
 	selected := r.selected
 	if selected >= len(options) {
 		selected = 0
 	}
-	var parts []string
+	actions := make([]interactionAction, 0, len(options))
 	for i, opt := range options {
-		if i == selected {
-			parts = append(parts, selectedStyle.Render(opt.label))
-		} else {
-			parts = append(parts, baseStyle.Render(opt.label))
+		actions = append(actions, interactionAction{Key: opt.key, Label: opt.label, Selected: i == selected})
+	}
+	presentation := r.reviewItem.presentation
+	if presentation.headline == "" && r.reviewItem.summary != "" {
+		presentation = reviewPresentation{
+			tone: interactionToneWarning, toneText: "Warning", headline: r.reviewItem.summary,
 		}
 	}
-	separator := baseStyle.Render("  ")
-	choicesLine := reviewChoices.Copy().Width(width).Render(strings.Join(parts, separator))
-	block := promptLine
-	if r.reviewItem.summary != "" {
-		block += "\n" + reviewChoices.Copy().Width(width).Render(TruncateOperationStatus(r.reviewItem.summary, width))
+	rows := append([]interactionRow(nil), presentation.rows...)
+	if len(r.reviewItem.candidateRules) > 0 {
+		rows = append(rows, interactionRow{Label: "Always", Value: RulesLabel(r.reviewItem.candidateRules)})
 	}
-	return block + "\n" + choicesLine
+	return renderInteractionPanel(styles, width, interactionPanel{
+		Title:    "Review required",
+		Meta:     r.reviewItem.name,
+		Tone:     presentation.tone,
+		ToneText: presentation.toneText,
+		Headline: presentation.headline,
+		Rows:     rows,
+		Actions:  actions,
+	})
 }
 
 func padRight(s string, w int) string {

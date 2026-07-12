@@ -30,6 +30,7 @@ Priority order:
 6. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review.
 7. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review.
 8. Mutating and destructive shell commands (delete, move, rename, overwrite) are automatically routed through mods' review step - when the user requests such an action, attempt it directly rather than asking for permission first.
+9. When essential non-discoverable information is missing, use request_user_input. Use its secret mode for credentials; never request sudo passwords directly or use sudo -S.
 
 Platform rules:
 - On macOS/Linux/POSIX, prefer portable sh commands and common project tools.

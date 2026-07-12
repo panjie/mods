@@ -294,8 +294,8 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.Contains(t, rendered, "[A] Always allow")
+	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	require.Contains(t, rendered, "Always allow")
 }
 
 func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
@@ -313,8 +313,8 @@ func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.Contains(t, rendered, "[A] Always allow")
+	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	require.Contains(t, rendered, "Always allow")
 }
 
 // TestReviewBannerAlwaysAllowLegacyFallback covers rules persisted before
@@ -334,8 +334,8 @@ func TestReviewBannerAlwaysAllowLegacyFallback(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.Contains(t, rendered, "[A] Always allow")
+	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	require.Contains(t, rendered, "Always allow")
 }
 
 func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
@@ -348,8 +348,8 @@ func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
 			candidateRules: nil,
 		},
 	}
-	rendered := reviewer.renderBanner(120, lipgloss.NewStyle(), lipgloss.NewStyle())
-	require.NotContains(t, rendered, "[A] Always allow")
+	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	require.NotContains(t, rendered, "Always allow")
 }
 
 func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
@@ -381,13 +381,9 @@ func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
 	require.Equal(t, 0, reviewer.selected)
 }
 
-func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
+func TestReviewBannerStylesSelectedActionAndKeys(t *testing.T) {
 	renderer := lipgloss.NewRenderer(nil)
 	renderer.SetColorProfile(termenv.TrueColor)
-	reviewChoices := renderer.NewStyle().
-		Foreground(lipgloss.Color("#E0DDFF")).
-		Background(lipgloss.Color("#4A3B9F")).
-		Padding(0, 2)
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
@@ -400,14 +396,10 @@ func TestReviewBannerStylesChoiceSeparators(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, renderer.NewStyle(), reviewChoices)
-
-	baseStyle := reviewChoices.Copy().Padding(0, 0)
-	selectedStyle := baseStyle.Copy().
-		Foreground(lipgloss.Color("#4A3B9F")).
-		Background(lipgloss.Color("#E0DDFF"))
-	require.Contains(t, rendered, selectedStyle.Render("[Y] Allow once")+baseStyle.Render("  ")+baseStyle.Render("[N] Deny"))
-	require.NotContains(t, rendered, selectedStyle.Render("[Y] Allow once")+"  "+baseStyle.Render("[N] Deny"))
+	styles := makeStyles(renderer).Interaction
+	rendered := reviewer.renderBanner(120, styles)
+	require.Contains(t, rendered, styles.Selected.Render("Y Allow once"))
+	require.Contains(t, rendered, styles.Key.Render("N"))
 }
 
 func TestReviewBannerTruncatesSavedRule(t *testing.T) {
@@ -424,17 +416,14 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(80, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(80, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
 	lines := strings.Split(rendered, "\n")
 	for _, line := range lines {
-		require.LessOrEqual(t, len([]rune(line)), 80, line)
+		require.LessOrEqual(t, lipgloss.Width(line), 80, line)
 	}
 }
 
-func TestReviewBannerTruncatesLongCommandWithEllipsis(t *testing.T) {
-	// A long shell command must render within the terminal width and signal
-	// truncation with "..." rather than being hard-cut mid-token, which left
-	// users unable to tell the command continued past the visible cut point.
+func TestReviewBannerWrapsLongCommandWithoutHidingTail(t *testing.T) {
 	long := "find . -name '*.go' -not -path './.git/*' -exec awk '{print $1 / $2}' {} +"
 	reviewer := &toolReviewer{
 		reviewPending: true,
@@ -443,19 +432,20 @@ func TestReviewBannerTruncatesLongCommandWithEllipsis(t *testing.T) {
 			name:    "shell_run",
 			args:    []byte(`{"command":"` + long + `"}`),
 			summary: "Risk: read-only",
+			presentation: reviewPresentation{
+				tone: interactionToneInfo, toneText: "Info", headline: "Run a read-only command",
+				rows: []interactionRow{{Label: "Command", Value: long}},
+			},
 		},
 	}
 	const width = 60
-	rendered := reviewer.renderBanner(width, lipgloss.NewStyle(), lipgloss.NewStyle())
+	rendered := reviewer.renderBanner(width, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
 	lines := strings.Split(rendered, "\n")
 
-	// The Review label is the first rendered line.
-	reviewLine := lines[0]
-	require.LessOrEqual(t, len([]rune(reviewLine)), width, "Review line must fit the terminal width")
-
-	// The command is signaled as truncated and its tail is not shown.
-	require.Contains(t, reviewLine, "...", `truncated Review line should end with "..."`)
-	require.NotContains(t, reviewLine, "{} +", "the command tail should be truncated away")
+	for _, line := range lines {
+		require.LessOrEqual(t, lipgloss.Width(line), width, line)
+	}
+	require.Contains(t, rendered, "{} +", "security-sensitive command tail must remain visible")
 }
 
 func TestReviewPolicyNonTTY(t *testing.T) {

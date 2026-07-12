@@ -15,9 +15,11 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/skills"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/ui"
 )
 
 type state int
@@ -107,7 +109,9 @@ type Mods struct {
 
 	ctx context.Context
 
-	reviewer *toolReviewer
+	reviewer  *toolReviewer
+	userInput *userInputManager
+	secrets   *secrets.Store
 
 	shellAnalyzer func(tool, command string) shellCommandAnalysis
 
@@ -154,7 +158,7 @@ func New(
 	}
 	debug.Printf("Skills: loaded %d skill(s) from %s", len(skillCatalog), cfg.SkillsDir)
 	return &Mods{
-		Styles:              MakeStyles(r),
+		Styles:              ui.MakeStylesWithTheme(r, cfg.Theme),
 		glam:                gr,
 		state:               startState,
 		renderer:            r,
@@ -164,6 +168,8 @@ func New(
 		db:                  db,
 		Config:              cfg,
 		reviewer:            newToolReviewer(cfg),
+		userInput:           newUserInputManager(cfg),
+		secrets:             secrets.New(),
 		ctx:                 ctx,
 		skillCatalog:        skillCatalog,
 	}, nil
@@ -203,6 +209,12 @@ func (m *Mods) Init() tea.Cmd {
 // Update implements tea.Model.
 func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	if inputMsg, ok := msg.(tea.KeyMsg); ok {
+		if handled, cmd := m.userInput.handleKey(inputMsg); handled {
+			return m, cmd
+		}
+	}
 
 	if m.feedbackMode {
 		switch msg := msg.(type) {
@@ -339,6 +351,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case toolReviewStartMsg:
 		m.reviewer.handleStartMsg(msg)
+		m.setActiveOperation("")
+	case userInputStartMsg:
+		m.userInput.handleStartMsg(msg)
 		m.setActiveOperation("")
 	case planCompleteMsg:
 		if !looksLikePlan(msg.plan) {
@@ -501,6 +516,10 @@ func (m *Mods) quit() tea.Msg {
 	// calls. close() is idempotent so racing with receiveCmd's error path
 	// is harmless.
 	m.closeActiveRunner()
+	m.userInput.reset()
+	if m.secrets != nil {
+		m.secrets.Clear()
+	}
 	m.cancelMu.Lock()
 	cancels := m.cancelRequest
 	m.cancelRequest = nil
@@ -584,7 +603,7 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 	m.setActiveOperation("Running tools")
 	m.state = responseState
 	cmds := []tea.Cmd{m.pollToolOperationStatusCmd(ch), m.callToolsCmd(runner, ch)}
-	cmds = append(cmds[:1], append([]tea.Cmd{m.reviewer.startSession()}, cmds[1:]...)...)
+	cmds = append(cmds[:1], append([]tea.Cmd{m.reviewer.startSession(), m.userInput.startSession()}, cmds[1:]...)...)
 	return cmds
 }
 
@@ -609,6 +628,7 @@ func toolCallFailed(err error) bool {
 func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
 	m.reviewer.reset()
+	m.userInput.reset()
 	for _, call := range msg.results {
 		if !errors.Is(call.Err, errReviewUnavailable) {
 			m.appendShellResult(call.Name, call.Arguments, call.Err)

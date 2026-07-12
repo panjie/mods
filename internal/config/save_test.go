@@ -237,3 +237,6 @@ func TestHasAPIKey(t *testing.T) {
 	})
 }
 
+func TestThemeHelpCoversInteractivePanels(t *testing.T) {
+	require.Contains(t, Help["theme"], "forms and panels")
+}

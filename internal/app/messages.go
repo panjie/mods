@@ -62,11 +62,16 @@ type toolReviewItem struct {
 	args           []byte
 	candidateRules []Rule
 	summary        string
+	presentation   reviewPresentation
 	resp           chan reviewResponse
 }
 
 type toolReviewStartMsg struct {
 	item toolReviewItem
+}
+
+type userInputStartMsg struct {
+	item userInputItem
 }
 
 type sessionDetailsMsg struct {

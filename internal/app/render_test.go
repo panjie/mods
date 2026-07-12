@@ -334,14 +334,14 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		m.responseOutputStarted = false
 		got := m.renderWithOperation("")
 		require.NotContains(t, got, "animating", "spinner must not appear above the approval prompt")
-		require.Contains(t, got, "Review:")
+		require.Contains(t, got, "REVIEW REQUIRED")
 	})
 
 	t.Run("model output present: output kept above the review prompt", func(t *testing.T) {
 		m.responseOutputStarted = true
 		got := m.renderWithOperation("partial answer so far")
 		require.Contains(t, got, "partial answer so far")
-		require.Contains(t, got, "Review:")
+		require.Contains(t, got, "REVIEW REQUIRED")
 		require.NotContains(t, got, "animating", "spinner stays paused while approval is pending")
 	})
 }

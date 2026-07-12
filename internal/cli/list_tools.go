@@ -45,6 +45,8 @@ func listAllTools(ctx context.Context, cfg *Config) error {
 // builtinCapabilityLabel renders the capability suffix shown after "builtin".
 func builtinCapabilityLabel(b tooling.BuiltinToolInfo) string {
 	switch {
+	case b.Interactive:
+		return ", interactive"
 	case b.Shell:
 		return ", shell"
 	case b.Mutable:

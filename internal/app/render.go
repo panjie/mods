@@ -126,8 +126,11 @@ func (m *Mods) renderWithOperation(content string) string {
 // a "waiting on the user" state, not a running phase, so the spinner pauses).
 // In the Tool phase both surfaces are active and composed as "spinner  label".
 func (m *Mods) footerView() string {
+	if m.userInput.isPending() {
+		return m.userInput.render(m.width, m.Styles.Interaction)
+	}
 	if m.reviewer.isPending() {
-		return m.reviewer.renderBanner(m.width, m.Styles.ReviewPrompt, m.Styles.ReviewChoices)
+		return m.reviewer.renderBanner(m.width, m.Styles.Interaction)
 	}
 
 	var opLine string
@@ -170,7 +173,7 @@ func (m *Mods) spinnerPhase() SpinnerPhase {
 // approval, debug, raw, and non-TTY — all the cases that previously suppressed
 // the spinner. It is the single shared gate for both rendering and ticking.
 func (m *Mods) spinnerVisible() bool {
-	if debug.Enabled() || m.Config.Raw || !IsOutputTTY() || m.anim == nil {
+	if debug.Enabled() || m.Config.Raw || !IsOutputTTY() || m.anim == nil || m.userInput.isPending() {
 		return false
 	}
 	switch m.state {

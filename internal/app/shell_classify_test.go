@@ -204,17 +204,17 @@ func TestExtractExternalPathsWindowsFlavor(t *testing.T) {
 		}
 	})
 
-	t.Run("multi-segment Unix paths are detected", func(t *testing.T) {
-		require.Equal(t, []string{"/etc/passwd"},
+	t.Run("Unix-style absolute paths are ignored", func(t *testing.T) {
+		require.Empty(t,
 			extractExternalPathsWithFlavor("cat /etc/passwd", ws, pathutil.FlavorPowerShell))
-		require.Equal(t, []string{"/usr/local/bin"},
+		require.Empty(t,
 			extractExternalPathsWithFlavor("ls /usr/local/bin", ws, pathutil.FlavorPowerShell))
 	})
 
-	t.Run("bare root is detected", func(t *testing.T) {
-		require.Equal(t, []string{"/"},
+	t.Run("Unix-style bare root is ignored", func(t *testing.T) {
+		require.Empty(t,
 			extractExternalPathsWithFlavor("find / -delete", ws, pathutil.FlavorPowerShell))
-		require.Equal(t, []string{"/"},
+		require.Empty(t,
 			extractExternalPathsWithFlavor("rm -rf /", ws, pathutil.FlavorPowerShell))
 	})
 
@@ -223,12 +223,33 @@ func TestExtractExternalPathsWindowsFlavor(t *testing.T) {
 			`csc /out:$out /target:winexe /reference:System.dll src.cs && ls /etc/passwd`,
 			ws, pathutil.FlavorPowerShell,
 		)
-		require.Contains(t, got, "/etc/passwd", "real multi-segment path should be detected")
+		require.NotContains(t, got, "/etc/passwd", "Unix-style path should not be extracted in PowerShell mode")
 		for _, p := range got {
 			require.False(t, strings.HasPrefix(p, "/out"), "compiler flag should not appear: %s", p)
 			require.False(t, strings.HasPrefix(p, "/target"), "compiler flag should not appear: %s", p)
 			require.False(t, strings.HasPrefix(p, "/reference"), "compiler flag should not appear: %s", p)
 		}
+	})
+
+	t.Run("division slash is not a path", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		got := extractExternalPathsWithFlavor(
+			`$dl = "$env:USERPROFILE\Downloads"; Get-ChildItem -Path $dl -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 50MB } | ForEach-Object { $sizeInMB = [math]::Round($_.Length / 1MB, 2); "$($_.FullName)  ($sizeInMB MB)" }`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Equal(t, []string{filepath.Join(home, "Downloads")}, got)
+		require.NotContains(t, got, "/")
+	})
+
+	t.Run("UNC paths are detected", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`Get-Content \\server\share\notes.txt`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Equal(t, []string{`\\server\share\notes.txt`}, got)
 	})
 
 	t.Run("semicolon-delimited paths are not concatenated", func(t *testing.T) {
@@ -333,6 +354,10 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	t.Cleanup(func() { mods.shellAnalyzer = nil })
 	result := mods.analyzeShellCommand("shell_run", "cat /etc/passwd")
 	require.False(t, result.NeedsReview, "cat /etc/passwd should be read-only")
+	if runtime.GOOS == "windows" {
+		require.NotContains(t, result.AffectedDirs, "/etc/passwd")
+		return
+	}
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
@@ -346,6 +371,10 @@ func TestAnalyzeShellCommandASTSingleQuotedExternalPath(t *testing.T) {
 	t.Cleanup(func() { mods.shellAnalyzer = nil })
 	result := mods.analyzeShellCommand("shell_run", "cat '/etc/passwd'")
 	require.False(t, result.NeedsReview)
+	if runtime.GOOS == "windows" {
+		require.NotContains(t, result.AffectedDirs, "/etc/passwd")
+		return
+	}
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
@@ -555,6 +584,28 @@ func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {
 	result := mods.analyzeShellCommand("powershell_run", "Get-Content C:\\Users\\Public\\file.txt")
 	require.False(t, result.NeedsReview, "Get-Content should be read-only")
 	require.NotEmpty(t, result.AffectedDirs, "should have affected dirs from AST")
+}
+
+func TestAnalyzeShellCommandPowerShellDivisionDoesNotAffectRoot(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	require.NotEmpty(t, home)
+
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			return shellCommandAnalysis{NeedsReview: false, Reason: "read-only"}
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+	cmd := `$dl = "$env:USERPROFILE\Downloads"; Get-ChildItem -Path $dl -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 50MB } | ForEach-Object { $sizeInMB = [math]::Round($_.Length / 1MB, 2); "$($_.FullName)  ($sizeInMB MB)" }`
+	result := mods.analyzeShellCommand("powershell_run", cmd)
+
+	require.False(t, result.NeedsReview)
+	require.Equal(t, []string{filepath.Join(home, "Downloads")}, result.AffectedDirs)
+	require.NotContains(t, result.AffectedDirs, "/")
 }
 
 func TestAnalyzeShellCommandPowerShellSetLocationGitLogWorkspaceDirs(t *testing.T) {

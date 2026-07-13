@@ -362,14 +362,7 @@ var (
 	reUnixAbsPath  = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
 	reSingleQuoted = regexp.MustCompile(`'[^']*'`)
 	reWinAbsPath   = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
-
-	// Windows/PowerShell-specific Unix-style path patterns. On Windows,
-	// single-segment tokens like /out, /target, /reference are compiler
-	// flags, not filesystem paths. Only multi-segment paths (/etc/passwd,
-	// /mnt/c/Users) and bare root (/) are meaningful filesystem references.
-	// ':' is excluded to skip flags like /out:value, /reference:dll.
-	reUnixMultiSegPath = regexp.MustCompile(`(?:^|[\s="'"])(/[A-Za-z0-9._][^\s'"<>|;,&(){}:]*/[^\s'"<>|;,&(){}]*)`)
-	reUnixBareRootWin  = regexp.MustCompile(`(?:^|[\s="'"])(/)(?:[\s'"<>|;,&(){}]|$)`)
+	reWinUNCPath   = regexp.MustCompile(`(?:^|[\s='"])(\\\\[^\\/\s'"<>|;,&(){}]+[\\/][^\s'"<>|;,&(){}]*)`)
 )
 
 // extractExternalPaths returns path tokens from the command that reference
@@ -400,18 +393,16 @@ func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathuti
 
 	if flavor == pathutil.FlavorPowerShell {
 		// Windows/PowerShell branch: compiler flags (/out, /target,
-		// /reference) share leading-slash syntax with Unix absolute paths
-		// but are always single-segment. Only match multi-segment Unix
-		// paths, bare root, and Windows-native patterns. Single-quoted
-		// strings are stripped to avoid false positives from script literals.
+		// /reference) share leading-slash syntax with Unix absolute paths,
+		// while "/" is also PowerShell's division operator. Keep this branch
+		// strictly on Windows/PowerShell path syntax so POSIX-looking tokens
+		// are not misclassified as filesystem paths. Single-quoted strings
+		// are stripped to avoid false positives from script literals.
 		command = reSingleQuoted.ReplaceAllString(command, " ")
 		for _, m := range reWinAbsPath.FindAllStringSubmatch(command, -1) {
 			add(m[1])
 		}
-		for _, m := range reUnixMultiSegPath.FindAllStringSubmatch(command, -1) {
-			add(m[1])
-		}
-		for _, m := range reUnixBareRootWin.FindAllStringSubmatch(command, -1) {
+		for _, m := range reWinUNCPath.FindAllStringSubmatch(command, -1) {
 			add(m[1])
 		}
 		for _, m := range reHomePath.FindAllString(command, -1) {

@@ -448,6 +448,91 @@ func TestReviewBannerWrapsLongCommandWithoutHidingTail(t *testing.T) {
 	require.Contains(t, rendered, "{} +", "security-sensitive command tail must remain visible")
 }
 
+func TestRequestApprovalUsesInteractiveReviewAvailability(t *testing.T) {
+	oldIsInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return false }
+	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
+
+	registry := testReviewRegistry(t)
+	mods := &Mods{
+		ctx:                 context.Background(),
+		Config:              testConfigForWorkspace(testApprovalScope.Value),
+		currentToolRegistry: registry,
+	}
+	mods.Config.InteractiveReviewAvailable = true
+	reviewer := newToolReviewer(mods.Config)
+	reviewer.reviewChan = make(chan toolReviewItem, 1)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- reviewer.requestApproval(testReviewerDeps(mods), "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
+	}()
+
+	item := receiveReviewItem(t, reviewer.reviewChan)
+	require.Equal(t, "fs_write_file", item.name)
+	item.resp <- reviewResponse{approved: true}
+	require.NoError(t, <-errCh)
+}
+
+func TestRequestApprovalRawModeIgnoresInteractiveReviewAvailability(t *testing.T) {
+	oldIsInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return false }
+	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
+
+	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	cfg.Raw = true
+	cfg.InteractiveReviewAvailable = true
+	reviewer := newToolReviewer(cfg)
+
+	err := reviewer.requestApproval(
+		reviewerDeps{ctx: context.Background(), accessIntent: AccessIntent{Class: AccessWrite}},
+		"fs_write_file",
+		[]byte(`{"path":"out.txt","content":"x"}`),
+	)
+	require.ErrorIs(t, err, errReviewUnavailable)
+}
+
+func TestRequestApprovalRawTTYModeDoesNotWaitForReview(t *testing.T) {
+	oldIsInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
+
+	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	cfg.Raw = true
+	reviewer := newToolReviewer(cfg)
+	reviewer.reviewChan = make(chan toolReviewItem, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	err := reviewer.requestApproval(
+		reviewerDeps{ctx: ctx, accessIntent: AccessIntent{Class: AccessWrite}},
+		"fs_write_file",
+		[]byte(`{"path":"out.txt","content":"x"}`),
+	)
+	require.ErrorIs(t, err, errReviewUnavailable)
+	require.Empty(t, reviewer.reviewChan)
+}
+
+func TestRequestApprovalTTYInputWithoutReviewUIIsUnavailable(t *testing.T) {
+	oldIsInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
+
+	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	reviewer := newToolReviewer(cfg)
+	reviewer.reviewChan = make(chan toolReviewItem, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	err := reviewer.requestApproval(
+		reviewerDeps{ctx: ctx, accessIntent: AccessIntent{Class: AccessWrite}},
+		"fs_write_file",
+		[]byte(`{"path":"out.txt","content":"x"}`),
+	)
+	require.ErrorIs(t, err, errReviewUnavailable)
+	require.Empty(t, reviewer.reviewChan)
+}
+
 func TestReviewPolicyNonTTY(t *testing.T) {
 	oldIsInputTTY := isInputTTY
 	oldInputTTY := IsInputTTY

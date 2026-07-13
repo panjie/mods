@@ -52,8 +52,22 @@ func TestParseProposals(t *testing.T) {
 		require.Equal(t, "Proposal 2: 成本优化", got[1].title)
 	})
 
+	t.Run("Chinese proposal headings are recognized", func(t *testing.T) {
+		content := "## 方案1：保守修复\nbody1\n\n## 方案2：完整修复\nbody2"
+		got := parseProposals(content)
+		require.Len(t, got, 2)
+		require.Equal(t, "方案1：保守修复", got[0].title)
+		require.Equal(t, "方案2：完整修复", got[1].title)
+		require.Equal(t, "body1", got[0].content)
+		require.Equal(t, "body2", got[1].content)
+	})
+
 	t.Run("single proposal returns nil", func(t *testing.T) {
 		require.Nil(t, parseProposals("### Proposal 1: Lone\njust one"))
+	})
+
+	t.Run("single Chinese proposal returns nil", func(t *testing.T) {
+		require.Nil(t, parseProposals("### 方案1：单个方案\njust one"))
 	})
 
 	t.Run("no proposal headings returns nil", func(t *testing.T) {
@@ -62,6 +76,13 @@ func TestParseProposals(t *testing.T) {
 
 	t.Run("inline mention does not count as a heading", func(t *testing.T) {
 		content := "## Proposal 1: Real\nsee also ## Proposal 2 later\nmore body"
+		got := parseProposals(content)
+		// Only the line-starting heading counts; the inline mention is ignored.
+		require.Nil(t, got)
+	})
+
+	t.Run("inline Chinese mention does not count as a heading", func(t *testing.T) {
+		content := "## 方案1：真实方案\n正文里提到 ## 方案2：另一个方案\nmore body"
 		got := parseProposals(content)
 		// Only the line-starting heading counts; the inline mention is ignored.
 		require.Nil(t, got)
@@ -86,12 +107,20 @@ func TestLooksLikePlan(t *testing.T) {
 		{name: "single complete plan", content: "## Plan\n- **Approach**: do it\n- **Steps**: 1. x\n- **Files**: a.go\n- **Risks**: low", want: true},
 		{name: "complete plan with commands instead of files", content: "## Plan\n- **Approach**: do it\n- **Steps**: 1. x\n- **Commands**: go test\n- **Risks**: low", want: true},
 		{name: "complete proposals", content: "## Proposal 1: Foo\n- **Approach**: a\n- **Steps**: b\n- **Files**: c\n- **Risks**: d\n\n## Proposal 2: Bar\n- **Approach**: e\n- **Steps**: f\n- **Commands**: g\n- **Risks**: h", want: true},
+		{name: "complete Chinese proposal headings", content: "## 方案1：保守修复\n- **Approach**: a\n- **Steps**: b\n- **Files**: c\n- **Risks**: d\n\n## 方案2：完整修复\n- **Approach**: e\n- **Steps**: f\n- **Commands**: g\n- **Risks**: h", want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, looksLikePlan(tc.content))
 		})
 	}
+}
+
+func TestPlanStructureMarkers(t *testing.T) {
+	require.True(t, planStructureRe.MatchString("## Plan\nbody"))
+	require.True(t, planStructureRe.MatchString("## Proposal 1: Foo\nbody"))
+	require.True(t, planStructureRe.MatchString("## 方案1：保守修复\nbody"))
+	require.False(t, planStructureRe.MatchString("## Planet\nbody"))
 }
 
 func TestPlanPromptDiscouragesOverInvestigation(t *testing.T) {

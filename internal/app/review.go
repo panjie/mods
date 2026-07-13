@@ -49,22 +49,38 @@ type reviewOption struct {
 //     isPending, renderBanner) plus the View pass that Bubble Tea runs
 //     synchronously after each Update. rules has its own internal mutex.
 type toolReviewer struct {
-	mu            sync.Mutex
-	reviewChan    chan toolReviewItem
-	reviewMode    ReviewMode
-	reviewPending bool
-	reviewItem    *toolReviewItem
-	rules         RuleSet
-	scope         Scope
-	selected      int
+	mu                         sync.Mutex
+	reviewChan                 chan toolReviewItem
+	reviewMode                 ReviewMode
+	reviewPending              bool
+	reviewItem                 *toolReviewItem
+	rules                      RuleSet
+	scope                      Scope
+	selected                   int
+	raw                        bool
+	reviewAvailabilityKnown    bool
+	interactiveReviewAvailable bool
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
 	workspace := cfg.ResolveWorkspace()
 	return &toolReviewer{
-		reviewMode: cfg.ReviewMode,
-		scope:      WorkspaceScope(workspace.Canonical),
+		reviewMode:                 cfg.ReviewMode,
+		scope:                      WorkspaceScope(workspace.Canonical),
+		raw:                        cfg.Raw,
+		reviewAvailabilityKnown:    true,
+		interactiveReviewAvailable: !cfg.Raw && cfg.InteractiveReviewAvailable,
 	}
+}
+
+func (r *toolReviewer) canReviewInteractively() bool {
+	if r.raw {
+		return false
+	}
+	if r.reviewAvailabilityKnown {
+		return r.interactiveReviewAvailable
+	}
+	return IsInputTTY()
 }
 
 func (r *toolReviewer) isPending() bool {
@@ -341,10 +357,10 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			return nil
 		}
 	}
-	if !IsInputTTY() {
-		debug.Printf("Review denied: stdin is not a TTY (tool=%s)", name)
+	if !r.canReviewInteractively() {
+		debug.Printf("Review denied: no interactive approval channel (tool=%s)", name)
 		return fmt.Errorf(
-			"%w: %s requires approval, but stdin is not a TTY; run interactively or use --review-mode never if non-interactive execution is intentional",
+			"%w: %s requires approval, but no interactive approval channel is available; run interactively or use --review-mode never if non-interactive execution is intentional",
 			errReviewUnavailable,
 			name,
 		)
@@ -395,7 +411,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 // references are capabilities: saved directory/tool rules and ReviewNever do
 // not authorize sending one to an external process or MCP server.
 func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, data []byte) error {
-	if !IsInputTTY() {
+	if !r.canReviewInteractively() {
 		return fmt.Errorf("%w: using a protected credential requires an interactive terminal", errReviewUnavailable)
 	}
 	respCh := make(chan reviewResponse, 1)

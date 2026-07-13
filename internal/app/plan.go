@@ -19,7 +19,7 @@ type proposal struct {
 	content string
 }
 
-var proposalHeadingRe = regexp.MustCompile(`(?m)^#{2,}[ \t]+Proposal[ \t]+\d+:`)
+var proposalHeadingRe = regexp.MustCompile(`(?m)^#{2,}[ \t]+(?:Proposal[ \t]+\d+|方案[ \t]*\d+)[：:]`)
 
 func parseProposals(content string) []proposal {
 	locs := proposalHeadingRe.FindAllStringIndex(content, -1)
@@ -45,9 +45,9 @@ func parseProposals(content string) []proposal {
 }
 
 // planStructureRe matches the structural markers the plan system prompt
-// requires: a "# Plan" / "# Proposal N" heading at any level, or the bold
+// requires: a "# Plan" / "# Proposal N" / "# 方案N" heading at any level, or the bold
 // field labels (**Approach**, **Steps**, ...).
-var planStructureRe = regexp.MustCompile(`(?m)(^#{1,}[ \t]+(?:Plan|Proposal)\b|\*\*(?:Approach|Steps|Files|Commands|Risks)\*\*)`)
+var planStructureRe = regexp.MustCompile(`(?m)(^#{1,}[ \t]+(?:Plan\b|Proposal\b|方案[ \t]*\d+)|\*\*(?:Approach|Steps|Files|Commands|Risks)\*\*)`)
 
 // looksLikePlan reports whether the model's output actually contains a plan.
 // It guards the plan-review UI: a stream that ended before the model wrote a

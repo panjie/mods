@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -14,16 +15,44 @@ import (
 	"github.com/panjie/mods/internal/proto"
 )
 
+var canOpenReviewTTY = func() bool {
+	path := "/dev/tty"
+	flag := os.O_RDONLY
+	if runtime.GOOS == "windows" {
+		path = "CONIN$"
+		flag = os.O_RDWR
+	}
+	f, err := os.OpenFile(path, flag, 0)
+	if err != nil {
+		debug.Printf("Review TTY unavailable: %v", err)
+		return false
+	}
+	if err := f.Close(); err != nil {
+		debug.Printf("Review TTY close failed: %v", err)
+	}
+	return true
+}
+
 // buildTeaProgramOptions assembles the Bubble Tea options for the current
 // invocation. Splitting this out of RunE keeps the entry point focused on
 // orchestration; the tty/raw decision tree was previously interleaved with
 // flag-validation code.
 func buildTeaProgramOptions() []tea.ProgramOption {
 	opts := []tea.ProgramOption{}
-	if !IsInputTTY() || config.Raw {
+	config.InteractiveReviewAvailable = false
+
+	if config.Raw || !IsErrorTTY() {
+		opts = append(opts, tea.WithInput(nil))
+	} else if IsInputTTY() {
+		config.InteractiveReviewAvailable = true
+	} else if canOpenReviewTTY() {
+		opts = append(opts, tea.WithInputTTY())
+		config.InteractiveReviewAvailable = true
+	} else {
 		opts = append(opts, tea.WithInput(nil))
 	}
-	if IsOutputTTY() && !config.Raw {
+
+	if IsErrorTTY() && !config.Raw {
 		opts = append(opts, tea.WithOutput(os.Stderr))
 	} else {
 		opts = append(opts, tea.WithoutRenderer())

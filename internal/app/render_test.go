@@ -387,6 +387,37 @@ func TestRenderWithOperationShowsSpinnerAndToolLabel(t *testing.T) {
 	})
 }
 
+func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *testing.T) {
+	oldOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return false }
+	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+
+	m := &Mods{
+		Config:       &Config{InteractiveReviewAvailable: true},
+		Styles:       makeStyles(lipgloss.NewRenderer(nil)),
+		state:        responseState,
+		contentMutex: &sync.Mutex{},
+		width:        60,
+		reviewer: &toolReviewer{
+			reviewAvailabilityKnown:    true,
+			interactiveReviewAvailable: true,
+			reviewPending:              true,
+			reviewItem: &toolReviewItem{
+				name: "fs_write_file",
+				args: []byte(`{"path":"out.txt","content":"x"}`),
+				resp: make(chan reviewResponse, 1),
+			},
+		},
+	}
+	m.appendToOutput("partial answer")
+
+	var view string
+	stdout := captureStdout(t, func() { view = m.View() })
+
+	require.Equal(t, "partial answer", stdout)
+	require.Contains(t, view, "REVIEW REQUIRED")
+}
+
 func captureStdout(tb testing.TB, fn func()) string {
 	tb.Helper()
 

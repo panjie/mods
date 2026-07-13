@@ -271,6 +271,7 @@ type Config struct {
 	SettingsExisted                                          bool
 	User                                                     string
 	OpenEditor                                               bool
+	InteractiveReviewAvailable                               bool
 	SessionDir                                               string
 	PortableDir                                              string
 	SessionReadFromID, SessionWriteToID, SessionWriteToTitle string

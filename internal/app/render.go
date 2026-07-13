@@ -70,6 +70,10 @@ func (m *Mods) View() string {
 		}
 	case responseState:
 		m.flushRender()
+		if !m.Config.Raw && !IsOutputTTY() && m.reviewer.isPending() && m.reviewer.canReviewInteractively() {
+			m.flushBufferedContent()
+			return m.renderWithOperation("")
+		}
 		if !m.Config.Raw && IsOutputTTY() {
 			if m.viewportNeeded() {
 				return m.renderWithOperation(m.glamViewport.View())

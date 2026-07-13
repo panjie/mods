@@ -190,6 +190,106 @@ func TestShowToolResultsFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
 }
 
+func TestBuildTeaProgramOptionsMarksPipeReviewAvailableWhenStderrTTY(t *testing.T) {
+	savedConfig := config
+	savedIsInputTTY := IsInputTTY
+	savedIsOutputTTY := IsOutputTTY
+	savedIsErrorTTY := IsErrorTTY
+	savedCanOpenReviewTTY := canOpenReviewTTY
+	t.Cleanup(func() {
+		config = savedConfig
+		IsInputTTY = savedIsInputTTY
+		IsOutputTTY = savedIsOutputTTY
+		IsErrorTTY = savedIsErrorTTY
+		canOpenReviewTTY = savedCanOpenReviewTTY
+	})
+
+	config = Config{}
+	IsInputTTY = func() bool { return false }
+	IsOutputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return true }
+	canOpenReviewTTY = func() bool { return true }
+
+	_ = buildTeaProgramOptions()
+
+	require.True(t, config.InteractiveReviewAvailable)
+}
+
+func TestBuildTeaProgramOptionsDoesNotMarkPipeReviewAvailableWhenTTYCannotOpen(t *testing.T) {
+	savedConfig := config
+	savedIsInputTTY := IsInputTTY
+	savedIsOutputTTY := IsOutputTTY
+	savedIsErrorTTY := IsErrorTTY
+	savedCanOpenReviewTTY := canOpenReviewTTY
+	t.Cleanup(func() {
+		config = savedConfig
+		IsInputTTY = savedIsInputTTY
+		IsOutputTTY = savedIsOutputTTY
+		IsErrorTTY = savedIsErrorTTY
+		canOpenReviewTTY = savedCanOpenReviewTTY
+	})
+
+	config = Config{}
+	IsInputTTY = func() bool { return false }
+	IsOutputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return true }
+	canOpenReviewTTY = func() bool { return false }
+
+	_ = buildTeaProgramOptions()
+
+	require.False(t, config.InteractiveReviewAvailable)
+}
+
+func TestBuildTeaProgramOptionsDoesNotMarkTTYReviewAvailableWhenStderrIsNotTTY(t *testing.T) {
+	savedConfig := config
+	savedIsInputTTY := IsInputTTY
+	savedIsOutputTTY := IsOutputTTY
+	savedIsErrorTTY := IsErrorTTY
+	savedCanOpenReviewTTY := canOpenReviewTTY
+	t.Cleanup(func() {
+		config = savedConfig
+		IsInputTTY = savedIsInputTTY
+		IsOutputTTY = savedIsOutputTTY
+		IsErrorTTY = savedIsErrorTTY
+		canOpenReviewTTY = savedCanOpenReviewTTY
+	})
+
+	config = Config{}
+	IsInputTTY = func() bool { return true }
+	IsOutputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return false }
+	canOpenReviewTTY = func() bool { return true }
+
+	_ = buildTeaProgramOptions()
+
+	require.False(t, config.InteractiveReviewAvailable)
+}
+
+func TestBuildTeaProgramOptionsDoesNotMarkRawPipeReviewAvailable(t *testing.T) {
+	savedConfig := config
+	savedIsInputTTY := IsInputTTY
+	savedIsOutputTTY := IsOutputTTY
+	savedIsErrorTTY := IsErrorTTY
+	savedCanOpenReviewTTY := canOpenReviewTTY
+	t.Cleanup(func() {
+		config = savedConfig
+		IsInputTTY = savedIsInputTTY
+		IsOutputTTY = savedIsOutputTTY
+		IsErrorTTY = savedIsErrorTTY
+		canOpenReviewTTY = savedCanOpenReviewTTY
+	})
+
+	config = Config{PersistentConfig: PersistentConfig{Raw: true}}
+	IsInputTTY = func() bool { return false }
+	IsOutputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return true }
+	canOpenReviewTTY = func() bool { return true }
+
+	_ = buildTeaProgramOptions()
+
+	require.False(t, config.InteractiveReviewAvailable)
+}
+
 func TestShowTokenUsageFlagAndFormatting(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Parse([]string{"--show-token-usage"}))

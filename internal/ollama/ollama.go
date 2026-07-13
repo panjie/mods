@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ollama/ollama/api"
+	api "github.com/panjie/mods/internal/ollamaapi"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
 )

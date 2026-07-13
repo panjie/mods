@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -27,7 +28,7 @@ func Printf(format string, args ...any) {
 	}
 	header := ui.StderrStyles().DebugHeader.String()
 	detail := ui.StderrStyles().DebugDetails.Render(fmt.Sprintf(format, args...))
-	fmt.Fprintf(os.Stderr, "\r %s %s\n", header, detail)
+	_, _ = lipgloss.Fprintf(os.Stderr, "\r %s %s\n", header, detail)
 }
 
 func PrintJSON(label string, v any) {
@@ -49,7 +50,7 @@ func PrintJSON(label string, v any) {
 	for _, line := range lines {
 		if line != "" {
 			detail := ui.StderrStyles().DebugDetails.Render("  " + line)
-			fmt.Fprintf(os.Stderr, "\r           %s\n", detail)
+			_, _ = lipgloss.Fprintf(os.Stderr, "\r           %s\n", detail)
 		}
 	}
 }

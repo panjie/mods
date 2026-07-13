@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
@@ -35,8 +35,8 @@ func TestBuildProviderOptionsIncludesAddProvider(t *testing.T) {
 
 func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 	keymap := configWizardKeyMap()
-	esc := tea.KeyMsg{Type: tea.KeyEsc}
-	shiftTab := tea.KeyMsg{Type: tea.KeyShiftTab}
+	esc := tea.KeyPressMsg{Code: tea.KeyEsc}
+	shiftTab := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 
 	prevBindings := []key.Binding{
 		keymap.Input.Prev,
@@ -90,8 +90,8 @@ func TestConfigWizardLayoutKeepsFocusedBorderWithinWindow(t *testing.T) {
 func TestConfigWizardThemeUsesInteractionPalette(t *testing.T) {
 	for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
 		t.Run(name, func(t *testing.T) {
-			palette := ui.MakeStylesWithTheme(StderrRenderer(), name).Interaction.Palette
-			theme := configWizardTheme(name)
+			palette := ui.MakeStylesWithTheme(name, true).Interaction.Palette
+			theme := configWizardTheme(name).Theme(true)
 			require.Equal(t, palette.Accent, theme.Group.Title.GetForeground())
 			require.Equal(t, palette.Text, theme.Focused.Title.GetForeground())
 			require.Equal(t, palette.Muted, theme.Focused.Description.GetForeground())

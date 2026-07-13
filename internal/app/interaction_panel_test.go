@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
-	styles := makeStyles(lipgloss.NewRenderer(nil)).Interaction
+	styles := makeStyles(true).Interaction
 	command := "sudo rm /usr/local/bin/mods && printf 'the complete command remains visible'"
 	for _, width := range []int{30, 60, 80, 120} {
 		t.Run(name("width=", width), func(t *testing.T) {
@@ -37,7 +37,7 @@ func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
 }
 
 func TestInteractionPanelNoColorKeepsSemanticLabels(t *testing.T) {
-	styles := makeStyles(lipgloss.NewRenderer(nil)).Interaction
+	styles := makeStyles(true).Interaction
 	rendered := renderInteractionPanel(styles, 60, interactionPanel{
 		Title: "Review required", Tone: interactionToneDanger, ToneText: "Danger",
 		Headline: "Delete a file", Rows: []interactionRow{{Label: "Target", Value: "/tmp/file"}},

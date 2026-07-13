@@ -3,11 +3,11 @@ package huh
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh/internal/selector"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2/internal/selector"
+	"charm.land/lipgloss/v2"
 )
 
 // Group is a collection of fields that are displayed together with a page of
@@ -35,12 +35,13 @@ type Group struct {
 	showErrors bool
 
 	// group options
-	width  int
-	height int
-	theme  *Theme
-	keymap *KeyMap
-	hide   func() bool
-	active bool
+	width     int
+	height    int
+	theme     Theme
+	hasDarkBg bool
+	keymap    *KeyMap
+	hide      func() bool
+	active    bool
 }
 
 // NewGroup returns a new group with the given fields.
@@ -56,7 +57,10 @@ func NewGroup(fields ...Field) *Group {
 
 	group.width = 80
 	height := group.rawHeight()
-	v := viewport.New(group.width, height) //nolint:mnd
+	v := viewport.New(
+		viewport.WithWidth(group.width),
+		viewport.WithHeight(height),
+	) //nolint:mnd
 	group.viewport = v
 	group.height = height
 
@@ -88,9 +92,9 @@ func (g *Group) WithShowErrors(show bool) *Group {
 }
 
 // WithTheme sets the theme on a group.
-func (g *Group) WithTheme(t *Theme) *Group {
+func (g *Group) WithTheme(t Theme) *Group {
 	g.theme = t
-	g.help.Styles = t.Help
+	g.help.Styles = t.Theme(g.hasDarkBg).Help
 	g.selector.Range(func(_ int, field Field) bool {
 		field.WithTheme(t)
 		return true
@@ -114,13 +118,9 @@ func (g *Group) WithKeyMap(k *KeyMap) *Group {
 // WithWidth sets the width on a group.
 func (g *Group) WithWidth(width int) *Group {
 	g.width = width
-	g.viewport.Width = width
-	g.help.Width = width
-	g.selector.Range(func(_ int, field Field) bool {
-		field.WithWidth(width)
-		return true
-	})
-	return g
+	g.viewport.SetWidth(width)
+	g.help.SetWidth(width)
+	return g.withFieldWidth(width)
 }
 
 func (g *Group) withFieldWidth(width int) *Group {
@@ -135,7 +135,7 @@ func (g *Group) withFieldWidth(width int) *Group {
 func (g *Group) WithHeight(height int) *Group {
 	g.height = height
 	h := height - g.titleFooterHeight()
-	g.viewport.Height = h
+	g.viewport.SetHeight(h)
 	g.selector.Range(func(_ int, field Field) bool {
 		// A field height must not exceed the form height.
 		if h < lipgloss.Height(field.View()) {
@@ -257,13 +257,13 @@ func (g *Group) prevField() []tea.Cmd {
 }
 
 // Update updates the group.
-func (g *Group) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (g *Group) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	// Update all the fields in the group.
 	g.selector.Range(func(i int, field Field) bool {
 		switch msg := msg.(type) {
-		case tea.KeyMsg:
+		case tea.KeyPressMsg, tea.PasteMsg:
 			break
 		default:
 			m, cmd := field.Update(msg)
@@ -281,7 +281,9 @@ func (g *Group) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return true
 	})
 
-	switch msg.(type) {
+	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		g.hasDarkBg = msg.IsDark()
 	case nextFieldMsg:
 		cmds = append(cmds, g.nextField()...)
 	case prevFieldMsg:
@@ -293,11 +295,11 @@ func (g *Group) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return g, tea.Batch(cmds...)
 }
 
-func (g *Group) getTheme() *Theme {
+func (g *Group) getTheme() *Styles {
 	if theme := g.theme; theme != nil {
-		return theme
+		return theme.Theme(g.hasDarkBg)
 	}
-	return ThemeCharm()
+	return ThemeFunc(ThemeCharm).Theme(g.hasDarkBg)
 }
 
 func (g *Group) styles() GroupStyles { return g.getTheme().Group }
@@ -383,6 +385,35 @@ func (g *Group) View() string {
 		parts[lastIdx] = strings.TrimSuffix(parts[lastIdx], " ")
 	}
 	return strings.Join(parts, "\n")
+}
+
+func (g *Group) contentCursor() *tea.Cursor {
+	field, ok := g.selector.Selected().(cursorProvider)
+	if !ok {
+		return nil
+	}
+	cursor := cloneCursor(field.Cursor())
+	if cursor == nil {
+		return nil
+	}
+	offset, _ := g.getContent()
+	cursor.Y += offset - g.viewport.YOffset()
+	if cursor.Y < 0 || cursor.Y >= g.viewport.Height() {
+		return nil
+	}
+	return cursor
+}
+
+// Cursor returns the focused field cursor relative to Group.View.
+func (g *Group) Cursor() *tea.Cursor {
+	cursor := g.contentCursor()
+	if cursor == nil {
+		return nil
+	}
+	if header := g.Header(); header != "" {
+		cursor.Y += lipgloss.Height(header)
+	}
+	return cursor
 }
 
 // Content renders the group's content only (no footer).

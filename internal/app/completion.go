@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/caarlos0/go-shellwords"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 )

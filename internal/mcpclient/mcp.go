@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"iter"
 	"maps"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"sync"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -51,7 +53,7 @@ func List(cfg *Config) {
 		if IsEnabled(cfg, name) {
 			s += ui.StdoutStyles().Timeago.Render(" (enabled)")
 		}
-		fmt.Println(s)
+		_, _ = lipgloss.Fprintln(os.Stdout, s)
 	}
 }
 
@@ -62,8 +64,8 @@ func ListTools(ctx context.Context, cfg *Config) error {
 	}
 	for sname, tools := range servers {
 		for _, tool := range tools {
-			fmt.Print(ui.StdoutStyles().Timeago.Render(sname + " > "))
-			fmt.Println(tool.Name)
+			_, _ = lipgloss.Fprint(os.Stdout, ui.StdoutStyles().Timeago.Render(sname+" > "))
+			_, _ = lipgloss.Fprintln(os.Stdout, tool.Name)
 		}
 	}
 	return nil

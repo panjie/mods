@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
@@ -54,7 +53,7 @@ func TestApplyGoogleBaseURLOverride(t *testing.T) {
 func TestBuildProviderConfigsGoogleUsesUserBaseURL(t *testing.T) {
 	customBase := "https://vertex-proxy.example.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
 	mods := &Mods{
-		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		Styles: makeStyles(true),
 		Config: &Config{
 			PersistentConfig: PersistentConfig{
 				APIs: []API{{

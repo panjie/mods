@@ -12,10 +12,11 @@ import (
 	"slices"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	glamour "charm.land/glamour/v2/styles"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	timeago "github.com/caarlos0/timea.go"
-	"github.com/charmbracelet/bubbles/key"
-	glamour "github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/editor"
 	"github.com/spf13/cobra"
 )
@@ -400,7 +401,7 @@ func handleError(err error) {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, format, args...)
+	_, _ = lipgloss.Fprintf(os.Stderr, format, args...)
 }
 
 func resetSettings() error {
@@ -521,13 +522,13 @@ func listRoles() {
 		if role == config.Role {
 			s = role + StdoutStyles().Timeago.Render(" (default)")
 		}
-		fmt.Println(s)
+		_, _ = lipgloss.Fprintln(os.Stdout, s)
 	}
 }
 
 func printList(sessions []Session) {
 	for _, session := range sessions {
-		_, _ = fmt.Fprintf(
+		_, _ = lipgloss.Fprintf(
 			os.Stdout,
 			"%s\t%s\t%s\n",
 			StdoutStyles().ShaHash.Render(session.ID[:ShortIDLength]),
@@ -539,7 +540,7 @@ func printList(sessions []Session) {
 
 func saveSession(mods *Mods) error {
 	if config.NoSave {
-		fmt.Fprintf(
+		_, _ = lipgloss.Fprintf(
 			os.Stderr,
 			"\nSession was not saved because %s is enabled.\n",
 			StderrStyles().InlineCode.Render("--no-save"),
@@ -552,7 +553,7 @@ func saveSession(mods *Mods) error {
 		return err
 	}
 
-	fmt.Fprintln(
+	_, _ = lipgloss.Fprintln(
 		os.Stderr,
 		"\nSession saved:",
 		StderrStyles().InlineCode.Render(id[:ShortIDLength]),
@@ -732,16 +733,16 @@ func isVersionOrHelpCmd(args []string) bool {
 	return false
 }
 
-func themeFrom(theme string) *huh.Theme {
+func themeFrom(theme string) huh.Theme {
 	switch strings.ToLower(strings.TrimSpace(theme)) {
 	case "dracula":
-		return huh.ThemeDracula()
+		return huh.ThemeFunc(huh.ThemeDracula)
 	case "catppuccin":
-		return huh.ThemeCatppuccin()
+		return huh.ThemeFunc(huh.ThemeCatppuccin)
 	case "base16":
-		return huh.ThemeBase16()
+		return huh.ThemeFunc(huh.ThemeBase16)
 	default:
-		return huh.ThemeCharm()
+		return huh.ThemeFunc(huh.ThemeCharm)
 	}
 }
 

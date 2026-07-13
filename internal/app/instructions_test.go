@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 
 	"github.com/panjie/mods/internal/proto"
@@ -81,7 +80,7 @@ func TestSetupStreamContextInjectsAgentsMD(t *testing.T) {
 		}
 		cfg.ApplyDefaults()
 		cfg.Roles = map[string][]string{}
-		return &Mods{Config: &cfg, Styles: makeStyles(lipgloss.NewRenderer(nil)), ctx: context.Background()}
+		return &Mods{Config: &cfg, Styles: makeStyles(true), ctx: context.Background()}
 	}
 	systemJoin := func(m *Mods) string {
 		var sb strings.Builder

@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -136,7 +136,7 @@ func proposalModeMods(t *testing.T, proposals ...proposal) *Mods {
 	t.Helper()
 	m := &Mods{
 		Config:         &Config{},
-		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:         makeStyles(true),
 		reviewer:       &toolReviewer{},
 		contentMutex:   &sync.Mutex{},
 		operationMutex: sync.Mutex{},
@@ -162,7 +162,7 @@ func TestProposalEnterSelectsCurrent(t *testing.T) {
 			m.proposalSelected = 1
 			m.planSelected = residual
 
-			cmd, handled := m.handleProposalKey(tea.KeyMsg{Type: tea.KeyEnter})
+			cmd, handled := m.handleProposalKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 			require.True(t, handled)
 			require.Nil(t, cmd)
 			require.False(t, m.proposalMode, "selecting must exit proposal mode")
@@ -184,8 +184,8 @@ func TestProposalEnterEquivalentToY(t *testing.T) {
 	mY := proposalModeMods(t, proposals...)
 	mY.proposalSelected = 1
 
-	_, _ = mEnter.handleProposalKey(tea.KeyMsg{Type: tea.KeyEnter})
-	_, _ = mY.handleProposalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	_, _ = mEnter.handleProposalKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, _ = mY.handleProposalKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 
 	require.Equal(t, mY.planContent, mEnter.planContent)
 	require.Equal(t, mY.proposalMode, mEnter.proposalMode)
@@ -239,6 +239,29 @@ func TestPlanInteractionPanelsFitTerminalWidths(t *testing.T) {
 			require.Contains(t, outputs[2], "MODIFICATION FEEDBACK")
 		})
 	}
+}
+
+func TestPlanFeedbackUsesRealCursor(t *testing.T) {
+	input := textinput.New()
+	input.SetVirtualCursor(false)
+	input.SetValue("修改这里")
+	input.CursorEnd()
+	_ = input.Focus()
+	m := &Mods{
+		Config:        &Config{Plan: true},
+		Styles:        makeStyles(true),
+		state:         planState,
+		planContent:   "plan",
+		feedbackMode:  true,
+		feedbackInput: input,
+		width:         60,
+		userInput:     newUserInputManager(&Config{}),
+		reviewer:      &toolReviewer{},
+		contentMutex:  &sync.Mutex{},
+	}
+	require.NotNil(t, m.View().Cursor)
+	m.feedbackMode = false
+	require.Nil(t, m.View().Cursor)
 }
 
 func name(prefix string, n int) string {

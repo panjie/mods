@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
@@ -38,7 +37,6 @@ func testIntegrationMods(t *testing.T, api, model string) *Mods {
 
 func testIntegrationModsWithBaseURL(t *testing.T, api, model, baseURL string) *Mods {
 	t.Helper()
-	r := lipgloss.NewRenderer(nil)
 	apis := []config.API{
 		{
 			Name:   api,
@@ -54,7 +52,7 @@ func testIntegrationModsWithBaseURL(t *testing.T, api, model, baseURL string) *M
 	}
 	return &Mods{
 		ctx:    context.Background(),
-		Styles: makeStyles(r),
+		Styles: makeStyles(true),
 		Config: &Config{
 			PersistentConfig: config.PersistentConfig{
 				Model:      model,

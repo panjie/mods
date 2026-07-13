@@ -3,11 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"image/color"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
@@ -207,12 +208,12 @@ func TestChatStylesFollowConfiguredTheme(t *testing.T) {
 	saveConfig := config
 	t.Cleanup(func() { config = saveConfig })
 
-	tests := map[string]lipgloss.Color{
-		"charm":      "#7D56F4",
-		"dracula":    "#BD93F9",
-		"catppuccin": "#CBA6F7",
-		"base16":     "#7CAFC2",
-		"unknown":    "#7D56F4",
+	tests := map[string]color.Color{
+		"charm":      lipgloss.Color("#7D56F4"),
+		"dracula":    lipgloss.Color("#BD93F9"),
+		"catppuccin": lipgloss.Color("#CBA6F7"),
+		"base16":     lipgloss.Color("#7CAFC2"),
+		"unknown":    lipgloss.Color("#7D56F4"),
 	}
 	for theme, accent := range tests {
 		config.Theme = theme
@@ -222,10 +223,10 @@ func TestChatStylesFollowConfiguredTheme(t *testing.T) {
 
 func TestChatPromptEnterAddsNewlineAndCtrlJSubmits(t *testing.T) {
 	model := newChatPromptModel()
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyEnter})
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("world")})
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "hello"})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyEnter})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "world"})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 
 	require.True(t, model.done)
 	require.False(t, model.exit)
@@ -235,7 +236,7 @@ func TestChatPromptEnterAddsNewlineAndCtrlJSubmits(t *testing.T) {
 func TestChatPromptEnhancedCtrlEnterSubmits(t *testing.T) {
 	model := newChatPromptModel()
 	model.textarea.SetValue("hello")
-	updated, _ := model.Update(testStringMessage(kittyKeyMessage("13;5u")))
+	updated, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
 	result := updated.(chatPromptModel)
 	require.True(t, result.done)
 	require.Equal(t, "hello", result.prompt)
@@ -244,60 +245,35 @@ func TestChatPromptEnhancedCtrlEnterSubmits(t *testing.T) {
 func TestChatPromptCtrlSSubmits(t *testing.T) {
 	model := newChatPromptModel()
 	model.textarea.SetValue("hello")
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlS})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	require.True(t, model.done)
 	require.Equal(t, "hello", model.prompt)
 }
 
 func TestChatPromptEnhancedCtrlCExits(t *testing.T) {
 	model := newChatPromptModel()
-	updated, _ := model.Update(testStringMessage(kittyKeyMessage("99;5u")))
+	updated, _ := model.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	result := updated.(chatPromptModel)
 	require.True(t, result.done)
 	require.True(t, result.exit)
 }
 
-func TestChatPromptNormalizesEnhancedEmacsKeys(t *testing.T) {
-	tests := map[string]string{
-		"97;5u":  "ctrl+a",
-		"98;5u":  "ctrl+b",
-		"100;5u": "ctrl+d",
-		"101;5u": "ctrl+e",
-		"102;5u": "ctrl+f",
-		"104;5u": "ctrl+h",
-		"107;5u": "ctrl+k",
-		"110;5u": "ctrl+n",
-		"112;5u": "ctrl+p",
-		"116;5u": "ctrl+t",
-		"117;5u": "ctrl+u",
-		"118;5u": "ctrl+v",
-		"119;5u": "ctrl+w",
-		"121;5u": "ctrl+y",
-	}
-	for sequence, want := range tests {
-		normalized := normalizeEnhancedChatKey(testStringMessage(kittyKeyMessage(sequence)))
-		keyMsg, ok := normalized.(tea.KeyMsg)
-		require.True(t, ok, sequence)
-		require.Equal(t, want, keyMsg.String(), sequence)
-	}
-}
-
 func TestChatPromptEmacsEditing(t *testing.T) {
 	model := newChatPromptModel()
 	model.textarea.SetValue("hello world")
-	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("97;5u"))) // Ctrl+A
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "X"})
 	require.Equal(t, "Xhello world", model.textarea.Value())
 
-	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("101;5u"))) // Ctrl+E
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Y")})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "Y"})
 	require.Equal(t, "Xhello worldY", model.textarea.Value())
 
-	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("119;5u"))) // Ctrl+W
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
 	require.Equal(t, "Xhello ", model.textarea.Value())
-	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("121;5u"))) // Ctrl+Y
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	require.Equal(t, "Xhello worldY", model.textarea.Value())
-	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("117;5u"))) // Ctrl+U
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 	require.Empty(t, model.textarea.Value())
 }
 
@@ -349,16 +325,12 @@ func TestRunInteractiveChatPromptRecognizesKittyCtrlC(t *testing.T) {
 	require.Empty(t, prompt)
 }
 
-type testStringMessage string
-
-func (m testStringMessage) String() string { return string(m) }
-
 func TestChatPromptIgnoresBlankCtrlEnterAndCtrlCExits(t *testing.T) {
 	model := newChatPromptModel()
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	require.False(t, model.done)
 
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlC})
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	require.True(t, model.done)
 	require.True(t, model.exit)
 	require.Empty(t, model.prompt)
@@ -371,7 +343,7 @@ func TestChatPromptResizesWithinBounds(t *testing.T) {
 	model.resizeHeight()
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
 
-	for _, line := range strings.Split(model.View(), "\n") {
+	for _, line := range strings.Split(model.View().Content, "\n") {
 		require.LessOrEqual(t, lipgloss.Width(line), 28)
 	}
 
@@ -387,7 +359,7 @@ func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
 		require.Equal(t, width, model.width)
 
 		widest := 0
-		for _, line := range strings.Split(model.View(), "\n") {
+		for _, line := range strings.Split(model.View().Content, "\n") {
 			lineWidth := lipgloss.Width(line)
 			require.LessOrEqual(t, lineWidth, width, line)
 			widest = max(widest, lineWidth)
@@ -399,25 +371,55 @@ func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
 func TestChatPromptTypingKeepsActionRowStable(t *testing.T) {
 	model := newChatPromptModel()
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 30, Height: 20})
-	before := chatActionLine(model.View(), "Ctrl+Enter", "Send")
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	after := chatActionLine(model.View(), "Ctrl+Enter", "Send")
+	before := chatActionLine(model.View().Content, "Ctrl+Enter", "Send")
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "a"})
+	after := chatActionLine(model.View().Content, "Ctrl+Enter", "Send")
 	require.NotEqual(t, -1, before)
 	require.Equal(t, before, after)
 }
 
-func TestChatPromptUsesTransparentEmptyEditorWithVisibleCursor(t *testing.T) {
+func TestChatPromptUsesRealCursorAtEmptyPlaceholder(t *testing.T) {
 	model := newChatPromptModel()
-	visible := ansi.Strip(model.View())
-	require.Contains(t, visible, "▏Type a message…")
-
-	model.textarea.Cursor.Blink = true
-	hidden := ansi.Strip(model.View())
-	require.NotContains(t, hidden, "▏")
-	require.Contains(t, hidden, "Type a message…")
+	view := model.View()
+	visible := ansi.Strip(view.Content)
+	require.NotContains(t, visible, "▏")
+	require.Contains(t, visible, "Type a message…")
+	require.NotNil(t, view.Cursor)
 
 	styles := makeChatStyles()
-	require.Equal(t, styles.text.GetBackground(), model.textarea.FocusedStyle.Base.GetBackground())
+	require.Equal(t, styles.text.GetBackground(), model.textarea.Styles().Focused.Base.GetBackground())
+}
+
+func TestChatPromptRealCursorTracksTextWrappingAndResize(t *testing.T) {
+	model := newChatPromptModel()
+	model.resize(24)
+
+	assertCursor := func() {
+		t.Helper()
+		local := model.textarea.Cursor()
+		view := model.View()
+		require.NotNil(t, local)
+		require.NotNil(t, view.Cursor)
+		require.Equal(t, local.X+2, view.Cursor.X)
+		require.Equal(t, local.Y+2, view.Cursor.Y)
+	}
+
+	assertCursor()
+	model.textarea.SetValue("中文abc")
+	model.textarea.CursorEnd()
+	assertCursor()
+	model.textarea.SetValue("第一行\n第二行")
+	model.textarea.CursorEnd()
+	model.resizeHeight()
+	assertCursor()
+	model.textarea.SetValue(strings.Repeat("界", 30))
+	model.textarea.CursorEnd()
+	model.resizeHeight()
+	assertCursor()
+	model.resize(16)
+	assertCursor()
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyLeft})
+	assertCursor()
 }
 
 func chatActionLine(view, keyText, label string) int {

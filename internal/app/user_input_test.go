@@ -3,11 +3,11 @@ package app
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -32,10 +32,10 @@ func TestUserInputManagerTextRoundTrip(t *testing.T) {
 	msg := start()
 	manager.handleStartMsg(msg.(userInputStartMsg))
 	for _, r := range "production" {
-		handled, _ := manager.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		handled, _ := manager.handleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 		require.True(t, handled)
 	}
-	handled, _ := manager.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	handled, _ := manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.True(t, handled)
 	select {
 	case got := <-done:
@@ -90,7 +90,7 @@ func TestSecretInputRenderKeepsAlignmentAndHelpStable(t *testing.T) {
 		},
 		resp: make(chan userInputResult, 1),
 	}})
-	styles := makeStyles(lipgloss.NewRenderer(nil)).Interaction
+	styles := makeStyles(true).Interaction
 
 	before := strings.Split(manager.render(80, styles), "\n")
 	require.Contains(t, before[0], "AUTHENTICATION REQUIRED")
@@ -100,13 +100,50 @@ func TestSecretInputRenderKeepsAlignmentAndHelpStable(t *testing.T) {
 	helpLineBefore := lineIndexContaining(before, "Submit")
 	require.Contains(t, helpBefore, "Submit")
 
-	manager.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	manager.handleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	after := strings.Split(manager.render(80, styles), "\n")
 	helpAfter := lineContaining(after, "Submit")
 	helpLineAfter := lineIndexContaining(after, "Submit")
 	require.Equal(t, helpLineBefore, helpLineAfter, "typing must not push the action row downward")
 	require.Equal(t, strings.Index(helpBefore, "Enter"), strings.Index(helpAfter, "Enter"))
 	require.Contains(t, helpAfter, "Submit")
+}
+
+func TestUserInputRealCursorPropagatesToModsView(t *testing.T) {
+	for _, kind := range []string{"text", "secret"} {
+		t.Run(kind, func(t *testing.T) {
+			manager := newUserInputManager(&Config{})
+			manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+				req:  toolregistry.UserInputRequest{Kind: kind, Question: "Value?"},
+				resp: make(chan userInputResult, 1),
+			}})
+			m := &Mods{
+				Config:       &Config{},
+				Styles:       makeStyles(true),
+				state:        requestState,
+				width:        60,
+				userInput:    manager,
+				reviewer:     &toolReviewer{},
+				contentMutex: &sync.Mutex{},
+			}
+			view := m.View()
+			require.NotNil(t, view.Cursor)
+
+			if kind == "secret" {
+				manager.secret.SetValue("秘密")
+				manager.secret.CursorEnd()
+			} else {
+				manager.text.SetValue("中文\ninput")
+				manager.text.CursorEnd()
+			}
+			moved := m.View()
+			require.NotNil(t, moved.Cursor)
+			require.NotEqual(t, view.Cursor.Position, moved.Cursor.Position)
+
+			manager.pending = false
+			require.Nil(t, m.View().Cursor)
+		})
+	}
 }
 
 func lineIndexContaining(lines []string, value string) int {

@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/anthropics/anthropic-sdk-go"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ollama/ollama/api"
 	"github.com/openai/openai-go"
 	"github.com/panjie/mods/internal/google"
+	api "github.com/panjie/mods/internal/ollamaapi"
 )
 
 func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg {

@@ -14,10 +14,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -30,7 +29,7 @@ func (s staticModel) Init() tea.Cmd { return nil }
 
 func (s staticModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return s, nil }
 
-func (s staticModel) View() string { return string(s) }
+func (s staticModel) View() tea.View { return tea.NewView(string(s)) }
 
 type staticStream struct{ usage proto.TokenUsage }
 
@@ -420,7 +419,7 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 		}
 		return &Mods{
 			Config: &cfg,
-			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			Styles: makeStyles(true),
 			ctx:    context.Background(),
 		}
 	}
@@ -474,7 +473,7 @@ func TestSetupStreamContextFormatFallback(t *testing.T) {
 		}
 		return &Mods{
 			Config: &cfg,
-			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			Styles: makeStyles(true),
 			ctx:    context.Background(),
 		}
 	}
@@ -525,7 +524,7 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		}
 		return &Mods{
 			Config: &cfg,
-			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			Styles: makeStyles(true),
 			ctx:    context.Background(),
 		}
 	}
@@ -600,7 +599,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		}
 		return &Mods{
 			Config: &cfg,
-			Styles: makeStyles(lipgloss.NewRenderer(nil)),
+			Styles: makeStyles(true),
 			ctx:    context.Background(),
 		}
 	}
@@ -654,7 +653,7 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 	cfg.Format = "markdown"
 	m := &Mods{
 		Config: &cfg,
-		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		Styles: makeStyles(true),
 		ctx:    context.Background(),
 	}
 
@@ -677,7 +676,7 @@ func TestSetupPlanContextPromptOverride(t *testing.T) {
 	cfg.Format = "markdown"
 	m := &Mods{
 		Config: &cfg,
-		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		Styles: makeStyles(true),
 		ctx:    context.Background(),
 	}
 
@@ -821,7 +820,7 @@ func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
 	cfg.Format = "markdown"
 	m := &Mods{
 		Config: &cfg,
-		Styles: makeStyles(lipgloss.NewRenderer(nil)),
+		Styles: makeStyles(true),
 		ctx:    context.Background(),
 	}
 	require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
@@ -833,7 +832,7 @@ func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
 func newAnimatingMods() *Mods {
 	return &Mods{
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		anim:                staticModel("animating"),
 		state:               requestState,
 		showOperationStatus: true,
@@ -847,21 +846,21 @@ func TestOperationStatusView(t *testing.T) {
 	t.Run("shows active operation", func(t *testing.T) {
 		m := newAnimatingMods()
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
-		require.Contains(t, m.View(), "Running command: go test ./...")
+		require.Contains(t, m.View().Content, "Running command: go test ./...")
 	})
 
 	t.Run("clears active operation", func(t *testing.T) {
 		m := newAnimatingMods()
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running tool: fs_read_file"})
 		_, _ = m.Update(toolOperationStatusMsg{done: true})
-		require.NotContains(t, m.View(), "Running tool: fs_read_file")
+		require.NotContains(t, m.View().Content, "Running tool: fs_read_file")
 	})
 
 	t.Run("hide tool status hides active operation", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.Config.HideToolStatus = true
 		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
-		require.NotContains(t, m.View(), "Running command: go test ./...")
+		require.NotContains(t, m.View().Content, "Running command: go test ./...")
 	})
 
 	t.Run("reasoning alone does not show status", func(t *testing.T) {
@@ -913,7 +912,7 @@ func TestPlanApprovalPreservesTranscriptBeforeExecution(t *testing.T) {
 
 	m := &Mods{
 		Config:         &Config{Plan: true},
-		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:         makeStyles(true),
 		state:          planState,
 		outputRenderer: outputRenderer{Output: "raw plan", glamOutput: "rendered plan\n"},
 		reviewer:       &toolReviewer{},
@@ -933,7 +932,7 @@ func TestPlanApprovalPreservesTranscriptBeforeExecution(t *testing.T) {
 func TestPlanExecutionStartResetsOutput(t *testing.T) {
 	m := &Mods{
 		Config:                &Config{},
-		Styles:                makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:                makeStyles(true),
 		state:                 planState,
 		outputRenderer:        outputRenderer{Output: "approved plan", displayOutput: "approved plan display", glamOutput: "rendered approved plan", glamHeight: 3},
 		responseOutputStarted: true,
@@ -959,14 +958,14 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 
 	t.Run("request state shows spinner", func(t *testing.T) {
 		m := newAnimatingMods()
-		require.Contains(t, m.View(), "animating")
+		require.Contains(t, m.View().Content, "animating")
 	})
 
 	t.Run("request state does not show approved plan", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.Output = "approved plan"
 		m.glamOutput = "rendered approved plan"
-		view := m.View()
+		view := m.View().Content
 		require.Contains(t, view, "animating")
 		require.NotContains(t, view, "approved plan")
 		require.NotContains(t, view, "rendered approved plan")
@@ -975,14 +974,14 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 	t.Run("response state before output shows spinner", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.state = responseState
-		require.Contains(t, m.View(), "animating")
+		require.Contains(t, m.View().Content, "animating")
 	})
 
 	t.Run("response state before output shows operation and spinner", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.state = responseState
 		m.setActiveOperation("Searching web: Go latest release")
-		view := m.View()
+		view := m.View().Content
 		require.Contains(t, view, "Searching web: Go latest release")
 		require.Contains(t, view, "animating",
 			"the spinner stays on alongside the tool/search operation label")
@@ -993,7 +992,7 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		m.state = responseState
 
 		view := m.View()
-		require.NotEmpty(t, strings.TrimSpace(view))
+		require.NotEmpty(t, strings.TrimSpace(view.Content))
 	})
 
 	t.Run("first output hides spinner", func(t *testing.T) {
@@ -1079,16 +1078,15 @@ func TestPlanStreamingStaysInResponseState(t *testing.T) {
 
 	m := &Mods{
 		Config:              &Config{Plan: true},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		anim:                staticModel("animating"),
 		state:               planState,
 		showOperationStatus: true,
 		width:               80,
 		reviewer:            &toolReviewer{},
 		contentMutex:        &sync.Mutex{},
-		renderer:            lipgloss.NewRenderer(nil),
 		glam:                gr,
-		glamViewport:        viewport.New(80, 20),
+		glamViewport:        viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
 	}
 	runner := newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return modsError{Err: err} })
 
@@ -1107,7 +1105,7 @@ func TestPlanStreamingStaysInResponseState(t *testing.T) {
 	// verify the output text still appears (Glamour wraps words in ANSI spans,
 	// so check a fragment that stays within one span) and that the spinner
 	// renders beneath it rather than replacing the output.
-	view := m.View()
+	view := m.View().Content
 	require.Contains(t, view, "Investigating")
 	require.Contains(t, view, "animating")
 }
@@ -1417,7 +1415,7 @@ func TestToolCallFailed(t *testing.T) {
 func TestPlanCompleteRejectsNonPlanOutput(t *testing.T) {
 	m := &Mods{
 		Config:         &Config{Plan: true},
-		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:         makeStyles(true),
 		reviewer:       &toolReviewer{},
 		width:          80,
 		operationMutex: sync.Mutex{},
@@ -1435,7 +1433,7 @@ func TestPlanCompleteRejectsNonPlanOutput(t *testing.T) {
 func TestPlanCompleteAcceptsStructuredPlan(t *testing.T) {
 	m := &Mods{
 		Config:         &Config{Plan: true},
-		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:         makeStyles(true),
 		reviewer:       &toolReviewer{},
 		width:          80,
 		operationMutex: sync.Mutex{},
@@ -1455,7 +1453,7 @@ func retryResetMods(t *testing.T) *Mods {
 	t.Helper()
 	return &Mods{
 		Config:         &Config{},
-		Styles:         makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:         makeStyles(true),
 		reviewer:       &toolReviewer{},
 		contentMutex:   &sync.Mutex{},
 		operationMutex: sync.Mutex{},

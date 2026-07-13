@@ -4,17 +4,17 @@ import (
 	"cmp"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh/internal/accessibility"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2/internal/accessibility"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/ordered"
 )
 
 const (
@@ -49,12 +49,12 @@ type Select[T comparable] struct {
 	filter    textinput.Model
 	spinner   spinner.Model
 
-	inline     bool
-	width      int
-	height     int
-	accessible bool // Deprecated: use RunAccessible instead.
-	theme      *Theme
-	keymap     SelectKeyMap
+	inline    bool
+	width     int
+	height    int
+	theme     Theme
+	hasDarkBg bool
+	keymap    SelectKeyMap
 }
 
 // NewSelect creates a new select field.
@@ -66,6 +66,7 @@ type Select[T comparable] struct {
 func NewSelect[T comparable]() *Select[T] {
 	filter := textinput.New()
 	filter.Prompt = "/"
+	filter.SetVirtualCursor(false)
 
 	s := spinner.New(spinner.WithSpinner(spinner.Line))
 
@@ -80,6 +81,14 @@ func NewSelect[T comparable]() *Select[T] {
 		description: Eval[string]{cache: make(map[uint64]string)},
 		spinner:     s,
 	}
+}
+
+// Cursor returns the filter's real cursor while filtering.
+func (s *Select[T]) Cursor() *tea.Cursor {
+	if !s.focused || !s.filtering {
+		return nil
+	}
+	return cursorInStyle(s.filter.Cursor(), s.activeStyles().Base)
 }
 
 // Value sets the value of the select field.
@@ -182,7 +191,7 @@ func (s *Select[T]) Options(options ...Option[T]) *Select[T] {
 
 	s.selectOption()
 
-	s.updateViewportHeight()
+	s.updateViewportSize()
 	s.updateValue()
 
 	return s
@@ -200,7 +209,7 @@ func (s *Select[T]) selectOption() {
 			break
 		}
 	}
-	s.viewport.YOffset = s.selected
+	s.ensureCursorVisible()
 }
 
 // OptionsFunc sets the options func of the select field.
@@ -233,7 +242,7 @@ func (s *Select[T]) OptionsFunc(f func() []Option[T], bindings any) *Select[T] {
 	// options are possibly dynamic.
 	if s.height <= 0 {
 		s.height = defaultHeight
-		s.updateViewportHeight()
+		s.updateViewportSize()
 	}
 	return s
 }
@@ -255,7 +264,7 @@ func (s *Select[T]) Inline(v bool) *Select[T] {
 // the height, the select field will become scrollable.
 func (s *Select[T]) Height(height int) *Select[T] {
 	s.height = height
-	s.updateViewportHeight()
+	s.updateViewportSize()
 	return s
 }
 
@@ -325,8 +334,8 @@ func (s *Select[T]) Init() tea.Cmd {
 }
 
 // Update updates the select field.
-func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	s.updateViewportHeight()
+func (s *Select[T]) Update(msg tea.Msg) (Model, tea.Cmd) {
+	s.updateViewportSize()
 
 	var cmd tea.Cmd
 	if s.filtering {
@@ -334,6 +343,8 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		s.hasDarkBg = msg.IsDark()
 	case updateFieldMsg:
 		var cmds []tea.Cmd
 		if ok, hash := s.title.shouldUpdate(); ok {
@@ -359,7 +370,7 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.options.bindingsHash = hash
 			if s.options.loadFromCache() {
 				s.filteredOptions = s.options.val
-				s.selected = clamp(s.selected, 0, len(s.options.val)-1)
+				s.selected = ordered.Clamp(s.selected, 0, len(s.options.val)-1)
 			} else {
 				s.options.loading = true
 				s.options.loadingStart = time.Now()
@@ -392,11 +403,11 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// since we're updating the options, we need to update the selected
 			// cursor position and filteredOptions.
-			s.selected = clamp(s.selected, 0, len(msg.options)-1)
+			s.selected = ordered.Clamp(s.selected, 0, len(msg.options)-1)
 			s.filteredOptions = msg.options
 			s.updateValue()
 		}
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		s.err = nil
 		switch {
 		case key.Matches(msg, s.keymap.Filter):
@@ -424,9 +435,8 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if s.selected < 0 {
 				s.selected = len(s.filteredOptions) - 1
 				s.viewport.GotoBottom()
-			}
-			if s.selected < s.viewport.YOffset {
-				s.viewport.SetYOffset(s.selected)
+			} else {
+				s.ensureCursorVisible()
 			}
 			s.updateValue()
 		case key.Matches(msg, s.keymap.GotoTop):
@@ -443,12 +453,12 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.selected = len(s.filteredOptions) - 1
 			s.viewport.GotoBottom()
 		case key.Matches(msg, s.keymap.HalfPageUp):
-			s.selected = max(s.selected-s.viewport.Height/2, 0)
-			s.viewport.HalfPageUp()
+			s.selected = max(s.selected-s.viewport.Height()/2, 0)
+			s.ensureCursorVisible()
 			s.updateValue()
 		case key.Matches(msg, s.keymap.HalfPageDown):
-			s.selected = min(s.selected+s.viewport.Height/2, len(s.filteredOptions)-1)
-			s.viewport.HalfPageDown()
+			s.selected = min(s.selected+s.viewport.Height()/2, len(s.filteredOptions)-1)
+			s.ensureCursorVisible()
 			s.updateValue()
 		case key.Matches(msg, s.keymap.Down, s.keymap.Right):
 			// When filtering we should ignore j/k keybindings
@@ -461,9 +471,8 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if s.selected > len(s.filteredOptions)-1 {
 				s.selected = 0
 				s.viewport.GotoTop()
-			}
-			if s.selected >= s.viewport.YOffset+s.viewport.Height {
-				s.viewport.ScrollDown(1)
+			} else {
+				s.ensureCursorVisible()
 			}
 			s.updateValue()
 		case key.Matches(msg, s.keymap.Prev):
@@ -506,10 +515,7 @@ func (s *Select[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		_, offset, height := s.optionsView()
-		if offset > -1 && height > 0 && (offset < s.viewport.YOffset || height+offset >= s.viewport.YOffset+s.viewport.Height) {
-			s.viewport.SetYOffset(offset)
-		}
+		s.ensureCursorVisible()
 	}
 
 	return s, cmd
@@ -521,51 +527,41 @@ func (s *Select[T]) updateValue() {
 	}
 }
 
-// updateViewportHeight updates the viewport size according to the Height setting
+// updateViewportSize updates the viewport size according to the Height setting
 // on this select field.
-func (s *Select[T]) updateViewportHeight() {
-	// If no height is set size the viewport to the number of options.
-	if s.height <= 0 {
-		v, _, _ := s.optionsView()
-		s.viewport.Height = lipgloss.Height(v)
-		return
-	}
-
-	offset := 0
-	if ss := s.titleView(); ss != "" {
-		offset += lipgloss.Height(ss)
-	}
-	if ss := s.descriptionView(); ss != "" {
-		offset += lipgloss.Height(ss)
-	}
-
-	s.viewport.Height = max(minHeight, s.height-offset)
-	// Keep the selected option visible without recentering on every update.
-	// When the whole list fits in the viewport, stay pinned to the top so that
-	// moving the cursor to a later option doesn't scroll earlier options out of
-	// view (a problem for short OptionsFunc selects rendered in a tall viewport).
-	// Otherwise, scroll only far enough to bring the selection back into view.
-	if n := len(s.filteredOptions); n > s.viewport.Height {
-		switch {
-		case s.selected < s.viewport.YOffset:
-			s.viewport.YOffset = s.selected
-		case s.selected >= s.viewport.YOffset+s.viewport.Height:
-			s.viewport.YOffset = s.selected - s.viewport.Height + 1
+func (s *Select[T]) updateViewportSize() {
+	if s.height > 0 {
+		yoffset := 0
+		if ss := s.titleView(); ss != "" {
+			yoffset += lipgloss.Height(ss)
 		}
+		if ss := s.descriptionView(); ss != "" {
+			yoffset += lipgloss.Height(ss)
+		}
+		s.viewport.SetHeight(max(minHeight, s.height-yoffset))
+		s.ensureCursorVisible()
 	} else {
-		s.viewport.YOffset = 0
+		// If no height is set size the viewport to the number of options.
+		v, _, _ := s.optionsView()
+		s.viewport.SetHeight(lipgloss.Height(v))
+	}
+	if s.width > 0 {
+		s.viewport.SetWidth(s.width)
+	} else {
+		v, _, _ := s.optionsView()
+		s.viewport.SetWidth(lipgloss.Width(v))
 	}
 }
 
 func (s *Select[T]) activeStyles() *FieldStyles {
 	theme := s.theme
 	if theme == nil {
-		theme = ThemeCharm()
+		theme = ThemeFunc(ThemeCharm)
 	}
 	if s.focused {
-		return &theme.Focused
+		return &theme.Theme(s.hasDarkBg).Focused
 	}
-	return &theme.Blurred
+	return &theme.Theme(s.hasDarkBg).Blurred
 }
 
 func (s *Select[T]) titleView() string {
@@ -648,6 +644,43 @@ func (s *Select[T]) optionsView() (string, int, int) {
 	return sb.String(), cursorOffset, cursorHeight
 }
 
+// cursorLineOffset computes the line offset and height (in lines) for the
+// currently selected option without rendering the full options string.
+func (s *Select[T]) cursorLineOffset() (offset int, height int) {
+	for i, option := range s.filteredOptions {
+		line := s.renderOption(option, s.selected == i)
+		h := lipgloss.Height(line)
+		if i < s.selected {
+			offset += h
+		}
+		if i == s.selected {
+			height = h
+			return offset, height
+		}
+	}
+	return offset, height
+}
+
+// ensureVisible scrolls a viewport the minimum amount so that the region
+// [offset, offset+height) is within the visible area.
+func ensureVisible(vp *viewport.Model, offset, height int) {
+	if height <= 0 {
+		return
+	}
+	yOff := vp.YOffset()
+	vHeight := vp.Height()
+	if offset < yOff {
+		vp.ScrollUp(yOff - offset)
+	} else if offset+height > yOff+vHeight {
+		vp.ScrollDown(offset + height - yOff - vHeight)
+	}
+}
+
+func (s *Select[T]) ensureCursorVisible() {
+	offset, height := s.cursorLineOffset()
+	ensureVisible(&s.viewport, offset, height)
+}
+
 func (s *Select[T]) renderOption(option Option[T], selected bool) string {
 	var (
 		styles   = s.activeStyles()
@@ -700,7 +733,7 @@ func (s *Select[T]) clearFilter() {
 // setFiltering sets the filter of the select field.
 func (s *Select[T]) setFiltering(filtering bool) {
 	if s.inline && filtering {
-		s.filter.Width = lipgloss.Width(s.titleView()) - 1 - 1
+		s.filter.SetWidth(lipgloss.Width(s.titleView()) - 1 - 1)
 	}
 	s.filtering = filtering
 	s.keymap.SetFilter.SetEnabled(filtering)
@@ -720,9 +753,6 @@ func (s *Select[T]) filterFunc(option string) bool {
 
 // Run runs the select field.
 func (s *Select[T]) Run() error {
-	if s.accessible { // TODO: remove in a future release.
-		return s.RunAccessible(os.Stdout, os.Stdin)
-	}
 	return Run(s)
 }
 
@@ -762,17 +792,21 @@ func (s *Select[T]) RunAccessible(w io.Writer, r io.Reader) error {
 }
 
 // WithTheme sets the theme of the select field.
-func (s *Select[T]) WithTheme(theme *Theme) Field {
+func (s *Select[T]) WithTheme(theme Theme) Field {
 	if s.theme != nil {
 		return s
 	}
 	s.theme = theme
-	s.filter.Cursor.Style = theme.Focused.TextInput.Cursor
-	s.filter.Cursor.TextStyle = theme.Focused.TextInput.CursorText
-	s.filter.PromptStyle = theme.Focused.TextInput.Prompt
-	s.filter.TextStyle = theme.Focused.TextInput.Text
-	s.filter.PlaceholderStyle = theme.Focused.TextInput.Placeholder
-	s.updateViewportHeight()
+	styles := s.theme.Theme(s.hasDarkBg)
+
+	st := s.filter.Styles()
+	st.Cursor.Color = styles.Focused.TextInput.Cursor.GetForeground()
+	st.Focused.Prompt = styles.Focused.TextInput.Prompt
+	st.Focused.Text = styles.Focused.TextInput.Text
+	st.Focused.Placeholder = styles.Focused.TextInput.Placeholder
+	s.filter.SetStyles(st)
+
+	s.updateViewportSize()
 	return s
 }
 
@@ -786,18 +820,10 @@ func (s *Select[T]) WithKeyMap(k *KeyMap) Field {
 	return s
 }
 
-// WithAccessible sets the accessible mode of the select field.
-//
-// Deprecated: you may now call [Select.RunAccessible] directly to run the
-// field in accessible mode.
-func (s *Select[T]) WithAccessible(accessible bool) Field {
-	s.accessible = accessible
-	return s
-}
-
 // WithWidth sets the width of the select field.
 func (s *Select[T]) WithWidth(width int) Field {
 	s.width = width
+	s.updateViewportSize()
 	return s
 }
 

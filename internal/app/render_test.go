@@ -7,10 +7,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ func newRenderTestMods(t *testing.T, thought string) *Mods {
 	t.Helper()
 	m := &Mods{
 		Config:       &Config{},
-		Styles:       makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:       makeStyles(true),
 		state:        responseState,
 		Thought:      thought,
 		contentMutex: &sync.Mutex{},
@@ -145,14 +145,12 @@ func TestFlushThought(t *testing.T) {
 			IsOutputTTY = oldExportedIsOutputTTY
 		}()
 
-		r := lipgloss.NewRenderer(nil)
 		gr, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"))
 		require.NoError(t, err)
 
 		m := newRenderTestMods(t, "deep thought\nsecond line")
-		m.renderer = r
 		m.glam = gr
-		m.glamViewport = viewport.New(80, 20)
+		m.glamViewport = viewport.New(viewport.WithWidth(80), viewport.WithHeight(20))
 		m.width = 80
 
 		m.flushThought()
@@ -178,7 +176,7 @@ func TestCompletionOutputThoughtField(t *testing.T) {
 
 	m := &Mods{
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		state:               requestState,
 		contentMutex:        &sync.Mutex{},
 		thinkActive:         true,
@@ -217,7 +215,7 @@ func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
 
 	m := &Mods{
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		state:               requestState,
 		contentMutex:        &sync.Mutex{},
 		thinkActive:         false,
@@ -239,7 +237,7 @@ func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
 func TestCompletionOutputSeparatesResponsesAfterToolCall(t *testing.T) {
 	m := &Mods{
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		state:               requestState,
 		contentMutex:        &sync.Mutex{},
 		showOperationStatus: true,
@@ -321,7 +319,7 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 	}
 	m := &Mods{
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		state:               responseState,
 		contentMutex:        &sync.Mutex{},
 		width:               60,
@@ -353,7 +351,7 @@ func TestRenderWithOperationShowsSpinnerAndToolLabel(t *testing.T) {
 
 	m := &Mods{
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		state:               responseState,
 		contentMutex:        &sync.Mutex{},
 		width:               60,
@@ -394,7 +392,7 @@ func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *tes
 
 	m := &Mods{
 		Config:       &Config{InteractiveReviewAvailable: true},
-		Styles:       makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:       makeStyles(true),
 		state:        responseState,
 		contentMutex: &sync.Mutex{},
 		width:        60,
@@ -412,7 +410,7 @@ func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *tes
 	m.appendToOutput("partial answer")
 
 	var view string
-	stdout := captureStdout(t, func() { view = m.View() })
+	stdout := captureStdout(t, func() { view = m.View().Content })
 
 	require.Equal(t, "partial answer", stdout)
 	require.Contains(t, view, "REVIEW REQUIRED")

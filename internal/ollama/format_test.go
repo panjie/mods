@@ -3,7 +3,7 @@ package ollama
 import (
 	"testing"
 
-	"github.com/ollama/ollama/api"
+	api "github.com/panjie/mods/internal/ollamaapi"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )

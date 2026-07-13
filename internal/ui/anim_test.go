@@ -1,40 +1,15 @@
 package ui
 
 import (
-	"io"
-	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/require"
 )
 
-func trueColorRenderer() *lipgloss.Renderer {
-	r := lipgloss.NewRenderer(io.Discard)
-	r.SetColorProfile(termenv.TrueColor)
-	return r
-}
-
-// ansi256Renderer simulates a 256-color terminal (e.g. WSL under Windows
-// Terminal when COLORTERM isn't propagated): termenv reports ANSI256, which is
-// below TrueColor but still color-capable.
-func ansi256Renderer() *lipgloss.Renderer {
-	r := lipgloss.NewRenderer(io.Discard)
-	r.SetColorProfile(termenv.ANSI256)
-	return r
-}
-
-// monochromeRenderer simulates a terminal with no color support at all.
-func monochromeRenderer() *lipgloss.Renderer {
-	r := lipgloss.NewRenderer(io.Discard)
-	r.SetColorProfile(termenv.Ascii)
-	return r
-}
-
 func TestSpinnerPhaseGradient(t *testing.T) {
 	cases := []struct {
-		phase            SpinnerPhase
+		phase              SpinnerPhase
 		wantStart, wantEnd string
 	}{
 		{PhaseConnecting, defaultGradientStart, defaultGradientEnd},
@@ -53,47 +28,27 @@ func TestSpinnerPhaseGradient(t *testing.T) {
 	}
 }
 
-func TestNewAnimRampForColorProfiles(t *testing.T) {
-	t.Run("truecolor builds a doubled ramp and emits color", func(t *testing.T) {
+func TestNewAnimBuildsRendererIndependentRamp(t *testing.T) {
+	t.Run("builds a doubled ramp and emits color", func(t *testing.T) {
 		const size = 6
-		a := NewAnim(size, trueColorRenderer(), Styles{})
+		a := NewAnim(size, Styles{})
 		require.Len(t, a.ramp, size*2, "ramp is doubled (forward + reversed) for color cycling")
-		view := a.View()
+		view := a.View().Content
 		require.NotEmpty(t, view, "cycling chars render even before ticks")
-		require.Contains(t, view, "\x1b[", "truecolor must emit ANSI color escapes")
-	})
-
-	t.Run("256-color profile also builds the ramp and emits color", func(t *testing.T) {
-		const size = 6
-		a := NewAnim(size, ansi256Renderer(), Styles{})
-		require.Len(t, a.ramp, size*2,
-			"the ramp must be built for any color profile so WSL/256-color terminals still get color")
-		view := a.View()
-		require.NotEmpty(t, view)
-		require.Contains(t, view, "\x1b[", "256-color must downsample and emit ANSI color escapes")
+		require.Contains(t, view, "\x1b[")
 	})
 
 	t.Run("below min ramp size renders plain chars", func(t *testing.T) {
-		a := NewAnim(2, trueColorRenderer(), Styles{}) // minRampSize == 3
+		a := NewAnim(2, Styles{}) // minRampSize == 3
 		require.Empty(t, a.ramp, "no ramp below the minimum visible width")
-		require.NotEmpty(t, a.View())
-		require.NotContains(t, a.View(), "\x1b[", "no color styling without a ramp")
-	})
-
-	t.Run("monochrome leaves the ramp empty and emits no escapes", func(t *testing.T) {
-		a := NewAnim(6, monochromeRenderer(), Styles{})
-		require.Empty(t, a.ramp, "only truly colorless (Ascii) profiles skip the ramp")
-		view := a.View()
-		require.NotEmpty(t, view)
-		require.NotContains(t, view, "\x1b[", "Ascii must not emit color escapes")
-		// Sanity: the monochrome view is just the raw cycling chars.
-		require.True(t, strings.IndexAny(view, "\x1b") == -1)
+		require.NotEmpty(t, a.View().Content)
+		require.NotContains(t, a.View().Content, "\x1b[", "no color styling without a ramp")
 	})
 }
 
 func TestSetPhaseRebuildsRamp(t *testing.T) {
 	const size = 6
-	a := NewAnim(size, trueColorRenderer(), Styles{})
+	a := NewAnim(size, Styles{})
 	require.Equal(t, PhaseConnecting, a.phase)
 	require.Len(t, a.ramp, size*2)
 
@@ -101,7 +56,7 @@ func TestSetPhaseRebuildsRamp(t *testing.T) {
 	a.SetPhase(PhaseStreaming)
 	require.Equal(t, PhaseStreaming, a.phase)
 	require.Len(t, a.ramp, size*2, "rebuilt ramp keeps the doubled layout")
-	require.NotEmpty(t, a.View())
+	require.NotEmpty(t, a.View().Content)
 
 	// Switching to yet another phase keeps the ramp consistent.
 	a.SetPhase(PhaseTool)
@@ -111,7 +66,7 @@ func TestSetPhaseRebuildsRamp(t *testing.T) {
 
 func TestSetPhaseNoOpWhenUnchanged(t *testing.T) {
 	const size = 6
-	a := NewAnim(size, trueColorRenderer(), Styles{})
+	a := NewAnim(size, Styles{})
 	a.SetPhase(PhaseTool)
 	before := append([]lipgloss.Style(nil), a.ramp...)
 

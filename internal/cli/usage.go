@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/ui"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
@@ -19,9 +19,7 @@ const (
 func useLine() string {
 	appName := filepath.Base(os.Args[0])
 
-	if ui.StdoutRenderer().ColorProfile() == termenv.TrueColor {
-		appName = ui.MakeGradientText(ui.StdoutStyles().AppName, appName)
-	}
+	appName = ui.MakeGradientText(ui.StdoutStyles().AppName, appName)
 
 	return fmt.Sprintf(
 		"%s %s",
@@ -31,15 +29,15 @@ func useLine() string {
 }
 
 func usageFunc(cmd *cobra.Command) error {
-	fmt.Printf("%s\n%s\n\n", helpIntroSummary, helpIntroDetail)
-	fmt.Printf(
+	_, _ = lipgloss.Fprintf(os.Stdout, "%s\n%s\n\n", helpIntroSummary, helpIntroDetail)
+	_, _ = lipgloss.Fprintf(os.Stdout,
 		"Usage:\n  %s\n\n",
 		useLine(),
 	)
-	fmt.Println("Options:")
+	_, _ = lipgloss.Fprintln(os.Stdout, "Options:")
 	printGroupedFlags(cmd)
 	if cmd.HasExample() {
-		fmt.Printf(
+		_, _ = lipgloss.Fprintf(os.Stdout,
 			"\nExample:\n  %s\n  %s\n",
 			ui.StdoutStyles().Comment.Render("# "+cmd.Example),
 			cheapHighlighting(ui.StdoutStyles(), examples[cmd.Example]),
@@ -63,10 +61,10 @@ func printGroupedFlags(cmd *cobra.Command) {
 			continue
 		}
 		if !first {
-			fmt.Println()
+			_, _ = lipgloss.Fprintln(os.Stdout)
 		}
 		first = false
-		fmt.Println(ui.StdoutStyles().Flag.Render(category))
+		_, _ = lipgloss.Fprintln(os.Stdout, ui.StdoutStyles().Flag.Render(category))
 		for _, f := range flags {
 			printFlag(f)
 		}
@@ -79,14 +77,14 @@ func printFlag(f *flag.Flag) {
 		description += " " + ui.StdoutStyles().Comment.Render("[advanced]")
 	}
 	if f.Shorthand == "" {
-		fmt.Printf(
+		_, _ = lipgloss.Fprintf(os.Stdout,
 			"  %-44s %s\n",
 			ui.StdoutStyles().Flag.Render("--"+f.Name),
 			description,
 		)
 		return
 	}
-	fmt.Printf(
+	_, _ = lipgloss.Fprintf(os.Stdout,
 		"  %s%s %-40s %s\n",
 		ui.StdoutStyles().Flag.Render("-"+f.Shorthand),
 		ui.StdoutStyles().FlagComma,

@@ -13,9 +13,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -254,7 +253,7 @@ func TestReviewKeys(t *testing.T) {
 				})},
 			},
 		}
-		handled, _ := reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+		handled, _ := reviewer.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 		require.True(t, handled)
 		require.Empty(t, reviewer.rules.Snapshot())
 	})
@@ -273,7 +272,7 @@ func TestReviewKeys(t *testing.T) {
 				candidateRules: []ApprovalRule{rule},
 			},
 		}
-		handled, _ := reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		handled, _ := reviewer.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 		require.True(t, handled)
 		require.Equal(t, []ApprovalRule{rule}, reviewer.rules.Snapshot())
 	})
@@ -294,7 +293,7 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
 	require.Contains(t, rendered, "Always allow")
 }
 
@@ -313,7 +312,7 @@ func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
 	require.Contains(t, rendered, "Always allow")
 }
 
@@ -334,7 +333,7 @@ func TestReviewBannerAlwaysAllowLegacyFallback(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
 	require.Contains(t, rendered, "Always allow")
 }
 
@@ -348,7 +347,7 @@ func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
 			candidateRules: nil,
 		},
 	}
-	rendered := reviewer.renderBanner(120, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
 	require.NotContains(t, rendered, "Always allow")
 }
 
@@ -361,7 +360,7 @@ func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
 			candidateRules: nil,
 		},
 	}
-	handled, _ := reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	handled, _ := reviewer.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	require.True(t, handled)
 	require.Empty(t, reviewer.rules.Snapshot())
 	select {
@@ -370,20 +369,18 @@ func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
 	default:
 	}
 
-	handled, _ = reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	handled, _ = reviewer.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.True(t, handled)
 	require.Equal(t, 1, reviewer.selected)
-	handled, _ = reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	handled, _ = reviewer.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.True(t, handled)
 	require.Equal(t, 2, reviewer.selected)
-	handled, _ = reviewer.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	handled, _ = reviewer.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.True(t, handled)
 	require.Equal(t, 0, reviewer.selected)
 }
 
 func TestReviewBannerStylesSelectedActionAndKeys(t *testing.T) {
-	renderer := lipgloss.NewRenderer(nil)
-	renderer.SetColorProfile(termenv.TrueColor)
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
@@ -396,7 +393,7 @@ func TestReviewBannerStylesSelectedActionAndKeys(t *testing.T) {
 			})},
 		},
 	}
-	styles := makeStyles(renderer).Interaction
+	styles := makeStyles(true).Interaction
 	rendered := reviewer.renderBanner(120, styles)
 	require.Contains(t, rendered, styles.Selected.Render("Y Allow once"))
 	require.Contains(t, rendered, styles.Key.Render("N"))
@@ -416,7 +413,7 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 			})},
 		},
 	}
-	rendered := reviewer.renderBanner(80, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	rendered := reviewer.renderBanner(80, makeStyles(true).Interaction)
 	lines := strings.Split(rendered, "\n")
 	for _, line := range lines {
 		require.LessOrEqual(t, lipgloss.Width(line), 80, line)
@@ -439,7 +436,7 @@ func TestReviewBannerWrapsLongCommandWithoutHidingTail(t *testing.T) {
 		},
 	}
 	const width = 60
-	rendered := reviewer.renderBanner(width, makeStyles(lipgloss.NewRenderer(nil)).Interaction)
+	rendered := reviewer.renderBanner(width, makeStyles(true).Interaction)
 	lines := strings.Split(rendered, "\n")
 
 	for _, line := range lines {
@@ -1440,7 +1437,7 @@ func TestRequestApprovalAfterResetIsUnavailable(t *testing.T) {
 	mods := &Mods{
 		ctx:                 context.Background(),
 		Config:              &Config{},
-		Styles:              makeStyles(lipgloss.NewRenderer(nil)),
+		Styles:              makeStyles(true),
 		currentToolRegistry: nil,
 	}
 

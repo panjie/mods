@@ -9,8 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/editor"
 	"github.com/panjie/mods/internal/proto"
 )
@@ -46,7 +47,8 @@ func buildTeaProgramOptions() []tea.ProgramOption {
 	} else if IsInputTTY() {
 		config.InteractiveReviewAvailable = true
 	} else if canOpenReviewTTY() {
-		opts = append(opts, tea.WithInputTTY())
+		// Bubble Tea v2 opens the controlling TTY automatically when stdin is
+		// redirected, so no explicit input option is required here.
 		config.InteractiveReviewAvailable = true
 	} else {
 		opts = append(opts, tea.WithInput(nil))
@@ -163,9 +165,9 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 	if IsOutputTTY() && !config.Raw {
 		switch {
 		case mods.RenderedOutput() != "":
-			fmt.Print(mods.RenderedOutput())
+			_, _ = lipgloss.Fprint(os.Stdout, mods.RenderedOutput())
 		case mods.Output != "":
-			fmt.Print(mods.Output)
+			_, _ = lipgloss.Fprint(os.Stdout, mods.Output)
 		}
 	}
 	printTokenUsage(mods)
@@ -183,7 +185,7 @@ func printTokenUsage(mods *Mods) {
 	}
 	usage := mods.TokenUsage()
 	if IsErrorTTY() {
-		fmt.Fprintln(os.Stderr, "\n"+styledTokenUsageLine(usage, StderrStyles()))
+		_, _ = lipgloss.Fprintln(os.Stderr, "\n"+styledTokenUsageLine(usage, StderrStyles()))
 		return
 	}
 	fmt.Fprintln(os.Stderr, tokenUsageLine(usage))

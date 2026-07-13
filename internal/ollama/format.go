@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/ollama/ollama/api"
+	api "github.com/panjie/mods/internal/ollamaapi"
 	"github.com/panjie/mods/internal/proto"
 )
 

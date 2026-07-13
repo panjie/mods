@@ -44,8 +44,6 @@ var (
 	IsErrorTTY            = ui.IsErrorTTY
 	StdoutStyles          = ui.StdoutStyles
 	StderrStyles          = ui.StderrStyles
-	StdoutRenderer        = ui.StdoutRenderer
-	StderrRenderer        = ui.StderrRenderer
 	PrintConfirmation     = ui.PrintConfirmation
 	FirstLine             = ui.FirstLine
 	HideCommandWindow     = platform.HideCommandWindow

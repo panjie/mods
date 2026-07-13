@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/skills"
 )
 
@@ -26,7 +28,7 @@ func listSkills(mods *Mods, dirs []string) error {
 	}
 	markdown := skillsMarkdown(dirs, catalog)
 	if !IsOutputTTY() || config.Raw {
-		fmt.Print(markdown)
+		_, _ = lipgloss.Fprint(os.Stdout, markdown)
 		return nil
 	}
 
@@ -37,7 +39,7 @@ func listSkills(mods *Mods, dirs []string) error {
 			ReasonText: "Could not render skills list.",
 		}
 	}
-	fmt.Println(strings.TrimRightFunc(rendered, unicode.IsSpace))
+	_, _ = lipgloss.Fprintln(os.Stdout, strings.TrimRightFunc(rendered, unicode.IsSpace))
 	return nil
 }
 

@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 var (
@@ -143,10 +144,10 @@ func printChatTurnOutput(mods *Mods) {
 		return
 	}
 	if output := mods.RenderedOutput(); output != "" {
-		fmt.Print(output)
+		_, _ = lipgloss.Fprint(os.Stdout, output)
 		return
 	}
-	fmt.Print(mods.Output)
+	_, _ = lipgloss.Fprint(os.Stdout, mods.Output)
 }
 
 func prepareNextChatTurn() {
@@ -171,10 +172,10 @@ func isChatExit(input string) bool {
 
 func chatBanner() {
 	if !IsErrorTTY() {
-		fmt.Fprintln(chatOutput, "mods chat: type /exit or /quit to quit.")
+		_, _ = lipgloss.Fprintln(chatOutput, "mods chat: type /exit or /quit to quit.")
 		return
 	}
-	fmt.Fprintln(chatOutput, renderChatBanner(chatTerminalWidth()))
+	_, _ = lipgloss.Fprintln(chatOutput, renderChatBanner(chatTerminalWidth()))
 }
 
 func chatPrompt() {
@@ -182,7 +183,7 @@ func chatPrompt() {
 }
 
 func runOneTurn(ctx context.Context, opts []tea.ProgramOption) (*Mods, error) {
-	mods, err := newMods(ctx, StderrRenderer(), &config, db)
+	mods, err := newMods(ctx, &config, db)
 	if err != nil {
 		return nil, modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 	}

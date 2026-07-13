@@ -6,13 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
 	timeago "github.com/caarlos0/timea.go"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/termenv"
 	"github.com/panjie/mods/internal/proto"
@@ -47,67 +47,76 @@ const (
 // uses a dedicated palette anchored on the mods brand purple (#6C50FF) with a
 // pink accent for marks and a warm red for destructive actions.
 
-var (
-	browserTitleBg = lipgloss.NewStyle().
+type browserStyles struct {
+	titleBg, countBadge, markedBadge, status, markGlyph, selectedRow, markedRow,
+	cursor, dangerTitle, confirmBox, empty, viewerTitle, viewerRule,
+	roleUser, roleAssistant, roleSystem lipgloss.Style
+}
+
+func makeBrowserStyles(isDark bool) browserStyles {
+	lightDark := lipgloss.LightDark(isDark)
+	return browserStyles{
+		titleBg: lipgloss.NewStyle().
 			Background(lipgloss.Color("#6C50FF")).
 			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true)
+			Bold(true),
 
-	browserCountBadge = lipgloss.NewStyle().
-				Background(lipgloss.Color("#4A3B9F")).
-				Foreground(lipgloss.Color("#E0DDFF")).
-				Bold(true)
+		countBadge: lipgloss.NewStyle().
+			Background(lipgloss.Color("#4A3B9F")).
+			Foreground(lipgloss.Color("#E0DDFF")).
+			Bold(true),
 
-	browserMarkedBadge = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#C0268E", Dark: "#FF87D7"}).
-				Bold(true)
+		markedBadge: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#C0268E"), lipgloss.Color("#FF87D7"))).
+			Bold(true),
 
-	browserStatus = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#00B594", Dark: "#3EECF0"}).
-			Bold(true)
+		status: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#00B594"), lipgloss.Color("#3EECF0"))).
+			Bold(true),
 
-	browserMarkGlyph = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#C0268E", Dark: "#FF87D7"}).
-				Bold(true)
+		markGlyph: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#C0268E"), lipgloss.Color("#FF87D7"))).
+			Bold(true),
 
-	browserSelectedRow = lipgloss.NewStyle().
-				Background(lipgloss.AdaptiveColor{Light: "#EFEBFE", Dark: "#241F3D"})
+		selectedRow: lipgloss.NewStyle().
+			Background(lightDark(lipgloss.Color("#EFEBFE"), lipgloss.Color("#241F3D"))),
 
-	browserMarkedRow = lipgloss.NewStyle().
-				Background(lipgloss.AdaptiveColor{Light: "#FBF0F8", Dark: "#2A1E29"})
+		markedRow: lipgloss.NewStyle().
+			Background(lightDark(lipgloss.Color("#FBF0F8"), lipgloss.Color("#2A1E29"))),
 
-	browserCursor = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#6C50FF", Dark: "#9D86FF"}).
-			Bold(true)
+		cursor: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#6C50FF"), lipgloss.Color("#9D86FF"))).
+			Bold(true),
 
-	browserDangerTitle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#FF5F87")).
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Bold(true)
+		dangerTitle: lipgloss.NewStyle().
+			Background(lipgloss.Color("#FF5F87")).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Bold(true),
 
-	browserConfirmBox = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#C0268E", Dark: "#FF5F87"}).
-				Padding(0, 2)
+		confirmBox: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lightDark(lipgloss.Color("#C0268E"), lipgloss.Color("#FF5F87"))).
+			Padding(0, 2),
 
-	browserEmpty = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#757575", Dark: "#8A8A8A"}).
-			Italic(true)
+		empty: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#757575"), lipgloss.Color("#8A8A8A"))).
+			Italic(true),
 
-	browserViewerTitle = lipgloss.NewStyle().Bold(true)
-	browserViewerRule  = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#E0E0E0", Dark: "#333333"})
+		viewerTitle: lipgloss.NewStyle().Bold(true),
+		viewerRule: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#E0E0E0"), lipgloss.Color("#333333"))),
 
-	browserRoleUser = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#6C50FF", Dark: "#9D86FF"}).
-			Bold(true)
-	browserRoleAssistant = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#00B594", Dark: "#3EECF0"}).
-				Bold(true)
-	browserRoleSystem = lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#757575", Dark: "#8A8A8A"}).
-				Italic(true)
-)
+		roleUser: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#6C50FF"), lipgloss.Color("#9D86FF"))).
+			Bold(true),
+		roleAssistant: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#00B594"), lipgloss.Color("#3EECF0"))).
+			Bold(true),
+		roleSystem: lipgloss.NewStyle().
+			Foreground(lightDark(lipgloss.Color("#757575"), lipgloss.Color("#8A8A8A"))).
+			Italic(true),
+	}
+}
 
 // --- list item ------------------------------------------------------------
 
@@ -160,11 +169,11 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 	// Cursor / mark column.
 	cursor := " "
 	if selected {
-		cursor = browserCursor.Render("❯")
+		cursor = d.b.styles.cursor.Render("❯")
 	}
 	glyph := " "
 	if marked {
-		glyph = browserMarkGlyph.Render("◉")
+		glyph = d.b.styles.markGlyph.Render("◉")
 	}
 
 	id := styles.ShaHash.Render(ci.conv.ID[:ShortIDLength])
@@ -215,9 +224,9 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 
 	switch {
 	case selected:
-		line = browserSelectedRow.Render(line)
+		line = d.b.styles.selectedRow.Render(line)
 	case marked:
-		line = browserMarkedRow.Render(line)
+		line = d.b.styles.markedRow.Render(line)
 	}
 	_, _ = io.WriteString(w, line)
 }
@@ -260,6 +269,7 @@ type browserModel struct {
 	confirmTargets []convItem
 
 	statusMsg string // transient feedback, cleared on the next key
+	styles    browserStyles
 }
 
 func newBrowserModel(sessions []Session) *browserModel {
@@ -273,12 +283,13 @@ func newBrowserModel(sessions []Session) *browserModel {
 		marks: map[string]bool{},
 		state: stateBrowsing,
 		width: 80, height: 24,
+		styles: makeBrowserStyles(true),
 	}
 	delegate := &convDelegate{b: m}
 	m.delegate = delegate
 	m.list = list.New(items, delegate, m.width, m.height-browserTitleHeight-browserFooterHeight)
 	configureList(&m.list)
-	m.viewport = viewport.New(m.width, m.height-browserTitleHeight-browserFooterHeight)
+	m.viewport = viewport.New(viewport.WithWidth(m.width), viewport.WithHeight(m.height-browserTitleHeight-browserFooterHeight))
 	return m
 }
 
@@ -292,6 +303,7 @@ func configureList(l *list.Model) {
 	l.SetShowPagination(false)
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(true)
+	l.FilterInput.SetVirtualCursor(false)
 
 	km := list.DefaultKeyMap()
 	// Rebind the page-navigation keys: the defaults ("d","f","l","h","b","u")
@@ -308,16 +320,21 @@ func configureList(l *list.Model) {
 	l.DisableQuitKeybindings()
 }
 
-func (m *browserModel) Init() tea.Cmd { return nil }
+func (m *browserModel) Init() tea.Cmd { return tea.RequestBackgroundColor }
 
 func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		m.styles = makeBrowserStyles(msg.IsDark())
+		m.list.Styles = list.DefaultStyles(msg.IsDark())
+		m.list.FilterInput.SetVirtualCursor(false)
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.list.SetSize(m.width, m.bodyHeight())
 		headerH := lipgloss.Height(m.viewerHeader)
-		m.viewport.Width = m.width
-		m.viewport.Height = max(1, m.height-headerH-browserFooterHeight)
+		m.viewport.SetWidth(m.width)
+		m.viewport.SetHeight(max(1, m.height-headerH-browserFooterHeight))
 		if m.rawContent != "" && m.state == stateViewing {
 			m.viewerContent = renderTranscript(m.rawContent, m.width)
 			m.viewport.SetContent(m.viewerContent)
@@ -496,7 +513,7 @@ func (m *browserModel) openViewer() (tea.Model, tea.Cmd) {
 	m.viewerLoaded = false
 	m.viewerHeader = m.buildViewerHeader(ci)
 	headerH := lipgloss.Height(m.viewerHeader)
-	m.viewport = viewport.New(m.width, max(1, m.height-headerH-browserFooterHeight))
+	m.viewport = viewport.New(viewport.WithWidth(m.width), viewport.WithHeight(max(1, m.height-headerH-browserFooterHeight)))
 	return m, m.loadContent(ci.conv.ID)
 }
 
@@ -541,10 +558,10 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.closeViewer()
 		return m, nil
 	case "j", "down":
-		m.viewport.LineDown(1)
+		m.viewport.ScrollDown(1)
 		return m, nil
 	case "k", "up":
-		m.viewport.LineUp(1)
+		m.viewport.ScrollUp(1)
 		return m, nil
 	case "pgdown", "f":
 		m.viewport.PageDown()
@@ -566,7 +583,7 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *browserModel) buildViewerHeader(ci convItem) string {
 	styles := StdoutStyles()
-	title := browserViewerTitle.Render(ci.conv.Title)
+	title := m.styles.viewerTitle.Render(ci.conv.Title)
 	id := styles.ShaHash.Render(ci.conv.ID)
 
 	var parts []string
@@ -580,7 +597,7 @@ func (m *browserModel) buildViewerHeader(ci convItem) string {
 	meta := styles.Comment.Render(strings.Join(parts, "  ·  "))
 
 	line1 := title + "  " + id
-	rule := browserViewerRule.Render(strings.Repeat("─", m.width))
+	rule := m.styles.viewerRule.Render(strings.Repeat("─", m.width))
 	return lipgloss.JoinVertical(lipgloss.Left, line1, meta, rule)
 }
 
@@ -648,18 +665,37 @@ func (m *browserModel) handleDeleted(msg deletedMsg) (tea.Model, tea.Cmd) {
 
 // --- view ----------------------------------------------------------------
 
-func (m *browserModel) View() string {
+func (m *browserModel) View() tea.View {
 	if m.width == 0 {
-		return "Starting…"
+		view := tea.NewView("Starting…")
+		view.AltScreen = true
+		return view
 	}
+	var content string
 	switch m.state {
 	case stateViewing:
-		return m.viewViewer()
+		content = m.viewViewer()
 	case stateConfirm:
-		return m.viewConfirm()
+		content = m.viewConfirm()
 	default:
-		return m.viewList()
+		content = m.viewList()
 	}
+	view := tea.NewView(content)
+	view.AltScreen = true
+	if m.state == stateBrowsing && m.list.FilterState() == list.Filtering {
+		if cursor := m.list.FilterInput.Cursor(); cursor != nil {
+			copy := *cursor
+			copy.X += m.list.Styles.TitleBar.GetMarginLeft() +
+				m.list.Styles.TitleBar.GetBorderLeftSize() +
+				m.list.Styles.TitleBar.GetPaddingLeft()
+			copy.Y += browserTitleHeight +
+				m.list.Styles.TitleBar.GetMarginTop() +
+				m.list.Styles.TitleBar.GetBorderTopSize() +
+				m.list.Styles.TitleBar.GetPaddingTop()
+			view.Cursor = &copy
+		}
+	}
+	return view
 }
 
 func (m *browserModel) viewList() string {
@@ -668,7 +704,7 @@ func (m *browserModel) viewList() string {
 	m.list.SetSize(m.width, m.bodyHeight())
 	body := m.list.View()
 	if len(m.list.Items()) == 0 {
-		body = emptyState(m.width, m.bodyHeight())
+		body = m.emptyState(m.width, m.bodyHeight())
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, title, body, footer)
 }
@@ -683,7 +719,7 @@ func (m *browserModel) viewConfirm() string {
 	m.list.SetSize(m.width, bodyH)
 	body := m.list.View()
 	if len(m.list.Items()) == 0 {
-		body = emptyState(m.width, bodyH)
+		body = m.emptyState(m.width, bodyH)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, title, body, panel)
 }
@@ -695,21 +731,21 @@ func (m *browserModel) viewViewer() string {
 	if viewportH < 1 {
 		viewportH = 1
 	}
-	m.viewport.Height = viewportH
+	m.viewport.SetHeight(viewportH)
 
 	var body string
 	switch {
 	case m.viewErr != "":
-		hint := browserDangerTitle.Render(" couldn't load session ") + "\n\n" +
-			browserEmpty.Render(m.viewErr) + "\n\n" +
+		hint := m.styles.dangerTitle.Render(" couldn't load session ") + "\n\n" +
+			m.styles.empty.Render(m.viewErr) + "\n\n" +
 			StdoutStyles().Comment.Render("press esc to go back")
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center, hint)
 	case !m.viewerLoaded:
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
-			browserEmpty.Render("Loading…"))
+			m.styles.empty.Render("Loading…"))
 	case m.viewerContent == "":
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
-			browserEmpty.Render("This session has no messages."))
+			m.styles.empty.Render("This session has no messages."))
 	default:
 		body = m.viewport.View()
 	}
@@ -718,14 +754,14 @@ func (m *browserModel) viewViewer() string {
 
 func (m *browserModel) viewTitle() string {
 	left := " Sessions " +
-		browserCountBadge.Render(fmt.Sprintf(" %d ", len(m.list.Items())))
+		m.styles.countBadge.Render(fmt.Sprintf(" %d ", len(m.list.Items())))
 
 	var right string
 	switch {
 	case m.statusMsg != "":
-		right = browserStatus.Render(m.statusMsg)
+		right = m.styles.status.Render(m.statusMsg)
 	case len(m.marks) > 0:
-		right = browserMarkedBadge.Render(fmt.Sprintf("◉ %d marked", len(m.marks)))
+		right = m.styles.markedBadge.Render(fmt.Sprintf("◉ %d marked", len(m.marks)))
 	}
 
 	bar := left
@@ -736,7 +772,7 @@ func (m *browserModel) viewTitle() string {
 		}
 		bar = left + strings.Repeat(" ", gap) + right
 	}
-	return browserTitleBg.Width(m.width).Render(bar)
+	return m.styles.titleBg.Width(m.width).Render(bar)
 }
 
 func (m *browserModel) viewFooter() string {
@@ -775,7 +811,7 @@ func (m *browserModel) viewFooter() string {
 func (m *browserModel) viewConfirmPanel() string {
 	styles := StdoutStyles()
 	n := len(m.confirmTargets)
-	head := browserDangerTitle.Render(fmt.Sprintf(" Delete %d session%s? ", n, plural(n)))
+	head := m.styles.dangerTitle.Render(fmt.Sprintf(" Delete %d session%s? ", n, plural(n)))
 
 	const maxShow = 5 //nolint:mnd
 	var rows []string
@@ -798,7 +834,7 @@ func (m *browserModel) viewConfirmPanel() string {
 		"    " + styles.Flag.Render("n / esc") + " " + styles.Comment.Render("cancel")
 
 	content := head + "\n" + body + "\n\n" + note + "\n\n" + actions
-	return browserConfirmBox.Render(content)
+	return m.styles.confirmBox.Render(content)
 }
 
 // --- helpers -------------------------------------------------------------
@@ -823,10 +859,10 @@ func renderHelp(width int, pairs [][2]string) string {
 	return s
 }
 
-func emptyState(width, height int) string {
+func (m *browserModel) emptyState(width, height int) string {
 	msg := "No sessions.\n\nPress q to exit."
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
-		browserEmpty.Render(msg))
+		m.styles.empty.Render(msg))
 }
 
 // renderTranscript colorizes the role prefixes that proto.Session emits
@@ -838,9 +874,10 @@ func renderTranscript(raw string, width int) string {
 		width = 10
 	}
 	s := raw
-	s = strings.ReplaceAll(s, "**System**: ", browserRoleSystem.Render("system")+": ")
-	s = strings.ReplaceAll(s, "**User**: ", browserRoleUser.Render("user")+": ")
-	s = strings.ReplaceAll(s, "**Assistant**: ", browserRoleAssistant.Render("assistant")+": ")
+	styles := makeBrowserStyles(true)
+	s = strings.ReplaceAll(s, "**System**: ", styles.roleSystem.Render("system")+": ")
+	s = strings.ReplaceAll(s, "**User**: ", styles.roleUser.Render("user")+": ")
+	s = strings.ReplaceAll(s, "**Assistant**: ", styles.roleAssistant.Render("assistant")+": ")
 	return wordwrap.String(s, width)
 }
 
@@ -873,7 +910,6 @@ func runSessionBrowser(sessions []Session) error {
 	program := tea.NewProgram(
 		newBrowserModel(sessions),
 		tea.WithOutput(os.Stderr),
-		tea.WithAltScreen(),
 	)
 	if _, err := program.Run(); err != nil {
 		return err

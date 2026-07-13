@@ -1,14 +1,14 @@
 package ui
 
 import (
+	"image/color"
 	"math/rand"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/lucasb-eyer/go-colorful"
-	"github.com/muesli/termenv"
 )
 
 const (
@@ -66,13 +66,12 @@ type Anim struct {
 	start        time.Time
 	size         int
 	phase        SpinnerPhase
-	renderer     *lipgloss.Renderer
 	cyclingChars []cyclingChar
 	ramp         []lipgloss.Style
 	Styles       Styles
 }
 
-func NewAnim(cyclingCharsSize uint, r *lipgloss.Renderer, s Styles) Anim {
+func NewAnim(cyclingCharsSize uint, s Styles) Anim {
 	// #nosec G115
 	n := int(cyclingCharsSize)
 	if n > maxCyclingChars {
@@ -80,11 +79,10 @@ func NewAnim(cyclingCharsSize uint, r *lipgloss.Renderer, s Styles) Anim {
 	}
 
 	c := Anim{
-		start:    time.Now(),
-		size:     n,
-		phase:    PhaseConnecting,
-		renderer: r,
-		Styles:   s,
+		start:  time.Now(),
+		size:   n,
+		phase:  PhaseConnecting,
+		Styles: s,
 	}
 	c.rebuildRamp()
 
@@ -129,14 +127,14 @@ func (a *Anim) rebuildRamp() {
 	n := a.size
 	a.ramp = nil
 	const minRampSize = 3
-	if n < minRampSize || a.renderer == nil || a.renderer.ColorProfile() == termenv.Ascii {
+	if n < minRampSize {
 		return
 	}
 	startHex, endHex := a.phase.gradient()
 	ramp := gradientRamp(n, startHex, endHex)
 	a.ramp = make([]lipgloss.Style, n, n*2) //nolint:mnd
 	for i, color := range ramp {
-		a.ramp[i] = a.renderer.NewStyle().Foreground(color)
+		a.ramp[i] = lipgloss.NewStyle().Foreground(color)
 	}
 	a.ramp = append(a.ramp, reverse(a.ramp)...) // reverse and append for color cycling
 }
@@ -176,7 +174,7 @@ func (a *Anim) updateChars(chars *[]cyclingChar) {
 }
 
 // View renders the animation.
-func (a Anim) View() string {
+func (a Anim) View() tea.View {
 	var b strings.Builder
 
 	for i, c := range a.cyclingChars {
@@ -187,7 +185,7 @@ func (a Anim) View() string {
 		b.WriteRune(c.currentValue)
 	}
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // Default gradient endpoints (the Connecting-phase palette). Kept as
@@ -221,9 +219,9 @@ func (p SpinnerPhase) gradient() (start, end string) {
 	}
 }
 
-func gradientRamp(length int, startHex, endHex string) []lipgloss.Color {
+func gradientRamp(length int, startHex, endHex string) []color.Color {
 	var (
-		c        = make([]lipgloss.Color, length)
+		c        = make([]color.Color, length)
 		start, _ = colorful.Hex(startHex)
 		end, _   = colorful.Hex(endHex)
 	)
@@ -234,7 +232,7 @@ func gradientRamp(length int, startHex, endHex string) []lipgloss.Color {
 	return c
 }
 
-func makeGradientRamp(length int) []lipgloss.Color {
+func makeGradientRamp(length int) []color.Color {
 	return gradientRamp(length, defaultGradientStart, defaultGradientEnd)
 }
 

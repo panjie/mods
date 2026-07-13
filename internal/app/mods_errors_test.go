@@ -7,18 +7,16 @@ import (
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/ollama/ollama/api"
 	"github.com/openai/openai-go"
 	"github.com/panjie/mods/internal/google"
+	api "github.com/panjie/mods/internal/ollamaapi"
 	"github.com/stretchr/testify/require"
 )
 
 func testMods(t *testing.T) *Mods {
 	t.Helper()
-	r := lipgloss.NewRenderer(nil)
 	return &Mods{
-		Styles: makeStyles(r),
+		Styles: makeStyles(true),
 		Config: &Config{
 			PersistentConfig: PersistentConfig{
 				Model: "gpt-4",

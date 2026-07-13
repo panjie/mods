@@ -5,9 +5,10 @@ import (
 	"regexp"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/ui"
 )
 
 const planSystemPrompt = prompts.Plan
@@ -195,22 +196,29 @@ func (m *Mods) renderPlanReviewBanner(content string) string {
 }
 
 func (m *Mods) renderPlanFeedbackInput(content string) string {
+	return appendInteractionPanel(content, m.planFeedbackPanelView().Content)
+}
+
+func (m *Mods) planFeedbackPanelView() ui.CursorView {
 	if m.width <= 0 {
 		m.width = 80
 	}
 	innerWidth := interactionPanelInnerWidth(m.Styles.Interaction, m.width)
 	// Reserve one cell for textinput's end-of-value cursor so the action row
 	// stays at a stable vertical position while feedback is typed.
-	m.feedbackInput.Width = max(1, innerWidth-m.Styles.Interaction.Input.GetHorizontalFrameSize()-3)
+	m.feedbackInput.SetWidth(max(1, innerWidth-m.Styles.Interaction.Input.GetHorizontalFrameSize()-3))
 	m.feedbackInput.Prompt = ""
-	block := renderInteractionPanel(m.Styles.Interaction, m.width, interactionPanel{
+	input := ui.NewCursorView("› "+m.feedbackInput.View(), m.feedbackInput.Cursor()).
+		Translate(2, 0).
+		InStyle(m.Styles.Interaction.Input)
+	return ui.RenderInteractionPanelView(m.Styles.Interaction, m.width, interactionPanel{
 		Title:    "Modification feedback",
 		Tone:     interactionToneInfo,
 		Headline: "Describe the changes you want in the plan",
-		Body:     []string{m.Styles.Interaction.Input.Render("› " + m.feedbackInput.View())},
+		Body:     []string{input.Content},
+		Cursor:   input.Cursor,
 		Actions:  []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}},
 	})
-	return appendInteractionPanel(content, block)
 }
 
 func appendInteractionPanel(content, panel string) string {

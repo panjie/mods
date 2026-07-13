@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -37,22 +39,34 @@ type InteractionPanel struct {
 	Body     []string
 	Choices  []InteractionAction
 	Actions  []InteractionAction
+	// Cursor is relative to Body[CursorBody]. It is ignored when nil.
+	Cursor     *tea.Cursor
+	CursorBody int
 }
 
 func RenderInteractionPanel(styles InteractionStyles, width int, panel InteractionPanel) string {
+	return RenderInteractionPanelView(styles, width, panel).Content
+}
+
+func RenderInteractionPanelView(styles InteractionStyles, width int, panel InteractionPanel) CursorView {
 	if width <= 0 {
 		width = 80
 	}
 	panelStyle := styles.Panel.Copy().BorderForeground(interactionToneColor(styles, panel.Tone))
 	innerWidth := max(1, width-panelStyle.GetHorizontalFrameSize())
 	lines := []string{renderInteractionTitle(styles, innerWidth, panel.Tone, panel.Title, panel.Meta)}
+	var cursor *tea.Cursor
 	if panel.Headline != "" || panel.ToneText != "" {
 		lines = append(lines, renderInteractionHeadline(styles, innerWidth, panel.Tone, panel.ToneText, panel.Headline)...)
 	}
 	for _, row := range panel.Rows {
 		lines = append(lines, renderInteractionRow(styles, innerWidth, row)...)
 	}
-	for _, body := range panel.Body {
+	for i, body := range panel.Body {
+		if cursor == nil && panel.Cursor != nil && i == panel.CursorBody {
+			cursor = cloneCursor(panel.Cursor)
+			cursor.Y += len(lines)
+		}
 		if body == "" {
 			lines = append(lines, "")
 			continue
@@ -67,7 +81,7 @@ func RenderInteractionPanel(styles InteractionStyles, width int, panel Interacti
 		lines = append(lines, "")
 		lines = append(lines, packInteractionActions(styles, innerWidth, panel.Actions)...)
 	}
-	return panelStyle.Render(strings.Join(lines, "\n"))
+	return NewCursorView(strings.Join(lines, "\n"), cursor).InStyle(panelStyle)
 }
 
 func InteractionPanelInnerWidth(styles InteractionStyles, width int) int {
@@ -171,7 +185,7 @@ func interactionToneStyle(styles InteractionStyles, tone InteractionTone) lipglo
 	}
 }
 
-func interactionToneColor(styles InteractionStyles, tone InteractionTone) lipgloss.Color {
+func interactionToneColor(styles InteractionStyles, tone InteractionTone) color.Color {
 	switch tone {
 	case InteractionToneDanger:
 		return styles.Palette.Danger

@@ -3,7 +3,8 @@ package huh
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // A Layout is responsible for laying out groups in a form.
@@ -12,15 +13,33 @@ type Layout interface {
 	GroupWidth(f *Form, g *Group, w int) int
 }
 
+// fieldWidthLayout is an optional extension for layouts that need a field
+// width different from the surrounding group width.
 type fieldWidthLayout interface {
-	FieldWidth(f *Form, g *Group, groupWidth int) int
+	FieldWidth(f *Form, g *Group, w int) int
 }
 
-func layoutFieldWidth(layout Layout, form *Form, group *Group, groupWidth int) int {
-	if layout, ok := layout.(fieldWidthLayout); ok {
-		return layout.FieldWidth(form, group, groupWidth)
+// cursorLayout is optional so existing custom layouts remain source
+// compatible. Layouts that rearrange groups can provide an exact cursor.
+type cursorLayout interface {
+	Cursor(f *Form) *tea.Cursor
+}
+
+// LayoutCursor returns a layout's translated cursor when it supports cursor
+// propagation. It lets custom layouts delegate to a built-in layout without
+// making cursor support mandatory on Layout.
+func LayoutCursor(layout Layout, f *Form) *tea.Cursor {
+	if layout, ok := layout.(cursorLayout); ok {
+		return layout.Cursor(f)
 	}
-	return groupWidth
+	return nil
+}
+
+func layoutFieldWidth(layout Layout, f *Form, g *Group, w int) int {
+	if l, ok := layout.(fieldWidthLayout); ok {
+		return l.FieldWidth(f, g, w)
+	}
+	return w
 }
 
 // LayoutDefault is the default layout shows a single group at a time.
@@ -47,6 +66,10 @@ func (l *layoutDefault) View(f *Form) string {
 
 func (l *layoutDefault) GroupWidth(_ *Form, _ *Group, w int) int {
 	return w
+}
+
+func (l *layoutDefault) Cursor(f *Form) *tea.Cursor {
+	return f.selector.Selected().Cursor()
 }
 
 type layoutColumns struct {
@@ -100,6 +123,24 @@ func (l *layoutColumns) GroupWidth(_ *Form, _ *Group, w int) int {
 	return w / l.columns
 }
 
+func (l *layoutColumns) Cursor(f *Form) *tea.Cursor {
+	selected := f.selector.Selected()
+	cursor := selected.contentCursor()
+	if cursor == nil {
+		return nil
+	}
+	x := 0
+	for _, group := range l.visibleGroups(f) {
+		if group == selected {
+			break
+		}
+		x += lipgloss.Width(group.Content())
+	}
+	cursor.X += x
+	cursor.Y++
+	return cursor
+}
+
 type layoutStack struct{}
 
 func (l *layoutStack) View(f *Form) string {
@@ -117,6 +158,24 @@ func (l *layoutStack) View(f *Form) string {
 
 func (l *layoutStack) GroupWidth(_ *Form, _ *Group, w int) int {
 	return w
+}
+
+func (l *layoutStack) Cursor(f *Form) *tea.Cursor {
+	selected := f.selector.Selected()
+	cursor := selected.contentCursor()
+	if cursor == nil {
+		return nil
+	}
+	y := 0
+	f.selector.Range(func(_ int, group *Group) bool {
+		if group == selected {
+			return false
+		}
+		y += lipgloss.Height(group.Content()) + 2
+		return true
+	})
+	cursor.Y += y
+	return cursor
 }
 
 type layoutGrid struct {
@@ -177,4 +236,29 @@ func (l *layoutGrid) View(f *Form) string {
 
 func (l *layoutGrid) GroupWidth(_ *Form, _ *Group, w int) int {
 	return w / l.columns
+}
+
+func (l *layoutGrid) Cursor(f *Form) *tea.Cursor {
+	selected := f.selector.Selected()
+	cursor := selected.contentCursor()
+	if cursor == nil {
+		return nil
+	}
+	grid := l.visibleGroups(f)
+	y := 0
+	for _, row := range grid {
+		x := 0
+		rowHeight := 0
+		for _, group := range row {
+			if group == selected {
+				cursor.X += x
+				cursor.Y += y
+				return cursor
+			}
+			x += lipgloss.Width(group.Content())
+			rowHeight = max(rowHeight, lipgloss.Height(group.Content()))
+		}
+		y += rowHeight + 2
+	}
+	return nil
 }

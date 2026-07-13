@@ -9,11 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/skills"
@@ -54,7 +53,6 @@ type Mods struct {
 	retries        int
 	toolCallRounds int
 	totalRounds    int
-	renderer       *lipgloss.Renderer
 	glam           *glamour.TermRenderer
 	glamViewport   viewport.Model
 	// messages is the session history fed to the provider on each
@@ -135,7 +133,6 @@ type Mods struct {
 
 func New(
 	ctx context.Context,
-	r *lipgloss.Renderer,
 	cfg *Config,
 	db *DB,
 ) (*Mods, error) {
@@ -150,7 +147,7 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("could not create glamour renderer: %w", err)
 	}
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	vp.GotoBottom()
 	skillDirs := cfg.ResolveSkillsDirs()
 	skillCatalog, scanErr := skills.ScanDirs(skillDirs)
@@ -159,10 +156,9 @@ func New(
 	}
 	debug.Printf("Skills: loaded %d skill(s) from %v", len(skillCatalog), skillDirs)
 	return &Mods{
-		Styles:              ui.MakeStylesWithTheme(r, cfg.Theme),
+		Styles:              ui.MakeStylesWithTheme(cfg.Theme, true),
 		glam:                gr,
 		state:               startState,
-		renderer:            r,
 		glamViewport:        vp,
 		contentMutex:        &sync.Mutex{},
 		showOperationStatus: IsOutputTTY() && IsErrorTTY() && !cfg.Raw && !cfg.HideToolStatus,
@@ -204,12 +200,15 @@ func (m *Mods) ApprovalRules() []Rule {
 
 // Init implements tea.Model.
 func (m *Mods) Init() tea.Cmd {
-	return m.findSessionDetails()
+	return tea.Batch(m.findSessionDetails(), tea.RequestBackgroundColor)
 }
 
 // Update implements tea.Model.
 func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	if msg, ok := msg.(tea.BackgroundColorMsg); ok {
+		m.Styles = ui.MakeStylesWithTheme(m.Config.Theme, msg.IsDark())
+	}
 
 	if inputMsg, ok := msg.(tea.KeyMsg); ok {
 		if handled, cmd := m.userInput.handleKey(inputMsg); handled {
@@ -253,7 +252,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.SessionReadFromID = msg.ReadID
 		m.reviewer.rules.Replace(msg.Rules)
 
-		m.anim = NewAnim(defaultFanciness, m.renderer, m.Styles)
+		m.anim = NewAnim(defaultFanciness, m.Styles)
 		cmds = append(cmds, m.anim.Init())
 		m.state = configLoadedState
 		cmds = append(cmds, m.readStdinCmd)
@@ -431,8 +430,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.quit
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.glamViewport.Width = m.width
-		m.glamViewport.Height = m.height
+		m.glamViewport.SetWidth(m.width)
+		m.glamViewport.SetHeight(m.height)
 		return m, nil
 	case tea.KeyMsg:
 		if cmd, handled := m.handleProposalKey(msg); handled {
@@ -735,7 +734,8 @@ func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "m", "M":
 		ti := textinput.New()
 		ti.Placeholder = "Describe changes you want to make to this proposal..."
-		ti.Width = max(m.width-4, 20)
+		ti.SetWidth(max(m.width-4, 20))
+		ti.SetVirtualCursor(false)
 		m.feedbackInput = ti
 		m.feedbackMode = true
 		return m.feedbackInput.Focus(), true
@@ -761,7 +761,8 @@ func (m *Mods) handlePlanReviewKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "m", "M":
 		ti := textinput.New()
 		ti.Placeholder = "Describe changes you want to make to the plan..."
-		ti.Width = max(m.width-4, 20)
+		ti.SetWidth(max(m.width-4, 20))
+		ti.SetVirtualCursor(false)
 		m.feedbackInput = ti
 		m.feedbackMode = true
 		return m.feedbackInput.Focus(), true
@@ -789,7 +790,8 @@ func (m *Mods) handlePlanReviewKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		case 2:
 			ti := textinput.New()
 			ti.Placeholder = "Describe changes you want to make to the plan..."
-			ti.Width = max(m.width-4, 20)
+			ti.SetWidth(max(m.width-4, 20))
+			ti.SetVirtualCursor(false)
 			m.feedbackInput = ti
 			m.feedbackMode = true
 			return m.feedbackInput.Focus(), true

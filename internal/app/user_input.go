@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/secrets"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
@@ -149,6 +149,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 		u.secret.EchoCharacter = '•'
 		u.secret.Placeholder = "Enter secret"
 		u.secret.Prompt = ""
+		u.secret.SetVirtualCursor(false)
 		u.secret.Focus()
 		return
 	}
@@ -156,6 +157,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 	u.text.Prompt = ""
 	u.text.ShowLineNumbers = false
 	u.text.SetHeight(1)
+	u.text.SetVirtualCursor(false)
 	u.text.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "new line"))
 	u.text.Focus()
 }
@@ -209,8 +211,12 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 func (u *userInputManager) render(width int, styles ui.InteractionStyles) string {
+	return u.renderView(width, styles).Content
+}
+
+func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui.CursorView {
 	if !u.isPending() {
-		return ""
+		return ui.CursorView{}
 	}
 	if width <= 0 {
 		width = 80
@@ -246,16 +252,20 @@ func (u *userInputManager) render(width int, styles ui.InteractionStyles) string
 		// textinput renders an additional cursor cell when the value is
 		// non-empty and the cursor is at the end. Reserve that cell so typing
 		// cannot wrap the input row and push the action row downward.
-		u.secret.Width = max(1, contentWidth-1)
-		panel.Body = []string{styles.Input.Render("› " + u.secret.View())}
+		u.secret.SetWidth(max(1, contentWidth-1))
+		input := ui.NewCursorView("› "+u.secret.View(), u.secret.Cursor()).Translate(2, 0).InStyle(styles.Input)
+		panel.Body = []string{input.Content}
+		panel.Cursor = input.Cursor
 		panel.Actions = []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}}
 	default:
 		contentWidth := max(1, innerWidth-styles.Input.GetHorizontalFrameSize()-2)
 		u.text.SetWidth(contentWidth)
-		panel.Body = []string{styles.Input.Render("› " + u.text.View())}
+		input := ui.NewCursorView("› "+u.text.View(), u.text.Cursor()).Translate(2, 0).InStyle(styles.Input)
+		panel.Body = []string{input.Content}
+		panel.Cursor = input.Cursor
 		panel.Actions = []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Ctrl+J", Label: "New line"}, {Key: "Esc", Label: "Cancel"}}
 	}
-	return renderInteractionPanel(styles, width, panel)
+	return ui.RenderInteractionPanelView(styles, width, panel)
 }
 
 func (m *Mods) handleSudoPrompt(ctx context.Context, prompt, command string) (string, error) {

@@ -7,9 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
@@ -317,11 +316,9 @@ func TestFormatTokenCount(t *testing.T) {
 }
 
 func TestStyledTokenUsageLine(t *testing.T) {
-	renderer := lipgloss.NewRenderer(io.Discard)
-	renderer.SetColorProfile(termenv.TrueColor)
 	styles := Styles{
-		Comment: renderer.NewStyle().Foreground(lipgloss.Color("#757575")),
-		Flag: renderer.NewStyle().
+		Comment: lipgloss.NewStyle().Foreground(lipgloss.Color("#757575")),
+		Flag: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#3EEFCF")).
 			Bold(true),
 	}
@@ -370,11 +367,9 @@ func TestPrintTokenUsageTTYAddsSpacingAndStyle(t *testing.T) {
 	}()
 	config.ShowTokenUsage = true
 	IsErrorTTY = func() bool { return true }
-	renderer := lipgloss.NewRenderer(io.Discard)
-	renderer.SetColorProfile(termenv.TrueColor)
 	styles := Styles{
-		Comment: renderer.NewStyle().Foreground(lipgloss.Color("#757575")),
-		Flag: renderer.NewStyle().
+		Comment: lipgloss.NewStyle().Foreground(lipgloss.Color("#757575")),
+		Flag: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#3EEFCF")).
 			Bold(true),
 	}
@@ -388,7 +383,7 @@ func TestPrintTokenUsageTTYAddsSpacingAndStyle(t *testing.T) {
 	})
 	require.Empty(t, stdout)
 	require.Equal(t, "\n  Tokens  unavailable\n", ansi.Strip(stderr))
-	require.NotEqual(t, ansi.Strip(stderr), stderr)
+	require.Equal(t, ansi.Strip(stderr), stderr, "Lip Gloss writer must downgrade captured non-TTY output")
 }
 
 func TestNoSaveFlag(t *testing.T) {

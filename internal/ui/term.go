@@ -4,9 +4,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
-	"github.com/muesli/termenv"
 )
 
 var IsInputTTY = sync.OnceValue(func() bool {
@@ -21,18 +20,22 @@ var IsErrorTTY = sync.OnceValue(func() bool {
 	return isatty.IsTerminal(os.Stderr.Fd())
 })
 
-var StdoutRenderer = sync.OnceValue(func() *lipgloss.Renderer {
-	return lipgloss.DefaultRenderer()
-})
-
 var StdoutStyles = sync.OnceValue(func() Styles {
-	return MakeStyles(StdoutRenderer())
+	isDark := true
+	if IsOutputTTY() && IsInputTTY() {
+		isDark = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
+	}
+	return MakeStyles(isDark)
 })
 
-var StderrRenderer = sync.OnceValue(func() *lipgloss.Renderer {
-	return lipgloss.NewRenderer(os.Stderr, termenv.WithColorCache(true))
+var StderrIsDark = sync.OnceValue(func() bool {
+	isDark := true
+	if IsErrorTTY() && IsInputTTY() {
+		isDark = lipgloss.HasDarkBackground(os.Stdin, os.Stderr)
+	}
+	return isDark
 })
 
 var StderrStyles = sync.OnceValue(func() Styles {
-	return MakeStyles(StderrRenderer())
+	return MakeStyles(StderrIsDark())
 })

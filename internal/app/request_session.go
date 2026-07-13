@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/google"
 	imageutil "github.com/panjie/mods/internal/image"

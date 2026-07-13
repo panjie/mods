@@ -13,9 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/anthropic"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/ui"
@@ -548,12 +549,12 @@ func RunConfigWizard() error {
 	// lingers and which location is authoritative).
 	if savePath != previousPath && !config.SettingsExisted {
 		if err := os.Remove(previousPath); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Warning: could not remove auto-created config %s: %v\n",
+			_, _ = lipgloss.Fprintf(os.Stderr, "Warning: could not remove auto-created config %s: %v\n",
 				StderrStyles().InlineCode.Render(previousPath), err)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(savePath))
+	_, _ = lipgloss.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(savePath))
 
 	if savePath != previousPath {
 		fmt.Fprintln(os.Stderr, "Portable mode will be active on the next launch.")
@@ -622,17 +623,33 @@ func buildProviderOptions() []huh.Option[string] {
 }
 
 type configWizardLayout struct {
-	formHorizontalFrame int
+	formHorizontalFrame  int
+	fieldHorizontalFrame int
 }
 
-func configWizardLayoutForTheme(theme *huh.Theme) huh.Layout {
+func configWizardLayoutForTheme(theme huh.Theme) huh.Layout {
 	formFrame := 0
+	fieldFrame := 0
 	if theme != nil {
-		formFrame = theme.Form.Base.GetHorizontalFrameSize()
+		styles := theme.Theme(true)
+		formFrame = styles.Form.Base.GetHorizontalFrameSize()
+		fieldFrame = max(
+			styles.Focused.Base.GetHorizontalFrameSize(),
+			styles.Blurred.Base.GetHorizontalFrameSize(),
+		)
 	}
 	return configWizardLayout{
-		formHorizontalFrame: formFrame,
+		formHorizontalFrame:  formFrame,
+		fieldHorizontalFrame: fieldFrame,
 	}
+}
+
+func (l configWizardLayout) FieldWidth(_ *huh.Form, _ *huh.Group, groupWidth int) int {
+	return max(1, groupWidth-l.fieldHorizontalFrame)
+}
+
+func (l configWizardLayout) Cursor(form *huh.Form) *tea.Cursor {
+	return huh.LayoutCursor(huh.LayoutDefault, form)
 }
 
 func (l configWizardLayout) View(form *huh.Form) string {
@@ -641,13 +658,20 @@ func (l configWizardLayout) View(form *huh.Form) string {
 
 func (l configWizardLayout) GroupWidth(_ *huh.Form, _ *huh.Group, width int) int {
 	// Lipgloss includes a Huh field's border and padding in its configured
-	// width. Only the outer form padding needs to be removed here.
-	return max(1, width-l.formHorizontalFrame)
+	// width. Remove the outer form padding and reserve the final terminal
+	// column; writing the bottom-right cell can wrap in Apple Terminal.
+	return max(1, width-l.formHorizontalFrame-1)
 }
 
-func configWizardTheme(theme string) *huh.Theme {
-	t := themeFrom(theme)
-	palette := ui.MakeStylesWithTheme(StderrRenderer(), theme).Interaction.Palette
+func configWizardTheme(theme string) huh.Theme {
+	return huh.ThemeFunc(func(isDark bool) *huh.Styles {
+		return configWizardStyles(theme, isDark)
+	})
+}
+
+func configWizardStyles(theme string, isDark bool) *huh.Styles {
+	t := themeFrom(theme).Theme(isDark)
+	palette := ui.MakeStylesWithTheme(theme, isDark).Interaction.Palette
 	accent := palette.Accent
 	accentSoft := palette.Surface
 	text := palette.Text
@@ -1259,20 +1283,20 @@ type summaryData struct {
 }
 
 func printConfigSummary(d summaryData) {
-	r := StderrRenderer()
-	accent := lipgloss.AdaptiveColor{Light: "#5A56E0", Dark: "#8B7CFF"}
-	muted := lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
-	border := lipgloss.AdaptiveColor{Light: "#D9D7FF", Dark: "#48406F"}
+	lightDark := lipgloss.LightDark(true)
+	accent := lightDark(lipgloss.Color("#5A56E0"), lipgloss.Color("#8B7CFF"))
+	muted := lightDark(lipgloss.Color("#6B7280"), lipgloss.Color("#9CA3AF"))
+	border := lightDark(lipgloss.Color("#D9D7FF"), lipgloss.Color("#48406F"))
 
-	title := r.NewStyle().
+	title := lipgloss.NewStyle().
 		Foreground(accent).
 		Bold(true).
 		Render("Configuration summary")
-	labelStyle := r.NewStyle().
+	labelStyle := lipgloss.NewStyle().
 		Foreground(muted).
 		Width(12)
-	valueStyle := r.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#202124", Dark: "#F2F2F7"})
+	valueStyle := lipgloss.NewStyle().
+		Foreground(lightDark(lipgloss.Color("#202124"), lipgloss.Color("#F2F2F7")))
 
 	modelValue := d.model
 	if d.addedModelCount > 1 {
@@ -1323,15 +1347,15 @@ func printConfigSummary(d summaryData) {
 	)
 
 	body := strings.Join(rows, "\n")
-	card := r.NewStyle().
+	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder(), true).
 		BorderForeground(border).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1).
-		Render(title + "\n" + r.NewStyle().Foreground(accent).Render(strings.Repeat("─", 24)) + "\n" + body)
+		Render(title + "\n" + lipgloss.NewStyle().Foreground(accent).Render(strings.Repeat("─", 24)) + "\n" + body)
 
-	fmt.Fprintln(os.Stderr, card)
+	_, _ = lipgloss.Fprintln(os.Stderr, card)
 }
 
 func summaryRow(labelStyle, valueStyle lipgloss.Style, label, value string) string {

@@ -6,7 +6,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/panjie/mods/internal/ui"
 )
 
 const tabWidth = 4
@@ -27,7 +29,25 @@ func (m *Mods) viewportNeeded() bool {
 }
 
 // View implements tea.Model.
-func (m *Mods) View() string {
+func (m *Mods) View() tea.View {
+	content := m.viewContent()
+	view := tea.NewView(content)
+	var panel ui.CursorView
+	switch {
+	case m.feedbackMode:
+		panel = m.planFeedbackPanelView()
+	case m.userInput.isPending():
+		panel = m.userInput.renderView(m.width, m.Styles.Interaction)
+	}
+	if panel.Cursor != nil {
+		cursor := *panel.Cursor
+		cursor.Y += max(0, lipgloss.Height(content)-lipgloss.Height(panel.Content))
+		view.Cursor = &cursor
+	}
+	return view
+}
+
+func (m *Mods) viewContent() string {
 	//nolint:exhaustive
 	switch m.state {
 	case errorState:
@@ -203,7 +223,7 @@ func (m *Mods) spinnerLine() string {
 		a.SetPhase(phase)
 		m.anim = a
 	}
-	return m.anim.View()
+	return m.anim.View().Content
 }
 
 func (m *Mods) operationStatusLine() string {
@@ -286,7 +306,7 @@ func (m *Mods) flushRender() {
 	m.glamOutput += "\n"
 	content := m.glamOutput
 	if m.width > 0 {
-		content = m.renderer.NewStyle().
+		content = lipgloss.NewStyle().
 			MaxWidth(m.width).
 			Render(m.glamOutput)
 	}

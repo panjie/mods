@@ -73,7 +73,7 @@ func TestIsVersionOrHelpCmd(t *testing.T) {
 		"mods -v":                 true,
 		"mods --help":             true,
 		"mods -h":                 true,
-		"mods --help-all":         true,
+		"mods --help-all":         false,
 		"mods --model gpt-4":      false,
 		"mods -v -m gpt-4":        true,
 		"mods -m gpt-4 --version": true,
@@ -460,7 +460,6 @@ func TestIsNoArgs(t *testing.T) {
 func isNoArgsCfg(cfg Config) bool {
 	return cfg.Prefix == "" &&
 		!cfg.ShowHelp &&
-		!cfg.HelpAll &&
 		!cfg.List &&
 		!cfg.ListRoles &&
 		!cfg.ListPrompts &&
@@ -474,24 +473,30 @@ func isNoArgsCfg(cfg Config) bool {
 		!cfg.ResetSettings
 }
 
-func TestHelpUsageFiltersAdvancedFlags(t *testing.T) {
+func TestHelpUsageShowsAllPublicFlags(t *testing.T) {
 	flags := rootCmd.Flags()
-	require.True(t, flagVisibleInUsage(flags.Lookup("model"), false))
-	require.True(t, flagVisibleInUsage(flags.Lookup("help-all"), false))
-	require.True(t, flagVisibleInUsage(flags.Lookup("workspace"), false))
+	require.True(t, flagVisibleInUsage(flags.Lookup("model")))
+	require.True(t, flagVisibleInUsage(flags.Lookup("workspace")))
+	require.True(t, flagVisibleInUsage(flags.Lookup("word-wrap")))
+	require.False(t, flagVisibleInUsage(flags.Lookup("memprofile")))
+	require.Nil(t, flags.Lookup("help-all"))
 
-	for _, name := range []string{"word-wrap", "max-tool-rounds", "hide-tool-status"} {
-		flag := flags.Lookup(name)
-		require.NotNil(t, flag)
-		require.False(t, flagVisibleInUsage(flag, false), name)
-		require.True(t, flagVisibleInUsage(flag, true), name)
-	}
-
-	require.False(t, flagVisibleInUsage(flags.Lookup("memprofile"), true))
+	output := captureStdout(t, func() {
+		require.NoError(t, usageFunc(rootCmd))
+	})
+	flags.VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			require.NotContains(t, output, "--"+f.Name)
+			return
+		}
+		require.Contains(t, output, "--"+f.Name)
+	})
+	require.Contains(t, output, "[advanced]")
+	require.NotContains(t, output, "--help-all")
 }
 
 func TestUsageIntroAndPromptSyntax(t *testing.T) {
-	withTestConfig(t, Config{HelpAll: false}, func() {
+	withTestConfig(t, Config{}, func() {
 		output := captureStdout(t, func() {
 			require.NoError(t, usageFunc(rootCmd))
 		})
@@ -505,22 +510,36 @@ func TestUsageIntroAndPromptSyntax(t *testing.T) {
 	})
 }
 
-func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
-	groups := groupedUsageFlags(rootCmd.Flags(), true)
-	require.True(t, groupHasFlag(groups, flagCategorySession, "continue"))
-	require.True(t, groupHasFlag(groups, flagCategorySession, "no-save"))
-	require.True(t, groupHasFlag(groups, flagCategoryMCP, "list-mcps"))
-	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
-	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
-	require.True(t, groupHasFlag(groups, flagCategoryToolsReview, "review-mode"))
-	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "skills-dirs"))
-	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "list-skills"))
-	require.False(t, groupHasFlag(groups, flagCategoryInputOutput, "hide-tool-results"))
-	require.False(t, groupHasFlag(groups, flagCategoryToolsReview, "review"))
+func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
+	groups := groupedUsageFlags(rootCmd.Flags())
+	require.Empty(t, groups[flagCategoryOther])
 
-	for category, flags := range groups {
-		require.False(t, groupHasFlag(map[string][]*pflag.Flag{category: flags}, category, "memprofile"))
+	seen := make(map[string]int)
+	for _, category := range flagCategorySpecs {
+		flags := groups[category.Name]
+		names := make([]string, 0, len(flags))
+		for _, f := range flags {
+			names = append(names, f.Name)
+			seen[f.Name]++
+			require.Equal(t, category.Name, flagCategory(f))
+		}
+		require.Equal(t, category.Flags, names, category.Name)
 	}
+
+	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if !f.Hidden {
+			require.Equal(t, 1, seen[f.Name], f.Name)
+		}
+	})
+}
+
+func TestHelpUsesWorkspaceAndReviewCategory(t *testing.T) {
+	groups := groupedUsageFlags(rootCmd.Flags())
+	require.True(t, groupHasFlag(groups, flagCategoryWorkspaceReview, "workspace"))
+	require.True(t, groupHasFlag(groups, flagCategoryWorkspaceReview, "review-mode"))
+	require.True(t, groupHasFlag(groups, flagCategoryToolsIntegrations, "skills-dirs"))
+	require.True(t, groupHasFlag(groups, flagCategoryToolsIntegrations, "list-skills"))
+	require.True(t, groupHasFlag(groups, flagCategoryToolsIntegrations, "list-tools"))
 }
 
 func TestListSkillsIsMutuallyExclusiveWithSessionActions(t *testing.T) {

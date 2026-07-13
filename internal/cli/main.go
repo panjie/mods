@@ -78,7 +78,7 @@ var (
 			debug.SetEnabled(config.Debug)
 			config.Prefix = RemoveWhitespace(strings.Join(args, " "))
 
-			if config.ShowHelp || config.HelpAll {
+			if config.ShowHelp {
 				return cmd.Usage()
 			}
 
@@ -147,7 +147,6 @@ func initFlags() {
 	regBool(flags, &config.ShowToolResults, "show-tool-results", "", config.ShowToolResults)
 	regBool(flags, &config.ShowTokenUsage, "show-token-usage", "", config.ShowTokenUsage)
 	regBool(flags, &config.ShowHelp, "help", "h", false)
-	regBool(flags, &config.HelpAll, "help-all", "", false)
 	regBool(flags, &config.Version, "version", "v", false)
 	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)
 	regBool(flags, &config.NoLimit, "no-limit", "", config.NoLimit)
@@ -203,46 +202,7 @@ func initFlags() {
 		"no-save",
 		"no-instructions",
 	)
-	markCategory(flags, flagCategoryModelAPI, "api", "model", "ask-model", "http-proxy")
-	markCategory(
-		flags,
-		flagCategorySession,
-		flagListSessions,
-		flagChat,
-		"continue",
-		"continue-last",
-		"no-save",
-		"no-instructions",
-	)
-	markCategory(
-		flags,
-		flagCategoryInputOutput,
-		"format",
-		"minimal",
-		"raw",
-		"hide-tool-status",
-		"show-tool-results",
-		"word-wrap",
-		"workspace",
-		"editor",
-		"image",
-		"stdin-image",
-		"clipboard-image",
-	)
-	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "skills-dirs", "reset-settings", "help", "help-all", "version", flagListPrompts, flagListSkills)
-	markCategory(flags, flagCategoryRoles, "role", "list-roles")
-	markCategory(flags, flagCategoryWebSearch, "web-search")
-	markCategory(flags, flagCategoryToolsReview, "plan", "think", "review-mode", "max-tool-rounds")
-	markCategory(flags, flagCategoryMCP, "list-mcps", "list-tools", "enable-mcp", "disable-mcp")
-	markCategory(
-		flags,
-		flagCategoryModelParams,
-		"max-retries",
-		"max-tokens",
-		"max-input-chars",
-		"no-limit",
-	)
-	markCategory(flags, flagCategoryDebug, "debug")
+	applyFlagCategories(flags)
 
 	for _, name := range sessionCompleteFlags {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -636,7 +596,6 @@ func persistSession(mods *Mods) (string, string, error) {
 func isNoArgs() bool {
 	return config.Prefix == "" &&
 		!config.ShowHelp &&
-		!config.HelpAll &&
 		!config.List &&
 		!config.Chat &&
 		!config.ListRoles &&
@@ -766,7 +725,7 @@ func isVersionOrHelpCmd(args []string) bool {
 		return false
 	}
 	for _, arg := range args[1:] {
-		if arg == "--version" || arg == "-v" || arg == "--help" || arg == "-h" || arg == "--help-all" {
+		if arg == "--version" || arg == "-v" || arg == "--help" || arg == "-h" {
 			return true
 		}
 	}

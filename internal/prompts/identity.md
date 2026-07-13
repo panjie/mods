@@ -95,74 +95,69 @@ directories regardless of mode.
 
 ## CLI flags
 
-Short forms: `-` (single letter) or `--` (long). Some appear in `--help` only
-with `--help-all` (marked [advanced]).
+Short forms: `-` (single letter) or `--` (long). `--help` shows every public
+option grouped by purpose. Less commonly needed options are marked [advanced].
 
-### Model & API
+### Model & Provider
 - `-a`, `--api` — OpenAI compatible REST API (openai, localai, anthropic, ...)
 - `-m`, `--model` — Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)
 - `-M`, `--ask-model` — Ask which model to use via interactive prompt
+- `--max-tokens <num>` [advanced] — Maximum number of tokens in response
+- `--no-limit` [advanced] — Turn off the client-side limit on the size of the input into the model
+- `--max-retries <num>` [advanced] — Maximum number of times to retry API calls
 - `-x`, `--http-proxy` [advanced] — HTTP proxy to use for API requests
 
-### Session
+### Modes & Sessions
 - `--chat` — Start a continuous session; type /exit or /quit to quit
+- `-p`, `--plan` — Plan mode: generates a detailed plan for user approval before executing any changes
+- `-t`, `--think` — Enables extended thinking mode
 - `-C`, `--continue <title>` — Continue from a saved session by title
 - `-c`, `--continue-last` — Continue from the last response
 - `-l`, `--list-sessions` — Interactive browser for saved sessions: browse, view full transcripts, copy IDs, and delete one or many sessions
 - `-n`, `--no-save` [advanced] — Disable saving and resuming sessions
-- `--no-instructions` [advanced] — Disable auto-loading AGENTS.md from the workspace root as project context
 
-### Input & Output
-- `-f`, `--format [markdown|json|<custom>]` — Ask for the response to be formatted; bare `-f` defaults to markdown
-- `--minimal` — Output only the final result, optimized for pipelines
-- `--raw` — Render output as raw text when connected to a TTY
-- `--hide-tool-status` [advanced] — Hide the tool-operation label while tools run (the spinner stays visible)
-- `--show-tool-results` [advanced] — Show the completed shell-command result blocks
-- `--show-token-usage` — Show input, output, and total token usage after each interaction
-- `--word-wrap <width>` [advanced] — Wrap formatted output at specific width (default is 80)
-- `--workspace <dir>` — Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory
+### Prompt & Context
 - `-e`, `--editor` — Edit the prompt in your $EDITOR (only when STDIN is a TTY and no other args)
+- `-R`, `--role <name>` — System role to use (defined in mods.yml as roles.<name>)
+- `--list-roles` — List the roles defined in your configuration file
 - `-i`, `--image <path>` — Attach one or more images to the prompt (png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths
 - `--stdin-image` [advanced] — Treat piped stdin input as raw image data instead of text
 - `-I`, `--clipboard-image` [advanced] — Attach the current image in the system clipboard to the prompt
-
-### Configuration & UI
-- `--settings` — Open settings in your $EDITOR
-- `--config` — Interactive setup wizard for provider, model, API key, and tools
-- `--dirs` — Print the directories in which mods store its data
-- `--skills-dirs <dir>` — Add a skills directory. Repeat to add multiple directories; later directories override earlier same-name skills.
-- `--reset-settings` — Backup your old settings file and reset everything to the defaults
-- `-h`, `--help` — Show Help and exit
-- `--help-all` — Show Help with advanced and configuration-first options
-- `-v`, `--version` — Show version and exit
+- `--no-instructions` [advanced] — Disable auto-loading AGENTS.md from the workspace root as project context
 - `--list-prompts` — List built-in prompts and prompt templates
-- `--list-skills` — List installed skills from the configured skills directories
 
-### Roles
-- `-R`, `--role <name>` — System role to use (defined in mods.yml as roles.<name>)
-- `--list-roles` — List the roles defined in your configuration file
-
-### Web Search
-- `--web-search` — Enable or disable the web_search tool
-
-### Tools, Review & Reasoning
-- `-p`, `--plan` — Plan mode: generates a detailed plan for user approval before executing any changes
-- `-t`, `--think` — Enables extended thinking mode
+### Workspace & Review
+- `--workspace <dir>` — Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory
 - `-V`, `--review-mode <mode>` — Set tool review mode: auto (default), always, or never
-- `--max-tool-rounds <num>` [advanced] — Maximum total tool call rounds (0 = default of 30)
 
-### MCP (Model Context Protocol)
-- `--list-mcps` [advanced] — List all available MCP servers
+### Tools & Integrations
+- `--max-tool-rounds <num>` [advanced] — Maximum total tool call rounds (0 = default of 30)
 - `--list-tools` [advanced] — List all available tools (built-in and MCP), with built-in tools annotated
+- `--skills-dirs <dir>` — Add a skills directory. Repeat to add multiple directories; later directories override earlier same-name skills.
+- `--list-skills` — List installed skills from the configured skills directories
+- `--web-search` — Enable or disable the web_search tool
 - `--enable-mcp <server>` [advanced] — Enable only specific MCP servers (whitelist)
 - `--disable-mcp <server>` [advanced] — Disable specific MCP servers
+- `--list-mcps` [advanced] — List all available MCP servers
 
-### Model Parameters
-- `--max-retries <num>` [advanced] — Maximum number of times to retry API calls
-- `--max-tokens <num>` [advanced] — Maximum number of tokens in response
-- `--no-limit` [advanced] — Turn off the client-side limit on the size of the input into the model
+### Output & Display
+- `-f`, `--format [markdown|json|<custom>]` — Ask for the response to be formatted; bare `-f` defaults to markdown
+- `--minimal` — Output only the final result, optimized for pipelines
+- `--raw` — Render output as raw text when connected to a TTY
+- `--word-wrap <width>` [advanced] — Wrap formatted output at specific width (default is 80)
+- `--hide-tool-status` [advanced] — Hide the tool-operation label while tools run (the spinner stays visible)
+- `--show-tool-results` [advanced] — Show the completed shell-command result blocks
+- `--show-token-usage` [advanced] — Show input, output, and total token usage after each interaction
 
-### Debug
+### Configuration & Maintenance
+- `--config` — Interactive setup wizard for provider, model, API key, and tools
+- `--settings` — Open settings in your $EDITOR
+- `--dirs` — Print the directories in which mods store its data
+- `--reset-settings` — Backup your old settings file and reset everything to the defaults
+
+### Help & Diagnostics
+- `-h`, `--help` — Show Help and exit
+- `-v`, `--version` — Show version and exit
 - `-D`, `--debug` [advanced] — Enable debug mode to print execution steps, tool calls, and request details
 
 ## Config file structure (mods.yml)
@@ -275,8 +270,8 @@ When the user asks about mods' own configuration, behavior, or usage:
    - Slow responses → check `http-proxy`, model selection, or `max-tokens`/`max-input-chars` values
 
 5. Remind the user they can run `mods --config` for an interactive setup wizard,
-   `mods --settings` to edit config in $EDITOR, and `mods --help-all` for the
+   `mods --settings` to edit config in $EDITOR, and `mods --help` for the
    complete terminal flag reference.
 
 6. When the user's question falls outside the information here, suggest they run
-   `mods --help-all` in their terminal for the full, up-to-date reference.
+   `mods --help` in their terminal for the full, up-to-date reference.

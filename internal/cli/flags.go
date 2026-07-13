@@ -10,31 +10,75 @@ const (
 )
 
 const (
-	flagCategoryModelAPI    = "Model & API"
-	flagCategorySession     = "Session"
-	flagCategoryInputOutput = "Input & Output"
-	flagCategoryConfigUI    = "Configuration & UI"
-	flagCategoryRoles       = "Roles"
-	flagCategoryWebSearch   = "Web Search"
-	flagCategoryToolsReview = "Tools, Review & Reasoning"
-	flagCategoryMCP         = "MCP"
-	flagCategoryModelParams = "Model Parameters"
-	flagCategoryDebug       = "Debug"
-	flagCategoryOther       = "Other"
+	flagCategoryModelProvider     = "Model & Provider"
+	flagCategoryModesSessions     = "Modes & Sessions"
+	flagCategoryPromptContext     = "Prompt & Context"
+	flagCategoryWorkspaceReview   = "Workspace & Review"
+	flagCategoryToolsIntegrations = "Tools & Integrations"
+	flagCategoryOutputDisplay     = "Output & Display"
+	flagCategoryConfigMaintenance = "Configuration & Maintenance"
+	flagCategoryHelpDiagnostics   = "Help & Diagnostics"
+	flagCategoryOther             = "Other"
 )
 
-var flagCategoryOrder = []string{
-	flagCategoryModelAPI,
-	flagCategorySession,
-	flagCategoryInputOutput,
-	flagCategoryConfigUI,
-	flagCategoryRoles,
-	flagCategoryWebSearch,
-	flagCategoryToolsReview,
-	flagCategoryMCP,
-	flagCategoryModelParams,
-	flagCategoryDebug,
-	flagCategoryOther,
+type flagCategorySpec struct {
+	Name  string
+	Flags []string
+}
+
+// flagCategorySpecs is the single source of truth for both category order and
+// flag order in --help. Keep every public flag here; groupedUsageFlags retains
+// an Other fallback so a newly added flag is still visible until categorized.
+var flagCategorySpecs = []flagCategorySpec{
+	{
+		Name: flagCategoryModelProvider,
+		Flags: []string{
+			"api", "model", "ask-model", "max-tokens", "no-limit",
+			"max-retries", "http-proxy",
+		},
+	},
+	{
+		Name: flagCategoryModesSessions,
+		Flags: []string{
+			flagChat, "plan", "think", flagContinue, flagContinueLast,
+			flagListSessions, "no-save",
+		},
+	},
+	{
+		Name: flagCategoryPromptContext,
+		Flags: []string{
+			"editor", "role", "list-roles", "image", "stdin-image",
+			"clipboard-image", "no-instructions", flagListPrompts,
+		},
+	},
+	{
+		Name:  flagCategoryWorkspaceReview,
+		Flags: []string{"workspace", "review-mode"},
+	},
+	{
+		Name: flagCategoryToolsIntegrations,
+		Flags: []string{
+			"max-tool-rounds", flagListTools, "skills-dirs", flagListSkills,
+			"web-search", "enable-mcp", "disable-mcp", flagListMCPs,
+		},
+	},
+	{
+		Name: flagCategoryOutputDisplay,
+		Flags: []string{
+			"format", "minimal", "raw", "word-wrap", "hide-tool-status",
+			"show-tool-results", "show-token-usage",
+		},
+	},
+	{
+		Name: flagCategoryConfigMaintenance,
+		Flags: []string{
+			flagConfig, flagSettings, "dirs", flagResetSettings,
+		},
+	},
+	{
+		Name:  flagCategoryHelpDiagnostics,
+		Flags: []string{"help", "version", "debug"},
+	},
 }
 
 // Names of session-action flags. These are the flags that select a single
@@ -152,15 +196,19 @@ func markCategory(flags *pflag.FlagSet, category string, names ...string) {
 	}
 }
 
-func flagVisibleInUsage(f *pflag.Flag, showAll bool) bool {
-	if f.Hidden {
-		return false
+func applyFlagCategories(flags *pflag.FlagSet) {
+	for _, category := range flagCategorySpecs {
+		markCategory(flags, category.Name, category.Flags...)
 	}
-	if showAll {
-		return true
-	}
-	return len(f.Annotations[flagTierAnnotation]) == 0 ||
-		f.Annotations[flagTierAnnotation][0] != flagTierAdvanced
+}
+
+func flagVisibleInUsage(f *pflag.Flag) bool {
+	return f != nil && !f.Hidden
+}
+
+func flagIsAdvanced(f *pflag.Flag) bool {
+	values := f.Annotations[flagTierAnnotation]
+	return len(values) > 0 && values[0] == flagTierAdvanced
 }
 
 func flagCategory(f *pflag.Flag) string {
@@ -171,14 +219,28 @@ func flagCategory(f *pflag.Flag) string {
 	return values[0]
 }
 
-func groupedUsageFlags(flags *pflag.FlagSet, showAll bool) map[string][]*pflag.Flag {
+func groupedUsageFlags(flags *pflag.FlagSet) map[string][]*pflag.Flag {
 	groups := make(map[string][]*pflag.Flag)
+	seen := make(map[string]struct{})
+	for _, category := range flagCategorySpecs {
+		for _, name := range category.Flags {
+			f := flags.Lookup(name)
+			if !flagVisibleInUsage(f) {
+				continue
+			}
+			groups[category.Name] = append(groups[category.Name], f)
+			seen[name] = struct{}{}
+		}
+	}
+
 	flags.VisitAll(func(f *pflag.Flag) {
-		if !flagVisibleInUsage(f, showAll) {
+		if !flagVisibleInUsage(f) {
 			return
 		}
-		category := flagCategory(f)
-		groups[category] = append(groups[category], f)
+		if _, ok := seen[f.Name]; ok {
+			return
+		}
+		groups[flagCategoryOther] = append(groups[flagCategoryOther], f)
 	})
 	return groups
 }

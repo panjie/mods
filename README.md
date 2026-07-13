@@ -362,11 +362,10 @@ apis:
 ```sh
 mods [OPTIONS] [PROMPT...]
 
-mods --help        # everyday options
-mods --help-all    # advanced and configuration-first options, grouped by purpose
-mods --config      # interactive setup wizard (recommended for new users)
-mods --settings    # open mods.yml in $EDITOR
-mods --dirs        # show where mods stores its data
+mods --help      # all options, grouped by purpose
+mods --config    # interactive setup wizard (recommended for new users)
+mods --settings  # open mods.yml in $EDITOR
+mods --dirs      # show where mods stores its data
 ```
 
 Most advanced defaults (model parameters, themes, MCP, debug, format hints)

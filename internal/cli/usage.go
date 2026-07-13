@@ -37,18 +37,7 @@ func usageFunc(cmd *cobra.Command) error {
 		useLine(),
 	)
 	fmt.Println("Options:")
-	showAll := config.HelpAll
-	if showAll {
-		printGroupedFlags(cmd)
-	} else {
-		printFlatFlags(cmd)
-	}
-	if !showAll {
-		fmt.Printf(
-			"\nUse %s to show advanced and configuration-first options.\n",
-			ui.StdoutStyles().InlineCode.Render("--help-all"),
-		)
-	}
+	printGroupedFlags(cmd)
 	if cmd.HasExample() {
 		fmt.Printf(
 			"\nExample:\n  %s\n  %s\n",
@@ -60,19 +49,15 @@ func usageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
-func printFlatFlags(cmd *cobra.Command) {
-	cmd.Flags().VisitAll(func(f *flag.Flag) {
-		if !flagVisibleInUsage(f, false) {
-			return
-		}
-		printFlag(f)
-	})
-}
-
 func printGroupedFlags(cmd *cobra.Command) {
-	groups := groupedUsageFlags(cmd.Flags(), true)
+	groups := groupedUsageFlags(cmd.Flags())
 	first := true
-	for _, category := range flagCategoryOrder {
+	categoryOrder := make([]string, 0, len(flagCategorySpecs)+1)
+	for _, category := range flagCategorySpecs {
+		categoryOrder = append(categoryOrder, category.Name)
+	}
+	categoryOrder = append(categoryOrder, flagCategoryOther)
+	for _, category := range categoryOrder {
 		flags := groups[category]
 		if len(flags) == 0 {
 			continue
@@ -89,11 +74,15 @@ func printGroupedFlags(cmd *cobra.Command) {
 }
 
 func printFlag(f *flag.Flag) {
+	description := ui.StdoutStyles().FlagDesc.Render(f.Usage)
+	if flagIsAdvanced(f) {
+		description += " " + ui.StdoutStyles().Comment.Render("[advanced]")
+	}
 	if f.Shorthand == "" {
 		fmt.Printf(
 			"  %-44s %s\n",
 			ui.StdoutStyles().Flag.Render("--"+f.Name),
-			ui.StdoutStyles().FlagDesc.Render(f.Usage),
+			description,
 		)
 		return
 	}
@@ -102,6 +91,6 @@ func printFlag(f *flag.Flag) {
 		ui.StdoutStyles().Flag.Render("-"+f.Shorthand),
 		ui.StdoutStyles().FlagComma,
 		ui.StdoutStyles().Flag.Render("--"+f.Name),
-		ui.StdoutStyles().FlagDesc.Render(f.Usage),
+		description,
 	)
 }

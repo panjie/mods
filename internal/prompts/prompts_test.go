@@ -75,7 +75,6 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"dirs",
 		"reset-settings",
 		"help",
-		"help-all",
 		"version",
 		"list-prompts",
 		"list-skills",

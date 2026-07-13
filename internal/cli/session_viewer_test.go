@@ -73,9 +73,11 @@ func TestViewerGutterUsesFixedWidthRoleMarkers(t *testing.T) {
 	}
 
 	dark := m.viewerGutter(viewport.GutterContext{Index: 0})
+	darkFlag := m.textStyles.Flag.GetForeground()
 	_, _ = m.Update(tea.BackgroundColorMsg{Color: color.White})
 	light := m.viewerGutter(viewport.GutterContext{Index: 0})
 	require.NotEqual(t, dark, light)
+	require.NotEqual(t, darkFlag, m.textStyles.Flag.GetForeground())
 }
 
 func TestSmartLiteralMatches(t *testing.T) {

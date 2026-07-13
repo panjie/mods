@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/ui"
 )
 
 // Session browser — an interactive TUI replacement for the old
@@ -42,10 +43,13 @@ const (
 
 // --- styles ---------------------------------------------------------------
 //
-// The data semantics (ID / muted meta / relative time) reuse StdoutStyles so
-// the browser reads as part of mods. The chrome (title bar, footer, overlay)
-// uses a dedicated palette anchored on the mods brand purple (#6C50FF) with a
-// pink accent for marks and a warm red for destructive actions.
+// The data semantics (ID / muted meta / relative time) use a model-owned copy
+// of the standard styles so the browser reads as part of mods. Do not call the
+// standalone StdoutStyles helper while Bubble Tea is running: it performs its
+// own terminal background query and would race Bubble Tea's input reader. The
+// chrome (title bar, footer, overlay) uses a dedicated palette anchored on the
+// mods brand purple (#6C50FF) with a pink accent for marks and a warm red for
+// destructive actions.
 
 type browserStyles struct {
 	titleBg, countBadge, markedBadge, status, markGlyph, selectedRow, markedRow,
@@ -168,7 +172,7 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 	if !ok {
 		return
 	}
-	styles := StdoutStyles()
+	styles := d.b.textStyles
 	width := m.Width()
 	selected := index == m.Index()
 	marked := d.b.marks[ci.conv.ID]
@@ -276,8 +280,9 @@ type browserModel struct {
 	state          browserState
 	confirmTargets []convItem
 
-	statusMsg string // transient feedback, cleared on the next key
-	styles    browserStyles
+	statusMsg  string // transient feedback, cleared on the next key
+	styles     browserStyles
+	textStyles ui.Styles
 }
 
 func newBrowserModel(sessions []Session) *browserModel {
@@ -291,7 +296,8 @@ func newBrowserModel(sessions []Session) *browserModel {
 		marks: map[string]bool{},
 		state: stateBrowsing,
 		width: 80, height: 24,
-		styles: makeBrowserStyles(true),
+		styles:     makeBrowserStyles(true),
+		textStyles: ui.MakeStyles(true),
 	}
 	delegate := &convDelegate{b: m}
 	m.delegate = delegate
@@ -334,6 +340,7 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		m.styles = makeBrowserStyles(msg.IsDark())
+		m.textStyles = ui.MakeStyles(msg.IsDark())
 		m.list.Styles = list.DefaultStyles(msg.IsDark())
 		m.list.FilterInput.SetVirtualCursor(false)
 		m.applyViewerStyles()
@@ -626,7 +633,7 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *browserModel) buildViewerHeader(ci convItem) string {
-	styles := StdoutStyles()
+	styles := m.textStyles
 	title := m.styles.viewerTitle.Render(ci.conv.Title)
 	id := styles.ShaHash.Render(ci.conv.ID)
 
@@ -791,7 +798,7 @@ func (m *browserModel) viewViewer() string {
 	case m.viewErr != "":
 		hint := m.styles.dangerTitle.Render(" couldn't load session ") + "\n\n" +
 			m.styles.empty.Render(m.viewErr) + "\n\n" +
-			StdoutStyles().Comment.Render("press esc to go back")
+			m.textStyles.Comment.Render("press esc to go back")
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center, hint)
 	case !m.viewerLoaded:
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
@@ -863,11 +870,11 @@ func (m *browserModel) viewFooter() string {
 			{"q", "quit"},
 		}
 	}
-	return renderHelp(m.width, pairs)
+	return m.renderHelp(pairs)
 }
 
 func (m *browserModel) viewConfirmPanel() string {
-	styles := StdoutStyles()
+	styles := m.textStyles
 	n := len(m.confirmTargets)
 	head := m.styles.dangerTitle.Render(fmt.Sprintf(" Delete %d session%s? ", n, plural(n)))
 
@@ -897,8 +904,8 @@ func (m *browserModel) viewConfirmPanel() string {
 
 // --- helpers -------------------------------------------------------------
 
-func renderHelp(width int, pairs [][2]string) string {
-	styles := StdoutStyles()
+func (m *browserModel) renderHelp(pairs [][2]string) string {
+	styles := m.textStyles
 	var segs []string
 	for _, p := range pairs {
 		if p[0] == "" {
@@ -911,11 +918,11 @@ func renderHelp(width int, pairs [][2]string) string {
 		segs = append(segs, seg)
 	}
 	s := strings.Join(segs, "   ")
-	if width > 0 && lipgloss.Width(s) > width {
-		s = ansi.Truncate(s, width, "…")
+	if m.width > 0 && lipgloss.Width(s) > m.width {
+		s = ansi.Truncate(s, m.width, "…")
 	}
-	if w := lipgloss.Width(s); w < width {
-		s += strings.Repeat(" ", width-w)
+	if w := lipgloss.Width(s); w < m.width {
+		s += strings.Repeat(" ", m.width-w)
 	}
 	return s
 }

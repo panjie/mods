@@ -220,6 +220,10 @@ mods --chat
 mods --chat --continue-last
 ```
 
+The session browser supports transcript search: open a session, press `/` to
+find text, use `n`/`N` to move between matches, and press `w` to toggle wrapping
+for code, logs, and tables.
+
 Use `--chat` for a terminal-native conversation when one prompt is not enough.
 The inline composer supports multi-line prompts: press `Enter` to send and
 `Ctrl+J` to add a new line. Type `/exit` or `/quit` (or press `Ctrl+C` while

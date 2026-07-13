@@ -13,7 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
 	timeago "github.com/caarlos0/timea.go"
-	"github.com/muesli/reflow/wordwrap"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/panjie/mods/internal/proto"
 )
@@ -50,7 +50,7 @@ const (
 type browserStyles struct {
 	titleBg, countBadge, markedBadge, status, markGlyph, selectedRow, markedRow,
 	cursor, dangerTitle, confirmBox, empty, viewerTitle, viewerRule,
-	roleUser, roleAssistant, roleSystem lipgloss.Style
+	roleUser, roleAssistant, roleSystem, highlight, selectedHighlight lipgloss.Style
 }
 
 func makeBrowserStyles(isDark bool) browserStyles {
@@ -115,6 +115,13 @@ func makeBrowserStyles(isDark bool) browserStyles {
 		roleSystem: lipgloss.NewStyle().
 			Foreground(lightDark(lipgloss.Color("#757575"), lipgloss.Color("#8A8A8A"))).
 			Italic(true),
+		highlight: lipgloss.NewStyle().
+			Background(lightDark(lipgloss.Color("#FFE58F"), lipgloss.Color("#665C00"))).
+			Foreground(lightDark(lipgloss.Color("#1F1F1F"), lipgloss.Color("#FFF8C5"))),
+		selectedHighlight: lipgloss.NewStyle().
+			Background(lipgloss.Color("#6C50FF")).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Bold(true),
 	}
 }
 
@@ -234,9 +241,9 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 // --- async messages ------------------------------------------------------
 
 type loadedContentMsg struct {
-	id      string
-	content string
-	err     error
+	id       string
+	messages []proto.Message
+	err      error
 }
 
 type deletedMsg struct {
@@ -255,13 +262,14 @@ type browserModel struct {
 	list     list.Model
 	delegate *convDelegate
 
-	viewport      viewport.Model
-	viewing       convItem
-	viewerHeader  string
-	rawContent    string
-	viewerContent string
-	viewerLoaded  bool
-	viewErr       string
+	viewport     viewport.Model
+	viewing      convItem
+	viewerHeader string
+	viewerDoc    transcriptDocument
+	viewerLayout transcriptLayout
+	viewerSearch viewerSearch
+	viewerLoaded bool
+	viewErr      string
 
 	marks map[string]bool
 
@@ -289,7 +297,7 @@ func newBrowserModel(sessions []Session) *browserModel {
 	m.delegate = delegate
 	m.list = list.New(items, delegate, m.width, m.height-browserTitleHeight-browserFooterHeight)
 	configureList(&m.list)
-	m.viewport = viewport.New(viewport.WithWidth(m.width), viewport.WithHeight(m.height-browserTitleHeight-browserFooterHeight))
+	m.resetViewerViewport(m.height - browserTitleHeight - browserFooterHeight)
 	return m
 }
 
@@ -328,16 +336,19 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.styles = makeBrowserStyles(msg.IsDark())
 		m.list.Styles = list.DefaultStyles(msg.IsDark())
 		m.list.FilterInput.SetVirtualCursor(false)
+		m.applyViewerStyles()
 		return m, nil
 	case tea.WindowSizeMsg:
+		anchor := m.captureViewerAnchor()
 		m.width, m.height = msg.Width, msg.Height
 		m.list.SetSize(m.width, m.bodyHeight())
 		headerH := lipgloss.Height(m.viewerHeader)
 		m.viewport.SetWidth(m.width)
 		m.viewport.SetHeight(max(1, m.height-headerH-browserFooterHeight))
-		if m.rawContent != "" && m.state == stateViewing {
-			m.viewerContent = renderTranscript(m.rawContent, m.width)
-			m.viewport.SetContent(m.viewerContent)
+		m.viewerSearch.resize(m.width)
+		if m.state == stateViewing && m.viewerDoc.content != "" {
+			m.rebuildViewerLayout()
+			m.restoreViewerAnchor(anchor)
 		}
 		return m, nil
 
@@ -346,6 +357,12 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case deletedMsg:
 		return m.handleDeleted(msg)
+
+	case tea.MouseWheelMsg:
+		if m.state == stateViewing {
+			return m.updateViewerMouse(msg)
+		}
+		return m, nil
 
 	case tea.KeyMsg:
 		// ctrl+c always quits, regardless of sub-state.
@@ -508,12 +525,13 @@ func (m *browserModel) openViewer() (tea.Model, tea.Cmd) {
 	m.state = stateViewing
 	m.viewing = ci
 	m.viewErr = ""
-	m.viewerContent = ""
-	m.rawContent = ""
+	m.viewerDoc = transcriptDocument{}
+	m.viewerLayout = transcriptLayout{}
+	m.viewerSearch = newViewerSearch(m.width)
 	m.viewerLoaded = false
 	m.viewerHeader = m.buildViewerHeader(ci)
 	headerH := lipgloss.Height(m.viewerHeader)
-	m.viewport = viewport.New(viewport.WithWidth(m.width), viewport.WithHeight(max(1, m.height-headerH-browserFooterHeight)))
+	m.resetViewerViewport(m.height - headerH - browserFooterHeight)
 	return m, m.loadContent(ci.conv.ID)
 }
 
@@ -521,8 +539,9 @@ func (m *browserModel) closeViewer() {
 	m.state = stateBrowsing
 	m.viewing = convItem{}
 	m.viewerHeader = ""
-	m.viewerContent = ""
-	m.rawContent = ""
+	m.viewerDoc = transcriptDocument{}
+	m.viewerLayout = transcriptLayout{}
+	m.viewerSearch = viewerSearch{}
 	m.viewerLoaded = false
 	m.viewErr = ""
 }
@@ -533,7 +552,7 @@ func (m *browserModel) loadContent(id string) tea.Cmd {
 		if err := m.db.ReadMessages(id, &msgs); err != nil {
 			return loadedContentMsg{id: id, err: err}
 		}
-		return loadedContentMsg{id: id, content: proto.Session(msgs).String()}
+		return loadedContentMsg{id: id, messages: msgs}
 	}
 }
 
@@ -541,44 +560,69 @@ func (m *browserModel) handleLoaded(msg loadedContentMsg) (tea.Model, tea.Cmd) {
 	m.viewerLoaded = true
 	if msg.err != nil {
 		m.viewErr = msg.err.Error()
-		m.viewerContent = ""
+		m.viewerDoc = transcriptDocument{}
 		return m, nil
 	}
-	m.rawContent = msg.content
-	m.viewerContent = renderTranscript(msg.content, m.width)
-	m.viewport.SetContent(m.viewerContent)
-	m.viewport.GotoTop()
+	m.viewerDoc = buildTranscriptDocument(msg.messages)
+	m.viewport.SetContent(m.viewerDoc.content)
+	m.rebuildViewerLayout()
+	m.viewport.SetYOffset(0)
 	m.viewErr = ""
 	return m, nil
 }
 
 func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.viewerSearch.active {
+		return m.updateViewerSearch(msg)
+	}
 	switch msg.String() {
 	case "q", "esc":
 		m.closeViewer()
 		return m, nil
+	case "/":
+		if m.viewerLoaded && m.viewerDoc.content != "" {
+			return m, m.beginViewerSearch()
+		}
+		return m, nil
+	case "n":
+		m.moveViewerHighlight(1)
+		return m, nil
+	case "N":
+		m.moveViewerHighlight(-1)
+		return m, nil
+	case "w":
+		m.toggleViewerWrap()
+		return m, nil
 	case "j", "down":
-		m.viewport.ScrollDown(1)
+		m.scrollViewer(1)
 		return m, nil
 	case "k", "up":
-		m.viewport.ScrollUp(1)
+		m.scrollViewer(-1)
 		return m, nil
 	case "pgdown", "f":
-		m.viewport.PageDown()
+		m.scrollViewer(m.viewport.Height())
 		return m, nil
 	case "pgup", "b":
-		m.viewport.PageUp()
+		m.scrollViewer(-m.viewport.Height())
 		return m, nil
 	case "g":
-		m.viewport.GotoTop()
+		m.viewport.SetYOffset(0)
 		return m, nil
 	case "G":
-		m.viewport.GotoBottom()
+		m.viewport.SetYOffset(max(0, m.viewport.TotalLineCount()-m.viewport.Height()))
+		return m, nil
+	case "h", "left":
+		if !m.viewport.SoftWrap {
+			m.viewport.ScrollLeft(viewerHorizontalStep)
+		}
+		return m, nil
+	case "l", "right":
+		if !m.viewport.SoftWrap {
+			m.viewport.ScrollRight(viewerHorizontalStep)
+		}
 		return m, nil
 	}
-	nvp, cmd := m.viewport.Update(msg)
-	m.viewport = nvp
-	return m, cmd
+	return m, nil
 }
 
 func (m *browserModel) buildViewerHeader(ci convItem) string {
@@ -682,6 +726,9 @@ func (m *browserModel) View() tea.View {
 	}
 	view := tea.NewView(content)
 	view.AltScreen = true
+	if m.state == stateViewing {
+		view.MouseMode = tea.MouseModeCellMotion
+	}
 	if m.state == stateBrowsing && m.list.FilterState() == list.Filtering {
 		if cursor := m.list.FilterInput.Cursor(); cursor != nil {
 			copy := *cursor
@@ -692,6 +739,12 @@ func (m *browserModel) View() tea.View {
 				m.list.Styles.TitleBar.GetMarginTop() +
 				m.list.Styles.TitleBar.GetBorderTopSize() +
 				m.list.Styles.TitleBar.GetPaddingTop()
+			view.Cursor = &copy
+		}
+	} else if m.state == stateViewing && m.viewerSearch.active {
+		if cursor := m.viewerSearch.input.Cursor(); cursor != nil {
+			copy := *cursor
+			copy.Y += max(0, m.height-browserFooterHeight)
 			view.Cursor = &copy
 		}
 	}
@@ -743,7 +796,7 @@ func (m *browserModel) viewViewer() string {
 	case !m.viewerLoaded:
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
 			m.styles.empty.Render("Loading…"))
-	case m.viewerContent == "":
+	case m.viewerDoc.content == "":
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
 			m.styles.empty.Render("This session has no messages."))
 	default:
@@ -779,14 +832,19 @@ func (m *browserModel) viewFooter() string {
 	var pairs [][2]string
 	switch m.state {
 	case stateViewing:
+		if m.viewerSearch.active {
+			return m.viewerSearch.view(m.width)
+		}
 		total := m.viewport.TotalLineCount()
 		pct := int(m.viewport.ScrollPercent() * 100) //nolint:mnd
 		pos := fmt.Sprintf("%d%% of %d lines", pct, total)
 		pairs = [][2]string{
+			{m.viewerSearch.summary(pos), ""},
 			{"↑↓/jk", "scroll"},
-			{"g/G", "top/bottom"},
+			{"/", "find"},
+			{"n/N", "match"},
+			{"w", m.viewerWrapLabel()},
 			{"q / esc", "back"},
-			{pos, ""},
 		}
 	case stateConfirm:
 		pairs = [][2]string{
@@ -853,6 +911,9 @@ func renderHelp(width int, pairs [][2]string) string {
 		segs = append(segs, seg)
 	}
 	s := strings.Join(segs, "   ")
+	if width > 0 && lipgloss.Width(s) > width {
+		s = ansi.Truncate(s, width, "…")
+	}
 	if w := lipgloss.Width(s); w < width {
 		s += strings.Repeat(" ", width-w)
 	}
@@ -863,22 +924,6 @@ func (m *browserModel) emptyState(width, height int) string {
 	msg := "No sessions.\n\nPress q to exit."
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
 		m.styles.empty.Render(msg))
-}
-
-// renderTranscript colorizes the role prefixes that proto.Session emits
-// and word-wraps to the viewport width for comfortable reading. It is kept
-// lightweight on purpose: a faithful, readable transcript beats a heavy
-// markdown pass here.
-func renderTranscript(raw string, width int) string {
-	if width < 10 { //nolint:mnd
-		width = 10
-	}
-	s := raw
-	styles := makeBrowserStyles(true)
-	s = strings.ReplaceAll(s, "**System**: ", styles.roleSystem.Render("system")+": ")
-	s = strings.ReplaceAll(s, "**User**: ", styles.roleUser.Render("user")+": ")
-	s = strings.ReplaceAll(s, "**Assistant**: ", styles.roleAssistant.Render("assistant")+": ")
-	return wordwrap.String(s, width)
 }
 
 func truncateRune(s string, max int) string {

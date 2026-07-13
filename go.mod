@@ -24,7 +24,6 @@ require (
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-localereader v0.0.1
-	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
 	github.com/openai/openai-go v1.12.0
 	github.com/spf13/cobra v1.10.2

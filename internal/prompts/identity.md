@@ -113,7 +113,7 @@ option grouped by purpose. Less commonly needed options are marked [advanced].
 - `-t`, `--think` — Enables extended thinking mode
 - `-C`, `--continue <title>` — Continue from a saved session by title
 - `-c`, `--continue-last` — Continue from the last response
-- `-l`, `--list-sessions` — Interactive browser for saved sessions: browse, view full transcripts, copy IDs, and delete one or many sessions
+- `-l`, `--list-sessions` — Interactive browser for saved sessions: browse, search and highlight transcript text (`/`, then `n`/`N`), toggle wrapping (`w`), copy IDs, and delete one or many sessions
 - `-n`, `--no-save` [advanced] — Disable saving and resuming sessions
 
 ### Prompt & Context

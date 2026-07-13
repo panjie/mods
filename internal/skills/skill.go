@@ -1,6 +1,6 @@
 // Package skills scans user-defined skill directories and renders the
-// system-prompt catalog. A skill is a directory under the configured
-// skills-dir containing a SKILL.md file with YAML frontmatter (name,
+// system-prompt catalog. A skill is a directory under a configured
+// skills directory containing a SKILL.md file with YAML frontmatter (name,
 // description) and a markdown body. Unknown frontmatter fields are
 // ignored so mods stays compatible with the broader Claude Skills
 // ecosystem (license, requires, etc.) without understanding them.
@@ -20,7 +20,7 @@ type Skill struct {
 	Name        string // frontmatter.name, or directory name fallback
 	Description string // frontmatter.description, or "(no description)" fallback
 	Body        string // markdown body after frontmatter (content of SKILL.md)
-	Dir         string // absolute path of the skill directory (for auxiliary file reads)
+	Dir         string // path of the skill directory as scanned (for auxiliary file reads)
 }
 
 // Scan walks dir for */SKILL.md (one level, non-recursive) and returns
@@ -74,9 +74,40 @@ func Scan(dir string) ([]Skill, error) {
 	return result, nil
 }
 
+// ScanDirs scans multiple skills directories, with later directories
+// overriding earlier same-name skills. The returned catalog is sorted by name.
+func ScanDirs(dirs []string) ([]Skill, error) {
+	byName := make(map[string]Skill)
+	for _, dir := range dirs {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		catalog, err := Scan(dir)
+		if err != nil {
+			return nil, err
+		}
+		for _, skill := range catalog {
+			if prev, ok := byName[skill.Name]; ok {
+				debug.Printf("skills: name collision %q (dir %q overwrites %q)", skill.Name, skill.Dir, prev.Dir)
+			}
+			byName[skill.Name] = skill
+		}
+	}
+	if len(byName) == 0 {
+		return nil, nil
+	}
+	result := make([]Skill, 0, len(byName))
+	for _, skill := range byName {
+		result = append(result, skill)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result, nil
+}
+
 // parseSkill parses SKILL.md content into a Skill. dir is the absolute
-// path of the skill directory (stored on Skill.Dir for auxiliary file
-// reads). The directory name is the fallback for a missing frontmatter
+// path of the skill directory as scanned (stored on Skill.Dir for auxiliary
+// file reads). The directory name is the fallback for a missing frontmatter
 // name.
 func parseSkill(content, dir string) (Skill, error) {
 	skill := Skill{Dir: dir}

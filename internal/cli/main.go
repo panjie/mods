@@ -76,7 +76,6 @@ var (
 		Example:       randomExample(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			debug.SetEnabled(config.Debug)
-			config.SkillsDir = NormalizeSkillsDir(config.SkillsDir)
 			config.Prefix = RemoveWhitespace(strings.Join(args, " "))
 
 			if config.ShowHelp || config.HelpAll {
@@ -155,7 +154,7 @@ func initFlags() {
 	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
-	regStr(flags, &config.SkillsDir, "skills-dir", "", config.SkillsDir)
+	regStrArr(flags, &config.SkillsDirs, "skills-dirs", "", config.SkillsDirs)
 	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
 	regBool(flags, &config.NoInstructions, "no-instructions", "", config.NoInstructions)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
@@ -230,7 +229,7 @@ func initFlags() {
 		"stdin-image",
 		"clipboard-image",
 	)
-	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "skills-dir", "reset-settings", "help", "help-all", "version", flagListPrompts, flagListSkills)
+	markCategory(flags, flagCategoryConfigUI, "settings", "config", "dirs", "skills-dirs", "reset-settings", "help", "help-all", "version", flagListPrompts, flagListSkills)
 	markCategory(flags, flagCategoryRoles, "role", "list-roles")
 	markCategory(flags, flagCategoryWebSearch, "web-search")
 	markCategory(flags, flagCategoryToolsReview, "plan", "think", "review-mode", "max-tool-rounds")

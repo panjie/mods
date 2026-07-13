@@ -72,7 +72,7 @@ func TestBuildRegistryRegistersLoadSkillWhenCatalogNonEmpty(t *testing.T) {
 	require.Len(t, catalog, 1)
 
 	cfg := cfgpkg.Default()
-	cfg.SkillsDir = root
+	cfg.SkillsDirs = []string{root}
 	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", catalog)
 	require.NoError(t, err)
 	_, ok := reg.Tool("load_skill")

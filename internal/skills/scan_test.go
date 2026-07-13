@@ -120,6 +120,28 @@ func TestScanNonexistentDirReturnsNilNoError(t *testing.T) {
 	require.Nil(t, skills)
 }
 
+func TestScanDirsMergesAndLaterDirsOverride(t *testing.T) {
+	first := t.TempDir()
+	second := t.TempDir()
+	writeSkill(t, first, "shared", "---\nname: shared\ndescription: Shared from first.\n---\n\nfirst body\n")
+	writeSkill(t, first, "alpha", "---\nname: alpha\ndescription: Alpha skill.\n---\n\nalpha body\n")
+	writeSkill(t, second, "shared", "---\nname: shared\ndescription: Shared from second.\n---\n\nsecond body\n")
+	writeSkill(t, second, "beta", "---\nname: beta\ndescription: Beta skill.\n---\n\nbeta body\n")
+
+	got, err := ScanDirs([]string{first, second})
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	require.Equal(t, []string{"alpha", "beta", "shared"}, []string{got[0].Name, got[1].Name, got[2].Name})
+	require.Equal(t, "Shared from second.", got[2].Description)
+	require.Equal(t, filepath.Join(second, "shared"), got[2].Dir)
+}
+
+func TestScanDirsMissingDirsAreIgnored(t *testing.T) {
+	got, err := ScanDirs([]string{filepath.Join(t.TempDir(), "missing")})
+	require.NoError(t, err)
+	require.Nil(t, got)
+}
+
 func TestScanSkipsDirsLackingSkillMd(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "no-skill"), 0o700))

@@ -142,7 +142,7 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 		return nil
 	}
 	if config.ListSkills {
-		return listSkills(mods, config.SkillsDir)
+		return listSkills(mods, config.ResolveSkillsDirs())
 	}
 	if config.List {
 		return listSessions(config.Raw)

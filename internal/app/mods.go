@@ -126,8 +126,8 @@ type Mods struct {
 	feedbackInput textinput.Model
 	feedbackMode  bool
 
-	// skillCatalog is the result of skills.Scan(cfg.SkillsDir) at New()
-	// time. Empty when the skills directory is absent or has no skills;
+	// skillCatalog is the result of skills.ScanDirs(cfg.ResolveSkillsDirs()) at New()
+	// time. Empty when the skills directories are absent or have no skills;
 	// in that case no catalog is injected and load_skill is not
 	// registered. See docs/superpowers/specs/2026-07-06-skills-system-design.md.
 	skillCatalog []skills.Skill
@@ -152,11 +152,12 @@ func New(
 	}
 	vp := viewport.New(0, 0)
 	vp.GotoBottom()
-	skillCatalog, scanErr := skills.Scan(cfg.SkillsDir)
+	skillDirs := cfg.ResolveSkillsDirs()
+	skillCatalog, scanErr := skills.ScanDirs(skillDirs)
 	if scanErr != nil {
-		debug.Printf("skills: scan %q failed: %v (proceeding with empty catalog)", cfg.SkillsDir, scanErr)
+		debug.Printf("skills: scan %v failed: %v (proceeding with empty catalog)", skillDirs, scanErr)
 	}
-	debug.Printf("Skills: loaded %d skill(s) from %s", len(skillCatalog), cfg.SkillsDir)
+	debug.Printf("Skills: loaded %d skill(s) from %v", len(skillCatalog), skillDirs)
 	return &Mods{
 		Styles:              ui.MakeStylesWithTheme(r, cfg.Theme),
 		glam:                gr,

@@ -513,7 +513,7 @@ func TestHelpAllGroupsFlagsByCategory(t *testing.T) {
 	require.True(t, groupHasFlag(groups, flagCategoryModelParams, "max-tokens"))
 	require.True(t, groupHasFlag(groups, flagCategoryInputOutput, "show-tool-results"))
 	require.True(t, groupHasFlag(groups, flagCategoryToolsReview, "review-mode"))
-	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "skills-dir"))
+	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "skills-dirs"))
 	require.True(t, groupHasFlag(groups, flagCategoryConfigUI, "list-skills"))
 	require.False(t, groupHasFlag(groups, flagCategoryInputOutput, "hide-tool-results"))
 	require.False(t, groupHasFlag(groups, flagCategoryToolsReview, "review"))
@@ -560,12 +560,13 @@ func TestAdvancedFlagsStillParse(t *testing.T) {
 	})
 }
 
-func TestSkillsDirFlagOverridesConfig(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{SkillsDir: "/from-config"}}, func() {
-		dir := filepath.Join(t.TempDir(), "skills")
-		require.NoError(t, rootCmd.Flags().Set("skills-dir", dir))
-
-		require.Equal(t, dir, config.SkillsDir)
+func TestSkillsDirsFlagAppendsMultipleDirs(t *testing.T) {
+	withTestConfig(t, Config{}, func() {
+		require.Nil(t, rootCmd.Flags().Lookup("skills-dir"))
+		require.NotNil(t, rootCmd.Flags().Lookup("skills-dirs"))
+		require.NoError(t, rootCmd.Flags().Set("skills-dirs", "/one"))
+		require.NoError(t, rootCmd.Flags().Set("skills-dirs", "/two"))
+		require.Equal(t, []string{"/one", "/two"}, config.SkillsDirs)
 	})
 }
 

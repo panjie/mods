@@ -59,7 +59,7 @@ var Help = map[string]string{
 	"roles":                  "List of predefined system messages that can be used as roles",
 	"list-roles":             "List the roles defined in your configuration file",
 	"list-prompts":           "List built-in prompts and prompt templates",
-	"list-skills":            "List installed skills from the configured skills directory",
+	"list-skills":            "List installed skills from the configured skills directories",
 	"prompts":                "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":                    "Render output as raw text when connected to a TTY",
 	"hide-tool-status":       "Hide the tool-operation label while tools run (the spinner stays visible)",
@@ -103,7 +103,7 @@ var Help = map[string]string{
 	"think":                  "Enables extended thinking mode",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
-	"skills-dir":             "Directory containing installed skills (one subdirectory per skill, each with a SKILL.md). Defaults to ~/.agents/skills.",
+	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
@@ -227,7 +227,7 @@ type PersistentConfig struct {
 	Think               bool                       `yaml:"think" env:"THINK"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
-	SkillsDir           string                     `yaml:"skills-dir" env:"SKILLS_DIR"`
+	SkillsDirs          []string                   `yaml:"skills-dirs"`
 	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
@@ -426,8 +426,8 @@ func Ensure() (Config, error) {
 	c := Default()
 	applySessionDirDefault(&c)
 	applySessionDirDefault(&fallback)
-	applySkillsDirDefault(&c)
-	applySkillsDirDefault(&fallback)
+	applySkillsDirsDefault(&c)
+	applySkillsDirsDefault(&fallback)
 
 	sp, err := settingsFilePath()
 	if err != nil {
@@ -467,6 +467,9 @@ func Ensure() (Config, error) {
 	if err := env.ParseWithOptions(&c, env.Options{Prefix: "MODS_"}); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
 	}
+	if err := parseSkillsDirsEnv(&c); err != nil {
+		return fallback, modsError{Err: err, ReasonText: "Could not parse environment into settings file."}
+	}
 
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
@@ -474,7 +477,7 @@ func Ensure() (Config, error) {
 	validateReviewMode(&c)
 
 	applySessionDirDefault(&c)
-	applySkillsDirDefault(&c)
+	applySkillsDirsDefault(&c)
 
 	if err := os.MkdirAll(
 		c.SessionDir,
@@ -593,13 +596,51 @@ func NormalizeSkillsDir(path string) string {
 	return path
 }
 
-// applySkillsDirDefault ensures c.SkillsDir always points at a normalized
-// skills directory.
-func applySkillsDirDefault(c *Config) {
-	if c.SkillsDir == "" {
-		c.SkillsDir = defaultSkillsDir()
+func parseSkillsDirsEnv(c *Config) error {
+	value := os.Getenv("MODS_SKILLS_DIRS")
+	if value == "" {
+		return nil
 	}
-	c.SkillsDir = NormalizeSkillsDir(c.SkillsDir)
+	c.SkillsDirs = filepath.SplitList(value)
+	return nil
+}
+
+// applySkillsDirsDefault ensures c.SkillsDirs is a normalized ordered list
+// with the shared user-level skills directory as its empty/default value.
+func applySkillsDirsDefault(c *Config) {
+	if len(c.ResolveSkillsDirs()) == 0 {
+		c.SkillsDirs = []string{defaultSkillsDir()}
+		return
+	}
+	c.SkillsDirs = c.ResolveSkillsDirs()
+}
+
+func (c Config) ResolveSkillsDirs() []string {
+	raw := make([]string, 0, len(c.SkillsDirs))
+	raw = append(raw, c.SkillsDirs...)
+
+	last := make(map[string]int, len(raw))
+	normalized := make([]string, 0, len(raw))
+	for _, dir := range raw {
+		dir = stdstrings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		dir = NormalizeSkillsDir(dir)
+		normalized = append(normalized, dir)
+		last[dir] = len(normalized) - 1
+	}
+
+	result := normalized[:0]
+	for i, dir := range normalized {
+		if last[dir] == i {
+			result = append(result, dir)
+		}
+	}
+	if len(result) == 0 {
+		return []string{defaultSkillsDir()}
+	}
+	return result
 }
 
 func settingsFilePath() (string, error) {

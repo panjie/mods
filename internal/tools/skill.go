@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
 )
@@ -77,7 +78,7 @@ func readAuxFile(skillDir, file string) (string, error) {
 		return "", fmt.Errorf("invalid file path: %s", file)
 	}
 	// Reject absolute paths.
-	if filepath.IsAbs(file) {
+	if pathutil.IsAbs(file) {
 		return "", fmt.Errorf("invalid file path: %s", file)
 	}
 	cleaned := filepath.Clean(file)

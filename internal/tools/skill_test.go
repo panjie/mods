@@ -87,6 +87,23 @@ func TestLoadSkillAuxFile(t *testing.T) {
 	require.Equal(t, "Detail content.\n", got)
 }
 
+func TestLoadSkillAuxFileUsesOverridingSkillDir(t *testing.T) {
+	first, catalog1 := setupSkillFixture(t)
+	second := t.TempDir()
+	multiDir := filepath.Join(second, "multi")
+	require.NoError(t, os.MkdirAll(filepath.Join(multiDir, "reference"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "SKILL.md"), []byte("---\nname: multi\ndescription: Override multi.\n---\n\nOverride instructions.\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(multiDir, "reference", "detail.md"), []byte("Override detail.\n"), 0o600))
+
+	catalog, err := skills.ScanDirs([]string{first, second})
+	require.NoError(t, err)
+	require.NotEmpty(t, catalog1)
+
+	reg, _ := loadSkillTool(t, catalog)
+	got := callLoadSkill(t, reg, `{"name":"multi","file":"reference/detail.md"}`)
+	require.Equal(t, "Override detail.\n", got)
+}
+
 func TestLoadSkillAuxFileScript(t *testing.T) {
 	_, catalog := setupSkillFixture(t)
 	reg, _ := loadSkillTool(t, catalog)

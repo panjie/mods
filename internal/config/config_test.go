@@ -401,49 +401,62 @@ func TestCreateConfigFilePermissionsOnUnix(t *testing.T) {
 	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
-func TestSkillsDirDefault(t *testing.T) {
-	cfg := Default()
-	applySkillsDirDefault(&cfg)
-	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), cfg.SkillsDir)
+func TestResolveSkillsDirsDefault(t *testing.T) {
+	cfg := Config{}
+	applySkillsDirsDefault(&cfg)
+	require.Equal(t, []string{filepath.Join(xdg.Home, ".agents", "skills")}, cfg.ResolveSkillsDirs())
 }
 
-func TestSkillsDirEnvOverride(t *testing.T) {
-	t.Setenv("MODS_SKILLS_DIR", "/custom/skills/dir")
-	cfg := Default()
-	require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
-	applySkillsDirDefault(&cfg)
-	require.Equal(t, "/custom/skills/dir", cfg.SkillsDir)
+func TestResolveSkillsDirsDefaultWithoutApplyingDefaults(t *testing.T) {
+	cfg := Config{}
+	require.Equal(t, []string{filepath.Join(xdg.Home, ".agents", "skills")}, cfg.ResolveSkillsDirs())
 }
 
-func TestSkillsDirYAMLOverride(t *testing.T) {
-	dir := t.TempDir()
-	skillsDir := filepath.Join(dir, "from-yaml")
-	yamlContent := "skills-dir: " + skillsDir
+func TestResolveSkillsDirsYAMLOverride(t *testing.T) {
 	var cfg Config
-	require.NoError(t, yaml.Unmarshal([]byte(yamlContent), &cfg))
-	applySkillsDirDefault(&cfg)
-	require.Equal(t, skillsDir, cfg.SkillsDir)
+	require.NoError(t, yaml.Unmarshal([]byte("skills-dirs:\n  - ~/team-skills\n  - ./project-skills\n"), &cfg))
+	applySkillsDirsDefault(&cfg)
+	require.Equal(t, []string{
+		filepath.Join(xdg.Home, "team-skills"),
+		"./project-skills",
+	}, cfg.ResolveSkillsDirs())
 }
 
-func TestSkillsDirExpandsHome(t *testing.T) {
+func TestResolveSkillsDirsEnvPathList(t *testing.T) {
+	t.Setenv("MODS_SKILLS_DIRS", filepath.Join("env", "one")+string(os.PathListSeparator)+filepath.Join("env", "two"))
+	cfg := Default()
+	require.NoError(t, parseSkillsDirsEnv(&cfg))
+	applySkillsDirsDefault(&cfg)
+	require.Equal(t, []string{filepath.Join("env", "one"), filepath.Join("env", "two")}, cfg.ResolveSkillsDirs())
+}
+
+func TestResolveSkillsDirsIgnoresEmptyAndKeepsLastDuplicate(t *testing.T) {
+	cfg := Config{PersistentConfig: PersistentConfig{
+		SkillsDirs: []string{"/skills/global", "", "/skills/project", "/skills/global"},
+	}}
+	applySkillsDirsDefault(&cfg)
+	require.Equal(t, []string{"/skills/project", "/skills/global"}, cfg.ResolveSkillsDirs())
+}
+
+func TestSkillsDirLegacyKeyIsIgnored(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte("skills-dir: /legacy\n"), &cfg))
+	applySkillsDirsDefault(&cfg)
+	require.Equal(t, []string{filepath.Join(xdg.Home, ".agents", "skills")}, cfg.ResolveSkillsDirs())
+}
+
+func TestNormalizeSkillsDirExpandsHome(t *testing.T) {
 	require.Equal(t, xdg.Home, NormalizeSkillsDir("~"))
 	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), NormalizeSkillsDir("~/.agents/skills"))
 }
 
-func TestSkillsDirYAMLExpandsHome(t *testing.T) {
-	var cfg Config
-	require.NoError(t, yaml.Unmarshal([]byte("skills-dir: ~/.agents/skills\n"), &cfg))
-	applySkillsDirDefault(&cfg)
-	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), cfg.SkillsDir)
-}
-
-func TestSkillsDirLeavesRelativePathUnchanged(t *testing.T) {
+func TestNormalizeSkillsDirLeavesRelativePathUnchanged(t *testing.T) {
 	require.Equal(t, filepath.Join("relative", "skills"), NormalizeSkillsDir(filepath.Join("relative", "skills")))
 }
 
 func TestRemovedSkillSourcesYAMLIsIgnored(t *testing.T) {
 	var cfg Config
 	require.NoError(t, yaml.Unmarshal([]byte("skill-sources:\n  - url: https://example.com/skills.git\n"), &cfg))
-	applySkillsDirDefault(&cfg)
-	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), cfg.SkillsDir)
+	applySkillsDirsDefault(&cfg)
+	require.Equal(t, []string{filepath.Join(xdg.Home, ".agents", "skills")}, cfg.ResolveSkillsDirs())
 }

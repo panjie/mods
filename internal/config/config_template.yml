@@ -145,8 +145,10 @@ web-search-provider: duckduckgo
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
 
-# {{ index .Help "skills-dir" }}
-# skills-dir: ~/.agents/skills
+# {{ index .Help "skills-dirs" }}
+# skills-dirs:
+#   - ~/.agents/skills
+#   - ./project-skills
 
 # {{ index .Help "web-search-api-key-env" }}
 # web-search-api-key-env: TAVILY_API_KEY

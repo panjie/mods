@@ -9,22 +9,22 @@ import (
 	"github.com/panjie/mods/internal/skills"
 )
 
-var scanSkills = skills.Scan
+var scanSkills = skills.ScanDirs
 var renderSkillsMarkdown = func(mods *Mods, content string) (string, error) {
 	return mods.RenderMarkdown(content)
 }
 
-// listSkills prints the installed skills discovered in dir. A missing or
-// empty directory is a valid empty catalog; actual scan failures are errors.
-func listSkills(mods *Mods, dir string) error {
-	catalog, err := scanSkills(dir)
+// listSkills prints the installed skills discovered in dirs. Missing or
+// empty directories are a valid empty catalog; actual scan failures are errors.
+func listSkills(mods *Mods, dirs []string) error {
+	catalog, err := scanSkills(dirs)
 	if err != nil {
 		return modsError{
 			Err:        err,
-			ReasonText: "Could not scan skills directory.",
+			ReasonText: "Could not scan skills directories.",
 		}
 	}
-	markdown := skillsMarkdown(dir, catalog)
+	markdown := skillsMarkdown(dirs, catalog)
 	if !IsOutputTTY() || config.Raw {
 		fmt.Print(markdown)
 		return nil
@@ -41,10 +41,19 @@ func listSkills(mods *Mods, dir string) error {
 	return nil
 }
 
-func skillsMarkdown(dir string, catalog []skills.Skill) string {
+func skillsMarkdown(dirs []string, catalog []skills.Skill) string {
 	var sb strings.Builder
-	sb.WriteString("# Skills\n\nDirectory: ")
-	sb.WriteString(markdownInlineCode(dir))
+	sb.WriteString("# Skills\n\n")
+	if len(dirs) == 1 {
+		sb.WriteString("Directory: ")
+		sb.WriteString(markdownInlineCode(dirs[0]))
+	} else {
+		sb.WriteString("Directories:")
+		for _, dir := range dirs {
+			sb.WriteString("\n- ")
+			sb.WriteString(markdownInlineCode(dir))
+		}
+	}
 	sb.WriteString("\n\n")
 	if len(catalog) == 0 {
 		sb.WriteString("_No skills found._\n")

@@ -63,11 +63,12 @@ Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
 
 When the user's request matches an available skill's description, call the
 `load_skill` tool with that skill's name to load its full instructions, then
-follow them. By default, skills live in `~/.agents/skills/<name>/SKILL.md`;
-users can select another directory with `--skills-dir` or the `skills-dir`
-config key. mods only loads skills already installed in that directory; it
-does not search for or install skills. Loaded skill content stays in the
-conversation; do not reload the same skill twice.
+follow them. By default, skills live in `~/.agents/skills/<name>/SKILL.md`.
+Users can add directories with repeated `--skills-dirs`, the `skills-dirs`
+config key, or `MODS_SKILLS_DIRS` using the OS path-list separator (`;` on
+Windows, `:` on Unix). Later directories override earlier same-name skills. mods only loads skills
+already installed in those directories; it does not search for or install skills.
+Loaded skill content stays in the conversation; do not reload the same skill twice.
 
 Some skills reference auxiliary files in `scripts/` or `reference/`
 subdirectories (e.g. "see reference/foo.md"). When a skill's body tells you
@@ -129,12 +130,13 @@ with `--help-all` (marked [advanced]).
 - `--settings` — Open settings in your $EDITOR
 - `--config` — Interactive setup wizard for provider, model, API key, and tools
 - `--dirs` — Print the directories in which mods store its data
+- `--skills-dirs <dir>` — Add a skills directory. Repeat to add multiple directories; later directories override earlier same-name skills.
 - `--reset-settings` — Backup your old settings file and reset everything to the defaults
 - `-h`, `--help` — Show Help and exit
 - `--help-all` — Show Help with advanced and configuration-first options
 - `-v`, `--version` — Show version and exit
 - `--list-prompts` — List built-in prompts and prompt templates
-- `--list-skills` — List installed skills from the configured skills directory
+- `--list-skills` — List installed skills from the configured skills directories
 
 ### Roles
 - `-R`, `--role <name>` — System role to use (defined in mods.yml as roles.<name>)
@@ -188,6 +190,7 @@ Top-level keys:
 - `review-mode` (string) — review mode: auto, always, never
 - `think` (bool) — enable extended thinking by default
 - `shell-classify-prompt` (string) — legacy custom classifier prompt; prefer prompts.shell-classifier
+- `skills-dirs`: Directories containing installed skills. Defaults to `~/.agents/skills`. Later directories override earlier same-name skills.
 
 - `role` (string) — active role name
 - `roles` (map) — role name → list of system messages. Each message is either inline text or `file://path`

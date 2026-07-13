@@ -17,7 +17,7 @@ func TestListSkillsOutputsSortedCatalogAndSummary(t *testing.T) {
 	writeCLITestSkill(t, dir, "alpha", "Alpha skill. More detail that should be hidden.")
 
 	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(nil, dir))
+		require.NoError(t, listSkills(nil, []string{dir}))
 	})
 
 	require.Equal(t, "# Skills\n\nDirectory: `"+dir+"`\n\n- **alpha** — Alpha skill.\n- **zeta** — Zeta skill.\n\n_2 skills_\n", output)
@@ -39,25 +39,44 @@ func TestListSkillsEmptyCatalogSucceeds(t *testing.T) {
 	withListSkillsOutputTest(t, false, false)
 	for _, dir := range []string{t.TempDir(), filepath.Join(t.TempDir(), "missing")} {
 		output := captureStdout(t, func() {
-			require.NoError(t, listSkills(nil, dir))
+			require.NoError(t, listSkills(nil, []string{dir}))
 		})
 		require.Equal(t, "# Skills\n\nDirectory: `"+dir+"`\n\n_No skills found._\n", output)
 	}
 }
 
+func TestListSkillsUsesMergedDirectories(t *testing.T) {
+	withListSkillsOutputTest(t, false, false)
+	first := t.TempDir()
+	second := t.TempDir()
+	writeCLITestSkill(t, first, "shared", "Shared first.")
+	writeCLITestSkill(t, second, "shared", "Shared second.")
+	writeCLITestSkill(t, second, "project", "Project skill.")
+
+	output := captureStdout(t, func() {
+		require.NoError(t, listSkills(nil, []string{first, second}))
+	})
+
+	require.Contains(t, output, "Directories:")
+	require.Contains(t, output, "`"+first+"`")
+	require.Contains(t, output, "`"+second+"`")
+	require.Contains(t, output, "- **project** — Project skill.")
+	require.Contains(t, output, "- **shared** — Shared second.")
+}
+
 func TestListSkillsScanFailureReturnsError(t *testing.T) {
 	saved := scanSkills
-	scanSkills = func(string) ([]skills.Skill, error) {
+	scanSkills = func([]string) ([]skills.Skill, error) {
 		return nil, errors.New("permission denied")
 	}
 	t.Cleanup(func() { scanSkills = saved })
 
-	err := listSkills(nil, "/unreadable")
+	err := listSkills(nil, []string{"/unreadable"})
 
 	require.Error(t, err)
 	merr, ok := err.(modsError)
 	require.True(t, ok)
-	require.Equal(t, "Could not scan skills directory.", merr.ReasonText)
+	require.Equal(t, "Could not scan skills directories.", merr.ReasonText)
 	require.ErrorContains(t, merr.Err, "permission denied")
 }
 
@@ -71,7 +90,7 @@ func TestListSkillsRendersMarkdownForTTY(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(&Mods{}, dir))
+		require.NoError(t, listSkills(&Mods{}, []string{dir}))
 	})
 
 	require.Equal(t, "rendered skills\n", output)
@@ -87,7 +106,7 @@ func TestListSkillsRawSkipsMarkdownRenderer(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(&Mods{}, dir))
+		require.NoError(t, listSkills(&Mods{}, []string{dir}))
 	})
 	require.Contains(t, output, "# Skills\n")
 }
@@ -100,7 +119,7 @@ func TestListSkillsRenderFailureReturnsError(t *testing.T) {
 		return "", errors.New("render failed")
 	}
 
-	err := listSkills(&Mods{}, dir)
+	err := listSkills(&Mods{}, []string{dir})
 
 	require.Error(t, err)
 	merr, ok := err.(modsError)
@@ -109,7 +128,7 @@ func TestListSkillsRenderFailureReturnsError(t *testing.T) {
 }
 
 func TestSkillsMarkdownEscapesContent(t *testing.T) {
-	got := skillsMarkdown("/tmp/a`b", []skills.Skill{{
+	got := skillsMarkdown([]string{"/tmp/a`b"}, []skills.Skill{{
 		Name:        "a*b",
 		Description: "Use [docs] and <files>. More details.",
 	}})

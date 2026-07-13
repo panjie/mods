@@ -132,6 +132,8 @@ func newChatPromptModel() chatPromptModel {
 	input.Prompt = ""
 	input.ShowLineNumbers = false
 	input.EndOfBufferCharacter = ' '
+	input.DynamicHeight = true
+	input.MinHeight = chatMinHeight
 	input.MaxHeight = chatMaxHeight
 	input.KeyMap.InsertNewline = key.NewBinding(
 		key.WithKeys("enter"),
@@ -150,7 +152,6 @@ func newChatPromptModel() chatPromptModel {
 	inputStyles.Blurred = inputStyles.Focused
 	input.SetStyles(inputStyles)
 	input.SetVirtualCursor(false)
-	input.SetHeight(chatMinHeight)
 	input.SetWidth(chatDefaultWidth)
 	_ = input.Focus()
 	return chatPromptModel{textarea: input, width: chatDefaultWidth, isDark: true}
@@ -182,7 +183,6 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+y":
 			if m.killText != "" {
 				m.textarea.InsertString(m.killText)
-				m.resizeHeight()
 			}
 			return m, nil
 		}
@@ -196,7 +196,6 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.killText = removed
 		}
 	}
-	m.resizeHeight()
 	return m, cmd
 }
 
@@ -233,16 +232,6 @@ func (m *chatPromptModel) resize(width int) {
 	styles := makeChatStylesForTheme(m.isDark)
 	innerWidth := ui.InteractionPanelInnerWidth(styles.interaction, m.width)
 	m.textarea.SetWidth(innerWidth)
-	m.resizeHeight()
-}
-
-func (m *chatPromptModel) resizeHeight() {
-	lines := 0
-	innerWidth := max(1, m.textarea.Width())
-	for _, line := range strings.Split(m.textarea.Value(), "\n") {
-		lines += max(1, (lipgloss.Width(line)+innerWidth-1)/innerWidth)
-	}
-	m.textarea.SetHeight(min(chatMaxHeight, max(chatMinHeight, lines)))
 }
 
 func (m *chatPromptModel) applyStyles() {

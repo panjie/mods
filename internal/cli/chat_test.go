@@ -338,9 +338,13 @@ func TestChatPromptIgnoresBlankCtrlEnterAndCtrlCExits(t *testing.T) {
 
 func TestChatPromptResizesWithinBounds(t *testing.T) {
 	model := newChatPromptModel()
+	require.True(t, model.textarea.DynamicHeight)
+	require.Equal(t, chatMinHeight, model.textarea.MinHeight)
+	require.Equal(t, chatMaxHeight, model.textarea.MaxHeight)
+	require.Equal(t, chatMinHeight, model.textarea.Height())
+
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
 	model.textarea.SetValue(strings.Repeat("a long wrapped line ", 12))
-	model.resizeHeight()
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
 
 	for _, line := range strings.Split(model.View().Content, "\n") {
@@ -348,8 +352,20 @@ func TestChatPromptResizesWithinBounds(t *testing.T) {
 	}
 
 	model.textarea.SetValue("short")
-	model.resizeHeight()
 	require.Equal(t, chatMinHeight, model.textarea.Height())
+}
+
+func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
+	model := newChatPromptModel()
+	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
+	model = updateChatPrompt(t, model, tea.PasteMsg{Content: strings.Repeat("wrapped content ", 12)})
+	require.Equal(t, chatMaxHeight, model.textarea.Height())
+
+	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 120, Height: 20})
+	require.Equal(t, chatMinHeight, model.textarea.Height())
+
+	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
+	require.Equal(t, chatMaxHeight, model.textarea.Height())
 }
 
 func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
@@ -410,11 +426,9 @@ func TestChatPromptRealCursorTracksTextWrappingAndResize(t *testing.T) {
 	assertCursor()
 	model.textarea.SetValue("第一行\n第二行")
 	model.textarea.CursorEnd()
-	model.resizeHeight()
 	assertCursor()
 	model.textarea.SetValue(strings.Repeat("界", 30))
 	model.textarea.CursorEnd()
-	model.resizeHeight()
 	assertCursor()
 	model.resize(16)
 	assertCursor()

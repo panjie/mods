@@ -173,47 +173,189 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 		got := ansi.Strip(chatOutput.(*bytes.Buffer).String())
 		require.Contains(t, got, "MODS CHAT")
 		require.Contains(t, got, "openai / gpt-5")
-		require.Contains(t, got, "role: reviewer")
-		require.Contains(t, got, "YOU\n")
+		require.Contains(t, got, "reviewer")
+		require.Contains(t, got, "YOU")
 		require.Contains(t, got, "hello")
 		require.Contains(t, got, "MODS")
-		require.Contains(t, got, "saved · df31ae2")
+		require.Contains(t, got, "SAVED")
+		require.Contains(t, got, "df31ae2")
 		require.NotContains(t, got, "Session saved:")
 	})
 }
 
-func TestChatBannerHidesSecondaryMetadataWhenNarrow(t *testing.T) {
+func TestChatBannerWrapsMetadataWithoutRepeatingActions(t *testing.T) {
 	saveConfig := config
 	t.Cleanup(func() { config = saveConfig })
 	config.API = "anthropic"
 	config.Model = "claude-sonnet"
 	config.Role = "default"
 
-	wide := ansi.Strip(renderChatBanner(80))
-	require.Contains(t, wide, "anthropic / claude-sonnet")
-	require.NotContains(t, wide, "role:")
-
-	narrow := ansi.Strip(renderChatBanner(30))
-	require.Contains(t, narrow, "MODS CHAT")
-	require.NotContains(t, narrow, "claude-sonnet")
-	require.Contains(t, narrow, "Enter send")
+	for _, width := range []int{28, 30, 60, 80, 120} {
+		rendered := renderChatBanner(width)
+		for _, line := range strings.Split(rendered, "\n") {
+			require.LessOrEqual(t, lipgloss.Width(line), width, line)
+		}
+		plain := ansi.Strip(rendered)
+		require.Contains(t, plain, "MODS CHAT")
+		require.Contains(t, strings.Join(strings.Fields(plain), " "), "anthropic / claude-sonnet")
+		require.NotContains(t, plain, "Ctrl+Enter")
+		require.NotContains(t, plain, "/quit")
+	}
 }
 
-func TestChatPromptEnterSubmitsAndCtrlJAddsNewline(t *testing.T) {
+func TestChatStylesFollowConfiguredTheme(t *testing.T) {
+	saveConfig := config
+	t.Cleanup(func() { config = saveConfig })
+
+	tests := map[string]lipgloss.Color{
+		"charm":      "#7D56F4",
+		"dracula":    "#BD93F9",
+		"catppuccin": "#CBA6F7",
+		"base16":     "#7CAFC2",
+		"unknown":    "#7D56F4",
+	}
+	for theme, accent := range tests {
+		config.Theme = theme
+		require.Equal(t, accent, makeChatStyles().interaction.Palette.Accent)
+	}
+}
+
+func TestChatPromptEnterAddsNewlineAndCtrlJSubmits(t *testing.T) {
 	model := newChatPromptModel()
 	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hello")})
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlJ})
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("world")})
 	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyEnter})
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("world")})
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlJ})
 
 	require.True(t, model.done)
 	require.False(t, model.exit)
 	require.Equal(t, "hello\nworld", model.prompt)
 }
 
-func TestChatPromptIgnoresBlankSubmitAndCtrlCExits(t *testing.T) {
+func TestChatPromptEnhancedCtrlEnterSubmits(t *testing.T) {
 	model := newChatPromptModel()
-	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyEnter})
+	model.textarea.SetValue("hello")
+	updated, _ := model.Update(testStringMessage(kittyKeyMessage("13;5u")))
+	result := updated.(chatPromptModel)
+	require.True(t, result.done)
+	require.Equal(t, "hello", result.prompt)
+}
+
+func TestChatPromptCtrlSSubmits(t *testing.T) {
+	model := newChatPromptModel()
+	model.textarea.SetValue("hello")
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlS})
+	require.True(t, model.done)
+	require.Equal(t, "hello", model.prompt)
+}
+
+func TestChatPromptEnhancedCtrlCExits(t *testing.T) {
+	model := newChatPromptModel()
+	updated, _ := model.Update(testStringMessage(kittyKeyMessage("99;5u")))
+	result := updated.(chatPromptModel)
+	require.True(t, result.done)
+	require.True(t, result.exit)
+}
+
+func TestChatPromptNormalizesEnhancedEmacsKeys(t *testing.T) {
+	tests := map[string]string{
+		"97;5u":  "ctrl+a",
+		"98;5u":  "ctrl+b",
+		"100;5u": "ctrl+d",
+		"101;5u": "ctrl+e",
+		"102;5u": "ctrl+f",
+		"104;5u": "ctrl+h",
+		"107;5u": "ctrl+k",
+		"110;5u": "ctrl+n",
+		"112;5u": "ctrl+p",
+		"116;5u": "ctrl+t",
+		"117;5u": "ctrl+u",
+		"118;5u": "ctrl+v",
+		"119;5u": "ctrl+w",
+		"121;5u": "ctrl+y",
+	}
+	for sequence, want := range tests {
+		normalized := normalizeEnhancedChatKey(testStringMessage(kittyKeyMessage(sequence)))
+		keyMsg, ok := normalized.(tea.KeyMsg)
+		require.True(t, ok, sequence)
+		require.Equal(t, want, keyMsg.String(), sequence)
+	}
+}
+
+func TestChatPromptEmacsEditing(t *testing.T) {
+	model := newChatPromptModel()
+	model.textarea.SetValue("hello world")
+	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("97;5u"))) // Ctrl+A
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+	require.Equal(t, "Xhello world", model.textarea.Value())
+
+	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("101;5u"))) // Ctrl+E
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Y")})
+	require.Equal(t, "Xhello worldY", model.textarea.Value())
+
+	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("119;5u"))) // Ctrl+W
+	require.Equal(t, "Xhello ", model.textarea.Value())
+	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("121;5u"))) // Ctrl+Y
+	require.Equal(t, "Xhello worldY", model.textarea.Value())
+	model = updateChatPrompt(t, model, testStringMessage(kittyKeyMessage("117;5u"))) // Ctrl+U
+	require.Empty(t, model.textarea.Value())
+}
+
+func TestRunInteractiveChatPromptRecognizesKittyCtrlEnter(t *testing.T) {
+	saveInput := chatInput
+	saveOutput := chatOutput
+	t.Cleanup(func() {
+		chatInput = saveInput
+		chatOutput = saveOutput
+	})
+	chatInput = strings.NewReader("hello\x1b[13;5u")
+	chatOutput = &bytes.Buffer{}
+
+	prompt, exit, err := runInteractiveChatPrompt()
+	require.NoError(t, err)
+	require.False(t, exit)
+	require.Equal(t, "hello", prompt)
+}
+
+func TestRunInteractiveChatPromptRecognizesKittyCtrlS(t *testing.T) {
+	saveInput := chatInput
+	saveOutput := chatOutput
+	t.Cleanup(func() {
+		chatInput = saveInput
+		chatOutput = saveOutput
+	})
+	chatInput = strings.NewReader("hello\x1b[115;5u")
+	chatOutput = &bytes.Buffer{}
+
+	prompt, exit, err := runInteractiveChatPrompt()
+	require.NoError(t, err)
+	require.False(t, exit)
+	require.Equal(t, "hello", prompt)
+}
+
+func TestRunInteractiveChatPromptRecognizesKittyCtrlC(t *testing.T) {
+	saveInput := chatInput
+	saveOutput := chatOutput
+	t.Cleanup(func() {
+		chatInput = saveInput
+		chatOutput = saveOutput
+	})
+	chatInput = strings.NewReader("\x1b[99;5u")
+	chatOutput = &bytes.Buffer{}
+
+	prompt, exit, err := runInteractiveChatPrompt()
+	require.NoError(t, err)
+	require.True(t, exit)
+	require.Empty(t, prompt)
+}
+
+type testStringMessage string
+
+func (m testStringMessage) String() string { return string(m) }
+
+func TestChatPromptIgnoresBlankCtrlEnterAndCtrlCExits(t *testing.T) {
+	model := newChatPromptModel()
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlJ})
 	require.False(t, model.done)
 
 	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -236,6 +378,55 @@ func TestChatPromptResizesWithinBounds(t *testing.T) {
 	model.textarea.SetValue("short")
 	model.resizeHeight()
 	require.Equal(t, chatMinHeight, model.textarea.Height())
+}
+
+func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
+	model := newChatPromptModel()
+	for _, width := range []int{60, 120, 180, 72} {
+		model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: width, Height: 30})
+		require.Equal(t, width, model.width)
+
+		widest := 0
+		for _, line := range strings.Split(model.View(), "\n") {
+			lineWidth := lipgloss.Width(line)
+			require.LessOrEqual(t, lineWidth, width, line)
+			widest = max(widest, lineWidth)
+		}
+		require.Equal(t, width, widest, "message input should fill the terminal width")
+	}
+}
+
+func TestChatPromptTypingKeepsActionRowStable(t *testing.T) {
+	model := newChatPromptModel()
+	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 30, Height: 20})
+	before := chatActionLine(model.View(), "Ctrl+Enter", "Send")
+	model = updateChatPrompt(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	after := chatActionLine(model.View(), "Ctrl+Enter", "Send")
+	require.NotEqual(t, -1, before)
+	require.Equal(t, before, after)
+}
+
+func TestChatPromptUsesTransparentEmptyEditorWithVisibleCursor(t *testing.T) {
+	model := newChatPromptModel()
+	visible := ansi.Strip(model.View())
+	require.Contains(t, visible, "▏Type a message…")
+
+	model.textarea.Cursor.Blink = true
+	hidden := ansi.Strip(model.View())
+	require.NotContains(t, hidden, "▏")
+	require.Contains(t, hidden, "Type a message…")
+
+	styles := makeChatStyles()
+	require.Equal(t, styles.text.GetBackground(), model.textarea.FocusedStyle.Base.GetBackground())
+}
+
+func chatActionLine(view, keyText, label string) int {
+	for i, line := range strings.Split(ansi.Strip(view), "\n") {
+		if strings.Contains(line, keyText) && strings.Contains(line, label) {
+			return i
+		}
+	}
+	return -1
 }
 
 func updateChatPrompt(t *testing.T, model chatPromptModel, msg tea.Msg) chatPromptModel {

@@ -774,7 +774,7 @@ func isVersionOrHelpCmd(args []string) bool {
 }
 
 func themeFrom(theme string) *huh.Theme {
-	switch theme {
+	switch strings.ToLower(strings.TrimSpace(theme)) {
 	case "dracula":
 		return huh.ThemeDracula()
 	case "catppuccin":

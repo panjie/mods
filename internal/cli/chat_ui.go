@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/ui"
 	"golang.org/x/term"
 )
 
@@ -28,73 +29,82 @@ var chatTerminalWidth = func() int {
 	return width
 }
 
+var kittyChatCtrlKeys = map[string]tea.KeyType{
+	kittyKeyMessage("13;5u"):  tea.KeyCtrlJ, // Ctrl+Enter
+	kittyKeyMessage("97;5u"):  tea.KeyCtrlA,
+	kittyKeyMessage("98;5u"):  tea.KeyCtrlB,
+	kittyKeyMessage("99;5u"):  tea.KeyCtrlC,
+	kittyKeyMessage("100;5u"): tea.KeyCtrlD,
+	kittyKeyMessage("101;5u"): tea.KeyCtrlE,
+	kittyKeyMessage("102;5u"): tea.KeyCtrlF,
+	kittyKeyMessage("104;5u"): tea.KeyCtrlH,
+	kittyKeyMessage("106;5u"): tea.KeyCtrlJ,
+	kittyKeyMessage("107;5u"): tea.KeyCtrlK,
+	kittyKeyMessage("110;5u"): tea.KeyCtrlN,
+	kittyKeyMessage("112;5u"): tea.KeyCtrlP,
+	kittyKeyMessage("115;5u"): tea.KeyCtrlS,
+	kittyKeyMessage("116;5u"): tea.KeyCtrlT,
+	kittyKeyMessage("117;5u"): tea.KeyCtrlU,
+	kittyKeyMessage("118;5u"): tea.KeyCtrlV,
+	kittyKeyMessage("119;5u"): tea.KeyCtrlW,
+	kittyKeyMessage("121;5u"): tea.KeyCtrlY,
+}
+
+func kittyKeyMessage(sequence string) string {
+	return fmt.Sprintf("?CSI%+v?", []byte(sequence))
+}
+
 type chatStyles struct {
-	title     lipgloss.Style
-	meta      lipgloss.Style
-	user      lipgloss.Style
-	assistant lipgloss.Style
-	userBody  lipgloss.Style
-	help      lipgloss.Style
-	saved     lipgloss.Style
-	inputBase lipgloss.Style
-	text      lipgloss.Style
-	mutedText lipgloss.Style
+	interaction ui.InteractionStyles
+	userRail    lipgloss.Style
+	text        lipgloss.Style
+	mutedText   lipgloss.Style
 }
 
 func makeChatStyles() chatStyles {
 	r := StderrRenderer()
-	purple := lipgloss.AdaptiveColor{Light: "#5B3FD1", Dark: "#9D86FF"}
-	cyan := lipgloss.AdaptiveColor{Light: "#008F83", Dark: "#3EEFCF"}
-	muted := lipgloss.AdaptiveColor{Light: "#6F6F78", Dark: "#777781"}
-	border := lipgloss.AdaptiveColor{Light: "#D8D3EA", Dark: "#393446"}
+	interaction := ui.MakeStylesWithTheme(r, config.Theme).Interaction
 	return chatStyles{
-		title: r.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#6C50FF")).
-			Bold(true).
-			Padding(0, 1),
-		meta:      r.NewStyle().Foreground(muted),
-		user:      r.NewStyle().Foreground(purple).Bold(true),
-		assistant: r.NewStyle().Foreground(cyan).Bold(true),
-		userBody: r.NewStyle().
+		interaction: interaction,
+		userRail: r.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
 			BorderLeft(true).
-			BorderStyle(lipgloss.ThickBorder()).
-			BorderForeground(purple).
+			BorderForeground(interaction.Palette.Accent).
 			PaddingLeft(1),
-		help:  r.NewStyle().Foreground(muted),
-		saved: r.NewStyle().Foreground(muted),
-		inputBase: r.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(border).
-			Padding(0, 1),
-		text:      r.NewStyle(),
-		mutedText: r.NewStyle().Foreground(muted),
+		text:      interaction.Body,
+		mutedText: interaction.Muted,
 	}
 }
 
 func renderChatBanner(width int) string {
 	styles := makeChatStyles()
-	title := styles.title.Render("MODS CHAT")
-	meta := strings.TrimSpace(config.API + " / " + config.Model)
-	if config.Role != "" && config.Role != "default" {
-		meta += "  ·  role: " + config.Role
+	width = normalizedChatWidth(width)
+	meta := strings.Trim(strings.TrimSpace(config.API)+" / "+strings.TrimSpace(config.Model), " / ")
+	if role := strings.TrimSpace(config.Role); role != "" && role != "default" {
+		if meta != "" {
+			meta += "  ·  "
+		}
+		meta += role
 	}
-
-	line := title
-	if width >= 48 && (config.API != "" || config.Model != "") {
-		candidate := title + "  " + styles.meta.Render(meta)
-		if lipgloss.Width(candidate) <= width {
-			line = candidate
+	lines := []string{styles.interaction.Info.Render("╭─") + " " + styles.interaction.Title.Render("MODS CHAT")}
+	if meta != "" {
+		wrapped := strings.Split(ansi.Hardwrap(styles.interaction.Meta.Render(meta), max(1, width-3), false), "\n")
+		for i, line := range wrapped {
+			prefix := "   "
+			if i == 0 {
+				prefix = styles.interaction.Info.Render("╰─") + " "
+			}
+			lines = append(lines, prefix+line)
 		}
 	}
-	help := "Enter send  ·  Ctrl+J newline  ·  /quit exit"
-	if width < 54 {
-		help = "Enter send  ·  Ctrl+J newline"
+	return strings.Join(lines, "\n")
+}
+
+func normalizedChatWidth(width int) int {
+	if width <= 0 {
+		width = chatDefaultWidth
 	}
-	if width < 32 {
-		help = "Enter send"
-	}
-	return line + "\n" + styles.help.Render(help)
+	return min(width, chatMaxWidth)
 }
 
 func renderChatUser(prompt string) {
@@ -102,30 +112,33 @@ func renderChatUser(prompt string) {
 		return
 	}
 	styles := makeChatStyles()
-	width := min(chatTerminalWidth(), chatMaxWidth)
-	bodyWidth := max(1, width-styles.userBody.GetHorizontalFrameSize())
-	body := styles.userBody.Render(ansi.Hardwrap(prompt, bodyWidth, false))
-	fmt.Fprintln(chatOutput, "\n"+styles.user.Render("YOU")+"\n"+body)
+	width := normalizedChatWidth(chatTerminalWidth())
+	bodyWidth := max(1, width-styles.userRail.GetHorizontalFrameSize())
+	body := styles.userRail.Render(ansi.Hardwrap(prompt, bodyWidth, false))
+	fmt.Fprintln(chatOutput, "\n"+styles.interaction.Info.Render("YOU")+"\n"+body)
 }
 
 func renderChatAssistant() {
 	if !IsErrorTTY() {
 		return
 	}
-	fmt.Fprintln(chatOutput, "\n"+makeChatStyles().assistant.Render("MODS"))
+	styles := makeChatStyles()
+	fmt.Fprintln(chatOutput, "\n"+styles.interaction.Success.Render("MODS"))
 }
 
 func renderChatSaved(id string) {
 	if !IsErrorTTY() || len(id) < ShortIDLength {
 		return
 	}
-	fmt.Fprintln(chatOutput, makeChatStyles().saved.Render("saved · "+id[:ShortIDLength]))
+	styles := makeChatStyles()
+	fmt.Fprintln(chatOutput, styles.interaction.Success.Render("✓ SAVED")+"  "+styles.interaction.Meta.Render(id[:ShortIDLength]))
 }
 
 type chatPromptModel struct {
 	textarea textarea.Model
 	width    int
 	prompt   string
+	killText string
 	exit     bool
 	done     bool
 }
@@ -133,20 +146,23 @@ type chatPromptModel struct {
 func newChatPromptModel() chatPromptModel {
 	styles := makeChatStyles()
 	input := textarea.New()
-	input.Placeholder = "Type a message…"
+	input.Placeholder = ""
 	input.Prompt = ""
 	input.ShowLineNumbers = false
 	input.EndOfBufferCharacter = ' '
 	input.MaxHeight = chatMaxHeight
 	input.KeyMap.InsertNewline = key.NewBinding(
-		key.WithKeys("ctrl+j"),
-		key.WithHelp("ctrl+j", "new line"),
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "new line"),
 	)
-	input.FocusedStyle.Base = styles.inputBase
+	// Chat uses the panel rail for structure. A background on textarea.Base
+	// colors its padded blank cells, which Apple Terminal renders as uneven
+	// blocks. Keep the editor transparent and style only its text/cursor.
+	input.FocusedStyle.Base = styles.text
 	input.FocusedStyle.CursorLine = styles.text
 	input.FocusedStyle.Text = styles.text
 	input.FocusedStyle.Placeholder = styles.mutedText
-	input.FocusedStyle.Prompt = styles.user
+	input.FocusedStyle.Prompt = styles.interaction.Info
 	input.FocusedStyle.EndOfBuffer = styles.text
 	input.BlurredStyle = input.FocusedStyle
 	input.SetHeight(chatMinHeight)
@@ -160,39 +176,87 @@ func (m chatPromptModel) Init() tea.Cmd {
 }
 
 func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	msg = normalizeEnhancedChatKey(msg)
+	editKey := ""
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.resize(msg.Width)
 		return m, nil
 	case tea.KeyMsg:
+		editKey = msg.String()
 		switch msg.String() {
 		case "ctrl+c":
 			m.exit = true
 			m.done = true
 			return m, tea.Quit
-		case "enter":
-			prompt := strings.TrimSpace(m.textarea.Value())
-			if prompt == "" {
-				return m, nil
+		case "ctrl+j", "ctrl+enter", "ctrl+s":
+			return m.submit()
+		case "ctrl+y":
+			if m.killText != "" {
+				m.textarea.InsertString(m.killText)
+				m.resizeHeight()
 			}
-			m.prompt = prompt
-			m.done = true
-			return m, tea.Quit
+			return m, nil
 		}
 	}
 
+	before := m.textarea.Value()
 	var cmd tea.Cmd
 	m.textarea, cmd = m.textarea.Update(msg)
+	if editKey == "ctrl+k" || editKey == "ctrl+u" || editKey == "ctrl+w" {
+		if removed := removedText(before, m.textarea.Value()); removed != "" {
+			m.killText = removed
+		}
+	}
 	m.resizeHeight()
 	return m, cmd
+}
+
+func removedText(before, after string) string {
+	prefix := 0
+	for prefix < len(before) && prefix < len(after) && before[prefix] == after[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(before)-prefix && suffix < len(after)-prefix && before[len(before)-1-suffix] == after[len(after)-1-suffix] {
+		suffix++
+	}
+	return before[prefix : len(before)-suffix]
+}
+
+func (m chatPromptModel) submit() (tea.Model, tea.Cmd) {
+	prompt := strings.TrimSpace(m.textarea.Value())
+	if prompt == "" {
+		return m, nil
+	}
+	m.prompt = prompt
+	m.done = true
+	return m, tea.Quit
+}
+
+func normalizeEnhancedChatKey(msg tea.Msg) tea.Msg {
+	stringer, ok := msg.(fmt.Stringer)
+	if !ok {
+		return msg
+	}
+	keyType, ok := kittyChatCtrlKeys[stringer.String()]
+	if !ok {
+		return msg
+	}
+	return tea.KeyMsg{Type: keyType}
 }
 
 func (m *chatPromptModel) resize(width int) {
 	if width <= 0 {
 		width = chatDefaultWidth
 	}
-	m.width = min(width, chatMaxWidth)
-	m.textarea.SetWidth(max(1, m.width))
+	// The composer follows the terminal width. Conversation content keeps its
+	// readability cap, but the active input surface should use all available
+	// space and react immediately to WindowSizeMsg changes.
+	m.width = width
+	styles := makeChatStyles()
+	innerWidth := ui.InteractionPanelInnerWidth(styles.interaction, m.width)
+	m.textarea.SetWidth(innerWidth)
 	m.resizeHeight()
 }
 
@@ -210,17 +274,38 @@ func (m chatPromptModel) View() string {
 		return ""
 	}
 	styles := makeChatStyles()
-	help := "Enter send  ·  Ctrl+J newline  ·  Ctrl+C exit"
-	if m.width < 48 {
-		help = "Enter send  ·  Ctrl+J newline"
+	body := m.textarea.View()
+	if m.textarea.Value() == "" {
+		body = renderEmptyChatEditor(styles, ui.InteractionPanelInnerWidth(styles.interaction, m.width), m.textarea.Cursor.Blink)
 	}
-	if m.width < 32 {
-		help = "Enter send"
+	panel := ui.RenderInteractionPanel(styles.interaction, m.width, ui.InteractionPanel{
+		Title: "Message",
+		Tone:  ui.InteractionToneInfo,
+		Body:  []string{body},
+		Actions: []ui.InteractionAction{
+			{Key: "Enter", Label: "New line"},
+			{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
+			{Key: "Ctrl+C", Label: "Exit"},
+		},
+	})
+	return "\n" + panel
+}
+
+func renderEmptyChatEditor(styles chatStyles, width int, cursorHidden bool) string {
+	width = max(1, width)
+	cursorCell := styles.interaction.Info.Render("▏")
+	if cursorHidden {
+		cursorCell = " "
 	}
-	return "\n" + styles.user.Render("YOU") + "\n" + m.textarea.View() + "\n" + styles.help.Render(help)
+	first := cursorCell + styles.mutedText.Render("Type a message…")
+	first += strings.Repeat(" ", max(0, width-lipgloss.Width(first)))
+	blank := strings.Repeat(" ", width)
+	return strings.Join([]string{first, blank, blank}, "\n")
 }
 
 func runInteractiveChatPrompt() (string, bool, error) {
+	restoreKeyboard := enableChatKeyboardEnhancements()
+	defer restoreKeyboard()
 	program := tea.NewProgram(
 		newChatPromptModel(),
 		tea.WithInput(chatInput),
@@ -235,4 +320,15 @@ func runInteractiveChatPrompt() (string, bool, error) {
 		return "", false, fmt.Errorf("unexpected chat input model %T", result)
 	}
 	return model.prompt, model.exit, nil
+}
+
+func enableChatKeyboardEnhancements() func() {
+	input, ok := chatInput.(*os.File)
+	if !ok || !term.IsTerminal(int(input.Fd())) || !IsErrorTTY() {
+		return func() {}
+	}
+	_, _ = fmt.Fprint(chatOutput, ansi.PushKittyKeyboard(ansi.KittyDisambiguateEscapeCodes))
+	return func() {
+		_, _ = fmt.Fprint(chatOutput, ansi.PopKittyKeyboard(1))
+	}
 }

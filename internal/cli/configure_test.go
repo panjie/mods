@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -53,41 +55,50 @@ func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 }
 
 func TestConfigWizardLayoutKeepsFocusedBorderWithinWindow(t *testing.T) {
-	const windowWidth = 64
-	provider := "openai"
-	theme := configWizardTheme("charm")
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Provider").
-				Description("Choose the API backend mods should use by default.").
-				Options(huh.NewOption("OpenAI", "openai")).
-				Value(&provider),
-		).
-			Title("mods setup").
-			Description("Connect a provider and pick the model you want to start with."),
-	).
-		WithTheme(theme).
-		WithLayout(configWizardLayoutForTheme(theme)).
-		WithShowHelp(false)
+	t.Setenv("TERM", "xterm-256color")
+	for _, windowWidth := range []int{30, 60, 64, 80, 120} {
+		t.Run(fmt.Sprintf("width=%d", windowWidth), func(t *testing.T) {
+			provider := "openai"
+			theme := configWizardTheme("charm")
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Provider").
+						Description("Choose the API backend mods should use by default.").
+						Options(huh.NewOption("OpenAI", "openai")).
+						Value(&provider),
+				).
+					Title("mods setup").
+					Description("Connect a provider and pick the model you want to start with."),
+			).
+				WithTheme(theme).
+				WithLayout(configWizardLayoutForTheme(theme)).
+				WithShowHelp(false)
 
-	form.Init()
-	model, _ := form.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
-	form = model.(*huh.Form)
-	view := ansi.Strip(form.View())
+			form.Init()
+			model, _ := form.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
+			view := ansi.Strip(model.(*huh.Form).View())
 
-	for _, line := range strings.Split(view, "\n") {
-		require.LessOrEqual(t, lipgloss.Width(line), windowWidth, line)
+			for _, line := range strings.Split(view, "\n") {
+				require.LessOrEqual(t, lipgloss.Width(line), windowWidth, line)
+			}
+			require.Contains(t, view, "╭", "focused field border was not rendered")
+		})
 	}
+}
 
-	for _, line := range strings.Split(view, "\n") {
-		if strings.Contains(line, "╭") {
-			require.Contains(t, line, "╮")
-			require.LessOrEqual(t, lipgloss.Width(line), windowWidth)
-			return
-		}
+func TestConfigWizardThemeUsesInteractionPalette(t *testing.T) {
+	for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
+		t.Run(name, func(t *testing.T) {
+			palette := ui.MakeStylesWithTheme(StderrRenderer(), name).Interaction.Palette
+			theme := configWizardTheme(name)
+			require.Equal(t, palette.Accent, theme.Group.Title.GetForeground())
+			require.Equal(t, palette.Text, theme.Focused.Title.GetForeground())
+			require.Equal(t, palette.Muted, theme.Focused.Description.GetForeground())
+			require.Equal(t, palette.Success, theme.Focused.SelectedOption.GetForeground())
+			require.Equal(t, palette.Danger, theme.Focused.ErrorMessage.GetForeground())
+		})
 	}
-	require.Fail(t, "focused field border was not rendered")
 }
 
 func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) {

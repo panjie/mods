@@ -55,6 +55,7 @@ type InteractionStyles struct {
 	Danger   lipgloss.Style
 	Warning  lipgloss.Style
 	Info     lipgloss.Style
+	Success  lipgloss.Style
 }
 
 func MakeStyles(r *lipgloss.Renderer) (s Styles) {
@@ -131,6 +132,7 @@ func makeInteractionStyles(r *lipgloss.Renderer, p InteractionPalette) Interacti
 		Danger:   r.NewStyle().Foreground(p.Danger).Bold(true),
 		Warning:  r.NewStyle().Foreground(p.Warning).Bold(true),
 		Info:     r.NewStyle().Foreground(p.Accent).Bold(true),
+		Success:  r.NewStyle().Foreground(p.Success).Bold(true),
 	}
 }
 

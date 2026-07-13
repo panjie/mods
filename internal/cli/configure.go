@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/panjie/mods/internal/anthropic"
 	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/ui"
 )
 
 const (
@@ -620,26 +621,17 @@ func buildProviderOptions() []huh.Option[string] {
 	return opts
 }
 
-const minConfigWizardFieldWidth = 20
-
 type configWizardLayout struct {
-	formHorizontalFrame  int
-	fieldHorizontalFrame int
+	formHorizontalFrame int
 }
 
 func configWizardLayoutForTheme(theme *huh.Theme) huh.Layout {
 	formFrame := 0
-	fieldFrame := 0
 	if theme != nil {
 		formFrame = theme.Form.Base.GetHorizontalFrameSize()
-		fieldFrame = max(
-			theme.Focused.Base.GetHorizontalFrameSize(),
-			theme.Blurred.Base.GetHorizontalFrameSize(),
-		)
 	}
 	return configWizardLayout{
-		formHorizontalFrame:  formFrame,
-		fieldHorizontalFrame: fieldFrame,
+		formHorizontalFrame: formFrame,
 	}
 }
 
@@ -648,29 +640,21 @@ func (l configWizardLayout) View(form *huh.Form) string {
 }
 
 func (l configWizardLayout) GroupWidth(_ *huh.Form, _ *huh.Group, width int) int {
-	adjusted := width - l.formHorizontalFrame
-	if adjusted < minConfigWizardFieldWidth {
-		return minConfigWizardFieldWidth
-	}
-	return adjusted
-}
-
-func (l configWizardLayout) FieldWidth(_ *huh.Form, _ *huh.Group, groupWidth int) int {
-	adjusted := groupWidth - l.fieldHorizontalFrame
-	if adjusted < minConfigWizardFieldWidth {
-		return minConfigWizardFieldWidth
-	}
-	return adjusted
+	// Lipgloss includes a Huh field's border and padding in its configured
+	// width. Only the outer form padding needs to be removed here.
+	return max(1, width-l.formHorizontalFrame)
 }
 
 func configWizardTheme(theme string) *huh.Theme {
 	t := themeFrom(theme)
-	accent := lipgloss.AdaptiveColor{Light: "#5A56E0", Dark: "#8B7CFF"}
-	accentSoft := lipgloss.AdaptiveColor{Light: "#E7E5FF", Dark: "#312B63"}
-	text := lipgloss.AdaptiveColor{Light: "#202124", Dark: "#F2F2F7"}
-	muted := lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
-	success := lipgloss.AdaptiveColor{Light: "#00875A", Dark: "#4ADE80"}
-	border := lipgloss.AdaptiveColor{Light: "#D9D7FF", Dark: "#48406F"}
+	palette := ui.MakeStylesWithTheme(StderrRenderer(), theme).Interaction.Palette
+	accent := palette.Accent
+	accentSoft := palette.Surface
+	text := palette.Text
+	muted := palette.Muted
+	success := palette.Success
+	danger := palette.Danger
+	border := palette.Accent
 
 	t.Form.Base = t.Form.Base.Padding(1, 2)
 	t.Group.Title = lipgloss.NewStyle().
@@ -690,11 +674,14 @@ func configWizardTheme(theme string) *huh.Theme {
 		Bold(true)
 	t.Focused.Description = lipgloss.NewStyle().
 		Foreground(muted)
+	t.Focused.ErrorIndicator = lipgloss.NewStyle().Foreground(danger).SetString(" *")
+	t.Focused.ErrorMessage = lipgloss.NewStyle().Foreground(danger).SetString(" *")
 	t.Focused.SelectSelector = lipgloss.NewStyle().
 		Foreground(accent).
 		Bold(true).
 		SetString("▸ ")
 	t.Focused.Option = lipgloss.NewStyle().Foreground(text)
+	t.Focused.UnselectedOption = lipgloss.NewStyle().Foreground(text)
 	t.Focused.SelectedOption = lipgloss.NewStyle().
 		Foreground(success).
 		Bold(true)
@@ -705,7 +692,7 @@ func configWizardTheme(theme string) *huh.Theme {
 		Foreground(muted).
 		SetString("[ ] ")
 	t.Focused.FocusedButton = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(accentSoft).
 		Background(accent).
 		Bold(true).
 		Padding(0, 2).
@@ -718,6 +705,7 @@ func configWizardTheme(theme string) *huh.Theme {
 	t.Focused.TextInput.Prompt = lipgloss.NewStyle().Foreground(accent)
 	t.Focused.TextInput.Placeholder = lipgloss.NewStyle().Foreground(muted)
 	t.Focused.TextInput.Cursor = lipgloss.NewStyle().Foreground(accent)
+	t.Focused.TextInput.Text = lipgloss.NewStyle().Foreground(text)
 
 	t.Blurred = t.Focused
 	t.Blurred.Base = lipgloss.NewStyle().

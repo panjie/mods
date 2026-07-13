@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
@@ -37,4 +38,16 @@ func TestInteractionSelectedStateUsesThemeAccent(t *testing.T) {
 	styles := MakeStylesWithTheme(renderer, "dracula").Interaction
 	require.NotEqual(t, styles.Selected.Render("Y Allow"), styles.Action.Render("Y Allow"))
 	require.Contains(t, styles.Selected.Render("Y Allow"), "\x1b[")
+}
+
+func TestInteractionSuccessStateUsesThemeSuccessColor(t *testing.T) {
+	renderer := lipgloss.NewRenderer(nil)
+	renderer.SetColorProfile(termenv.TrueColor)
+	styles := MakeStylesWithTheme(renderer, "catppuccin").Interaction
+	rendered := RenderInteractionPanel(styles, 40, InteractionPanel{
+		Title: "Saved",
+		Tone:  InteractionToneSuccess,
+	})
+	require.Contains(t, rendered, "\x1b[")
+	require.Contains(t, ansi.Strip(rendered), "SAVED")
 }

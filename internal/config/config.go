@@ -269,7 +269,7 @@ type Config struct {
 	SettingsExisted                                          bool
 	User                                                     string
 	OpenEditor                                               bool
-	InteractiveReviewAvailable                               bool
+	InteractiveTTYAvailable                                  bool
 	SessionDir                                               string
 	PortableDir                                              string
 	SessionReadFromID, SessionWriteToID, SessionWriteToTitle string

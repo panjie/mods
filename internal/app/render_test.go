@@ -391,7 +391,7 @@ func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *tes
 	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
 
 	m := &Mods{
-		Config:       &Config{InteractiveReviewAvailable: true},
+		Config:       &Config{InteractiveTTYAvailable: true},
 		Styles:       makeStyles(true),
 		state:        responseState,
 		contentMutex: &sync.Mutex{},

@@ -47,6 +47,22 @@ func (s staticStream) Usage() proto.TokenUsage { return s.usage }
 
 func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 
+func TestInitQueriesBackgroundColorOnlyWithInteractiveTerminal(t *testing.T) {
+	nonInteractive := &Mods{Config: &Config{}}
+	require.IsType(t, sessionDetailsMsg{}, nonInteractive.Init()())
+
+	raw := &Mods{Config: &Config{
+		PersistentConfig:        PersistentConfig{Raw: true},
+		InteractiveTTYAvailable: true,
+	}}
+	require.IsType(t, sessionDetailsMsg{}, raw.Init()())
+
+	interactive := &Mods{Config: &Config{InteractiveTTYAvailable: true}}
+	batch, ok := interactive.Init()().(tea.BatchMsg)
+	require.True(t, ok)
+	require.Len(t, batch, 2)
+}
+
 func TestFindSessionDetails(t *testing.T) {
 	newMods := func(t *testing.T) *Mods {
 		db := testDB(t)

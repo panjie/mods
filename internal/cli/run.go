@@ -40,21 +40,21 @@ var canOpenReviewTTY = func() bool {
 // flag-validation code.
 func buildTeaProgramOptions() []tea.ProgramOption {
 	opts := []tea.ProgramOption{}
-	config.InteractiveReviewAvailable = false
+	config.InteractiveTTYAvailable = false
 
 	if config.Raw || !IsErrorTTY() {
 		opts = append(opts, tea.WithInput(nil))
 	} else if IsInputTTY() {
-		config.InteractiveReviewAvailable = true
+		config.InteractiveTTYAvailable = true
 	} else if canOpenReviewTTY() {
 		// Bubble Tea v2 opens the controlling TTY automatically when stdin is
 		// redirected, so no explicit input option is required here.
-		config.InteractiveReviewAvailable = true
+		config.InteractiveTTYAvailable = true
 	} else {
 		opts = append(opts, tea.WithInput(nil))
 	}
 
-	if IsErrorTTY() && !config.Raw {
+	if IsErrorTTY() && !config.Raw && config.InteractiveTTYAvailable {
 		opts = append(opts, tea.WithOutput(os.Stderr))
 	} else {
 		opts = append(opts, tea.WithoutRenderer())
@@ -104,27 +104,61 @@ func maybePrintMissingAPIKeyHint() {
 		config.API, StderrStyles().InlineCode.Render("mods --config"))
 }
 
-// dispatchOneShotActions executes the post-runOneTurn action chain: dirs,
-// settings, reset, list-roles, list, mcp-list, delete, etc., and finally
-// prints rendered/raw output for the regular prompt path. The chain is
-// preserved in the same order as the previous inline switch so behaviour
-// is unchanged; only the structure is now navigable per-action.
-//
-// Returning early from a matching action keeps the original semantics
-// where a session-action flag short-circuits prompt output rendering.
-func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) error {
+// dispatchPreTurnAction handles commands that do not need a model request.
+// Keeping them ahead of Bubble Tea startup prevents terminal capability
+// queries from leaking replies into the user's shell when the command exits.
+func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
 	if config.Dirs {
-		return runDirsAction(args)
+		return true, runDirsAction(args)
 	}
 
 	if config.Settings {
-		return runSettingsEditorAction()
+		return true, runSettingsEditorAction()
 	}
 
 	if config.ResetSettings {
-		return resetSettings()
+		return true, resetSettings()
 	}
 
+	if config.ListRoles {
+		listRoles()
+		return true, nil
+	}
+	if config.ListPrompts {
+		listPrompts()
+		return true, nil
+	}
+	if config.ListSkills {
+		var mods *Mods
+		if IsOutputTTY() && !config.Raw {
+			var err error
+			mods, err = newMods(ctx, &config, db)
+			if err != nil {
+				return true, modsError{Err: err, ReasonText: "Could not prepare skills list."}
+			}
+		}
+		return true, listSkills(mods, config.ResolveSkillsDirs())
+	}
+	if config.List {
+		return true, listSessions(config.Raw)
+	}
+
+	if config.MCPList {
+		List(&config)
+		return true, nil
+	}
+
+	if config.MCPListTools {
+		ctx, cancel := context.WithTimeout(ctx, config.MCPTimeout)
+		defer cancel()
+		return true, listAllTools(ctx, &config)
+	}
+
+	return false, nil
+}
+
+// dispatchTurnResult validates and prints the result of a real model turn.
+func dispatchTurnResult(mods *Mods) error {
 	if mods.Input == "" && isNoArgs() {
 		return modsError{
 			ReasonText: "You haven't provided any prompt input.",
@@ -133,32 +167,6 @@ func dispatchOneShotActions(ctx context.Context, args []string, mods *Mods) erro
 				StdoutStyles().InlineCode.Render("mods [PROMPT...]"),
 			),
 		}
-	}
-
-	if config.ListRoles {
-		listRoles()
-		return nil
-	}
-	if config.ListPrompts {
-		listPrompts()
-		return nil
-	}
-	if config.ListSkills {
-		return listSkills(mods, config.ResolveSkillsDirs())
-	}
-	if config.List {
-		return listSessions(config.Raw)
-	}
-
-	if config.MCPList {
-		List(&config)
-		return nil
-	}
-
-	if config.MCPListTools {
-		ctx, cancel := context.WithTimeout(ctx, config.MCPTimeout)
-		defer cancel()
-		return listAllTools(ctx, &config)
 	}
 
 	// raw mode already prints the output, no need to print it again
@@ -259,9 +267,9 @@ func runDirsAction(args []string) error {
 			}
 		}
 	}
-	fmt.Printf("Configuration: %s\n", filepath.Dir(config.SettingsPath))
-	//nolint:mnd
-	fmt.Printf("%*sSessions: %s\n", 8, " ", config.SessionDir)
+	const configurationLabel = "Configuration:"
+	fmt.Printf("%s %s\n", configurationLabel, filepath.Dir(config.SettingsPath))
+	fmt.Printf("%*s %s\n", len(configurationLabel), "Sessions:", config.SessionDir)
 	return nil
 }
 

@@ -509,7 +509,7 @@ func TestRequestApprovalUsesInteractiveReviewAvailability(t *testing.T) {
 		Config:              testConfigForWorkspace(testApprovalScope.Value),
 		currentToolRegistry: registry,
 	}
-	mods.Config.InteractiveReviewAvailable = true
+	mods.Config.InteractiveTTYAvailable = true
 	reviewer := newToolReviewer(mods.Config)
 	reviewer.reviewChan = make(chan toolReviewItem, 1)
 
@@ -531,7 +531,7 @@ func TestRequestApprovalRawModeIgnoresInteractiveReviewAvailability(t *testing.T
 
 	cfg := testConfigForWorkspace(testApprovalScope.Value)
 	cfg.Raw = true
-	cfg.InteractiveReviewAvailable = true
+	cfg.InteractiveTTYAvailable = true
 	reviewer := newToolReviewer(cfg)
 
 	err := reviewer.requestApproval(

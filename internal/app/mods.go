@@ -200,6 +200,12 @@ func (m *Mods) ApprovalRules() []Rule {
 
 // Init implements tea.Model.
 func (m *Mods) Init() tea.Cmd {
+	// Terminal queries are only safe when the CLI has an interactive input
+	// reader available to consume their replies. Otherwise those replies can
+	// arrive after the program exits and be echoed by the user's shell.
+	if m.Config.Raw || !m.Config.InteractiveTTYAvailable {
+		return m.findSessionDetails()
+	}
 	return tea.Batch(m.findSessionDetails(), tea.RequestBackgroundColor)
 }
 

@@ -69,7 +69,7 @@ func newToolReviewer(cfg *Config) *toolReviewer {
 		scope:                      WorkspaceScope(workspace.Canonical),
 		raw:                        cfg.Raw,
 		reviewAvailabilityKnown:    true,
-		interactiveReviewAvailable: !cfg.Raw && cfg.InteractiveReviewAvailable,
+		interactiveReviewAvailable: !cfg.Raw && cfg.InteractiveTTYAvailable,
 	}
 }
 

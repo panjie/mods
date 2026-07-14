@@ -125,7 +125,11 @@ var sessionCompleteFlags = []string{
 
 // flagDesc renders the help text for a flag from the shared Help map.
 func flagDesc(name string) string {
-	return StdoutStyles().FlagDesc.Render(Help[name])
+	// Keep registration side-effect free. The usage renderer applies styles
+	// when help is actually requested; styling here would initialize
+	// StdoutStyles for every command and trigger an unnecessary terminal
+	// background query during startup.
+	return Help[name]
 }
 
 // regStr registers a string flag with auto-rendered help, optional shorthand.

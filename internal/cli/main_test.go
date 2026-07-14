@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
@@ -211,7 +214,7 @@ func TestBuildTeaProgramOptionsMarksPipeReviewAvailableWhenStderrTTY(t *testing.
 
 	_ = buildTeaProgramOptions()
 
-	require.True(t, config.InteractiveReviewAvailable)
+	require.True(t, config.InteractiveTTYAvailable)
 }
 
 func TestBuildTeaProgramOptionsDoesNotMarkPipeReviewAvailableWhenTTYCannotOpen(t *testing.T) {
@@ -236,7 +239,7 @@ func TestBuildTeaProgramOptionsDoesNotMarkPipeReviewAvailableWhenTTYCannotOpen(t
 
 	_ = buildTeaProgramOptions()
 
-	require.False(t, config.InteractiveReviewAvailable)
+	require.False(t, config.InteractiveTTYAvailable)
 }
 
 func TestBuildTeaProgramOptionsDoesNotMarkTTYReviewAvailableWhenStderrIsNotTTY(t *testing.T) {
@@ -261,7 +264,7 @@ func TestBuildTeaProgramOptionsDoesNotMarkTTYReviewAvailableWhenStderrIsNotTTY(t
 
 	_ = buildTeaProgramOptions()
 
-	require.False(t, config.InteractiveReviewAvailable)
+	require.False(t, config.InteractiveTTYAvailable)
 }
 
 func TestBuildTeaProgramOptionsDoesNotMarkRawPipeReviewAvailable(t *testing.T) {
@@ -286,7 +289,45 @@ func TestBuildTeaProgramOptionsDoesNotMarkRawPipeReviewAvailable(t *testing.T) {
 
 	_ = buildTeaProgramOptions()
 
-	require.False(t, config.InteractiveReviewAvailable)
+	require.False(t, config.InteractiveTTYAvailable)
+}
+
+type quitImmediatelyModel struct{}
+
+func (quitImmediatelyModel) Init() tea.Cmd { return tea.Quit }
+
+func (m quitImmediatelyModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
+
+func (quitImmediatelyModel) View() tea.View { return tea.NewView("") }
+
+func TestBuildTeaProgramOptionsDisablesRendererWithoutTerminalInput(t *testing.T) {
+	savedConfig := config
+	savedIsInputTTY := IsInputTTY
+	savedIsOutputTTY := IsOutputTTY
+	savedIsErrorTTY := IsErrorTTY
+	savedCanOpenReviewTTY := canOpenReviewTTY
+	t.Cleanup(func() {
+		config = savedConfig
+		IsInputTTY = savedIsInputTTY
+		IsOutputTTY = savedIsOutputTTY
+		IsErrorTTY = savedIsErrorTTY
+		canOpenReviewTTY = savedCanOpenReviewTTY
+	})
+
+	t.Setenv("TERM", "xterm-ghostty")
+	config = Config{}
+	IsInputTTY = func() bool { return false }
+	IsOutputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return true }
+	canOpenReviewTTY = func() bool { return false }
+
+	output := captureStderr(t, func() {
+		_, err := tea.NewProgram(quitImmediatelyModel{}, buildTeaProgramOptions()...).Run()
+		require.NoError(t, err)
+	})
+
+	require.Empty(t, output)
+	require.False(t, config.InteractiveTTYAvailable)
 }
 
 func TestShowTokenUsageFlagAndFormatting(t *testing.T) {
@@ -528,6 +569,12 @@ func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 	})
 }
 
+func TestRegisteredFlagDescriptionsContainNoTerminalSequences(t *testing.T) {
+	rootCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		require.NotContains(t, flag.Usage, "\x1b", flag.Name)
+	})
+}
+
 func TestHelpUsesWorkspaceAndReviewCategory(t *testing.T) {
 	groups := groupedUsageFlags(rootCmd.Flags())
 	require.True(t, groupHasFlag(groups, flagCategoryWorkspaceReview, "workspace"))
@@ -559,11 +606,81 @@ func TestDirsActionUsesSessions(t *testing.T) {
 		output = captureStdout(t, func() {
 			require.NoError(t, runDirsAction(nil))
 		})
-		require.Contains(t, output, "Sessions: "+config.SessionDir)
-		require.NotContains(t, output, "Cache:")
+		require.Equal(t, fmt.Sprintf(
+			"Configuration: %s\n     Sessions: %s\n",
+			filepath.Dir(config.SettingsPath),
+			config.SessionDir,
+		), output)
 
 		require.Error(t, runDirsAction([]string{"cache"}))
 	})
+}
+
+func TestDirsBypassesBubbleTea(t *testing.T) {
+	saveRunOneTurn := runOneTurnProgram
+	defer func() { runOneTurnProgram = saveRunOneTurn }()
+
+	called := false
+	runOneTurnProgram = func(context.Context, []tea.ProgramOption) (*Mods, error) {
+		called = true
+		return nil, nil
+	}
+
+	withTestConfig(t, Config{Dirs: true, SettingsExisted: true}, func() {
+		output := captureStdout(t, func() {
+			require.NoError(t, rootCmd.RunE(rootCmd, nil))
+		})
+		require.Contains(t, output, "Configuration: ")
+	})
+	require.False(t, called)
+}
+
+func TestReadOnlyOneShotActionsBypassBubbleTea(t *testing.T) {
+	tests := map[string]func(*Config){
+		"dirs":          func(cfg *Config) { cfg.Dirs = true },
+		"list roles":    func(cfg *Config) { cfg.ListRoles = true },
+		"list prompts":  func(cfg *Config) { cfg.ListPrompts = true },
+		"list skills":   func(cfg *Config) { cfg.ListSkills, cfg.Raw = true, true },
+		"list sessions": func(cfg *Config) { cfg.List = true },
+		"list MCPs":     func(cfg *Config) { cfg.MCPList = true },
+		"list tools":    func(cfg *Config) { cfg.MCPListTools = true },
+	}
+
+	for name, configure := range tests {
+		t.Run(name, func(t *testing.T) {
+			saveRunOneTurn := runOneTurnProgram
+			saveDB := db
+			t.Cleanup(func() {
+				runOneTurnProgram = saveRunOneTurn
+				db = saveDB
+			})
+
+			cfg := Default()
+			cfg.SettingsExisted = true
+			cfg.SettingsPath = filepath.Join(t.TempDir(), "mods.yml")
+			cfg.SessionDir = t.TempDir()
+			cfg.SkillsDirs = []string{t.TempDir()}
+			configure(&cfg)
+			db = testDB(t)
+
+			called := false
+			runOneTurnProgram = func(context.Context, []tea.ProgramOption) (*Mods, error) {
+				called = true
+				return nil, nil
+			}
+
+			withTestConfig(t, cfg, func() {
+				cmd := *rootCmd
+				cmd.SetContext(context.Background())
+				_ = captureStderr(t, func() {
+					_ = captureStdout(t, func() {
+						require.NoError(t, rootCmd.RunE(&cmd, nil))
+					})
+				})
+			})
+			require.False(t, called)
+		})
+	}
 }
 
 func TestAdvancedFlagsStillParse(t *testing.T) {

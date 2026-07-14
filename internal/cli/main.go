@@ -69,6 +69,8 @@ var (
 	config = Default()
 	db     *DB
 
+	runOneTurnProgram = runOneTurn
+
 	rootCmd = &cobra.Command{
 		Use:           "mods",
 		Short:         helpIntroSummary,
@@ -83,13 +85,7 @@ var (
 				return cmd.Usage()
 			}
 
-			opts := buildTeaProgramOptions()
-
 			if autoConfig, err := maybeRunAutoConfig(os.Args); autoConfig || err != nil {
-				return err
-			}
-
-			if err := gatherInteractivePrompt(); err != nil {
 				return err
 			}
 
@@ -104,18 +100,28 @@ var (
 				return nil
 			}
 
+			if handled, err := dispatchPreTurnAction(cmd.Context(), args); handled {
+				return err
+			}
+
+			if err := gatherInteractivePrompt(); err != nil {
+				return err
+			}
+
 			maybePrintMissingAPIKeyHint()
 
 			if config.Chat {
+				opts := buildTeaProgramOptions()
 				return runChat(cmd.Context(), args, opts)
 			}
 
-			mods, err := runOneTurn(cmd.Context(), opts)
+			opts := buildTeaProgramOptions()
+			mods, err := runOneTurnProgram(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 
-			return dispatchOneShotActions(cmd.Context(), args, mods)
+			return dispatchTurnResult(mods)
 		},
 	}
 )

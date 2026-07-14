@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"regexp"
 	"strings"
 )
 
@@ -28,12 +29,6 @@ func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 	}
 
 	// Security flags — any hit means not read-only
-	if ir.HasScriptBlock {
-		return false, "", nil
-	}
-	if ir.HasAssignment {
-		return false, "", nil
-	}
 	if ir.HasControlFlow {
 		return false, "", nil
 	}
@@ -51,18 +46,23 @@ func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 		}
 	}
 
-	// Subexpression $(...) → can execute arbitrary code
-	for _, e := range ir.Expansions {
-		if e == "subshell" {
-			return false, "", nil
-		}
+	if hasPowerShellExpansion(ir, "subshell") {
+		return false, "", nil
 	}
-
-	// Variable args → may leak secrets via error messages
-	for _, e := range ir.Expansions {
-		if e == "var" {
-			return false, "", nil
-		}
+	if !safePowerShellAssignments(ir) {
+		return false, "", nil
+	}
+	if !safePowerShellVariables(ir) {
+		return false, "", nil
+	}
+	if !safePowerShellMethods(ir) {
+		return false, "", nil
+	}
+	if len(ir.ForEachMemberNames) > 0 {
+		return false, "", nil
+	}
+	if powerShellCommandArgsContainUnsafeVariable(ir) {
+		return false, "", nil
 	}
 
 	// Encoded command → hides intent
@@ -97,10 +97,22 @@ func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 
 func readOnlyPowerShellInvocation(inv psCommandInvocation) bool {
 	name := normalizePowerShellCommandName(inv.Name)
+	if name == "foreach-object" && !powerShellInvocationHasScriptBlockArg(inv) {
+		return false
+	}
 	if readOnlyPowerShellCmdlets[name] {
 		return true
 	}
 	return readOnlySubcommandInvocation(name, inv.Args)
+}
+
+func powerShellInvocationHasScriptBlockArg(inv psCommandInvocation) bool {
+	for _, arg := range inv.Args {
+		if strings.HasPrefix(strings.TrimSpace(arg), "{") {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizePowerShellCommandName(name string) string {
@@ -117,6 +129,117 @@ func normalizePowerShellCommandName(name string) string {
 
 func trimPowerShellLiteral(s string) string {
 	return strings.Trim(strings.TrimSpace(s), `"'`)
+}
+
+var simplePowerShellLocalVar = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+var safePipelinePowerShellVariables = map[string]bool{
+	"_": true, "psitem": true, "true": true, "false": true, "null": true,
+	"args": true, "input": true,
+}
+
+var purePowerShellMethodNames = map[string]bool{
+	"trim":     true,
+	"split":    true,
+	"tostring": true,
+}
+
+func normalizePowerShellVariableName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, "$")
+	return strings.ToLower(name)
+}
+
+func assignedPowerShellLocals(ir *psBridgeIR) map[string]bool {
+	assigned := map[string]bool{}
+	for _, target := range ir.ScriptBlockAssignmentTargets {
+		name := normalizePowerShellVariableName(target)
+		if simplePowerShellLocalVar.MatchString(name) {
+			assigned[name] = true
+		}
+	}
+	return assigned
+}
+
+func safePowerShellAssignments(ir *psBridgeIR) bool {
+	if !ir.HasAssignment {
+		return true
+	}
+	if !ir.HasScriptBlock || len(ir.AssignmentTargets) == 0 || len(ir.ScriptBlockAssignmentTargets) == 0 {
+		return false
+	}
+	scriptBlockAssignments := map[string]int{}
+	for _, target := range ir.ScriptBlockAssignmentTargets {
+		name := normalizePowerShellVariableName(target)
+		scriptBlockAssignments[name]++
+	}
+	for _, target := range ir.AssignmentTargets {
+		name := normalizePowerShellVariableName(target)
+		if strings.Contains(name, ":") || !simplePowerShellLocalVar.MatchString(name) {
+			return false
+		}
+		if scriptBlockAssignments[name] == 0 {
+			return false
+		}
+		scriptBlockAssignments[name]--
+	}
+	return true
+}
+
+func safePowerShellVariables(ir *psBridgeIR) bool {
+	assigned := assignedPowerShellLocals(ir)
+	for _, variable := range ir.Variables {
+		name := normalizePowerShellVariableName(variable)
+		if safePipelinePowerShellVariables[name] || assigned[name] {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func safePowerShellMethods(ir *psBridgeIR) bool {
+	if len(ir.StaticMembers) > 0 {
+		return false
+	}
+	for _, method := range ir.MethodInvocations {
+		if !purePowerShellMethodNames[strings.ToLower(strings.TrimSpace(method))] {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPowerShellExpansion(ir *psBridgeIR, expansion string) bool {
+	for _, e := range ir.Expansions {
+		if e == expansion {
+			return true
+		}
+	}
+	return false
+}
+
+func powerShellCommandArgsContainUnsafeVariable(ir *psBridgeIR) bool {
+	assigned := assignedPowerShellLocals(ir)
+	if len(assigned) == 0 {
+		return false
+	}
+	for _, inv := range ir.Invocations {
+		name := normalizePowerShellCommandName(inv.Name)
+		for _, arg := range inv.Args {
+			trimmed := strings.TrimSpace(arg)
+			if (name == "foreach-object" || name == "where-object" || name == "sort-object") && strings.HasPrefix(trimmed, "{") {
+				continue
+			}
+			lower := strings.ToLower(trimmed)
+			for local := range assigned {
+				if strings.Contains(lower, "$"+local) || strings.Contains(lower, "${"+local+"}") || lower == "@"+local {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // readOnlyPowerShellCmdlets is the allowlist of PowerShell cmdlets and
@@ -162,7 +285,8 @@ var readOnlyPowerShellCmdlets = map[string]bool{
 
 	// Pipeline transformers
 	"select-object": true, "select": true,
-	"sort-object": true, "sort": true,
+	"foreach-object": true,
+	"sort-object":    true, "sort": true,
 	"group-object": true, "group": true,
 	"where-object": true, "?": true, "where": true,
 	"measure-object": true, "measure": true,

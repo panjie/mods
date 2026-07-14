@@ -257,6 +257,9 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 // analysis: a command the LLM flags as not needing review is a read;
 // anything else (mutable, unknown, or unparsed) is treated as a write.
 func shellAccessMode(a shellCommandAnalysis) AccessClass {
+	if a.Effect == shellEffectUnknown || a.Effect == shellEffectWrite {
+		return AccessWrite
+	}
 	if a.NeedsReview {
 		return AccessWrite
 	}
@@ -329,21 +332,34 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	var analysis shellCommandAnalysis
 	if shellExecution {
 		cmd := extractShellCommand(data)
-		if intent.HasAccess() {
-			class := intent.DominantClass()
-			analysis = shellCommandAnalysis{
-				NeedsReview:  class == AccessWrite,
-				AffectedDirs: normalizeShellAffectedDirsForTool(intent.AllDirs(), r.scope.Value, name),
-				Reason:       intent.Reason,
-			}
-			intent = AccessIntent{Class: class, Dirs: analysis.AffectedDirs, Reason: intent.Reason}
-		} else if cmd != "" && deps.analyzeShell != nil {
+		analyzed := cmd != "" && deps.analyzeShell != nil
+		if analyzed {
 			analysis = deps.analyzeShell(name, cmd)
 			analysis.AffectedDirs = normalizeShellAffectedDirsForTool(analysis.AffectedDirs, r.scope.Value, name)
-			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs}
+		}
+		if intent.HasAccess() {
+			class := intent.DominantClass()
+			dirs := normalizeShellAffectedDirsForTool(intent.AllDirs(), r.scope.Value, name)
+			if analysis.Effect == "" {
+				reason := intent.Reason
+				if reason == "" {
+					reason = analysis.Reason
+				}
+				analysis = shellCommandAnalysis{
+					NeedsReview:  class == AccessWrite,
+					AffectedDirs: dirs,
+					Reason:       reason,
+				}
+				analysis = normalizeShellEffect(analysis)
+			} else if intent.Reason != "" && (analysis.Reason == "" || analysis.Reason == defaultShellCommandAnalysis().Reason) {
+				analysis.Reason = intent.Reason
+			}
+			intent = AccessIntent{Class: class, Dirs: dirs, Reason: intent.Reason}
+		} else if analyzed || analysis.Effect != "" {
+			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs, Reason: analysis.Reason}
 		} else {
 			analysis = defaultShellCommandAnalysis()
-			intent = AccessIntent{Class: shellAccessMode(analysis)}
+			intent = AccessIntent{Class: shellAccessMode(analysis), Reason: analysis.Reason}
 		}
 		debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", debug.Truncate(cmd, 500), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 	}
@@ -370,12 +386,13 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if intent.HasAccess() {
 		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode), shellExecution)
 	}
+	presentationAnalysis := analysis
 	item := toolReviewItem{
 		name:           name,
 		args:           data,
 		candidateRules: candidateRules,
-		summary:        formatReviewSummaryWithIntent(name, data, analysis, r.scope, intent),
-		presentation:   formatReviewPresentationWithIntent(name, data, analysis, r.scope, intent),
+		summary:        formatReviewSummaryWithIntent(name, data, presentationAnalysis, r.scope, intent),
+		presentation:   formatReviewPresentationWithIntent(name, data, presentationAnalysis, r.scope, intent),
 		resp:           respCh,
 	}
 	// Snapshot the channel under the lock so a concurrent reset() that

@@ -117,11 +117,12 @@ The user will review your plan and approve or deny it before execution begins.`
 	ShellClassifier = `Analyze this shell command for review.
 Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
 Use exactly this shape:
-{"needs_review":true,"affected_dirs":["/path/or/relative/dir"],"reason":"short reason"}
+{"needs_review":true,"affected_dirs":["/path/or/relative/dir"],"reason":"short reason","effect":"read|write|unknown"}
 
 Set needs_review to true if the command creates, deletes, modifies, or may modify files, directories, system settings, or persistent state. If unsure, set needs_review to true.
 Set affected_dirs to the directories that may be read, written, deleted, modified, or used as the command's working context. If none are affected or unknown, use an empty array.
-Example: ls -la /path/to/project => {"needs_review":false,"affected_dirs":["/path/to/project"],"reason":"lists directory contents only"}.`
+Set effect to "read" only when the command is read-only, "write" when it writes or may write persistent state, and "unknown" when unsure.
+Example: ls -la /path/to/project => {"needs_review":false,"affected_dirs":["/path/to/project"],"reason":"lists directory contents only","effect":"read"}.`
 )
 
 type Definition struct {

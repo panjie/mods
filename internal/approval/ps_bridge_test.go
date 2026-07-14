@@ -85,6 +85,73 @@ func TestParseWithBridgeAssignment(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ir)
 	require.True(t, ir.HasAssignment)
+	require.Contains(t, ir.AssignmentTargets, "$x")
+	require.Empty(t, ir.ScriptBlockAssignmentTargets)
+}
+
+func TestParseWithBridgeSafeScriptBlockFacts(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	cmd := `Get-ChildItem -Recurse -Filter *.go | ForEach-Object { $lines = (Get-Content $_.FullName | Measure-Object -Line).Lines; "$($_.FullName): $lines lines" } | Sort-Object { [int]($_.Split(':')[1].Trim().Split(' ')[0]) } -Descending`
+	ir, err := parseWithBridge(cmd)
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.True(t, ir.HasScriptBlock)
+	require.True(t, ir.HasAssignment)
+	require.Contains(t, ir.AssignmentTargets, "$lines")
+	require.Contains(t, ir.ScriptBlockAssignmentTargets, "$lines")
+	require.Contains(t, ir.Variables, "_")
+	require.Contains(t, ir.Variables, "lines")
+	require.Contains(t, ir.Commands, "foreach-object")
+	require.Contains(t, ir.Commands, "sort-object")
+	require.Contains(t, ir.MethodInvocations, "Split")
+	require.Contains(t, ir.MethodInvocations, "Trim")
+	require.NotContains(t, ir.Expansions, "subshell", "member-only $() in expandable strings must not be treated like command substitution")
+}
+
+func TestParseWithBridgeParenthesizedAssignmentScopeFacts(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge(`($x = 'v'); Get-ChildItem | Where-Object { $_.Name -like '*.go' }`)
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.True(t, ir.HasScriptBlock)
+	require.True(t, ir.HasAssignment)
+	require.Contains(t, ir.AssignmentTargets, "$x")
+	require.Empty(t, ir.ScriptBlockAssignmentTargets)
+}
+
+func TestParseWithBridgeUnsafeVariableFacts(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge(`Get-Content $env:SECRET`)
+	require.NoError(t, err)
+	require.Contains(t, ir.Variables, "env:SECRET")
+	require.Contains(t, ir.Expansions, "var")
+}
+
+func TestParseWithBridgeCommandSubexpressionStillFlagged(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge(`Get-Content $(Get-ChildItem)`)
+	require.NoError(t, err)
+	require.Contains(t, ir.Expansions, "subshell")
+}
+
+func TestParseWithBridgeUnsafeExpressionFacts(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge(`Get-ChildItem | ForEach-Object { $_.Delete() }`)
+	require.NoError(t, err)
+	require.Contains(t, ir.MethodInvocations, "Delete")
+
+	ir, err = parseWithBridge(`[IO.File]::Delete('owned.txt')`)
+	require.NoError(t, err)
+	require.NotEmpty(t, ir.StaticMembers)
+
+	ir, err = parseWithBridge(`[Environment]::UserName`)
+	require.NoError(t, err)
+	require.NotEmpty(t, ir.StaticMembers)
 }
 
 func TestParseWithBridgeControlFlow(t *testing.T) {

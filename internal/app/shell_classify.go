@@ -22,14 +22,23 @@ import (
 
 const defaultShellClassifyPrompt = prompts.ShellClassifier
 
+type shellEffect string
+
+const (
+	shellEffectUnknown shellEffect = "unknown"
+	shellEffectRead    shellEffect = "read"
+	shellEffectWrite   shellEffect = "write"
+)
+
 type shellCommandAnalysis struct {
 	NeedsReview  bool
 	AffectedDirs []string
 	Reason       string
+	Effect       shellEffect
 }
 
 func defaultShellCommandAnalysis() shellCommandAnalysis {
-	return shellCommandAnalysis{NeedsReview: true}
+	return shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown, Reason: "unknown shell effects"}
 }
 
 func shellPathFlavor(tool string) pathutil.Flavor {
@@ -73,6 +82,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 				NeedsReview:  false,
 				AffectedDirs: affected,
 				Reason:       static.Reason,
+				Effect:       shellEffectRead,
 			},
 			nil,
 			nil,
@@ -87,6 +97,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 				NeedsReview:  true,
 				AffectedDirs: static.AffectedDirs,
 				Reason:       static.Reason,
+				Effect:       shellEffectWrite,
 			},
 			nil,
 			externalPaths,
@@ -110,6 +121,8 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 }
 
 func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {
+	result = normalizeShellEffect(result)
+
 	if len(result.AffectedDirs) == 0 {
 		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
 	}
@@ -126,6 +139,52 @@ func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPa
 	}
 
 	return result
+}
+
+func normalizeShellEffect(a shellCommandAnalysis) shellCommandAnalysis {
+	switch a.Effect {
+	case "":
+		a.Effect = defaultShellEffect(a.NeedsReview)
+	case shellEffectRead:
+		if a.NeedsReview {
+			a.Effect = shellEffectUnknown
+		}
+	case shellEffectWrite, shellEffectUnknown:
+		a.NeedsReview = true
+	default:
+		a.NeedsReview = true
+		a.Effect = shellEffectUnknown
+	}
+	return a
+}
+
+func shellEffectConsistent(needsReview bool, effect shellEffect) bool {
+	switch effect {
+	case "":
+		return true
+	case shellEffectRead:
+		return !needsReview
+	case shellEffectWrite, shellEffectUnknown:
+		return needsReview
+	default:
+		return false
+	}
+}
+
+func shellEffectValid(effect shellEffect) bool {
+	switch effect {
+	case "", shellEffectRead, shellEffectWrite, shellEffectUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+func defaultShellEffect(needsReview bool) shellEffect {
+	if needsReview {
+		return shellEffectWrite
+	}
+	return shellEffectRead
 }
 
 func appendMissingShellDirs(dirs []string, extra []string) []string {
@@ -271,6 +330,7 @@ func parseShellAnalysisJSON(raw string) (shellCommandAnalysis, bool) {
 		NeedsReview  *bool    `json:"needs_review"`
 		AffectedDirs []string `json:"affected_dirs"`
 		Reason       string   `json:"reason"`
+		Effect       string   `json:"effect"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed); err != nil {
 		return shellCommandAnalysis{}, false
@@ -278,10 +338,15 @@ func parseShellAnalysisJSON(raw string) (shellCommandAnalysis, bool) {
 	if parsed.NeedsReview == nil {
 		return shellCommandAnalysis{}, false
 	}
+	effect := shellEffect(parsed.Effect)
+	if !shellEffectValid(effect) || !shellEffectConsistent(*parsed.NeedsReview, effect) {
+		return shellCommandAnalysis{}, false
+	}
 	return shellCommandAnalysis{
 		NeedsReview:  *parsed.NeedsReview,
 		AffectedDirs: parsed.AffectedDirs,
 		Reason:       parsed.Reason,
+		Effect:       effect,
 	}, true
 }
 
@@ -519,7 +584,7 @@ func mentionsExternalPath(command, workspaceDir string) bool {
 // shellClassifyCacheCapacity bounds the in-memory cache of shell classifier
 // results so a long chat session that issues many distinct mutable commands
 // cannot grow the cache without limit. The cache stores facts about the
-// command (NeedsReview / AffectedDirs / Reason); the approval decision is
+// command (NeedsReview / AffectedDirs / Reason / Effect); the approval decision is
 // recomputed every call by the review layer based on workspace + saved
 // rules + review-mode, so changing those at runtime never observes stale
 // decisions through the cache.

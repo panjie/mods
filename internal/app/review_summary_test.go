@@ -50,6 +50,13 @@ func TestFormatReviewSummary(t *testing.T) {
 			formatReviewSummary("shell_run", []byte(`{"command":"touch out"}`), shellCommandAnalysis{NeedsReview: true, AffectedDirs: []string{"."}}, scope),
 			"workspace mutation",
 		)
+		unknownSummary := formatReviewSummary("shell_run", []byte(`{"command":"opaque-command"}`), shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown, AffectedDirs: []string{"/workspace"}}, scope)
+		require.Contains(t, unknownSummary, "unknown")
+		require.NotContains(t, unknownSummary, "workspace mutation")
+		contradictoryWrite := shellCommandAnalysis{NeedsReview: false, Effect: shellEffectWrite, AffectedDirs: []string{"/workspace"}}
+		contradictoryWriteSummary := formatReviewSummary("shell_run", []byte(`{"command":"touch out"}`), contradictoryWrite, scope)
+		require.Contains(t, contradictoryWriteSummary, "workspace mutation")
+		require.NotContains(t, contradictoryWriteSummary, "read-only")
 		require.Contains(t,
 			formatReviewSummary("shell_run", []byte(`{"command":"rm /tmp/x"}`), shellCommandAnalysis{NeedsReview: true, AffectedDirs: []string{"/tmp"}}, scope),
 			"external mutation",

@@ -108,7 +108,11 @@ func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope
 }
 
 func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {
-	if !analysis.NeedsReview {
+	analysis = normalizeShellEffect(analysis)
+	if analysis.Effect == shellEffectUnknown {
+		return "unknown"
+	}
+	if !analysis.NeedsReview || analysis.Effect == shellEffectRead {
 		for _, dir := range analysis.AffectedDirs {
 			if !pathWithinScope(dir, scope) {
 				return "external read"

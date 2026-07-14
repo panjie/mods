@@ -4,15 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	_ "embed"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
 	"time"
-	"unicode/utf16"
 )
 
 //go:embed ps_bridge.ps1
@@ -22,21 +21,27 @@ var psBridgeScript []byte
 // bridge script after parsing a command. The Go-side classifier consumes
 // this to determine read-only status.
 type psBridgeIR struct {
-	Version        string                `json:"version"`
-	Commands       []string              `json:"commands"`
-	Operators      []string              `json:"operators"`
-	Redirects      []string              `json:"redirects"`
-	Expansions     []string              `json:"expansions"`
-	RiskFlags      []string              `json:"risk_flags"`
-	ParseErrors    []string              `json:"parse_errors"`
-	HasScriptBlock bool                  `json:"has_script_block"`
-	HasAssignment  bool                  `json:"has_assignment"`
-	HasBackground  bool                  `json:"has_background"`
-	HasStopParsing bool                  `json:"has_stop_parsing"`
-	HasControlFlow bool                  `json:"has_control_flow"`
-	CommandArgs    map[string][]string   `json:"command_args"`
-	Paths          []string              `json:"paths"`
-	Invocations    []psCommandInvocation `json:"command_invocations"`
+	Version                      string                `json:"version"`
+	Commands                     []string              `json:"commands"`
+	Operators                    []string              `json:"operators"`
+	Redirects                    []string              `json:"redirects"`
+	Expansions                   []string              `json:"expansions"`
+	RiskFlags                    []string              `json:"risk_flags"`
+	ParseErrors                  []string              `json:"parse_errors"`
+	HasScriptBlock               bool                  `json:"has_script_block"`
+	HasAssignment                bool                  `json:"has_assignment"`
+	HasBackground                bool                  `json:"has_background"`
+	HasStopParsing               bool                  `json:"has_stop_parsing"`
+	HasControlFlow               bool                  `json:"has_control_flow"`
+	CommandArgs                  map[string][]string   `json:"command_args"`
+	Paths                        []string              `json:"paths"`
+	ForEachMemberNames           []string              `json:"foreach_member_names"`
+	Variables                    []string              `json:"variables"`
+	AssignmentTargets            []string              `json:"assignment_targets"`
+	ScriptBlockAssignmentTargets []string              `json:"script_block_assignment_targets"`
+	MethodInvocations            []string              `json:"method_invocations"`
+	StaticMembers                []string              `json:"static_members"`
+	Invocations                  []psCommandInvocation `json:"command_invocations"`
 }
 
 type psCommandInvocation struct {
@@ -45,14 +50,20 @@ type psCommandInvocation struct {
 }
 
 type bridgeProcess struct {
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	dead   bool
+	mu         sync.Mutex
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	stdout     *bufio.Reader
+	scriptPath string
+	dead       bool
 }
 
 func (bp *bridgeProcess) shutdown() {
+	defer func() {
+		if bp.scriptPath != "" {
+			_ = os.Remove(bp.scriptPath)
+		}
+	}()
 	_ = bp.stdin.Close()
 	done := make(chan struct{})
 	go func() {
@@ -73,9 +84,6 @@ var (
 
 	winPSPath     string
 	winPSPathOnce sync.Once
-
-	winEncodedBridge     string
-	winEncodedBridgeOnce sync.Once
 )
 
 // getWindowsShellPath resolves the PowerShell binary that runs the
@@ -103,23 +111,6 @@ func getWindowsShellPath() string {
 		winPSPath = ""
 	})
 	return winPSPath
-}
-
-func encodePSScript(script []byte) string {
-	u16 := utf16.Encode([]rune(string(script)))
-	b := make([]byte, len(u16)*2)
-	for i, r := range u16 {
-		b[i*2] = byte(r)
-		b[i*2+1] = byte(r >> 8)
-	}
-	return base64.StdEncoding.EncodeToString(b)
-}
-
-func getBridgeEncoded() string {
-	winEncodedBridgeOnce.Do(func() {
-		winEncodedBridge = encodePSScript(psBridgeScript)
-	})
-	return winEncodedBridge
 }
 
 const maxCommandBytes = 65536
@@ -175,30 +166,48 @@ func startBridgeProcess() (*bridgeProcess, error) {
 	if shell == "" {
 		return nil, fmt.Errorf("PowerShell host not available (neither pwsh.exe nor powershell.exe found on PATH)")
 	}
+	scriptFile, err := os.CreateTemp("", "mods-ps-bridge-*.ps1")
+	if err != nil {
+		return nil, fmt.Errorf("create bridge script: %w", err)
+	}
+	scriptPath := scriptFile.Name()
+	if _, err := scriptFile.Write(psBridgeScript); err != nil {
+		_ = scriptFile.Close()
+		_ = os.Remove(scriptPath)
+		return nil, fmt.Errorf("write bridge script: %w", err)
+	}
+	if err := scriptFile.Close(); err != nil {
+		_ = os.Remove(scriptPath)
+		return nil, fmt.Errorf("close bridge script: %w", err)
+	}
 	cmd := exec.Command(
 		shell,
 		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-		"-EncodedCommand", getBridgeEncoded(),
+		"-File", scriptPath,
 	)
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
+		_ = os.Remove(scriptPath)
 		return nil, fmt.Errorf("stdin pipe: %w", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		_ = stdinPipe.Close()
+		_ = os.Remove(scriptPath)
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		_ = stdinPipe.Close()
 		_ = stdoutPipe.Close()
+		_ = os.Remove(scriptPath)
 		return nil, fmt.Errorf("start bridge: %w", err)
 	}
 	return &bridgeProcess{
-		cmd:    cmd,
-		stdin:  stdinPipe,
-		stdout: bufio.NewReader(stdoutPipe),
+		cmd:        cmd,
+		stdin:      stdinPipe,
+		stdout:     bufio.NewReader(stdoutPipe),
+		scriptPath: scriptPath,
 	}, nil
 }
 

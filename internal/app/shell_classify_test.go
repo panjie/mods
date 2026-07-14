@@ -304,6 +304,39 @@ func TestShellRunPathFlavor(t *testing.T) {
 	require.Equal(t, pathutil.FlavorPOSIX, shellPathFlavor("shell_run"))
 }
 
+func TestDefaultShellCommandAnalysisIsUnknown(t *testing.T) {
+	got := defaultShellCommandAnalysis()
+	require.True(t, got.NeedsReview)
+	require.Equal(t, shellEffectUnknown, got.Effect)
+}
+
+func TestShellStaticAnalysisSetsEffect(t *testing.T) {
+	m := &Mods{Config: testConfigForWorkspace(t.TempDir())}
+
+	read := m.analyzeShellCommand("shell_run", "git status")
+	require.False(t, read.NeedsReview)
+	require.Equal(t, shellEffectRead, read.Effect)
+
+	write := m.analyzeShellCommand("shell_run", "cat > out.txt <<'EOF'\nhello\nEOF")
+	require.True(t, write.NeedsReview)
+	require.Equal(t, shellEffectWrite, write.Effect)
+}
+
+func TestShellAccessMode(t *testing.T) {
+	require.Equal(t, AccessRead, shellAccessMode(shellCommandAnalysis{NeedsReview: false, Effect: shellEffectRead}))
+	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: true, Effect: shellEffectWrite}))
+	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: false, Effect: shellEffectWrite}))
+	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: false, Effect: shellEffectUnknown}))
+	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown}))
+}
+
+func TestParseShellAnalysisResponseCanReturnUnknownEffect(t *testing.T) {
+	analysis, ok := parseShellAnalysisResponse(`{"needs_review":true,"affected_dirs":[],"reason":"not sure","effect":"unknown"}`)
+	require.True(t, ok)
+	require.True(t, analysis.NeedsReview)
+	require.Equal(t, shellEffectUnknown, analysis.Effect)
+}
+
 func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")

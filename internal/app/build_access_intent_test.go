@@ -32,6 +32,14 @@ func TestBuildAccessIntent(t *testing.T) {
 	require.Equal(t, AccessWrite, intentMut.Class)
 	require.Equal(t, []string{"/ws/x"}, intentMut.Dirs)
 
+	// Unknown effect remains write-like even when analyzer output is inconsistent.
+	analyzeUnknown := func(tool, cmd string) shellCommandAnalysis {
+		return shellCommandAnalysis{NeedsReview: false, Effect: shellEffectUnknown, AffectedDirs: []string{"/ws/opaque"}}
+	}
+	intentUnknown := buildAccessIntent("shell_run", []byte(`{"command":"opaque"}`), reg, analyzeUnknown)
+	require.Equal(t, AccessWrite, intentUnknown.Class)
+	require.Equal(t, []string{"/ws/opaque"}, intentUnknown.Dirs)
+
 	// fs read via registered IntentExtractor.
 	regFs := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(regFs, toolregistry.FilesystemConfig{Root: root}))

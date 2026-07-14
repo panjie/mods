@@ -23,6 +23,12 @@ function New-IR {
         has_control_flow  = $false
         command_args      = @{}
         paths             = [System.Collections.Generic.List[string]]::new()
+        foreach_member_names = [System.Collections.Generic.List[string]]::new()
+        variables          = [System.Collections.Generic.List[string]]::new()
+        assignment_targets = [System.Collections.Generic.List[string]]::new()
+        script_block_assignment_targets = [System.Collections.Generic.List[string]]::new()
+        method_invocations = [System.Collections.Generic.List[string]]::new()
+        static_members     = [System.Collections.Generic.List[string]]::new()
         command_invocations = [System.Collections.Generic.List[object]]::new()
     }
 }
@@ -30,6 +36,23 @@ function New-IR {
 function Add-Unique {
     param([System.Collections.Generic.List[string]]$List, [string]$Value)
     if (-not $List.Contains($Value)) { $List.Add($Value) | Out-Null }
+}
+
+function Add-Value {
+    param([System.Collections.Generic.List[string]]$List, [string]$Value)
+    if ($Value) { $List.Add($Value) | Out-Null }
+}
+
+function Test-InScriptBlockExpression {
+    param($Node)
+    $parent = $Node.Parent
+    while ($null -ne $parent) {
+        if ($parent -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+            return $true
+        }
+        $parent = $parent.Parent
+    }
+    return $false
 }
 
 $controlFlowTypes = @(
@@ -88,6 +111,31 @@ function Invoke-Parse {
                             if (-not $ir.command_args[$cmdName].Contains($argText)) {
                                 $ir.command_args[$cmdName].Add($argText) | Out-Null
                             }
+                        }
+                    }
+                    if ($cmdName -eq 'foreach-object' -or $cmdName -eq '%') {
+                        for ($i = 1; $i -lt $elems.Count; $i++) {
+                            $elem = $elems[$i]
+                            if ($elem -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                                continue
+                            }
+                            if ($elem -is [System.Management.Automation.Language.CommandParameterAst]) {
+                                $paramName = $elem.ParameterName
+                                if ($paramName -and $paramName.ToLower() -eq 'membername') {
+                                    if ($elem.Argument) {
+                                        $memberName = $elem.Argument.ToString().Trim().Trim('"').Trim("'")
+                                        if ($memberName) { Add-Unique $ir.foreach_member_names $memberName }
+                                    } elseif (($i + 1) -lt $elems.Count) {
+                                        $memberName = $elems[$i + 1].ToString().Trim().Trim('"').Trim("'")
+                                        if ($memberName) { Add-Unique $ir.foreach_member_names $memberName }
+                                    } else {
+                                        Add-Unique $ir.foreach_member_names '-MemberName'
+                                    }
+                                }
+                                continue
+                            }
+                            $memberName = $elem.ToString().Trim().Trim('"').Trim("'")
+                            if ($memberName) { Add-Unique $ir.foreach_member_names $memberName }
                         }
                     }
                     $ir.command_invocations.Add([ordered]@{
@@ -149,12 +197,21 @@ function Invoke-Parse {
         }
 
         if ($node -is [System.Management.Automation.Language.SubExpressionAst]) {
-            Add-Unique $ir.expansions "subshell"
+            $hasCommand = $false
+            try {
+                $matches = $node.SubExpression.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
+                $hasCommand = ($matches -and $matches.Count -gt 0)
+            } catch {
+                $hasCommand = $true
+            }
+            if ($hasCommand) { Add-Unique $ir.expansions "subshell" }
             continue
         }
 
         if ($node -is [System.Management.Automation.Language.VariableExpressionAst]) {
-            $varName = $node.VariablePath.UserPath.ToLower()
+            $varNameRaw = $node.VariablePath.UserPath
+            $varName = $varNameRaw.ToLower()
+            if ($varNameRaw) { Add-Unique $ir.variables $varNameRaw }
             if ($varConstants -notcontains $varName) {
                 Add-Unique $ir.expansions "var"
             }
@@ -168,6 +225,35 @@ function Invoke-Parse {
 
         if ($node -is [System.Management.Automation.Language.AssignmentStatementAst]) {
             $ir.has_assignment = $true
+            try {
+                $target = $node.Left.ToString().Trim()
+                if ($target) {
+                    Add-Value $ir.assignment_targets $target
+                    if (Test-InScriptBlockExpression $node) {
+                        Add-Value $ir.script_block_assignment_targets $target
+                    }
+                }
+            } catch {}
+            continue
+        }
+
+        if ($node -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+            try {
+                $memberName = $node.Member.ToString().Trim().Trim('"').Trim("'")
+                if ($memberName) { Add-Unique $ir.method_invocations $memberName }
+            } catch {}
+            try {
+                $exprText = $node.ToString()
+                if ($exprText -like '*::*') { Add-Unique $ir.static_members $exprText }
+            } catch {}
+            continue
+        }
+
+        if ($node -is [System.Management.Automation.Language.MemberExpressionAst]) {
+            try {
+                $exprText = $node.ToString()
+                if ($exprText -like '*::*') { Add-Unique $ir.static_members $exprText }
+            } catch {}
             continue
         }
 
@@ -228,6 +314,12 @@ function Write-IR {
         has_control_flow = $ir.has_control_flow
         command_args     = $cmdArgsOut
         paths            = @($ir.paths)
+        foreach_member_names = @($ir.foreach_member_names)
+        variables          = @($ir.variables)
+        assignment_targets = @($ir.assignment_targets)
+        script_block_assignment_targets = @($ir.script_block_assignment_targets)
+        method_invocations = @($ir.method_invocations)
+        static_members     = @($ir.static_members)
         command_invocations = @($ir.command_invocations)
     }
     [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 3))

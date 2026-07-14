@@ -240,6 +240,59 @@ func TestApprovalRuleSet(t *testing.T) {
 	}))
 }
 
+func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T) {
+	oldInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldInputTTY })
+
+	workspaceScope := testShellWorkspaceScope(t)
+	registry := testReviewRegistry(t)
+	mods := &Mods{
+		ctx:                 context.Background(),
+		Config:              testConfigForWorkspace(workspaceScope.Value),
+		currentToolRegistry: registry,
+		shellAnalyzer: func(string, string) shellCommandAnalysis {
+			return shellCommandAnalysis{
+				NeedsReview:  true,
+				AffectedDirs: []string{workspaceScope.Value},
+				Reason:       "classifier could not prove read-only",
+				Effect:       shellEffectUnknown,
+			}
+		},
+	}
+	reviewer := &toolReviewer{
+		reviewMode: ReviewAuto,
+		scope:      workspaceScope,
+		reviewChan: make(chan toolReviewItem, 1),
+	}
+	data := []byte(`{"command":"opaque-command"}`)
+	intent := buildAccessIntent("shell_run", data, registry, mods.analyzeShellCommand)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- reviewer.requestApproval(reviewerDeps{
+			ctx:              context.Background(),
+			isShellExecution: registry.ShellExecution,
+			analyzeShell:     mods.analyzeShellCommand,
+			accessIntent:     intent,
+		}, "shell_run", data)
+	}()
+
+	item := receiveReviewItem(t, reviewer.reviewChan)
+	require.Contains(t, item.summary, workspaceScope.Value)
+	require.Contains(t, item.summary, "Risk: unknown")
+	require.Contains(t, item.summary, "classifier could not prove read-only")
+	require.Equal(t, interactionToneWarning, item.presentation.tone)
+	require.Equal(t, "Warning", item.presentation.toneText)
+	require.Equal(t, "Run a command with unknown effects", item.presentation.headline)
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Scope", Value: workspaceScope.Value})
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Reason", Value: "classifier could not prove read-only"})
+	require.Len(t, item.candidateRules, 1)
+	require.Equal(t, AccessWrite, item.candidateRules[0].Mode)
+	item.resp <- reviewResponse{approved: true}
+	require.NoError(t, <-errCh)
+}
+
 func TestReviewKeys(t *testing.T) {
 	t.Run("yes does not remember", func(t *testing.T) {
 		reviewer := &toolReviewer{
@@ -1106,18 +1159,42 @@ func testReviewerDeps(mods *Mods) reviewerDeps {
 
 func TestShellAnalysisParsing(t *testing.T) {
 	t.Run("valid json with review and dirs", func(t *testing.T) {
-		analysis, ok := parseShellAnalysisResponse(`{"needs_review":true,"affected_dirs":["/tmp/cache"],"reason":"writes file"}`)
+		analysis, ok := parseShellAnalysisResponse(`{"needs_review":true,"affected_dirs":["/tmp/cache"],"reason":"writes file","effect":"write"}`)
 		require.True(t, ok)
 		require.True(t, analysis.NeedsReview)
 		require.Equal(t, []string{"/tmp/cache"}, analysis.AffectedDirs)
 		require.Equal(t, "writes file", analysis.Reason)
+		require.Equal(t, shellEffectWrite, analysis.Effect)
 	})
 
 	t.Run("valid json without review", func(t *testing.T) {
-		analysis, ok := parseShellAnalysisResponse(`{"needs_review":false,"affected_dirs":[],"reason":"read-only"}`)
+		analysis, ok := parseShellAnalysisResponse(`{"needs_review":false,"affected_dirs":[],"reason":"read-only","effect":"read"}`)
 		require.True(t, ok)
 		require.False(t, analysis.NeedsReview)
 		require.Empty(t, analysis.AffectedDirs)
+		require.Equal(t, shellEffectRead, analysis.Effect)
+	})
+
+	t.Run("old json without effect remains compatible", func(t *testing.T) {
+		analysis, ok := parseShellAnalysisResponse(`{"needs_review":false,"affected_dirs":[],"reason":"legacy read-only"}`)
+		require.True(t, ok)
+		require.False(t, analysis.NeedsReview)
+		require.Equal(t, shellEffect(""), analysis.Effect)
+	})
+
+	t.Run("rejects write effect without review", func(t *testing.T) {
+		_, ok := parseShellAnalysisResponse(`{"needs_review":false,"affected_dirs":[],"reason":"contradictory","effect":"write"}`)
+		require.False(t, ok)
+	})
+
+	t.Run("rejects read effect with review", func(t *testing.T) {
+		_, ok := parseShellAnalysisResponse(`{"needs_review":true,"affected_dirs":[],"reason":"contradictory","effect":"read"}`)
+		require.False(t, ok)
+	})
+
+	t.Run("rejects unknown effect without review", func(t *testing.T) {
+		_, ok := parseShellAnalysisResponse(`{"needs_review":false,"affected_dirs":[],"reason":"contradictory","effect":"unknown"}`)
+		require.False(t, ok)
 	})
 
 	t.Run("thinking before json", func(t *testing.T) {

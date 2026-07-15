@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	cfgpkg "github.com/panjie/mods/internal/config"
-	"github.com/panjie/mods/internal/mcpclient"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -18,10 +17,8 @@ func explicitlyEnabledTools(cfg *Config) bool {
 		cfg.BuiltinTools.SequentialThinking {
 		return true
 	}
-	for name := range cfg.MCPServers {
-		if mcpclient.IsEnabled(cfg, name) {
-			return true
-		}
+	if len(cfg.MCPServers) > 0 {
+		return true
 	}
 	return false
 }

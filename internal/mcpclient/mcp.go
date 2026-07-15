@@ -29,9 +29,6 @@ func EnabledServers(cfg *Config) iter.Seq2[string, MCPServerConfig] {
 		names := slices.Collect(maps.Keys(cfg.MCPServers))
 		slices.Sort(names)
 		for _, name := range names {
-			if !IsEnabled(cfg, name) {
-				continue
-			}
 			if !yield(name, cfg.MCPServers[name]) {
 				return
 			}
@@ -39,20 +36,9 @@ func EnabledServers(cfg *Config) iter.Seq2[string, MCPServerConfig] {
 	}
 }
 
-func IsEnabled(cfg *Config, name string) bool {
-	if len(cfg.MCPEnable) > 0 {
-		return slices.Contains(cfg.MCPEnable, name)
-	}
-	return !slices.Contains(cfg.MCPDisable, "*") &&
-		!slices.Contains(cfg.MCPDisable, name)
-}
-
 func List(cfg *Config) {
 	for name := range cfg.MCPServers {
-		s := name
-		if IsEnabled(cfg, name) {
-			s += ui.StdoutStyles().Timeago.Render(" (enabled)")
-		}
+		s := name + ui.StdoutStyles().Timeago.Render(" (enabled)")
 		_, _ = lipgloss.Fprintln(os.Stdout, s)
 	}
 }

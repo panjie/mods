@@ -175,8 +175,7 @@ func initFlags() {
 	regBool(flags, &config.Plan, "plan", "p", config.Plan)
 	regBool(flags, &config.MCPList, "list-mcps", "", false)
 	regBool(flags, &config.MCPListTools, "list-tools", "", false)
-	regStrArr(flags, &config.MCPDisable, "disable-mcp", "", nil)
-	regStrArr(flags, &config.MCPEnable, "enable-mcp", "", nil)
+
 	regBool(flags, &config.WebSearch, "web-search", "", config.WebSearch)
 	regStrArr(flags, &config.Images, "image", "i", config.Images)
 	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
@@ -199,8 +198,6 @@ func initFlags() {
 		"show-tool-results",
 		"show-token-usage",
 		"max-tool-rounds",
-		"enable-mcp",
-		"disable-mcp",
 		"list-mcps",
 		"list-tools",
 		"debug",

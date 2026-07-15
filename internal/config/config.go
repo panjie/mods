@@ -84,8 +84,7 @@ var Help = map[string]string{
 	"theme":                  "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
 	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":            "MCP Servers configurations",
-	"enable-mcp":             "Enable only specific MCP servers (whitelist, overrides disable list)",
-	"disable-mcp":            "Disable specific MCP servers",
+
 	"list-mcps":              "List all available MCP servers",
 	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
 	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
@@ -259,8 +258,7 @@ type Config struct {
 	ListSkills    bool
 	MCPList       bool
 	MCPListTools  bool
-	MCPEnable     []string
-	MCPDisable    []string
+
 	NoSave        bool
 
 	// Runtime state (computed internally, never persisted).

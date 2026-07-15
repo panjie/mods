@@ -87,8 +87,7 @@ func TestIdentityCoversAllFlags(t *testing.T) {
 		"max-tool-rounds",
 		"list-mcps",
 		"list-tools",
-		"enable-mcp",
-		"disable-mcp",
+
 		"max-retries",
 		"max-tokens",
 		"no-limit",

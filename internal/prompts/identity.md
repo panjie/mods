@@ -136,8 +136,7 @@ option grouped by purpose. Less commonly needed options are marked [advanced].
 - `--skills-dirs <dir>` — Add a skills directory. Repeat to add multiple directories; later directories override earlier same-name skills.
 - `--list-skills` — List installed skills from the configured skills directories
 - `--web-search` — Enable or disable the web_search tool
-- `--enable-mcp <server>` [advanced] — Enable only specific MCP servers (whitelist)
-- `--disable-mcp <server>` [advanced] — Disable specific MCP servers
+
 - `--list-mcps` [advanced] — List all available MCP servers
 
 ### Output & Display

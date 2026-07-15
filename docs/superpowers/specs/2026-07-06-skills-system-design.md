@@ -171,7 +171,8 @@ The tool does not go through the `requestApproval` review flow because it is rea
 
 The directory is selectable through `--skills-dir`, the `skills-dir` YAML key,
 or `MODS_SKILLS_DIR`, with normal precedence (`CLI > YAML > env > default`). The
-default is `~/.agents/skills` in both standard and portable mode. A leading `~`
+default is `~/.agents/skills` in standard mode, or `<mods executable directory>/skills`
+in portable mode. A leading `~`
 or `~/` is expanded to the current user's home directory; other relative paths
 retain their existing current-working-directory semantics.
 
@@ -313,7 +314,7 @@ The user flow is: clone awesome-claude-skills, copy the specific skill directory
 
 ## Open Questions Resolved During Brainstorming
 
-1. *Where do skills live?* → User directory only (`~/.agents/skills/`).
+1. *Where do skills live?* → User directory by default (`~/.agents/skills/`), or next to the executable in portable mode.
 2. *What is a skill?* → Markdown with frontmatter (`name`, `description`), body is the instruction text. Unknown frontmatter fields ignored.
 3. *How does mods decide which to load?* → LLM autonomous selection from a system-prompt catalog.
 4. *How is skill content delivered?* → `load_skill` tool returns the body as a tool result.

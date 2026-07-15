@@ -101,7 +101,7 @@ var Help = map[string]string{
 	"think":                  "Enables extended thinking mode",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
-	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills.",
+	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, or a skills directory next to the executable in portable mode.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
@@ -572,10 +572,13 @@ func defaultSessionDir() string {
 	return filepath.Join(xdg.DataHome, "mods", "sessions")
 }
 
-// defaultSkillsDir resolves the shared user-level skills directory. Unlike
-// session and config storage, skills remain in the user's home directory in
-// portable mode so external skill managers can use the same location.
+// defaultSkillsDir resolves the default skills directory. In portable mode it
+// lives next to the executable so the whole folder is self-contained;
+// otherwise it uses the shared user-level skills directory.
 func defaultSkillsDir() string {
+	if portableActive() {
+		return filepath.Join(executableDir(), "skills")
+	}
 	return filepath.Join(xdg.Home, ".agents", "skills")
 }
 

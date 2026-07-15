@@ -17,7 +17,7 @@ skills-dirs:
 Rules:
 
 - `skills-dir` is removed from config, CLI, environment, docs, and identity prompt references.
-- `skills-dirs` defaults to `[~/.agents/skills]`.
+- `skills-dirs` defaults to `[~/.agents/skills]`, or `[<mods executable directory>/skills]` in portable mode.
 - If two directories define the same skill name, the later directory wins.
 - Empty entries are ignored.
 - `~` expansion follows the existing `NormalizeSkillsDir` behavior.
@@ -94,7 +94,7 @@ Update the following so self-help tests remain accurate:
 
 Add tests for:
 
-- Default effective dirs are `[~/.agents/skills]`.
+- Default effective dirs are `[~/.agents/skills]`, or `[<mods executable directory>/skills]` in portable mode.
 - `skills-dir`, `--skills-dir`, and `MODS_SKILLS_DIR` are no longer recognized as supported configuration surfaces.
 - `skills-dirs` YAML supports multiple entries.
 - `MODS_SKILLS_DIRS` parses OS path-list separators.

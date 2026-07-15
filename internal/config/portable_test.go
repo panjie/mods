@@ -79,12 +79,12 @@ func TestDefaultSessionDirFallsBackToXDG(t *testing.T) {
 	require.Equal(t, filepath.Join(xdg.DataHome, "mods", "sessions"), defaultSessionDir())
 }
 
-func TestDefaultSkillsDirPortableStillUsesUserHome(t *testing.T) {
+func TestDefaultSkillsDirPortableUsesExeDir(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mods.yml"), []byte(""), 0o600))
 	defer swapExecutableDir(dir)()
 
-	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), defaultSkillsDir())
+	require.Equal(t, filepath.Join(dir, "skills"), defaultSkillsDir())
 }
 
 func TestEnsurePortableModePopulatesFields(t *testing.T) {
@@ -101,6 +101,7 @@ func TestEnsurePortableModePopulatesFields(t *testing.T) {
 	require.Equal(t, filepath.Join(dir, "mods.yml"), cfg.SettingsPath)
 	require.Equal(t, dir, cfg.PortableDir)
 	require.Equal(t, filepath.Join(dir, "sessions"), cfg.SessionDir)
+	require.Equal(t, []string{filepath.Join(dir, "skills")}, cfg.ResolveSkillsDirs())
 	// The sessions directory is created by Ensure.
 	require.DirExists(t, filepath.Join(dir, "sessions"))
 }

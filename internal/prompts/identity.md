@@ -63,7 +63,8 @@ Config-file-only keys (no CLI flag): `apis`, `roles`, `prompts`, `mcp-servers`,
 
 When the user's request matches an available skill's description, call the
 `load_skill` tool with that skill's name to load its full instructions, then
-follow them. By default, skills live in `~/.agents/skills/<name>/SKILL.md`.
+follow them. By default, skills live in `~/.agents/skills/<name>/SKILL.md`, or
+in `<mods executable directory>/skills/<name>/SKILL.md` in portable mode.
 Users can add directories with repeated `--skills-dirs`, the `skills-dirs`
 config key, or `MODS_SKILLS_DIRS` using the OS path-list separator (`;` on
 Windows, `:` on Unix). Later directories override earlier same-name skills. mods only loads skills
@@ -184,7 +185,7 @@ Top-level keys:
 - `review-mode` (string) — review mode: auto, always, never
 - `think` (bool) — enable extended thinking by default
 - `shell-classify-prompt` (string) — legacy custom classifier prompt; prefer prompts.shell-classifier
-- `skills-dirs`: Directories containing installed skills. Defaults to `~/.agents/skills`. Later directories override earlier same-name skills.
+- `skills-dirs`: Directories containing installed skills. Defaults to `~/.agents/skills`, or `<mods executable directory>/skills` in portable mode. Later directories override earlier same-name skills.
 
 - `role` (string) — active role name
 - `roles` (map) — role name → list of system messages. Each message is either inline text or `file://path`

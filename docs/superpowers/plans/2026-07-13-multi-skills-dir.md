@@ -4,7 +4,7 @@
 
 **Goal:** Replace single-directory skills configuration with `skills-dirs`, an ordered list of skill directories.
 
-**Architecture:** Remove the old `skills-dir` config field, flag, and env var from the target implementation. Store only `SkillsDirs []string`, resolve it to a normalized ordered list with a default of `~/.agents/skills`, and scan all effective directories with later same-name skills overriding earlier ones.
+**Architecture:** Remove the old `skills-dir` config field, flag, and env var from the target implementation. Store only `SkillsDirs []string`, resolve it to a normalized ordered list with a default of `~/.agents/skills` (or `<mods executable directory>/skills` in portable mode), and scan all effective directories with later same-name skills overriding earlier ones.
 
 **Tech Stack:** Go, Cobra/pflag `StringArray`, YAML config, explicit environment parsing with `filepath.SplitList`, existing `internal/config`, `internal/skills`, `internal/app`, and `internal/cli` packages.
 
@@ -12,7 +12,7 @@
 
 - `skills-dir`, `--skills-dir`, and `MODS_SKILLS_DIR` are removed from the target design.
 - `skills-dirs` is the only supported skills directory configuration key.
-- `skills-dirs` defaults to `[~/.agents/skills]` when unset or empty.
+- `skills-dirs` defaults to `[~/.agents/skills]` when unset or empty, or `[<mods executable directory>/skills]` in portable mode.
 - `--skills-dirs` is repeatable; order is preserved.
 - `MODS_SKILLS_DIRS` uses `filepath.SplitList`: Windows `;`, Unix `:`.
 - Empty directory entries are ignored.
@@ -413,7 +413,7 @@ Expected: FAIL until `identity.md` documents `skills-dirs` and no longer relies 
 In `internal/config/config.go` `Help`, remove `skills-dir` and add:
 
 ```go
-"skills-dirs": "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills.",
+"skills-dirs": "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, or a skills directory next to the executable in portable mode.",
 ```
 
 In `internal/config/config_template.yml`, replace the `skills-dir` example with:
@@ -430,7 +430,7 @@ In `internal/config/config_template.yml`, replace the `skills-dir` example with:
 In `internal/prompts/identity.md`, replace `skills-dir` references with:
 
 ```markdown
-- `skills-dirs`: Directories containing installed skills. Defaults to `~/.agents/skills`. Later directories override earlier same-name skills.
+- `skills-dirs`: Directories containing installed skills. Defaults to `~/.agents/skills`, or `<mods executable directory>/skills` in portable mode. Later directories override earlier same-name skills.
 - `--skills-dirs <dir>`: Add a skills directory. Repeat to add multiple directories.
 ```
 

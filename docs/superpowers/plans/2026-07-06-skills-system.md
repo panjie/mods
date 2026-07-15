@@ -18,7 +18,7 @@
 - No new external dependencies. Hand-rolled frontmatter parser (no `gopkg.in/yaml.v3`).
 - Tool naming follows existing convention: snake_case (`load_skill`, matching `fs_read_file`, `web_search`, `shell_run`, `thinking_note`).
 - Config precedence: CLI flags > mods.yml > MODS_ env > defaults. `skills-dir` uses yaml tag `skills-dir` + env `MODS_SKILLS_DIR`.
-- Portable mode uses the same `~/.agents/skills` default as standard mode.
+- Portable mode uses a `skills` directory next to the executable by default.
 - `--skills-dir`, YAML, and environment values expand a leading `~` or `~/`.
 - Skills are pure prompt content; `requires`/`license`/other frontmatter fields are parsed-but-ignored.
 - `load_skill` is `ReadOnly: true`, does not go through `requestApproval`.

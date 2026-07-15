@@ -101,7 +101,7 @@ var Help = map[string]string{
 	"think":                  "Enables extended thinking mode",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
-	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, or a skills directory next to the executable in portable mode.",
+	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 }
@@ -572,14 +572,15 @@ func defaultSessionDir() string {
 	return filepath.Join(xdg.DataHome, "mods", "sessions")
 }
 
-// defaultSkillsDir resolves the default skills directory. In portable mode it
-// lives next to the executable so the whole folder is self-contained;
-// otherwise it uses the shared user-level skills directory.
-func defaultSkillsDir() string {
+// defaultSkillsDirs resolves the default skills directories. Portable mode
+// keeps the shared user-level directory and also loads skills next to the
+// executable so the portable folder can carry overrides with it.
+func defaultSkillsDirs() []string {
+	userDir := filepath.Join(xdg.Home, ".agents", "skills")
 	if portableActive() {
-		return filepath.Join(executableDir(), "skills")
+		return []string{userDir, filepath.Join(executableDir(), "skills")}
 	}
-	return filepath.Join(xdg.Home, ".agents", "skills")
+	return []string{userDir}
 }
 
 // NormalizeSkillsDir expands a leading home-directory marker in a skills
@@ -605,10 +606,10 @@ func parseSkillsDirsEnv(c *Config) error {
 }
 
 // applySkillsDirsDefault ensures c.SkillsDirs is a normalized ordered list
-// with the shared user-level skills directory as its empty/default value.
+// with the default skills directories as its empty/default value.
 func applySkillsDirsDefault(c *Config) {
 	if len(c.ResolveSkillsDirs()) == 0 {
-		c.SkillsDirs = []string{defaultSkillsDir()}
+		c.SkillsDirs = defaultSkillsDirs()
 		return
 	}
 	c.SkillsDirs = c.ResolveSkillsDirs()
@@ -637,7 +638,7 @@ func (c Config) ResolveSkillsDirs() []string {
 		}
 	}
 	if len(result) == 0 {
-		return []string{defaultSkillsDir()}
+		return defaultSkillsDirs()
 	}
 	return result
 }

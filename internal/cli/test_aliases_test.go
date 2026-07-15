@@ -9,6 +9,7 @@ import (
 )
 
 type PersistentConfig = cfgpkg.PersistentConfig
+type APIs = cfgpkg.APIs
 
 var testDB = testutil.OpenTestDB
 

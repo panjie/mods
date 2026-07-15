@@ -116,16 +116,19 @@ func renderChatSaved(id string) {
 }
 
 type chatPromptModel struct {
-	textarea textarea.Model
-	width    int
-	prompt   string
-	killText string
-	exit     bool
-	done     bool
-	isDark   bool
+	textarea     textarea.Model
+	width        int
+	prompt       string
+	killText     string
+	history      []string
+	historyIndex int
+	draft        string
+	exit         bool
+	done         bool
+	isDark       bool
 }
 
-func newChatPromptModel() chatPromptModel {
+func newChatPromptModel(history []string) chatPromptModel {
 	styles := makeChatStylesForTheme(true)
 	input := textarea.New()
 	input.Placeholder = "Type a message…"
@@ -154,7 +157,13 @@ func newChatPromptModel() chatPromptModel {
 	input.SetVirtualCursor(false)
 	input.SetWidth(chatDefaultWidth)
 	_ = input.Focus()
-	return chatPromptModel{textarea: input, width: chatDefaultWidth, isDark: true}
+	return chatPromptModel{
+		textarea:     input,
+		width:        chatDefaultWidth,
+		history:      append([]string(nil), history...),
+		historyIndex: len(history),
+		isDark:       true,
+	}
 }
 
 func (m chatPromptModel) Init() tea.Cmd {
@@ -178,6 +187,14 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.exit = true
 			m.done = true
 			return m, tea.Quit
+		case "up":
+			if m.onFirstLine() && m.recallPreviousHistory() {
+				return m, nil
+			}
+		case "down":
+			if m.onLastLine() && m.recallNextHistory() {
+				return m, nil
+			}
 		case "ctrl+j", "ctrl+enter", "ctrl+s":
 			return m.submit()
 		case "ctrl+y":
@@ -197,6 +214,45 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, cmd
+}
+
+func (m chatPromptModel) onFirstLine() bool {
+	return m.textarea.Line() == 0 && m.textarea.LineInfo().RowOffset == 0
+}
+
+func (m chatPromptModel) onLastLine() bool {
+	info := m.textarea.LineInfo()
+	return m.textarea.Line() >= m.textarea.LineCount()-1 && info.RowOffset >= info.Height-1
+}
+
+func (m *chatPromptModel) recallPreviousHistory() bool {
+	if len(m.history) == 0 || m.historyIndex == 0 {
+		return false
+	}
+	if m.historyIndex == len(m.history) {
+		m.draft = m.textarea.Value()
+	}
+	m.historyIndex--
+	m.loadHistoryValue(m.history[m.historyIndex])
+	return true
+}
+
+func (m *chatPromptModel) recallNextHistory() bool {
+	if len(m.history) == 0 || m.historyIndex == len(m.history) {
+		return false
+	}
+	m.historyIndex++
+	if m.historyIndex == len(m.history) {
+		m.loadHistoryValue(m.draft)
+		return true
+	}
+	m.loadHistoryValue(m.history[m.historyIndex])
+	return true
+}
+
+func (m *chatPromptModel) loadHistoryValue(value string) {
+	m.textarea.SetValue(value)
+	m.textarea.MoveToEnd()
 }
 
 func removedText(before, after string) string {
@@ -253,25 +309,29 @@ func (m chatPromptModel) View() tea.View {
 	}
 	styles := makeChatStylesForTheme(m.isDark)
 	body := m.textarea.View()
+	actions := []ui.InteractionAction{
+		{Key: "Enter", Label: "New line"},
+		{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
+		{Key: "Ctrl+C", Label: "Exit"},
+	}
+	if len(m.history) > 0 {
+		actions = append([]ui.InteractionAction{{Key: "Up/Down", Label: "History"}}, actions...)
+	}
 	panel := ui.RenderInteractionPanelView(styles.interaction, m.width, ui.InteractionPanel{
-		Title:  "Message",
-		Tone:   ui.InteractionToneInfo,
-		Body:   []string{body},
-		Cursor: m.textarea.Cursor(),
-		Actions: []ui.InteractionAction{
-			{Key: "Enter", Label: "New line"},
-			{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
-			{Key: "Ctrl+C", Label: "Exit"},
-		},
+		Title:   "Message",
+		Tone:    ui.InteractionToneInfo,
+		Body:    []string{body},
+		Cursor:  m.textarea.Cursor(),
+		Actions: actions,
 	})
 	panel.Content = "\n" + panel.Content
 	panel = panel.Translate(0, 1)
 	return panel.TeaView()
 }
 
-func runInteractiveChatPrompt() (string, bool, error) {
+func runInteractiveChatPrompt(history []string) (string, bool, error) {
 	program := tea.NewProgram(
-		newChatPromptModel(),
+		newChatPromptModel(history),
 		tea.WithInput(chatInput),
 		tea.WithOutput(chatOutput),
 	)

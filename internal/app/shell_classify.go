@@ -279,9 +279,9 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 		var ok bool
 		analysis, ok = parseShellAnalysisResponse(rawResponse)
 		if !ok {
-			// Don't cache parse failures — a single hallucination shouldn't
-			// permanently mark this command as requiring review.
-			return defaultShellCommandAnalysis()
+			defaultResult := defaultShellCommandAnalysis()
+			shellClassifyCache.Store(cacheKey, defaultResult)
+			return defaultResult
 		}
 	} else {
 		analysis = shellCommandAnalysis{NeedsReview: classifyResponse(rawResponse)}

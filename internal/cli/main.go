@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	glamour "charm.land/glamour/v2/styles"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -644,11 +643,9 @@ func askInfo() error {
 		}
 	}
 
-	keymap := huh.NewDefaultKeyMap()
-	keymap.Text.NewLine = key.NewBinding(
-		key.WithKeys("ctrl+j"),
-		key.WithHelp("ctrl+j", "new line"),
-	)
+	if !config.AskModel && foundModel {
+		return nil
+	}
 
 	// wrapping is done by the caller
 	//nolint:wrapcheck
@@ -666,27 +663,9 @@ func askInfo() error {
 					return opts[config.API]
 				}, &config.API).
 				Value(&config.Model),
-		).WithHideFunc(func() bool {
-			// AskModel is true if the user is passing a flag to ask;
-			// FoundModel is true if a model is found for whatever config the
-			// user has (either --api/--model or default-api and
-			// default-model in settings).
-			// So, it'll only hide this if the user didn't run with
-			// `--ask-model` AND the configuration yields a valid model.
-			return !config.AskModel && foundModel
-		}),
-		huh.NewGroup(
-			huh.NewText().
-				TitleFunc(func() string {
-					return fmt.Sprintf("Enter a prompt for %s/%s:", config.API, config.Model)
-				}, &config.Model).
-				Value(&config.Prefix),
-		).WithHideFunc(func() bool {
-			return config.Prefix != ""
-		}),
+		),
 	).
 		WithTheme(themeFrom(config.Theme)).
-		WithKeyMap(keymap).
 		Run()
 }
 

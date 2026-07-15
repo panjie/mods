@@ -151,6 +151,61 @@ func TestRunChatPrintsBannerAndPrompt(t *testing.T) {
 	})
 }
 
+func TestGatherInteractivePromptUsesChatComposerForOneShotPrompt(t *testing.T) {
+	withInteractivePromptTest(t, func(calls *[]string) {
+		config = Config{PersistentConfig: PersistentConfig{
+			API:   "openai",
+			Model: "gpt-4o",
+			APIs:  APIs{{Name: "openai", Models: map[string]Model{"gpt-4o": {}}}},
+		}}
+
+		err := gatherInteractivePrompt()
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"hello from composer"}, *calls)
+		require.Equal(t, "hello from composer", config.Prefix)
+	})
+}
+
+func TestGatherInteractivePromptAskModelWithArgsSkipsChatComposer(t *testing.T) {
+	withInteractivePromptTest(t, func(calls *[]string) {
+		config = Config{AskModel: true, Prefix: "existing prompt", PersistentConfig: PersistentConfig{
+			API:   "openai",
+			Model: "gpt-4o",
+			APIs:  APIs{{Name: "openai", Models: map[string]Model{"gpt-4o": {}}}},
+		}}
+		askInfoPrompt = func() error { return nil }
+
+		err := gatherInteractivePrompt()
+
+		require.NoError(t, err)
+		require.Empty(t, *calls)
+		require.Equal(t, "existing prompt", config.Prefix)
+	})
+}
+
+func TestGatherInteractivePromptComposerCancelReturnsUserCanceled(t *testing.T) {
+	withInteractivePromptTest(t, func(calls *[]string) {
+		config = Config{PersistentConfig: PersistentConfig{
+			API:   "openai",
+			Model: "gpt-4o",
+			APIs:  APIs{{Name: "openai", Models: map[string]Model{"gpt-4o": {}}}},
+		}}
+		chatPromptInput = func([]string) (string, bool, error) {
+			*calls = append(*calls, "cancel")
+			return "", true, nil
+		}
+
+		err := gatherInteractivePrompt()
+
+		require.Error(t, err)
+		merr, ok := err.(modsError)
+		require.True(t, ok)
+		require.Equal(t, "User canceled.", merr.ReasonText)
+		require.Empty(t, config.Prefix)
+	})
+}
+
 func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 	withChatTest(t, "", func(calls *[]string) {
 		config.API = "openai"
@@ -159,7 +214,7 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 		IsErrorTTY = func() bool { return true }
 		chatTerminalWidth = func() int { return 80 }
 		prompts := []string{"/quit"}
-		chatPromptInput = func() (string, bool, error) {
+		chatPromptInput = func([]string) (string, bool, error) {
 			prompt := prompts[0]
 			prompts = prompts[1:]
 			return prompt, false, nil
@@ -181,6 +236,25 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 		require.Contains(t, got, "SAVED")
 		require.Contains(t, got, "df31ae2")
 		require.NotContains(t, got, "Session saved:")
+	})
+}
+
+func TestRunChatPassesAccumulatedHistoryToPrompt(t *testing.T) {
+	withChatTest(t, "", func(calls *[]string) {
+		IsErrorTTY = func() bool { return true }
+		prompts := []string{"second", "/quit"}
+		var histories [][]string
+		chatPromptInput = func(history []string) (string, bool, error) {
+			histories = append(histories, append([]string(nil), history...))
+			prompt := prompts[0]
+			prompts = prompts[1:]
+			return prompt, false, nil
+		}
+
+		require.NoError(t, runChat(context.Background(), []string{"first"}, nil))
+
+		require.Equal(t, []string{"first", "second"}, *calls)
+		require.Equal(t, [][]string{{"first"}, {"first", "second"}}, histories)
 	})
 }
 
@@ -222,7 +296,7 @@ func TestChatStylesFollowConfiguredTheme(t *testing.T) {
 }
 
 func TestChatPromptEnterAddsNewlineAndCtrlJSubmits(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "hello"})
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyEnter})
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "world"})
@@ -234,7 +308,7 @@ func TestChatPromptEnterAddsNewlineAndCtrlJSubmits(t *testing.T) {
 }
 
 func TestChatPromptEnhancedCtrlEnterSubmits(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model.textarea.SetValue("hello")
 	updated, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
 	result := updated.(chatPromptModel)
@@ -243,7 +317,7 @@ func TestChatPromptEnhancedCtrlEnterSubmits(t *testing.T) {
 }
 
 func TestChatPromptCtrlSSubmits(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model.textarea.SetValue("hello")
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	require.True(t, model.done)
@@ -251,7 +325,7 @@ func TestChatPromptCtrlSSubmits(t *testing.T) {
 }
 
 func TestChatPromptEnhancedCtrlCExits(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	updated, _ := model.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	result := updated.(chatPromptModel)
 	require.True(t, result.done)
@@ -259,7 +333,7 @@ func TestChatPromptEnhancedCtrlCExits(t *testing.T) {
 }
 
 func TestChatPromptEmacsEditing(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model.textarea.SetValue("hello world")
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "X"})
@@ -277,6 +351,83 @@ func TestChatPromptEmacsEditing(t *testing.T) {
 	require.Empty(t, model.textarea.Value())
 }
 
+func TestChatPromptUpDownCyclesHistoryAndRestoresDraft(t *testing.T) {
+	model := newChatPromptModel([]string{"first", "second"})
+	model.textarea.SetValue("draft")
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "second", model.textarea.Value())
+	require.Equal(t, 1, model.historyIndex)
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "first", model.textarea.Value())
+	require.Equal(t, 0, model.historyIndex)
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "first", model.textarea.Value())
+	require.Equal(t, 0, model.historyIndex)
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyDown})
+	require.Equal(t, "second", model.textarea.Value())
+	require.Equal(t, 1, model.historyIndex)
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyDown})
+	require.Equal(t, "draft", model.textarea.Value())
+	require.Equal(t, 2, model.historyIndex)
+}
+
+func TestChatPromptHistoryNavigationPreservesMultilineArrowMovement(t *testing.T) {
+	model := newChatPromptModel([]string{"previous"})
+	model.textarea.SetValue("one\ntwo")
+	model.textarea.MoveToEnd()
+	require.Equal(t, 1, model.textarea.Line())
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "one\ntwo", model.textarea.Value())
+	require.Equal(t, 0, model.textarea.Line())
+	require.Equal(t, 1, model.historyIndex)
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "previous", model.textarea.Value())
+	require.Equal(t, 0, model.historyIndex)
+}
+
+func TestChatPromptHistoryNavigationPreservesWrappedLineMovement(t *testing.T) {
+	model := newChatPromptModel([]string{"previous"})
+	model.resize(18)
+	model.textarea.SetValue(strings.Repeat("wrapped ", 8))
+	model.textarea.MoveToEnd()
+	require.Greater(t, model.textarea.LineInfo().RowOffset, 0)
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.NotEqual(t, "previous", model.textarea.Value())
+	require.Equal(t, 1, model.historyIndex)
+
+	for model.textarea.LineInfo().RowOffset > 0 {
+		model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	}
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, "previous", model.textarea.Value())
+	require.Equal(t, 0, model.historyIndex)
+}
+
+func TestChatPromptDownMovesWithinMultilineInputBeforeHistory(t *testing.T) {
+	model := newChatPromptModel([]string{"previous"})
+	model.textarea.SetValue("one\ntwo")
+	model.textarea.MoveToBegin()
+	require.Equal(t, 0, model.textarea.Line())
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyDown})
+	require.Equal(t, "one\ntwo", model.textarea.Value())
+	require.Equal(t, 1, model.textarea.Line())
+	require.Equal(t, 1, model.historyIndex)
+}
+
+func TestChatPromptHistoryHintOnlyAppearsWhenHistoryExists(t *testing.T) {
+	require.NotContains(t, ansi.Strip(newChatPromptModel(nil).View().Content), "History")
+	require.Contains(t, ansi.Strip(newChatPromptModel([]string{"previous"}).View().Content), "History")
+}
+
 func TestRunInteractiveChatPromptRecognizesKittyCtrlEnter(t *testing.T) {
 	saveInput := chatInput
 	saveOutput := chatOutput
@@ -287,7 +438,7 @@ func TestRunInteractiveChatPromptRecognizesKittyCtrlEnter(t *testing.T) {
 	chatInput = strings.NewReader("hello\x1b[13;5u")
 	chatOutput = &bytes.Buffer{}
 
-	prompt, exit, err := runInteractiveChatPrompt()
+	prompt, exit, err := runInteractiveChatPrompt(nil)
 	require.NoError(t, err)
 	require.False(t, exit)
 	require.Equal(t, "hello", prompt)
@@ -303,7 +454,7 @@ func TestRunInteractiveChatPromptRecognizesKittyCtrlS(t *testing.T) {
 	chatInput = strings.NewReader("hello\x1b[115;5u")
 	chatOutput = &bytes.Buffer{}
 
-	prompt, exit, err := runInteractiveChatPrompt()
+	prompt, exit, err := runInteractiveChatPrompt(nil)
 	require.NoError(t, err)
 	require.False(t, exit)
 	require.Equal(t, "hello", prompt)
@@ -319,14 +470,14 @@ func TestRunInteractiveChatPromptRecognizesKittyCtrlC(t *testing.T) {
 	chatInput = strings.NewReader("\x1b[99;5u")
 	chatOutput = &bytes.Buffer{}
 
-	prompt, exit, err := runInteractiveChatPrompt()
+	prompt, exit, err := runInteractiveChatPrompt(nil)
 	require.NoError(t, err)
 	require.True(t, exit)
 	require.Empty(t, prompt)
 }
 
 func TestChatPromptIgnoresBlankCtrlEnterAndCtrlCExits(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	require.False(t, model.done)
 
@@ -337,7 +488,7 @@ func TestChatPromptIgnoresBlankCtrlEnterAndCtrlCExits(t *testing.T) {
 }
 
 func TestChatPromptResizesWithinBounds(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	require.True(t, model.textarea.DynamicHeight)
 	require.Equal(t, chatMinHeight, model.textarea.MinHeight)
 	require.Equal(t, chatMaxHeight, model.textarea.MaxHeight)
@@ -356,7 +507,7 @@ func TestChatPromptResizesWithinBounds(t *testing.T) {
 }
 
 func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
 	model = updateChatPrompt(t, model, tea.PasteMsg{Content: strings.Repeat("wrapped content ", 12)})
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
@@ -369,7 +520,7 @@ func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
 }
 
 func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	for _, width := range []int{60, 120, 180, 72} {
 		model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: width, Height: 30})
 		require.Equal(t, width, model.width)
@@ -385,7 +536,7 @@ func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
 }
 
 func TestChatPromptTypingKeepsActionRowStable(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 30, Height: 20})
 	before := chatActionLine(model.View().Content, "Ctrl+Enter", "Send")
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "a"})
@@ -395,7 +546,7 @@ func TestChatPromptTypingKeepsActionRowStable(t *testing.T) {
 }
 
 func TestChatPromptUsesRealCursorAtEmptyPlaceholder(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	view := model.View()
 	visible := ansi.Strip(view.Content)
 	require.NotContains(t, visible, "▏")
@@ -407,7 +558,7 @@ func TestChatPromptUsesRealCursorAtEmptyPlaceholder(t *testing.T) {
 }
 
 func TestChatPromptRealCursorTracksTextWrappingAndResize(t *testing.T) {
-	model := newChatPromptModel()
+	model := newChatPromptModel(nil)
 	model.resize(24)
 
 	assertCursor := func() {
@@ -485,6 +636,39 @@ func withChatTest(t *testing.T, input string, fn func(calls *[]string)) {
 		calls = append(calls, prompt)
 		config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
 		return &Mods{}, nil
+	}
+
+	fn(&calls)
+}
+
+func withInteractivePromptTest(t *testing.T, fn func(calls *[]string)) {
+	t.Helper()
+
+	saveConfig := config
+	saveIsInputTTY := IsInputTTY
+	saveIsErrorTTY := IsErrorTTY
+	saveAskInfoPrompt := askInfoPrompt
+	saveChatPromptInput := chatPromptInput
+	saveChatInput := chatInput
+	saveChatOutput := chatOutput
+	defer func() {
+		config = saveConfig
+		IsInputTTY = saveIsInputTTY
+		IsErrorTTY = saveIsErrorTTY
+		askInfoPrompt = saveAskInfoPrompt
+		chatPromptInput = saveChatPromptInput
+		chatInput = saveChatInput
+		chatOutput = saveChatOutput
+	}()
+
+	IsInputTTY = func() bool { return true }
+	IsErrorTTY = func() bool { return true }
+	chatInput = strings.NewReader("")
+	chatOutput = &bytes.Buffer{}
+	calls := []string{}
+	chatPromptInput = func([]string) (string, bool, error) {
+		calls = append(calls, "hello from composer")
+		return "hello from composer", false, nil
 	}
 
 	fn(&calls)

@@ -34,6 +34,8 @@ var canOpenReviewTTY = func() bool {
 	return true
 }
 
+var askInfoPrompt = askInfo
+
 // buildTeaProgramOptions assembles the Bubble Tea options for the current
 // invocation. Splitting this out of RunE keeps the entry point focused on
 // orchestration; the tty/raw decision tree was previously interleaved with
@@ -62,10 +64,9 @@ func buildTeaProgramOptions() []tea.ProgramOption {
 	return opts
 }
 
-// gatherInteractivePrompt covers the two interactive prompts that RunE may
-// trigger when the user has not supplied any prompt arguments: the
-// $EDITOR-driven prefix capture and the askInfo TUI for picking an API
-// and model. Both paths only fire on a TTY.
+// gatherInteractivePrompt covers the interactive prompts that RunE may trigger
+// on a TTY: optional $EDITOR capture, API/model selection, and one-shot prompt
+// entry through the same composer used by chat mode.
 func gatherInteractivePrompt() error {
 	if isNoArgs() && IsInputTTY() && config.OpenEditor {
 		prompt, err := prefixFromEditor()
@@ -76,7 +77,7 @@ func gatherInteractivePrompt() error {
 	}
 
 	if (isNoArgs() || config.AskModel) && IsInputTTY() {
-		if err := askInfo(); err != nil && err == huh.ErrUserAborted {
+		if err := askInfoPrompt(); err != nil && err == huh.ErrUserAborted {
 			return modsError{
 				Err:        err,
 				ReasonText: "User canceled.",
@@ -87,6 +88,20 @@ func gatherInteractivePrompt() error {
 				ReasonText: "Prompt failed.",
 			}
 		}
+	}
+
+	if isNoArgs() && IsInputTTY() {
+		prompt, exit, err := readChatPromptOnce(nil)
+		if err != nil {
+			return err
+		}
+		if exit || isChatExit(prompt) {
+			return modsError{
+				Err:        huh.ErrUserAborted,
+				ReasonText: "User canceled.",
+			}
+		}
+		config.Prefix = RemoveWhitespace(prompt)
 	}
 	return nil
 }

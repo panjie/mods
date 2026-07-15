@@ -32,16 +32,18 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 	}
 
 	chatBanner()
+	history := []string{}
 	firstPrompt := strings.TrimSpace(strings.Join(args, " "))
 	if firstPrompt != "" {
 		if err := runChatMessage(ctx, firstPrompt, opts); err != nil {
 			return err
 		}
+		history = append(history, firstPrompt)
 	}
 
 	scanner := bufio.NewScanner(chatInput)
 	for {
-		prompt, exit, err := readChatPrompt(scanner)
+		prompt, exit, err := readChatPrompt(scanner, history)
 		if err != nil {
 			return err
 		}
@@ -58,18 +60,35 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 		if err := runChatMessage(ctx, prompt, opts); err != nil {
 			return err
 		}
+		history = append(history, prompt)
 	}
 }
 
-func readChatPrompt(scanner *bufio.Scanner) (string, bool, error) {
+func readChatPrompt(scanner *bufio.Scanner, history []string) (string, bool, error) {
 	if IsErrorTTY() {
-		prompt, exit, err := chatPromptInput()
+		return readChatPromptOnce(history)
+	}
+
+	chatPrompt()
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
+		}
+		return "", true, nil
+	}
+	return strings.TrimSpace(scanner.Text()), false, nil
+}
+
+func readChatPromptOnce(history []string) (string, bool, error) {
+	if IsErrorTTY() {
+		prompt, exit, err := chatPromptInput(history)
 		if err != nil {
 			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
 		}
 		return strings.TrimSpace(prompt), exit, nil
 	}
 
+	scanner := bufio.NewScanner(chatInput)
 	chatPrompt()
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {

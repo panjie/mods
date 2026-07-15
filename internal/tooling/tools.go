@@ -48,6 +48,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 			Timeout:        cfg.BuiltinTools.ShellTimeout,
 			MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
 			SudoPrompt:     handlers.SudoPrompt,
+			Progress:       handlers.ShellProgress,
 		}); err != nil {
 			return nil, err
 		}
@@ -56,6 +57,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 				Root:           root,
 				Timeout:        cfg.BuiltinTools.ShellTimeout,
 				MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
+				Progress:       handlers.ShellProgress,
 			}); err != nil {
 				return nil, err
 			}

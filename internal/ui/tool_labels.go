@@ -50,11 +50,11 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 		}
 	case "shell_run":
 		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
-			return TruncateOperationStatus("Running command: "+command, width)
+			return TruncateOperationStatus("Shell: "+command, width)
 		}
 	case "powershell_run":
 		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
-			return TruncateOperationStatus("Running PowerShell: "+command, width)
+			return TruncateOperationStatus("PS: "+command, width)
 		}
 	case "fs_read_file":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {

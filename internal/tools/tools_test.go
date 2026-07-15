@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -16,6 +18,17 @@ import (
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 )
+
+func TestMain(m *testing.M) {
+	if os.Getenv("MODS_SHELL_PROGRESS_HELPER") == "1" {
+		fmt.Fprintln(os.Stdout, "first line")
+		time.Sleep(30 * time.Millisecond)
+		fmt.Fprintln(os.Stderr, "second line")
+		time.Sleep(80 * time.Millisecond)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 func TestRegistry(t *testing.T) {
 	registry := NewRegistry()
@@ -123,6 +136,63 @@ func TestValidateRequiredArgs(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestShellRunnerProgress(t *testing.T) {
+	runner := ShellRunner{
+		Root:             t.TempDir(),
+		Tool:             "shell_run",
+		Timeout:          2 * time.Second,
+		ProgressInterval: 10 * time.Millisecond,
+		BuildCommand: func(ctx context.Context, _ string) *exec.Cmd {
+			cmd := exec.CommandContext(ctx, os.Args[0])
+			cmd.Env = append(os.Environ(), "MODS_SHELL_PROGRESS_HELPER=1")
+			return cmd
+		},
+	}
+	var updates []ShellProgress
+	runner.Progress = func(_ context.Context, progress ShellProgress) {
+		updates = append(updates, progress)
+	}
+
+	out, err := runner.Run(context.Background(), "ignored command")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(out, "first line") || !strings.Contains(out, "second line") {
+		t.Fatalf("unexpected output: %q", out)
+	}
+	if len(updates) < 2 {
+		t.Fatalf("expected multiple progress updates, got %d", len(updates))
+	}
+	if updates[0].Tool != "shell_run" || updates[0].Command != "ignored command" {
+		t.Fatalf("unexpected first update: %#v", updates[0])
+	}
+	var sawLastOutput bool
+	for _, update := range updates {
+		if update.Elapsed < 0 {
+			t.Fatalf("negative elapsed: %v", update.Elapsed)
+		}
+		if strings.Contains(update.LastOutput, "second line") {
+			sawLastOutput = true
+		}
+	}
+	if !sawLastOutput {
+		t.Fatalf("expected progress to include recent output, got %#v", updates)
+	}
+}
+
+func TestCappedOutputLastLineTracksTailAfterTruncation(t *testing.T) {
+	out := newCappedOutput(8)
+	_, _ = out.Write([]byte("old line\n"))
+	_, _ = out.Write([]byte(strings.Repeat("x", shellProgressTailLimit+32)))
+	_, _ = out.Write([]byte("\nnew line\n"))
+	if got := out.LastLine(); got != "new line" {
+		t.Fatalf("LastLine() = %q, want new line", got)
+	}
+	if text := out.String(); !strings.Contains(text, "[Output truncated at 8 chars.]") {
+		t.Fatalf("expected capped output to remain truncated, got %q", text)
 	}
 }
 

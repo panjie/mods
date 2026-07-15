@@ -35,7 +35,22 @@ const (
 	// above so external callers and internal usage cannot drift.
 	defaultShellTimeout = DefaultShellTimeout
 	defaultShellOutput  = DefaultShellMaxOutput
+
+	defaultShellProgressInterval = 2 * time.Second
+	shellProgressTailLimit       = 4096
 )
+
+// ShellProgress describes a still-running shell command for UI status updates.
+type ShellProgress struct {
+	Tool       string
+	Command    string
+	Elapsed    time.Duration
+	LastOutput string
+}
+
+// ShellProgressHandler receives best-effort progress updates while a shell
+// command is still running. It must not affect command output or completion.
+type ShellProgressHandler func(context.Context, ShellProgress)
 
 // ShellConfig configures the native shell tool.
 type ShellConfig struct {
@@ -43,6 +58,7 @@ type ShellConfig struct {
 	Timeout        time.Duration
 	MaxOutputChars int
 	SudoPrompt     SecretPromptHandler
+	Progress       ShellProgressHandler
 }
 
 // RegisterShell registers the native shell tool.
@@ -84,7 +100,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			if err := validateSecretEnv(args.SecretEnv); err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, cfg, root, args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
+			return runShellCommand(ctx, cfg, root, "shell_run", args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
 		},
 	})
 }
@@ -124,7 +140,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			if err := validateSecretEnv(args.SecretEnv); err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, cfg, root, args.Command, args.SecretEnv, nil, powerShellCommand)
+			return runShellCommand(ctx, cfg, root, "powershell_run", args.Command, args.SecretEnv, nil, powerShellCommand)
 		},
 	})
 }
@@ -143,11 +159,14 @@ func (e ShellExitError) ExitCode() int {
 }
 
 type ShellRunner struct {
-	Root           string
-	Timeout        time.Duration
-	MaxOutputChars int
-	BuildCommand   func(context.Context, string) *exec.Cmd
-	Env            map[string]string
+	Root             string
+	Tool             string
+	Timeout          time.Duration
+	MaxOutputChars   int
+	BuildCommand     func(context.Context, string) *exec.Cmd
+	Env              map[string]string
+	Progress         ShellProgressHandler
+	ProgressInterval time.Duration
 }
 
 func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
@@ -176,20 +195,61 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	out := newCappedOutput(r.MaxOutputChars)
 	cmd.Stdout = out
 	cmd.Stderr = out
-	err := cmd.Run()
-	text := out.String()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			text = appendExitStatus(text, exitErr.ExitCode())
-			return text, ShellExitError{Code: exitErr.ExitCode()}
-		}
-		return text, err
+	if err := cmd.Start(); err != nil {
+		return out.String(), err
 	}
-	return text, nil
+	started := time.Now()
+	r.reportProgress(runCtx, command, started, out)
+
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
+
+	var tick <-chan time.Time
+	var ticker *time.Ticker
+	if r.Progress != nil {
+		interval := r.ProgressInterval
+		if interval <= 0 {
+			interval = defaultShellProgressInterval
+		}
+		ticker = time.NewTicker(interval)
+		tick = ticker.C
+		defer ticker.Stop()
+	}
+
+	for {
+		select {
+		case err := <-waitCh:
+			text := out.String()
+			if err != nil {
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
+					text = appendExitStatus(text, exitErr.ExitCode())
+					return text, ShellExitError{Code: exitErr.ExitCode()}
+				}
+				return text, err
+			}
+			return text, nil
+		case <-tick:
+			r.reportProgress(runCtx, command, started, out)
+		}
+	}
 }
 
-func runShellCommand(ctx context.Context, cfg ShellConfig, root, command string, env map[string]string, sudoPrompt SecretPromptHandler, buildCmd func(context.Context, string) *exec.Cmd) (string, error) {
+func (r ShellRunner) reportProgress(ctx context.Context, command string, started time.Time, out *cappedOutput) {
+	if r.Progress == nil {
+		return
+	}
+	r.Progress(ctx, ShellProgress{
+		Tool:       r.Tool,
+		Command:    command,
+		Elapsed:    time.Since(started),
+		LastOutput: out.LastLine(),
+	})
+}
+
+func runShellCommand(ctx context.Context, cfg ShellConfig, root, toolName, command string, env map[string]string, sudoPrompt SecretPromptHandler, buildCmd func(context.Context, string) *exec.Cmd) (string, error) {
 	prepared, cleanup, err := prepareSudoCommand(ctx, command, sudoPrompt)
 	if err != nil {
 		return "", err
@@ -203,10 +263,12 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, root, command string,
 	}
 	return ShellRunner{
 		Root:           root,
+		Tool:           toolName,
 		Timeout:        cfg.Timeout,
 		MaxOutputChars: cfg.MaxOutputChars,
 		BuildCommand:   buildCmd,
 		Env:            env,
+		Progress:       cfg.Progress,
 	}.Run(ctx, prepared.Command)
 }
 
@@ -224,6 +286,7 @@ func validateSecretEnv(env map[string]string) error {
 type cappedOutput struct {
 	mu        sync.Mutex
 	buf       bytes.Buffer
+	tail      []byte
 	limit     int
 	truncated bool
 }
@@ -238,6 +301,14 @@ func newCappedOutput(limit int) *cappedOutput {
 func (w *cappedOutput) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if len(p) >= shellProgressTailLimit {
+		w.tail = append(w.tail[:0], p[len(p)-shellProgressTailLimit:]...)
+	} else {
+		w.tail = append(w.tail, p...)
+	}
+	if len(w.tail) > shellProgressTailLimit {
+		w.tail = append([]byte(nil), w.tail[len(w.tail)-shellProgressTailLimit:]...)
+	}
 	remaining := w.limit - w.buf.Len()
 	if remaining > 0 {
 		if len(p) > remaining {
@@ -254,16 +325,36 @@ func (w *cappedOutput) Write(p []byte) (int, error) {
 
 func (w *cappedOutput) String() string {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	out := w.buf.Bytes()
+	out := append([]byte(nil), w.buf.Bytes()...)
+	truncated := w.truncated
+	limit := w.limit
+	w.mu.Unlock()
+	text := decodeOutput(out)
+	if truncated {
+		return text + fmt.Sprintf("\n\n[Output truncated at %d chars.]", limit)
+	}
+	return text
+}
+
+func (w *cappedOutput) LastLine() string {
+	w.mu.Lock()
+	out := append([]byte(nil), w.tail...)
+	w.mu.Unlock()
+	text := strings.ReplaceAll(decodeOutput(out), "\r", "\n")
+	lines := strings.Split(text, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) != "" {
+			return lines[i]
+		}
+	}
+	return ""
+}
+
+func decodeOutput(out []byte) string {
 	if decoded, decErr := localereader.UTF8(out); decErr == nil {
 		out = decoded
 	}
-	text := string(out)
-	if w.truncated {
-		return text + fmt.Sprintf("\n\n[Output truncated at %d chars.]", w.limit)
-	}
-	return text
+	return string(out)
 }
 
 func appendExitStatus(text string, code int) string {

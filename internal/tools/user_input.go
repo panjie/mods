@@ -33,8 +33,9 @@ type UserInputHandler func(context.Context, UserInputRequest) (UserInputResponse
 type SecretPromptHandler func(context.Context, string, string) (string, error)
 
 type InteractionHandlers struct {
-	UserInput  UserInputHandler
-	SudoPrompt SecretPromptHandler
+	UserInput     UserInputHandler
+	SudoPrompt    SecretPromptHandler
+	ShellProgress ShellProgressHandler
 }
 
 // RegisterUserInput registers the provider-visible request_user_input tool.

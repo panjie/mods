@@ -338,12 +338,12 @@ func TestToolOperationLabel(t *testing.T) {
 
 	t.Run("shell command preview", func(t *testing.T) {
 		got := toolOperationLabel("shell_run", []byte(`{"command":"go   test   ./...\necho done"}`), 80)
-		require.Equal(t, "Running command: go test ./...", got)
+		require.Equal(t, "Shell: go test ./...", got)
 	})
 
 	t.Run("shell command skips leading comment", func(t *testing.T) {
 		got := toolOperationLabel("shell_run", []byte(`{"command":"# check workspace config\nls .opencode*"}`), 80)
-		require.Equal(t, "Running command: ls .opencode*", got)
+		require.Equal(t, "Shell: ls .opencode*", got)
 	})
 
 	t.Run("file read path", func(t *testing.T) {
@@ -861,8 +861,8 @@ func newAnimatingMods() *Mods {
 func TestOperationStatusView(t *testing.T) {
 	t.Run("shows active operation", func(t *testing.T) {
 		m := newAnimatingMods()
-		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
-		require.Contains(t, m.View().Content, "Running command: go test ./...")
+		_, _ = m.Update(toolOperationStatusMsg{content: "Shell: go test ./..."})
+		require.Contains(t, m.View().Content, "Shell: go test ./...")
 	})
 
 	t.Run("clears active operation", func(t *testing.T) {
@@ -875,8 +875,8 @@ func TestOperationStatusView(t *testing.T) {
 	t.Run("hide tool status hides active operation", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.Config.HideToolStatus = true
-		_, _ = m.Update(toolOperationStatusMsg{content: "Running command: go test ./..."})
-		require.NotContains(t, m.View().Content, "Running command: go test ./...")
+		_, _ = m.Update(toolOperationStatusMsg{content: "Shell: go test ./..."})
+		require.NotContains(t, m.View().Content, "Shell: go test ./...")
 	})
 
 	t.Run("reasoning alone does not show status", func(t *testing.T) {
@@ -891,9 +891,9 @@ func TestOperationStatusView(t *testing.T) {
 	t.Run("active operation while reasoning renders without reasoning badge", func(t *testing.T) {
 		m := newAnimatingMods()
 		m.thinkActive = true
-		m.setActiveOperation("Running command: go test ./...")
+		m.setActiveOperation("Shell: go test ./...")
 		view := m.renderWithOperation("answer")
-		require.Contains(t, view, "Running command: go test ./...")
+		require.Contains(t, view, "Shell: go test ./...")
 		require.NotContains(t, view, "[R]")
 		require.NotContains(t, view, "Reasoning")
 	})

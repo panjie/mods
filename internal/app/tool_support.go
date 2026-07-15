@@ -42,13 +42,12 @@ func (m *Mods) buildToolRegistryForProvider(
 	client stream.Client,
 ) (*toolregistry.Registry, error) {
 	if client.Capabilities().Tools {
-		if m.userInput.available() {
-			return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog, toolregistry.InteractionHandlers{
-				UserInput:  m.handleUserInput,
-				SudoPrompt: m.handleSudoPrompt,
-			})
+		handlers := toolregistry.InteractionHandlers{ShellProgress: m.handleShellProgress}
+		if m.userInput != nil && m.userInput.available() {
+			handlers.UserInput = m.handleUserInput
+			handlers.SudoPrompt = m.handleSudoPrompt
 		}
-		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog)
+		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog, handlers)
 	}
 	if explicitlyEnabledTools(cfg) {
 		return nil, modsError{

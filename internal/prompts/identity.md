@@ -165,7 +165,7 @@ option grouped by purpose. Less commonly needed options are marked [advanced].
 Top-level keys:
 
 - `default-api` — the API provider name (e.g., openai, anthropic, deepseek)
-- `default-model` — the default model name or alias
+- `default-model` — the default model name or alias. It must be configured under `apis.<name>.models`, either by choosing a discovered model in `mods --config` or by editing `mods.yml` manually.
 - `format` (string) — markdown, json, or a custom format-text key; empty = off
 - `format-text` (map) — custom format prompts keyed by format name
 - `minimal` (bool) — pipeline-friendly output by default
@@ -208,15 +208,15 @@ Top-level keys:
 - `builtin-tools` — native tool configuration:
   ```yaml
   builtin-tools:
-    filesystem: true        # true, false, or auto
-    shell: false            # enable shell tool
-    sequential-thinking: false   # enable sequential thinking
+    filesystem: auto        # true, false, or auto
+    shell: true             # enable shell tool
+    sequential-thinking: true    # enable sequential thinking
     shell-timeout: 30s      # max shell command duration
     shell-max-output: 20000 # max shell output chars
     workspace: ""           # root for filesystem/shell tools (defaults to CWD)
   ```
 
-- `web-search` (bool) — enable web search
+- `web-search` (bool) — enable web search (default: true)
 - `web-search-provider` (string) — duckduckgo, tavily, or custom
 - `web-search-api-key` (string) — API key for the search provider
 - `web-search-api-key-env` (string) — environment variable for the API key (default: TAVILY_API_KEY)
@@ -247,6 +247,8 @@ Top-level keys:
   ```
 
   Model thinking behavior is opt-in. If a model does not set `thinking-type`, mods keeps thinking disabled even when the provider defaults it on; model discovery intentionally does not add `thinking-type`. Set `thinking-type: enabled` (or provider-specific values like `adaptive` for MiniMax) to allow `-t` / `think: true` to enable thinking. `thinking-budget` and `reasoning-effort` are optional tuning fields; mods maps the unified setting to provider-specific request fields such as `thinking.type`, `enable_thinking`, `thinkingBudget`, or `reasoning_effort`.
+
+  The default config does not ship provider model lists. In `mods --config`, model discovery writes only models the user selects. If discovery fails or the user does not select a discovered model, they must enter model identifiers manually in the wizard or edit `apis.<name>.models` directly.
 
 - `images` ([]string) — default image paths to attach
 

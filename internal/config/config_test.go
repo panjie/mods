@@ -107,6 +107,15 @@ func TestWorkspaceHelpUsesWorkspaceTerminology(t *testing.T) {
 	require.Contains(t, Help["workspace"], "Set the workspace")
 }
 
+func TestDefaultToolSettings(t *testing.T) {
+	cfg := Default()
+
+	require.Equal(t, FilesystemAuto, cfg.BuiltinTools.Filesystem)
+	require.True(t, cfg.BuiltinTools.Shell)
+	require.True(t, cfg.BuiltinTools.SequentialThinking)
+	require.True(t, cfg.WebSearch)
+}
+
 func TestMinimalConfig(t *testing.T) {
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config
@@ -222,6 +231,20 @@ func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {
 	require.Contains(t, string(content), "show-token-usage: false")
 }
 
+func TestConfigTemplateIncludesDefaultToolSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(content)
+
+	require.Contains(t, text, "filesystem: auto")
+	require.Contains(t, text, "shell: true")
+	require.Contains(t, text, "sequential-thinking: true")
+	require.Contains(t, text, "web-search: true")
+}
+
 func TestCreateConfigFileUsesLFLineEndings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))
@@ -253,6 +276,37 @@ func TestConfigTemplateUsesEnglishNeutralSections(t *testing.T) {
 		"Enterprise / Alternative",
 	} {
 		require.NotContains(t, text, section)
+	}
+}
+
+func TestConfigTemplateOmitsDefaultProviderModelLists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal(data, &cfg))
+	require.Empty(t, cfg.Model)
+
+	builtinProviders := map[string]struct{}{
+		"openai":     {},
+		"google":     {},
+		"anthropic":  {},
+		"azure":      {},
+		"deepseek":   {},
+		"glm":        {},
+		"minimax":    {},
+		"qwen":       {},
+		"kimi":       {},
+		"openrouter": {},
+		"ollama":     {},
+	}
+	for _, api := range cfg.APIs {
+		if _, ok := builtinProviders[api.Name]; ok {
+			require.Emptyf(t, api.Models, "default provider %s should not ship model lists", api.Name)
+		}
 	}
 }
 

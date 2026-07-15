@@ -333,6 +333,23 @@ func TestParseNewModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
 	})
 }
 
+func TestConfigWizardModelNamesUsesDiscoveredSelection(t *testing.T) {
+	models, err := configWizardModelNames("openai", []string{"gpt-5.4", "gpt-5.4-mini"}, "manual-model")
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5.4", "gpt-5.4-mini"}, models)
+}
+
+func TestConfigWizardModelNamesRequiresManualWhenNoDiscoverySelection(t *testing.T) {
+	models, err := configWizardModelNames("openai", nil, "\n manual-model \n")
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"manual-model"}, models)
+
+	_, err = configWizardModelNames("openai", nil, "\n\t")
+	require.Error(t, err)
+}
+
 func TestValidateWizardBaseURLRequiresNewProviderURL(t *testing.T) {
 	require.Error(t, validateWizardBaseURL(addProviderOption, ""))
 	require.NoError(t, validateWizardBaseURL("custom", ""))

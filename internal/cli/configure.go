@@ -209,30 +209,24 @@ func RunConfigWizard() error {
 				return wizardProviderName(chosenAPI, newProviderName) == "ollama" || keyStorage != "config"
 			}),
 
-		// Discover models: live fetch with a spinner. A successful
-		// discovery requires at least one model to be selected. An
-		// empty list (fetch failed or the provider doesn't implement a
-		// model-list endpoint) falls through to manual entry.
+		// Discover models: live fetch with a spinner. Selected discovered
+		// models are saved automatically; if discovery fails or the user leaves
+		// the picker empty, the next page asks for model names manually.
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
 				TitleFunc(func() string {
 					return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
 				}, []any{&chosenAPI, &newProviderName}).
-				Description("Select at least one model to add. The first selected becomes the default.").
+				Description("Select models to add, or leave empty to enter a model name manually. The first selected becomes the default.").
 				OptionsFunc(discoverOptions, []any{&chosenAPI, &newProviderName, &apiType, &baseURL, &apiKey}).
-				Value(&discoveredPick).
-				Validate(func(v []string) error {
-					if discoverySucceeded && len(v) == 0 {
-						return fmt.Errorf("select at least one model")
-					}
-					return nil
-				}),
+				Value(&discoveredPick),
 		).
 			Title("discover models").
 			Description("Fetch the model list from the provider's API now."),
 
-		// Manual model entry: fallback shown only when discovery came back empty
-		// (or the user picked nothing), so the user can always finish setup.
+		// Manual model entry: shown when discovery failed or when the user did
+		// not select a discovered model, so setup never writes an unselected
+		// provider catalog entry.
 		huh.NewGroup(
 			huh.NewText().
 				TitleFunc(func() string {
@@ -250,7 +244,7 @@ func RunConfigWizard() error {
 		).
 			Title("new models").
 			Description("Type model identifiers manually.").
-			WithHideFunc(func() bool { return discoverySucceeded }),
+			WithHideFunc(func() bool { return discoverySucceeded && len(discoveredPick) > 0 }),
 
 		// Page 8: Built-in tools
 		huh.NewGroup(
@@ -402,20 +396,12 @@ func RunConfigWizard() error {
 		effType = at
 	}
 
-	// Models always come from the discover picker, falling back to the manual
-	// text box when discovery yielded nothing. The first entry becomes the
-	// default model.
-	var addedModelNames []string
-	if len(discoveredPick) > 0 {
-		// The MultiSelect value is in option (fetched) order, so the first
-		// entry is a deterministic default.
-		addedModelNames = discoveredPick
-	} else {
-		parsed, perr := parseNewModelNames(apiName, manualModelsText)
-		if perr != nil {
-			return perr
-		}
-		addedModelNames = parsed
+	// Models come from the discover picker only when the user selected one;
+	// all other cases require manually-entered model names. The first entry
+	// becomes the default model.
+	addedModelNames, err := configWizardModelNames(apiName, discoveredPick, manualModelsText)
+	if err != nil {
+		return err
 	}
 	modelName := addedModelNames[0]
 
@@ -816,6 +802,15 @@ func parseNewModelNames(provider, value string) ([]string, error) {
 		return nil, fmt.Errorf("model name is required")
 	}
 	return models, nil
+}
+
+func configWizardModelNames(provider string, discoveredPick []string, manualModelsText string) ([]string, error) {
+	if len(discoveredPick) > 0 {
+		// The MultiSelect value is in option (fetched) order, so the first
+		// entry is a deterministic default.
+		return discoveredPick, nil
+	}
+	return parseNewModelNames(provider, manualModelsText)
 }
 
 func validateWizardBaseURL(chosenAPI, value string) error {

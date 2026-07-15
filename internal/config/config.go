@@ -50,7 +50,7 @@ var Help = map[string]string{
 	"apis":              "Aliases and endpoints for OpenAI compatible REST API",
 	"api-type":          "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, azure, or azure-ad. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
 	"http-proxy":        "HTTP proxy to use for API requests",
-	"model":             "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
+	"model":             "Default model name configured under the selected API provider",
 	"ask-model":         "Ask which model to use via interactive prompt",
 	"max-input-chars":   "Default character limit on input to model",
 	"format":            "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
@@ -719,11 +719,12 @@ func Default() Config {
 			ReviewMode:         ReviewAuto,
 			WordWrap:           80,
 			MCPTimeout:         15 * time.Second,
+			WebSearch:          true,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
-				Filesystem:         FilesystemAlways,
-				Shell:              false,
-				SequentialThinking: false,
+				Filesystem:         FilesystemAuto,
+				Shell:              true,
+				SequentialThinking: true,
 				// Reference the canonical tools-package defaults so the
 				// YAML template and the runtime fallback cannot drift.
 				ShellTimeout:   tools.DefaultShellTimeout,

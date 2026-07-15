@@ -206,6 +206,9 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 	t.Run("implicit auto filesystem is skipped for unsupported provider", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.BuiltinTools.Filesystem = FilesystemAuto
+		cfg.BuiltinTools.Shell = false
+		cfg.BuiltinTools.SequentialThinking = false
+		cfg.WebSearch = false
 		mods := &Mods{ctx: context.Background()}
 		registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "read README.md", noToolsClient{})
 		if err != nil {

@@ -4,7 +4,7 @@
 # {{ index .Help "api" }}
 default-api: openai
 # {{ index .Help "model" }}
-default-model: gpt-4o-mini
+# default-model: your-model
 
 # -----------------------------------------------------------------------------
 # Formatting
@@ -118,14 +118,14 @@ mcp-servers:
 mcp-timeout: 15s
 # {{ index .Help "builtin-tools" }}
 builtin-tools:
-  filesystem: true
-  shell: false
-  sequential-thinking: false
+  filesystem: auto
+  shell: true
+  sequential-thinking: true
   shell-timeout: 30s
   shell-max-output: 20000
   workspace: ""  # root directory for filesystem/shell tools, defaults to CWD
 # {{ index .Help "web-search" }}
-web-search: false
+web-search: true
 # {{ index .Help "web-search-provider" }}
 # Supported: duckduckgo (default), tavily, custom
 web-search-provider: duckduckgo
@@ -171,23 +171,6 @@ apis:
     # WARNING: Avoid using this with untrusted or shared config files, as the
     # command is executed via the shell. Prefer api-key-env when possible.
     # api-key-cmd: rbw get -f OPENAI_API_KEY chat.openai.com
-    models:
-      gpt-4o:
-        aliases: ["4o"]
-        max-input-chars: 392000
-        fallback: gpt-4o-mini
-      gpt-4o-mini:
-        aliases: ["4o-mini", "mini"]
-        max-input-chars: 392000
-      o1:
-        aliases: ["o1"]
-        max-input-chars: 392000
-      o1-mini:
-        aliases: ["o1m"]
-        max-input-chars: 392000
-      o3-mini:
-        aliases: ["o3m"]
-        max-input-chars: 392000
 
   google:
     # Optional override of the Gemini streaming endpoint. The default,
@@ -198,57 +181,21 @@ apis:
     # multi-model proxy that mirrors Google's URL structure. Single-model
     # proxies should write the full URL without a placeholder.
     # base-url: https://my-vertex-proxy.example.com/v1beta/models/{model}:streamGenerateContent?alt=sse
-    models:
-      gemini-2.5-pro:
-        aliases: ["gm2.5p", "gemini-pro"]
-        max-input-chars: 4194304
-      gemini-2.5-flash:
-        aliases: ["gm2.5f", "gemini-flash"]
-        max-input-chars: 4194304
-      gemini-2.0-flash:
-        aliases: ["gm2.0f"]
-        max-input-chars: 4194304
 
   anthropic:
     base-url: https://api.anthropic.com/v1
     api-key:
     api-key-env: ANTHROPIC_API_KEY
-    models:
-      claude-3-5-sonnet-20241022:
-        aliases: ["claude-3.5-sonnet", "sonnet-3.5", "sonnet"]
-        max-input-chars: 800000
-      claude-3-5-haiku-20241022:
-        aliases: ["claude-3.5-haiku", "haiku-3.5", "haiku"]
-        max-input-chars: 800000
-      claude-3-opus-20240229:
-        aliases: ["claude-3-opus", "opus-3", "opus"]
-        max-input-chars: 800000
 
   azure:
     base-url: https://YOUR_RESOURCE_NAME.openai.azure.com
     api-key:
     api-key-env: AZURE_OPENAI_KEY
-    models:
-      gpt-4o:
-        aliases: ["az4o"]
-        max-input-chars: 392000
 
   deepseek:
     base-url: https://api.deepseek.com/
     api-key:
     api-key-env: DEEPSEEK_API_KEY
-    models:
-      # thinking-type opts a model into -t / --think. When it is absent,
-      # mods keeps thinking disabled even if the provider defaults it on.
-      # For DeepSeek this maps to thinking.type enabled/disabled.
-      # See: https://api-docs.deepseek.com/guides/thinking_mode
-      deepseek-reasoner:
-        aliases: ["r1", "reasoner"]
-        max-input-chars: 800000
-        thinking-type: enabled
-      deepseek-chat:
-        aliases: ["chat", "v3"]
-        max-input-chars: 800000
 
   # GLM
   # Recent GLM models use thinking.type: "enabled" (Anthropic-style) and
@@ -257,14 +204,6 @@ apis:
     base-url: https://open.bigmodel.cn/api/paas/v4
     api-key:
     api-key-env: ZAI_API_KEY
-    models:
-      glm-4-plus:
-        aliases: ["glm", "glm4"]
-        max-input-chars: 128000
-        thinking-type: enabled
-      glm-4-air:
-        aliases: ["glm4-air"]
-        max-input-chars: 128000
 
   # MiniMax
   # Uses thinking.type: "adaptive" (NOT "enabled") and inlines reasoning
@@ -273,11 +212,6 @@ apis:
     base-url: https://api.minimaxi.com/v1
     api-key:
     api-key-env: MINIMAX_API_KEY
-    models:
-      MiniMax-Text-01:
-        aliases: ["m1", "minimax"]
-        max-input-chars: 800000
-        thinking-type: adaptive
 
   # Qwen (Alibaba DashScope)
   # qwen-plus supports thinking via enable_thinking; mods maps the unified
@@ -286,20 +220,6 @@ apis:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     api-key:
     api-key-env: DASHSCOPE_API_KEY
-    models:
-      qwq-plus:
-        aliases: ["qwq", "qwen-reasoner"]
-        max-input-chars: 131072
-      qwen-plus:
-        aliases: ["qwen", "qp"]
-        max-input-chars: 131072
-        thinking-type: enabled
-      qwen-max:
-        aliases: ["qmax"]
-        max-input-chars: 131072
-      qwen-turbo:
-        aliases: ["qturbo"]
-        max-input-chars: 131072
 
   # Kimi (Moonshot AI)
   # moonshot-v1 family does not expose thinking-mode controls.
@@ -307,13 +227,6 @@ apis:
     base-url: https://api.moonshot.cn/v1
     api-key:
     api-key-env: MOONSHOT_API_KEY
-    models:
-      moonshot-v1-128k:
-        aliases: ["kimi128", "kimi"]
-        max-input-chars: 128000
-      moonshot-v1-32k:
-        aliases: ["kimi32"]
-        max-input-chars: 32000
 
   # ---------------------------------------------------------------------------
   # Model Routers and Gateways
@@ -322,32 +235,12 @@ apis:
     base-url: https://openrouter.ai/api/v1
     api-key:
     api-key-env: OPENROUTER_API_KEY
-    models:
-      anthropic/claude-3.5-sonnet:
-        aliases: ["or-sonnet"]
-        max-input-chars: 800000
-      google/gemini-2.5-pro:
-        aliases: ["or-gemini-pro"]
-        max-input-chars: 4194304
-      deepseek/deepseek-chat:
-        aliases: ["or-deepseek"]
-        max-input-chars: 800000
 
   # ---------------------------------------------------------------------------
   # Local and Self-hosted Providers
   # ---------------------------------------------------------------------------
   ollama:
     base-url: http://localhost:11434
-    models:
-      "llama3.1":
-        aliases: ["llama3.1", "llama"]
-        max-input-chars: 392000
-      "qwen2.5":
-        aliases: ["qwen2.5"]
-        max-input-chars: 131072
-      "gemma2":
-        aliases: ["gemma2", "gemma"]
-        max-input-chars: 32000
 
   # ---------------------------------------------------------------------------
   # Custom Provider Examples

@@ -125,11 +125,17 @@ Prefer to edit the raw YAML? Open it in your `$EDITOR`:
 mods --settings
 ```
 
-The defaults are ready to go with OpenAI:
+Set a provider and model with the interactive wizard, or edit the YAML directly:
 
 ```yaml
 default-api: openai
 default-model: gpt-5.4
+apis:
+  openai:
+    api-key-env: OPENAI_API_KEY
+    models:
+      gpt-5.4:
+        max-input-chars: 1000000
 ```
 
 ```sh
@@ -276,8 +282,8 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `shell_run`          | Execute shell commands (prefix-allowable through review). |
 | `thinking_note`      | Sequential-thinking scratchpad for complex tasks.         |
 
-Filesystem tools are on by default (`auto`); shell and sequential-thinking are
-opt-in. Toggle them in `mods.yml`:
+Filesystem tools default to `auto`; shell and sequential-thinking are enabled
+by default. Toggle them in `mods.yml`:
 
 ```yaml
 builtin-tools:
@@ -348,6 +354,10 @@ mods --api ollama --model llama4 "summarize this log"
 ```
 
 Any other OpenAI-compatible endpoint can be added as a custom profile:
+
+`mods --config` can discover models for providers that expose a model-list
+endpoint. If discovery is unavailable, enter the model name in the wizard or add
+it manually:
 
 ```yaml
 apis:

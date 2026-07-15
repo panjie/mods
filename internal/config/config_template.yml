@@ -1,23 +1,26 @@
+# -----------------------------------------------------------------------------
+# Core Defaults
+# -----------------------------------------------------------------------------
 # {{ index .Help "api" }}
 default-api: openai
 # {{ index .Help "model" }}
 default-model: gpt-4o-mini
 
-# ── Formatting ────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Formatting
+# -----------------------------------------------------------------------------
 # {{ index .Help "format-text" }}
 format-text:
   markdown: '{{ index .Config.FormatText "markdown" }}'
   json: '{{ index .Config.FormatText "json" }}'
-
 # {{ index .Help "format" }}
 # format: markdown  # markdown, json, or a custom format-text key; empty = off
-
 # {{ index .Help "minimal" }}
 minimal: false
 
-# ── Roles ─────────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Roles
+# -----------------------------------------------------------------------------
 # {{ index .Help "roles" }}
 roles:
   "default": []
@@ -27,12 +30,12 @@ roles:
   #   - you do not explain anything
   #   - you simply output one liners to solve the problems you're asked
   #   - you do not provide any explanation whatsoever, ONLY the command
-
 # {{ index .Help "role" }}
 role: "default"
 
-# ── Built-in Prompt Overrides ─────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Built-in Prompt Overrides
+# -----------------------------------------------------------------------------
 # {{ index .Help "prompts" }}
 prompts:
   identity: ""
@@ -40,60 +43,49 @@ prompts:
   plan: ""
   shell-classifier: ""
 
-# ── Display & Output ──────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Display and Output
+# -----------------------------------------------------------------------------
 # {{ index .Help "raw" }}
 raw: false
-
 # {{ index .Help "hide-tool-status" }}
 hide-tool-status: false
-
 # {{ index .Help "show-tool-results" }}
 show-tool-results: false
-
 # {{ index .Help "show-token-usage" }}
 show-token-usage: false
-
 # {{ index .Help "word-wrap" }}
 word-wrap: 80
-
 # {{ index .Help "theme" }}
 theme: charm
 
-# ── Model Parameters ──────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Model Parameters
+# -----------------------------------------------------------------------------
 # {{ index .Help "max-input-chars" }}
 max-input-chars: 12250
-
 # {{ index .Help "max-tokens" }}
 # max-tokens: 100
-
 # {{ index .Help "no-limit" }}
 no-limit: false
-
 # {{ index .Help "no-instructions" }}
 no-instructions: false
-
 # {{ index .Help "http-proxy" }}
 # http-proxy: ""  # HTTP proxy for API requests
-
 # {{ index .Help "max-retries" }}
 max-retries: 5
-
 # {{ index .Help "max-tool-rounds" }}
 max-tool-rounds: 30
-
 # {{ index .Help "think" }}
 think: false
-
 # {{ index .Help "review-mode" }}
 review-mode: auto
-
 # {{ index .Help "shell-classify-prompt" }}
 # shell-classify-prompt: "Classify this shell command. Does it create, delete, or modify any files, directories, system settings, or persistent state? Answer only YES or NO. If unsure, answer YES."
 
-# ── Tool & MCP Configuration ──────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Tools and MCP
+# -----------------------------------------------------------------------------
 # {{ index .Help "mcp-servers" }}
 mcp-servers:
   # Example: GitHub MCP via Docker:
@@ -122,10 +114,8 @@ mcp-servers:
   # loopback/private/link-local hosts are rejected. Set
   # MODS_MCP_ALLOW_PRIVATE=1 in the environment to opt in for local
   # development against a self-hosted MCP gateway.
-
 # {{ index .Help "mcp-timeout" }}
 mcp-timeout: 15s
-
 # {{ index .Help "builtin-tools" }}
 builtin-tools:
   filesystem: true
@@ -134,50 +124,45 @@ builtin-tools:
   shell-timeout: 30s
   shell-max-output: 20000
   workspace: ""  # root directory for filesystem/shell tools, defaults to CWD
-
 # {{ index .Help "web-search" }}
 web-search: false
-
 # {{ index .Help "web-search-provider" }}
 # Supported: duckduckgo (default), tavily, custom
 web-search-provider: duckduckgo
-
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
-
 # {{ index .Help "skills-dirs" }}
 # skills-dirs:
 #   - ~/.agents/skills
 #   - ./project-skills
-
 # {{ index .Help "web-search-api-key-env" }}
 # web-search-api-key-env: TAVILY_API_KEY
 
-# ── Images ────────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Images
+# -----------------------------------------------------------------------------
 # {{ index .Help "image" }}
 # images: []
-
 # {{ index .Help "stdin-image" }}
 # stdin-image: false
-
 # {{ index .Help "clipboard-image" }}
 # clipboard-image: false
 
-# ── Debug ─────────────────────────────────────────────────────────
-
+# -----------------------------------------------------------------------------
+# Debug
+# -----------------------------------------------------------------------------
 # {{ index .Help "debug" }}
 debug: false
 
-# ══════════════════════════════════════════════════════════════════
-#                               APIs
-# ══════════════════════════════════════════════════════════════════
-
+# =============================================================================
+# APIs
+# =============================================================================
 # {{ index .Help "apis" }}
 apis:
 
-  # ── Major Cloud Providers ─────────────────────────────────────
-
+  # ---------------------------------------------------------------------------
+  # Hosted Providers
+  # ---------------------------------------------------------------------------
   openai:
     base-url: https://api.openai.com/v1
     api-key:
@@ -239,8 +224,6 @@ apis:
         aliases: ["claude-3-opus", "opus-3", "opus"]
         max-input-chars: 800000
 
-  # ── Enterprise / Alternative ──────────────────────────────────
-
   azure:
     base-url: https://YOUR_RESOURCE_NAME.openai.azure.com
     api-key:
@@ -267,9 +250,7 @@ apis:
         aliases: ["chat", "v3"]
         max-input-chars: 800000
 
-  # ── Chinese AI Providers (国内大模型) ──────────────────────────
-
-  # 智谱 GLM (ZhipuAI)
+  # GLM
   # Recent GLM models use thinking.type: "enabled" (Anthropic-style) and
   # return reasoning via the reasoning_content delta field (auto-captured).
   glm:
@@ -298,7 +279,7 @@ apis:
         max-input-chars: 800000
         thinking-type: adaptive
 
-  # 通义千问 Qwen (Alibaba DashScope)
+  # Qwen (Alibaba DashScope)
   # qwen-plus supports thinking via enable_thinking; mods maps the unified
   # thinking-type opt-in to that provider-specific field.
   qwen:
@@ -334,8 +315,9 @@ apis:
         aliases: ["kimi32"]
         max-input-chars: 32000
 
-  # ── Multi-provider Aggregator ─────────────────────────────────
-
+  # ---------------------------------------------------------------------------
+  # Model Routers and Gateways
+  # ---------------------------------------------------------------------------
   openrouter:
     base-url: https://openrouter.ai/api/v1
     api-key:
@@ -351,8 +333,9 @@ apis:
         aliases: ["or-deepseek"]
         max-input-chars: 800000
 
-  # ── Local / Self-hosted ───────────────────────────────────────
-
+  # ---------------------------------------------------------------------------
+  # Local and Self-hosted Providers
+  # ---------------------------------------------------------------------------
   ollama:
     base-url: http://localhost:11434
     models:
@@ -366,6 +349,9 @@ apis:
         aliases: ["gemma2", "gemma"]
         max-input-chars: 32000
 
+  # ---------------------------------------------------------------------------
+  # Custom Provider Examples
+  # ---------------------------------------------------------------------------
   # Example: custom OpenAI-compatible server
   # custom:
   #   base-url: https://your-server.com/v1
@@ -376,7 +362,7 @@ apis:
   #       aliases: ["ym"]
   #       max-input-chars: 100000
   #
-  #       # ── Reasoning / Thinking configuration ──
+  #       # Reasoning / Thinking configuration
   #       # These fields control how -t / --think on interacts with
   #       # the provider. All are optional with sensible defaults.
   #
@@ -397,7 +383,7 @@ apis:
   #       # thought-fields: [my_custom_field]
   #
   #       # think-tag: override the inline reasoning tag name.
-  #       # Default "think" → <think>...</think>. Only parsed when -t is on.
+  #       # Default: "think" renders as <think>...</think>. Only parsed when -t is on.
   #       # think-tag: reasoning
   #
   #       # reasoning-effort: target reasoning_effort value for -t.
@@ -407,10 +393,10 @@ apis:
   # Example: custom Anthropic-compatible server (speaks the Anthropic
   # Messages API, e.g. a Claude proxy or a third-party gateway). Set
   # api-type: anthropic so mods routes through the native Anthropic
-  # adapter — including tool calling, reasoning/thinking, and image
-  # support — regardless of the provider name. base-url may be the host
+  # adapter, including tool calling, reasoning/thinking, and image
+  # support, regardless of the provider name. base-url may be the host
   # root, the host with /v1, or the full /v1/messages endpoint many
-  # providers document — the adapter normalizes it so the path is never
+  # providers document. The adapter normalizes it so the path is never
   # doubled.
   # acme-claude:
   #   api-type: anthropic
@@ -430,7 +416,7 @@ apis:
   # zen gateway serves some models only via its OpenAI-compatible endpoint
   # (/v1/chat/completions) and others only via its Anthropic endpoint
   # (/v1/messages). mods models one provider = one protocol, so configure
-  # TWO providers sharing the same key — one per endpoint. (OpenRouter, by
+  # TWO providers sharing the same key, one per endpoint. (OpenRouter, by
   # contrast, serves every model through a single OpenAI-compatible
   # endpoint, so it needs only one provider.)
   #

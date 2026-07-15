@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -693,10 +694,19 @@ func createConfigFile(path string) error {
 		Config: Default(),
 		Help:   Help,
 	}
-	if err := tmpl.Execute(f, m); err != nil {
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, m); err != nil {
 		return modsError{Err: err, ReasonText: "Could not render template."}
 	}
+	if _, err := f.WriteString(normalizeLineEndings(buf.String())); err != nil {
+		return modsError{Err: err, ReasonText: "Could not write configuration file."}
+	}
 	return nil
+}
+
+func normalizeLineEndings(s string) string {
+	s = stdstrings.ReplaceAll(s, "\r\n", "\n")
+	return stdstrings.ReplaceAll(s, "\r", "\n")
 }
 
 func Default() Config {

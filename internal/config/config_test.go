@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
@@ -219,6 +220,40 @@ func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "show-token-usage: false")
+}
+
+func TestCreateConfigFileUsesLFLineEndings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(content), "\r")
+}
+
+func TestNormalizeLineEndings(t *testing.T) {
+	require.Equal(t, "a\nb\nc\n", normalizeLineEndings("a\r\nb\rc\n"))
+}
+
+func TestConfigTemplateUsesEnglishNeutralSections(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(content)
+
+	for _, r := range text {
+		require.Falsef(t, unicode.Is(unicode.Han, r), "config template must not contain Chinese characters: %q", r)
+	}
+
+	for _, section := range []string{
+		"Chinese AI Providers",
+		"Major Cloud Providers",
+		"Enterprise / Alternative",
+	} {
+		require.NotContains(t, text, section)
+	}
 }
 
 func TestAPITypeYAML(t *testing.T) {

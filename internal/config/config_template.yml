@@ -255,9 +255,9 @@ apis:
     api-key:
     api-key-env: DEEPSEEK_API_KEY
     models:
-      # DeepSeek models default to thinking ENABLED. mods actively sends
-      # thinking.type: disabled when -t is off, and thinking.type: enabled
-      # (the value below) when -t is on. No extra-params boilerplate needed.
+      # thinking-type opts a model into -t / --think. When it is absent,
+      # mods keeps thinking disabled even if the provider defaults it on.
+      # For DeepSeek this maps to thinking.type enabled/disabled.
       # See: https://api-docs.deepseek.com/guides/thinking_mode
       deepseek-reasoner:
         aliases: ["r1", "reasoner"]
@@ -299,8 +299,8 @@ apis:
         thinking-type: adaptive
 
   # 通义千问 Qwen (Alibaba DashScope)
-  # Two thinking modes: qwq (dedicated reasoning model, always thinks)
-  # and qwen-plus (toggle via enable_thinking).
+  # qwen-plus supports thinking via enable_thinking; mods maps the unified
+  # thinking-type opt-in to that provider-specific field.
   qwen:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     api-key:
@@ -312,11 +312,7 @@ apis:
       qwen-plus:
         aliases: ["qwen", "qp"]
         max-input-chars: 131072
-        # enable_thinking toggles reasoning on this model; -t does not
-        # toggle it for OpenAI-compatible endpoints. Switch to qwq-plus
-        # for a model that only thinks on demand.
-        extra-params:
-          enable_thinking: true
+        thinking-type: enabled
       qwen-max:
         aliases: ["qmax"]
         max-input-chars: 131072
@@ -384,15 +380,16 @@ apis:
   #       # These fields control how -t / --think on interacts with
   #       # the provider. All are optional with sensible defaults.
   #
-  #       # thinking-type: the value to set thinking.type to when -t is on.
-  #       # Default "adaptive" (MiniMax). Use "enabled" for GLM/Anthropic.
+  #       # thinking-type: opt into -t / --think for this model. Omit it to
+  #       # keep thinking disabled by default, including for discovered models.
+  #       # Common values: enabled, adaptive (MiniMax).
   #       thinking-type: enabled
   #
   #       # extra-params: arbitrary fields merged into the request body.
-  #       # Set thinking.type: disabled here for "off by default, -r turns on".
+  #       # Provider-specific thinking toggles are normally handled by mods'
+  #       # unified thinking policy; use this only for unsupported fields.
   #       extra-params:
-  #         thinking:
-  #           type: disabled
+  #         custom_field: custom_value
   #
   #       # thought-fields: override the delta fields consulted for reasoning
   #       # content extraction. Default: [reasoning_content, reasoning,

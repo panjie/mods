@@ -45,45 +45,45 @@ const (
 )
 
 var Help = map[string]string{
-	"api":                    "OpenAI compatible REST API (openai, localai, anthropic, ...)",
-	"apis":                   "Aliases and endpoints for OpenAI compatible REST API",
-	"api-type":               "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, azure, or azure-ad. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
-	"http-proxy":             "HTTP proxy to use for API requests",
-	"model":                  "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
-	"ask-model":              "Ask which model to use via interactive prompt",
-	"max-input-chars":        "Default character limit on input to model",
-	"format":                 "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
-	"format-text":            "Text to append when using the -f flag",
-	"minimal":                "Output only the final result, optimized for pipelines",
-	"role":                   "System role to use",
-	"roles":                  "List of predefined system messages that can be used as roles",
-	"list-roles":             "List the roles defined in your configuration file",
-	"list-prompts":           "List built-in prompts and prompt templates",
-	"list-skills":            "List installed skills from the configured skills directories",
-	"prompts":                "Override built-in runtime prompts; empty values use the built-in defaults",
-	"raw":                    "Render output as raw text when connected to a TTY",
-	"hide-tool-status":       "Hide the tool-operation label while tools run (the spinner stays visible)",
-	"show-tool-results":      "Show completed shell-command result blocks in the output",
-	"show-token-usage":       "Show input, output, and total token usage after each interaction",
-	"help":                   "Show Help and exit",
-	"version":                "Show version and exit",
-	"max-retries":            "Maximum number of times to retry API calls",
-	"no-limit":               "Turn off the client-side limit on the size of the input into the model",
-	"no-instructions":        "Disable auto-loading AGENTS.md from the workspace root as project context",
-	"word-wrap":              "Wrap formatted output at specific width (default is 80)",
-	"max-tokens":             "Maximum number of tokens in response",
-	"settings":               "Open settings in your $EDITOR",
-	"config":                 "Interactive setup wizard for provider, model, API key, and tools",
-	"dirs":                   "Print the directories in which mods store its data",
-	"reset-settings":         "Backup your old settings file and reset everything to the defaults",
-	"continue":               "Continue from the last response or a given save title",
-	"continue-last":          "Continue from the last response",
-	"no-save":                "Disable saving and resuming sessions",
-	"chat":                   "Start a continuous session; type /exit or /quit to quit",
-	"list-sessions":          "Interactively browse, view, and delete saved sessions",
-	"theme":                  "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
-	"editor":                 "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
-	"mcp-servers":            "MCP Servers configurations",
+	"api":               "OpenAI compatible REST API (openai, localai, anthropic, ...)",
+	"apis":              "Aliases and endpoints for OpenAI compatible REST API",
+	"api-type":          "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, azure, or azure-ad. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
+	"http-proxy":        "HTTP proxy to use for API requests",
+	"model":             "Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)",
+	"ask-model":         "Ask which model to use via interactive prompt",
+	"max-input-chars":   "Default character limit on input to model",
+	"format":            "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
+	"format-text":       "Text to append when using the -f flag",
+	"minimal":           "Output only the final result, optimized for pipelines",
+	"role":              "System role to use",
+	"roles":             "List of predefined system messages that can be used as roles",
+	"list-roles":        "List the roles defined in your configuration file",
+	"list-prompts":      "List built-in prompts and prompt templates",
+	"list-skills":       "List installed skills from the configured skills directories",
+	"prompts":           "Override built-in runtime prompts; empty values use the built-in defaults",
+	"raw":               "Render output as raw text when connected to a TTY",
+	"hide-tool-status":  "Hide the tool-operation label while tools run (the spinner stays visible)",
+	"show-tool-results": "Show completed shell-command result blocks in the output",
+	"show-token-usage":  "Show input, output, and total token usage after each interaction",
+	"help":              "Show Help and exit",
+	"version":           "Show version and exit",
+	"max-retries":       "Maximum number of times to retry API calls",
+	"no-limit":          "Turn off the client-side limit on the size of the input into the model",
+	"no-instructions":   "Disable auto-loading AGENTS.md from the workspace root as project context",
+	"word-wrap":         "Wrap formatted output at specific width (default is 80)",
+	"max-tokens":        "Maximum number of tokens in response",
+	"settings":          "Open settings in your $EDITOR",
+	"config":            "Interactive setup wizard for provider, model, API key, and tools",
+	"dirs":              "Print the directories in which mods store its data",
+	"reset-settings":    "Backup your old settings file and reset everything to the defaults",
+	"continue":          "Continue from the last response or a given save title",
+	"continue-last":     "Continue from the last response",
+	"no-save":           "Disable saving and resuming sessions",
+	"chat":              "Start a continuous session; type /exit or /quit to quit",
+	"list-sessions":     "Interactively browse, view, and delete saved sessions",
+	"theme":             "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
+	"editor":            "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
+	"mcp-servers":       "MCP Servers configurations",
 
 	"list-mcps":              "List all available MCP servers",
 	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
@@ -98,7 +98,7 @@ var Help = map[string]string{
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
-	"think":                  "Enables extended thinking mode",
+	"think":                  "Enable extended thinking for models that opt in with thinking-type",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
@@ -115,10 +115,9 @@ type Model struct {
 	Fallback       string         `yaml:"fallback"`
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
-	// ThinkingType is the value to set thinking.type to when thinking is
-	// enabled via -t / --think. Defaults to "adaptive" (MiniMax) when
-	// extra-params.thinking already exists; use "enabled" for GLM and
-	// Anthropic-compatible APIs.
+	// ThinkingType opts this model into -t / --think. When empty, mods keeps
+	// thinking disabled even if the provider defaults it on. Values are mapped
+	// by the app thinking policy (e.g. "enabled", or "adaptive" for MiniMax).
 	ThinkingType string `yaml:"thinking-type,omitempty"`
 	// ThinkFields overrides the list of delta fields consulted for
 	// reasoning/thinking content extraction. Defaults to
@@ -259,7 +258,7 @@ type Config struct {
 	MCPList       bool
 	MCPListTools  bool
 
-	NoSave        bool
+	NoSave bool
 
 	// Runtime state (computed internally, never persisted).
 	Prefix                                                   string

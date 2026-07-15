@@ -238,13 +238,15 @@ Top-level keys:
           aliases: ["short"]
           max-input-chars: 100000
           fallback: ""               # fallback model name
-          thinking-type: ""          # reasoning toggle: adaptive (MiniMax), enabled (GLM/Anthropic)
-          thinking-budget: 0         # max reasoning tokens
-          reasoning-effort: medium   # low, medium, high
+          thinking-type: ""          # opt into -t thinking for this model; omit = keep thinking off
+          thinking-budget: 0         # optional thinking token budget when thinking-type is set
+          reasoning-effort: medium   # optional OpenAI/Azure effort when thinking-type is set
           thought-fields: []         # override delta fields for reasoning extraction
           think-tag: think           # override inline reasoning tag
           extra-params: {}           # arbitrary extra request body fields
   ```
+
+  Model thinking behavior is opt-in. If a model does not set `thinking-type`, mods keeps thinking disabled even when the provider defaults it on; model discovery intentionally does not add `thinking-type`. Set `thinking-type: enabled` (or provider-specific values like `adaptive` for MiniMax) to allow `-t` / `think: true` to enable thinking. `thinking-budget` and `reasoning-effort` are optional tuning fields; mods maps the unified setting to provider-specific request fields such as `thinking.type`, `enable_thinking`, `thinkingBudget`, or `reasoning_effort`.
 
 - `images` ([]string) — default image paths to attach
 

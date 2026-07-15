@@ -139,6 +139,23 @@ apis: {}
 	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
 }
 
+func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotOptInThinking(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:                "deepseek",
+		modelName:              "deepseek-v4-flash",
+		reviewMode:             "auto",
+		fsMode:                 "auto",
+		webSearchProvider:      "duckduckgo",
+		webSearchProviderValue: "duckduckgo",
+		keyStorage:             "env",
+		envVarName:             "DEEPSEEK_API_KEY",
+		addedModelNames:        []string{"deepseek-v4-flash"},
+	})
+
+	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "max-input-chars"}, defaultNewModelInputChars)
+	requireNoUpdatePath(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "thinking-type"})
+}
+
 func TestBuildConfigWizardUpdatesWritesAPITypeForAnthropic(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:         "acme-claude",

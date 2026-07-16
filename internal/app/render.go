@@ -183,7 +183,8 @@ func (m *Mods) footerView() string {
 // responseOutputStarted flips true once the first token of an answer streams.
 // Thinking (-t) is treated as Streaming since the model is producing tokens.
 func (m *Mods) spinnerPhase() SpinnerPhase {
-	if strings.TrimSpace(m.getActiveOperation()) != "" {
+	op := strings.TrimSpace(m.getActiveOperation())
+	if op != "" && !isShellCompletionStatus(op) {
 		return PhaseTool
 	}
 	if m.responseOutputStarted || m.thinkActive {
@@ -229,7 +230,52 @@ func (m *Mods) spinnerLine() string {
 func (m *Mods) operationStatusLine() string {
 	text := m.getActiveOperation()
 	text = TruncateOperationStatus(text, m.width)
-	return m.Styles.Comment.Render(text)
+	if line := m.shellCompletionStatusLine(text); line != "" {
+		return line
+	}
+	if line := m.runningShellStatusLine(text); line != "" {
+		return line
+	}
+	return statusBadge("RUNNING", m.Styles.Interaction.Warning) + m.Styles.Comment.Render(" "+text)
+}
+
+func (m *Mods) shellCompletionStatusLine(text string) string {
+	switch {
+	case strings.HasPrefix(text, "✓ "):
+		return statusBadge("DONE", m.Styles.Interaction.Success) + m.Styles.Comment.Render(" "+strings.TrimPrefix(text, "✓ "))
+	case strings.HasPrefix(text, "✗ "):
+		return statusBadge("FAILED", m.Styles.Interaction.Danger) + m.Styles.Comment.Render(" "+strings.TrimPrefix(text, "✗ "))
+	default:
+		return ""
+	}
+}
+
+func isShellCompletionStatus(text string) bool {
+	return strings.HasPrefix(text, "✓ ") || strings.HasPrefix(text, "✗ ")
+}
+
+func (m *Mods) runningShellStatusLine(text string) string {
+	if _, _, _, ok := runningShellStatus(text); !ok {
+		return ""
+	}
+	return statusBadge("RUNNING", m.Styles.Interaction.Warning) + m.Styles.Comment.Render(" "+text)
+}
+
+func statusBadge(label string, style lipgloss.Style) string {
+	return style.Render(fmt.Sprintf("%-7s", label))
+}
+
+func runningShellStatus(text string) (prefix, command, suffix string, ok bool) {
+	for _, marker := range []string{"Shell - ", "PS - ", "Shell: ", "PS: "} {
+		if after, found := strings.CutPrefix(text, marker); found {
+			command, suffix, _ = strings.Cut(after, " - last: ")
+			if suffix != "" {
+				suffix = " - last: " + suffix
+			}
+			return marker, strings.TrimSpace(command), suffix, true
+		}
+	}
+	return "", "", "", false
 }
 
 func (m *Mods) appendToOutput(s string) {

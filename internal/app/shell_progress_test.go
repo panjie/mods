@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,21 +15,43 @@ func TestShellProgressStatus(t *testing.T) {
 	got := shellProgressStatus(
 		"powershell_run",
 		"# installing PowerShell\nwinget install --id Microsoft.PowerShell",
-		65*time.Second+400*time.Millisecond,
 		"\x1b[32mDownloading 42%\x1b[0m\r",
 		200,
 	)
-	require.Equal(t, "PS - 1m05s - last: Downloading 42% - winget install --id Microsoft.PowerShell", got)
+	require.Equal(t, "PS - winget install --id Microsoft.PowerShell - last: Downloading 42%", got)
 }
 
 func TestShellProgressStatusUsesLastNonEmptyOutputLine(t *testing.T) {
-	got := shellProgressStatus("shell_run", "npm install", 3*time.Second, "first\n\nlatest\n", 200)
-	require.Equal(t, "Shell - 3s - last: latest - npm install", got)
+	got := shellProgressStatus("shell_run", "npm install", "first\n\nlatest\n", 200)
+	require.Equal(t, "Shell - npm install - last: latest", got)
 }
 
-func TestShellProgressStatusKeepsElapsedWhenNarrow(t *testing.T) {
-	got := shellProgressStatus("powershell_run", "winget install --id 9PFXXSHC64H3 --exact --accept-source-agreements --accept-package-agreements", 42*time.Second, "", 32)
-	require.Contains(t, got, "PS - 42s")
+func TestShellProgressStatusKeepsCommandWhenNarrow(t *testing.T) {
+	got := shellProgressStatus("powershell_run", "winget install --id 9PFXXSHC64H3 --exact --accept-source-agreements --accept-package-agreements", "", 32)
+	require.Contains(t, got, "PS - winget install")
+	require.NotContains(t, got, "42s")
+}
+
+func TestShellCompletionStatus(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		got := shellCompletionStatus("shell_run", []byte(`{"command":"go test ./..."}`), nil, 200)
+		require.Equal(t, "✓ Shell - go test ./...", got)
+	})
+
+	t.Run("exit code", func(t *testing.T) {
+		got := shellCompletionStatus("powershell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1}, 200)
+		require.Equal(t, "✗ PS - npm test (exit 1)", got)
+	})
+
+	t.Run("plain error", func(t *testing.T) {
+		got := shellCompletionStatus("shell_run", []byte(`{"command":"missing"}`), errors.New("command not found"), 200)
+		require.Equal(t, "✗ Shell - missing (failed: command not found)", got)
+	})
+
+	t.Run("non shell", func(t *testing.T) {
+		got := shellCompletionStatus("fs_read_file", []byte(`{"path":"mods.go"}`), nil, 200)
+		require.Empty(t, got)
+	})
 }
 
 func TestHandleShellProgressRedactsSecrets(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -383,6 +384,35 @@ func TestRenderWithOperationShowsSpinnerAndToolLabel(t *testing.T) {
 		require.Contains(t, got, "animating", "spinner stays on even with --hide-tool-status")
 		require.NotContains(t, got, "Run: find", "tool label hidden by --hide-tool-status")
 	})
+}
+
+func TestOperationStatusLineShowsRunningShellBadge(t *testing.T) {
+	m := &Mods{
+		Config:              &Config{},
+		Styles:              makeStyles(true),
+		width:               80,
+		showOperationStatus: true,
+		reviewer:            &toolReviewer{},
+	}
+	m.setActiveOperation("Shell - go test ./... - last: ok")
+
+	got := m.operationStatusLine()
+
+	require.Equal(t, "RUNNING Shell - go test ./... - last: ok", strings.Join(strings.Fields(ansi.Strip(got)), " "))
+	require.Contains(t, got, "\x1b[")
+}
+
+func TestOperationStatusLineStylesShellCompletion(t *testing.T) {
+	m := &Mods{
+		Config: &Config{},
+		Styles: makeStyles(true),
+		width:  80,
+	}
+	m.setActiveOperation("✗ Shell - npm test (exit 1)")
+
+	got := m.operationStatusLine()
+	require.Equal(t, "FAILED Shell - npm test (exit 1)", strings.Join(strings.Fields(ansi.Strip(got)), " "))
+	require.Contains(t, got, "\x1b[")
 }
 
 func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *testing.T) {

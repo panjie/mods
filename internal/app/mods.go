@@ -635,9 +635,13 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
 	m.reviewer.reset()
 	m.userInput.reset()
+	completionStatus := ""
 	for _, call := range msg.results {
 		if !errors.Is(call.Err, errReviewUnavailable) {
 			m.appendShellResult(call.Name, call.Arguments, call.Err)
+			if status := shellCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
+				completionStatus = status
+			}
 		}
 		if call.Err != nil {
 			var exitErr shellExitCoder
@@ -684,6 +688,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		m.setActiveOperation("")
 		return msgCmd(msg.runner.doneMsg())
 	}
+	m.setActiveOperation(completionStatus)
 	m.totalRounds++
 	hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
 		return toolCallFailed(c.Err)

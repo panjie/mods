@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -17,40 +17,52 @@ func (m *Mods) handleShellProgress(_ context.Context, progress toolregistry.Shel
 		command = m.secrets.Redact(command)
 		lastOutput = m.secrets.Redact(lastOutput)
 	}
-	m.sendToolOperationStatus(shellProgressStatus(progress.Tool, command, progress.Elapsed, lastOutput, m.width))
+	m.sendToolOperationStatus(shellProgressStatus(progress.Tool, command, lastOutput, m.width))
 }
 
-func shellProgressStatus(tool, command string, elapsed time.Duration, lastOutput string, width int) string {
-	prefix := "Shell"
-	if tool == "powershell_run" {
-		prefix = "PS"
+func shellProgressStatus(tool, command string, lastOutput string, width int) string {
+	prefix := shellStatusPrefix(tool)
+	if prefix == "" {
+		prefix = "Shell"
 	}
-	status := prefix + " - " + shellElapsed(elapsed)
-	if output := shellProgressOutputPreview(lastOutput); output != "" {
-		status += " - last: " + output
-	}
+	status := prefix
 	if command := ShellCommandPreview(command); command != "" {
 		status += " - " + command
+	}
+	if output := shellProgressOutputPreview(lastOutput); output != "" {
+		status += " - last: " + output
 	}
 	return TruncateOperationStatus(status, width)
 }
 
-func shellElapsed(elapsed time.Duration) string {
-	if elapsed < 0 {
-		elapsed = 0
+func shellCompletionStatus(tool string, data []byte, err error, width int) string {
+	prefix := shellStatusPrefix(tool)
+	if prefix == "" {
+		return ""
 	}
-	seconds := int(elapsed.Round(time.Second).Seconds())
-	if seconds < 60 {
-		return fmt.Sprintf("%ds", seconds)
+	command := ShellCommandPreview(ArgString(ToolOperationArgs(data), "command"))
+	if command == "" {
+		return ""
 	}
-	minutes := seconds / 60
-	seconds %= 60
-	if minutes < 60 {
-		return fmt.Sprintf("%dm%02ds", minutes, seconds)
+	if err == nil {
+		return TruncateOperationStatus("✓ "+prefix+" - "+command, width)
 	}
-	hours := minutes / 60
-	minutes %= 60
-	return fmt.Sprintf("%dh%02dm", hours, minutes)
+	var exitErr shellExitCoder
+	if errors.As(err, &exitErr) {
+		return TruncateOperationStatus(fmt.Sprintf("✗ %s - %s (exit %d)", prefix, command, exitErr.ExitCode()), width)
+	}
+	return TruncateOperationStatus(fmt.Sprintf("✗ %s - %s (failed: %s)", prefix, command, OneLinePreview(err.Error())), width)
+}
+
+func shellStatusPrefix(tool string) string {
+	switch tool {
+	case "shell_run":
+		return "Shell"
+	case "powershell_run":
+		return "PS"
+	default:
+		return ""
+	}
 }
 
 func shellProgressOutputPreview(output string) string {

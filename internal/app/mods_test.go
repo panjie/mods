@@ -17,6 +17,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -862,7 +863,7 @@ func TestOperationStatusView(t *testing.T) {
 	t.Run("shows active operation", func(t *testing.T) {
 		m := newAnimatingMods()
 		_, _ = m.Update(toolOperationStatusMsg{content: "Shell: go test ./..."})
-		require.Contains(t, m.View().Content, "Shell: go test ./...")
+		require.Contains(t, ansi.Strip(m.View().Content), "Shell: go test ./...")
 	})
 
 	t.Run("clears active operation", func(t *testing.T) {
@@ -893,7 +894,7 @@ func TestOperationStatusView(t *testing.T) {
 		m.thinkActive = true
 		m.setActiveOperation("Shell: go test ./...")
 		view := m.renderWithOperation("answer")
-		require.Contains(t, view, "Shell: go test ./...")
+		require.Contains(t, ansi.Strip(view), "Shell: go test ./...")
 		require.NotContains(t, view, "[R]")
 		require.NotContains(t, view, "Reasoning")
 	})
@@ -1048,6 +1049,11 @@ func TestSpinnerPhaseDerivation(t *testing.T) {
 	m.responseOutputStarted = true
 	m.setActiveOperation("Running: go test ./...")
 	require.Equal(t, PhaseTool, m.spinnerPhase())
+
+	// A shell completion badge is only a result marker; it should not make the
+	// spinner look like a tool is still executing.
+	m.setActiveOperation("✓ Shell - go test ./...")
+	require.Equal(t, PhaseStreaming, m.spinnerPhase())
 }
 
 // TestShouldUpdateAnimationTicksDuringStreaming locks in the always-on change:
@@ -1425,6 +1431,40 @@ func TestToolCallFailed(t *testing.T) {
 	})
 	t.Run("wrapped non-zero shell exit is not a failure", func(t *testing.T) {
 		require.False(t, toolCallFailed(fmt.Errorf("wrapped: %w", toolregistry.ShellExitError{Code: 2})))
+	})
+}
+
+func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
+	errh := func(error) tea.Msg { return nil }
+
+	t.Run("success", func(t *testing.T) {
+		m := newAnimatingMods()
+		cmd := m.handleToolCallsDone(streamEventMsg{
+			results: []proto.ToolCallStatus{{Name: "shell_run", Arguments: []byte(`{"command":"go test ./..."}`)}},
+			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+		})
+		require.NotNil(t, cmd)
+		require.Equal(t, "✓ Shell - go test ./...", m.getActiveOperation())
+	})
+
+	t.Run("exit code", func(t *testing.T) {
+		m := newAnimatingMods()
+		cmd := m.handleToolCallsDone(streamEventMsg{
+			results: []proto.ToolCallStatus{{Name: "powershell_run", Arguments: []byte(`{"command":"npm test"}`), Err: toolregistry.ShellExitError{Code: 1}}},
+			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+		})
+		require.NotNil(t, cmd)
+		require.Equal(t, "✗ PS - npm test (exit 1)", m.getActiveOperation())
+	})
+
+	t.Run("non shell", func(t *testing.T) {
+		m := newAnimatingMods()
+		cmd := m.handleToolCallsDone(streamEventMsg{
+			results: []proto.ToolCallStatus{{Name: "fs_read_file", Arguments: []byte(`{"path":"mods.go"}`)}},
+			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+		})
+		require.NotNil(t, cmd)
+		require.Empty(t, m.getActiveOperation())
 	})
 }
 

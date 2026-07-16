@@ -20,6 +20,8 @@ type outputRenderer struct {
 	displayOutput        string
 	outputBuilder        strings.Builder
 	displayOutputBuilder strings.Builder
+	displayBlocks        map[string]string
+	displayBlockSeq      int
 	glamHeight           int
 	renderDirty          bool
 	lastRenderFlush      time.Time
@@ -344,6 +346,21 @@ func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 	m.flushRender()
 }
 
+func (m *Mods) appendToOutputWithDisplayBlock(raw, block string) {
+	marker := m.nextDisplayBlockMarker(block)
+	m.appendToOutputWithDisplay(raw, marker+"\n\n")
+}
+
+func (m *Mods) nextDisplayBlockMarker(block string) string {
+	if m.displayBlocks == nil {
+		m.displayBlocks = map[string]string{}
+	}
+	m.displayBlockSeq++
+	marker := fmt.Sprintf("MODS_DISPLAY_BLOCK_%d", m.displayBlockSeq)
+	m.displayBlocks[marker] = block
+	return marker
+}
+
 func (m *Mods) shouldFlushRender(display string) bool {
 	if strings.ContainsAny(display, "\n\r") {
 		return true
@@ -366,6 +383,7 @@ func (m *Mods) flushRender() {
 	m.glamOutput, _ = m.glam.Render(preprocessed)
 	m.glamOutput = strings.TrimRightFunc(m.glamOutput, unicode.IsSpace)
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
+	m.glamOutput = m.replaceDisplayBlocks(m.glamOutput)
 	m.glamOutput = m.styleToolResultLines(m.glamOutput)
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.glamOutput += "\n"
@@ -384,6 +402,27 @@ func (m *Mods) flushRender() {
 	}
 	m.renderDirty = false
 	m.lastRenderFlush = time.Now()
+}
+
+func (m *Mods) replaceDisplayBlocks(rendered string) string {
+	if len(m.displayBlocks) == 0 {
+		return rendered
+	}
+	lines := strings.Split(rendered, "\n")
+	changed := false
+	for i, line := range lines {
+		marker := strings.TrimSpace(ansi.Strip(line))
+		block, ok := m.displayBlocks[marker]
+		if !ok {
+			continue
+		}
+		lines[i] = block
+		changed = true
+	}
+	if !changed {
+		return rendered
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *Mods) styleToolResultLines(rendered string) string {
@@ -426,7 +465,7 @@ func (m *Mods) styleToolResultLine(line string) (string, bool) {
 	if marker == "✗" {
 		markerStyle = toolResultFailureMarkerStyle
 	}
-	return plain[:idx] + markerStyle.Render(marker) + m.Styles.Comment.Render(after), true
+	return m.Styles.Comment.Render(plain[:idx]) + markerStyle.Render(marker) + m.Styles.Comment.Render(after), true
 }
 
 var (
@@ -439,20 +478,22 @@ func (m *Mods) resetOutputBuffers() {
 	m.displayOutput = ""
 	m.outputBuilder.Reset()
 	m.displayOutputBuilder.Reset()
+	m.displayBlocks = nil
+	m.displayBlockSeq = 0
 	m.renderDirty = false
 	m.lastRenderFlush = time.Time{}
 }
 
 // flushThought renders the accumulated reasoning/thinking content before the
 // answer. Raw output keeps the explicit markdown separator for compatibility,
-// while the TTY display uses a quieter block.
+// while the TTY display uses the same panel language as runtime prompts.
 func (m *Mods) flushThought() {
 	m.thoughtFlushed = true
 	thought := strings.TrimSpace(m.Thought)
 	if thought == "" {
 		return
 	}
-	m.appendToOutputWithDisplay(thoughtMarkdown(thought), thoughtDisplayMarkdown(thought))
+	m.appendToOutputWithDisplayBlock(thoughtMarkdown(thought), thoughtDisplayBlock(m.Styles.Interaction, m.width, thought))
 }
 
 // thoughtMarkdown formats reasoning content as a labelled markdown
@@ -473,21 +514,11 @@ func thoughtMarkdown(thought string) string {
 	return b.String()
 }
 
-// thoughtDisplayMarkdown formats reasoning content for interactive terminals.
-// It stays in markdown so glamour can apply the user's theme, but keeps the
-// block visually quiet and leaves the final answer as the main event.
-func thoughtDisplayMarkdown(thought string) string {
-	var b strings.Builder
-	b.WriteString("> _thinking_\n>\n")
-	for _, line := range strings.Split(thought, "\n") {
-		if strings.TrimSpace(line) == "" {
-			b.WriteString(">\n")
-			continue
-		}
-		b.WriteString("> ")
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	return b.String()
+func thoughtDisplayBlock(styles ui.InteractionStyles, width int, thought string) string {
+	return renderInteractionPanel(styles, width, interactionPanel{
+		Title: "Thinking",
+		Meta:  "-t",
+		Tone:  interactionToneInfo,
+		Body:  strings.Split(thought, "\n"),
+	})
 }

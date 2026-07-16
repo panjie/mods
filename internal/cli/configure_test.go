@@ -139,7 +139,7 @@ apis: {}
 	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
 }
 
-func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotOptInThinking(t *testing.T) {
+func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "deepseek",
 		modelName:              "deepseek-v4-flash",

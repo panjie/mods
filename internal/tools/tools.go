@@ -198,11 +198,28 @@ func (r *Registry) ValidateRequiredArgs(name string, data []byte) error {
 		if !present {
 			return fmt.Errorf("tool %q: %s is required", name, field)
 		}
-		if s, ok := value.(string); ok && s == "" {
+		if s, ok := value.(string); ok && s == "" && !allowsEmptyRequiredString(tool.Spec.InputSchema, field) {
 			return fmt.Errorf("tool %q: %s is required", name, field)
 		}
 	}
 	return nil
+}
+
+func allowsEmptyRequiredString(schema map[string]any, field string) bool {
+	properties, _ := schema["properties"].(map[string]any)
+	property, _ := properties[field].(map[string]any)
+	minLength, ok := property["minLength"]
+	if !ok {
+		return false
+	}
+	switch v := minLength.(type) {
+	case int:
+		return v == 0
+	case float64:
+		return v == 0
+	default:
+		return false
+	}
 }
 
 // Len returns the number of registered tools.

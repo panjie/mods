@@ -98,7 +98,7 @@ var Help = map[string]string{
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
-	"think":                  "Enable extended thinking for models that opt in with thinking-type",
+	"think":                  "Enable extended thinking for supported models; thinking-type can override provider defaults",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
@@ -115,9 +115,8 @@ type Model struct {
 	Fallback       string         `yaml:"fallback"`
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
-	// ThinkingType opts this model into -t / --think. When empty, mods keeps
-	// thinking disabled even if the provider defaults it on. Values are mapped
-	// by the app thinking policy (e.g. "enabled", or "adaptive" for MiniMax).
+	// ThinkingType overrides the provider default value used by -t / --think.
+	// Custom OpenAI-compatible providers can set it to opt into thinking.type.
 	ThinkingType string `yaml:"thinking-type,omitempty"`
 	// ThinkFields overrides the list of delta fields consulted for
 	// reasoning/thinking content extraction. Defaults to

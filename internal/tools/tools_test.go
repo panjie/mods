@@ -115,6 +115,8 @@ func TestValidateRequiredArgs(t *testing.T) {
 		{"write missing path", "fs_write_file", `{"content":"x"}`, "path is required"},
 		{"write empty path", "fs_write_file", `{"path":"","content":"x"}`, "path is required"},
 		{"write missing content", "fs_write_file", `{"path":"a.txt"}`, "content is required"},
+		{"replace missing new text", "fs_replace", `{"path":"a.txt","old_text":"x"}`, "new_text is required"},
+		{"replace empty new text allowed", "fs_replace", `{"path":"a.txt","old_text":"x","new_text":""}`, ""},
 		{"read missing path", "fs_read_file", `{"offset":0}`, "path is required"},
 		{"copy missing dest", "fs_copy", `{"source_path":"a"}`, "dest_path is required"},
 		{"valid write", "fs_write_file", `{"path":"a.txt","content":"x"}`, ""},
@@ -549,6 +551,128 @@ func TestFilesystemApplyPatch(t *testing.T) {
 	}
 }
 
+func TestFilesystemReplace(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	path := filepath.Join(root, "a.txt")
+	if err := os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o640); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	beforeInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file before replace: %v", err)
+	}
+
+	args := map[string]string{"path": "a.txt", "old_text": "beta\n", "new_text": "delta\n"}
+	data, err := json.Marshal(args)
+	if err != nil {
+		t.Fatalf("marshal args: %v", err)
+	}
+	if _, err := registry.Call(context.Background(), "fs_replace", data); err != nil {
+		t.Fatalf("replace text: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(content) != "alpha\ndelta\ngamma\n" {
+		t.Fatalf("unexpected content: %q", content)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if got, want := info.Mode().Perm(), beforeInfo.Mode().Perm(); got != want {
+		t.Fatalf("mode=%v want unchanged %v", got, want)
+	}
+}
+
+func TestFilesystemReplaceAllowsEmptyNewText(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	path := filepath.Join(root, "a.txt")
+	if err := os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"beta\n","new_text":""}`))
+	if err != nil {
+		t.Fatalf("delete text with empty replacement: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(content) != "alpha\ngamma\n" {
+		t.Fatalf("unexpected content: %q", content)
+	}
+}
+
+func TestFilesystemReplaceRequiresUniqueOldText(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	path := filepath.Join(root, "a.txt")
+	if err := os.WriteFile(path, []byte("same\nsame\n"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"same\n","new_text":"once\n"}`))
+	if err == nil {
+		t.Fatal("expected duplicate old_text to fail")
+	}
+	if !strings.Contains(err.Error(), "matched 2 times") {
+		t.Fatalf("expected duplicate match error, got: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(content) != "same\nsame\n" {
+		t.Fatalf("file changed after failed replace: %q", content)
+	}
+
+	_, err = registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"missing","new_text":"x"}`))
+	if err == nil {
+		t.Fatal("expected missing old_text to fail")
+	}
+	if !strings.Contains(err.Error(), "was not found") {
+		t.Fatalf("expected missing text error, got: %v", err)
+	}
+}
+
+func TestFilesystemApplyPatchRecountsHunkHeaders(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register filesystem: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("old\n"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	patch := "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n+more\n"
+	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	if err != nil {
+		t.Fatalf("apply patch with stale hunk count: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(root, "a.txt"))
+	if err != nil {
+		t.Fatalf("read patched file: %v", err)
+	}
+	if string(content) != "new\nmore\n" {
+		t.Fatalf("unexpected patched content: %q", content)
+	}
+}
+
 func TestFilesystemApplyPatchRefusesSymlink(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()
@@ -969,6 +1093,18 @@ func TestFilesystemIntentExtractor(t *testing.T) {
 	wantLiteralGlobDir := filepath.Join(canonicalRoot, "literal*")
 	if len(intentLiteralGlob.Dirs) != 1 || intentLiteralGlob.Dirs[0] != wantLiteralGlobDir {
 		t.Fatalf("fs_write_file literal glob dirs=%v want [%s]", intentLiteralGlob.Dirs, wantLiteralGlobDir)
+	}
+
+	extReplace, ok := registry.IntentExtractor("fs_replace")
+	if !ok {
+		t.Fatal("fs_replace must have an intent extractor")
+	}
+	intentReplace := extReplace([]byte(`{"path":"out.txt","old_text":"a","new_text":"b"}`))
+	if intentReplace.Class != approval.AccessWrite {
+		t.Fatalf("fs_replace class=%q want write", intentReplace.Class)
+	}
+	if len(intentReplace.Dirs) != 1 || intentReplace.Dirs[0] != canonicalRoot {
+		t.Fatalf("fs_replace dirs=%v want [%s]", intentReplace.Dirs, canonicalRoot)
 	}
 
 	extLargest, ok := registry.IntentExtractor("fs_largest")

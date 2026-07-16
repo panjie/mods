@@ -53,6 +53,68 @@ func filesystemWriteFileTool(root string, safeDirs []string) Tool {
 	}
 }
 
+func filesystemReplaceTool(root string, safeDirs []string) Tool {
+	return Tool{
+		Kind:            ToolKindBuiltin,
+		Capabilities:    ToolCapabilities{Mutable: true},
+		IntentExtractor: pathParentIntent(root, false),
+		Spec: proto.ToolSpec{
+			Name:        "fs_replace",
+			Description: "Replace exactly one occurrence of old_text in an existing UTF-8 text file. Prefer this for small targeted edits after reading the file; use fs_apply_patch for multi-file or git-style diffs. old_text must match the current file contents exactly and should include enough surrounding context to be unique.",
+			InputSchema: objectSchema(map[string]any{
+				"path":     stringProp("Path to edit, relative to the workspace, absolute, or using the current user's home directory."),
+				"old_text": stringProp("Exact text to replace. Must appear exactly once in the current file; include surrounding context to make it unique."),
+				"new_text": stringPropAllowEmpty("Replacement text. May be empty to delete old_text."),
+			}, "path", "old_text", "new_text"),
+		},
+		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
+			var args struct {
+				Path    string  `json:"path"`
+				OldText string  `json:"old_text"`
+				NewText *string `json:"new_text"`
+			}
+			if err := decodeArgs(data, &args); err != nil {
+				return "", err
+			}
+			if args.OldText == "" {
+				return "", fmt.Errorf("old_text is required")
+			}
+			if args.NewText == nil {
+				return "", fmt.Errorf("new_text is required")
+			}
+			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			if err != nil {
+				return "", err
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return "", err
+			}
+			if !info.Mode().IsRegular() {
+				return "", fmt.Errorf("%s is not a regular file", displayPath(root, path))
+			}
+			contentBytes, err := os.ReadFile(path)
+			if err != nil {
+				return "", err
+			}
+			content := string(contentBytes)
+			matches := strings.Count(content, args.OldText)
+			switch matches {
+			case 0:
+				return "", fmt.Errorf("old_text was not found in %s; re-read the file and use exact current content", displayPath(root, path))
+			case 1:
+				updated := strings.Replace(content, args.OldText, *args.NewText, 1)
+				if err := os.WriteFile(path, []byte(updated), info.Mode().Perm()); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Replaced 1 occurrence in %s", displayPath(root, path)), nil
+			default:
+				return "", fmt.Errorf("old_text matched %d times in %s; include more surrounding context so it matches exactly once", matches, displayPath(root, path))
+			}
+		},
+	}
+}
+
 func filesystemDeleteFileTool(root string, safeDirs []string) Tool {
 	return Tool{
 		Kind:            ToolKindBuiltin,
@@ -267,9 +329,9 @@ func filesystemApplyPatchTool(root string, safeDirs []string) Tool {
 		IntentExtractor: patchIntent(root),
 		Spec: proto.ToolSpec{
 			Name:        "fs_apply_patch",
-			Description: "Apply a unified diff patch to files inside the workspace.",
+			Description: "Apply a unified diff with git apply. Use this for multi-file or git-style diffs; for small single-file edits, prefer fs_replace after reading the file. Patches must use exact current file context with --- a/path and +++ b/path headers; quote paths with spaces using git C-style quotes.",
 			InputSchema: objectSchema(map[string]any{
-				"patch": stringProp("Unified diff patch text."),
+				"patch": stringProp("Unified diff patch text with exact context from the current files. Hunk line counts are recounted automatically, but context lines must match."),
 			}, "patch"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
@@ -285,13 +347,13 @@ func filesystemApplyPatchTool(root string, safeDirs []string) Tool {
 			if err := validatePatchPaths(ctx, root, args.Patch); err != nil {
 				return "", err
 			}
-			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn")
+			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn", "--recount")
 			platform.HideCommandWindow(cmd)
 			cmd.Dir = root
 			cmd.Stdin = strings.NewReader(args.Patch)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
-				return "", fmt.Errorf("git apply failed: %w\n%s", err, strings.TrimSpace(string(out)))
+				return "", fmt.Errorf("git apply failed: %w\n%s\nRe-read the target files and regenerate the patch with exact current context, or use fs_replace for a small single-file edit", err, strings.TrimSpace(string(out)))
 			}
 			return "Patch applied", nil
 		},

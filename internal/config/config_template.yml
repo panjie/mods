@@ -212,8 +212,8 @@ apis:
     api-key-env: MINIMAX_API_KEY
 
   # Qwen (Alibaba DashScope)
-  # qwen-plus supports thinking via enable_thinking; mods maps the unified
-  # thinking-type opt-in to that provider-specific field.
+  # qwen-plus supports thinking via enable_thinking; mods maps -t / --think
+  # to that provider-specific field.
   qwen:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     api-key:
@@ -257,9 +257,9 @@ apis:
   #       # These fields control how -t / --think on interacts with
   #       # the provider. All are optional with sensible defaults.
   #
-  #       # thinking-type: opt into -t / --think for this model. Omit it to
-  #       # keep thinking disabled by default, including for discovered models.
-  #       # Common values: enabled, adaptive (MiniMax).
+  #       # thinking-type: override the provider default used by -t / --think.
+  #       # Built-in providers usually do not need this. Custom providers can
+  #       # set it to send thinking.type. Common values: enabled, adaptive.
   #       thinking-type: enabled
   #
   #       # extra-params: arbitrary fields merged into the request body.

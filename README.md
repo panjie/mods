@@ -277,6 +277,7 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 |----------------------|-----------------------------------------------------------|
 | `fs_read_file`       | Read UTF-8 files (with offset/limit for large files).     |
 | `fs_write_file`      | Create or overwrite files in the workspace.               |
+| `fs_replace`         | Replace exact text in an existing file.                   |
 | `fs_search`          | Search file contents across the workspace.                |
 | `fs_apply_patch`     | Apply targeted edits to existing files.                   |
 | `shell_run`          | Execute shell commands (prefix-allowable through review). |

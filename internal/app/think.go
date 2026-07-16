@@ -19,32 +19,32 @@ func (m *Mods) resolveThink(
 	if m.Config.Think && active {
 		debug.Printf("Think: enabled for %s/%s", mod.API, mod.Name)
 	} else if m.Config.Think {
-		debug.Printf("Think: requested for %s/%s but thinking-type is not configured; keeping thinking off", mod.API, mod.Name)
+		debug.Printf("Think: requested for %s/%s but no thinking configuration is known; keeping thinking off", mod.API, mod.Name)
 	}
 	return active, nil
 }
 
 // applyThinkConfigs applies the unified thinking policy and returns whether
-// thinking is actually active. thinking-type is the opt-in switch for user
-// visible thinking: when it is absent, even a requested -t keeps thinking off.
+// thinking is actually active. For built-in providers, -t / --think enables the
+// provider's default thinking mechanism; thinking-type only overrides the
+// provider default or opts custom providers into a thinking.type request.
 func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config, requested bool) bool {
-	enabled := requested && mod.ThinkingType != ""
 	switch mod.API {
 	case "google":
-		if enabled {
+		if requested {
 			gccfg.ThinkingBudget = resolvedThinkingBudget(mod, gccfg.ThinkingBudget)
 			gccfg.ThinkingBudgetExplicit = true
 			debug.Printf("Think: google thinking_budget=%d", gccfg.ThinkingBudget)
 			return true
 		}
 		// Gemini defaults to thinking enabled; explicitly send budget=0 to
-		// keep discovered models non-thinking unless thinking-type opts in.
+		// keep thinking off unless -t / --think is requested.
 		gccfg.ThinkingBudget = 0
 		gccfg.ThinkingBudgetExplicit = true
 		debug.Printf("Think: google thinking_budget=0 (thinking off)")
 		return false
 	case "anthropic":
-		if enabled {
+		if requested {
 			accfg.ThinkingBudget = resolvedThinkingBudget(mod, accfg.ThinkingBudget)
 			debug.Printf("Think: anthropic thinking_budget=%d", accfg.ThinkingBudget)
 			return true
@@ -55,18 +55,19 @@ func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config,
 		debug.Printf("Think: %s does not support thinking, skipped", mod.API)
 		return false
 	default:
-		return applyOpenAICompatibleThinking(mod, ccfg, enabled)
+		return applyOpenAICompatibleThinking(mod, ccfg, requested)
 	}
 }
 
-func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, enabled bool) bool {
-	ccfg.ThinkTags = enabled
-	if !enabled {
+func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, requested bool) bool {
+	if !requested {
+		ccfg.ThinkTags = false
 		disableOpenAICompatibleThink(mod, ccfg)
 		return false
 	}
 
 	if mod.API == "qwen" || hasExtraParam(ccfg, "enable_thinking") {
+		ccfg.ThinkTags = true
 		ensureExtraParams(ccfg)
 		ccfg.ExtraParams["enable_thinking"] = true
 		debug.Printf("Think: enable_thinking=true")
@@ -74,6 +75,7 @@ func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, enabled bool)
 	}
 
 	if useReasoningEffort(mod, ccfg) {
+		ccfg.ThinkTags = true
 		effort := mod.ReasoningEffort
 		if effort == "" {
 			effort = string(openai.ReasoningEffortMedium)
@@ -88,14 +90,22 @@ func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, enabled bool)
 		return true
 	}
 
+	thinkingType, ok := resolvedOpenAICompatibleThinkingType(mod, ccfg)
+	if !ok {
+		ccfg.ThinkTags = false
+		debug.Printf("Think: no thinking on parameter for %s/%s", mod.API, mod.Name)
+		return false
+	}
+
+	ccfg.ThinkTags = true
 	thinking := ensureThinkingParam(ccfg)
-	thinking["type"] = mod.ThinkingType
+	thinking["type"] = thinkingType
 	// MiniMax's adaptive mode rejects budget_tokens. Other thinking.type values
 	// keep provider-specific nested fields intact.
-	if mod.ThinkingType == "adaptive" {
+	if thinkingType == "adaptive" {
 		delete(thinking, "budget_tokens")
 	}
-	debug.Printf("Think: thinking.type=%s", mod.ThinkingType)
+	debug.Printf("Think: thinking.type=%s", thinkingType)
 	return true
 }
 
@@ -158,6 +168,26 @@ func ensureThinkingParam(ccfg *openai.Config) map[string]any {
 		ccfg.ExtraParams["thinking"] = thinking
 	}
 	return thinking
+}
+
+func resolvedOpenAICompatibleThinkingType(mod Model, ccfg *openai.Config) (string, bool) {
+	if mod.ThinkingType != "" {
+		return mod.ThinkingType, true
+	}
+	switch mod.API {
+	case "deepseek", "glm":
+		return "enabled", true
+	case "minimax":
+		return "adaptive", true
+	}
+	thinking, ok := ccfg.ExtraParams["thinking"].(map[string]any)
+	if !ok {
+		return "", false
+	}
+	if t, ok := thinking["type"].(string); ok && t != "" && t != "disabled" {
+		return t, true
+	}
+	return "enabled", true
 }
 
 func useReasoningEffort(mod Model, ccfg *openai.Config) bool {

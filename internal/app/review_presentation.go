@@ -27,6 +27,9 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 	case "fs_write_file":
 		result.headline = writeTargetMode(ArgString(parsed, "path"), scope)
 		result.rows = []interactionRow{{Label: "Target", Value: ArgString(parsed, "path")}}
+	case "fs_replace":
+		result.headline = "Replace text in a file"
+		result.rows = []interactionRow{{Label: "Target", Value: ArgString(parsed, "path")}}
 	case "fs_mkdir":
 		result.headline = "Create a directory"
 		result.rows = []interactionRow{{Label: "Target", Value: ArgString(parsed, "path")}}

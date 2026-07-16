@@ -64,6 +64,10 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
 			return TruncateOperationStatus("Writing file: "+path, width)
 		}
+	case "fs_replace":
+		if path := OneLinePreview(ArgString(args, "path")); path != "" {
+			return TruncateOperationStatus("Replacing text in: "+path, width)
+		}
 	case "fs_list_dir":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
 			return TruncateOperationStatus("Listing directory: "+path, width)

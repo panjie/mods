@@ -357,6 +357,11 @@ func TestToolOperationLabel(t *testing.T) {
 		require.Equal(t, "Writing file: mods.go", got)
 	})
 
+	t.Run("file replace path", func(t *testing.T) {
+		got := toolOperationLabel("fs_replace", []byte(`{"path":"mods.go","old_text":"old","new_text":"new"}`), 80)
+		require.Equal(t, "Replacing text in: mods.go", got)
+	})
+
 	t.Run("file search query and path", func(t *testing.T) {
 		got := toolOperationLabel("fs_search", []byte(`{"path":"internal","query":"toolOperationLabel"}`), 80)
 		require.Equal(t, "Searching files: toolOperationLabel in internal", got)

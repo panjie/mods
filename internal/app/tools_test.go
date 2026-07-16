@@ -140,7 +140,7 @@ func TestToolCapabilities(t *testing.T) {
 			t.Fatalf("expected %s to be read-only", name)
 		}
 	}
-	for _, name := range []string{"fs_write_file", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir", "shell_run"} {
+	for _, name := range []string{"fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir", "shell_run"} {
 		if !registry.Mutable(name) {
 			t.Fatalf("expected %s to be mutable", name)
 		}

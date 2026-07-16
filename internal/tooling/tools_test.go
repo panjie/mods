@@ -28,6 +28,7 @@ func TestBuiltinSpecs(t *testing.T) {
 	want := map[string]bool{
 		"fs_read_file":  false,
 		"fs_write_file": false,
+		"fs_replace":    false,
 		"shell_run":     false,
 		"web_search":    false,
 		"thinking_note": false,

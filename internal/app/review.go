@@ -544,6 +544,8 @@ func formatReviewLabel(name string, args []byte) string {
 		content := ArgString(parsed, "content")
 		size := len(content)
 		return fmt.Sprintf("Write %s (%d bytes)", path, size)
+	case "fs_replace":
+		return fmt.Sprintf("Replace text in %s", OneLinePreview(ArgString(parsed, "path")))
 	case "fs_delete_file":
 		return fmt.Sprintf("Delete file %s", OneLinePreview(ArgString(parsed, "path")))
 	case "fs_delete_dir":

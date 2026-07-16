@@ -37,8 +37,10 @@ when cached or passwordless authorization is unavailable.
 Prefer native `fs_*` tools for direct filesystem work because their paths and
 approval intent are structured. Use `fs_read_file`, `fs_list_dir`, `fs_stat`,
 `fs_search`, and `fs_largest` for read-only inspection. Use `fs_write_file`,
-`fs_apply_patch`, `fs_delete_file`, `fs_delete_dir`, `fs_move`, `fs_copy`, and
-`fs_mkdir` for mutations. Use `fs_delete_file` only for file deletion and
+`fs_replace`, `fs_apply_patch`, `fs_delete_file`, `fs_delete_dir`, `fs_move`,
+`fs_copy`, and `fs_mkdir` for mutations. Use `fs_replace` for small exact text
+edits after reading the target file; use `fs_apply_patch` for multi-file or
+git-style diffs. Use `fs_delete_file` only for file deletion and
 `fs_delete_dir` only for directory deletion; do not use `rm -rf` for a request
 that specifically says "file".
 
@@ -236,15 +238,15 @@ Top-level keys:
           aliases: ["short"]
           max-input-chars: 100000
           fallback: ""               # fallback model name
-          thinking-type: ""          # opt into -t thinking for this model; omit = keep thinking off
-          thinking-budget: 0         # optional thinking token budget when thinking-type is set
-          reasoning-effort: medium   # optional OpenAI/Azure effort when thinking-type is set
+          thinking-type: ""          # optional override for the value used by -t thinking
+          thinking-budget: 0         # optional thinking token budget
+          reasoning-effort: medium   # optional OpenAI/Azure effort
           thought-fields: []         # override delta fields for reasoning extraction
           think-tag: think           # override inline reasoning tag
           extra-params: {}           # arbitrary extra request body fields
   ```
 
-  Model thinking behavior is opt-in. If a model does not set `thinking-type`, mods keeps thinking disabled even when the provider defaults it on; model discovery intentionally does not add `thinking-type`. Set `thinking-type: enabled` (or provider-specific values like `adaptive` for MiniMax) to allow `-t` / `think: true` to enable thinking. `thinking-budget` and `reasoning-effort` are optional tuning fields; mods maps the unified setting to provider-specific request fields such as `thinking.type`, `enable_thinking`, `thinkingBudget`, or `reasoning_effort`.
+  `-t` / `think: true` enables thinking for supported providers. Built-in providers use sensible defaults, such as `thinking.type: enabled` for DeepSeek/GLM, `adaptive` for MiniMax, `enable_thinking` for Qwen, `thinkingBudget` for Google/Anthropic, and `reasoning_effort` for OpenAI/Azure. `thinking-type` is only an override for those defaults or an opt-in for custom OpenAI-compatible providers that need `thinking.type`. `thinking-budget` and `reasoning-effort` are optional tuning fields.
 
   The default config does not ship provider model lists. In `mods --config`, model discovery writes only models the user selects. If discovery fails or the user does not select a discovered model, they must enter model identifiers manually in the wizard or edit `apis.<name>.models` directly.
 

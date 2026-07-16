@@ -60,6 +60,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	tools := []Tool{
 		filesystemReadFileTool(root, safeDirs),
 		filesystemWriteFileTool(root, safeDirs),
+		filesystemReplaceTool(root, safeDirs),
 		filesystemListDirTool(root, safeDirs),
 		filesystemStatTool(root, safeDirs),
 		filesystemSearchTool(root, safeDirs),

@@ -72,23 +72,28 @@ func TestThoughtMarkdown(t *testing.T) {
 	})
 }
 
-func TestThoughtDisplayMarkdown(t *testing.T) {
-	t.Run("renders a quiet blockquote without the raw thinking marker", func(t *testing.T) {
-		got := thoughtDisplayMarkdown("The user is asking about X.\nI should consider Y.")
-		require.Contains(t, got, "> _thinking_", "should include the quieter display header")
-		require.Contains(t, got, "> The user is asking about X.")
-		require.Contains(t, got, "> I should consider Y.")
-		require.NotContains(t, got, "💭")
-		require.NotContains(t, got, "**")
-		require.NotContains(t, got, "\n---\n")
+func TestThoughtDisplayBlock(t *testing.T) {
+	t.Run("renders an interaction panel without the raw thinking marker", func(t *testing.T) {
+		got := thoughtDisplayBlock(makeStyles(true).Interaction, 60, "The user is asking about X.\nI should consider Y.")
+		plain := ansi.Strip(got)
+
+		require.Contains(t, got, "┃")
+		require.Contains(t, plain, "THINKING")
+		require.Contains(t, plain, "-t")
+		require.Contains(t, plain, "The user is asking about X.")
+		require.Contains(t, plain, "I should consider Y.")
+		require.NotContains(t, plain, "💭")
+		require.NotContains(t, plain, "**")
+		require.NotContains(t, plain, "---")
 	})
 
-	t.Run("blank lines become bare quote markers", func(t *testing.T) {
-		got := thoughtDisplayMarkdown("line one\n\nline three")
-		require.Contains(t, got, ">\n", "blank thought lines should be rendered as bare > markers")
-		require.Contains(t, got, "> line one")
-		require.Contains(t, got, "> line three")
-		require.NotContains(t, got, "\n---\n")
+	t.Run("blank lines are preserved in the panel body", func(t *testing.T) {
+		got := thoughtDisplayBlock(makeStyles(true).Interaction, 60, "line one\n\nline three")
+		plain := ansi.Strip(got)
+
+		require.Contains(t, plain, "line one")
+		require.Contains(t, plain, "line three")
+		require.NotContains(t, plain, "---")
 	})
 }
 
@@ -136,7 +141,7 @@ func TestFlushThought(t *testing.T) {
 		require.Contains(t, m.Output, "> actual thought")
 	})
 
-	t.Run("tty display uses quieter thinking markdown while raw output stays stable", func(t *testing.T) {
+	t.Run("tty display uses interaction panel while raw output stays stable", func(t *testing.T) {
 		oldIsOutputTTY := isOutputTTY
 		oldExportedIsOutputTTY := IsOutputTTY
 		isOutputTTY = func() bool { return true }
@@ -159,13 +164,27 @@ func TestFlushThought(t *testing.T) {
 		require.True(t, m.thoughtFlushed)
 		require.Contains(t, m.Output, "> **💭 thinking**")
 		require.Contains(t, m.Output, "\n---\n")
-		require.Contains(t, m.displayOutput, "> _thinking_")
+		require.NotContains(t, m.displayOutput, "> _thinking_")
+		require.Contains(t, m.displayOutput, "MODS_DISPLAY_BLOCK_")
 		require.NotContains(t, m.displayOutput, "💭")
 		require.NotContains(t, m.displayOutput, "**")
 		require.NotContains(t, m.displayOutput, "\n---\n")
-		require.Contains(t, m.glamOutput, "thinking")
+		plain := ansi.Strip(m.glamOutput)
+		require.Contains(t, m.glamOutput, "┃")
+		require.Contains(t, plain, "THINKING")
+		require.Contains(t, plain, "deep thought")
+		require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_")
 		require.NotContains(t, m.glamOutput, "💭")
 	})
+}
+
+func TestReplaceDisplayBlocks(t *testing.T) {
+	m := &Mods{}
+	marker := m.nextDisplayBlockMarker("┃ THINKING\n┃ body")
+
+	got := m.replaceDisplayBlocks("before\n" + marker + "\nafter")
+
+	require.Equal(t, "before\n┃ THINKING\n┃ body\nafter", got)
 }
 
 func TestCompletionOutputThoughtField(t *testing.T) {

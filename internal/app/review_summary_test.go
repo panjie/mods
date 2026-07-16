@@ -31,6 +31,11 @@ func TestFormatReviewSummary(t *testing.T) {
 		require.Equal(t, "Patch: a.txt (+2 -1)", summary)
 	})
 
+	t.Run("replace summarizes byte counts", func(t *testing.T) {
+		summary := formatReviewSummary("fs_replace", []byte(`{"path":"a.txt","old_text":"old","new_text":"newer"}`), shellCommandAnalysis{}, testApprovalScope)
+		require.Equal(t, "Target: a.txt - replace 3 bytes with 5 bytes", summary)
+	})
+
 	t.Run("new filesystem mutations summarize action", func(t *testing.T) {
 		scope := WorkspaceScope(t.TempDir())
 		require.Contains(t, formatReviewSummary("fs_delete_file", []byte(`{"path":"old.txt"}`), shellCommandAnalysis{}, scope), "delete file")

@@ -29,6 +29,10 @@ func formatReviewSummaryWithIntent(name string, args []byte, analysis shellComma
 		content := ArgString(parsed, "content")
 		mode := writeTargetMode(path, scope)
 		return fmt.Sprintf("Target: %s - %s - %d bytes", OneLinePreview(path), mode, len(content))
+	case "fs_replace":
+		oldText := ArgString(parsed, "old_text")
+		newText := ArgString(parsed, "new_text")
+		return fmt.Sprintf("Target: %s - replace %d bytes with %d bytes", OneLinePreview(ArgString(parsed, "path")), len(oldText), len(newText))
 	case "fs_delete_file":
 		return fmt.Sprintf("Target: %s - delete file", OneLinePreview(ArgString(parsed, "path")))
 	case "fs_delete_dir":

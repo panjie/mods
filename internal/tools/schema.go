@@ -39,6 +39,12 @@ func stringProp(description string) map[string]any {
 	}
 }
 
+func stringPropAllowEmpty(description string) map[string]any {
+	prop := stringProp(description)
+	prop["minLength"] = 0
+	return prop
+}
+
 func integerProp(description string) map[string]any {
 	return map[string]any{
 		"type":        "integer",

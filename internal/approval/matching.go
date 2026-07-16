@@ -60,7 +60,7 @@ func rulesForTool(name string, data []byte) []Rule {
 
 func isBuiltinFilesystemEditTool(name string) bool {
 	switch name {
-	case "fs_write_file", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir":
+	case "fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir":
 		return true
 	default:
 		return false

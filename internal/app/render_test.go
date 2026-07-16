@@ -3,6 +3,7 @@ package app
 import (
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
 
@@ -434,20 +436,68 @@ func TestOperationStatusLineStylesShellCompletion(t *testing.T) {
 	require.Contains(t, got, "\x1b[")
 }
 
-func TestStyleToolResultLineUsesMutedBodyAndColoredMarker(t *testing.T) {
-	m := &Mods{Styles: makeStyles(true)}
+func TestToolResultDisplayLineUsesSharedThemeStyles(t *testing.T) {
+	var themedSuccess []string
+	for _, theme := range []string{"charm", "dracula"} {
+		t.Run(theme, func(t *testing.T) {
+			styles := ui.MakeStylesWithTheme(theme, true)
+			m := &Mods{Styles: styles}
 
-	success, ok := m.styleToolResultLine("  │ ✓ fs_read_file: path=mods.go")
-	require.True(t, ok)
-	require.Equal(t, "  │ ✓ fs_read_file: path=mods.go", ansi.Strip(success))
-	require.Contains(t, success, "\x1b[")
-	require.Contains(t, success, "38;2;143;209;158")
-	require.Contains(t, success, "38;2;117;117;117")
+			success := m.toolResultDisplayLine("✓ fs_read_file: path=mods.go")
+			require.Equal(t,
+				styles.Comment.Render("  │ ")+styles.Interaction.Success.Render("✓")+styles.Comment.Render(" fs_read_file: path=mods.go"),
+				success,
+			)
+			require.Equal(t, "  │ ✓ fs_read_file: path=mods.go", ansi.Strip(success))
 
-	failure, ok := m.styleToolResultLine("  │ ✗ fs_delete_file: path=mods.go · failed")
-	require.True(t, ok)
-	require.Equal(t, "  │ ✗ fs_delete_file: path=mods.go · failed", ansi.Strip(failure))
-	require.Contains(t, failure, "38;2;231;154;162")
+			failure := m.toolResultDisplayLine("✗ fs_delete_file: path=mods.go · failed")
+			require.Equal(t,
+				styles.Comment.Render("  │ ")+styles.Interaction.Danger.Render("✗")+styles.Comment.Render(" fs_delete_file: path=mods.go · failed"),
+				failure,
+			)
+			themedSuccess = append(themedSuccess, success)
+		})
+	}
+	require.NotEqual(t, themedSuccess[0], themedSuccess[1], "semantic marker must follow the configured theme")
+}
+
+func TestToolResultTTYDisplayIsSingleLineAndKeepsRawTranscript(t *testing.T) {
+	oldOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+
+	gr, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(52),
+	)
+	require.NoError(t, err)
+	m := &Mods{
+		Config:       &Config{},
+		Styles:       ui.MakeStylesWithTheme("dracula", true),
+		glam:         gr,
+		glamViewport: viewport.New(viewport.WithWidth(52), viewport.WithHeight(10)),
+		contentMutex: &sync.Mutex{},
+		width:        52,
+	}
+	command := `say -v Kyoko "皇族数の確保に向けた皇室典範改正案は参院特別委員会で審議されました🙂"`
+	m.appendToolResult("shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), nil)
+
+	require.Contains(t, m.Output, "> ✓ shell_run:")
+	require.Contains(t, m.Output, " · exit 0")
+	require.Contains(t, m.displayOutput, "MODS_DISPLAY_BLOCK_")
+	require.NotContains(t, m.displayOutput, "> ✓ shell_run:")
+
+	plainLines := strings.Split(strings.TrimRight(ansi.Strip(m.glamOutput), "\n"), "\n")
+	var activityLines []string
+	for _, line := range plainLines {
+		if strings.Contains(line, "shell_run") || strings.Contains(line, "│") {
+			activityLines = append(activityLines, line)
+		}
+	}
+	require.Equal(t, []string{"  │ " + strings.TrimPrefix(strings.TrimSpace(m.Output), "> ")}, activityLines)
+	require.LessOrEqual(t, lipgloss.Width(activityLines[0]), 52)
+	require.Contains(t, m.glamOutput, m.Styles.Comment.Render("  │ "))
+	require.Contains(t, m.glamOutput, m.Styles.Interaction.Success.Render("✓"))
 }
 
 func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *testing.T) {

@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,6 +27,27 @@ func TestShellCommandPreview(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, ShellCommandPreview(tc.command))
+		})
+	}
+}
+
+func TestTruncateOperationStatusUsesTerminalCellWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		width int
+		want  string
+	}{
+		{name: "ascii", input: "abcdefghijkl", width: 8, want: "abcde..."},
+		{name: "wide characters", input: "皇族数の確保", width: 10, want: "皇族数..."},
+		{name: "emoji graphemes", input: "🙂🙂🙂", width: 5, want: "🙂..."},
+		{name: "narrow wide character", input: "皇族", width: 2, want: "皇"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := TruncateOperationStatus(tc.input, tc.width)
+			require.Equal(t, tc.want, got)
+			require.LessOrEqual(t, ansi.StringWidth(got), tc.width)
 		})
 	}
 }

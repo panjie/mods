@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,10 +66,28 @@ func TestToolResultStatusTruncates(t *testing.T) {
 	require.Equal(t, "\u2713 fs_search: query=ve...", got)
 }
 
+func TestToolResultStatusTruncatesWideContentToOneTerminalLine(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{name: "Japanese", command: `say -v Kyoko "皇族数の確保に向けた皇室典範改正案は参院特別委員会で審議されました"`},
+		{name: "emoji", command: `printf "🙂🙂🙂🙂🙂🙂🙂🙂 deployment finished"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ToolResultStatus("shell_run", []byte(fmt.Sprintf(`{"command":%q}`, tc.command)), nil, 48)
+			require.NotContains(t, got, "\n")
+			require.LessOrEqual(t, ansi.StringWidth(got), 48)
+			require.True(t, strings.HasSuffix(got, " \u00b7 exit 0"), got)
+		})
+	}
+}
+
 func TestToolResultLineWidth(t *testing.T) {
 	got := ToolResultLineWidth("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review"), 48)
 	require.Equal(t, "> \u2717 fs_delete_file: path=C:\\Users\\panj... \u00b7 failed", got)
-	require.LessOrEqual(t, len([]rune(strings.TrimPrefix(got, "> "))), 48)
+	require.LessOrEqual(t, ansi.StringWidth(strings.TrimPrefix(got, "> ")), 48)
 }
 
 type exitCodeErr struct{ code int }

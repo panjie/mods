@@ -419,7 +419,8 @@ func TestToolOperationLabel(t *testing.T) {
 
 	t.Run("unicode and narrow width truncate safely", func(t *testing.T) {
 		got := toolOperationLabel("web_search", []byte(`{"query":"搜索 一个 很长 很长 的 查询 内容"}`), 20)
-		require.Equal(t, "Searching web: 搜索...", got)
+		require.Equal(t, "Searching web: 搜...", got)
+		require.LessOrEqual(t, ansi.StringWidth(got), 20)
 	})
 }
 

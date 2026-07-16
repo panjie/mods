@@ -299,18 +299,20 @@ func (m *Mods) appendToolResult(name string, data []byte, err error) {
 	if m.Config.Raw || m.Config.Minimal {
 		return
 	}
-	block := ToolResultLineWidth(name, data, err, m.toolResultStatusWidth())
-	if block == "" {
+	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())
+	if status == "" {
 		return
 	}
 	if m.secrets != nil {
-		block = m.secrets.Redact(block)
+		status = m.secrets.Redact(status)
 	}
+	block := "> " + status
+	display := m.nextDisplayBlockMarker(m.toolResultDisplayLine(status)) + "\n\n"
 	if m.Output == "" {
-		m.appendToOutput(block + "\n\n")
+		m.appendToOutputWithDisplay(block+"\n\n", display)
 		return
 	}
-	m.appendToOutput("\n\n" + block + "\n\n")
+	m.appendToOutputWithDisplay("\n\n"+block+"\n\n", "\n\n"+display)
 }
 
 func (m *Mods) toolResultStatusWidth() int {
@@ -321,10 +323,28 @@ func (m *Mods) toolResultStatusWidth() int {
 	if width <= 0 {
 		width = 80
 	}
-	// Glamour renders a blockquote with a gutter (e.g. "  │ "), so leave room
-	// for that prefix; otherwise a status that is one logical line may wrap when
-	// rendered in the terminal.
+	// The TTY activity line has a four-cell rail ("  │ "). Leave room for it so
+	// the result always remains a single physical line.
 	return max(1, width-4)
+}
+
+func (m *Mods) toolResultDisplayLine(status string) string {
+	const rail = "  │ "
+	marker := ""
+	switch {
+	case strings.HasPrefix(status, "✓ "):
+		marker = "✓"
+	case strings.HasPrefix(status, "✗ "):
+		marker = "✗"
+	}
+	if marker == "" {
+		return m.Styles.Comment.Render(rail + status)
+	}
+	markerStyle := m.Styles.Interaction.Success
+	if marker == "✗" {
+		markerStyle = m.Styles.Interaction.Danger
+	}
+	return m.Styles.Comment.Render(rail) + markerStyle.Render(marker) + m.Styles.Comment.Render(status[len(marker):])
 }
 
 func (m *Mods) appendToOutputWithDisplay(raw, display string) {
@@ -384,7 +404,6 @@ func (m *Mods) flushRender() {
 	m.glamOutput = strings.TrimRightFunc(m.glamOutput, unicode.IsSpace)
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
 	m.glamOutput = m.replaceDisplayBlocks(m.glamOutput)
-	m.glamOutput = m.styleToolResultLines(m.glamOutput)
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.glamOutput += "\n"
 	content := m.glamOutput
@@ -424,54 +443,6 @@ func (m *Mods) replaceDisplayBlocks(rendered string) string {
 	}
 	return strings.Join(lines, "\n")
 }
-
-func (m *Mods) styleToolResultLines(rendered string) string {
-	lines := strings.Split(rendered, "\n")
-	changed := false
-	for i, line := range lines {
-		styled, ok := m.styleToolResultLine(line)
-		if !ok {
-			continue
-		}
-		lines[i] = styled
-		changed = true
-	}
-	if !changed {
-		return rendered
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (m *Mods) styleToolResultLine(line string) (string, bool) {
-	plain := ansi.Strip(line)
-	marker := ""
-	idx := strings.Index(plain, "✓")
-	if idx >= 0 {
-		marker = "✓"
-	} else {
-		idx = strings.Index(plain, "✗")
-		if idx >= 0 {
-			marker = "✗"
-		}
-	}
-	if marker == "" || !strings.Contains(plain[:idx], "│") {
-		return "", false
-	}
-	after := plain[idx+len(marker):]
-	if !strings.HasPrefix(after, " ") {
-		return "", false
-	}
-	markerStyle := toolResultSuccessMarkerStyle
-	if marker == "✗" {
-		markerStyle = toolResultFailureMarkerStyle
-	}
-	return m.Styles.Comment.Render(plain[:idx]) + markerStyle.Render(marker) + m.Styles.Comment.Render(after), true
-}
-
-var (
-	toolResultSuccessMarkerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8FD19E"))
-	toolResultFailureMarkerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E79AA2"))
-)
 
 func (m *Mods) resetOutputBuffers() {
 	m.Output = ""

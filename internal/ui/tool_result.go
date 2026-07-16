@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // exitCoder is implemented by errors that carry a process exit code, such as
@@ -66,14 +68,14 @@ func ToolResultStatus(name string, data []byte, err error, width int) string {
 func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
 	if detail != "" {
 		fullSuffix := suffix + ": " + detail
-		if summary == "" || width-runeLen(prefix)-runeLen(fullSuffix) >= minToolSummaryWidth {
+		if summary == "" || width-displayWidth(prefix)-displayWidth(fullSuffix) >= minToolSummaryWidth {
 			suffix = fullSuffix
 		}
 	}
 	if summary == "" {
 		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
 	}
-	available := width - runeLen(prefix) - runeLen(suffix)
+	available := width - displayWidth(prefix) - displayWidth(suffix)
 	if available <= 0 {
 		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
 	}
@@ -99,4 +101,4 @@ func isShellTool(name string) bool {
 	}
 }
 
-func runeLen(s string) int { return len([]rune(s)) }
+func displayWidth(s string) int { return ansi.StringWidth(s) }

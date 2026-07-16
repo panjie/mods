@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 var tokenErrRe = regexp.MustCompile(`This model's maximum context length is (\d+) tokens. However, your messages resulted in (\d+) tokens`)
@@ -250,14 +252,13 @@ func TruncateOperationStatus(s string, width int) string {
 	if width <= 0 || width > 120 {
 		width = 120
 	}
-	runes := []rune(s)
-	if len(runes) <= width {
+	if ansi.StringWidth(s) <= width {
 		return s
 	}
 	if width <= 3 {
-		return string(runes[:width])
+		return ansi.Truncate(s, width, "")
 	}
-	return string(runes[:width-3]) + "..."
+	return ansi.Truncate(s, width, "...")
 }
 
 // if the input is whitespace only, make it empty.

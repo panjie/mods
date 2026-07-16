@@ -118,6 +118,10 @@ mcp-timeout: 15s
 builtin-tools:
   filesystem: auto
   shell: true
+  # Additional command names to trust as read-only.
+  # A match trusts all arguments, subcommands, and internal side effects.
+  # Unsafe shell structures are still reviewed.
+  shell-read-only-commands: []
   sequential-thinking: true
   shell-timeout: 30s
   shell-max-output: 20000

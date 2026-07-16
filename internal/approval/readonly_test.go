@@ -120,3 +120,35 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		})
 	}
 }
+
+func TestIsReadOnlyPOSIXWithPolicy(t *testing.T) {
+	policy := ReadOnlyCommandPolicy{Commands: []string{"rg", "jq", "find"}}
+	readOnly := []string{
+		"rg needle README.md",
+		"/usr/bin/rg needle README.md",
+		"env LC_ALL=C rg needle README.md",
+		"rg needle README.md | jq .",
+		"find . -delete",
+	}
+	for _, command := range readOnly {
+		t.Run("read "+command, func(t *testing.T) {
+			got, reason := IsReadOnlyPOSIXWithPolicy(command, policy)
+			require.True(t, got)
+			require.NotEmpty(t, reason)
+		})
+	}
+
+	notReadOnly := []string{
+		"rg needle README.md > matches.txt",
+		"rg needle README.md &",
+		"rg needle README.md | rm output.txt",
+		"RG needle README.md",
+		"$COMMAND needle README.md",
+	}
+	for _, command := range notReadOnly {
+		t.Run("not read "+command, func(t *testing.T) {
+			got, _ := IsReadOnlyPOSIXWithPolicy(command, policy)
+			require.False(t, got)
+		})
+	}
+}

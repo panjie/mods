@@ -11,6 +11,12 @@ import (
 // and reports whether it is definitively read-only. Returns (true, reason)
 // when read-only; (false, "") when not or inconclusive (fail-closed).
 func IsReadOnlyPOSIX(command string) (bool, string) {
+	return IsReadOnlyPOSIXWithPolicy(command, ReadOnlyCommandPolicy{})
+}
+
+// IsReadOnlyPOSIXWithPolicy is IsReadOnlyPOSIX with additional command names
+// the user explicitly trusts as read-only.
+func IsReadOnlyPOSIXWithPolicy(command string, policy ReadOnlyCommandPolicy) (bool, string) {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return false, ""
@@ -21,7 +27,7 @@ func IsReadOnlyPOSIX(command string) (bool, string) {
 		return false, ""
 	}
 	for _, stmt := range file.Stmts {
-		if ro, _ := stmtIsReadOnly(stmt); !ro {
+		if ro, _ := stmtIsReadOnly(stmt, policy); !ro {
 			return false, ""
 		}
 	}
@@ -30,7 +36,7 @@ func IsReadOnlyPOSIX(command string) (bool, string) {
 
 // stmtIsReadOnly checks a single statement: background, redirects, then
 // delegates to the command-level check.
-func stmtIsReadOnly(stmt *syntax.Stmt) (bool, string) {
+func stmtIsReadOnly(stmt *syntax.Stmt, policy ReadOnlyCommandPolicy) (bool, string) {
 	if stmt == nil || stmt.Cmd == nil {
 		return false, ""
 	}
@@ -48,27 +54,27 @@ func stmtIsReadOnly(stmt *syntax.Stmt) (bool, string) {
 			return false, ""
 		}
 	}
-	return cmdIsReadOnly(stmt.Cmd)
+	return cmdIsReadOnly(stmt.Cmd, policy)
 }
 
 // cmdIsReadOnly dispatches on command type. BinaryCmd and Subshell recurse;
 // CallExpr does leaf classification; everything else is fail-closed.
-func cmdIsReadOnly(cmd syntax.Command) (bool, string) {
+func cmdIsReadOnly(cmd syntax.Command, policy ReadOnlyCommandPolicy) (bool, string) {
 	switch c := cmd.(type) {
 	case *syntax.BinaryCmd:
-		if ro, _ := stmtIsReadOnly(c.X); !ro {
+		if ro, _ := stmtIsReadOnly(c.X, policy); !ro {
 			return false, ""
 		}
-		return stmtIsReadOnly(c.Y)
+		return stmtIsReadOnly(c.Y, policy)
 	case *syntax.Subshell:
 		for _, stmt := range c.Stmts {
-			if ro, _ := stmtIsReadOnly(stmt); !ro {
+			if ro, _ := stmtIsReadOnly(stmt, policy); !ro {
 				return false, ""
 			}
 		}
 		return true, "read-only subshell"
 	case *syntax.CallExpr:
-		return callIsReadOnly(c)
+		return callIsReadOnly(c, policy)
 	default:
 		return false, ""
 	}
@@ -77,12 +83,12 @@ func cmdIsReadOnly(cmd syntax.Command) (bool, string) {
 // callIsReadOnly classifies a leaf command: checks word parts for dynamic
 // constructs, extracts the command name, then checks the allowlist or
 // subcommand table.
-func callIsReadOnly(call *syntax.CallExpr) (bool, string) {
+func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, string) {
 	if call == nil || len(call.Args) == 0 {
 		return false, ""
 	}
 	for _, arg := range call.Args {
-		if !wordIsReadOnly(arg) {
+		if !wordIsReadOnly(arg, policy) {
 			return false, ""
 		}
 	}
@@ -91,6 +97,9 @@ func callIsReadOnly(call *syntax.CallExpr) (bool, string) {
 		return false, ""
 	}
 	name = path.Base(name)
+	if policy.matchesPOSIX(name) {
+		return true, policy.reason(name)
+	}
 	if name != "env" && name != "xxd" && readOnlyCommands[name] {
 		return true, "read-only command: " + name
 	}
@@ -98,7 +107,7 @@ func callIsReadOnly(call *syntax.CallExpr) (bool, string) {
 	if len(args) > 0 {
 		args[0] = name
 	}
-	if readOnly, reason := invocationTokensReadOnly(args); readOnly {
+	if readOnly, reason := invocationTokensReadOnly(args, policy); readOnly {
 		return true, reason
 	}
 	return false, ""
@@ -108,13 +117,16 @@ func callIsReadOnly(call *syntax.CallExpr) (bool, string) {
 // validates arguments as well as the executable name so wrappers and
 // output-producing flags cannot inherit a read-only classification merely
 // from their first token.
-func invocationTokensReadOnly(args []string) (bool, string) {
+func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, string) {
 	if len(args) == 0 || args[0] == "" {
 		return false, ""
 	}
 	name := path.Base(args[0])
+	if policy.matchesPOSIX(name) {
+		return true, policy.reason(name)
+	}
 	if name == "env" {
-		return envInvocationReadOnly(args[1:])
+		return envInvocationReadOnly(args[1:], policy)
 	}
 	if readOnlyCommands[name] {
 		if name == "xxd" && hasAnyArg(args[1:], "-r", "--revert") {
@@ -128,7 +140,7 @@ func invocationTokensReadOnly(args []string) (bool, string) {
 	return false, ""
 }
 
-func envInvocationReadOnly(args []string) (bool, string) {
+func envInvocationReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, string) {
 	nested, ok := envCommandArgs(args)
 	if !ok {
 		return false, ""
@@ -136,7 +148,7 @@ func envInvocationReadOnly(args []string) (bool, string) {
 	if len(nested) == 0 {
 		return true, "read-only command: env"
 	}
-	return invocationTokensReadOnly(nested)
+	return invocationTokensReadOnly(nested, policy)
 }
 
 func envCommandArgs(args []string) ([]string, bool) {
@@ -205,7 +217,7 @@ func hasAnyArg(args []string, unsafe ...string) bool {
 
 // wordIsReadOnly walks a word's parts. CmdSubst recurses into inner
 // statements; ProcSubst is fail-closed; everything else is allowed.
-func wordIsReadOnly(word *syntax.Word) bool {
+func wordIsReadOnly(word *syntax.Word, policy ReadOnlyCommandPolicy) bool {
 	if word == nil {
 		return true
 	}
@@ -219,7 +231,7 @@ func wordIsReadOnly(word *syntax.Word) bool {
 			readonly = false
 			return false
 		case *syntax.CmdSubst:
-			if !stmtsAreReadOnly(n.Stmts) {
+			if !stmtsAreReadOnly(n.Stmts, policy) {
 				readonly = false
 				return false
 			}
@@ -255,9 +267,9 @@ func wordHasProcSubst(word *syntax.Word) bool {
 	return found
 }
 
-func stmtsAreReadOnly(stmts []*syntax.Stmt) bool {
+func stmtsAreReadOnly(stmts []*syntax.Stmt, policy ReadOnlyCommandPolicy) bool {
 	for _, stmt := range stmts {
-		if ro, _ := stmtIsReadOnly(stmt); !ro {
+		if ro, _ := stmtIsReadOnly(stmt, policy); !ro {
 			return false
 		}
 	}

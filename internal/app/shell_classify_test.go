@@ -411,6 +411,37 @@ func TestAnalyzeShellCommandASTSingleQuotedExternalPath(t *testing.T) {
 	require.Contains(t, result.AffectedDirs, "/etc/passwd")
 }
 
+func TestAnalyzeShellCommandConfiguredReadOnlyCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX configured-command coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	externalDir := canonicalTestPath(t, t.TempDir())
+	externalFile := filepath.Join(externalDir, "records.json")
+	cfg := testConfigForWorkspace(workspace)
+	cfg.BuiltinTools.ShellReadOnlyCommands = []string{"rg", "find"}
+	mods := &Mods{
+		Config: cfg,
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for configured command %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+	result := mods.analyzeShellCommand("shell_run", "rg needle '"+externalFile+"'")
+	require.False(t, result.NeedsReview)
+	require.Equal(t, shellEffectRead, result.Effect)
+	require.Contains(t, result.AffectedDirs, externalFile)
+	require.NotEmpty(t, result.Reason)
+
+	result = mods.analyzeShellCommand("shell_run", "find . -delete")
+	require.False(t, result.NeedsReview, "user policy must take precedence over known write flags")
+
+	result = mods.analyzeShellCommand("shell_run", "rg needle README.md > matches.txt")
+	require.True(t, result.NeedsReview, "shell output redirection must remain a write")
+}
+
 func TestAnalyzeShellCommandReadOnlyWorkspaceAffectedDirs(t *testing.T) {
 	workspace := canonicalTestPath(t, t.TempDir())
 	externalDir := canonicalTestPath(t, t.TempDir())

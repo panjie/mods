@@ -10,6 +10,7 @@ import (
 	stdstrings "strings"
 	"text/template"
 	"time"
+	"unicode"
 
 	_ "embed"
 
@@ -329,12 +330,41 @@ func (c Config) ResolveWorkspace() Workspace {
 
 // BuiltinToolsConfig controls native tools implemented by mods.
 type BuiltinToolsConfig struct {
-	Filesystem         FilesystemMode `yaml:"filesystem"`
-	Shell              bool           `yaml:"shell"`
-	SequentialThinking bool           `yaml:"sequential-thinking"`
-	ShellTimeout       time.Duration  `yaml:"shell-timeout"`
-	ShellMaxOutput     int            `yaml:"shell-max-output"`
-	Workspace          string         `yaml:"workspace"`
+	Filesystem            FilesystemMode `yaml:"filesystem"`
+	Shell                 bool           `yaml:"shell"`
+	ShellReadOnlyCommands []string       `yaml:"shell-read-only-commands"`
+	SequentialThinking    bool           `yaml:"sequential-thinking"`
+	ShellTimeout          time.Duration  `yaml:"shell-timeout"`
+	ShellMaxOutput        int            `yaml:"shell-max-output"`
+	Workspace             string         `yaml:"workspace"`
+}
+
+func validateShellReadOnlyCommands(c *Config) error {
+	commands := make([]string, 0, len(c.BuiltinTools.ShellReadOnlyCommands))
+	seen := make(map[string]struct{}, len(c.BuiltinTools.ShellReadOnlyCommands))
+	for i, raw := range c.BuiltinTools.ShellReadOnlyCommands {
+		command := stdstrings.TrimSpace(raw)
+		if command == "" || !validShellReadOnlyCommandName(command) {
+			return fmt.Errorf("builtin-tools.shell-read-only-commands[%d] must be a single command name without paths, whitespace, globs, or shell syntax: %q", i, raw)
+		}
+		if _, ok := seen[command]; ok {
+			continue
+		}
+		seen[command] = struct{}{}
+		commands = append(commands, command)
+	}
+	c.BuiltinTools.ShellReadOnlyCommands = commands
+	return nil
+}
+
+func validShellReadOnlyCommandName(command string) bool {
+	for _, r := range command {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || stdstrings.ContainsRune("._+@%-", r) {
+			continue
+		}
+		return false
+	}
+	return command != ""
 }
 
 // FilesystemMode controls when native filesystem tools are exposed.
@@ -466,6 +496,9 @@ func Ensure() (Config, error) {
 
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
+	}
+	if err := validateShellReadOnlyCommands(&c); err != nil {
+		return fallback, modsError{Err: err, ReasonText: "Could not validate settings file."}
 	}
 	validateReviewMode(&c)
 

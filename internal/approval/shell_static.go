@@ -18,14 +18,20 @@ type ShellStaticAnalysis struct {
 // It returns unknown when the command cannot be proven read-only or tied to
 // concrete write targets; callers can then fall back to slower classifiers.
 func AnalyzeShellStatic(command string, posix bool) ShellStaticAnalysis {
+	return AnalyzeShellStaticWithPolicy(command, posix, ReadOnlyCommandPolicy{})
+}
+
+// AnalyzeShellStaticWithPolicy performs deterministic shell access
+// classification with user-configured read-only command names.
+func AnalyzeShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCommandPolicy) ShellStaticAnalysis {
 	if posix {
-		if ro, reason := IsReadOnlyPOSIX(command); ro {
+		if ro, reason := IsReadOnlyPOSIXWithPolicy(command, policy); ro {
 			return ShellStaticAnalysis{Class: ShellStaticRead, Reason: reason}
 		}
 		return analyzeShellStaticWrite(command, posix)
 	}
 
-	if ro, reason, paths := IsReadOnlyPowerShell(command); ro {
+	if ro, reason, paths := IsReadOnlyPowerShellWithPolicy(command, policy); ro {
 		return ShellStaticAnalysis{
 			Class:        ShellStaticRead,
 			AffectedDirs: paths,

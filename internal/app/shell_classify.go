@@ -61,15 +61,16 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	if m.Config != nil {
 		ws = m.Config.ResolveWorkspace().Canonical
 	}
+	policy := m.readOnlyCommandPolicy()
 
 	flavor := shellPathFlavor(tool)
-	externalPaths := extractExternalPathsWithFlavor(command, ws, flavor)
+	externalPaths := extractExternalPathsWithPolicy(command, ws, flavor, policy)
 
 	// Tier 1: static shell classifier. POSIX uses the mvdan shell AST for
 	// read-only classification and write-target extraction. PowerShell uses
 	// its parser bridge for read-only commands and the local tokenizer for
 	// common write targets. Unknown commands fall through to the LLM.
-	static := approval.AnalyzeShellStatic(command, !shellToolUsesPowerShell(tool))
+	static := approval.AnalyzeShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
 	switch static.Class {
 	case approval.ShellStaticRead:
 		affected := externalPaths
@@ -118,6 +119,15 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// LLM classifier
 	result := m.classifyShellWithLLM(tool, command)
 	return finalizeShellAnalysis(result, nil, externalPaths, nil, ws, flavor)
+}
+
+func (m *Mods) readOnlyCommandPolicy() approval.ReadOnlyCommandPolicy {
+	if m == nil || m.Config == nil {
+		return approval.ReadOnlyCommandPolicy{}
+	}
+	return approval.ReadOnlyCommandPolicy{
+		Commands: m.Config.BuiltinTools.ShellReadOnlyCommands,
+	}
 }
 
 func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {
@@ -440,6 +450,10 @@ func extractExternalPaths(command, workspaceDir string) []string {
 }
 
 func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
+	return extractExternalPathsWithPolicy(command, workspaceDir, flavor, approval.ReadOnlyCommandPolicy{})
+}
+
+func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathutil.Flavor, policy approval.ReadOnlyCommandPolicy) []string {
 	originalCommand := command
 	opts := pathutil.DefaultOptions(workspaceDir, flavor)
 	seen := map[string]bool{}
@@ -513,7 +527,7 @@ func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathuti
 	// awk/sed regex syntax as paths. Recover genuine quoted path arguments
 	// from the shell AST: only values that begin with explicit external-path
 	// syntax are considered, so quoted program bodies remain ignored.
-	if readOnly, _ := approval.IsReadOnlyPOSIX(originalCommand); readOnly {
+	if readOnly, _ := approval.IsReadOnlyPOSIXWithPolicy(originalCommand, policy); readOnly {
 		for _, arg := range approval.StaticPOSIXLiteralArgs(originalCommand) {
 			if isExplicitShellPathArg(arg) {
 				add(arg)

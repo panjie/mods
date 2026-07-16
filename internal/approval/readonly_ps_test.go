@@ -137,3 +137,17 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 		})
 	}
 }
+
+func TestIsReadOnlyPowerShellWithPolicy(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+	policy := ReadOnlyCommandPolicy{Commands: []string{"my-report"}}
+
+	readOnly, _, _ := IsReadOnlyPowerShellWithPolicy(`C:\Tools\MY-REPORT.EXE --write`, policy)
+	require.True(t, readOnly)
+
+	readOnly, _, _ = IsReadOnlyPowerShellWithPolicy(`my-report > out.txt`, policy)
+	require.False(t, readOnly)
+
+	readOnly, _, _ = IsReadOnlyPowerShellWithPolicy(`my-report; Remove-Item out.txt`, policy)
+	require.False(t, readOnly)
+}

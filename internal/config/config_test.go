@@ -341,6 +341,54 @@ func TestFilesystemModeYAML(t *testing.T) {
 	})
 }
 
+func TestShellReadOnlyCommandsConfig(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte(`builtin-tools:
+  shell-read-only-commands:
+    - " rg "
+    - jq
+    - rg
+`), &cfg))
+	require.NoError(t, validateShellReadOnlyCommands(&cfg))
+	require.Equal(t, []string{"rg", "jq"}, cfg.BuiltinTools.ShellReadOnlyCommands)
+	require.Empty(t, Default().BuiltinTools.ShellReadOnlyCommands)
+}
+
+func TestValidateShellReadOnlyCommandsRejectsNonNames(t *testing.T) {
+	for _, command := range []string{"", "git status", "/usr/bin/rg", `bin\rg`, "C:rg", "rg*", "rg|cat"} {
+		t.Run(command, func(t *testing.T) {
+			cfg := Config{}
+			cfg.BuiltinTools.ShellReadOnlyCommands = []string{command}
+			err := validateShellReadOnlyCommands(&cfg)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "shell-read-only-commands[0]")
+		})
+	}
+}
+
+func TestEnsureRejectsInvalidShellReadOnlyCommand(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	path := filepath.Join(configHome, "mods", "mods.yml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("builtin-tools:\n  shell-read-only-commands: ['git status']\n"), 0o600))
+
+	_, err := Ensure()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "shell-read-only-commands[0]")
+}
+
+func TestConfigTemplateIncludesShellReadOnlyCommands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "shell-read-only-commands: []")
+	require.Contains(t, string(content), "all arguments, subcommands, and internal side effects")
+}
+
 func TestSettingsFilePathDarwin(t *testing.T) {
 	defer swapExecutableDir("")()
 	if runtime.GOOS != "darwin" {

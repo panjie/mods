@@ -13,6 +13,12 @@ import (
 // return value contains AST-extracted string literal argument values that the
 // caller can filter to external paths for AffectedDirs.
 func IsReadOnlyPowerShell(command string) (bool, string, []string) {
+	return IsReadOnlyPowerShellWithPolicy(command, ReadOnlyCommandPolicy{})
+}
+
+// IsReadOnlyPowerShellWithPolicy is IsReadOnlyPowerShell with additional
+// command names the user explicitly trusts as read-only.
+func IsReadOnlyPowerShellWithPolicy(command string, policy ReadOnlyCommandPolicy) (bool, string, []string) {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return false, "", nil
@@ -87,7 +93,7 @@ func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 		}
 	}
 	for _, inv := range invocations {
-		if !readOnlyPowerShellInvocation(inv) {
+		if !readOnlyPowerShellInvocation(inv, policy) {
 			return false, "", nil
 		}
 	}
@@ -95,8 +101,11 @@ func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 	return true, "read-only PowerShell command (AST analysis)", ir.Paths
 }
 
-func readOnlyPowerShellInvocation(inv psCommandInvocation) bool {
+func readOnlyPowerShellInvocation(inv psCommandInvocation, policy ReadOnlyCommandPolicy) bool {
 	name := normalizePowerShellCommandName(inv.Name)
+	if policy.matchesPowerShell(name) {
+		return true
+	}
 	if name == "foreach-object" && !powerShellInvocationHasScriptBlockArg(inv) {
 		return false
 	}

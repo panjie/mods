@@ -107,6 +107,7 @@ func TestIdentityCoversConfigKeys(t *testing.T) {
 		"roles",
 		"prompts",
 		"builtin-tools",
+		"shell-read-only-commands",
 		"mcp-servers",
 		"mcp-timeout",
 		"apis",

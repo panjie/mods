@@ -4,6 +4,19 @@
 
 **Assistant**: 1, 2, 3, 4
 
+**Assistant**: Tool call: shell_run (shell-1)
+command:
+echo first
+echo second
+
+**Tool**: Tool result: shell_run (shell-1)
+command:
+echo first
+echo second
+status: success
+output:
+{"the":"result"}
+
 **User**: as a json array
 
 **Assistant**: [ 1, 2, 3, 4 ]

@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -35,23 +33,8 @@ func shellProgressStatus(tool, command string, lastOutput string, width int) str
 	return TruncateOperationStatus(status, width)
 }
 
-func shellCompletionStatus(tool string, data []byte, err error, width int) string {
-	prefix := shellStatusPrefix(tool)
-	if prefix == "" {
-		return ""
-	}
-	command := ShellCommandPreview(ArgString(ToolOperationArgs(data), "command"))
-	if command == "" {
-		return ""
-	}
-	if err == nil {
-		return TruncateOperationStatus("✓ "+prefix+" - "+command, width)
-	}
-	var exitErr shellExitCoder
-	if errors.As(err, &exitErr) {
-		return TruncateOperationStatus(fmt.Sprintf("✗ %s - %s (exit %d)", prefix, command, exitErr.ExitCode()), width)
-	}
-	return TruncateOperationStatus(fmt.Sprintf("✗ %s - %s (failed: %s)", prefix, command, OneLinePreview(err.Error())), width)
+func toolCompletionStatus(tool string, data []byte, err error, width int) string {
+	return ToolResultStatus(tool, data, err, width)
 }
 
 func shellStatusPrefix(tool string) string {

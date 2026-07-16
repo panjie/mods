@@ -66,7 +66,7 @@ var flagCategorySpecs = []flagCategorySpec{
 		Name: flagCategoryOutputDisplay,
 		Flags: []string{
 			"format", "minimal", "raw", "word-wrap", "hide-tool-status",
-			"show-tool-results", "show-token-usage",
+			"show-token-usage",
 		},
 	},
 	{

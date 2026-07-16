@@ -146,7 +146,6 @@ option grouped by purpose. Less commonly needed options are marked [advanced].
 - `--raw` — Render output as raw text when connected to a TTY
 - `--word-wrap <width>` [advanced] — Wrap formatted output at specific width (default is 80)
 - `--hide-tool-status` [advanced] — Hide the tool-operation label while tools run (the spinner stays visible)
-- `--show-tool-results` [advanced] — Show the completed shell-command result blocks
 - `--show-token-usage` [advanced] — Show input, output, and total token usage after each interaction
 
 ### Configuration & Maintenance
@@ -171,7 +170,6 @@ Top-level keys:
 - `minimal` (bool) — pipeline-friendly output by default
 - `raw` (bool) — raw text output
 - `hide-tool-status` (bool) — hide the tool-operation label (the spinner stays visible)
-- `show-tool-results` (bool) — show completed tool result blocks
 - `show-token-usage` (bool) — show token usage on stderr after each interaction
 - `word-wrap` (int) — output width (default: 80)
 - `max-tokens` (int) — max tokens in response

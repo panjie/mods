@@ -38,7 +38,8 @@ func buildTranscriptDocument(messages []proto.Message) transcriptDocument {
 	var contentLines []string
 	var lineInfo []transcriptLine
 	for _, msg := range messages {
-		if msg.Content == "" || msg.Role == proto.RoleTool {
+		content := proto.TranscriptContent(msg)
+		if content == "" {
 			continue
 		}
 		if len(contentLines) > 0 {
@@ -46,7 +47,7 @@ func buildTranscriptDocument(messages []proto.Message) transcriptDocument {
 			lineInfo = append(lineInfo, transcriptLine{})
 		}
 
-		content := plainTranscriptContent(msg.Content)
+		content = plainTranscriptContent(content)
 		parts := strings.Split(content, "\n")
 		for i, line := range parts {
 			contentLines = append(contentLines, line)
@@ -250,6 +251,8 @@ func (m *browserModel) viewerGutter(ctx viewport.GutterContext) string {
 		style, marker = m.styles.roleUser, "U"
 	case proto.RoleAssistant:
 		style, marker = m.styles.roleAssistant, "A"
+	case proto.RoleTool:
+		style, marker = m.styles.roleSystem, "T"
 	case proto.RoleSystem:
 		style, marker = m.styles.roleSystem, "S"
 	default:

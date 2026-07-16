@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -289,22 +290,39 @@ func (m *Mods) appendResponseBoundary() {
 	m.appendToOutput("\n\n")
 }
 
-// appendShellResult appends a compact transcript block describing the outcome of
-// a completed shell command so users can review which commands ran and whether
-// they succeeded. Non-shell tools render as empty and are skipped.
-func (m *Mods) appendShellResult(name string, data []byte, err error) {
-	if !m.Config.ShowToolResults {
+// appendToolResult appends a compact one-line transcript block describing the
+// outcome of a completed tool call. Raw/minimal modes intentionally stay clean
+// for pipeline use.
+func (m *Mods) appendToolResult(name string, data []byte, err error) {
+	if m.Config.Raw || m.Config.Minimal {
 		return
 	}
-	block := ShellResultBlock(name, data, err)
+	block := ToolResultLineWidth(name, data, err, m.toolResultStatusWidth())
 	if block == "" {
 		return
+	}
+	if m.secrets != nil {
+		block = m.secrets.Redact(block)
 	}
 	if m.Output == "" {
 		m.appendToOutput(block + "\n\n")
 		return
 	}
 	m.appendToOutput("\n\n" + block + "\n\n")
+}
+
+func (m *Mods) toolResultStatusWidth() int {
+	width := m.width
+	if m.Config != nil && m.Config.WordWrap > 0 && (width <= 0 || m.Config.WordWrap < width) {
+		width = m.Config.WordWrap
+	}
+	if width <= 0 {
+		width = 80
+	}
+	// Glamour renders a blockquote with a gutter (e.g. "  │ "), so leave room
+	// for that prefix; otherwise a status that is one logical line may wrap when
+	// rendered in the terminal.
+	return max(1, width-4)
 }
 
 func (m *Mods) appendToOutputWithDisplay(raw, display string) {
@@ -348,6 +366,7 @@ func (m *Mods) flushRender() {
 	m.glamOutput, _ = m.glam.Render(preprocessed)
 	m.glamOutput = strings.TrimRightFunc(m.glamOutput, unicode.IsSpace)
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
+	m.glamOutput = m.styleToolResultLines(m.glamOutput)
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.glamOutput += "\n"
 	content := m.glamOutput
@@ -366,6 +385,54 @@ func (m *Mods) flushRender() {
 	m.renderDirty = false
 	m.lastRenderFlush = time.Now()
 }
+
+func (m *Mods) styleToolResultLines(rendered string) string {
+	lines := strings.Split(rendered, "\n")
+	changed := false
+	for i, line := range lines {
+		styled, ok := m.styleToolResultLine(line)
+		if !ok {
+			continue
+		}
+		lines[i] = styled
+		changed = true
+	}
+	if !changed {
+		return rendered
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *Mods) styleToolResultLine(line string) (string, bool) {
+	plain := ansi.Strip(line)
+	marker := ""
+	idx := strings.Index(plain, "✓")
+	if idx >= 0 {
+		marker = "✓"
+	} else {
+		idx = strings.Index(plain, "✗")
+		if idx >= 0 {
+			marker = "✗"
+		}
+	}
+	if marker == "" || !strings.Contains(plain[:idx], "│") {
+		return "", false
+	}
+	after := plain[idx+len(marker):]
+	if !strings.HasPrefix(after, " ") {
+		return "", false
+	}
+	markerStyle := toolResultSuccessMarkerStyle
+	if marker == "✗" {
+		markerStyle = toolResultFailureMarkerStyle
+	}
+	return plain[:idx] + markerStyle.Render(marker) + m.Styles.Comment.Render(after), true
+}
+
+var (
+	toolResultSuccessMarkerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8FD19E"))
+	toolResultFailureMarkerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E79AA2"))
+)
 
 func (m *Mods) resetOutputBuffers() {
 	m.Output = ""

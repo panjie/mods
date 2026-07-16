@@ -32,25 +32,25 @@ func TestShellProgressStatusKeepsCommandWhenNarrow(t *testing.T) {
 	require.NotContains(t, got, "42s")
 }
 
-func TestShellCompletionStatus(t *testing.T) {
+func TestToolCompletionStatus(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		got := shellCompletionStatus("shell_run", []byte(`{"command":"go test ./..."}`), nil, 200)
-		require.Equal(t, "✓ Shell - go test ./...", got)
+		got := toolCompletionStatus("shell_run", []byte(`{"command":"go test ./..."}`), nil, 200)
+		require.Equal(t, "✓ shell_run: go test ./... · exit 0", got)
 	})
 
 	t.Run("exit code", func(t *testing.T) {
-		got := shellCompletionStatus("powershell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1}, 200)
-		require.Equal(t, "✗ PS - npm test (exit 1)", got)
+		got := toolCompletionStatus("powershell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1}, 200)
+		require.Equal(t, "✗ powershell_run: npm test · exit 1", got)
 	})
 
 	t.Run("plain error", func(t *testing.T) {
-		got := shellCompletionStatus("shell_run", []byte(`{"command":"missing"}`), errors.New("command not found"), 200)
-		require.Equal(t, "✗ Shell - missing (failed: command not found)", got)
+		got := toolCompletionStatus("shell_run", []byte(`{"command":"missing"}`), errors.New("command not found"), 200)
+		require.Equal(t, "✗ shell_run: missing · failed: command not found", got)
 	})
 
 	t.Run("non shell", func(t *testing.T) {
-		got := shellCompletionStatus("fs_read_file", []byte(`{"path":"mods.go"}`), nil, 200)
-		require.Empty(t, got)
+		got := toolCompletionStatus("fs_read_file", []byte(`{"path":"mods.go"}`), nil, 200)
+		require.Equal(t, "✓ fs_read_file: path=mods.go", got)
 	})
 }
 

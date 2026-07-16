@@ -150,7 +150,6 @@ func initFlags() {
 	regBool(flags, &config.List, flagListSessions, "l", config.List)
 	regBool(flags, &config.Chat, flagChat, "", false)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
-	regBool(flags, &config.ShowToolResults, "show-tool-results", "", config.ShowToolResults)
 	regBool(flags, &config.ShowTokenUsage, "show-token-usage", "", config.ShowTokenUsage)
 	regBool(flags, &config.ShowHelp, "help", "h", false)
 	regBool(flags, &config.Version, "version", "v", false)
@@ -194,7 +193,6 @@ func initFlags() {
 		"no-limit",
 		"word-wrap",
 		"hide-tool-status",
-		"show-tool-results",
 		"show-token-usage",
 		"max-tool-rounds",
 		"list-mcps",

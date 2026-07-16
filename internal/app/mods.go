@@ -638,8 +638,8 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	completionStatus := ""
 	for _, call := range msg.results {
 		if !errors.Is(call.Err, errReviewUnavailable) {
-			m.appendShellResult(call.Name, call.Arguments, call.Err)
-			if status := shellCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
+			m.appendToolResult(call.Name, call.Arguments, call.Err)
+			if status := toolCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
 				completionStatus = status
 			}
 		}

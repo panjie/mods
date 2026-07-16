@@ -36,14 +36,26 @@ func TestStringer(t *testing.T) {
 			Content: "1, 2, 3, 4",
 		},
 		{
+			Role: RoleAssistant,
+			ToolCalls: []ToolCall{
+				{
+					ID: "shell-1",
+					Function: Function{
+						Name:      "shell_run",
+						Arguments: []byte(`{"command":"echo first\necho second"}`),
+					},
+				},
+			},
+		},
+		{
 			Role:    RoleTool,
 			Content: `{"the":"result"}`,
 			ToolCalls: []ToolCall{
 				{
-					ID: "aaa",
+					ID: "shell-1",
 					Function: Function{
-						Name:      "myfunc",
-						Arguments: []byte(`{"a":"b"}`),
+						Name:      "shell_run",
+						Arguments: []byte(`{"command":"echo first\necho second"}`),
 					},
 				},
 			},

@@ -298,9 +298,8 @@ builtin-tools:
 Pass `--workspace` to scope filesystem and shell tools to a project workspace. The
 status line at the bottom shows what Mods is doing between tool calls
 ("Reading file: ...", "Running command: ...", "Searching web: ..."). Hide it
-with `--hide-tool-status`. To leave a completed shell-command result block in
-the output (for example ``> ✓ ran `ls -la` · exit 0``) so you can review which
-commands ran and whether they succeeded, pass `--show-tool-results`.
+with `--hide-tool-status`. Completed tool calls leave a compact one-line result
+in normal output, for example `> ✓ shell_run: ls -la · exit 0`.
 Use `--show-token-usage` to print the input, output, and total token count for
 an interaction to stderr without mixing it into the model response on stdout.
 

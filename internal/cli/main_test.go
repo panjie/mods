@@ -188,10 +188,6 @@ func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {
 	})
 }
 
-func TestShowToolResultsFlagRegistered(t *testing.T) {
-	require.NotNil(t, rootCmd.Flags().Lookup("show-tool-results"))
-}
-
 func TestBuildTeaProgramOptionsMarksPipeReviewAvailableWhenStderrTTY(t *testing.T) {
 	savedConfig := config
 	savedIsInputTTY := IsInputTTY

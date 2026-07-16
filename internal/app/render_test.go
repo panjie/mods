@@ -415,6 +415,22 @@ func TestOperationStatusLineStylesShellCompletion(t *testing.T) {
 	require.Contains(t, got, "\x1b[")
 }
 
+func TestStyleToolResultLineUsesMutedBodyAndColoredMarker(t *testing.T) {
+	m := &Mods{Styles: makeStyles(true)}
+
+	success, ok := m.styleToolResultLine("  │ ✓ fs_read_file: path=mods.go")
+	require.True(t, ok)
+	require.Equal(t, "  │ ✓ fs_read_file: path=mods.go", ansi.Strip(success))
+	require.Contains(t, success, "\x1b[")
+	require.Contains(t, success, "38;2;143;209;158")
+	require.Contains(t, success, "38;2;117;117;117")
+
+	failure, ok := m.styleToolResultLine("  │ ✗ fs_delete_file: path=mods.go · failed")
+	require.True(t, ok)
+	require.Equal(t, "  │ ✗ fs_delete_file: path=mods.go · failed", ansi.Strip(failure))
+	require.Contains(t, failure, "38;2;231;154;162")
+}
+
 func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *testing.T) {
 	oldOutputTTY := IsOutputTTY
 	IsOutputTTY = func() bool { return false }

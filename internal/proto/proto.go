@@ -2,6 +2,7 @@
 package proto
 
 import (
+	"encoding/json"
 	"strings"
 )
 
@@ -157,7 +158,8 @@ type Session []Message
 func (cc Session) String() string {
 	var sb strings.Builder
 	for _, msg := range cc {
-		if msg.Content == "" {
+		content := TranscriptContent(msg)
+		if content == "" {
 			continue
 		}
 		switch msg.Role {
@@ -166,12 +168,101 @@ func (cc Session) String() string {
 		case RoleUser:
 			sb.WriteString("**User**: ")
 		case RoleTool:
-			continue
+			sb.WriteString("**Tool**: ")
 		case RoleAssistant:
 			sb.WriteString("**Assistant**: ")
 		}
-		sb.WriteString(msg.Content)
+		sb.WriteString(content)
 		sb.WriteString("\n\n")
 	}
 	return sb.String()
+}
+
+// TranscriptContent returns the human-readable transcript payload for a
+// message. Unlike Content alone, it also includes provider tool-call metadata so
+// saved sessions remain auditable and searchable.
+func TranscriptContent(msg Message) string {
+	var parts []string
+	if msg.Role != RoleTool && strings.TrimSpace(msg.Content) != "" {
+		parts = append(parts, msg.Content)
+	}
+	switch msg.Role {
+	case RoleAssistant:
+		for _, call := range msg.ToolCalls {
+			if text := toolCallTranscript("Tool call", call, ""); text != "" {
+				parts = append(parts, text)
+			}
+		}
+	case RoleTool:
+		for _, call := range msg.ToolCalls {
+			if text := toolCallTranscript("Tool result", call, msg.Content); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		if len(msg.ToolCalls) == 0 && msg.Content != "" {
+			parts = append(parts, "Tool result:\n"+msg.Content)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func toolCallTranscript(label string, call ToolCall, result string) string {
+	name := call.Function.Name
+	if name == "" {
+		name = "tool"
+	}
+	var sb strings.Builder
+	sb.WriteString(label)
+	sb.WriteString(": ")
+	sb.WriteString(name)
+	if call.ID != "" {
+		sb.WriteString(" (")
+		sb.WriteString(call.ID)
+		sb.WriteString(")")
+	}
+	if len(call.Function.Arguments) > 0 {
+		sb.WriteString("\n")
+		sb.WriteString(formatToolArguments(name, call.Function.Arguments))
+	}
+	if result != "" {
+		status := "success"
+		if call.IsError {
+			status = "error"
+		}
+		sb.WriteString("\n")
+		sb.WriteString("status: ")
+		sb.WriteString(status)
+		sb.WriteString("\n")
+		sb.WriteString("output:\n")
+		sb.WriteString(result)
+	}
+	return sb.String()
+}
+
+func formatToolArguments(name string, data []byte) string {
+	if command := shellCommandArgument(name, data); command != "" {
+		return "command:\n" + command
+	}
+	var v any
+	if err := json.Unmarshal(data, &v); err == nil {
+		if formatted, err := json.MarshalIndent(v, "", "  "); err == nil {
+			return "arguments:\n" + string(formatted)
+		}
+	}
+	return "arguments:\n" + string(data)
+}
+
+func shellCommandArgument(name string, data []byte) string {
+	switch name {
+	case "shell_run", "powershell_run":
+	default:
+		return ""
+	}
+	var args struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(data, &args); err != nil {
+		return ""
+	}
+	return args.Command
 }

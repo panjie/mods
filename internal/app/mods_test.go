@@ -1377,45 +1377,58 @@ func TestEnsureKey(t *testing.T) {
 	})
 }
 
-func TestAppendShellResult(t *testing.T) {
+func TestAppendToolResult(t *testing.T) {
 	newMods := func() *Mods {
 		return &Mods{Config: &Config{}, contentMutex: &sync.Mutex{}}
 	}
 
-	t.Run("success appends block", func(t *testing.T) {
+	t.Run("shell success appends line by default", func(t *testing.T) {
 		m := newMods()
-		m.Config.ShowToolResults = true
-		m.appendShellResult("shell_run", []byte(`{"command":"ls -la"}`), nil)
-		require.Contains(t, m.Output, "> \u2713 ran `ls -la`")
+		m.appendToolResult("shell_run", []byte(`{"command":"ls -la"}`), nil)
+		require.Contains(t, m.Output, "> \u2713 shell_run: ls -la")
 		require.Contains(t, m.Output, "exit 0")
 	})
 
-	t.Run("failure appends exit code", func(t *testing.T) {
+	t.Run("shell failure appends exit code", func(t *testing.T) {
 		m := newMods()
-		m.Config.ShowToolResults = true
-		m.appendShellResult("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1})
-		require.Contains(t, m.Output, "> \u2717 ran `npm test`")
+		m.appendToolResult("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1})
+		require.Contains(t, m.Output, "> \u2717 shell_run: npm test")
 		require.Contains(t, m.Output, "exit 1")
 	})
 
-	t.Run("default suppresses tool results", func(t *testing.T) {
+	t.Run("raw suppresses tool results", func(t *testing.T) {
 		m := newMods()
-		m.appendShellResult("shell_run", []byte(`{"command":"ls"}`), nil)
+		m.Config.Raw = true
+		m.appendToolResult("shell_run", []byte(`{"command":"ls"}`), nil)
 		require.Empty(t, m.Output)
 	})
 
-	t.Run("non shell tool is skipped", func(t *testing.T) {
+	t.Run("minimal suppresses tool results", func(t *testing.T) {
 		m := newMods()
-		m.appendShellResult("fs_read_file", []byte(`{"path":"/a"}`), nil)
+		m.Config.Minimal = true
+		m.appendToolResult("fs_read_file", []byte(`{"path":"/a"}`), nil)
 		require.Empty(t, m.Output)
 	})
 
-	t.Run("block separates from prior content", func(t *testing.T) {
+	t.Run("non shell tool is shown", func(t *testing.T) {
 		m := newMods()
-		m.Config.ShowToolResults = true
+		m.appendToolResult("fs_read_file", []byte(`{"path":"/a"}`), nil)
+		require.Contains(t, m.Output, "> \u2713 fs_read_file: path=/a")
+	})
+
+	t.Run("line separates from prior content", func(t *testing.T) {
+		m := newMods()
 		m.appendToOutput("thinking...")
-		m.appendShellResult("shell_run", []byte(`{"command":"ls"}`), nil)
-		require.Contains(t, m.Output, "thinking...\n\n> \u2713 ran `ls`")
+		m.appendToolResult("shell_run", []byte(`{"command":"ls"}`), nil)
+		require.Contains(t, m.Output, "thinking...\n\n> \u2713 shell_run: ls")
+	})
+
+	t.Run("line uses render width", func(t *testing.T) {
+		m := newMods()
+		m.width = 52
+		m.appendToolResult("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review"))
+		require.Contains(t, m.Output, "> \u2717 fs_delete_file: path=C:\\Users\\panj... \u00b7 failed")
+		require.NotContains(t, m.Output, "Downloads")
 	})
 }
 
@@ -1444,7 +1457,7 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
 		})
 		require.NotNil(t, cmd)
-		require.Equal(t, "✓ Shell - go test ./...", m.getActiveOperation())
+		require.Equal(t, "✓ shell_run: go test ./... · exit 0", m.getActiveOperation())
 	})
 
 	t.Run("exit code", func(t *testing.T) {
@@ -1454,7 +1467,7 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
 		})
 		require.NotNil(t, cmd)
-		require.Equal(t, "✗ PS - npm test (exit 1)", m.getActiveOperation())
+		require.Equal(t, "✗ powershell_run: npm test · exit 1", m.getActiveOperation())
 	})
 
 	t.Run("non shell", func(t *testing.T) {
@@ -1464,7 +1477,7 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
 		})
 		require.NotNil(t, cmd)
-		require.Empty(t, m.getActiveOperation())
+		require.Equal(t, "✓ fs_read_file: path=mods.go", m.getActiveOperation())
 	})
 }
 

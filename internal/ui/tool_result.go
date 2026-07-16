@@ -12,54 +12,91 @@ type exitCoder interface {
 	ExitCode() int
 }
 
-// ShellResultBlock returns a compact markdown transcript block describing the
-// outcome of a completed shell command, so users can review which commands ran
-// and whether they succeeded. It returns an empty string for tool names that
-// are not shell commands.
-func ShellResultBlock(name string, data []byte, err error) string {
-	command := shellCommand(name, data)
-	if command == "" {
+// ToolResultLine returns a compact single-line markdown transcript block for a
+// completed tool call. It includes the tool name, a short argument summary, and
+// whether the call succeeded or failed.
+func ToolResultLine(name string, data []byte, err error) string {
+	return ToolResultLineWidth(name, data, err, 120)
+}
+
+// ToolResultLineWidth is ToolResultLine with a caller-provided display width
+// for the status text. The width should already account for any renderer prefix
+// such as a Markdown blockquote gutter.
+func ToolResultLineWidth(name string, data []byte, err error, width int) string {
+	status := ToolResultStatus(name, data, err, width)
+	if status == "" {
 		return ""
 	}
-	code := inlineCode(command)
+	return "> " + status
+}
+
+// ToolResultStatus returns the unstyled one-line status text used by the live
+// operation footer. It starts with a success/failure marker so callers can
+// apply styling uniformly.
+func ToolResultStatus(name string, data []byte, err error, width int) string {
+	if name == "" {
+		return ""
+	}
+	prefix := "\u2713 " + name
+	if err != nil {
+		prefix = "\u2717 " + name
+	}
+	summary := toolResultSummary(name, data)
+	if summary != "" {
+		prefix += ": "
+	}
+	suffix := ""
+	detail := ""
 	if err == nil {
-		return fmt.Sprintf("> \u2713 ran %s \u00b7 exit 0", code)
+		if isShellTool(name) {
+			suffix = " \u00b7 exit 0"
+		}
+		return toolStatusLine(prefix, summary, suffix, detail, width)
 	}
 	var ec exitCoder
 	if errors.As(err, &ec) {
-		return fmt.Sprintf("> \u2717 ran %s \u00b7 exit %d", code, ec.ExitCode())
+		suffix = fmt.Sprintf(" \u00b7 exit %d", ec.ExitCode())
+		return toolStatusLine(prefix, summary, suffix, detail, width)
 	}
-	return fmt.Sprintf("> \u2717 ran %s \u00b7 failed: %s", code, OneLinePreview(err.Error()))
+	suffix = " \u00b7 failed"
+	detail = OneLinePreview(err.Error())
+	return toolStatusLine(prefix, summary, suffix, detail, width)
 }
 
-func shellCommand(name string, data []byte) string {
+func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
+	if detail != "" {
+		fullSuffix := suffix + ": " + detail
+		if summary == "" || width-runeLen(prefix)-runeLen(fullSuffix) >= minToolSummaryWidth {
+			suffix = fullSuffix
+		}
+	}
+	if summary == "" {
+		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
+	}
+	available := width - runeLen(prefix) - runeLen(suffix)
+	if available <= 0 {
+		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
+	}
+	return prefix + TruncateOperationStatus(summary, available) + suffix
+}
+
+const minToolSummaryWidth = 12
+
+func toolResultSummary(name string, data []byte) string {
+	args := ToolOperationArgs(data)
+	if isShellTool(name) {
+		return ShellCommandPreview(ArgString(args, "command"))
+	}
+	return ToolArgsSummary(args)
+}
+
+func isShellTool(name string) bool {
 	switch name {
 	case "shell_run", "powershell_run":
+		return true
 	default:
-		return ""
+		return false
 	}
-	return ShellCommandPreview(ArgString(ToolOperationArgs(data), "command"))
 }
 
-// inlineCode wraps s in a markdown inline-code span, using a backtick fence
-// long enough to enclose any backtick runs within s.
-func inlineCode(s string) string {
-	maxRun := 0
-	run := 0
-	for _, r := range s {
-		if r == '`' {
-			run++
-			if run > maxRun {
-				maxRun = run
-			}
-			continue
-		}
-		run = 0
-	}
-	fence := strings.Repeat("`", maxRun+1)
-	pad := ""
-	if strings.HasPrefix(s, "`") || strings.HasSuffix(s, "`") {
-		pad = " "
-	}
-	return fence + pad + s + pad + fence
-}
+func runeLen(s string) int { return len([]rune(s)) }

@@ -35,19 +35,49 @@ func sendViewerKey(m *browserModel, code rune, text string) {
 func TestBuildTranscriptDocumentIsPlainRoleAwareContent(t *testing.T) {
 	doc := buildTranscriptDocument([]proto.Message{
 		{Role: proto.RoleUser, Content: "\x1b[31mfirst\x1b[0m\a\r\nsecond"},
-		{Role: proto.RoleTool, Content: "secret tool result"},
+		{
+			Role:    proto.RoleTool,
+			Content: "secret tool result",
+			ToolCalls: []proto.ToolCall{{
+				ID: "call-1",
+				Function: proto.Function{
+					Name:      "shell_run",
+					Arguments: []byte(`{"command":"echo first\necho second"}`),
+				},
+			}},
+		},
 		{Role: proto.RoleAssistant, Content: "answer"},
 		{Role: proto.RoleSystem, Content: ""},
 	})
 
-	require.Equal(t, "first\nsecond\n\nanswer", doc.content)
+	require.Contains(t, doc.content, "first\nsecond")
+	require.Contains(t, doc.content, "Tool result: shell_run (call-1)")
+	require.Contains(t, doc.content, "command:\necho first\necho second")
+	require.Contains(t, doc.content, "secret tool result")
+	require.Contains(t, doc.content, "answer")
 	require.Equal(t, doc.content, ansi.Strip(doc.content))
-	require.Len(t, doc.lines, 4)
+	require.Len(t, doc.lines, 12)
 	require.Equal(t, transcriptLine{role: proto.RoleUser, start: true}, doc.lines[0])
 	require.Equal(t, transcriptLine{role: proto.RoleUser}, doc.lines[1])
 	require.Equal(t, transcriptLine{}, doc.lines[2])
-	require.Equal(t, transcriptLine{role: proto.RoleAssistant, start: true}, doc.lines[3])
-	require.NotContains(t, doc.content, "tool")
+	require.Equal(t, transcriptLine{role: proto.RoleTool, start: true}, doc.lines[3])
+	require.Equal(t, transcriptLine{role: proto.RoleTool}, doc.lines[4])
+	require.Equal(t, transcriptLine{role: proto.RoleAssistant, start: true}, doc.lines[11])
+}
+
+func TestViewerGutterShowsToolMarker(t *testing.T) {
+	m := newLoadedViewer(t, 40, 12, []proto.Message{
+		{
+			Role:    proto.RoleTool,
+			Content: "ok",
+			ToolCalls: []proto.ToolCall{{
+				Function: proto.Function{Name: "fs_read_file", Arguments: []byte(`{"path":"mods.go"}`)},
+			}},
+		},
+	})
+
+	got := m.viewerGutter(viewport.GutterContext{Index: 0})
+	require.Equal(t, "T │ ", ansi.Strip(got))
 }
 
 func TestViewerGutterUsesFixedWidthRoleMarkers(t *testing.T) {

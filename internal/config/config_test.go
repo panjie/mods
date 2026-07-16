@@ -182,34 +182,6 @@ func TestConfigTemplateIncludesPrompts(t *testing.T) {
 	require.Contains(t, string(content), `shell-classifier: ""`)
 }
 
-func TestShowToolResultsConfig(t *testing.T) {
-	t.Run("default is false", func(t *testing.T) {
-		require.False(t, Default().ShowToolResults)
-	})
-
-	t.Run("yaml", func(t *testing.T) {
-		var cfg Config
-		require.NoError(t, yaml.Unmarshal([]byte("show-tool-results: true"), &cfg))
-		require.True(t, cfg.ShowToolResults)
-	})
-
-	t.Run("env", func(t *testing.T) {
-		t.Setenv("MODS_SHOW_TOOL_RESULTS", "true")
-		var cfg Config
-		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
-		require.True(t, cfg.ShowToolResults)
-	})
-}
-
-func TestConfigTemplateIncludesShowToolResults(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
-
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "show-tool-results: false")
-}
-
 func TestShowTokenUsageConfig(t *testing.T) {
 	require.False(t, Default().ShowTokenUsage)
 

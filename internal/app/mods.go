@@ -636,9 +636,10 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.reviewer.reset()
 	m.userInput.reset()
 	completionStatus := ""
+	var outputCmds []tea.Cmd
 	for _, call := range msg.results {
 		if !errors.Is(call.Err, errReviewUnavailable) {
-			m.appendToolResult(call.Name, call.Arguments, call.Err)
+			outputCmds = append(outputCmds, m.toolResultOutputCmd(call.Name, call.Arguments, call.Err))
 			if status := toolCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
 				completionStatus = status
 			}
@@ -654,10 +655,10 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			if errors.Is(call.Err, errReviewUnavailable) {
 				msg.runner.close()
 				m.currentToolRegistry = nil
-				return msgCmd(modsError{
+				return tea.Sequence(append(outputCmds, msgCmd(modsError{
 					Err:        call.Err,
 					ReasonText: "Tool execution requires review.",
-				})
+				}))...)
 			}
 			continue
 		}
@@ -686,7 +687,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		// own; mirroring a status line here would produce a duplicate row
 		// while waiting for the model to respond.
 		m.setActiveOperation("")
-		return msgCmd(msg.runner.doneMsg())
+		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 	}
 	m.setActiveOperation(completionStatus)
 	m.totalRounds++
@@ -702,11 +703,11 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	}
 	if m.toolRoundLimitExceeded(maxTotal, msg.runner.stream) {
 		msg.runner.close()
-		return msgCmd(msg.runner.doneMsg())
+		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 	}
 	debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
 	m.responseBoundaryPending = true
-	return msg.runner.receiveCmd()
+	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
 }
 
 func (m *Mods) clearProposals() {

@@ -1383,58 +1383,96 @@ func TestEnsureKey(t *testing.T) {
 	})
 }
 
-func TestAppendToolResult(t *testing.T) {
+func TestToolResultOutput(t *testing.T) {
 	newMods := func() *Mods {
 		return &Mods{Config: &Config{}, contentMutex: &sync.Mutex{}}
 	}
 
-	t.Run("shell success appends line by default", func(t *testing.T) {
+	t.Run("shell success writes stderr by default", func(t *testing.T) {
 		m := newMods()
-		m.appendToolResult("shell_run", []byte(`{"command":"ls -la"}`), nil)
-		require.Contains(t, m.Output, "> \u2713 shell_run: ls -la")
-		require.Contains(t, m.Output, "exit 0")
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"ls -la"}`), nil))
+		})
+		require.Contains(t, stderr, "\u2713 shell_run: ls -la")
+		require.Contains(t, stderr, "exit 0")
+		require.Equal(t, ansi.Strip(stderr), stderr)
+		require.Empty(t, m.Output)
+		require.Empty(t, m.RenderedOutput())
 	})
 
-	t.Run("shell failure appends exit code", func(t *testing.T) {
+	t.Run("shell failure writes exit code to stderr", func(t *testing.T) {
 		m := newMods()
-		m.appendToolResult("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1})
-		require.Contains(t, m.Output, "> \u2717 shell_run: npm test")
-		require.Contains(t, m.Output, "exit 1")
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1}))
+		})
+		require.Contains(t, stderr, "\u2717 shell_run: npm test")
+		require.Contains(t, stderr, "exit 1")
+		require.Empty(t, m.Output)
 	})
 
 	t.Run("raw suppresses tool results", func(t *testing.T) {
 		m := newMods()
 		m.Config.Raw = true
-		m.appendToolResult("shell_run", []byte(`{"command":"ls"}`), nil)
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"ls"}`), nil))
+		})
 		require.Empty(t, m.Output)
+		require.Empty(t, stderr)
 	})
 
 	t.Run("minimal suppresses tool results", func(t *testing.T) {
 		m := newMods()
 		m.Config.Minimal = true
-		m.appendToolResult("fs_read_file", []byte(`{"path":"/a"}`), nil)
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"/a"}`), nil))
+		})
+		require.Empty(t, m.Output)
+		require.Empty(t, stderr)
+	})
+
+	t.Run("non shell tool writes stderr", func(t *testing.T) {
+		m := newMods()
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"/a"}`), nil))
+		})
+		require.Contains(t, stderr, "\u2713 fs_read_file: path=/a")
 		require.Empty(t, m.Output)
 	})
 
-	t.Run("non shell tool is shown", func(t *testing.T) {
-		m := newMods()
-		m.appendToolResult("fs_read_file", []byte(`{"path":"/a"}`), nil)
-		require.Contains(t, m.Output, "> \u2713 fs_read_file: path=/a")
-	})
-
-	t.Run("line separates from prior content", func(t *testing.T) {
+	t.Run("prior response content is unchanged", func(t *testing.T) {
 		m := newMods()
 		m.appendToOutput("thinking...")
-		m.appendToolResult("shell_run", []byte(`{"command":"ls"}`), nil)
-		require.Contains(t, m.Output, "thinking...\n\n> \u2713 shell_run: ls")
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"ls"}`), nil))
+		})
+		require.Contains(t, stderr, "\u2713 shell_run: ls")
+		require.Equal(t, "thinking...", m.Output)
 	})
 
 	t.Run("line uses render width", func(t *testing.T) {
 		m := newMods()
 		m.width = 52
-		m.appendToolResult("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review"))
-		require.Contains(t, m.Output, "> \u2717 fs_delete_file: path=C:\\Users\\panj... \u00b7 failed")
-		require.NotContains(t, m.Output, "Downloads")
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review")))
+		})
+		require.Contains(t, stderr, "\u2717 fs_delete_file: path=C:\\Users\\panj... \u00b7 failed")
+		require.NotContains(t, stderr, "Downloads")
+		require.Empty(t, m.Output)
+	})
+
+	t.Run("interactive renderer returns a print command", func(t *testing.T) {
+		oldErrorTTY := IsErrorTTY
+		IsErrorTTY = func() bool { return true }
+		t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
+
+		m := newMods()
+		m.Config.InteractiveTTYAvailable = true
+		m.Styles = makeStyles(true)
+		stderr := captureStderr(t, func() {
+			require.NotNil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil))
+		})
+		require.Empty(t, stderr)
+		require.Empty(t, m.Output)
 	})
 }
 
@@ -1458,32 +1496,69 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		m := newAnimatingMods()
-		cmd := m.handleToolCallsDone(streamEventMsg{
-			results: []proto.ToolCallStatus{{Name: "shell_run", Arguments: []byte(`{"command":"go test ./..."}`)}},
-			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+		var cmd tea.Cmd
+		stderr := captureStderr(t, func() {
+			cmd = m.handleToolCallsDone(streamEventMsg{
+				results: []proto.ToolCallStatus{{Name: "shell_run", Arguments: []byte(`{"command":"go test ./..."}`)}},
+				runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+			})
 		})
 		require.NotNil(t, cmd)
+		require.Contains(t, stderr, "✓ shell_run: go test ./... · exit 0")
 		require.Equal(t, "✓ shell_run: go test ./... · exit 0", m.getActiveOperation())
+		require.Empty(t, m.Output)
 	})
 
 	t.Run("exit code", func(t *testing.T) {
 		m := newAnimatingMods()
-		cmd := m.handleToolCallsDone(streamEventMsg{
-			results: []proto.ToolCallStatus{{Name: "powershell_run", Arguments: []byte(`{"command":"npm test"}`), Err: toolregistry.ShellExitError{Code: 1}}},
-			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+		var cmd tea.Cmd
+		stderr := captureStderr(t, func() {
+			cmd = m.handleToolCallsDone(streamEventMsg{
+				results: []proto.ToolCallStatus{{Name: "powershell_run", Arguments: []byte(`{"command":"npm test"}`), Err: toolregistry.ShellExitError{Code: 1}}},
+				runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+			})
 		})
 		require.NotNil(t, cmd)
+		require.Contains(t, stderr, "✗ powershell_run: npm test · exit 1")
 		require.Equal(t, "✗ powershell_run: npm test · exit 1", m.getActiveOperation())
+		require.Empty(t, m.Output)
 	})
 
 	t.Run("non shell", func(t *testing.T) {
 		m := newAnimatingMods()
-		cmd := m.handleToolCallsDone(streamEventMsg{
-			results: []proto.ToolCallStatus{{Name: "fs_read_file", Arguments: []byte(`{"path":"mods.go"}`)}},
-			runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+		var cmd tea.Cmd
+		stderr := captureStderr(t, func() {
+			cmd = m.handleToolCallsDone(streamEventMsg{
+				results: []proto.ToolCallStatus{{Name: "fs_read_file", Arguments: []byte(`{"path":"mods.go"}`)}},
+				runner:  newStreamRunner(staticStream{}, nil, nil, errh),
+			})
 		})
 		require.NotNil(t, cmd)
+		require.Contains(t, stderr, "✓ fs_read_file: path=mods.go")
 		require.Equal(t, "✓ fs_read_file: path=mods.go", m.getActiveOperation())
+		require.Empty(t, m.Output)
+	})
+
+	t.Run("multiple results preserve stderr order", func(t *testing.T) {
+		m := newAnimatingMods()
+		stderr := captureStderr(t, func() {
+			cmd := m.handleToolCallsDone(streamEventMsg{
+				results: []proto.ToolCallStatus{
+					{Name: "fs_read_file", Arguments: []byte(`{"path":"first.go"}`)},
+					{Name: "shell_run", Arguments: []byte(`{"command":"go test ./..."}`)},
+					{Name: "fs_stat", Arguments: []byte(`{"path":"last.go"}`)},
+				},
+				runner: newStreamRunner(staticStream{}, nil, nil, errh),
+			})
+			require.NotNil(t, cmd)
+		})
+		first := strings.Index(stderr, "fs_read_file: path=first.go")
+		second := strings.Index(stderr, "shell_run: go test ./...")
+		third := strings.Index(stderr, "fs_stat: path=last.go")
+		require.GreaterOrEqual(t, first, 0)
+		require.Greater(t, second, first)
+		require.Greater(t, third, second)
+		require.Empty(t, m.Output)
 	})
 }
 

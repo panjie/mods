@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -292,27 +293,27 @@ func (m *Mods) appendResponseBoundary() {
 	m.appendToOutput("\n\n")
 }
 
-// appendToolResult appends a compact one-line transcript block describing the
-// outcome of a completed tool call. Raw/minimal modes intentionally stay clean
-// for pipeline use.
-func (m *Mods) appendToolResult(name string, data []byte, err error) {
+// toolResultOutputCmd emits a compact one-line activity record for a completed
+// tool call. It deliberately bypasses every response buffer so stdout and
+// RenderedOutput remain model-output-only. When Bubble Tea owns stderr, Println
+// inserts the record safely above the live renderer; otherwise write it
+// directly to stderr.
+func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd {
 	if m.Config.Raw || m.Config.Minimal {
-		return
+		return nil
 	}
 	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())
 	if status == "" {
-		return
+		return nil
 	}
 	if m.secrets != nil {
 		status = m.secrets.Redact(status)
 	}
-	block := "> " + status
-	display := m.nextDisplayBlockMarker(m.toolResultDisplayLine(status)) + "\n\n"
-	if m.Output == "" {
-		m.appendToOutputWithDisplay(block+"\n\n", display)
-		return
+	if m.Config.InteractiveTTYAvailable && IsErrorTTY() {
+		return tea.Println(m.toolResultDisplayLine(status))
 	}
-	m.appendToOutputWithDisplay("\n\n"+block+"\n\n", "\n\n"+display)
+	_, _ = fmt.Fprintln(os.Stderr, status)
+	return nil
 }
 
 func (m *Mods) toolResultStatusWidth() int {

@@ -461,10 +461,10 @@ func TestToolResultDisplayLineUsesSharedThemeStyles(t *testing.T) {
 	require.NotEqual(t, themedSuccess[0], themedSuccess[1], "semantic marker must follow the configured theme")
 }
 
-func TestToolResultTTYDisplayIsSingleLineAndKeepsRawTranscript(t *testing.T) {
-	oldOutputTTY := IsOutputTTY
-	IsOutputTTY = func() bool { return true }
-	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+func TestToolResultTTYUsesRendererWithoutMutatingResponse(t *testing.T) {
+	oldErrorTTY := IsErrorTTY
+	IsErrorTTY = func() bool { return true }
+	t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
 
 	gr, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle("dark"),
@@ -472,7 +472,7 @@ func TestToolResultTTYDisplayIsSingleLineAndKeepsRawTranscript(t *testing.T) {
 	)
 	require.NoError(t, err)
 	m := &Mods{
-		Config:       &Config{},
+		Config:       &Config{InteractiveTTYAvailable: true},
 		Styles:       ui.MakeStylesWithTheme("dracula", true),
 		glam:         gr,
 		glamViewport: viewport.New(viewport.WithWidth(52), viewport.WithHeight(10)),
@@ -480,24 +480,44 @@ func TestToolResultTTYDisplayIsSingleLineAndKeepsRawTranscript(t *testing.T) {
 		width:        52,
 	}
 	command := `say -v Kyoko "皇族数の確保に向けた皇室典範改正案は参院特別委員会で審議されました🙂"`
-	m.appendToolResult("shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), nil)
+	data := []byte(`{"command":` + strconv.Quote(command) + `}`)
+	cmd := m.toolResultOutputCmd("shell_run", data, nil)
 
-	require.Contains(t, m.Output, "> ✓ shell_run:")
-	require.Contains(t, m.Output, " · exit 0")
-	require.Contains(t, m.displayOutput, "MODS_DISPLAY_BLOCK_")
-	require.NotContains(t, m.displayOutput, "> ✓ shell_run:")
+	require.NotNil(t, cmd)
+	require.Empty(t, m.Output)
+	require.Empty(t, m.displayOutput)
+	require.Empty(t, m.glamOutput)
+	status := ToolResultStatus("shell_run", data, nil, m.toolResultStatusWidth())
+	activityLine := m.toolResultDisplayLine(status)
+	require.Contains(t, ansi.Strip(activityLine), "  │ ✓ shell_run:")
+	require.Contains(t, ansi.Strip(activityLine), " · exit 0")
+	require.LessOrEqual(t, lipgloss.Width(activityLine), 52)
+	require.Contains(t, activityLine, m.Styles.Comment.Render("  │ "))
+	require.Contains(t, activityLine, m.Styles.Interaction.Success.Render("✓"))
+}
 
-	plainLines := strings.Split(strings.TrimRight(ansi.Strip(m.glamOutput), "\n"), "\n")
-	var activityLines []string
-	for _, line := range plainLines {
-		if strings.Contains(line, "shell_run") || strings.Contains(line, "│") {
-			activityLines = append(activityLines, line)
-		}
+func TestToolResultKeepsJSONStdoutValid(t *testing.T) {
+	oldOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return false }
+	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+
+	m := &Mods{
+		Config:       &Config{PersistentConfig: PersistentConfig{Format: "json"}},
+		state:        responseState,
+		contentMutex: &sync.Mutex{},
+		reviewer:     &toolReviewer{},
+		width:        80,
 	}
-	require.Equal(t, []string{"  │ " + strings.TrimPrefix(strings.TrimSpace(m.Output), "> ")}, activityLines)
-	require.LessOrEqual(t, lipgloss.Width(activityLines[0]), 52)
-	require.Contains(t, m.glamOutput, m.Styles.Comment.Render("  │ "))
-	require.Contains(t, m.glamOutput, m.Styles.Interaction.Success.Render("✓"))
+	m.appendToOutput(`{"ok":true}`)
+	stderr := captureStderr(t, func() {
+		require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil))
+	})
+	stdout := captureStdout(t, func() { _ = m.View() })
+
+	require.JSONEq(t, `{"ok":true}`, stdout)
+	require.Contains(t, stderr, "✓ fs_read_file: path=mods.go")
+	require.Equal(t, `{"ok":true}`, m.Output)
+	require.Empty(t, m.RenderedOutput())
 }
 
 func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *testing.T) {
@@ -539,6 +559,22 @@ func captureStdout(tb testing.TB, fn func()) string {
 	require.NoError(tb, err)
 	os.Stdout = w
 	defer func() { os.Stdout = old }()
+
+	fn()
+	require.NoError(tb, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(tb, err)
+	return string(out)
+}
+
+func captureStderr(tb testing.TB, fn func()) string {
+	tb.Helper()
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(tb, err)
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
 
 	fn()
 	require.NoError(tb, w.Close())

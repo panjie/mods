@@ -144,22 +144,14 @@ func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
 		return true, nil
 	}
 	if config.ListSkills {
-		var mods *Mods
-		if IsOutputTTY() && !config.Raw {
-			var err error
-			mods, err = newMods(ctx, &config, db)
-			if err != nil {
-				return true, modsError{Err: err, ReasonText: "Could not prepare skills list."}
-			}
-		}
-		return true, listSkills(mods, config.ResolveSkillsDirs())
+		return true, listSkills(config.ResolveSkillsDirs())
 	}
 	if config.List {
 		return true, listSessions(config.Raw)
 	}
 
 	if config.MCPList {
-		List(&config)
+		listMCPServers(&config)
 		return true, nil
 	}
 

@@ -4,23 +4,28 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/skills"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListSkillsOutputsSortedCatalogAndSummary(t *testing.T) {
-	withListSkillsOutputTest(t, false, false)
+	withListOutputTest(t, false, false, 100)
 	dir := t.TempDir()
 	writeCLITestSkill(t, dir, "zeta", "Zeta skill. More detail that should be hidden.")
 	writeCLITestSkill(t, dir, "alpha", "Alpha skill. More detail that should be hidden.")
 
 	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(nil, []string{dir}))
+		require.NoError(t, listSkills([]string{dir}))
 	})
 
-	require.Equal(t, "# Skills\n\nDirectory: `"+dir+"`\n\n- **alpha** — Alpha skill.\n- **zeta** — Zeta skill.\n\n_2 skills_\n", output)
+	require.Equal(t,
+		"Skills\n\nDirectory  "+dir+"\n\nNAME   DESCRIPTION\nalpha  Alpha skill.\nzeta   Zeta skill.\n\n2 skills\n",
+		output,
+	)
 }
 
 func TestFirstSentenceHandlesExtensionsAbbreviationsAndChinese(t *testing.T) {
@@ -36,17 +41,20 @@ func TestFirstSentenceHandlesExtensionsAbbreviationsAndChinese(t *testing.T) {
 }
 
 func TestListSkillsEmptyCatalogSucceeds(t *testing.T) {
-	withListSkillsOutputTest(t, false, false)
+	withListOutputTest(t, false, false, 100)
 	for _, dir := range []string{t.TempDir(), filepath.Join(t.TempDir(), "missing")} {
 		output := captureStdout(t, func() {
-			require.NoError(t, listSkills(nil, []string{dir}))
+			require.NoError(t, listSkills([]string{dir}))
 		})
-		require.Equal(t, "# Skills\n\nDirectory: `"+dir+"`\n\n_No skills found._\n", output)
+		require.Equal(t,
+			"Skills\n\nDirectory  "+dir+"\n\nNo skills found.\n\n0 skills\n",
+			output,
+		)
 	}
 }
 
 func TestListSkillsUsesMergedDirectories(t *testing.T) {
-	withListSkillsOutputTest(t, false, false)
+	withListOutputTest(t, false, false, 100)
 	first := t.TempDir()
 	second := t.TempDir()
 	writeCLITestSkill(t, first, "shared", "Shared first.")
@@ -54,14 +62,12 @@ func TestListSkillsUsesMergedDirectories(t *testing.T) {
 	writeCLITestSkill(t, second, "project", "Project skill.")
 
 	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(nil, []string{first, second}))
+		require.NoError(t, listSkills([]string{first, second}))
 	})
 
-	require.Contains(t, output, "Directories:")
-	require.Contains(t, output, "`"+first+"`")
-	require.Contains(t, output, "`"+second+"`")
-	require.Contains(t, output, "- **project** — Project skill.")
-	require.Contains(t, output, "- **shared** — Shared second.")
+	require.Contains(t, output, "Directories\n  "+first+"\n  "+second)
+	require.Contains(t, output, "project  Project skill.")
+	require.Contains(t, output, "shared   Shared second.")
 }
 
 func TestListSkillsScanFailureReturnsError(t *testing.T) {
@@ -71,7 +77,7 @@ func TestListSkillsScanFailureReturnsError(t *testing.T) {
 	}
 	t.Cleanup(func() { scanSkills = saved })
 
-	err := listSkills(nil, []string{"/unreadable"})
+	err := listSkills([]string{"/unreadable"})
 
 	require.Error(t, err)
 	merr, ok := err.(modsError)
@@ -80,75 +86,41 @@ func TestListSkillsScanFailureReturnsError(t *testing.T) {
 	require.ErrorContains(t, merr.Err, "permission denied")
 }
 
-func TestListSkillsRendersMarkdownForTTY(t *testing.T) {
-	withListSkillsOutputTest(t, true, false)
-	dir := t.TempDir()
-	writeCLITestSkill(t, dir, "alpha", "Alpha skill. More details.")
-	renderSkillsMarkdown = func(_ *Mods, content string) (string, error) {
-		require.Contains(t, content, "- **alpha** — Alpha skill.")
-		return "rendered skills\n\n", nil
-	}
-
-	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(&Mods{}, []string{dir}))
-	})
-
-	require.Equal(t, "rendered skills\n", output)
-}
-
-func TestListSkillsRawSkipsMarkdownRenderer(t *testing.T) {
-	withListSkillsOutputTest(t, true, true)
+func TestListSkillsTTYUsesStylesAndRawDoesNot(t *testing.T) {
 	dir := t.TempDir()
 	writeCLITestSkill(t, dir, "alpha", "Alpha skill.")
-	renderSkillsMarkdown = func(_ *Mods, _ string) (string, error) {
-		t.Fatal("renderer must not be called in raw mode")
-		return "", nil
-	}
 
-	output := captureStdout(t, func() {
-		require.NoError(t, listSkills(&Mods{}, []string{dir}))
+	withListOutputTest(t, true, false, 100)
+	styled := captureStdout(t, func() {
+		require.NoError(t, listSkills([]string{dir}))
 	})
-	require.Contains(t, output, "# Skills\n")
+	require.Contains(t, styled, "\x1b[")
+	require.Contains(t, ansi.Strip(styled), "alpha  Alpha skill.")
+
+	config.Raw = true
+	raw := captureStdout(t, func() {
+		require.NoError(t, listSkills([]string{dir}))
+	})
+	require.NotContains(t, raw, "\x1b[")
+	require.Contains(t, raw, "alpha  Alpha skill.")
 }
 
-func TestListSkillsRenderFailureReturnsError(t *testing.T) {
-	withListSkillsOutputTest(t, true, false)
-	dir := t.TempDir()
-	writeCLITestSkill(t, dir, "alpha", "Alpha skill.")
-	renderSkillsMarkdown = func(_ *Mods, _ string) (string, error) {
-		return "", errors.New("render failed")
-	}
-
-	err := listSkills(&Mods{}, []string{dir})
-
-	require.Error(t, err)
-	merr, ok := err.(modsError)
-	require.True(t, ok)
-	require.Equal(t, "Could not render skills list.", merr.ReasonText)
+func TestNormalizeListDescriptionCollapsesWhitespace(t *testing.T) {
+	require.Equal(t, "Use [docs] and <files>.", normalizeListDescription(" Use [docs]\n and\t<files>. "))
 }
 
-func TestSkillsMarkdownEscapesContent(t *testing.T) {
-	got := skillsMarkdown([]string{"/tmp/a`b"}, []skills.Skill{{
-		Name:        "a*b",
-		Description: "Use [docs] and <files>. More details.",
-	}})
-
-	require.Contains(t, got, "Directory: ``/tmp/a`b``")
-	require.Contains(t, got, "- **a\\*b** — Use \\[docs\\] and \\<files\\>.")
-	require.Contains(t, got, "_1 skill_")
-}
-
-func withListSkillsOutputTest(t *testing.T, tty, raw bool) {
+func withListOutputTest(t *testing.T, tty, raw bool, width int) {
 	t.Helper()
 	savedTTY := IsOutputTTY
 	savedConfig := config
-	savedRenderer := renderSkillsMarkdown
+	savedWidth := listOutputWidth
 	IsOutputTTY = func() bool { return tty }
 	config.Raw = raw
+	listOutputWidth = func() int { return width }
 	t.Cleanup(func() {
 		IsOutputTTY = savedTTY
 		config = savedConfig
-		renderSkillsMarkdown = savedRenderer
+		listOutputWidth = savedWidth
 	})
 }
 
@@ -158,4 +130,20 @@ func writeCLITestSkill(t *testing.T, root, name, description string) {
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	body := "---\nname: " + name + "\ndescription: " + description + "\n---\n\nInstructions.\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o600))
+}
+
+func TestSkillsDescriptionsDoNotContainMarkdownEscapes(t *testing.T) {
+	withListOutputTest(t, false, false, 100)
+	saved := scanSkills
+	scanSkills = func([]string) ([]skills.Skill, error) {
+		return []skills.Skill{{Name: "a*b", Description: "Use [docs] and <files>. More details."}}, nil
+	}
+	t.Cleanup(func() { scanSkills = saved })
+
+	output := captureStdout(t, func() {
+		require.NoError(t, listSkills([]string{"/tmp/a`b"}))
+	})
+	require.Contains(t, output, "Directory  /tmp/a`b")
+	require.Contains(t, output, "a*b   Use [docs] and <files>.")
+	require.False(t, strings.Contains(output, `\[`))
 }

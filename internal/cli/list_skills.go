@@ -1,24 +1,19 @@
 package cli
 
 import (
-	"fmt"
-	"os"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
-	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/skills"
 )
 
 var scanSkills = skills.ScanDirs
-var renderSkillsMarkdown = func(mods *Mods, content string) (string, error) {
-	return mods.RenderMarkdown(content)
-}
 
 // listSkills prints the installed skills discovered in dirs. Missing or
 // empty directories are a valid empty catalog; actual scan failures are errors.
-func listSkills(mods *Mods, dirs []string) error {
+func listSkills(dirs []string) error {
 	catalog, err := scanSkills(dirs)
 	if err != nil {
 		return modsError{
@@ -26,90 +21,43 @@ func listSkills(mods *Mods, dirs []string) error {
 			ReasonText: "Could not scan skills directories.",
 		}
 	}
-	markdown := skillsMarkdown(dirs, catalog)
-	if !IsOutputTTY() || config.Raw {
-		_, _ = lipgloss.Fprint(os.Stdout, markdown)
-		return nil
+	slices.SortFunc(catalog, func(a, b skills.Skill) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	rows := make([][]string, 0, len(catalog))
+	for _, skill := range catalog {
+		rows = append(rows, []string{skill.Name, firstSentence(normalizeListDescription(skill.Description))})
 	}
-
-	rendered, err := renderSkillsMarkdown(mods, markdown)
-	if err != nil {
-		return modsError{
-			Err:        err,
-			ReasonText: "Could not render skills list.",
-		}
-	}
-	_, _ = lipgloss.Fprintln(os.Stdout, strings.TrimRightFunc(rendered, unicode.IsSpace))
+	printListView(listView{
+		Title: "Skills",
+		Meta:  skillsDirectoryMeta(dirs),
+		Columns: []listColumn{
+			{Header: "NAME"},
+			{Header: "DESCRIPTION", Flexible: true},
+		},
+		Rows:    rows,
+		Empty:   "No skills found.",
+		Summary: listCount(len(rows), "skill", "skills"),
+	})
 	return nil
 }
 
-func skillsMarkdown(dirs []string, catalog []skills.Skill) string {
-	var sb strings.Builder
-	sb.WriteString("# Skills\n\n")
+func skillsDirectoryMeta(dirs []string) []string {
+	if len(dirs) == 0 {
+		return nil
+	}
 	if len(dirs) == 1 {
-		sb.WriteString("Directory: ")
-		sb.WriteString(markdownInlineCode(dirs[0]))
-	} else {
-		sb.WriteString("Directories:")
-		for _, dir := range dirs {
-			sb.WriteString("\n- ")
-			sb.WriteString(markdownInlineCode(dir))
-		}
+		return []string{"Directory  " + dirs[0]}
 	}
-	sb.WriteString("\n\n")
-	if len(catalog) == 0 {
-		sb.WriteString("_No skills found._\n")
-		return sb.String()
+	meta := []string{"Directories"}
+	for _, dir := range dirs {
+		meta = append(meta, "  "+dir)
 	}
-
-	for _, skill := range catalog {
-		sb.WriteString("- **")
-		sb.WriteString(escapeMarkdownText(skill.Name))
-		sb.WriteString("** — ")
-		sb.WriteString(escapeMarkdownText(firstSentence(skill.Description)))
-		sb.WriteString("\n")
-	}
-	sb.WriteString("\n_")
-	sb.WriteString(fmt.Sprintf("%d ", len(catalog)))
-	label := "skills"
-	if len(catalog) == 1 {
-		label = "skill"
-	}
-	sb.WriteString(label)
-	sb.WriteString("_\n")
-	return sb.String()
+	return meta
 }
 
-func escapeMarkdownText(text string) string {
-	var sb strings.Builder
-	for _, r := range text {
-		if strings.ContainsRune(`\`+"`*_[]<>", r) {
-			sb.WriteByte('\\')
-		}
-		sb.WriteRune(r)
-	}
-	return sb.String()
-}
-
-func markdownInlineCode(text string) string {
-	longest := 0
-	current := 0
-	for _, r := range text {
-		if r == '`' {
-			current++
-			if current > longest {
-				longest = current
-			}
-			continue
-		}
-		current = 0
-	}
-	fence := strings.Repeat("`", longest+1)
-	if strings.HasPrefix(text, "`") || strings.HasSuffix(text, "`") ||
-		strings.HasPrefix(text, " ") || strings.HasSuffix(text, " ") {
-		return fence + " " + text + " " + fence
-	}
-	return fence + text + fence
+func normalizeListDescription(description string) string {
+	return strings.Join(strings.Fields(description), " ")
 }
 
 // firstSentence returns the first sentence of a skill description. Sentence

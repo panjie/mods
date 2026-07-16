@@ -5,7 +5,6 @@ import (
 	"github.com/panjie/mods/internal/apperr"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	debugpkg "github.com/panjie/mods/internal/debug"
-	"github.com/panjie/mods/internal/mcpclient"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/ui"
@@ -47,8 +46,6 @@ var (
 	PrintConfirmation     = ui.PrintConfirmation
 	FirstLine             = ui.FirstLine
 	HideCommandWindow     = platform.HideCommandWindow
-	List                  = mcpclient.List
-	ListTools             = mcpclient.ListTools
 )
 
 const (

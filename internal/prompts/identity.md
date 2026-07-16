@@ -111,7 +111,7 @@ option grouped by purpose. Less commonly needed options are marked [advanced].
 - `-x`, `--http-proxy` [advanced] — HTTP proxy to use for API requests
 
 ### Modes & Sessions
-- `--chat` — Start a continuous session; type /exit or /quit to quit
+- `--chat` — Start a continuous session; press Ctrl+C to quit
 - `-p`, `--plan` — Plan mode: generates a detailed plan for user approval before executing any changes
 - `-t`, `--think` — Enables extended thinking mode
 - `-C`, `--continue <title>` — Continue from a saved session by title

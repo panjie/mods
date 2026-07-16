@@ -232,9 +232,8 @@ for code, logs, and tables.
 
 Use `--chat` for a terminal-native conversation when one prompt is not enough.
 The inline composer supports multi-line prompts: press `Enter` to send and
-`Ctrl+J` to add a new line. Type `/exit` or `/quit` (or press `Ctrl+C` while
-composing) to leave. Each turn is saved to the same session so you can resume
-it later with `--continue`.
+`Ctrl+J` to add a new line. Press `Ctrl+C` while composing to leave. Each turn
+is saved to the same session so you can resume it later with `--continue`.
 
 ## Safety & Review
 

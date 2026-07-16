@@ -13,37 +13,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsChatExit(t *testing.T) {
-	require.True(t, isChatExit("/exit"))
-	require.True(t, isChatExit("/quit"))
-	require.True(t, isChatExit("  /exit  "))
-	require.False(t, isChatExit("exit"))
-	require.False(t, isChatExit("hello"))
-}
-
-func TestRunChatExitsWithoutTurn(t *testing.T) {
-	withChatTest(t, "/exit\n", func(calls *[]string) {
+func TestRunChatSendsFormerExitCommandsAsMessages(t *testing.T) {
+	withChatTest(t, "/exit\n/quit\n", func(calls *[]string) {
 		require.NoError(t, runChat(context.Background(), nil, nil))
-		require.Empty(t, *calls)
+		require.Equal(t, []string{"/exit", "/quit"}, *calls)
 	})
 }
 
 func TestRunChatIgnoresEmptyLines(t *testing.T) {
-	withChatTest(t, "\nhello\n/quit\n", func(calls *[]string) {
+	withChatTest(t, "\nhello\n", func(calls *[]string) {
 		require.NoError(t, runChat(context.Background(), nil, nil))
 		require.Equal(t, []string{"hello"}, *calls)
 	})
 }
 
 func TestRunChatUsesArgsBeforePromptedInput(t *testing.T) {
-	withChatTest(t, "second\n/exit\n", func(calls *[]string) {
+	withChatTest(t, "second\n", func(calls *[]string) {
 		require.NoError(t, runChat(context.Background(), []string{"first"}, nil))
 		require.Equal(t, []string{"first", "second"}, *calls)
 	})
 }
 
 func TestRunChatPreservesSessionID(t *testing.T) {
-	withChatTest(t, "second\n/exit\n", func(calls *[]string) {
+	withChatTest(t, "second\n", func(calls *[]string) {
 		var continues []string
 		chatTurn = func(_ context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
 			*calls = append(*calls, prompt)
@@ -60,7 +52,7 @@ func TestRunChatPreservesSessionID(t *testing.T) {
 }
 
 func TestRunChatRejectsNoSave(t *testing.T) {
-	withChatTest(t, "/exit\n", func(_ *[]string) {
+	withChatTest(t, "", func(_ *[]string) {
 		config.NoSave = true
 
 		err := runChat(context.Background(), nil, nil)
@@ -73,7 +65,7 @@ func TestRunChatRejectsNoSave(t *testing.T) {
 }
 
 func TestRunChatRejectsSessionActions(t *testing.T) {
-	withChatTest(t, "/exit\n", func(_ *[]string) {
+	withChatTest(t, "", func(_ *[]string) {
 		config.ListPrompts = true
 
 		err := runChat(context.Background(), nil, nil)
@@ -86,7 +78,7 @@ func TestRunChatRejectsSessionActions(t *testing.T) {
 }
 
 func TestRunChatRejectsListSkills(t *testing.T) {
-	withChatTest(t, "/exit\n", func(_ *[]string) {
+	withChatTest(t, "", func(_ *[]string) {
 		config.ListSkills = true
 
 		err := runChat(context.Background(), nil, nil)
@@ -99,7 +91,7 @@ func TestRunChatRejectsListSkills(t *testing.T) {
 }
 
 func TestValidateChatModeRejectsConfigSetup(t *testing.T) {
-	withChatTest(t, "/exit\n", func(_ *[]string) {
+	withChatTest(t, "", func(_ *[]string) {
 		config.Chat = true
 		config.ConfigSetup = true
 
@@ -140,13 +132,13 @@ func TestRunChatTurnPrintsTTYOutput(t *testing.T) {
 
 func TestRunChatPrintsBannerAndPrompt(t *testing.T) {
 	var output bytes.Buffer
-	withChatTest(t, "/exit\n", func(_ *[]string) {
+	withChatTest(t, "", func(_ *[]string) {
 		chatOutput = &output
 
 		require.NoError(t, runChat(context.Background(), nil, nil))
 
 		got := output.String()
-		require.Contains(t, got, "mods chat: type /exit or /quit to quit.")
+		require.Contains(t, got, "mods chat: press Ctrl+C to quit.")
 		require.Contains(t, got, "mods> ")
 	})
 }
@@ -213,11 +205,8 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 		config.Role = "reviewer"
 		IsErrorTTY = func() bool { return true }
 		chatTerminalWidth = func() int { return 80 }
-		prompts := []string{"/quit"}
 		chatPromptInput = func([]string) (string, bool, error) {
-			prompt := prompts[0]
-			prompts = prompts[1:]
-			return prompt, false, nil
+			return "", true, nil
 		}
 
 		stdout := captureStdout(t, func() {
@@ -242,10 +231,13 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 func TestRunChatPassesAccumulatedHistoryToPrompt(t *testing.T) {
 	withChatTest(t, "", func(calls *[]string) {
 		IsErrorTTY = func() bool { return true }
-		prompts := []string{"second", "/quit"}
+		prompts := []string{"second"}
 		var histories [][]string
 		chatPromptInput = func(history []string) (string, bool, error) {
 			histories = append(histories, append([]string(nil), history...))
+			if len(prompts) == 0 {
+				return "", true, nil
+			}
 			prompt := prompts[0]
 			prompts = prompts[1:]
 			return prompt, false, nil
@@ -274,6 +266,7 @@ func TestChatBannerWrapsMetadataWithoutRepeatingActions(t *testing.T) {
 		require.Contains(t, plain, "MODS CHAT")
 		require.Contains(t, strings.Join(strings.Fields(plain), " "), "anthropic / claude-sonnet")
 		require.NotContains(t, plain, "Ctrl+Enter")
+		require.NotContains(t, plain, "/exit")
 		require.NotContains(t, plain, "/quit")
 	}
 }

@@ -95,7 +95,7 @@ func gatherInteractivePrompt() error {
 		if err != nil {
 			return err
 		}
-		if exit || isChatExit(prompt) {
+		if exit {
 			return modsError{
 				Err:        huh.ErrUserAborted,
 				ReasonText: "User canceled.",

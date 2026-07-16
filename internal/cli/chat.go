@@ -53,9 +53,6 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 		if prompt == "" {
 			continue
 		}
-		if isChatExit(prompt) {
-			return nil
-		}
 
 		if err := runChatMessage(ctx, prompt, opts); err != nil {
 			return err
@@ -180,18 +177,9 @@ func prepareNextChatTurn() {
 	config.SessionWriteToTitle = ""
 }
 
-func isChatExit(input string) bool {
-	switch strings.TrimSpace(input) {
-	case "/exit", "/quit":
-		return true
-	default:
-		return false
-	}
-}
-
 func chatBanner() {
 	if !IsErrorTTY() {
-		_, _ = lipgloss.Fprintln(chatOutput, "mods chat: type /exit or /quit to quit.")
+		_, _ = lipgloss.Fprintln(chatOutput, "mods chat: press Ctrl+C to quit.")
 		return
 	}
 	_, _ = lipgloss.Fprintln(chatOutput, renderChatBanner(chatTerminalWidth()))

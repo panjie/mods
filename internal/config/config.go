@@ -80,7 +80,7 @@ var Help = map[string]string{
 	"continue":         "Continue from the last response or a given save title",
 	"continue-last":    "Continue from the last response",
 	"no-save":          "Disable saving and resuming sessions",
-	"chat":             "Start a continuous session; type /exit or /quit to quit",
+	"chat":             "Start a continuous session; press Ctrl+C to quit",
 	"list-sessions":    "Interactively browse, view, and delete saved sessions",
 	"theme":            "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
 	"editor":           "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",

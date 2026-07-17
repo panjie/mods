@@ -204,11 +204,76 @@ func TestExtractExternalPathsWindowsFlavor(t *testing.T) {
 		}
 	})
 
+	t.Run("double-quoted path with spaces preserves full Windows path", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`Get-Content "C:\Program Files\App\notes.txt"`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Equal(t, []string{`C:\Program Files\App\notes.txt`}, got)
+		require.NotContains(t, got, `C:\Program`)
+	})
+
+	t.Run("single-quoted path with spaces preserves full Windows path", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`Get-Content 'C:\Program Files\App\notes.txt'`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Equal(t, []string{`C:\Program Files\App\notes.txt`}, got)
+		require.NotContains(t, got, `C:\Program`)
+	})
+
+	t.Run("single-quoted path with escaped single quote preserves full Windows path", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`Get-Content 'C:\O''Reilly\App\notes.txt'`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Equal(t, []string{`C:\O'Reilly\App\notes.txt`}, got)
+		require.NotContains(t, got, `C:\O`)
+		require.NotContains(t, got, `Reilly\App\notes.txt`)
+	})
+
+	t.Run("quoted dot-prefixed parent traversal resolves external", func(t *testing.T) {
+		wantParent := filepath.Clean(filepath.Join(ws, ".."))
+		want := filepath.Clean(filepath.Join(ws, "..", "outside.txt"))
+
+		require.Equal(t, []string{wantParent}, extractExternalPathsWithFlavor(
+			`Get-ChildItem '.\..'`,
+			ws, pathutil.FlavorPowerShell,
+		))
+		require.Equal(t, []string{wantParent}, extractExternalPathsWithFlavor(
+			`Get-ChildItem './..'`,
+			ws, pathutil.FlavorPowerShell,
+		))
+		require.Equal(t, []string{want}, extractExternalPathsWithFlavor(
+			`Get-Content '.\..\outside.txt'`,
+			ws, pathutil.FlavorPowerShell,
+		))
+		require.Equal(t, []string{want}, extractExternalPathsWithFlavor(
+			`Get-Content "./../outside.txt"`,
+			ws, pathutil.FlavorPowerShell,
+		))
+		require.Equal(t, []string{want}, extractExternalPathsWithFlavor(
+			`Get-Content '.\../outside.txt'`,
+			ws, pathutil.FlavorPowerShell,
+		))
+		require.Equal(t, []string{want}, extractExternalPathsWithFlavor(
+			`Get-Content './..\outside.txt'`,
+			ws, pathutil.FlavorPowerShell,
+		))
+	})
+
 	t.Run("Unix-style absolute paths are ignored", func(t *testing.T) {
 		require.Empty(t,
 			extractExternalPathsWithFlavor("cat /etc/passwd", ws, pathutil.FlavorPowerShell))
 		require.Empty(t,
 			extractExternalPathsWithFlavor("ls /usr/local/bin", ws, pathutil.FlavorPowerShell))
+	})
+
+	t.Run("quoted Unix-style absolute paths are ignored", func(t *testing.T) {
+		require.Empty(t,
+			extractExternalPathsWithFlavor(`Get-Content "/etc/passwd"`, ws, pathutil.FlavorPowerShell))
+		require.Empty(t,
+			extractExternalPathsWithFlavor(`Get-Content '/etc/passwd'`, ws, pathutil.FlavorPowerShell))
 	})
 
 	t.Run("Unix-style bare root is ignored", func(t *testing.T) {
@@ -292,6 +357,19 @@ func TestMentionsExternalPathEmptyRoot(t *testing.T) {
 	// No workspace context: any absolute path is treated as potentially external.
 	require.True(t, mentionsExternalPath("cat /etc/passwd", ""))
 	require.False(t, mentionsExternalPath("cat README.md", ""))
+}
+
+func TestFilterArgPathsPowerShellPreservesSpacedWindowsPath(t *testing.T) {
+	ws := filepath.Clean(t.TempDir())
+
+	got := filterArgPaths([]string{`C:\Program Files\App\notes.txt`}, ws, pathutil.FlavorPowerShell)
+	require.Equal(t, []string{`C:\Program Files\App\notes.txt`}, got)
+	require.NotContains(t, got, `C:\Program`)
+}
+
+func TestFilterArgPathsPowerShellIgnoresUnixStyleArgs(t *testing.T) {
+	got := filterArgPaths([]string{"/out", "/reference", "/etc/passwd"}, "", pathutil.FlavorPowerShell)
+	require.Empty(t, got)
 }
 
 func TestShellRunPathFlavor(t *testing.T) {
@@ -648,6 +726,12 @@ func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {
 	result := mods.analyzeShellCommand("powershell_run", "Get-Content C:\\Users\\Public\\file.txt")
 	require.False(t, result.NeedsReview, "Get-Content should be read-only")
 	require.NotEmpty(t, result.AffectedDirs, "should have affected dirs from AST")
+
+	spacedPath := `C:\Program Files\App\notes.txt`
+	result = mods.analyzeShellCommand("powershell_run", `Get-Content "C:\Program Files\App\notes.txt"`)
+	require.False(t, result.NeedsReview, "Get-Content should be read-only")
+	require.Contains(t, result.AffectedDirs, spacedPath)
+	require.NotContains(t, result.AffectedDirs, `C:\Program`)
 }
 
 func TestAnalyzeShellCommandPowerShellDivisionDoesNotAffectRoot(t *testing.T) {

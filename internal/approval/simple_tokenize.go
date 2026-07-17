@@ -12,24 +12,31 @@ import (
 func tokenizeSimple(s string) []string {
 	var tokens []string
 	var current strings.Builder
-	inQuotes := false
+	var quote byte
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
-		if ch == '"' {
-			if inQuotes {
+		if ch == '"' || ch == '\'' {
+			if quote == '\'' && ch == '\'' && i+1 < len(s) && s[i+1] == '\'' {
+				current.WriteByte('\'')
+				i++
+				continue
+			}
+			if quote == ch {
 				tokens = append(tokens, current.String())
 				current.Reset()
-				inQuotes = false
-			} else {
+				quote = 0
+			} else if quote == 0 {
 				if current.Len() > 0 {
 					tokens = append(tokens, current.String())
 					current.Reset()
 				}
-				inQuotes = true
+				quote = ch
+			} else {
+				current.WriteByte(ch)
 			}
 			continue
 		}
-		if !inQuotes && (ch == ' ' || ch == '\t') {
+		if quote == 0 && (ch == ' ' || ch == '\t') {
 			if current.Len() > 0 {
 				tokens = append(tokens, current.String())
 				current.Reset()
@@ -47,13 +54,21 @@ func tokenizeSimple(s string) []string {
 func splitSimpleCompound(s string) []string {
 	var parts []string
 	start := 0
-	inQuotes := false
+	var quote byte
 	for i := 0; i < len(s); i++ {
-		if s[i] == '"' {
-			inQuotes = !inQuotes
+		if s[i] == '"' || s[i] == '\'' {
+			if quote == '\'' && s[i] == '\'' && i+1 < len(s) && s[i+1] == '\'' {
+				i++
+				continue
+			}
+			if quote == s[i] {
+				quote = 0
+			} else if quote == 0 {
+				quote = s[i]
+			}
 			continue
 		}
-		if inQuotes {
+		if quote != 0 {
 			continue
 		}
 		if i+1 < len(s) && s[i] == '&' && s[i+1] == '&' {
@@ -93,6 +108,10 @@ func commandHasPowerShellCompoundSyntax(s string) bool {
 		switch s[i] {
 		case '\'':
 			if !inDouble {
+				if inSingle && i+1 < len(s) && s[i+1] == '\'' {
+					i++
+					continue
+				}
 				inSingle = !inSingle
 			}
 		case '"':

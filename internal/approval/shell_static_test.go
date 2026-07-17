@@ -62,3 +62,22 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 		require.Equal(t, ShellStaticWrite, got.Class)
 	})
 }
+
+func TestAnalyzeShellStaticPowerShell(t *testing.T) {
+	t.Run("single-quoted write path with spaces", func(t *testing.T) {
+		got := AnalyzeShellStatic(`Set-Content 'C:\Program Files\App\notes.txt' 'hello'`, false)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Contains(t, got.AffectedDirs, `C:\Program Files\App`)
+		require.NotContains(t, got.AffectedDirs, `'C:`)
+		require.NotContains(t, got.AffectedDirs, `Files\App`)
+	})
+
+	t.Run("single-quoted write path with escaped single quote", func(t *testing.T) {
+		got := AnalyzeShellStatic(`Set-Content 'C:\O''Reilly\App\notes.txt' 'hello'`, false)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Contains(t, got.AffectedDirs, `C:\O'Reilly\App`)
+		require.NotContains(t, got.AffectedDirs, `C:\`)
+		require.NotContains(t, got.AffectedDirs, `C:\O`)
+		require.NotContains(t, got.AffectedDirs, `Reilly\App`)
+	})
+}

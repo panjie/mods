@@ -430,14 +430,16 @@ var reJSONFence = regexp.MustCompile("(?is)```(?:json)?\\s*(.*?)\\s*```")
 // Path-extraction patterns for extractExternalPaths. The *Path variants
 // capture the full token so it can be populated into AffectedDirs.
 var (
-	reParentPath   = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
-	reHomePath     = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
-	reHomeVarPath  = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/][^\s'"<>|;,&(){}]*`)
-	reCMDHomePath  = regexp.MustCompile(`(?i)%(?:USERPROFILE|HOMEDRIVE%%HOMEPATH)%[\\/][^\s'"<>|;,&(){}]*`)
-	reUnixAbsPath  = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
-	reSingleQuoted = regexp.MustCompile(`'[^']*'`)
-	reWinAbsPath   = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
-	reWinUNCPath   = regexp.MustCompile(`(?:^|[\s='"])(\\\\[^\\/\s'"<>|;,&(){}]+[\\/][^\s'"<>|;,&(){}]*)`)
+	reParentPath        = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
+	reHomePath          = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
+	reHomeVarPath       = regexp.MustCompile(`(?i)\$(?:\{(?:HOME|env:USERPROFILE)\}|env:USERPROFILE|HOME)[\\/][^\s'"<>|;,&(){}]*`)
+	reCMDHomePath       = regexp.MustCompile(`(?i)%(?:USERPROFILE|HOMEDRIVE%%HOMEPATH)%[\\/][^\s'"<>|;,&(){}]*`)
+	reUnixAbsPath       = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
+	reSingleQuoted      = regexp.MustCompile(`'[^']*'`)
+	reSingleQuotedValue = regexp.MustCompile(`'([^'\r\n]*)'`)
+	reDoubleQuotedValue = regexp.MustCompile(`"([^"\r\n]*)"`)
+	reWinAbsPath        = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
+	reWinUNCPath        = regexp.MustCompile(`(?:^|[\s='"])(\\\\[^\\/\s'"<>|;,&(){}]+[\\/][^\s'"<>|;,&(){}]*)`)
 )
 
 // extractExternalPaths returns path tokens from the command that reference
@@ -475,9 +477,13 @@ func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathuti
 		// /reference) share leading-slash syntax with Unix absolute paths,
 		// while "/" is also PowerShell's division operator. Keep this branch
 		// strictly on Windows/PowerShell path syntax so POSIX-looking tokens
-		// are not misclassified as filesystem paths. Single-quoted strings
-		// are stripped to avoid false positives from script literals.
-		command = reSingleQuoted.ReplaceAllString(command, " ")
+		// are not misclassified as filesystem paths. Quoted strings are only
+		// treated as paths when the full literal starts with explicit path syntax;
+		// single-quoted strings are then stripped to avoid false positives from
+		// script literals.
+		addPowerShellQuotedPathArgs(command, add)
+		command = stripPowerShellSingleQuotedStrings(command)
+		command = reDoubleQuotedValue.ReplaceAllString(command, " ")
 		for _, m := range reWinAbsPath.FindAllStringSubmatch(command, -1) {
 			add(m[1])
 		}
@@ -537,6 +543,73 @@ func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathuti
 	return paths
 }
 
+func addPowerShellQuotedPathArgs(command string, add func(string)) {
+	for _, value := range powerShellSingleQuotedValues(command) {
+		if isExplicitPowerShellPathArg(value) {
+			add(value)
+		}
+	}
+	for _, m := range reDoubleQuotedValue.FindAllStringSubmatch(command, -1) {
+		if isExplicitPowerShellPathArg(m[1]) {
+			add(m[1])
+		}
+	}
+}
+
+func powerShellSingleQuotedValues(command string) []string {
+	var values []string
+	for i := 0; i < len(command); i++ {
+		if command[i] != '\'' {
+			continue
+		}
+		var value strings.Builder
+		for j := i + 1; j < len(command); j++ {
+			if command[j] != '\'' {
+				value.WriteByte(command[j])
+				continue
+			}
+			if j+1 < len(command) && command[j+1] == '\'' {
+				value.WriteByte('\'')
+				j++
+				continue
+			}
+			values = append(values, value.String())
+			i = j
+			break
+		}
+	}
+	return values
+}
+
+func stripPowerShellSingleQuotedStrings(command string) string {
+	var stripped strings.Builder
+	for i := 0; i < len(command); i++ {
+		if command[i] != '\'' {
+			stripped.WriteByte(command[i])
+			continue
+		}
+		closing := -1
+		for j := i + 1; j < len(command); j++ {
+			if command[j] != '\'' {
+				continue
+			}
+			if j+1 < len(command) && command[j+1] == '\'' {
+				j++
+				continue
+			}
+			closing = j
+			break
+		}
+		if closing == -1 {
+			stripped.WriteByte(command[i])
+			continue
+		}
+		stripped.WriteByte(' ')
+		i = closing
+	}
+	return stripped.String()
+}
+
 func isExplicitShellPathArg(arg string) bool {
 	if arg == "~" || strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, `..\`) || strings.HasPrefix(arg, "~/") || strings.HasPrefix(arg, `~\`) {
 		return true
@@ -545,6 +618,37 @@ func isExplicitShellPathArg(arg string) bool {
 		return true
 	}
 	return strings.HasPrefix(arg, "~") && (strings.Contains(arg, "/") || strings.Contains(arg, `\`))
+}
+
+func isExplicitPowerShellPathArg(arg string) bool {
+	arg = strings.TrimSpace(arg)
+	if arg == "~" || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, `..\`) || hasDotPrefixedParentTraversal(arg) || strings.HasPrefix(arg, "~/") || strings.HasPrefix(arg, `~\`) {
+		return true
+	}
+	if len(arg) >= 3 && ((arg[0] >= 'A' && arg[0] <= 'Z') || (arg[0] >= 'a' && arg[0] <= 'z')) && arg[1] == ':' && (arg[2] == '\\' || arg[2] == '/') {
+		return true
+	}
+	if strings.HasPrefix(arg, `\\`) || strings.HasPrefix(arg, `//`) {
+		return true
+	}
+	lower := strings.ToLower(arg)
+	for _, prefix := range []string{"${env:userprofile}", "$env:userprofile", "${home}", "$home", "%userprofile%", "%homedrive%%homepath%"} {
+		if strings.HasPrefix(lower, prefix+`\`) || strings.HasPrefix(lower, prefix+"/") {
+			return true
+		}
+	}
+	return strings.HasPrefix(arg, "~") && (strings.Contains(arg, "/") || strings.Contains(arg, `\`))
+}
+
+func hasDotPrefixedParentTraversal(arg string) bool {
+	if len(arg) < len("./..") || arg[0] != '.' || !isShellPathSeparator(arg[1]) || arg[2] != '.' || arg[3] != '.' {
+		return false
+	}
+	return len(arg) == len("./..") || isShellPathSeparator(arg[4])
+}
+
+func isShellPathSeparator(ch byte) bool {
+	return ch == '/' || ch == '\\'
 }
 
 func blankPOSIXHeredocBodies(command string) string {
@@ -681,7 +785,24 @@ func filterArgPaths(args []string, workspaceDir string, flavor pathutil.Flavor) 
 	}
 	var result []string
 	seen := map[string]bool{}
+	opts := pathutil.DefaultOptions(workspaceDir, flavor)
+	add := func(p string) {
+		p = pathutil.NormalizeShellPath(p, opts)
+		if pathutil.Location(p, workspaceDir, nil) != pathutil.LocationExternal || seen[p] {
+			return
+		}
+		seen[p] = true
+		result = append(result, p)
+	}
 	for _, arg := range args {
+		isExplicit := isExplicitShellPathArg(arg)
+		if flavor == pathutil.FlavorPowerShell {
+			isExplicit = isExplicitPowerShellPathArg(arg)
+		}
+		if isExplicit {
+			add(arg)
+			continue
+		}
 		for _, p := range extractExternalPathsWithFlavor(arg, workspaceDir, flavor) {
 			if !seen[p] {
 				seen[p] = true

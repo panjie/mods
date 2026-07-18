@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -31,6 +32,22 @@ func TestConfig(t *testing.T) {
 			"json":     "as json",
 		}), cfg.FormatText)
 	})
+}
+
+func TestIdentityCoversEveryPersistentConfigKey(t *testing.T) {
+	configType := reflect.TypeFor[PersistentConfig]()
+	for i := range configType.NumField() {
+		field := configType.Field(i)
+		if field.Name == "System" {
+			continue // Deprecated compatibility-only key.
+		}
+		key := strings.Split(field.Tag.Get("yaml"), ",")[0]
+		if key == "" {
+			key = strings.ToLower(field.Name)
+		}
+		require.Contains(t, prompts.Identity, "`"+key+"`",
+			"identity.md must document persistent config key %q", key)
+	}
 }
 
 func TestPromptConfig(t *testing.T) {
@@ -78,7 +95,7 @@ func TestValidateReviewMode(t *testing.T) {
 }
 
 func TestDefaultPromptText(t *testing.T) {
-	cfg := defaultConfig()
+	cfg := Default()
 
 	require.Contains(t, MinimalSystemPrompt, "Unless the user explicitly requests otherwise")
 	require.Contains(t, MinimalSystemPrompt, "output only the final answer")

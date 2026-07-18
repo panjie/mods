@@ -44,6 +44,24 @@ func TestHandleSqliteErr(t *testing.T) {
 	})
 }
 
+type failingSchemaQuerier struct{}
+
+func (failingSchemaQuerier) Get(any, string, ...any) error {
+	return fmt.Errorf("schema query failed")
+}
+
+func (failingSchemaQuerier) Rebind(query string) string {
+	return query
+}
+
+func TestSchemaIntrospectionPropagatesQueryErrors(t *testing.T) {
+	_, err := hasColumn(failingSchemaQuerier{}, "sessions", "model")
+	require.EqualError(t, err, "inspect column sessions.model: schema query failed")
+
+	_, err = tableExists(failingSchemaQuerier{}, "sessions")
+	require.EqualError(t, err, "inspect table sessions: schema query failed")
+}
+
 func TestHasSessions(t *testing.T) {
 	db := testDB(t)
 
@@ -56,6 +74,22 @@ func TestHasSessions(t *testing.T) {
 	has, err = db.HasSessions()
 	require.NoError(t, err)
 	require.True(t, has)
+}
+
+func TestApprovalRulesRejectsMalformedPathsJSON(t *testing.T) {
+	db := testDB(t)
+	const id = "df31ae23ab8b75b5643c2f846c570997edc71333"
+	require.NoError(t, db.Save(id, "malformed approval rule", "openai", "gpt-5"))
+	_, err := db.db.Exec(`
+		INSERT INTO approval_rules (
+			session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
+		) VALUES (?, 'workspace', '/workspace', 'dir_allow', '', '', '{', 'read')
+	`, id)
+	require.NoError(t, err)
+
+	rules, err := db.ApprovalRules(id)
+	require.Nil(t, rules)
+	require.ErrorContains(t, err, "ApprovalRules: decode paths for dir_allow/")
 }
 
 func TestSessionDB(t *testing.T) {

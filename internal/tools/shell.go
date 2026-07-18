@@ -19,6 +19,7 @@ import (
 
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 const (
@@ -330,6 +331,7 @@ func (w *cappedOutput) String() string {
 	limit := w.limit
 	w.mu.Unlock()
 	text := decodeOutput(out)
+	text = textutil.ValidUTF8Prefix(text)
 	if truncated {
 		return text + fmt.Sprintf("\n\n[Output truncated at %d chars.]", limit)
 	}

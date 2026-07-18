@@ -255,6 +255,8 @@ Top-level keys:
   The default config does not ship provider model lists. In `mods --config`, model discovery writes only models the user selects. If discovery fails or the user does not select a discovered model, they must enter model identifiers manually in the wizard or edit `apis.<name>.models` directly.
 
 - `images` ([]string) — default image paths to attach
+- `stdin-image` (bool) — treat piped stdin as raw image data instead of text
+- `clipboard-image` (bool) — attach the current clipboard image
 
 - `debug` (bool) — enable debug mode
 

@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
+	"github.com/panjie/mods/internal/textutil"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -43,7 +44,7 @@ func PrintJSON(label string, v any) {
 	output := string(b)
 	const maxLen = 2000
 	if len(output) > maxLen {
-		output = output[:maxLen] + fmt.Sprintf("\n... (truncated, total %d chars)", len(b))
+		output = textutil.TruncateUTF8Bytes(output, maxLen) + fmt.Sprintf("\n... (truncated, total %d bytes)", len(b))
 	}
 	lines := strings.Split(output, "\n")
 	Printf("%s:", label)
@@ -57,7 +58,7 @@ func PrintJSON(label string, v any) {
 
 func Truncate(s string, max int) string {
 	if len(s) > max {
-		return s[:max] + fmt.Sprintf("... (truncated, total %d chars)", len(s))
+		return textutil.TruncateUTF8Bytes(s, max) + fmt.Sprintf("... (truncated, total %d bytes)", len(s))
 	}
 	return s
 }

@@ -3,10 +3,13 @@ package mcpclient
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/panjie/mods/internal/netutil"
 )
 
 // sensitiveEnvPatterns matches environment variable NAMES that mods refuses
@@ -133,10 +136,20 @@ func isLocalHostname(host string) bool {
 // isInternalAddress reports whether an IP literal targets an internal
 // destination that an untrusted MCP server URL must not reach.
 func isInternalAddress(ip net.IP) bool {
-	return ip.IsLoopback() ||
-		ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() ||
-		ip.IsUnspecified()
+	return netutil.IsBlockedAddress(ip)
+}
+
+func mcpHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: netutil.SafeTransport(netutil.SafeTransportOptions{
+			AllowPrivate: mcpPrivateAllowed,
+			ErrorPrefix:  "mcp",
+		}),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("mcp: stopped after 10 redirects")
+			}
+			return validateMCPRemoteURL(req.URL.String())
+		},
+	}
 }

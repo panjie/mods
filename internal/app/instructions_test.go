@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -62,6 +63,15 @@ func TestLoadProjectInstructions(t *testing.T) {
 		got := loadProjectInstructions(cfgWith(root))
 		require.Contains(t, got, "truncated")
 		require.Less(t, len(got), len(body))
+	})
+
+	t.Run("unicode truncation remains valid UTF-8", func(t *testing.T) {
+		root := t.TempDir()
+		body := strings.Repeat("你", maxInstructionsBytes/3+2)
+		writeAgents(t, root, body)
+		got := loadProjectInstructions(cfgWith(root))
+		require.True(t, utf8.ValidString(got))
+		require.Contains(t, got, "truncated")
 	})
 }
 

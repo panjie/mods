@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"time"
 
 	"github.com/panjie/mods/internal/proto"
@@ -28,11 +27,6 @@ func lastAssistantContent(messages []proto.Message) string {
 		}
 	}
 	return ""
-}
-
-func FirstLine(s string) string {
-	first, _, _ := strings.Cut(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
-	return first
 }
 
 // completionInput is a tea.Msg that wraps the content read from stdin.

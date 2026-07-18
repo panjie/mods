@@ -288,11 +288,11 @@ func InitClient(ctx context.Context, server MCPServerConfig) (*client.Client, er
 		)
 	case "sse":
 		if err = validateMCPRemoteURL(server.URL); err == nil {
-			cli, err = client.NewSSEMCPClient(server.URL)
+			cli, err = client.NewSSEMCPClient(server.URL, client.WithHTTPClient(mcpHTTPClient()))
 		}
 	case "http":
 		if err = validateMCPRemoteURL(server.URL); err == nil {
-			cli, err = client.NewStreamableHttpClient(server.URL)
+			cli, err = client.NewStreamableHttpClient(server.URL, transport.WithHTTPBasicClient(mcpHTTPClient()))
 		}
 	default:
 		return nil, fmt.Errorf("unsupported MCP server type: %q, supported types are: stdio, sse, http", server.Type)

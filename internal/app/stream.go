@@ -10,13 +10,13 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/panjie/mods/internal/clipboard"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 func (m *Mods) setupStreamContext(content string, mod Model) error {
@@ -138,11 +138,7 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 
 	origLen := int64(len(content))
 	if !cfg.NoLimit && mod.MaxChars > 0 && origLen > mod.MaxChars {
-		end := int(mod.MaxChars)
-		for end > 0 && !utf8.RuneStart(content[end]) {
-			end--
-		}
-		content = content[:end]
+		content = textutil.TruncateUTF8Bytes(content, int(mod.MaxChars))
 	}
 
 	debug.Printf("Context: %d system message(s), %d existing message(s)", len(m.messages), 0)

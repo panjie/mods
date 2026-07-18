@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 // ErrNoContent happens when the client is returning no content.
@@ -76,7 +77,7 @@ func CallTool(
 		content = err.Error()
 	}
 	if len(content) > maxToolResultChars {
-		content = content[:maxToolResultChars] +
+		content = textutil.TruncateUTF8Bytes(content, maxToolResultChars) +
 			fmt.Sprintf("\n\n[Output truncated at %d chars. Use more specific tools (e.g. list_directory instead of directory_tree, or read_file for single files) to retrieve targeted content.]",
 				maxToolResultChars)
 	}

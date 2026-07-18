@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/panjie/mods/internal/textutil"
 )
 
 // maxInstructionsBytes caps how much of AGENTS.md is injected as project
@@ -31,7 +33,7 @@ func loadProjectInstructions(cfg *Config) string {
 	content := strings.TrimRight(string(data), "\r\n")
 	if len(content) > maxInstructionsBytes {
 		omitted := len(content) - maxInstructionsBytes
-		content = content[:maxInstructionsBytes] +
+		content = textutil.TruncateUTF8Bytes(content, maxInstructionsBytes) +
 			fmt.Sprintf("\n\n[... AGENTS.md truncated: %d more bytes omitted ...]", omitted)
 	}
 	return content

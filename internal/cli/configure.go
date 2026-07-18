@@ -19,6 +19,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/anthropic"
 	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -405,67 +406,22 @@ func RunConfigWizard() error {
 	}
 	modelName := addedModelNames[0]
 
-	// Connection test. Only the OpenAI-compatible adapter exposes a simple
-	// /chat/completions probe; a newly added Anthropic provider is skipped
-	// with a note (probing it with an OpenAI request would always fail).
-	if apiKey != "" && providerBaseURL != "" && isOpenAICompatible(effType) {
-		fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
-		if err := testConnection(modelName, providerBaseURL, apiKey); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
-			var saveAnyway bool
-			if err := huh.NewConfirm().
-				Title("Connection test failed. Save configuration anyway?").
-				Value(&saveAnyway).
-				Run(); err != nil || !saveAnyway {
-				fmt.Fprintln(os.Stderr, "Not saved.")
-				return nil
-			}
-		} else {
-			fmt.Fprintln(os.Stderr, "✓ OK")
-		}
-	} else if newProvider && apiKey != "" && providerBaseURL != "" && !isOpenAICompatible(effType) {
-		fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, effType)
+	saveConnection, err := confirmConfigWizardConnection(
+		apiName, effType, modelName, providerBaseURL, apiKey, newProvider,
+	)
+	if err != nil {
+		return err
+	}
+	if !saveConnection {
+		return nil
 	}
 
-	// Form 3: config file location (Standard vs Portable). Skipped when the
-	// executable directory cannot be determined (e.g. `go run`), since
-	// portable mode needs a real on-disk binary location to write next to.
-	savePath := config.SettingsPath
-	if exeDir := cfgpkg.ExeDir(); exeDir != "" {
-		saveLocation := "standard"
-		if config.PortableDir != "" {
-			saveLocation = "portable"
-		}
-		portablePath := filepath.Join(exeDir, "mods.yml")
-		storageTheme := configWizardTheme(config.Theme)
-		form3 := huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Config file location").
-					Description("Portable stores the config and sessions next to this executable, so the whole folder is self-contained.").
-					Options(
-						huh.NewOption(fmt.Sprintf("Standard — %s", config.SettingsPath), "standard"),
-						huh.NewOption(fmt.Sprintf("Portable — %s", portablePath), "portable"),
-					).
-					Value(&saveLocation),
-			).
-				Title("storage").
-				Description("Choose where mods writes its configuration file."),
-		).
-			WithTheme(storageTheme).
-			WithLayout(configWizardLayoutForTheme(storageTheme)).
-			WithKeyMap(keymap).
-			WithEscapeAbortConfirmation("Press Esc again to exit.")
-		if err := form3.Run(); err != nil {
-			if errors.Is(err, huh.ErrUserAborted) {
-				fmt.Fprintln(os.Stderr, "\nCanceled.")
-				return nil
-			}
-			return fmt.Errorf("config wizard: %w", err)
-		}
-		if saveLocation == "portable" {
-			savePath = portablePath
-		}
+	savePath, canceled, err := chooseConfigWizardSavePath(keymap)
+	if err != nil {
+		return err
+	}
+	if canceled {
+		return nil
 	}
 
 	// Reflect the chosen path so the summary, save, and post-save message
@@ -474,28 +430,7 @@ func RunConfigWizard() error {
 	config.SettingsPath = savePath
 
 	webSearchProviderValue := webSearchProviderForConfig(webSearchProvider, webSearchCustomURL)
-
-	// Build the summary.
-	printConfigSummary(summaryData{
-		api:                 apiName,
-		model:               modelName,
-		apiType:             apiType,
-		keyStorage:          keyStorage,
-		envVarName:          envVarName,
-		baseURL:             providerBaseURL,
-		addedModelCount:     len(addedModelNames),
-		fsMode:              fsMode,
-		shellOn:             shellOn,
-		thinkingOn:          thinkingOn,
-		webSearchOn:         webSearchOn,
-		webSearchProvider:   webSearchProviderValue,
-		webSearchKeyStorage: webSearchKeyStorage,
-		webSearchAPIKeyEnv:  webSearchAPIKeyEnv,
-		reviewMode:          reviewMode,
-		settingsPath:        config.SettingsPath,
-	})
-
-	updates := buildConfigWizardUpdates(configWizardSaveData{
+	saveData := configWizardSaveData{
 		apiName:                apiName,
 		apiType:                apiType,
 		modelName:              modelName,
@@ -514,25 +449,115 @@ func RunConfigWizard() error {
 		envVarName:             envVarName,
 		baseURLInput:           baseURL,
 		addedModelNames:        addedModelNames,
+	}
+	return saveConfigWizard(savePath, previousPath, saveData, summaryData{
+		api:                 apiName,
+		model:               modelName,
+		apiType:             apiType,
+		keyStorage:          keyStorage,
+		envVarName:          envVarName,
+		baseURL:             providerBaseURL,
+		addedModelCount:     len(addedModelNames),
+		fsMode:              fsMode,
+		shellOn:             shellOn,
+		thinkingOn:          thinkingOn,
+		webSearchOn:         webSearchOn,
+		webSearchProvider:   webSearchProviderValue,
+		webSearchKeyStorage: webSearchKeyStorage,
+		webSearchAPIKeyEnv:  webSearchAPIKeyEnv,
+		reviewMode:          reviewMode,
+		settingsPath:        config.SettingsPath,
 	})
+}
 
-	// Seed the target file when it doesn't yet exist (the common case when
-	// bootstrapping portable mode for the first time). SaveFieldPaths is a
-	// round-trip update and errors on a missing file, so ensure one exists.
-	// WriteDefaultFile is a no-op when the file is already present.
+func confirmConfigWizardConnection(apiName, apiType, modelName, baseURL, apiKey string, newProvider bool) (bool, error) {
+	if apiKey == "" || baseURL == "" {
+		return true, nil
+	}
+	if !isOpenAICompatible(apiType) {
+		if newProvider {
+			fmt.Fprintf(os.Stderr, "\nSkipping connection test for %s endpoint (%s); verify with a real prompt.\n", apiName, apiType)
+		}
+		return true, nil
+	}
+
+	fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
+	if err := testConnection(modelName, baseURL, apiKey); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
+		var saveAnyway bool
+		if confirmErr := huh.NewConfirm().
+			Title("Connection test failed. Save configuration anyway?").
+			Value(&saveAnyway).
+			Run(); confirmErr != nil {
+			if errors.Is(confirmErr, huh.ErrUserAborted) {
+				fmt.Fprintln(os.Stderr, "Not saved.")
+				return false, nil
+			}
+			return false, fmt.Errorf("config wizard: %w", confirmErr)
+		}
+		if !saveAnyway {
+			fmt.Fprintln(os.Stderr, "Not saved.")
+			return false, nil
+		}
+		return true, nil
+	}
+	fmt.Fprintln(os.Stderr, "✓ OK")
+	return true, nil
+}
+
+func chooseConfigWizardSavePath(keymap *huh.KeyMap) (path string, canceled bool, err error) {
+	path = config.SettingsPath
+	exeDir := cfgpkg.ExeDir()
+	if exeDir == "" {
+		return path, false, nil
+	}
+
+	saveLocation := "standard"
+	if config.PortableDir != "" {
+		saveLocation = "portable"
+	}
+	portablePath := filepath.Join(exeDir, "mods.yml")
+	storageTheme := configWizardTheme(config.Theme)
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Config file location").
+				Description("Portable stores the config and sessions next to this executable, so the whole folder is self-contained.").
+				Options(
+					huh.NewOption(fmt.Sprintf("Standard — %s", config.SettingsPath), "standard"),
+					huh.NewOption(fmt.Sprintf("Portable — %s", portablePath), "portable"),
+				).
+				Value(&saveLocation),
+		).
+			Title("storage").
+			Description("Choose where mods writes its configuration file."),
+	).
+		WithTheme(storageTheme).
+		WithLayout(configWizardLayoutForTheme(storageTheme)).
+		WithKeyMap(keymap).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			fmt.Fprintln(os.Stderr, "\nCanceled.")
+			return path, true, nil
+		}
+		return "", false, fmt.Errorf("config wizard: %w", err)
+	}
+	if saveLocation == "portable" {
+		path = portablePath
+	}
+	return path, false, nil
+}
+
+func saveConfigWizard(savePath, previousPath string, data configWizardSaveData, summary summaryData) error {
+	printConfigSummary(summary)
 	if err := WriteDefaultFile(savePath); err != nil {
 		return fmt.Errorf("prepare config file: %w", err)
 	}
-	if err := SaveFieldPaths(savePath, updates); err != nil {
+	if err := SaveFieldPaths(savePath, buildConfigWizardUpdates(data)); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	// If Ensure auto-created the standard config during this run (it did
-	// not exist before) and the user switched to portable, remove the
-	// stray default file so the XDG location stays clean. This is best-effort
-	// cleanup; surface non-NotExist failures so a permission issue is not
-	// silently masked (the user would otherwise wonder why the old file
-	// lingers and which location is authoritative).
 	if savePath != previousPath && !config.SettingsExisted {
 		if err := os.Remove(previousPath); err != nil && !os.IsNotExist(err) {
 			_, _ = lipgloss.Fprintf(os.Stderr, "Warning: could not remove auto-created config %s: %v\n",
@@ -541,19 +566,15 @@ func RunConfigWizard() error {
 	}
 
 	_, _ = lipgloss.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(savePath))
-
 	if savePath != previousPath {
 		fmt.Fprintln(os.Stderr, "Portable mode will be active on the next launch.")
 	}
-
-	if keyStorage == "env" && apiName != "ollama" {
-		fmt.Fprintf(os.Stderr, "\nRemember to export your key:\n  export %s=sk-...\n",
-			envVarName)
+	if data.keyStorage == "env" && data.apiName != "ollama" {
+		fmt.Fprintf(os.Stderr, "\nRemember to export your key:\n  export %s=sk-...\n", data.envVarName)
 	}
-	if webSearchOn && webSearchProviderUsesKey(webSearchProvider) && webSearchKeyStorage == "env" {
-		fmt.Fprintf(os.Stderr, "\nRemember to export your web search key:\n  export %s=...\n", webSearchAPIKeyEnv)
+	if data.webSearchOn && webSearchProviderUsesKey(data.webSearchProvider) && data.webSearchKeyStorage == "env" {
+		fmt.Fprintf(os.Stderr, "\nRemember to export your web search key:\n  export %s=...\n", data.webSearchAPIKeyEnv)
 	}
-
 	return nil
 }
 
@@ -582,25 +603,11 @@ func configWizardKeyMap() *huh.KeyMap {
 // buildProviderOptions returns huh options for each configured provider,
 // annotated with a short description for well-known providers.
 func buildProviderOptions() []huh.Option[string] {
-	descs := map[string]string{
-		"openai":     "GPT-5.x, o3, o4-mini",
-		"anthropic":  "Claude Opus/Sonnet/Haiku",
-		"google":     "Gemini Pro/Flash",
-		"deepseek":   "DeepSeek V4 (reasoning)",
-		"glm":        "GLM-5.2 (Zhipu)",
-		"qwen":       "Qwen (Alibaba)",
-		"kimi":       "Kimi K2 (Moonshot)",
-		"minimax":    "MiniMax M3",
-		"openrouter": "Multi-provider aggregator",
-		"ollama":     "Local models (no API key needed)",
-		"azure":      "Azure OpenAI",
-	}
-
 	opts := make([]huh.Option[string], 0, len(config.APIs)+1)
 	for _, api := range config.APIs {
 		label := api.Name
-		if desc, ok := descs[api.Name]; ok {
-			label = fmt.Sprintf("%-12s  %s", api.Name, desc)
+		if info, ok := providerinfo.Lookup(api.Name); ok && info.Description != "" {
+			label = fmt.Sprintf("%-12s  %s", api.Name, info.Description)
 		}
 		opts = append(opts, huh.NewOption(label, api.Name))
 	}
@@ -857,18 +864,7 @@ func findBaseURL(apiName string) string {
 // base-url. Google's default URL embeds {model} — applyGoogleBaseURLOverride
 // (internal/app/provider.go) substitutes it at runtime.
 func builtinBaseURL(apiName string) string {
-	switch apiName {
-	case "google":
-		return "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
-	case "openai":
-		return "https://api.openai.com/v1"
-	case "anthropic":
-		return "https://api.anthropic.com/v1"
-	case "ollama":
-		return "http://localhost:11434"
-	default:
-		return "https://your-server.com/v1"
-	}
+	return providerinfo.DefaultBaseURL(apiName)
 }
 
 // findAPIType returns the configured api-type (wire protocol) for the provider,
@@ -1011,12 +1007,7 @@ func isHTTPURL(value string) bool {
 // isOpenAICompatible reports whether the provider uses the standard
 // OpenAI-compatible /chat/completions endpoint.
 func isOpenAICompatible(apiName string) bool {
-	switch apiName {
-	case "anthropic", "google", "ollama", "azure", "azure-ad":
-		return false
-	default:
-		return true
-	}
+	return providerinfo.IsOpenAICompatible(apiName)
 }
 
 // testConnection makes a minimal chat completion request to verify the

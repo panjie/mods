@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestCallTool_truncatesLongResults(t *testing.T) {
@@ -49,6 +50,16 @@ func TestCallTool_truncatesLongResults(t *testing.T) {
 		}
 		if status.Err != nil {
 			t.Errorf("unexpected error: %v", status.Err)
+		}
+	})
+
+	t.Run("unicode truncation remains valid UTF-8", func(t *testing.T) {
+		long := strings.Repeat("你", maxToolResultChars/3+2)
+		msg, _ := CallTool("tid", "tool", nil, func(string, []byte) (string, error) {
+			return long, nil
+		})
+		if !utf8.ValidString(msg.Content) {
+			t.Fatalf("truncated tool result is invalid UTF-8: %q", msg.Content[len(msg.Content)-20:])
 		}
 	})
 

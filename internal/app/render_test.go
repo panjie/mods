@@ -14,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
@@ -296,7 +297,7 @@ func TestSessionOutputFlushesForNonTTY(t *testing.T) {
 	t.Cleanup(func() { IsOutputTTY = oldIsOutputTTY })
 
 	db := testDB(t)
-	id := newSessionID()
+	id := session.NewID()
 	require.NoError(t, db.SaveSession(
 		id,
 		"show flush",

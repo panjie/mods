@@ -25,7 +25,6 @@ type RuleSet = approval.RuleSet
 type Scope = approval.Scope
 type AccessIntent = approval.AccessIntent
 type AccessClass = approval.AccessClass
-type Decision = approval.Decision
 type ApprovalReviewMode = approval.ReviewMode
 type Styles = ui.Styles
 type Anim = ui.Anim
@@ -49,8 +48,6 @@ var OneLinePreview = ui.OneLinePreview
 var ShellCommandPreview = ui.ShellCommandPreview
 var TruncateOperationStatus = ui.TruncateOperationStatus
 var RemoveWhitespace = ui.RemoveWhitespace
-var ToolResultLine = ui.ToolResultLine
-var ToolResultLineWidth = ui.ToolResultLineWidth
 var ToolResultStatus = ui.ToolResultStatus
 var MakeStyles = ui.MakeStyles
 var NewAnim = ui.NewAnim
@@ -76,9 +73,7 @@ const (
 	ReviewAuto   = cfgpkg.ReviewAuto
 	ReviewAlways = cfgpkg.ReviewAlways
 
-	ShortIDLength = session.ShortIDLength
-	MinIDLength   = session.MinIDLength
-
+	ShortIDLength       = session.ShortIDLength
 	ToolSelectionRules  = cfgpkg.ToolSelectionRules
 	MinimalSystemPrompt = cfgpkg.MinimalSystemPrompt
 

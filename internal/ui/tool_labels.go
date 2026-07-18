@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 var tokenErrRe = regexp.MustCompile(`This model's maximum context length is (\d+) tokens. However, your messages resulted in (\d+) tokens`)
@@ -29,7 +30,7 @@ func CutPrompt(msg, prompt string) string {
 	// cut 10 extra chars 'just in case'
 	reduceBy := 10 + (current-maxt)*4 //nolint:mnd
 	if len(prompt) > reduceBy {
-		return prompt[:len(prompt)-reduceBy]
+		return textutil.TruncateUTF8Bytes(prompt, len(prompt)-reduceBy)
 	}
 
 	return prompt

@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
@@ -565,19 +566,20 @@ func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 	})
 }
 
+func TestIdentityCoversEveryPublicFlag(t *testing.T) {
+	rootCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Hidden {
+			return
+		}
+		require.Contains(t, prompts.Identity, "--"+flag.Name,
+			"identity.md must document public flag --%s", flag.Name)
+	})
+}
+
 func TestRegisteredFlagDescriptionsContainNoTerminalSequences(t *testing.T) {
 	rootCmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		require.NotContains(t, flag.Usage, "\x1b", flag.Name)
 	})
-}
-
-func TestHelpUsesWorkspaceAndReviewCategory(t *testing.T) {
-	groups := groupedUsageFlags(rootCmd.Flags())
-	require.True(t, groupHasFlag(groups, flagCategoryWorkspaceReview, "workspace"))
-	require.True(t, groupHasFlag(groups, flagCategoryWorkspaceReview, "review-mode"))
-	require.True(t, groupHasFlag(groups, flagCategoryToolsIntegrations, "skills-dirs"))
-	require.True(t, groupHasFlag(groups, flagCategoryToolsIntegrations, "list-skills"))
-	require.True(t, groupHasFlag(groups, flagCategoryToolsIntegrations, "list-tools"))
 }
 
 func TestListSkillsIsMutuallyExclusiveWithSessionActions(t *testing.T) {
@@ -697,7 +699,7 @@ func TestSkillsDirsFlagAppendsMultipleDirs(t *testing.T) {
 	})
 }
 
-func TestReadmeDocumentsCurrentFlags(t *testing.T) {
+func TestReadmeDescribesPromptWorkflow(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
 	require.NoError(t, err)
 

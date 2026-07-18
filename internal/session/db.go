@@ -122,14 +122,22 @@ func Open(ds string) (*DB, error) {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
 
-	if !hasColumn(db, "sessions", "model") {
+	hasModel, err := hasColumn(db, "sessions", "model")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	if !hasModel {
 		if _, err := db.Exec(`
 			ALTER TABLE sessions ADD COLUMN model string
 		`); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
-	if !hasColumn(db, "sessions", "api") {
+	hasAPI, err := hasColumn(db, "sessions", "api")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	if !hasAPI {
 		if _, err := db.Exec(`
 			ALTER TABLE sessions ADD COLUMN api string
 		`); err != nil {
@@ -162,17 +170,33 @@ func Open(ds string) (*DB, error) {
 	`); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
 	}
-	if !hasColumn(db, "approval_rules", "scope_kind") || !hasColumn(db, "approval_rules", "scope_value") {
+	hasScopeKind, err := hasColumn(db, "approval_rules", "scope_kind")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	hasScopeValue, err := hasColumn(db, "approval_rules", "scope_value")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	if !hasScopeKind || !hasScopeValue {
 		if err := migrateApprovalRulesScope(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
-	if !hasColumn(db, "approval_rules", "paths") {
+	hasPaths, err := hasColumn(db, "approval_rules", "paths")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	if !hasPaths {
 		if err := migrateApprovalRulesPaths(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
-	if !hasColumn(db, "approval_rules", "mode") {
+	hasMode, err := hasColumn(db, "approval_rules", "mode")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	if !hasMode {
 		if err := migrateApprovalRulesMode(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
@@ -191,28 +215,28 @@ type schemaQuerier interface {
 	Rebind(query string) string
 }
 
-func hasColumn(q schemaQuerier, table, col string) bool {
+func hasColumn(q schemaQuerier, table, col string) (bool, error) {
 	var count int
 	if err := q.Get(&count, q.Rebind(`
 		SELECT count(*)
 		FROM pragma_table_info(?) c
 		WHERE c.name = ?
 	`), table, col); err != nil {
-		return false
+		return false, fmt.Errorf("inspect column %s.%s: %w", table, col, err)
 	}
-	return count > 0
+	return count > 0, nil
 }
 
-func tableExists(q schemaQuerier, table string) bool {
+func tableExists(q schemaQuerier, table string) (bool, error) {
 	var count int
 	if err := q.Get(&count, q.Rebind(`
 		SELECT count(*)
 		FROM sqlite_master
 		WHERE type = 'table' AND name = ?
 	`), table); err != nil {
-		return false
+		return false, fmt.Errorf("inspect table %s: %w", table, err)
 	}
-	return count > 0
+	return count > 0, nil
 }
 
 func migrateLegacySessionSchema(db *sqlx.DB) error {
@@ -228,28 +252,65 @@ func migrateLegacySessionSchema(db *sqlx.DB) error {
 	}
 	defer func() { _ = tx.Rollback() }() // no-op after Commit
 
-	if tableExists(tx, "conversations") && !tableExists(tx, "sessions") {
+	conversationsTable, err := tableExists(tx, "conversations")
+	if err != nil {
+		return err
+	}
+	sessionsTable, err := tableExists(tx, "sessions")
+	if err != nil {
+		return err
+	}
+	if conversationsTable && !sessionsTable {
 		if _, err := tx.Exec(`ALTER TABLE conversations RENAME TO sessions`); err != nil {
 			return fmt.Errorf("rename conversations table: %w", err)
 		}
 	}
-	if tableExists(tx, "conversation_messages") && !tableExists(tx, "session_messages") {
+	conversationMessagesTable, err := tableExists(tx, "conversation_messages")
+	if err != nil {
+		return err
+	}
+	sessionMessagesTable, err := tableExists(tx, "session_messages")
+	if err != nil {
+		return err
+	}
+	if conversationMessagesTable && !sessionMessagesTable {
 		if _, err := tx.Exec(`ALTER TABLE conversation_messages RENAME TO session_messages`); err != nil {
 			return fmt.Errorf("rename conversation_messages table: %w", err)
 		}
+		sessionMessagesTable = true
 	}
-	if tableExists(tx, "session_messages") &&
-		hasColumn(tx, "session_messages", "conversation_id") &&
-		!hasColumn(tx, "session_messages", "session_id") {
-		if _, err := tx.Exec(`ALTER TABLE session_messages RENAME COLUMN conversation_id TO session_id`); err != nil {
-			return fmt.Errorf("rename session_messages column: %w", err)
+	if sessionMessagesTable {
+		hasConversationID, err := hasColumn(tx, "session_messages", "conversation_id")
+		if err != nil {
+			return err
+		}
+		hasSessionID, err := hasColumn(tx, "session_messages", "session_id")
+		if err != nil {
+			return err
+		}
+		if hasConversationID && !hasSessionID {
+			if _, err := tx.Exec(`ALTER TABLE session_messages RENAME COLUMN conversation_id TO session_id`); err != nil {
+				return fmt.Errorf("rename session_messages column: %w", err)
+			}
 		}
 	}
-	if tableExists(tx, "approval_rules") &&
-		hasColumn(tx, "approval_rules", "conversation_id") &&
-		!hasColumn(tx, "approval_rules", "session_id") {
-		if _, err := tx.Exec(`ALTER TABLE approval_rules RENAME COLUMN conversation_id TO session_id`); err != nil {
-			return fmt.Errorf("rename approval_rules column: %w", err)
+	approvalRulesTable, err := tableExists(tx, "approval_rules")
+	if err != nil {
+		return err
+	}
+	if approvalRulesTable {
+		hasConversationID, err := hasColumn(tx, "approval_rules", "conversation_id")
+		if err != nil {
+			return err
+		}
+		hasSessionID, err := hasColumn(tx, "approval_rules", "session_id")
+		if err != nil {
+			return err
+		}
+		if hasConversationID && !hasSessionID {
+			if _, err := tx.Exec(`ALTER TABLE approval_rules RENAME COLUMN conversation_id TO session_id`); err != nil {
+				return fmt.Errorf("rename approval_rules column: %w", err)
+			}
 		}
 	}
 
@@ -515,7 +576,9 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 			Mode:       approval.AccessClass(row.Mode),
 		}
 		if row.Paths != "" && row.Paths != "null" {
-			_ = json.Unmarshal([]byte(row.Paths), &rule.Paths)
+			if err := json.Unmarshal([]byte(row.Paths), &rule.Paths); err != nil {
+				return nil, fmt.Errorf("ApprovalRules: decode paths for %s/%s: %w", row.Type, row.Tool, err)
+			}
 		}
 		rules = append(rules, rule)
 	}

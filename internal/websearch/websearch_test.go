@@ -2,7 +2,6 @@ package websearch
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -40,16 +39,6 @@ func TestSearchResultFormat(t *testing.T) {
 	require.Contains(t, output, "2. T2")
 	require.Contains(t, output, "https://u1.com")
 	require.Contains(t, output, "S1")
-}
-
-func formatResults(query string, results []Result) string {
-	var sb []byte
-	sb = append(sb, fmt.Sprintf("Web search results for \"%s\":\n\n", query)...)
-	for i, r := range results {
-		sb = append(sb, fmt.Sprintf("%d. %s\n   URL: %s\n   %s\n\n",
-			i+1, r.Title, r.URL, r.Snippet)...)
-	}
-	return string(sb)
 }
 
 func TestParseDuckDuckGoInstant(t *testing.T) {

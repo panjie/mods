@@ -17,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/caarlos0/go-shellwords"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/providerinfo"
 	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
@@ -224,7 +225,7 @@ func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 				switch {
 				case t == "openai":
 					// no-op: name-based routing already defaults to OpenAI-compatible
-				case knownAPITypes[t]:
+				case providerinfo.KnownProtocol(t):
 					mod.API = t
 				default:
 					debug.Printf("api-type %q on %s is not a recognized adapter; using OpenAI-compatible",

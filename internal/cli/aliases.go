@@ -5,7 +5,6 @@ import (
 	"github.com/panjie/mods/internal/apperr"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	debugpkg "github.com/panjie/mods/internal/debug"
-	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/ui"
 )
@@ -29,23 +28,18 @@ var (
 	Default               = cfgpkg.Default
 	Ensure                = cfgpkg.Ensure
 	WriteDefaultFile      = cfgpkg.WriteDefaultFile
-	SaveFields            = cfgpkg.SaveFields
 	SaveFieldPaths        = cfgpkg.SaveFieldPaths
 	HasAPIKey             = cfgpkg.HasAPIKey
-	NormalizeSkillsDir    = cfgpkg.NormalizeSkillsDir
 	Help                  = cfgpkg.Help
 	Open                  = session.Open
 	MigrateDefaultStorage = session.MigrateDefaultStorage
-	newSessionID          = session.NewID
 	RemoveWhitespace      = ui.RemoveWhitespace
 	IsInputTTY            = ui.IsInputTTY
 	IsOutputTTY           = ui.IsOutputTTY
 	IsErrorTTY            = ui.IsErrorTTY
 	StdoutStyles          = ui.StdoutStyles
 	StderrStyles          = ui.StderrStyles
-	PrintConfirmation     = ui.PrintConfirmation
 	FirstLine             = ui.FirstLine
-	HideCommandWindow     = platform.HideCommandWindow
 )
 
 const (
@@ -54,7 +48,6 @@ const (
 	ReviewAlways = cfgpkg.ReviewAlways
 
 	ShortIDLength = session.ShortIDLength
-	MinIDLength   = session.MinIDLength
 )
 
 var (

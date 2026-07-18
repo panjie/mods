@@ -25,3 +25,9 @@ func TestStaticBackgroundIsDark(t *testing.T) {
 		})
 	}
 }
+
+func TestFirstLine(t *testing.T) {
+	require.Equal(t, "line", FirstLine("line"))
+	require.Equal(t, "line", FirstLine("line\n"))
+	require.Equal(t, "line", FirstLine("line\nsomething else\nline3\nfoo\nends with a double \n\n"))
+}

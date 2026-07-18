@@ -13,6 +13,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/panjie/mods/internal/netutil"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 const (
@@ -44,14 +47,17 @@ func Search(ctx context.Context, cfg Config, query string) (string, error) {
 	if len(results) == 0 {
 		return "", fmt.Errorf("web search: no results found for %q", query)
 	}
+	return formatResults(query, results), nil
+}
 
+func formatResults(query string, results []Result) string {
 	var sb strings.Builder
 	sb.WriteString("Web search results for \"" + query + "\":\n\n")
 	for i, r := range results {
 		sb.WriteString(fmt.Sprintf("%d. %s\n   URL: %s\n   %s\n\n",
 			i+1, r.Title, r.URL, r.Snippet))
 	}
-	return sb.String(), nil
+	return sb.String()
 }
 
 type Result struct {
@@ -154,12 +160,7 @@ func privateSearchAllowed() bool {
 // isBlockedAddress reports whether an IP is internal/loopback/link-local,
 // i.e. must never be reachable from a user-controlled search provider URL.
 func isBlockedAddress(ip net.IP) bool {
-	return ip.IsLoopback() ||
-		ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() ||
-		ip.IsUnspecified()
+	return netutil.IsBlockedAddress(ip)
 }
 
 // validateProviderURL rejects URLs whose host is a private/loopback IP literal.
@@ -189,28 +190,10 @@ func validateProviderURL(rawURL string) error {
 // validation time and to 127.0.0.1 a millisecond later (DNS rebinding), the
 // dial is refused.
 func safeSearchTransport() *http.Transport {
-	dialer := &net.Dialer{}
-	return &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if privateSearchAllowed() {
-				return dialer.DialContext(ctx, network, addr)
-			}
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-			if err != nil {
-				return nil, err
-			}
-			for _, resolved := range ips {
-				if isBlockedAddress(resolved.IP) {
-					return nil, fmt.Errorf("web search: refused to dial private or loopback address %s for %q", resolved.IP, host)
-				}
-			}
-			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
-		},
-	}
+	return netutil.SafeTransport(netutil.SafeTransportOptions{
+		AllowPrivate: privateSearchAllowed,
+		ErrorPrefix:  "web search",
+	})
 }
 
 func newRequest(ctx context.Context, method, urlStr string) (*http.Request, error) {
@@ -398,7 +381,7 @@ func searchTavily(ctx context.Context, apiKey, query string, maxResults int) ([]
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("searching Tavily: HTTP %d: %s", resp.StatusCode,
-			string(respBody[:min(len(respBody), 200)]))
+			textutil.TruncateUTF8Bytes(string(respBody), 200))
 	}
 
 	var sr searchResponse
@@ -448,7 +431,7 @@ func searchCustom(ctx context.Context, baseURL, apiKey, query string, maxResults
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("web search: HTTP %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))
+		return nil, fmt.Errorf("web search: HTTP %d: %s", resp.StatusCode, textutil.TruncateUTF8Bytes(string(body), 200))
 	}
 
 	body, err := io.ReadAll(resp.Body)

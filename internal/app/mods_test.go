@@ -19,6 +19,7 @@ import (
 	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
@@ -83,7 +84,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue id", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		rules := []ApprovalRule{scopedRule(ApprovalRule{
 			Type: approvalShellPrefix,
 			Tool: "shell_run", Pattern: "git commit *",
@@ -107,7 +108,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue id preserves existing title", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.Save(id, "message", "openai", "gpt-4"))
 		mods.Config.Continue = id
 		mods.Config.Prefix = "prompt"
@@ -122,7 +123,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue with no prompt", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.ContinueLast = true
 		msg := mods.findSessionDetails()()
@@ -134,7 +135,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue explicit missing target does not fall back to head", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "missing-title"
 		mods.Config.Prefix = "prompt"
@@ -145,7 +146,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue title", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "message 1"
 		mods.Config.Prefix = "prompt"
@@ -157,7 +158,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue last", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.ContinueLast = true
 		mods.Config.Prefix = "prompt"
@@ -170,7 +171,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("continue missing name fails", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.Save(id, "message 1", "openai", "gpt-4"))
 		mods.Config.Continue = "message 2"
 		mods.Config.Prefix = "prompt"
@@ -190,7 +191,7 @@ func TestFindSessionDetails(t *testing.T) {
 
 	t.Run("no session save does not restore rules", func(t *testing.T) {
 		mods := newMods(t)
-		id := newSessionID()
+		id := session.NewID()
 		require.NoError(t, mods.db.SaveSession(
 			id,
 			"message",
@@ -268,160 +269,6 @@ func TestPruneHistoryForBudgetDropsLeadingToolResults(t *testing.T) {
 	got := pruneHistoryForBudget(messages, "new", 40, false)
 	require.Equal(t, []string{proto.RoleSystem, proto.RoleAssistant}, []string{got[0].Role, got[1].Role})
 	require.Equal(t, "final answer", got[1].Content)
-}
-
-func TestRemoveWhitespace(t *testing.T) {
-	t.Run("only whitespaces", func(t *testing.T) {
-		require.Equal(t, "", removeWhitespace(" \n"))
-	})
-
-	t.Run("regular text", func(t *testing.T) {
-		require.Equal(t, " regular\n ", removeWhitespace(" regular\n "))
-	})
-}
-
-var cutPromptTests = map[string]struct {
-	msg      string
-	prompt   string
-	expected string
-}{
-	"bad error": {
-		msg:      "nope",
-		prompt:   "the prompt",
-		expected: "the prompt",
-	},
-	"crazy error": {
-		msg:      tokenErrMsg(10, 93),
-		prompt:   "the prompt",
-		expected: "the prompt",
-	},
-	"cut prompt": {
-		msg:      tokenErrMsg(10, 3),
-		prompt:   "this is a long prompt I have no idea if its really 10 tokens",
-		expected: "this is a long prompt ",
-	},
-	"missmatch of token estimation vs api result": {
-		msg:      tokenErrMsg(30000, 100),
-		prompt:   "tell me a joke",
-		expected: "tell me a joke",
-	},
-}
-
-func tokenErrMsg(l, ml int) string {
-	return fmt.Sprintf(`This model's maximum context length is %d tokens. However, your messages resulted in %d tokens`, ml, l)
-}
-
-func TestCutPrompt(t *testing.T) {
-	for name, tc := range cutPromptTests {
-		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.expected, cutPrompt(tc.msg, tc.prompt))
-		})
-	}
-}
-
-func TestIncreaseIndent(t *testing.T) {
-	t.Run("single line", func(t *testing.T) {
-		require.Equal(t, "\thello", increaseIndent("hello"))
-	})
-	t.Run("multiple lines", func(t *testing.T) {
-		require.Equal(t, "\ta\n\tb\n\tc", increaseIndent("a\nb\nc"))
-	})
-	t.Run("empty", func(t *testing.T) {
-		require.Equal(t, "\t", increaseIndent(""))
-	})
-}
-
-func TestToolOperationLabel(t *testing.T) {
-	t.Run("web search query", func(t *testing.T) {
-		got := toolOperationLabel("web_search", []byte(`{"query":"GUI wrapper for command line tools"}`), 80)
-		require.Equal(t, "Searching web: GUI wrapper for command line tools", got)
-	})
-
-	t.Run("shell command preview", func(t *testing.T) {
-		got := toolOperationLabel("shell_run", []byte(`{"command":"go   test   ./...\necho done"}`), 80)
-		require.Equal(t, "Shell: go test ./...", got)
-	})
-
-	t.Run("shell command skips leading comment", func(t *testing.T) {
-		got := toolOperationLabel("shell_run", []byte(`{"command":"# check workspace config\nls .opencode*"}`), 80)
-		require.Equal(t, "Shell: ls .opencode*", got)
-	})
-
-	t.Run("file read path", func(t *testing.T) {
-		got := toolOperationLabel("fs_read_file", []byte(`{"path":"mods.go"}`), 80)
-		require.Equal(t, "Reading file: mods.go", got)
-	})
-
-	t.Run("file write path", func(t *testing.T) {
-		got := toolOperationLabel("fs_write_file", []byte(`{"path":"mods.go","content":"package main"}`), 80)
-		require.Equal(t, "Writing file: mods.go", got)
-	})
-
-	t.Run("file replace path", func(t *testing.T) {
-		got := toolOperationLabel("fs_replace", []byte(`{"path":"mods.go","old_text":"old","new_text":"new"}`), 80)
-		require.Equal(t, "Replacing text in: mods.go", got)
-	})
-
-	t.Run("file search query and path", func(t *testing.T) {
-		got := toolOperationLabel("fs_search", []byte(`{"path":"internal","query":"toolOperationLabel"}`), 80)
-		require.Equal(t, "Searching files: toolOperationLabel in internal", got)
-	})
-
-	t.Run("largest files path", func(t *testing.T) {
-		got := toolOperationLabel("fs_largest", []byte(`{"path":"Downloads","kind":"file"}`), 80)
-		require.Equal(t, "Finding largest file in: Downloads", got)
-	})
-
-	t.Run("copy path", func(t *testing.T) {
-		got := toolOperationLabel("fs_copy", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), 80)
-		require.Equal(t, "Copying: a.txt to b.txt", got)
-	})
-
-	t.Run("move path", func(t *testing.T) {
-		got := toolOperationLabel("fs_move", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), 80)
-		require.Equal(t, "Moving: a.txt to b.txt", got)
-	})
-
-	t.Run("thinking note", func(t *testing.T) {
-		got := toolOperationLabel("thinking_note", []byte(`{"thought":"checking the next step","done":false}`), 80)
-		require.Equal(t, "Thinking: checking the next step", got)
-	})
-
-	t.Run("skill load body", func(t *testing.T) {
-		got := toolOperationLabel("load_skill", []byte(`{"name":"mcp-builder"}`), 80)
-		require.Equal(t, "Loading skill: mcp-builder", got)
-	})
-
-	t.Run("skill load aux file", func(t *testing.T) {
-		got := toolOperationLabel("load_skill", []byte(`{"name":"mcp-builder","file":"reference/foo.md"}`), 80)
-		require.Equal(t, "Loading skill: mcp-builder (reference/foo.md)", got)
-	})
-
-	t.Run("skill load no name", func(t *testing.T) {
-		got := toolOperationLabel("load_skill", []byte(`{}`), 80)
-		require.Equal(t, "Loading skill", got)
-	})
-
-	t.Run("unknown tool preferred fields", func(t *testing.T) {
-		got := toolOperationLabel("github_search", []byte(`{"query":"mods status bar","repo":"panjie/mods","irrelevant":"x"}`), 120)
-		require.Equal(t, "Running tool: github_search (query=mods status bar, repo=panjie/mods)", got)
-	})
-
-	t.Run("invalid json falls back", func(t *testing.T) {
-		got := toolOperationLabel("mcp_tool", []byte(`{nope`), 80)
-		require.Equal(t, "Running tool: mcp_tool", got)
-	})
-
-	t.Run("empty args falls back", func(t *testing.T) {
-		got := toolOperationLabel("mcp_tool", []byte(`{}`), 80)
-		require.Equal(t, "Running tool: mcp_tool", got)
-	})
-
-	t.Run("unicode and narrow width truncate safely", func(t *testing.T) {
-		got := toolOperationLabel("web_search", []byte(`{"query":"搜索 一个 很长 很长 的 查询 内容"}`), 20)
-		require.Equal(t, "Searching web: 搜...", got)
-		require.LessOrEqual(t, ansi.StringWidth(got), 20)
-	})
 }
 
 func systemContents(messages []proto.Message) []string {

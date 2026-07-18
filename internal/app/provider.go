@@ -9,6 +9,7 @@ import (
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
+	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/stream"
 )
 
@@ -19,20 +20,9 @@ type providerConfigs struct {
 	OpenAI    openai.Config
 }
 
-// knownAPITypes is the set of values that select a concrete adapter, either as
-// a provider name or via the api-type setting. Any other value falls through to
-// the OpenAI-compatible adapter in buildProviderConfigs / newStreamClient.
-var knownAPITypes = map[string]bool{
-	"openai":    true,
-	"anthropic": true,
-	"google":    true,
-	"ollama":    true,
-	"azure":     true,
-	"azure-ad":  true,
-}
-
 func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error) {
 	var cfgs providerConfigs
+	keyEnv, keyURL := providerinfo.Auth(mod.API)
 	switch mod.API {
 	case "ollama":
 		cfgs.Ollama = ollama.DefaultConfig()
@@ -40,7 +30,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			cfgs.Ollama.BaseURL = api.BaseURL
 		}
 	case "anthropic":
-		key, err := m.ensureKey(api, "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys")
+		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "Anthropic authentication failed"}
 		}
@@ -49,7 +39,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			cfgs.Anthropic.BaseURL = api.BaseURL
 		}
 	case "google":
-		key, err := m.ensureKey(api, "GOOGLE_API_KEY", "https://aistudio.google.com/app/apikey")
+		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "Google authentication failed"}
 		}
@@ -59,7 +49,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			cfgs.Google.BaseURL = applyGoogleBaseURLOverride(api.BaseURL, mod.Name)
 		}
 	case "azure", "azure-ad":
-		key, err := m.ensureKey(api, "AZURE_OPENAI_KEY", "https://aka.ms/oai/access")
+		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "Azure authentication failed"}
 		}
@@ -76,7 +66,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			cfgs.OpenAI.APIType = "azure"
 		}
 	default:
-		key, err := m.ensureKey(api, "OPENAI_API_KEY", "https://platform.openai.com/account/api-keys")
+		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "OpenAI authentication failed"}
 		}

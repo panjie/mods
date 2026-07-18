@@ -2,7 +2,7 @@
 
 ## Commands
 - `go run github.com/go-task/task/v3/cmd/task@v3.51.1 build` writes `bin/mods` or `bin/mods.exe` with git version metadata.
-- Pre-PR baseline from README/CI: `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` (`go build ./...`) then `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` (`go test ./...`). To mirror CI exactly, run `go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci` (`go build -v ./...` then `go test -v -cover -timeout=30s ./...`).
+- Pre-PR baseline from README/CI: `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` (`go build ./...`) then `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` (root module plus `internal/huh`). To mirror CI exactly, run `go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci` (verbose build/tests with coverage for both modules).
 - Focus a normal test with `go test ./internal/app -run TestName -count=1` or the relevant package path.
 - Build task install-path tests live in `internal/buildtask`; run `go test ./internal/buildtask -run TestInstallDir -count=1` after touching `Taskfile.yml` or install-path logic.
 - Provider integration tests are excluded by default; run `go test -tags integration ./internal/app -run TestOpenAIIntegration -count=1` only with the matching provider key. Ollama integration uses `OLLAMA_HOST` or `http://localhost:11434` and model `llama3.1`.

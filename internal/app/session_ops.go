@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 func (m *Mods) findSessionDetails() tea.Cmd {
@@ -118,11 +119,7 @@ func (m *Mods) readLimitedStdin(reader io.Reader) ([]byte, error) {
 	if int64(len(data)) <= limit {
 		return data, nil
 	}
-	end := int(limit)
-	for end > 0 && (data[end]&0xc0) == 0x80 {
-		end--
-	}
-	data = data[:end]
+	data = []byte(textutil.TruncateUTF8Bytes(string(data), int(limit)))
 	data = append(data, []byte(fmt.Sprintf("\n\n[Input truncated at %d chars. Use --no-limit to disable truncation.]", limit))...)
 	return data, nil
 }

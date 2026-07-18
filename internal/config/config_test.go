@@ -12,6 +12,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
+	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -34,7 +35,7 @@ func TestConfig(t *testing.T) {
 	})
 }
 
-func TestIdentityCoversEveryPersistentConfigKey(t *testing.T) {
+func TestSelfHelpCoversEveryPersistentConfigKey(t *testing.T) {
 	configType := reflect.TypeFor[PersistentConfig]()
 	for i := range configType.NumField() {
 		field := configType.Field(i)
@@ -45,8 +46,8 @@ func TestIdentityCoversEveryPersistentConfigKey(t *testing.T) {
 		if key == "" {
 			key = strings.ToLower(field.Name)
 		}
-		require.Contains(t, prompts.Identity, "`"+key+"`",
-			"identity.md must document persistent config key %q", key)
+		require.Contains(t, selfhelp.Reference, "`"+key+"`",
+			"self-help reference must document persistent config key %q", key)
 	}
 }
 
@@ -110,14 +111,12 @@ func TestDefaultPromptText(t *testing.T) {
 	)
 }
 
-func TestToolSelectionRulesArePrioritized(t *testing.T) {
-	require.Contains(t, ToolSelectionRules, "Priority order:")
-	require.Contains(t, ToolSelectionRules, "fs_* tools may also access files outside the workspace")
-	require.Contains(t, ToolSelectionRules, "such access triggers an approval prompt")
-	require.Contains(t, ToolSelectionRules, "Use shell tools for repository-wide inspection")
-	require.Contains(t, ToolSelectionRules, "rg --files")
-	require.Contains(t, ToolSelectionRules, "powershell_run")
-	require.Contains(t, ToolSelectionRules, "go test ./...")
+func TestToolSelectionRulesCoverCoreChoices(t *testing.T) {
+	require.Contains(t, ToolSelectionRules, "Prefer fs_* tools")
+	require.Contains(t, ToolSelectionRules, "Use shell tools for repository-wide")
+	require.Contains(t, ToolSelectionRules, "review step")
+	require.Contains(t, ToolSelectionRules, "PowerShell 5.1")
+	require.Contains(t, ToolSelectionRules, "Do not retry blindly")
 }
 
 func TestWorkspaceHelpUsesWorkspaceTerminology(t *testing.T) {

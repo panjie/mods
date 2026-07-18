@@ -29,6 +29,7 @@ func TestBuiltinSpecs(t *testing.T) {
 		"fs_read_file":  false,
 		"fs_write_file": false,
 		"fs_replace":    false,
+		"mods_help":     false,
 		"shell_run":     false,
 		"web_search":    false,
 	}
@@ -85,6 +86,8 @@ func TestBuildRegistrySkipsLoadSkillWhenCatalogEmpty(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := reg.Tool("load_skill")
 	require.False(t, ok, "load_skill must NOT be registered when catalog is empty")
+	_, ok = reg.Tool("mods_help")
+	require.True(t, ok, "mods_help must be registered independently of skills")
 }
 
 func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {

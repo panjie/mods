@@ -10,6 +10,7 @@ import (
 	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/mcpclient"
+	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -26,6 +27,14 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	workspace := cfg.ResolveWorkspace()
 	root := workspace.Canonical
+
+	if err := toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{
+		SettingsPath:   cfg.SettingsPath,
+		Portable:       cfg.PortableDir != "",
+		FilesystemMode: string(cfg.BuiltinTools.Filesystem),
+	}); err != nil {
+		return nil, err
+	}
 
 	if ShouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
@@ -93,7 +102,12 @@ func ShouldEnableFilesystemTools(cfg *cfgpkg.Config, prompt string) bool {
 	case cfgpkg.FilesystemNever:
 		return false
 	case "", cfgpkg.FilesystemAuto:
-		return PromptLooksFileRelated(prompt)
+		if selfhelp.IsConfigHelpOnly(prompt) {
+			return false
+		}
+		return PromptLooksFileRelated(prompt) ||
+			selfhelp.IsConfigMutation(prompt) ||
+			selfhelp.IsConfigInspection(prompt)
 	default:
 		return false
 	}
@@ -146,6 +160,7 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 		_ = toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{Root: root})
 	}
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
+	_ = toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{})
 	_ = toolregistry.RegisterSkill(registry, nil)
 	_ = toolregistry.RegisterUserInput(registry, nil)
 

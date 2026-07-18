@@ -87,18 +87,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
 
-	registryCtx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
-	m.addCancel(cancel)
-	registry, err := m.buildToolRegistryForProvider(registryCtx, cfg, wscfg, cfg.Prefix+"\n"+content, client)
-	if err != nil {
-		cancel()
-		return requestSession{}, err
-	}
-	m.currentToolRegistry = registry
-
-	tools := registry.Specs()
-	debugTools(tools, registry.Len())
-
 	if cfg.Plan {
 		err = m.setupPlanContext(content, mod)
 	} else {
@@ -112,14 +100,27 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		err = m.setupStreamContext(content, mod)
 	}
 	if err != nil {
-		_ = registry.Close()
-		m.currentToolRegistry = nil
 		return requestSession{}, err
 	}
 	if !cfg.Plan {
 		m.injectPlanHistory()
 		m.injectApprovedPlan()
 	}
+
+	registryCtx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
+	m.addCancel(cancel)
+	registry, err := m.buildToolRegistryForProvider(
+		registryCtx, cfg, wscfg, toolIntentContext(m.messages), client,
+	)
+	if err != nil {
+		cancel()
+		return requestSession{}, err
+	}
+	m.currentToolRegistry = registry
+	m.injectSelfHelpFallback()
+
+	tools := registry.Specs()
+	debugTools(tools, registry.Len())
 
 	request := proto.Request{
 		Messages:   m.messages,

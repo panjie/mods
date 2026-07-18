@@ -19,46 +19,13 @@ const (
 	MarkdownFormat = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
 	JSONFormat     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
 	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
-	ToolSelection  = `Tool selection.
-
-Priority order:
-1. Use fs_* tools for files inside the configured workspace; they are auto-approved for reads and reviewed only for writes.
-2. fs_* tools may also access files outside the workspace (Downloads, Desktop, system temp, etc.); such access triggers an approval prompt. Prefer workspace-local paths to minimize interruptions.
-3. Prefer native filesystem tools over shell for common file operations: fs_read_file for reading file contents, fs_replace for small exact single-file edits after reading the file, fs_apply_patch for multi-file or git-style diffs, fs_largest for largest-file/largest-directory requests, fs_delete_file when the user asks to delete a file, fs_delete_dir when the user asks to delete a directory, fs_copy for copying, fs_move for moving or renaming, and fs_mkdir for directory creation. Do not use rm -rf for a "file" request.
-4. Use shell tools for repository-wide inspection, test/build commands, git commands, package manager scripts, and data-processing pipelines.
-5. Minimize tool calls by using one well-formed command instead of repeated small retries.
-6. Return command output directly; avoid redirection, Out-File, Set-Content, or temporary scripts just to inspect results. Shell output redirection (>, >>) writes files and triggers review.
-7. For multi-step work that genuinely needs intermediate files, write them inside the configured workspace so fs_read_file can inspect them without shell review.
-8. Mutating and destructive shell commands (delete, move, rename, overwrite) are automatically routed through mods' review step - when the user requests such an action, attempt it directly rather than asking for permission first.
-9. When essential non-discoverable information is missing, use request_user_input. Use its secret mode for credentials; never request sudo passwords directly or use sudo -S.
-
-Platform rules:
-- On macOS/Linux/POSIX, prefer portable sh commands and common project tools.
-- On Windows, all native shell tools execute PowerShell, including shell_run. Use PowerShell 5.1 compatible syntax (avoid ternary operators, null-coalescing operators, pipeline chain operators && and ||, and other PowerShell 7+ only features) so commands work across both Windows PowerShell 5.1 and PowerShell 7+. Do not use cmd.exe batch syntax or cmd-only flags such as /s, /a-d, or /o-s.
-- On Windows, pass only the PowerShell command to powershell_run or shell_run, without powershell, powershell.exe, pwsh, or -Command prefixes.
-
-Command playbook:
-- Shell commands execute in the cwd shown in system info; never prefix them with cd to the cwd. On Windows, also do not prefix commands with Set-Location, cd, or Push-Location to that cwd.
-- Read a file: fs_read_file path. Read line ranges with start_line/end_line (1-based, inclusive); page large files by bytes with offset/limit.
-- Slice by line number (shell fallback when fs tools are unavailable): sed -n 'START,ENDp' file (POSIX) or Get-Content file | Select-Object -Skip N -First M (PowerShell).
-- Search text: rg "pattern" path
-- List files: rg --files path
-- Find files by name: rg --files | rg "name-or-extension"
-- Count matches: rg -n "pattern" path | wc -l (POSIX) or (rg -n "pattern" path).Count (PowerShell)
-- Git status: git status --short
-- Git diff: git diff -- path
-- Git recent history: git log --oneline -n 20
-- Go tests: go test ./...; focused test: go test ./package -run TestName -count=1
-- Node projects: inspect package.json scripts first, then use npm/pnpm/yarn test or build consistently with the lockfile.
-- Python tests: prefer project tooling if configured; otherwise pytest or python -m pytest.
-- Rust tests: cargo test; focused test: cargo test test_name.
-- JSON: use jq when available; otherwise use the language/tooling already present in the project.
-- Sorting/unique/counting: sort, uniq, wc (POSIX) or Sort-Object, Get-Unique, Measure-Object (PowerShell).
-
-Failure handling:
-- If a command is missing, inspect project files for the intended tool or script before retrying.
-- If a command fails because of path, quoting, or package selection, fix the command once or twice with the error message as evidence.
-- Do not keep retrying blindly; report the failing command and relevant output when blocked.`
+	ToolSelection  = `Tool selection:
+- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.
+- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with cd.
+- Minimize tool calls. Return inspection output directly instead of creating temporary files or using output redirection.
+- Mutations are routed through mods' review step. When the user requested the action, call the appropriate tool without asking for separate permission.
+- On POSIX, prefer portable sh commands. On Windows, native shell tools run PowerShell; use Windows PowerShell 5.1-compatible syntax and do not wrap commands in powershell/pwsh -Command.
+- If a command fails, use the error as evidence and correct it once or twice. Do not retry blindly.`
 
 	SafeWorkspaceTemplate = "Safe temporary workspace: {safe_workspace}. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes."
 

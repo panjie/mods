@@ -35,24 +35,22 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Equal(t, Plan, byName[KeyPlan].Default)
 	require.Equal(t, ShellClassifier, byName[KeyShellClassifier].Default)
 
-	require.Contains(t, Identity, "execute it directly rather than asking for permission")
-	require.Contains(t, Identity, "built-in review step that gates mutating changes")
-	require.Contains(t, Identity, "state it briefly in one line, then proceed")
+	require.Contains(t, Identity, "execute it directly and rely on mods' review step")
+	require.Contains(t, Identity, "state it briefly and proceed")
 	require.Contains(t, Identity, "fs_replace")
-	require.Contains(t, ToolSelection, "attempt it directly rather than asking for permission first")
+	require.Contains(t, ToolSelection, "call the appropriate tool")
 	require.Contains(t, ToolSelection, "fs_replace")
-	require.Contains(t, ToolSelection, "rg --files")
-	require.Contains(t, ToolSelection, "powershell_run")
-	require.Contains(t, ToolSelection, "Set-Location")
-	require.Contains(t, ToolSelection, "go test ./...")
-	require.Contains(t, ToolSelection, "Do not keep retrying blindly")
+	require.Contains(t, ToolSelection, "PowerShell 5.1")
+	require.Contains(t, ToolSelection, "Do not retry blindly")
 }
 
 func TestIdentityHasSelfHelpPolicy(t *testing.T) {
-	require.Contains(t, Identity, "fs_read_file ~/.config/mods/mods.yml",
-		"must instruct LLM how to read config")
-	require.Contains(t, Identity, `Get-Content (Join-Path $env:USERPROFILE ".config\mods\mods.yml")`,
-		"must give Windows config examples in PowerShell syntax")
-	require.Contains(t, Identity, "Self-help policy",
-		"must have a self-help section")
+	require.Contains(t, Identity, "call `mods_help`")
+	require.Contains(t, Identity, "exact active config path")
+	require.Contains(t, Identity, "next mods invocation")
+}
+
+func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024,
+		"default identity and tool-selection prompts must stay within 5 KiB")
 }

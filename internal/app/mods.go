@@ -94,6 +94,7 @@ type Mods struct {
 	operationMutex      sync.Mutex
 	toolOperations      chan<- toolOperationStatusMsg
 	currentToolRegistry *toolregistry.Registry
+	selfHelpFallback    string
 
 	// sessionMu guards activeRunner. activeRunner tracks the streamRunner
 	// owning the in-flight provider stream (if any) so quit() and

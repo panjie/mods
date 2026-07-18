@@ -42,6 +42,30 @@ func TestShouldEnableFilesystemTools(t *testing.T) {
 		}
 	})
 
+	t.Run("auto enables mods config mutation", func(t *testing.T) {
+		cfg := defaultConfig()
+		cfg.BuiltinTools.Filesystem = FilesystemAuto
+		if !shouldEnableFilesystemTools(&cfg, "帮我把 mods 默认模型改成 gpt-5") {
+			t.Fatal("expected filesystem tools for mods config mutation")
+		}
+	})
+
+	t.Run("auto skips mods config explanation", func(t *testing.T) {
+		cfg := defaultConfig()
+		cfg.BuiltinTools.Filesystem = FilesystemAuto
+		if shouldEnableFilesystemTools(&cfg, "mods 怎么修改配置") {
+			t.Fatal("expected help-only config question not to enable filesystem tools")
+		}
+	})
+
+	t.Run("auto enables inspection of current mods config", func(t *testing.T) {
+		cfg := defaultConfig()
+		cfg.BuiltinTools.Filesystem = FilesystemAuto
+		if !shouldEnableFilesystemTools(&cfg, "检查我的 mods 配置") {
+			t.Fatal("expected filesystem tools for direct config inspection")
+		}
+	})
+
 	t.Run("explicit true overrides prompt", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.BuiltinTools.Filesystem = FilesystemAlways
@@ -57,6 +81,22 @@ func TestShouldEnableFilesystemTools(t *testing.T) {
 			t.Fatal("expected filesystem tools disabled when explicitly disabled")
 		}
 	})
+}
+
+func TestToolIntentContextCarriesRecentConfigIntent(t *testing.T) {
+	messages := []proto.Message{
+		{Role: proto.RoleSystem, Content: "system"},
+		{Role: proto.RoleUser, Content: "mods 怎么修改配置"},
+		{Role: proto.RoleAssistant, Content: "Which model?"},
+		{Role: proto.RoleUser, Content: "那就帮我改成 gpt-5"},
+	}
+	context := toolIntentContext(messages)
+	require.Contains(t, context, "mods 怎么修改配置")
+	require.Contains(t, context, "帮我改成 gpt-5")
+
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Filesystem = FilesystemAuto
+	require.True(t, shouldEnableFilesystemTools(&cfg, context))
 }
 
 func TestBuildToolRegistryPowerShellRun(t *testing.T) {
@@ -164,6 +204,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 		"fs_stat":      []byte(`{"path":"README.md"}`),
 		"fs_search":    []byte(`{"path":".","query":"mods"}`),
 		"fs_largest":   []byte(`{"path":".","kind":"file"}`),
+		"mods_help":    []byte(`{"topic":"overview"}`),
 		"web_search":   []byte(`{"query":"mods v2.5.0"}`),
 	}
 	seen := map[string]bool{}
@@ -178,7 +219,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 		require.Equalf(t, AccessRead, intent.Class, "%s", spec.Name)
 		seen[spec.Name] = true
 	}
-	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "web_search"} {
+	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "mods_help", "web_search"} {
 		require.Truef(t, seen[name], "expected read-only tool %s to be audited", name)
 	}
 }
@@ -212,6 +253,28 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 		if registry.Len() != 0 {
 			t.Fatalf("expected no tools for unsupported provider, got %d", registry.Len())
 		}
+	})
+
+	t.Run("self-help fallback is prepared for unsupported provider", func(t *testing.T) {
+		cfg := defaultConfig()
+		cfg.SettingsPath = "/home/test/.config/mods/mods.yml"
+		cfg.BuiltinTools.Filesystem = FilesystemAuto
+		cfg.BuiltinTools.Shell = false
+		cfg.WebSearch = false
+		mods := &Mods{ctx: context.Background()}
+		registry, err := mods.buildToolRegistryForProvider(
+			context.Background(), &cfg, websearch.Config{}, "mods 怎么修改配置", noToolsClient{},
+		)
+		require.NoError(t, err)
+		require.Zero(t, registry.Len())
+
+		mods.messages = []proto.Message{{Role: proto.RoleUser, Content: "mods 怎么修改配置"}}
+		mods.injectSelfHelpFallback()
+		require.Len(t, mods.messages, 2)
+		require.Equal(t, proto.RoleSystem, mods.messages[0].Role)
+		require.Contains(t, mods.messages[0].Content, "Active config path: /home/test/.config/mods/mods.yml")
+		require.Contains(t, mods.messages[0].Content, "Direct config editing is unavailable")
+		require.Contains(t, mods.messages[0].Content, "## Config")
 	})
 
 	t.Run("explicit tools error", func(t *testing.T) {

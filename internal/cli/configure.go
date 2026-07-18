@@ -45,7 +45,6 @@ func RunConfigWizard() error {
 		fsMode = "auto"
 	}
 	shellOn := config.BuiltinTools.Shell
-	thinkingOn := config.BuiltinTools.SequentialThinking
 	webSearchOn := config.WebSearch
 	webSearchProvider := normalizeWebSearchProviderForWizard(config.WebSearchProvider)
 	webSearchCustomURL := webSearchCustomURLForWizard(config.WebSearchProvider)
@@ -262,10 +261,6 @@ func RunConfigWizard() error {
 				Title("Enable shell execution?").
 				Description("Mods can run shell commands; each risky command is reviewed before execution.").
 				Value(&shellOn),
-			huh.NewConfirm().
-				Title("Enable sequential thinking?").
-				Description("A scratchpad tool for complex multi-step reasoning.").
-				Value(&thinkingOn),
 		).
 			Title("built-in tools").
 			Description("Decide which local capabilities mods can use."),
@@ -437,7 +432,6 @@ func RunConfigWizard() error {
 		reviewMode:             reviewMode,
 		fsMode:                 fsMode,
 		shellOn:                shellOn,
-		thinkingOn:             thinkingOn,
 		webSearchOn:            webSearchOn,
 		webSearchProvider:      webSearchProvider,
 		webSearchProviderValue: webSearchProviderValue,
@@ -460,7 +454,6 @@ func RunConfigWizard() error {
 		addedModelCount:     len(addedModelNames),
 		fsMode:              fsMode,
 		shellOn:             shellOn,
-		thinkingOn:          thinkingOn,
 		webSearchOn:         webSearchOn,
 		webSearchProvider:   webSearchProviderValue,
 		webSearchKeyStorage: webSearchKeyStorage,
@@ -937,7 +930,7 @@ type configWizardSaveData struct {
 	webSearchAPIKeyEnv                              string
 	keyStorage, apiKey, envVarName, baseURLInput    string
 	addedModelNames                                 []string
-	shellOn, thinkingOn, webSearchOn                bool
+	shellOn, webSearchOn                            bool
 }
 
 func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
@@ -947,7 +940,6 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		{Path: []string{"review-mode"}, Value: d.reviewMode},
 		{Path: []string{"builtin-tools", "filesystem"}, Value: d.fsMode},
 		{Path: []string{"builtin-tools", "shell"}, Value: d.shellOn},
-		{Path: []string{"builtin-tools", "sequential-thinking"}, Value: d.thinkingOn},
 		{Path: []string{"web-search"}, Value: d.webSearchOn},
 		{Path: []string{"web-search-provider"}, Value: d.webSearchProviderValue},
 	}
@@ -1262,7 +1254,7 @@ type summaryData struct {
 	api, model, apiType, keyStorage, envVarName, baseURL string
 	fsMode                                               string
 	addedModelCount                                      int
-	shellOn, thinkingOn, webSearchOn                     bool
+	shellOn, webSearchOn                                 bool
 	webSearchProvider, webSearchKeyStorage               string
 	webSearchAPIKeyEnv                                   string
 	reviewMode, settingsPath                             string
@@ -1313,7 +1305,6 @@ func printConfigSummary(d summaryData) {
 	rows = append(rows,
 		summaryRow(labelStyle, valueStyle, "Filesystem", d.fsMode),
 		summaryRow(labelStyle, valueStyle, "Shell", boolLabel(d.shellOn)),
-		summaryRow(labelStyle, valueStyle, "Thinking", boolLabel(d.thinkingOn)),
 		summaryRow(labelStyle, valueStyle, "Web search", boolLabel(d.webSearchOn)),
 	)
 	if d.webSearchOn {

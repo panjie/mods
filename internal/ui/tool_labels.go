@@ -126,11 +126,6 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 		}
 	case "fs_apply_patch":
 		return TruncateOperationStatus("Applying patch", width)
-	case "thinking_note":
-		if thought := OneLinePreview(ArgString(args, "thought")); thought != "" {
-			return TruncateOperationStatus("Thinking: "+thought, width)
-		}
-		return TruncateOperationStatus("Thinking note", width)
 	case "load_skill":
 		skillName := OneLinePreview(ArgString(args, "name"))
 		file := OneLinePreview(ArgString(args, "file"))

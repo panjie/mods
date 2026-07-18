@@ -214,7 +214,6 @@ Top-level keys:
     # Each entry trusts all arguments, subcommands, and internal side effects;
     # output redirection and other unsafe shell structures are still reviewed.
     shell-read-only-commands: []
-    sequential-thinking: true    # enable sequential thinking
     shell-timeout: 30s      # max shell command duration
     shell-max-output: 20000 # max shell output chars
     workspace: ""           # root for filesystem/shell tools (defaults to CWD)

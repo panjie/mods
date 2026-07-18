@@ -111,7 +111,6 @@ func TestToolOperationLabel(t *testing.T) {
 		"largest file":             {"fs_largest", `{"path":"Downloads","kind":"file"}`, "Finding largest file in: Downloads"},
 		"copy":                     {"fs_copy", `{"source_path":"a.txt","dest_path":"b.txt"}`, "Copying: a.txt to b.txt"},
 		"move":                     {"fs_move", `{"source_path":"a.txt","dest_path":"b.txt"}`, "Moving: a.txt to b.txt"},
-		"thinking":                 {"thinking_note", `{"thought":"checking the next step","done":false}`, "Thinking: checking the next step"},
 		"skill":                    {"load_skill", `{"name":"mcp-builder"}`, "Loading skill: mcp-builder"},
 		"skill file":               {"load_skill", `{"name":"mcp-builder","file":"reference/foo.md"}`, "Loading skill: mcp-builder (reference/foo.md)"},
 		"skill missing name":       {"load_skill", `{}`, "Loading skill"},

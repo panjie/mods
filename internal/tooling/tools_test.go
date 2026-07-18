@@ -31,7 +31,6 @@ func TestBuiltinSpecs(t *testing.T) {
 		"fs_replace":    false,
 		"shell_run":     false,
 		"web_search":    false,
-		"thinking_note": false,
 	}
 	seen := map[string]bool{}
 	for _, info := range got {
@@ -137,4 +136,5 @@ func TestBuiltinSpecsExcludesSkillDiscoveryAndInstallTools(t *testing.T) {
 	}
 	require.False(t, have["search_skills"], "search_skills must not appear in --list-tools")
 	require.False(t, have["install_skill"], "install_skill must not appear in --list-tools")
+	require.False(t, have["thinking_note"], "removed thinking_note must not appear in --list-tools")
 }

@@ -87,8 +87,7 @@ func TestToolCallContextTimeoutPolicy(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.MCPTimeout = 10 * time.Millisecond
 	cfg.BuiltinTools.Shell = true
-	cfg.BuiltinTools.SequentialThinking = true
-	cfg.WebSearch = false
+	cfg.WebSearch = true
 
 	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{}, "hello", nil)
 	if err != nil {
@@ -117,7 +116,7 @@ func TestToolCallContextTimeoutPolicy(t *testing.T) {
 		}
 	}
 
-	ctx, cancel = mods.toolCallContext(registry, "thinking_note", &cfg)
+	ctx, cancel = mods.toolCallContext(registry, "web_search", &cfg)
 	defer cancel()
 	if _, ok := ctx.Deadline(); !ok {
 		t.Fatal("caller-timed tool context should use mcp-timeout deadline")
@@ -128,14 +127,13 @@ func TestToolCapabilities(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.BuiltinTools.Filesystem = FilesystemAlways
 	cfg.BuiltinTools.Shell = true
-	cfg.BuiltinTools.SequentialThinking = true
 	cfg.WebSearch = true
 	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}
 
-	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "web_search", "thinking_note"} {
+	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "web_search"} {
 		if !registry.ReadOnly(name) {
 			t.Fatalf("expected %s to be read-only", name)
 		}
@@ -154,7 +152,6 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.BuiltinTools.Filesystem = FilesystemAlways
 	cfg.BuiltinTools.Shell = true
-	cfg.BuiltinTools.SequentialThinking = true
 	cfg.WebSearch = true
 	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello", nil)
 	if err != nil {
@@ -162,13 +159,12 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 	}
 
 	args := map[string][]byte{
-		"fs_read_file":  []byte(`{"path":"README.md"}`),
-		"fs_list_dir":   []byte(`{"path":"."}`),
-		"fs_stat":       []byte(`{"path":"README.md"}`),
-		"fs_search":     []byte(`{"path":".","query":"mods"}`),
-		"fs_largest":    []byte(`{"path":".","kind":"file"}`),
-		"web_search":    []byte(`{"query":"mods v2.5.0"}`),
-		"thinking_note": []byte(`{"thought":"inspect","next_step":"test","done":false}`),
+		"fs_read_file": []byte(`{"path":"README.md"}`),
+		"fs_list_dir":  []byte(`{"path":"."}`),
+		"fs_stat":      []byte(`{"path":"README.md"}`),
+		"fs_search":    []byte(`{"path":".","query":"mods"}`),
+		"fs_largest":   []byte(`{"path":".","kind":"file"}`),
+		"web_search":   []byte(`{"query":"mods v2.5.0"}`),
 	}
 	seen := map[string]bool{}
 	for _, spec := range registry.Specs() {
@@ -182,7 +178,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 		require.Equalf(t, AccessRead, intent.Class, "%s", spec.Name)
 		seen[spec.Name] = true
 	}
-	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "web_search", "thinking_note"} {
+	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "web_search"} {
 		require.Truef(t, seen[name], "expected read-only tool %s to be audited", name)
 	}
 }
@@ -207,7 +203,6 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.BuiltinTools.Filesystem = FilesystemAuto
 		cfg.BuiltinTools.Shell = false
-		cfg.BuiltinTools.SequentialThinking = false
 		cfg.WebSearch = false
 		mods := &Mods{ctx: context.Background()}
 		registry, err := mods.buildToolRegistryForProvider(context.Background(), &cfg, websearch.Config{}, "read README.md", noToolsClient{})

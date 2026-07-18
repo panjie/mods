@@ -89,7 +89,7 @@ var Help = map[string]string{
 	"list-mcps":              "List all available MCP servers",
 	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
 	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
-	"builtin-tools":          "Native tool configuration for filesystem, shell, and sequential thinking tools",
+	"builtin-tools":          "Native tool configuration for filesystem and shell tools",
 	"web-search":             "Enable or disable the web_search tool",
 	"web-search-provider":    "Web search provider: duckduckgo (default), tavily, or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
@@ -333,7 +333,6 @@ type BuiltinToolsConfig struct {
 	Filesystem            FilesystemMode `yaml:"filesystem"`
 	Shell                 bool           `yaml:"shell"`
 	ShellReadOnlyCommands []string       `yaml:"shell-read-only-commands"`
-	SequentialThinking    bool           `yaml:"sequential-thinking"`
 	ShellTimeout          time.Duration  `yaml:"shell-timeout"`
 	ShellMaxOutput        int            `yaml:"shell-max-output"`
 	Workspace             string         `yaml:"workspace"`
@@ -752,9 +751,8 @@ func Default() Config {
 			WebSearch:          true,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
-				Filesystem:         FilesystemAuto,
-				Shell:              true,
-				SequentialThinking: true,
+				Filesystem: FilesystemAuto,
+				Shell:      true,
 				// Reference the canonical tools-package defaults so the
 				// YAML template and the runtime fallback cannot drift.
 				ShellTimeout:   tools.DefaultShellTimeout,

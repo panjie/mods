@@ -280,16 +280,14 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `fs_search`          | Search file contents across the workspace.                |
 | `fs_apply_patch`     | Apply targeted edits to existing files.                   |
 | `shell_run`          | Execute shell commands (prefix-allowable through review). |
-| `thinking_note`      | Sequential-thinking scratchpad for complex tasks.         |
 
-Filesystem tools default to `auto`; shell and sequential-thinking are enabled
-by default. Toggle them in `mods.yml`:
+Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
+`mods.yml`:
 
 ```yaml
 builtin-tools:
   filesystem: auto          # auto, true, or false
   shell: true
-  sequential-thinking: true
   shell-timeout: 30s
   shell-max-output: 20000
   workspace: ""             # defaults to the current working directory

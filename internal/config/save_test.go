@@ -68,20 +68,17 @@ func TestSaveFields_NestedMapping(t *testing.T) {
 	path := writeTestConfig(t, `builtin-tools:
   filesystem: auto
   shell: false
-  sequential-thinking: false
 `)
 
 	require.NoError(t, SaveFields(path, map[string]any{
-		"builtin-tools.filesystem":          "true",
-		"builtin-tools.shell":               true,
-		"builtin-tools.sequential-thinking": true,
+		"builtin-tools.filesystem": "true",
+		"builtin-tools.shell":      true,
 	}))
 
 	m := loadAsMap(t, path)
 	bt := m["builtin-tools"].(map[string]any)
 	require.Equal(t, "true", bt["filesystem"])
 	require.Equal(t, true, bt["shell"])
-	require.Equal(t, true, bt["sequential-thinking"])
 }
 
 func TestSaveFields_DeeplyNested(t *testing.T) {

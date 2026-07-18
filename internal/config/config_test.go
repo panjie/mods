@@ -129,8 +129,13 @@ func TestDefaultToolSettings(t *testing.T) {
 
 	require.Equal(t, FilesystemAuto, cfg.BuiltinTools.Filesystem)
 	require.True(t, cfg.BuiltinTools.Shell)
-	require.True(t, cfg.BuiltinTools.SequentialThinking)
 	require.True(t, cfg.WebSearch)
+}
+
+func TestRemovedSequentialThinkingConfigIsIgnored(t *testing.T) {
+	cfg := Default()
+	require.NoError(t, yaml.Unmarshal([]byte("builtin-tools:\n  sequential-thinking: false\n"), &cfg))
+	require.True(t, cfg.BuiltinTools.Shell)
 }
 
 func TestMinimalConfig(t *testing.T) {
@@ -230,7 +235,7 @@ func TestConfigTemplateIncludesDefaultToolSettings(t *testing.T) {
 
 	require.Contains(t, text, "filesystem: auto")
 	require.Contains(t, text, "shell: true")
-	require.Contains(t, text, "sequential-thinking: true")
+	require.NotContains(t, text, "sequential-thinking")
 	require.Contains(t, text, "web-search: true")
 }
 

@@ -13,8 +13,7 @@ import (
 func explicitlyEnabledTools(cfg *Config) bool {
 	if cfg.WebSearch ||
 		cfg.BuiltinTools.Filesystem == cfgpkg.FilesystemAlways ||
-		cfg.BuiltinTools.Shell ||
-		cfg.BuiltinTools.SequentialThinking {
+		cfg.BuiltinTools.Shell {
 		return true
 	}
 	if len(cfg.MCPServers) > 0 {
@@ -24,7 +23,7 @@ func explicitlyEnabledTools(cfg *Config) bool {
 }
 
 // buildToolRegistryForProvider decides whether to register native tools
-// (filesystem, shell, websearch, sequential-thinking) and MCP servers,
+// (filesystem, shell, websearch) and MCP servers,
 // based on the provider backend's declared capabilities.
 //
 // The capability check is delegated to the adapter via

@@ -364,7 +364,7 @@ func TestStreamParsesThoughtSignatureFromFunctionCall(t *testing.T) {
 		reader: bufio.NewReader(bytes.NewBufferString(
 			"data: {\"candidates\":[{\"content\":{\"parts\":[" +
 				"{\"text\":\"thinking\",\"thought\":true,\"thoughtSignature\":\"sig_abc\"}," +
-				"{\"functionCall\":{\"name\":\"thinking_note\",\"args\":{\"thought\":\"step\"},\"thoughtSignature\":\"sig_def\"}}" +
+				"{\"functionCall\":{\"name\":\"example_tool\",\"args\":{\"input\":\"step\"},\"thoughtSignature\":\"sig_def\"}}" +
 				"]}}]}\n\n",
 		)),
 		unmarshaler: &JSONUnmarshaler{},
@@ -376,7 +376,7 @@ func TestStreamParsesThoughtSignatureFromFunctionCall(t *testing.T) {
 	messages := st.Messages()
 	require.Len(t, messages, 1)
 	require.Len(t, messages[0].ToolCalls, 1)
-	require.Equal(t, "thinking_note", messages[0].ToolCalls[0].Function.Name)
+	require.Equal(t, "example_tool", messages[0].ToolCalls[0].Function.Name)
 	require.Equal(t, "sig_def", messages[0].ToolCalls[0].Function.ThoughtSignature,
 		"thoughtSignature from functionCall must be preserved in proto.ToolCall")
 }
@@ -387,8 +387,8 @@ func TestFromProtoMessagePreservesThoughtSignature(t *testing.T) {
 		ToolCalls: []proto.ToolCall{{
 			ID: "call_1",
 			Function: proto.Function{
-				Name:             "thinking_note",
-				Arguments:        []byte(`{"thought":"step"}`),
+				Name:             "example_tool",
+				Arguments:        []byte(`{"input":"step"}`),
 				ThoughtSignature: "sig_xyz",
 			},
 		}},

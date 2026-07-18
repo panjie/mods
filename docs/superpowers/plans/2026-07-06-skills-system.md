@@ -16,7 +16,7 @@
 ## Global Constraints
 
 - No new external dependencies. Hand-rolled frontmatter parser (no `gopkg.in/yaml.v3`).
-- Tool naming follows existing convention: snake_case (`load_skill`, matching `fs_read_file`, `web_search`, `shell_run`, `thinking_note`).
+- Tool naming follows existing convention: snake_case (`load_skill`, matching `fs_read_file`, `web_search`, `shell_run`).
 - Config precedence: CLI flags > mods.yml > MODS_ env > defaults. `skills-dir` uses yaml tag `skills-dir` + env `MODS_SKILLS_DIR`.
 - Portable mode also uses a `skills` directory next to the executable by default.
 - `--skills-dir`, YAML, and environment values expand a leading `~` or `~/`.
@@ -1037,7 +1037,7 @@ After the MCP registration block (after line 66 `if err := mcpclient.RegisterToo
 
 - [ ] **Step 4: Update `BuiltinSpecs` to harvest the `load_skill` spec**
 
-In `internal/tooling/tools.go` `BuiltinSpecs()`, after the `_ = toolregistry.RegisterThinking(registry)` line (~line 133), add:
+In `internal/tooling/tools.go` `BuiltinSpecs()`, after the other built-in registration calls, add:
 
 ```go
 	_ = toolregistry.RegisterSkill(registry, nil)

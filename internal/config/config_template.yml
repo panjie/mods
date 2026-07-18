@@ -122,7 +122,6 @@ builtin-tools:
   # A match trusts all arguments, subcommands, and internal side effects.
   # Unsafe shell structures are still reviewed.
   shell-read-only-commands: []
-  sequential-thinking: true
   shell-timeout: 30s
   shell-max-output: 20000
   workspace: ""  # root directory for filesystem/shell tools, defaults to CWD

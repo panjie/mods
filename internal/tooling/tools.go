@@ -64,12 +64,6 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		}
 	}
 
-	if cfg.BuiltinTools.SequentialThinking {
-		if err := toolregistry.RegisterThinking(registry); err != nil {
-			return nil, err
-		}
-	}
-
 	if err := mcpclient.RegisterTools(ctx, cfg, registry); err != nil {
 		return nil, err
 	}
@@ -152,7 +146,6 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 		_ = toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{Root: root})
 	}
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
-	_ = toolregistry.RegisterThinking(registry)
 	_ = toolregistry.RegisterSkill(registry, nil)
 	_ = toolregistry.RegisterUserInput(registry, nil)
 

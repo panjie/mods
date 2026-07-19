@@ -116,8 +116,9 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		cancel()
 		return requestSession{}, err
 	}
-	m.currentToolRegistry = registry
-	m.injectSelfHelpFallback()
+	if err := m.activateToolRegistry(registry, cancel); err != nil {
+		return requestSession{}, err
+	}
 
 	tools := registry.Specs()
 	debugTools(tools, registry.Len())
@@ -157,6 +158,20 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		cleanup: registry,
 		errh:    errh,
 	}, nil
+}
+
+func (m *Mods) activateToolRegistry(registry *toolregistry.Registry, cancel context.CancelFunc) error {
+	if err := m.injectToolSelectionPrompt(registry); err != nil {
+		_ = registry.Close()
+		if cancel != nil {
+			cancel()
+		}
+		m.currentToolRegistry = nil
+		return err
+	}
+	m.currentToolRegistry = registry
+	m.injectSelfHelpFallback()
+	return nil
 }
 
 func validateImagePaths(paths []string) error {

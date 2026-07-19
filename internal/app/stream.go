@@ -22,6 +22,7 @@ import (
 func (m *Mods) setupStreamContext(content string, mod Model) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
+	m.toolSelectionInsertAt = -1
 
 	workspace := m.Config.ResolveWorkspace()
 	root := workspace.Display
@@ -56,18 +57,11 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		if err != nil {
 			return err
 		}
-		toolSelectionPrompt, err := m.resolvePrompt(prompts.KeyToolSelection, ToolSelectionRules)
-		if err != nil {
-			return err
-		}
 		m.messages = append(m.messages, proto.Message{
 			Role:    proto.RoleSystem,
 			Content: identityPrompt,
 		})
-		m.messages = append(m.messages, proto.Message{
-			Role:    proto.RoleSystem,
-			Content: toolSelectionPrompt,
-		})
+		m.toolSelectionInsertAt = len(m.messages)
 		if !cfg.Plan {
 			safeDir := os.TempDir()
 			m.messages = append(m.messages, proto.Message{
@@ -89,19 +83,6 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			})
 		}
 	}
-	if cfg.Format != "" && !cfg.Minimal {
-		txt := cfg.FormatText[cfg.Format]
-		if txt == "" {
-			txt = fallbackFormatText(cfg.Format)
-		}
-		if txt != "" {
-			m.messages = append(m.messages, proto.Message{
-				Role:    proto.RoleSystem,
-				Content: txt,
-			})
-		}
-	}
-
 	if cfg.Role != "" {
 		roleSetup, ok := cfg.Roles[cfg.Role]
 		if !ok {
@@ -121,6 +102,19 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			m.messages = append(m.messages, proto.Message{
 				Role:    proto.RoleSystem,
 				Content: content,
+			})
+		}
+	}
+
+	if cfg.Format != "" && !cfg.Minimal {
+		txt := cfg.FormatText[cfg.Format]
+		if txt == "" {
+			txt = fallbackFormatText(cfg.Format)
+		}
+		if txt != "" {
+			m.messages = append(m.messages, proto.Message{
+				Role:    proto.RoleSystem,
+				Content: txt,
 			})
 		}
 	}
@@ -154,7 +148,8 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 	}
 
 	if !cfg.NoSave && cfg.SessionReadFromID != "" {
-		if err := m.db.ReadMessages(cfg.SessionReadFromID, &m.messages); err != nil {
+		var saved []proto.Message
+		if err := m.db.ReadMessages(cfg.SessionReadFromID, &saved); err != nil {
 			return modsError{
 				Err: err,
 				ReasonText: fmt.Sprintf(
@@ -163,7 +158,12 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 				),
 			}
 		}
-		debug.Printf("Session: read %d messages from %s", len(m.messages), cfg.SessionReadFromID[:min(ShortIDLength, len(cfg.SessionReadFromID))])
+		for _, msg := range saved {
+			if msg.Role != proto.RoleSystem {
+				m.messages = append(m.messages, msg)
+			}
+		}
+		debug.Printf("Session: read %d messages from %s", len(saved), cfg.SessionReadFromID[:min(ShortIDLength, len(cfg.SessionReadFromID))])
 		m.messages = pruneHistoryForBudget(m.messages, content, mod.MaxChars, cfg.NoLimit)
 	}
 

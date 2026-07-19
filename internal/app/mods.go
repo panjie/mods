@@ -89,12 +89,13 @@ type Mods struct {
 	db     *DB
 	Config *Config
 
-	content             []string
-	contentMutex        *sync.Mutex
-	operationMutex      sync.Mutex
-	toolOperations      chan<- toolOperationStatusMsg
-	currentToolRegistry *toolregistry.Registry
-	selfHelpFallback    string
+	content               []string
+	contentMutex          *sync.Mutex
+	operationMutex        sync.Mutex
+	toolOperations        chan<- toolOperationStatusMsg
+	currentToolRegistry   *toolregistry.Registry
+	selfHelpFallback      string
+	toolSelectionInsertAt int
 
 	// sessionMu guards activeRunner. activeRunner tracks the streamRunner
 	// owning the in-flight provider stream (if any) so quit() and

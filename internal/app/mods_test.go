@@ -443,6 +443,9 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 			Prompts: PromptConfig{ToolSelection: "custom tool rules"},
 		}})
 		require.NoError(t, m.setupStreamContext("hello", model))
+		registry := toolregistry.NewRegistry()
+		require.NoError(t, toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{}))
+		require.NoError(t, m.injectToolSelectionPrompt(registry))
 		contents := systemContents(m.messages)
 		require.Contains(t, contents, "custom tool rules")
 		require.NotContains(t, contents, ToolSelectionRules)

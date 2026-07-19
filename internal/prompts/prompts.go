@@ -19,13 +19,34 @@ const (
 	MarkdownFormat = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
 	JSONFormat     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
 	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested."
-	ToolSelection  = `Tool selection:
-- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.
-- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with cd.
-- Minimize tool calls. Return inspection output directly instead of creating temporary files or using output redirection.
+
+	ToolSelectionGeneral = `Tool selection:
+- Minimize tool calls and use only tools available in this request.
 - Mutations are routed through mods' review step. When the user requested the action, call the appropriate tool without asking for separate permission.
-- On POSIX, prefer portable sh commands. On Windows, native shell tools run PowerShell; use Windows PowerShell 5.1-compatible syntax and do not wrap commands in powershell/pwsh -Command.
-- If a command fails, use the error as evidence and correct it once or twice. Do not retry blindly.`
+- If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly.`
+
+	ToolSelectionFilesystem = `- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
+
+	ToolSelectionShellPOSIX = `- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
+
+	ToolSelectionShellWindows = `- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with Set-Location, cd, or Push-Location. Use Windows PowerShell 5.1-compatible syntax, pass only the command without powershell/pwsh -Command, and do not write temporary scripts or redirect inspection output.`
+
+	ToolSelectionPlanGeneral = `Tool selection (PLAN mode):
+- Use only read-only tools for targeted investigation. Do not create, modify, delete, install, or persist anything.`
+
+	ToolSelectionPlanFilesystem = `- For filesystem investigation, use only fs_read_file, fs_list_dir, fs_stat, fs_search, or fs_largest. Do not call filesystem mutation tools.`
+
+	ToolSelectionPlanShellPOSIX = `- Use shell only for necessary read-only repository inspection. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
+
+	ToolSelectionPlanShellWindows = `- Use shell only for necessary read-only repository inspection with Windows PowerShell 5.1-compatible syntax. Do not prefix commands with Set-Location, cd, or Push-Location; do not redirect output, create temporary files, install packages, or run generated scripts.`
+
+	// ToolSelection is the complete normal-mode reference shown by
+	// --list-prompts. Runtime requests select only the capability blocks for
+	// tools that are actually registered.
+	ToolSelection = ToolSelectionGeneral + "\n" +
+		ToolSelectionFilesystem + "\n" +
+		ToolSelectionShellPOSIX + "\n" +
+		ToolSelectionShellWindows
 
 	SafeWorkspaceTemplate = "Safe temporary workspace: {safe_workspace}. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes."
 
@@ -102,7 +123,7 @@ type Definition struct {
 func Builtin() []Definition {
 	return []Definition{
 		{Name: KeyIdentity, Description: "Base Mods identity and behavior instructions.", Default: Identity, Configurable: true},
-		{Name: KeyToolSelection, Description: "Guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
+		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyPlan, Description: "System prompt used while drafting an approval plan.", Default: Plan, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},

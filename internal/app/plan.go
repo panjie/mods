@@ -142,8 +142,14 @@ func (m *Mods) setupPlanContext(content string, mod Model) error {
 			m.messages[:1],
 			append([]proto.Message{planMsg}, m.messages[1:]...)...,
 		)
+		if m.toolSelectionInsertAt >= 1 {
+			m.toolSelectionInsertAt++
+		}
 	} else {
 		m.messages = append([]proto.Message{planMsg}, m.messages...)
+		if m.toolSelectionInsertAt >= 0 {
+			m.toolSelectionInsertAt++
+		}
 	}
 	return nil
 }

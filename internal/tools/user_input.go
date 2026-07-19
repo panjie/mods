@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/selfhelp"
 )
 
 const UserInputToolName = "request_user_input"
@@ -36,6 +37,7 @@ type InteractionHandlers struct {
 	UserInput     UserInputHandler
 	SudoPrompt    SecretPromptHandler
 	ShellProgress ShellProgressHandler
+	SelfHelp      selfhelp.Reference
 }
 
 // RegisterUserInput registers the provider-visible request_user_input tool.

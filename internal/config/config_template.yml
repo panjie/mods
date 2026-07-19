@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Core Defaults
 # -----------------------------------------------------------------------------
-# {{ index .Help "api" }}
+# {{ index .Help "default-api" }}
 default-api: openai
-# {{ index .Help "model" }}
+# {{ index .Help "default-model" }}
 # default-model: your-model
 
 # -----------------------------------------------------------------------------
@@ -38,9 +38,13 @@ role: "default"
 # -----------------------------------------------------------------------------
 # {{ index .Help "prompts" }}
 prompts:
+  # {{ index .Help "prompts.identity" }}
   identity: ""
+  # {{ index .Help "prompts.tool-selection" }}
   tool-selection: ""
+  # {{ index .Help "prompts.plan" }}
   plan: ""
+  # {{ index .Help "prompts.shell-classifier" }}
   shell-classifier: ""
 
 # -----------------------------------------------------------------------------
@@ -116,15 +120,18 @@ mcp-servers:
 mcp-timeout: 15s
 # {{ index .Help "builtin-tools" }}
 builtin-tools:
+  # {{ index .Help "builtin-tools.filesystem" }}
   filesystem: auto
+  # {{ index .Help "builtin-tools.shell" }}
   shell: true
-  # Additional command names to trust as read-only.
-  # A match trusts all arguments, subcommands, and internal side effects.
-  # Unsafe shell structures are still reviewed.
+  # {{ index .Help "builtin-tools.shell-read-only-commands" }}
   shell-read-only-commands: []
+  # {{ index .Help "builtin-tools.shell-timeout" }}
   shell-timeout: 30s
+  # {{ index .Help "builtin-tools.shell-max-output" }}
   shell-max-output: 20000
-  workspace: ""  # root directory for filesystem/shell tools, defaults to CWD
+  # {{ index .Help "builtin-tools.workspace" }}
+  workspace: ""
 # {{ index .Help "web-search" }}
 web-search: true
 # {{ index .Help "web-search-provider" }}
@@ -142,7 +149,7 @@ web-search-provider: duckduckgo
 # -----------------------------------------------------------------------------
 # Images
 # -----------------------------------------------------------------------------
-# {{ index .Help "image" }}
+# {{ index .Help "images" }}
 # images: []
 # {{ index .Help "stdin-image" }}
 # stdin-image: false
@@ -165,12 +172,13 @@ apis:
   # Hosted Providers
   # ---------------------------------------------------------------------------
   openai:
+    # {{ index .Help "apis.<provider>.base-url" }}
     base-url: https://api.openai.com/v1
+    # {{ index .Help "apis.<provider>.api-key" }}
     api-key:
+    # {{ index .Help "apis.<provider>.api-key-env" }}
     api-key-env: OPENAI_API_KEY
-    # api-key-cmd executes a shell command to retrieve the API key at runtime.
-    # WARNING: Avoid using this with untrusted or shared config files, as the
-    # command is executed via the shell. Prefer api-key-env when possible.
+    # {{ index .Help "apis.<provider>.api-key-cmd" }}
     # api-key-cmd: rbw get -f OPENAI_API_KEY chat.openai.com
 
   google:

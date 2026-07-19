@@ -3,7 +3,10 @@
 // provider packages.
 package providerinfo
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type Descriptor struct {
 	Protocol       string
@@ -59,18 +62,38 @@ var descriptors = map[string]Descriptor{
 	"openrouter": {Protocol: "openai", Description: "Multi-provider aggregator"},
 }
 
+// NamedDescriptor associates built-in provider metadata with its config name.
+type NamedDescriptor struct {
+	Name string
+	Descriptor
+}
+
+var protocols = []string{"openai", "anthropic", "google", "ollama", "azure", "azure-ad"}
+
+// Descriptors returns built-in provider metadata in stable name order.
+func Descriptors() []NamedDescriptor {
+	result := make([]NamedDescriptor, 0, len(descriptors))
+	for name, descriptor := range descriptors {
+		result = append(result, NamedDescriptor{Name: name, Descriptor: descriptor})
+	}
+	slices.SortFunc(result, func(a, b NamedDescriptor) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return result
+}
+
+// Protocols returns every accepted api-type value.
+func Protocols() []string {
+	return append([]string(nil), protocols...)
+}
+
 func Lookup(name string) (Descriptor, bool) {
 	d, ok := descriptors[strings.ToLower(strings.TrimSpace(name))]
 	return d, ok
 }
 
 func KnownProtocol(protocol string) bool {
-	switch strings.ToLower(strings.TrimSpace(protocol)) {
-	case "openai", "anthropic", "google", "ollama", "azure", "azure-ad":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(protocols, strings.ToLower(strings.TrimSpace(protocol)))
 }
 
 // Protocol resolves an explicit api-type first, then built-in name metadata,

@@ -46,7 +46,10 @@ func (m *Mods) buildToolRegistryForProvider(
 ) (*toolregistry.Registry, error) {
 	if client.Capabilities().Tools {
 		m.selfHelpFallback = ""
-		handlers := toolregistry.InteractionHandlers{ShellProgress: m.handleShellProgress}
+		handlers := toolregistry.InteractionHandlers{
+			ShellProgress: m.handleShellProgress,
+			SelfHelp:      m.selfHelpReference,
+		}
 		if m.userInput != nil && m.userInput.available() {
 			handlers.UserInput = m.handleUserInput
 			handlers.SudoPrompt = m.handleSudoPrompt
@@ -60,7 +63,7 @@ func (m *Mods) buildToolRegistryForProvider(
 			ReasonText: "Tools are not supported for this provider. Use OpenAI, Anthropic, Ollama, or an OpenAI-compatible provider for tools.",
 		}
 	}
-	m.selfHelpFallback = formatSelfHelpFallback(cfg, prompt)
+	m.selfHelpFallback = formatSelfHelpFallback(m.selfHelpReference, cfg, prompt)
 	debug.Printf("Tools skipped: provider does not support tool execution")
 	return toolregistry.NewRegistry(), nil
 }
@@ -92,12 +95,12 @@ func toolIntentContext(messages []proto.Message) string {
 	return sb.String()
 }
 
-func formatSelfHelpFallback(cfg *Config, prompt string) string {
+func formatSelfHelpFallback(reference selfhelp.Reference, cfg *Config, prompt string) string {
 	topic, ok := selfhelp.DetectTopic(prompt)
 	if !ok {
 		return ""
 	}
-	content, err := selfhelp.Lookup(topic)
+	content, err := reference.Lookup(topic)
 	if err != nil {
 		return ""
 	}

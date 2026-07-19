@@ -12,7 +12,6 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
-	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -35,7 +34,13 @@ func TestConfig(t *testing.T) {
 	})
 }
 
-func TestSelfHelpCoversEveryPersistentConfigKey(t *testing.T) {
+func TestSelfHelpSettingsCoverEveryPersistentConfigKey(t *testing.T) {
+	documented := make(map[string]SettingInfo)
+	for _, setting := range SelfHelpSettings() {
+		require.NotEmpty(t, setting.Description, setting.Path)
+		require.NotContains(t, documented, setting.Path, "duplicate setting path")
+		documented[setting.Path] = setting
+	}
 	configType := reflect.TypeFor[PersistentConfig]()
 	for i := range configType.NumField() {
 		field := configType.Field(i)
@@ -46,8 +51,45 @@ func TestSelfHelpCoversEveryPersistentConfigKey(t *testing.T) {
 		if key == "" {
 			key = strings.ToLower(field.Name)
 		}
-		require.Contains(t, selfhelp.Reference, "`"+key+"`",
-			"self-help reference must document persistent config key %q", key)
+		require.Contains(t, documented, key,
+			"self-help settings must include persistent config key %q", key)
+	}
+}
+
+func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
+	documented := make(map[string]SettingInfo)
+	for _, setting := range SelfHelpSettings() {
+		documented[setting.Path] = setting
+	}
+	for _, path := range []string{
+		"prompts.identity",
+		"prompts.tool-selection",
+		"builtin-tools.filesystem",
+		"builtin-tools.shell-timeout",
+		"mcp-servers.<server>.pass-env-all",
+		"apis.<provider>.api-type",
+		"apis.<provider>.api-key-env",
+		"apis.<provider>.models.<model>.reasoning-effort",
+		"apis.<provider>.models.<model>.extra-params",
+	} {
+		require.Contains(t, documented, path)
+		require.NotEmpty(t, documented[path].Description, path)
+	}
+
+	require.Equal(t, "80", documented["word-wrap"].Default)
+	require.Equal(t, "auto", documented["review-mode"].Default)
+	require.Equal(t, "true", documented["web-search"].Default)
+	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
+	require.Equal(t, "30s", documented["builtin-tools.shell-timeout"].Default)
+	for _, path := range []string{
+		"web-search-api-key",
+		"prompts.identity",
+		"prompts.shell-classifier",
+		"apis.<provider>.api-key",
+		"apis.<provider>.api-key-cmd",
+		"apis.<provider>.models.<model>.extra-params",
+	} {
+		require.Empty(t, documented[path].Default, path)
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
@@ -566,14 +565,48 @@ func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 	})
 }
 
-func TestSelfHelpCoversEveryPublicFlag(t *testing.T) {
+func TestSelfHelpCatalogMatchesEveryPublicFlag(t *testing.T) {
+	catalog := selfHelpFlagGroups(rootCmd.Flags())
+	documented := make(map[string]selfhelpFlagTestEntry)
+	for _, group := range catalog {
+		for _, flag := range group.Flags {
+			documented[flag.Name] = selfhelpFlagTestEntry{
+				category:    group.Name,
+				shorthand:   flag.Shorthand,
+				description: flag.Description,
+				advanced:    flag.Advanced,
+			}
+		}
+	}
 	rootCmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		if flag.Hidden {
 			return
 		}
-		require.Contains(t, selfhelp.Reference, "--"+flag.Name,
-			"self-help reference must document public flag --%s", flag.Name)
+		require.Equal(t, selfhelpFlagTestEntry{
+			category:    flagCategory(flag),
+			shorthand:   flag.Shorthand,
+			description: flag.Usage,
+			advanced:    flagIsAdvanced(flag),
+		}, documented[flag.Name], flag.Name)
 	})
+	require.Len(t, documented, lenVisibleFlags(rootCmd.Flags()))
+}
+
+type selfhelpFlagTestEntry struct {
+	category    string
+	shorthand   string
+	description string
+	advanced    bool
+}
+
+func lenVisibleFlags(flags *pflag.FlagSet) int {
+	count := 0
+	flags.VisitAll(func(flag *pflag.Flag) {
+		if !flag.Hidden {
+			count++
+		}
+	})
+	return count
 }
 
 func TestRegisteredFlagDescriptionsContainNoTerminalSequences(t *testing.T) {

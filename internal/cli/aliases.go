@@ -25,6 +25,7 @@ type (
 var (
 	newUserErrorf         = apperr.NewUserErrorf
 	newMods               = app.New
+	withSelfHelpCLI       = app.WithSelfHelpCLI
 	Default               = cfgpkg.Default
 	Ensure                = cfgpkg.Ensure
 	WriteDefaultFile      = cfgpkg.WriteDefaultFile

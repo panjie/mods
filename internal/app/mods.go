@@ -15,6 +15,7 @@ import (
 	"charm.land/glamour/v2"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
+	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -95,6 +96,7 @@ type Mods struct {
 	toolOperations        chan<- toolOperationStatusMsg
 	currentToolRegistry   *toolregistry.Registry
 	selfHelpFallback      string
+	selfHelpReference     selfhelp.Reference
 	toolSelectionInsertAt int
 
 	// sessionMu guards activeRunner. activeRunner tracks the streamRunner
@@ -137,7 +139,12 @@ func New(
 	ctx context.Context,
 	cfg *Config,
 	db *DB,
+	options ...Option,
 ) (*Mods, error) {
+	var newOptions newOptions
+	for _, option := range options {
+		option(&newOptions)
+	}
 	wordWrap := cfg.WordWrap
 	opts := []glamour.TermRendererOption{
 		glamour.WithEnvironmentConfig(),
@@ -157,6 +164,10 @@ func New(
 		debug.Printf("skills: scan %v failed: %v (proceeding with empty catalog)", skillDirs, scanErr)
 	}
 	debug.Printf("Skills: loaded %d skill(s) from %v", len(skillCatalog), skillDirs)
+	selfHelpReference, err := buildSelfHelpReference(newOptions.selfHelpFlags)
+	if err != nil {
+		return nil, fmt.Errorf("could not build self-help reference: %w", err)
+	}
 	return &Mods{
 		Styles:              ui.MakeStylesWithTheme(cfg.Theme, true),
 		glam:                gr,
@@ -171,6 +182,7 @@ func New(
 		secrets:             secrets.New(),
 		ctx:                 ctx,
 		skillCatalog:        skillCatalog,
+		selfHelpReference:   selfHelpReference,
 	}, nil
 }
 

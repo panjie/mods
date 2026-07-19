@@ -49,6 +49,8 @@ const (
 var Help = map[string]string{
 	"api":              "OpenAI compatible REST API (openai, localai, anthropic, ...)",
 	"apis":             "Aliases and endpoints for OpenAI compatible REST API",
+	"default-api":      "Active provider name configured under apis",
+	"default-model":    "Default model name or alias configured under the active provider",
 	"api-type":         "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, azure, or azure-ad. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
 	"http-proxy":       "HTTP proxy to use for API requests",
 	"model":            "Default model name configured under the selected API provider",
@@ -95,6 +97,7 @@ var Help = map[string]string{
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
 	"image":                  "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
+	"images":                 "Default image paths to attach to each prompt",
 	"stdin-image":            "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
@@ -105,6 +108,44 @@ var Help = map[string]string{
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
+
+	"prompts.identity":         "Override the built-in identity prompt; empty uses the built-in default",
+	"prompts.tool-selection":   "Override tool-selection guidance; empty uses capability-filtered defaults",
+	"prompts.plan":             "Override the plan-mode prompt; empty uses the built-in default",
+	"prompts.shell-classifier": "Override the shell safety classifier prompt; empty uses the built-in default",
+
+	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
+	"builtin-tools.shell":                    "Enable the native shell execution tool",
+	"builtin-tools.shell-read-only-commands": "Additional executable names to trust as read-only; a match trusts all arguments, subcommands, and internal side effects, while unsafe shell structures are still reviewed",
+	"builtin-tools.shell-timeout":            "Maximum duration of a native shell command",
+	"builtin-tools.shell-max-output":         "Maximum shell output characters returned to the model",
+	"builtin-tools.workspace":                "Root directory for filesystem and shell tools; empty uses the current working directory",
+
+	"mcp-servers.<server>.type":         "MCP transport type: stdio, sse, or http",
+	"mcp-servers.<server>.command":      "Command used to start a stdio MCP server",
+	"mcp-servers.<server>.env":          "Environment assignments explicitly forwarded to an MCP server",
+	"mcp-servers.<server>.args":         "Arguments passed to a stdio MCP server command",
+	"mcp-servers.<server>.url":          "Endpoint URL for an SSE or HTTP MCP server",
+	"mcp-servers.<server>.pass-env-all": "Forward the entire parent environment to a trusted stdio MCP server",
+
+	"apis.<provider>.api-key":     "Provider API key; prefer api-key-env",
+	"apis.<provider>.api-key-env": "Environment variable containing the provider API key",
+	"apis.<provider>.api-key-cmd": "Shell command that resolves the provider API key at runtime",
+	"apis.<provider>.version":     "Provider API version when required by the adapter",
+	"apis.<provider>.base-url":    "Provider API endpoint",
+	"apis.<provider>.models":      "Models configured for this provider",
+	"apis.<provider>.user":        "Provider-specific user or Azure deployment identifier",
+	"apis.<provider>.api-type":    "Wire protocol used by this provider",
+
+	"apis.<provider>.models.<model>.max-input-chars":  "Input character limit for this model",
+	"apis.<provider>.models.<model>.aliases":          "Alternative names that select this model",
+	"apis.<provider>.models.<model>.fallback":         "Fallback model used after a provider failure",
+	"apis.<provider>.models.<model>.thinking-budget":  "Provider-specific reasoning token budget",
+	"apis.<provider>.models.<model>.extra-params":     "Additional provider request fields for this model",
+	"apis.<provider>.models.<model>.thinking-type":    "Provider-specific thinking mode override",
+	"apis.<provider>.models.<model>.thought-fields":   "Stream fields inspected for reasoning content",
+	"apis.<provider>.models.<model>.think-tag":        "Inline tag used to extract reasoning content",
+	"apis.<provider>.models.<model>.reasoning-effort": "Reasoning effort sent when thinking is enabled",
 }
 
 // Model represents the LLM model used in the API call.

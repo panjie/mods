@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
 	"github.com/stretchr/testify/require"
 )
@@ -61,6 +63,12 @@ func TestBuiltinSpecs(t *testing.T) {
 	}
 	sort.Strings(names)
 	t.Logf("builtins (%d): %v", len(got), names)
+
+	originalName := got[0].Name
+	got[0].Name = "mutated"
+	again, err := BuiltinSpecs()
+	require.NoError(t, err)
+	require.Equal(t, originalName, again[0].Name)
 }
 
 func TestBuildRegistryRegistersLoadSkillWhenCatalogNonEmpty(t *testing.T) {
@@ -88,6 +96,32 @@ func TestBuildRegistrySkipsLoadSkillWhenCatalogEmpty(t *testing.T) {
 	require.False(t, ok, "load_skill must NOT be registered when catalog is empty")
 	_, ok = reg.Tool("mods_help")
 	require.True(t, ok, "mods_help must be registered independently of skills")
+}
+
+func TestBuildRegistryPassesSharedReferenceToModsHelp(t *testing.T) {
+	cfg := cfgpkg.Default()
+	reference := selfhelp.NewReference(selfhelp.Catalog{
+		Settings: []selfhelp.Setting{{
+			Path: "generated-setting", ValueType: "string", Description: "Generated description.",
+		}},
+	})
+	reg, err := BuildRegistry(
+		context.Background(),
+		&cfg,
+		websearch.Config{},
+		"",
+		nil,
+		toolregistry.InteractionHandlers{SelfHelp: reference},
+	)
+	require.NoError(t, err)
+	result, err := reg.Call(
+		context.Background(),
+		toolregistry.ModsHelpToolName,
+		[]byte(`{"topic":"config"}`),
+	)
+	require.NoError(t, err)
+	require.Contains(t, result, "`generated-setting`")
+	require.Contains(t, result, "Generated description.")
 }
 
 func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {

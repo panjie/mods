@@ -16,6 +16,7 @@ type ModsHelpConfig struct {
 	SettingsPath   string
 	Portable       bool
 	FilesystemMode string
+	Reference      selfhelp.Reference
 }
 
 func RegisterModsHelp(registry *Registry, cfg ModsHelpConfig) error {
@@ -40,7 +41,7 @@ func RegisterModsHelp(registry *Registry, cfg ModsHelpConfig) error {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			content, err := selfhelp.Lookup(args.Topic)
+			content, err := cfg.Reference.Lookup(args.Topic)
 			if err != nil {
 				return "", err
 			}

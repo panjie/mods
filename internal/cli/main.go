@@ -204,6 +204,7 @@ func initFlags() {
 		"no-instructions",
 	)
 	applyFlagCategories(flags)
+	registeredSelfHelpFlags = selfHelpFlagGroups(flags)
 
 	for _, name := range sessionCompleteFlags {
 		_ = rootCmd.RegisterFlagCompletionFunc(name, func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {

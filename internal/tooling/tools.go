@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
@@ -32,6 +33,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		SettingsPath:   cfg.SettingsPath,
 		Portable:       cfg.PortableDir != "",
 		FilesystemMode: string(cfg.BuiltinTools.Filesystem),
+		Reference:      handlers.SelfHelp,
 	}); err != nil {
 		return nil, err
 	}
@@ -141,12 +143,25 @@ type BuiltinToolInfo struct {
 	Interactive bool
 }
 
+var (
+	builtinSpecsOnce  sync.Once
+	builtinSpecsCache []BuiltinToolInfo
+	builtinSpecsErr   error
+)
+
 // BuiltinSpecs enumerates every built-in tool mods can provide, independent of
 // runtime enablement (which depends on prompt and config). It powers
 // --list-tools' built-in catalogue. Tools are registered into a throwaway
 // registry (their Call closures are never invoked) purely to harvest specs and
 // capabilities, so this works offline and without API keys.
 func BuiltinSpecs() ([]BuiltinToolInfo, error) {
+	builtinSpecsOnce.Do(func() {
+		builtinSpecsCache, builtinSpecsErr = buildBuiltinSpecs()
+	})
+	return append([]BuiltinToolInfo(nil), builtinSpecsCache...), builtinSpecsErr
+}
+
+func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 	root, err := os.MkdirTemp("", "mods-list-*")
 	if err != nil {
 		return nil, err

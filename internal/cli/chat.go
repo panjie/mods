@@ -190,7 +190,7 @@ func chatPrompt() {
 }
 
 func runOneTurn(ctx context.Context, opts []tea.ProgramOption) (*Mods, error) {
-	mods, err := newMods(ctx, &config, db)
+	mods, err := newMods(ctx, &config, db, withSelfHelpCLI(registeredSelfHelpFlags))
 	if err != nil {
 		return nil, modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 	}

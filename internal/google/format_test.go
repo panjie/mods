@@ -426,13 +426,18 @@ func TestFromProtoMessageOmitsThoughtPartWhenNoSignature(t *testing.T) {
 
 func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	client, captured, closeServer := newCapturingSequenceServer(t, []string{
-		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"call_1\",\"name\":\"read_file\",\"args\":{\"path\":\"README.md\"}}}]}}]}\n\n",
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"call_1\",\"name\":\"read_file\",\"args\":{\"path\":\"README.md\"},\"thoughtSignature\":\"sig_budget\"}}]}}]}\n\n",
 		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"done\"}]}}]}\n\n",
 	})
 	defer closeServer()
 
+	budgetCalls := 0
 	st := client.Request(context.Background(), proto.Request{
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "read README"}},
+		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			budgetCalls++
+			return messages, nil
+		},
 		ToolCaller: func(name string, data []byte) (string, error) {
 			require.Equal(t, "read_file", name)
 			require.JSONEq(t, `{"path":"README.md"}`, string(data))
@@ -450,6 +455,7 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	statuses := st.CallTools()
 	require.Len(t, statuses, 1)
 	require.NoError(t, statuses[0].Err)
+	require.Equal(t, 2, budgetCalls, "budgeter must run for initial and tool follow-up requests")
 	require.Len(t, *captured, 2)
 
 	var followup map[string]any
@@ -458,7 +464,10 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	require.Len(t, contents, 3)
 	assistant := contents[1].(map[string]any)
 	require.Equal(t, geminiRoleModel, assistant["role"])
-	require.Contains(t, assistant["parts"].([]any)[0].(map[string]any), "functionCall")
+	parts := assistant["parts"].([]any)
+	require.Len(t, parts, 2, "budget rebuild must preserve the thought-signature part")
+	functionCall := parts[1].(map[string]any)["functionCall"].(map[string]any)
+	require.Equal(t, "sig_budget", functionCall["thoughtSignature"])
 	toolResult := contents[2].(map[string]any)
 	require.Equal(t, geminiRoleUser, toolResult["role"])
 	fnResp := toolResult["parts"].([]any)[0].(map[string]any)["functionResponse"].(map[string]any)

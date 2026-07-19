@@ -16,10 +16,9 @@ import (
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
-	"github.com/panjie/mods/internal/textutil"
 )
 
-func (m *Mods) setupStreamContext(content string, mod Model) error {
+func (m *Mods) setupStreamContext(content string, _ Model) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
 	m.toolSelectionInsertAt = -1
@@ -70,17 +69,21 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 			})
 		}
 		if instructions := loadProjectInstructions(cfg); instructions != "" {
-			m.messages = append(m.messages, proto.Message{
+			msg := proto.Message{
 				Role:    proto.RoleSystem,
 				Content: "Project instructions (AGENTS.md):\n\n" + instructions,
-			})
+			}
+			msg.SetContextClass(proto.ContextClassProjectInstructions)
+			m.messages = append(m.messages, msg)
 		}
 		if len(m.skillCatalog) > 0 {
 			debug.Printf("Skills: injected catalog (%d skill(s)) into system prompt", len(m.skillCatalog))
-			m.messages = append(m.messages, proto.Message{
+			msg := proto.Message{
 				Role:    proto.RoleSystem,
 				Content: skills.CatalogPrompt(m.skillCatalog),
-			})
+			}
+			msg.SetContextClass(proto.ContextClassSkillCatalog)
+			m.messages = append(m.messages, msg)
 		}
 	}
 	if cfg.Role != "" {
@@ -130,21 +133,12 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		content = strings.TrimSpace(prefix + "\n\n" + content)
 	}
 
-	origLen := int64(len(content))
-	if !cfg.NoLimit && mod.MaxChars > 0 && origLen > mod.MaxChars {
-		content = textutil.TruncateUTF8Bytes(content, int(mod.MaxChars))
-	}
-
 	debug.Printf("Context: %d system message(s), %d existing message(s)", len(m.messages), 0)
 	for i, msg := range m.messages {
 		debug.Printf("  System message #%d (%d chars): %s", i+1, len(msg.Content), debug.Truncate(msg.Content, 200))
 	}
-	if origLen > 0 {
-		truncNote := ""
-		if !cfg.NoLimit && mod.MaxChars > 0 && origLen > mod.MaxChars {
-			truncNote = fmt.Sprintf(" (truncated from %d to %d chars, max-input-chars=%d)", origLen, len(content), mod.MaxChars)
-		}
-		debug.Printf("  User message (%d chars): %s%s", len(content), debug.Truncate(strings.ReplaceAll(content, "\n", "\\n"), 300), truncNote)
+	if len(content) > 0 {
+		debug.Printf("  User message (%d chars): %s", len(content), debug.Truncate(strings.ReplaceAll(content, "\n", "\\n"), 300))
 	}
 
 	if !cfg.NoSave && cfg.SessionReadFromID != "" {
@@ -160,17 +154,19 @@ func (m *Mods) setupStreamContext(content string, mod Model) error {
 		}
 		for _, msg := range saved {
 			if msg.Role != proto.RoleSystem {
+				msg.SetContextClass(proto.ContextClassHistory)
 				m.messages = append(m.messages, msg)
 			}
 		}
 		debug.Printf("Session: read %d messages from %s", len(saved), cfg.SessionReadFromID[:min(ShortIDLength, len(cfg.SessionReadFromID))])
-		m.messages = pruneHistoryForBudget(m.messages, content, mod.MaxChars, cfg.NoLimit)
 	}
 
-	m.messages = append(m.messages, proto.Message{
+	current := proto.Message{
 		Role:    proto.RoleUser,
 		Content: content,
-	})
+	}
+	current.SetContextClass(proto.ContextClassCurrentUser)
+	m.messages = append(m.messages, current)
 	// Attach images from CLI flags
 	var images []proto.Image
 	var totalBytes int
@@ -280,71 +276,6 @@ func (m *Mods) appendImageWithMime(images []proto.Image, totalBytes *int, data [
 		}
 	}
 	return append(images, proto.Image{Data: data, MimeType: mime}), nil
-}
-
-func pruneHistoryForBudget(messages []proto.Message, newContent string, maxChars int64, noLimit bool) []proto.Message {
-	if noLimit || maxChars <= 0 || len(messages) == 0 {
-		return messages
-	}
-	budget := int(maxChars)
-	used := len(newContent)
-	var systems []proto.Message
-	for _, msg := range messages {
-		if msg.Role != proto.RoleSystem {
-			continue
-		}
-		used += messageSize(msg)
-		systems = append(systems, msg)
-	}
-	out := append([]proto.Message(nil), systems...)
-	var tail []proto.Message
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		if msg.Role == proto.RoleSystem {
-			continue
-		}
-		size := messageSize(msg)
-		if used+size > budget {
-			break
-		}
-		used += size
-		tail = append(tail, msg)
-	}
-	for i := len(tail) - 1; i >= 0; i-- {
-		out = append(out, tail[i])
-	}
-	out = dropLeadingToolResults(out)
-	if len(out) < len(messages) {
-		debug.Printf("Session: pruned history from %d to %d messages (budget=%d chars)", len(messages), len(out), budget)
-	}
-	return out
-}
-
-func dropLeadingToolResults(messages []proto.Message) []proto.Message {
-	firstNonSystem := 0
-	for firstNonSystem < len(messages) && messages[firstNonSystem].Role == proto.RoleSystem {
-		firstNonSystem++
-	}
-	first := firstNonSystem
-	for first < len(messages) && messages[first].Role == proto.RoleTool {
-		first++
-	}
-	if first == firstNonSystem {
-		return messages
-	}
-	out := append([]proto.Message(nil), messages[:firstNonSystem]...)
-	return append(out, messages[first:]...)
-}
-
-func messageSize(msg proto.Message) int {
-	size := len(msg.Content)
-	for _, img := range msg.Images {
-		size += len(img.Data)
-	}
-	for _, call := range msg.ToolCalls {
-		size += len(call.ID) + len(call.Function.Name) + len(call.Function.Arguments)
-	}
-	return size
 }
 
 func fallbackFormatText(format string) string {

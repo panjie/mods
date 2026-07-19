@@ -1,10 +1,12 @@
 package skills
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 )
@@ -160,14 +162,39 @@ func TestCatalogPromptEmptyReturnsEmpty(t *testing.T) {
 
 func TestCatalogPromptFormat(t *testing.T) {
 	skills := []Skill{
-		{Name: "alpha", Description: "Alpha skill."},
 		{Name: "bravo", Description: "Bravo skill."},
+		{Name: "alpha", Description: "Alpha skill."},
 	}
 	got := CatalogPrompt(skills)
 	require.Contains(t, got, "## Available skills")
 	require.Contains(t, got, "load_skill")
+	require.Contains(t, got, "search_skills")
 	require.Contains(t, got, "- alpha: Alpha skill.")
 	require.Contains(t, got, "- bravo: Bravo skill.")
-	// Alpha must appear before bravo (caller passes pre-sorted slice).
+	// Rendering is stable even when the caller's catalog is not sorted.
 	require.Less(t, strings.Index(got, "alpha"), strings.Index(got, "bravo"))
+}
+
+func TestCatalogPromptBoundsDescriptionsAndTotal(t *testing.T) {
+	catalog := make([]Skill, 40)
+	for i := range catalog {
+		catalog[i] = Skill{
+			Name:        fmt.Sprintf("skill-%02d", i),
+			Description: strings.Repeat("你", 200),
+		}
+	}
+	got := CatalogPrompt(catalog)
+	require.LessOrEqual(t, len(got), MaxCatalogBytes)
+	require.True(t, utf8.ValidString(got))
+	require.Contains(t, got, "omitted")
+
+	render := CatalogPromptBudget(catalog[:1], MaxCatalogBytes)
+	line := strings.TrimPrefix(strings.Split(render.Prompt, "\n")[3], "- skill-00: ")
+	require.LessOrEqual(t, len(line), MaxDescriptionBytes)
+}
+
+func TestCatalogPromptBudgetCanOmitEntireCatalog(t *testing.T) {
+	render := CatalogPromptBudget([]Skill{{Name: "alpha", Description: "desc"}}, 8)
+	require.Empty(t, render.Prompt)
+	require.Equal(t, 1, render.Omitted)
 }

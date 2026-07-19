@@ -123,6 +123,17 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	tools := registry.Specs()
 	debugTools(tools, registry.Len())
 
+	budgeter := newContextBudgeter(mod.MaxChars, maxTokens, cfg.NoLimit, tools, m.skillCatalog)
+	budgetedMessages, budgetReport, err := budgeter.apply(m.messages)
+	if err != nil {
+		_ = registry.Close()
+		cancel()
+		m.currentToolRegistry = nil
+		return requestSession{}, modsError{Err: err, ReasonText: "Request context is too large"}
+	}
+	m.messages = budgetedMessages
+	debugContextBudget(budgetReport)
+
 	request := proto.Request{
 		Messages:   m.messages,
 		API:        mod.API,
@@ -131,6 +142,11 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		Tools:      tools,
 		TrackUsage: cfg.ShowTokenUsage,
 		ToolCaller: m.toolCaller(registry, cfg),
+		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			budgeted, report, budgetErr := budgeter.apply(messages)
+			debugContextBudget(report)
+			return budgeted, budgetErr
+		},
 	}
 	if maxTokens > 0 {
 		request.MaxTokens = &maxTokens

@@ -236,6 +236,14 @@ func TestContinuedSessionRefreshesSystemAndToolSelectionPrompts(t *testing.T) {
 	require.Contains(t, joined, "previous request")
 	require.Contains(t, joined, "previous answer")
 	require.Equal(t, 1, strings.Count(joined, "Tool selection:"))
+	for _, message := range m.messages {
+		if message.Content == "previous request" || message.Content == "previous answer" {
+			require.Equal(t, proto.ContextClassHistory, message.ContextClass())
+		}
+		if message.Content == "follow up" {
+			require.Equal(t, proto.ContextClassCurrentUser, message.ContextClass())
+		}
+	}
 }
 
 func indexContaining(contents []string, needle string) int {

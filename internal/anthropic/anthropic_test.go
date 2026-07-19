@@ -1,11 +1,42 @@
 package anthropic
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	SDK "github.com/anthropics/anthropic-sdk-go"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/stretchr/testify/require"
 )
+
+func TestMessageBudgeterRunsInitiallyAndStopsFailedFollowup(t *testing.T) {
+	wantErr := errors.New("budget exceeded")
+	calls := 0
+	client := New(DefaultConfig("test"))
+	st := client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
+		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			calls++
+			return nil, wantErr
+		},
+	})
+	require.False(t, st.Next())
+	require.ErrorIs(t, st.Err(), wantErr)
+	require.Equal(t, 1, calls)
+
+	followup := &Stream{
+		done:     true,
+		messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
+		budgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			calls++
+			return nil, wantErr
+		},
+	}
+	require.False(t, followup.Next())
+	require.ErrorIs(t, followup.Err(), wantErr)
+	require.Equal(t, 2, calls)
+}
 
 func TestNormalizeBaseURL(t *testing.T) {
 	cases := []struct {

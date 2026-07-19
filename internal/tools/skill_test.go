@@ -2,10 +2,12 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/panjie/mods/internal/skills"
 	"github.com/stretchr/testify/require"
@@ -168,6 +170,62 @@ func TestRegisterSkillSpecHarvested(t *testing.T) {
 	required, ok := tool.Spec.InputSchema["required"].([]string)
 	require.True(t, ok)
 	require.Equal(t, []string{"name"}, required)
+	search, ok := reg.Tool("search_skills")
+	require.True(t, ok)
+	require.True(t, search.Capabilities.ReadOnly)
+}
+
+func TestSearchSkillsRankingAndLimit(t *testing.T) {
+	catalog := []skills.Skill{
+		{Name: "deploy", Description: "Ship applications"},
+		{Name: "deploy-cloud", Description: "Cloud release"},
+		{Name: "safe-deploy", Description: "Deployment safety"},
+		{Name: "release", Description: "Deploy applications"},
+	}
+	reg, _ := loadSkillTool(t, catalog)
+	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"deploy","limit":3}`))
+	require.NoError(t, err)
+	lines := strings.Split(out, "\n")
+	require.Len(t, lines, 3)
+	require.Contains(t, lines[0], "deploy:")
+	require.Contains(t, lines[1], "deploy-cloud:")
+	require.Contains(t, lines[2], "safe-deploy:")
+	require.NotContains(t, out, "release:")
+}
+
+func TestSearchSkillsValidationAndInformationIsolation(t *testing.T) {
+	catalog := []skills.Skill{{
+		Name:        "private",
+		Description: strings.Repeat("你", 200),
+		Body:        "SECRET BODY",
+		Dir:         "/secret/path",
+	}}
+	reg, _ := loadSkillTool(t, catalog)
+	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"PRIVATE"}`))
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(strings.TrimPrefix(out, "- private: ")), skills.MaxDescriptionBytes)
+	require.NotContains(t, out, "SECRET BODY")
+	require.NotContains(t, out, "/secret/path")
+	require.True(t, utf8.ValidString(out))
+
+	_, err = reg.Call(context.Background(), "search_skills", []byte(`{"query":" "}`))
+	require.ErrorContains(t, err, "must not be empty")
+	_, err = reg.Call(context.Background(), "search_skills", []byte(`{"query":"x","limit":21}`))
+	require.ErrorContains(t, err, "between 1 and 20")
+}
+
+func TestSearchSkillsOutputBound(t *testing.T) {
+	catalog := make([]skills.Skill, 20)
+	for i := range catalog {
+		catalog[i] = skills.Skill{
+			Name:        fmt.Sprintf("matching-%02d", i),
+			Description: strings.Repeat("x", skills.MaxDescriptionBytes),
+		}
+	}
+	reg, _ := loadSkillTool(t, catalog)
+	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"matching","limit":20}`))
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(out), skillSearchMaxBytes)
 }
 
 func TestLoadSkillLargeFileRejected(t *testing.T) {

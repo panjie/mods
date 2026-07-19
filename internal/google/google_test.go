@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,19 @@ import (
 	"github.com/panjie/mods/internal/stream"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMessageBudgeterFailureStopsInitialRequest(t *testing.T) {
+	wantErr := errors.New("budget exceeded")
+	client := New(DefaultConfig("model", "test"))
+	st := client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
+		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			return nil, wantErr
+		},
+	})
+	require.False(t, st.Next())
+	require.ErrorIs(t, st.Err(), wantErr)
+}
 
 func TestStreamMessagesIncludesAssistantResponse(t *testing.T) {
 	stream := &Stream{

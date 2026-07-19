@@ -90,6 +90,13 @@ func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities
 
 // Request makes a new request and returns a stream.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	if request.MessageBudgeter != nil {
+		messages, err := request.MessageBudgeter(request.Messages)
+		if err != nil {
+			return &Stream{budgetErr: err, messages: request.Messages}
+		}
+		request.Messages = messages
+	}
 	body := openai.ChatCompletionNewParams{
 		Model:    request.Model,
 		User:     openai.String(request.User),
@@ -135,6 +142,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		request:       body,
 		toolCall:      request.ToolCaller,
 		messages:      request.Messages,
+		budgeter:      request.MessageBudgeter,
 		trackUsage:    request.TrackUsage,
 		parseThink:    c.config.ThinkTags,
 		thoughtFields: c.config.ThoughtFields,
@@ -164,6 +172,8 @@ type Stream struct {
 	trackUsage    bool
 	roundUsage    proto.TokenUsage
 	usage         proto.TokenUsage
+	budgeter      proto.MessageBudgeter
+	budgetErr     error
 }
 
 func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
@@ -196,7 +206,12 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 }
 
 // Close implements stream.Stream.
-func (s *Stream) Close() error { return s.stream.Close() } //nolint:wrapcheck
+func (s *Stream) Close() error {
+	if s.stream == nil {
+		return nil
+	}
+	return s.stream.Close() //nolint:wrapcheck
+}
 
 // Current implements stream.Stream.
 func (s *Stream) Current() (proto.Chunk, error) {
@@ -337,7 +352,15 @@ func partialTagSuffixLen(s, tag string) int {
 }
 
 // Err implements stream.Stream.
-func (s *Stream) Err() error { return s.stream.Err() } //nolint:wrapcheck
+func (s *Stream) Err() error {
+	if s.budgetErr != nil {
+		return s.budgetErr
+	}
+	if s.stream == nil {
+		return nil
+	}
+	return s.stream.Err() //nolint:wrapcheck
+}
 
 // Messages implements stream.Stream.
 func (s *Stream) Messages() []proto.Message { return s.messages }
@@ -347,8 +370,20 @@ func (s *Stream) Usage() proto.TokenUsage { return s.usage }
 
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
+	if s.budgetErr != nil {
+		return false
+	}
 	if s.done {
 		s.done = false
+		if s.budgeter != nil {
+			messages, err := s.budgeter(s.messages)
+			if err != nil {
+				s.budgetErr = err
+				return false
+			}
+			s.messages = messages
+			s.request.Messages = fromProtoMessages(messages)
+		}
 		s.stream = s.factory()
 		s.message = openai.ChatCompletionAccumulator{}
 	}

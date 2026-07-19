@@ -85,8 +85,9 @@ same registered ToolSpecs and capabilities used by `mods --list-tools`.
 ## Skills
 
 When a request matches an installed skill description, call
-`load_skill(<name>)`, then follow the returned instructions. Load auxiliary
-files only when the skill directs you to them.
+`load_skill(<name>)`, then follow the returned instructions. If its name is
+unknown or omitted from the bounded prompt catalog, call `search_skills` first.
+Load auxiliary files only when the skill directs you to them.
 
 Skills normally live in the user agent skills directory. Portable mode also
 loads the executable's `skills` directory. Additional directories can be
@@ -94,7 +95,8 @@ provided through the repeated skills-directory option, its config key, or its
 `MODS_*` environment form using the OS path-list separator. Later directories
 override earlier same-name skills.
 
-Mods loads only installed skills; it does not search for or install skills.
+Mods loads and searches only installed skills; it does not discover remote or
+installable skills, or install them.
 Loaded skill content remains in the conversation and should not be loaded
 twice. Installed skill names are intentionally not included in self-help.
 

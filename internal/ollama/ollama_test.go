@@ -1,12 +1,47 @@
 package ollama
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	api "github.com/panjie/mods/internal/ollamaapi"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/stretchr/testify/require"
 )
+
+func TestMessageBudgeterRunsInitiallyAndStopsFailedFollowup(t *testing.T) {
+	wantErr := errors.New("budget exceeded")
+	calls := 0
+	client, err := New(DefaultConfig())
+	require.NoError(t, err)
+	st := client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
+		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			calls++
+			return nil, wantErr
+		},
+	})
+	require.False(t, st.Next())
+	require.ErrorIs(t, st.Err(), wantErr)
+	require.Equal(t, 1, calls)
+
+	followup := &Stream{
+		message: api.Message{ToolCalls: []api.ToolCall{{
+			Function: api.ToolCallFunction{Name: "demo"},
+		}}},
+		toolCall: func(string, []byte) (string, error) { return "result", nil },
+		budgeter: func(messages []proto.Message) ([]proto.Message, error) {
+			calls++
+			return nil, wantErr
+		},
+	}
+	statuses := followup.CallTools()
+	require.Len(t, statuses, 1)
+	require.ErrorIs(t, followup.Err(), wantErr)
+	require.Equal(t, 2, calls)
+}
 
 func TestNextStopsAtCompletedMessage(t *testing.T) {
 	s := &Stream{

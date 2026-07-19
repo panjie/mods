@@ -235,6 +235,19 @@ func TestSetupStreamContextDoesNotTruncateWhenMaxCharsUnset(t *testing.T) {
 	require.Equal(t, "hello world", mods.messages[len(mods.messages)-1].Content)
 }
 
+func TestSetupStreamContextDefersTruncationToFinalBudgeter(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.MaxInputChars = 5
+	cfg.FormatText = defaultConfig().FormatText
+	mods := &Mods{
+		ctx:    context.Background(),
+		db:     testDB(t),
+		Config: &cfg,
+	}
+	require.NoError(t, mods.setupStreamContext("hello world", Model{MaxChars: 5}))
+	require.Equal(t, "hello world", mods.messages[len(mods.messages)-1].Content)
+}
+
 func TestReadLimitedStdinTruncatesBeforeReadAll(t *testing.T) {
 	m := &Mods{Config: &Config{}}
 	m.Config.MaxInputChars = 5
@@ -242,33 +255,6 @@ func TestReadLimitedStdinTruncatesBeforeReadAll(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), "hello")
 	require.Contains(t, string(data), "Input truncated")
-}
-
-func TestPruneHistoryForBudgetKeepsRecentMessages(t *testing.T) {
-	messages := []proto.Message{
-		{Role: proto.RoleSystem, Content: "sys"},
-		{Role: proto.RoleUser, Content: strings.Repeat("old", 20)},
-		{Role: proto.RoleAssistant, Content: strings.Repeat("older", 20)},
-		{Role: proto.RoleUser, Content: "recent question"},
-		{Role: proto.RoleAssistant, Content: "recent answer"},
-	}
-	got := pruneHistoryForBudget(messages, "new", 40, false)
-	require.Equal(t, proto.RoleSystem, got[0].Role)
-	require.Equal(t, "recent question", got[1].Content)
-	require.Equal(t, "recent answer", got[2].Content)
-	require.Len(t, got, 3)
-}
-
-func TestPruneHistoryForBudgetDropsLeadingToolResults(t *testing.T) {
-	messages := []proto.Message{
-		{Role: proto.RoleSystem, Content: "sys"},
-		{Role: proto.RoleAssistant, Content: strings.Repeat("tool call", 20), ToolCalls: []proto.ToolCall{{ID: "call-1"}}},
-		{Role: proto.RoleTool, Content: "small result", ToolCalls: []proto.ToolCall{{ID: "call-1"}}},
-		{Role: proto.RoleAssistant, Content: "final answer"},
-	}
-	got := pruneHistoryForBudget(messages, "new", 40, false)
-	require.Equal(t, []string{proto.RoleSystem, proto.RoleAssistant}, []string{got[0].Role, got[1].Role})
-	require.Equal(t, "final answer", got[1].Content)
 }
 
 func systemContents(messages []proto.Message) []string {
@@ -629,6 +615,7 @@ func TestPlanHistoryCarriedIntoExecution(t *testing.T) {
 	require.Len(t, m.planHistory, 4) // user + assistant + tool + plan
 	for _, msg := range m.planHistory {
 		require.NotContains(t, msg.Content, "PLANNING PHASE ONLY")
+		require.Equal(t, proto.ContextClassHistory, msg.ContextClass())
 	}
 
 	// Execution rebuilds the system block fresh and re-appends the request.

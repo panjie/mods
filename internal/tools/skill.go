@@ -19,9 +19,15 @@ import (
 // most source files while preventing accidental context blowup.
 const SkillFileMaxBytes = 256 << 10
 
-// RegisterSkill registers the load_skill tool. skills is the scan result
-// the tool will serve at runtime; an empty slice is allowed and produces
-// a tool whose Call closure returns a not-found error for any name.
+const (
+	skillSearchDefaultLimit = 10
+	skillSearchMaxLimit     = 20
+	skillSearchMaxBytes     = 4096
+)
+
+// RegisterSkill registers load_skill and search_skills. skills is the scan
+// result the tools serve at runtime; an empty slice is allowed and produces
+// discovery tools with no results.
 // RegisterSkill is unconditional — the caller decides whether to register
 // at all (BuildRegistry skips it when the runtime catalog is empty).
 func RegisterSkill(reg *Registry, catalog []skills.Skill) error {
@@ -29,14 +35,14 @@ func RegisterSkill(reg *Registry, catalog []skills.Skill) error {
 	for i := range catalog {
 		index[catalog[i].Name] = &catalog[i]
 	}
-	return reg.Register(Tool{
+	if err := reg.Register(Tool{
 		Kind:         ToolKindBuiltin,
 		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        "load_skill",
-			Description: "Load a skill's full instructions by name, or fetch an auxiliary file from a skill's directory. Available skills are listed in the system prompt under \"Available skills\".",
+			Description: "Load a skill's full instructions by name, or fetch an auxiliary file from its directory. If the name is unknown or absent from the system prompt, call search_skills first.",
 			InputSchema: objectSchema(map[string]any{
-				"name": stringProp("Skill name as listed in the system prompt."),
+				"name": stringProp("Exact skill name. Use search_skills first when unknown."),
 				"file": stringProp("Optional. Relative path to an auxiliary file inside the skill directory (e.g. 'reference/foo.md', 'scripts/run.py'). Omit to load the skill's SKILL.md body."),
 			}, "name"),
 		},
@@ -66,7 +72,119 @@ func RegisterSkill(reg *Registry, catalog []skills.Skill) error {
 			}
 			return content, nil
 		},
+	}); err != nil {
+		return err
+	}
+	return reg.Register(newSearchSkillsTool(catalog))
+}
+
+type skillSearchMatch struct {
+	skill skills.Skill
+	rank  int
+}
+
+func newSearchSkillsTool(catalog []skills.Skill) Tool {
+	snapshot := append([]skills.Skill(nil), catalog...)
+	return Tool{
+		Kind:         ToolKindBuiltin,
+		Capabilities: ToolCapabilities{ReadOnly: true},
+		Spec: proto.ToolSpec{
+			Name:        "search_skills",
+			Description: "Search installed skills by name and description. Returns bounded metadata only; use load_skill with an exact result name to load instructions.",
+			InputSchema: objectSchema(map[string]any{
+				"query": stringProp("Required non-empty search terms matched case-insensitively against skill names and descriptions."),
+				"limit": integerProp("Optional maximum number of results. Defaults to 10; allowed range is 1 to 20."),
+			}, "query"),
+		},
+		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+			var args struct {
+				Query string `json:"query"`
+				Limit int    `json:"limit"`
+			}
+			if err := decodeArgs(data, &args); err != nil {
+				return "", err
+			}
+			query := strings.TrimSpace(args.Query)
+			if query == "" {
+				return "", fmt.Errorf("query must not be empty")
+			}
+			if args.Limit == 0 {
+				args.Limit = skillSearchDefaultLimit
+			}
+			if args.Limit < 1 || args.Limit > skillSearchMaxLimit {
+				return "", fmt.Errorf("limit must be between 1 and %d", skillSearchMaxLimit)
+			}
+			return renderSkillSearch(searchSkills(snapshot, query, args.Limit)), nil
+		},
+	}
+}
+
+func searchSkills(catalog []skills.Skill, query string, limit int) []skillSearchMatch {
+	lowerQuery := strings.ToLower(strings.TrimSpace(query))
+	tokens := strings.Fields(lowerQuery)
+	matches := make([]skillSearchMatch, 0)
+	for _, skill := range catalog {
+		name := strings.ToLower(skill.Name)
+		description := strings.ToLower(skill.Description)
+		combined := name + " " + description
+		matched := true
+		for _, token := range tokens {
+			if !strings.Contains(combined, token) {
+				matched = false
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		rank := 3
+		switch {
+		case name == lowerQuery:
+			rank = 0
+		case strings.HasPrefix(name, lowerQuery):
+			rank = 1
+		default:
+			allName := true
+			for _, token := range tokens {
+				if !strings.Contains(name, token) {
+					allName = false
+					break
+				}
+			}
+			if allName {
+				rank = 2
+			}
+		}
+		matches = append(matches, skillSearchMatch{skill: skill, rank: rank})
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].rank != matches[j].rank {
+			return matches[i].rank < matches[j].rank
+		}
+		return matches[i].skill.Name < matches[j].skill.Name
 	})
+	if len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches
+}
+
+func renderSkillSearch(matches []skillSearchMatch) string {
+	if len(matches) == 0 {
+		return "No matching skills found."
+	}
+	var sb strings.Builder
+	for _, match := range matches {
+		line := "- " + match.skill.Name + ": " + skills.BoundedDescription(match.skill.Description) + "\n"
+		if sb.Len()+len(line) > skillSearchMaxBytes {
+			break
+		}
+		sb.WriteString(line)
+	}
+	if sb.Len() == 0 {
+		return "Matching skill names are too large to display."
+	}
+	return strings.TrimSuffix(sb.String(), "\n")
 }
 
 // readAuxFile reads an auxiliary file from a skill directory with path

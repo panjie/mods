@@ -245,6 +245,7 @@ func (m *Mods) capturePlanHistory() {
 		if msg.Role == proto.RoleSystem {
 			continue
 		}
+		msg.SetContextClass(proto.ContextClassHistory)
 		m.planHistory = append(m.planHistory, msg)
 	}
 }
@@ -263,6 +264,9 @@ func (m *Mods) injectPlanHistory() {
 	history := m.planHistory
 	for len(history) > 0 && history[0].Role == proto.RoleUser {
 		history = history[1:]
+	}
+	for i := range history {
+		history[i].SetContextClass(proto.ContextClassHistory)
 	}
 	m.planHistory = nil
 	m.messages = append(m.messages, history...)

@@ -7,12 +7,22 @@
 package skills
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/panjie/mods/internal/debug"
+	"github.com/panjie/mods/internal/textutil"
+)
+
+const (
+	// MaxDescriptionBytes bounds each description placed in a provider prompt
+	// or tool result. The in-memory Skill remains unchanged.
+	MaxDescriptionBytes = 256
+	// MaxCatalogBytes bounds the always-on skill catalog prompt.
+	MaxCatalogBytes = 4096
 )
 
 // Skill is the parsed result of one skill directory.
@@ -184,24 +194,76 @@ func splitFrontmatter(content string) (name, description, body string, ok bool) 
 	return name, description, body, true
 }
 
-// CatalogPrompt renders the system-prompt section listing available skills.
-// Returns "" for an empty slice (caller skips injection entirely). The
-// caller is expected to pass a slice already sorted by Name (Scan does
-// this); CatalogPrompt does not re-sort.
+// CatalogRender describes a bounded catalog prompt.
+type CatalogRender struct {
+	Prompt   string
+	Included int
+	Omitted  int
+}
+
+// BoundedDescription returns a UTF-8-safe prompt representation without
+// changing the full description held in memory.
+func BoundedDescription(description string) string {
+	if len(description) <= MaxDescriptionBytes {
+		return description
+	}
+	const suffix = "..."
+	return textutil.TruncateUTF8Bytes(description, MaxDescriptionBytes-len(suffix)) + suffix
+}
+
+// CatalogPrompt renders the system-prompt section listing available skills
+// within the hard catalog limit.
 func CatalogPrompt(skills []Skill) string {
-	if len(skills) == 0 {
-		return ""
+	return CatalogPromptBudget(skills, MaxCatalogBytes).Prompt
+}
+
+// CatalogPromptBudget renders a deterministically sorted catalog within both
+// maxBytes and MaxCatalogBytes. A budget too small for useful discovery
+// guidance produces an empty prompt; search_skills remains available.
+func CatalogPromptBudget(catalog []Skill, maxBytes int) CatalogRender {
+	if len(catalog) == 0 || maxBytes <= 0 {
+		return CatalogRender{Omitted: len(catalog)}
 	}
-	var sb strings.Builder
-	sb.WriteString("## Available skills\n\n")
-	sb.WriteString("Call load_skill(<name>) to load a skill's full instructions.\n")
-	sb.WriteString("To fetch an auxiliary file (e.g. reference/foo.md), pass it as the optional second argument: load_skill(<name>, \"<file>\").\n")
-	for _, s := range skills {
-		sb.WriteString("- ")
-		sb.WriteString(s.Name)
-		sb.WriteString(": ")
-		sb.WriteString(s.Description)
-		sb.WriteString("\n")
+	if maxBytes > MaxCatalogBytes {
+		maxBytes = MaxCatalogBytes
 	}
-	return sb.String()
+	sorted := append([]Skill(nil), catalog...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+
+	const header = "## Available skills\n\n" +
+		"Call load_skill(<name>) to load full instructions. If the name is unknown or omitted below, call search_skills first.\n"
+	if len(header) > maxBytes {
+		return CatalogRender{Omitted: len(sorted)}
+	}
+
+	lines := make([]string, 0, len(sorted))
+	for _, skill := range sorted {
+		line := "- " + skill.Name + ": " + BoundedDescription(skill.Description) + "\n"
+		omittedAfter := len(sorted) - len(lines) - 1
+		candidate := header + strings.Join(append(append([]string(nil), lines...), line), "")
+		if omittedAfter > 0 {
+			candidate += catalogOmittedNotice(omittedAfter)
+		}
+		if len(candidate) > maxBytes {
+			break
+		}
+		lines = append(lines, line)
+	}
+
+	result := CatalogRender{Included: len(lines), Omitted: len(sorted) - len(lines)}
+	result.Prompt = header + strings.Join(lines, "")
+	if result.Omitted > 0 {
+		notice := catalogOmittedNotice(result.Omitted)
+		if len(result.Prompt)+len(notice) <= maxBytes {
+			result.Prompt += notice
+		} else if len(lines) == 0 {
+			// A header without either entries or an omission hint is misleading.
+			return CatalogRender{Omitted: len(sorted)}
+		}
+	}
+	return result
+}
+
+func catalogOmittedNotice(count int) string {
+	return "- ... " + fmt.Sprintf("%d more skills omitted; use search_skills.\n", count)
 }

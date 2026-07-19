@@ -32,6 +32,7 @@ func TestBuiltinSpecs(t *testing.T) {
 		"fs_write_file": false,
 		"fs_replace":    false,
 		"mods_help":     false,
+		"search_skills": false,
 		"shell_run":     false,
 		"web_search":    false,
 	}
@@ -164,14 +165,14 @@ func TestBuiltinSpecsIncludesLoadSkill(t *testing.T) {
 	require.True(t, found, "load_skill must appear in --list-tools output")
 }
 
-func TestBuiltinSpecsExcludesSkillDiscoveryAndInstallTools(t *testing.T) {
+func TestBuiltinSpecsIncludesSkillDiscoveryButExcludesInstallTools(t *testing.T) {
 	specs, err := BuiltinSpecs()
 	require.NoError(t, err)
 	have := map[string]bool{}
 	for _, s := range specs {
 		have[s.Name] = true
 	}
-	require.False(t, have["search_skills"], "search_skills must not appear in --list-tools")
+	require.True(t, have["search_skills"], "search_skills must appear in --list-tools")
 	require.False(t, have["install_skill"], "install_skill must not appear in --list-tools")
 	require.False(t, have["thinking_note"], "removed thinking_note must not appear in --list-tools")
 }

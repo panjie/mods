@@ -111,7 +111,30 @@ type Message struct {
 	Content   string
 	Images    []Image
 	ToolCalls []ToolCall
+
+	// contextClass is request-local budget metadata. Keeping it unexported
+	// intentionally excludes it from JSON and gob session persistence.
+	contextClass ContextClass
 }
+
+// ContextClass identifies request-local message roles used by the unified
+// context budgeter. Persisted messages intentionally lose this classification
+// and are reclassified as history when a session is loaded.
+type ContextClass uint8
+
+const (
+	ContextClassUnspecified ContextClass = iota
+	ContextClassHistory
+	ContextClassCurrentUser
+	ContextClassSkillCatalog
+	ContextClassProjectInstructions
+)
+
+// SetContextClass attaches request-local budget metadata to a message.
+func (m *Message) SetContextClass(class ContextClass) { m.contextClass = class }
+
+// ContextClass returns request-local budget metadata for a message.
+func (m Message) ContextClass() ContextClass { return m.contextClass }
 
 // ToolCall is a tool call in a message.
 type ToolCall struct {
@@ -150,7 +173,14 @@ type Request struct {
 	ResponseFormat *string
 	TrackUsage     bool
 	ToolCaller     func(name string, data []byte) (string, error)
+	// MessageBudgeter is an internal callback invoked before provider tool
+	// follow-up requests. It is not part of any provider wire schema.
+	MessageBudgeter MessageBudgeter
 }
+
+// MessageBudgeter reapplies the provider-neutral input budget before a
+// follow-up request is sent.
+type MessageBudgeter func(messages []Message) ([]Message, error)
 
 // Session is a session.
 type Session []Message

@@ -35,8 +35,9 @@ flow. Never use `rm -rf` for a request that specifically targets a file.
 
 When a request matches an available skill description, call
 `load_skill(<name>)`, follow its instructions, and load only auxiliary files the
-skill explicitly requires. Do not reload a skill already present in the
-conversation.
+skill explicitly requires. If the relevant skill name is unknown or omitted
+from the prompt catalog, call `search_skills` first. Do not reload a skill
+already present in the conversation.
 
 ## Mods self-help
 

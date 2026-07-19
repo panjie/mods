@@ -46,6 +46,7 @@ func isPassiveAutoConfigSkippedAction(args []string) bool {
 		config.ListRoles ||
 		config.ListPrompts ||
 		config.ListSkills ||
+		showSkillsDirs ||
 		config.MCPList ||
 		config.MCPListTools
 }
@@ -70,6 +71,7 @@ func isAutoConfigSkippedAction() bool {
 		config.ListRoles ||
 		config.ListPrompts ||
 		config.ListSkills ||
+		showSkillsDirs ||
 		config.MCPList ||
 		config.MCPListTools
 }

@@ -123,6 +123,11 @@ func maybePrintMissingAPIKeyHint() {
 // Keeping them ahead of Bubble Tea startup prevents terminal capability
 // queries from leaking replies into the user's shell when the command exits.
 func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
+	if showSkillsDirs {
+		printSkillsDirs(config.ResolveSkillsDirs())
+		return true, nil
+	}
+
 	if config.Dirs {
 		return true, runDirsAction(args)
 	}
@@ -162,6 +167,18 @@ func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// printSkillsDirs emits the effective scan roots one per line. Absolute paths
+// make the output unambiguous and convenient for shell consumers while keeping
+// missing configured directories visible.
+func printSkillsDirs(dirs []string) {
+	for _, dir := range dirs {
+		if abs, err := filepath.Abs(dir); err == nil {
+			dir = abs
+		}
+		fmt.Println(filepath.Clean(dir))
+	}
 }
 
 // dispatchTurnResult validates and prints the result of a real model turn.

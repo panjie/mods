@@ -732,6 +732,92 @@ func TestSkillsDirsFlagAppendsMultipleDirs(t *testing.T) {
 	})
 }
 
+func TestExtractSkillsDirsAction(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantArgs   []string
+		wantAction bool
+	}{
+		{
+			name:     "no flag",
+			args:     []string{"hello"},
+			wantArgs: []string{"hello"},
+		},
+		{
+			name:       "bare flag",
+			args:       []string{"--skills-dirs"},
+			wantArgs:   []string{},
+			wantAction: true,
+		},
+		{
+			name:     "space separated directory",
+			args:     []string{"--skills-dirs", "./project-skills", "hello"},
+			wantArgs: []string{"--skills-dirs", "./project-skills", "hello"},
+		},
+		{
+			name:     "equals directory",
+			args:     []string{"--skills-dirs=./project-skills"},
+			wantArgs: []string{"--skills-dirs=./project-skills"},
+		},
+		{
+			name:       "bare flag before another option",
+			args:       []string{"--skills-dirs", "--raw"},
+			wantArgs:   []string{"--raw"},
+			wantAction: true,
+		},
+		{
+			name:       "configured directories followed by action",
+			args:       []string{"--skills-dirs", "/one", "--skills-dirs", "/two", "--skills-dirs"},
+			wantArgs:   []string{"--skills-dirs", "/one", "--skills-dirs", "/two"},
+			wantAction: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotArgs, gotAction := extractSkillsDirsAction(tc.args)
+			require.Equal(t, tc.wantArgs, gotArgs)
+			require.Equal(t, tc.wantAction, gotAction)
+		})
+	}
+}
+
+func TestSkillsDirsActionPrintsEffectiveAbsolutePathsAndBypassesBubbleTea(t *testing.T) {
+	saveRunOneTurn := runOneTurnProgram
+	saveShowSkillsDirs := showSkillsDirs
+	t.Cleanup(func() {
+		runOneTurnProgram = saveRunOneTurn
+		showSkillsDirs = saveShowSkillsDirs
+	})
+
+	root := t.TempDir()
+	t.Chdir(root)
+	called := false
+	runOneTurnProgram = func(context.Context, []tea.ProgramOption) (*Mods, error) {
+		called = true
+		return nil, nil
+	}
+	showSkillsDirs = true
+
+	withTestConfig(t, Config{
+		PersistentConfig: PersistentConfig{
+			SkillsDirs: []string{"relative-skills", filepath.Join(root, "missing-skills")},
+		},
+		SettingsExisted: true,
+	}, func() {
+		output := captureStdout(t, func() {
+			require.NoError(t, rootCmd.RunE(rootCmd, nil))
+		})
+		require.Equal(t,
+			filepath.Join(root, "relative-skills")+"\n"+
+				filepath.Join(root, "missing-skills")+"\n",
+			output,
+		)
+	})
+	require.False(t, called)
+}
+
 func TestReadmeDescribesPromptWorkflow(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
 	require.NoError(t, err)

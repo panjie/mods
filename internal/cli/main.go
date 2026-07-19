@@ -69,6 +69,7 @@ var (
 	db     *DB
 
 	runOneTurnProgram = runOneTurn
+	showSkillsDirs    bool
 
 	rootCmd = &cobra.Command{
 		Use:           "mods",
@@ -306,7 +307,9 @@ func execute() {
 		rootCmd.InitDefaultCompletionCmd()
 	}
 
-	rootCmd.SetArgs(os.Args[1:])
+	args, showDirs := extractSkillsDirsAction(os.Args[1:])
+	showSkillsDirs = showDirs
+	rootCmd.SetArgs(args)
 
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
@@ -605,6 +608,7 @@ func isNoArgs() bool {
 		!config.ListSkills &&
 		!config.MCPList &&
 		!config.MCPListTools &&
+		!showSkillsDirs &&
 		!config.Dirs &&
 		!config.Settings &&
 		!config.ConfigSetup &&

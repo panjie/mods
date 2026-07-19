@@ -93,7 +93,8 @@ Skills normally live in the user agent skills directory. Portable mode also
 loads the executable's `skills` directory. Additional directories can be
 provided through the repeated skills-directory option, its config key, or its
 `MODS_*` environment form using the OS path-list separator. Later directories
-override earlier same-name skills.
+override earlier same-name skills. Passing the skills-directory option without
+a value prints the effective directories, one absolute path per line.
 
 Mods loads and searches only installed skills; it does not discover remote or
 installable skills, or install them.

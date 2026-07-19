@@ -78,6 +78,19 @@ func TestShouldAutoConfigSkipsExplicitConfig(t *testing.T) {
 	})
 }
 
+func TestShouldAutoConfigSkipsSkillsDirsAction(t *testing.T) {
+	saveShowSkillsDirs := showSkillsDirs
+	showSkillsDirs = true
+	t.Cleanup(func() { showSkillsDirs = saveShowSkillsDirs })
+
+	withFirstRunTest(t, Config{SettingsExisted: false}, func() {
+		should, err := shouldAutoConfig([]string{"mods", "--skills-dirs"})
+
+		require.NoError(t, err)
+		require.False(t, should)
+	})
+}
+
 func TestRunAutoConfigRunsWizardAndAsksForRerun(t *testing.T) {
 	saveConfig := config
 	saveRunConfigWizard := runConfigWizard

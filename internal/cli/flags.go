@@ -1,7 +1,11 @@
 // Package cli flag registration helpers and shared flag-name constants.
 package cli
 
-import "github.com/spf13/pflag"
+import (
+	"strings"
+
+	"github.com/spf13/pflag"
+)
 
 const (
 	flagTierAnnotation     = "mods/tier"
@@ -172,6 +176,28 @@ func regStrArr(flags *pflag.FlagSet, p *[]string, name, short string, def []stri
 		return
 	}
 	flags.StringArrayVar(p, name, def, flagDesc(name))
+}
+
+// extractSkillsDirsAction keeps the existing "--skills-dirs DIR" spelling
+// while allowing a genuinely valueless "--skills-dirs" to act as a read-only
+// listing command. pflag's NoOptDefVal cannot be used here because it would
+// stop consuming the space-separated DIR form and turn DIR into prompt input.
+func extractSkillsDirsAction(args []string) ([]string, bool) {
+	out := make([]string, 0, len(args))
+	show := false
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--skills-dirs" {
+			out = append(out, args[i])
+			continue
+		}
+		if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			out = append(out, args[i], args[i+1])
+			i++
+			continue
+		}
+		show = true
+	}
+	return out, show
 }
 
 func markAdvanced(flags *pflag.FlagSet, names ...string) {

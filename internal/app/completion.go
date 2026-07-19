@@ -274,8 +274,14 @@ func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []pr
 	if !debug.Enabled() {
 		return
 	}
+	providerMessages := proto.NormalizeSystemMessages(*messages)
 	debug.Printf("API request -> model=%s, api=%s", mod.Name, mod.API)
-	debug.Printf("Request: %d message(s), %d tool definition(s)", len(*messages), len(tools))
+	debug.Printf(
+		"Request: %d provider message(s) from %d internal message fragment(s), %d tool definition(s)",
+		len(providerMessages),
+		len(*messages),
+		len(tools),
+	)
 	tempStr := "unset"
 	if request.Temperature != nil {
 		tempStr = fmt.Sprintf("%.2f", *request.Temperature)
@@ -289,7 +295,7 @@ func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []pr
 	if cfg.HTTPProxy != "" {
 		debug.Printf("HTTP proxy: %s", cfg.HTTPProxy)
 	}
-	if b, err := json.Marshal(request.Messages); err == nil {
+	if b, err := json.Marshal(providerMessages); err == nil {
 		toolBody, _ := json.Marshal(request.Tools)
 		debug.Printf("Request: ~%dKB body (%dKB messages + %dKB tools)",
 			(len(b)+len(toolBody))/1024, len(b)/1024, len(toolBody)/1024)

@@ -52,26 +52,17 @@ const (
 
 	ApprovedPlanTemplate = "The user has approved the following plan for execution:\n\n{approved_plan}\n\nFollow this approved plan during execution. If new information requires changing it, explain the reason before deviating."
 
-	Plan = `You are in PLAN mode. Before executing anything, you must first create a detailed, step-by-step plan for the user to review.
+	Plan = `You are in PLAN mode. Create a detailed, implementation-ready plan for the user to review before any execution.
 
-CRITICAL — PLANNING PHASE ONLY. You are NOT authorized to:
+Planning is read-only. Do not create, modify, move, or delete files; install dependencies; write or run generated/self-written code; redirect output to files; or execute commands that produce the task's final result. Use only available read-only tools for targeted investigation. Any implementation action belongs in the plan, not in current tool calls.
 
-- Write any scripts or programs (Python, shell, JS, etc.) — even "temporary" or "experimental" ones
-- Create or modify any files anywhere (workspace, /tmp, or safe workspace)
-- Run any self-written code or script
-- Execute commands that produce the task's final output
+Inspect only facts directly relevant to making the plan accurate. Prefer a few targeted reads (about 3 to 5). Do not probe hardware, OS or shell details, installed tool versions, or unrelated environment state unless the task depends on them. If uncertainty remains after reasonable inspection, state the assumption in the plan instead of continuing to probe.
 
-Investigation means READING, not BUILDING. If you catch yourself writing a script, STOP — that script belongs in the plan, not in your current tool calls.
-
-Valid investigation means read-only inspection. Use platform-appropriate read-only commands for listing directories, reading files, searching text, and checking metadata; do not redirect output to files. Built-in read-only tools such as fs_list_dir, fs_read_file, fs_stat, fs_search, and fs_largest are allowed.
-
-When you have enough context, output the plan IMMEDIATELY. Do not over-investigate. Do not include investigation notes, tool call results, or running commentary — just the plan itself.
-
-Investigate only as much as needed to write an accurate plan. Before running any command, confirm it is directly relevant to the user's request; if it is not, skip it. Do NOT probe hardware (CPU, RAM, GPU), OS version, shell environment, installed tool versions, or system specs unless the task explicitly depends on them — that information is almost never needed. Aim for a few targeted reads (around 3 to 5); if you still cannot decide after that, state your assumptions explicitly in the plan and proceed, rather than continuing to probe. The goal is a sound plan, not exhaustive investigation.
+Once enough context is available, output the plan immediately. Return only the plan: no investigation notes, tool results, or running commentary.
 
 ## Output Format
 
-### Single approach — use this heading and structure:
+For one approach, use exactly:
 
 ## Plan
 - **Approach**: one-line summary of the strategy
@@ -80,7 +71,7 @@ Investigate only as much as needed to write an accurate plan. Before running any
 - **Commands**: shell commands that will be run, one per line
 - **Risks**: potential issues, edge cases, or limitations
 
-### Multiple approaches — use this structure for each:
+For materially different alternatives, use:
 
 ## Proposal 1: Brief Title
 - **Approach**: ...
@@ -96,11 +87,9 @@ Investigate only as much as needed to write an accurate plan. Before running any
 - **Commands**: ...
 - **Risks**: ...
 
-Each proposal must be self-contained and independently actionable.
+Include every field; write None when no files or commands apply. Each proposal must be self-contained and independently actionable. Proposal headings must start with exactly "## Proposal N: " at heading level 2; do not nest them under another heading.
 
-Each proposal heading MUST begin with exactly two hash characters followed by a space (for example, "## Proposal 1: Title"). Do not use three or more hash characters and do not nest proposals under another heading; the proposal parser recognizes proposals only at this exact heading level.
-
-The user will review your plan and approve or deny it before execution begins.`
+The user will approve, revise, or reject the plan before execution.`
 
 	ShellClassifier = `Analyze this shell command for review.
 Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.

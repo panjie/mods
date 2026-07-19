@@ -80,7 +80,7 @@ func (m *Mods) injectToolSelectionPrompt(registry *toolregistry.Registry) error 
 			insertAt++
 		}
 	}
-	msg := proto.Message{Role: proto.RoleSystem, Content: content}
+	msg := structuredSystemMessage(content, proto.SystemSectionExecutionTools)
 	m.messages = append(m.messages, proto.Message{})
 	copy(m.messages[insertAt+1:], m.messages[insertAt:])
 	m.messages[insertAt] = msg

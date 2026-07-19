@@ -54,3 +54,22 @@ func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024,
 		"default identity and tool-selection prompts must stay within 5 KiB")
 }
+
+func TestDefaultPlanPromptStaysCompactAndComplete(t *testing.T) {
+	require.GreaterOrEqual(t, len(Plan), 1600)
+	require.LessOrEqual(t, len(Plan), 2000)
+	for _, required := range []string{
+		"Planning is read-only",
+		"about 3 to 5",
+		"## Plan",
+		"## Proposal 1:",
+		"**Approach**",
+		"**Steps**",
+		"**Files**",
+		"**Commands**",
+		"**Risks**",
+		"write None",
+	} {
+		require.Contains(t, Plan, required)
+	}
+}

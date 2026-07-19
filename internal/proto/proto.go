@@ -115,6 +115,10 @@ type Message struct {
 	// contextClass is request-local budget metadata. Keeping it unexported
 	// intentionally excludes it from JSON and gob session persistence.
 	contextClass ContextClass
+	// systemSection is request-local prompt precedence metadata. Provider
+	// adapters use it to render one structured system block; it is excluded
+	// from JSON and gob session persistence.
+	systemSection SystemSection
 }
 
 // ContextClass identifies request-local message roles used by the unified
@@ -135,6 +139,13 @@ func (m *Message) SetContextClass(class ContextClass) { m.contextClass = class }
 
 // ContextClass returns request-local budget metadata for a message.
 func (m Message) ContextClass() ContextClass { return m.contextClass }
+
+// SetSystemSection assigns this message to a structured precedence section.
+// The renderer consults it only when Role is system.
+func (m *Message) SetSystemSection(section SystemSection) { m.systemSection = section }
+
+// SystemSection returns the request-local structured system section.
+func (m Message) SystemSection() SystemSection { return m.systemSection }
 
 // ToolCall is a tool call in a message.
 type ToolCall struct {

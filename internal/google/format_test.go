@@ -83,6 +83,23 @@ func TestFromProtoMessagesIncludesAssistantWithModelRole(t *testing.T) {
 // surface as Gemini's top-level systemInstruction rather than leaking into
 // contents.
 func TestFromProtoMessagesPromotesSystemToInstruction(t *testing.T) {
+	t.Run("structured systems merge into one part", func(t *testing.T) {
+		identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
+		identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
+		format := proto.Message{Role: proto.RoleSystem, Content: "format"}
+		format.SetSystemSection(proto.SystemSectionOutputFormat)
+		sys, contents := fromProtoMessages([]proto.Message{
+			format,
+			{Role: proto.RoleUser, Content: "hi"},
+			identity,
+		})
+		require.NotNil(t, sys)
+		require.Len(t, sys.Parts, 1)
+		require.Contains(t, sys.Parts[0].Text, "identity")
+		require.Contains(t, sys.Parts[0].Text, "format")
+		require.Len(t, contents, 1)
+	})
+
 	t.Run("single system", func(t *testing.T) {
 		sys, contents := fromProtoMessages([]proto.Message{
 			{Role: proto.RoleSystem, Content: "be concise"},
@@ -432,8 +449,16 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	defer closeServer()
 
 	budgetCalls := 0
+	identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
+	identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
+	format := proto.Message{Role: proto.RoleSystem, Content: "format"}
+	format.SetSystemSection(proto.SystemSectionOutputFormat)
 	st := client.Request(context.Background(), proto.Request{
-		Messages: []proto.Message{{Role: proto.RoleUser, Content: "read README"}},
+		Messages: []proto.Message{
+			format,
+			{Role: proto.RoleUser, Content: "read README"},
+			identity,
+		},
 		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
 			budgetCalls++
 			return messages, nil
@@ -457,6 +482,12 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	require.NoError(t, statuses[0].Err)
 	require.Equal(t, 2, budgetCalls, "budgeter must run for initial and tool follow-up requests")
 	require.Len(t, *captured, 2)
+	for _, body := range *captured {
+		var request map[string]any
+		require.NoError(t, json.Unmarshal(body, &request))
+		system := request["systemInstruction"].(map[string]any)
+		require.Len(t, system["parts"].([]any), 1)
+	}
 
 	var followup map[string]any
 	require.NoError(t, json.Unmarshal((*captured)[1], &followup))

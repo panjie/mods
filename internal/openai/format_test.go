@@ -4,7 +4,26 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/stretchr/testify/require"
 )
+
+func TestFromProtoMessagesMergesStructuredSystemPrompt(t *testing.T) {
+	identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
+	identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
+	format := proto.Message{Role: proto.RoleSystem, Content: "format"}
+	format.SetSystemSection(proto.SystemSectionOutputFormat)
+
+	got := fromProtoMessages([]proto.Message{
+		format,
+		{Role: proto.RoleUser, Content: "hello"},
+		identity,
+	})
+	require.Len(t, got, 2)
+	require.Equal(t, proto.RoleSystem, msgRole(got[0]))
+	require.Contains(t, toProtoMessage(got[0]).Content, "identity")
+	require.Contains(t, toProtoMessage(got[0]).Content, "format")
+	require.Equal(t, proto.RoleUser, msgRole(got[1]))
+}
 
 func TestStripSchema(t *testing.T) {
 	t.Run("nil returns nil", func(t *testing.T) {

@@ -5,7 +5,14 @@ import (
 	"strings"
 
 	"github.com/panjie/mods/internal/prompts"
+	"github.com/panjie/mods/internal/proto"
 )
+
+func structuredSystemMessage(content string, section proto.SystemSection) proto.Message {
+	message := proto.Message{Role: proto.RoleSystem, Content: content}
+	message.SetSystemSection(section)
+	return message
+}
 
 func (m *Mods) resolvePrompt(key, fallback string) (string, error) {
 	configured := ""

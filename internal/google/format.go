@@ -28,6 +28,7 @@ const (
 //   - proto.RoleTool becomes a user content with functionResponse parts, which
 //     is the generateContent wire shape for returning client-side tool results.
 func fromProtoMessages(input []proto.Message) (*Content, []Content) {
+	input = proto.NormalizeSystemMessages(input)
 	var sysParts []Part
 	contents := make([]Content, 0, len(input))
 

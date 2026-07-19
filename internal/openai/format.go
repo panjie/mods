@@ -30,6 +30,7 @@ func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 }
 
 func fromProtoMessages(input []proto.Message) []openai.ChatCompletionMessageParamUnion {
+	input = proto.NormalizeSystemMessages(input)
 	var messages []openai.ChatCompletionMessageParamUnion
 	for _, msg := range input {
 		switch msg.Role {

@@ -272,6 +272,7 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 		mods.injectSelfHelpFallback()
 		require.Len(t, mods.messages, 2)
 		require.Equal(t, proto.RoleSystem, mods.messages[0].Role)
+		require.Equal(t, proto.SystemSectionExecutionSelfHelp, mods.messages[0].SystemSection())
 		require.Contains(t, mods.messages[0].Content, "Active config path: /home/test/.config/mods/mods.yml")
 		require.Contains(t, mods.messages[0].Content, "Direct config editing is unavailable")
 		require.Contains(t, mods.messages[0].Content, "## Config")

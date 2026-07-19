@@ -246,10 +246,10 @@ func (m *Mods) injectApprovedPlan() {
 	if m.planContent == "" {
 		return
 	}
-	m.messages = append(m.messages, proto.Message{
-		Role:    proto.RoleSystem,
-		Content: formatApprovedPlanPrompt(m.planContent),
-	})
+	m.messages = append(m.messages, structuredSystemMessage(
+		formatApprovedPlanPrompt(m.planContent),
+		proto.SystemSectionProjectApprovedPlan,
+	))
 	m.planContent = ""
 }
 

@@ -520,7 +520,8 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 
 	systemMessages := systemContents(m.messages)
 	require.Contains(t, systemMessages, planSystemPrompt)
-	require.Contains(t, planSystemPrompt, "Use platform-appropriate read-only commands")
+	require.Contains(t, planSystemPrompt, "Planning is read-only")
+	require.Contains(t, planSystemPrompt, "Use only available read-only tools")
 	for _, msg := range systemMessages {
 		require.NotContains(t, msg, "Safe temporary workspace:")
 	}
@@ -640,6 +641,7 @@ func TestPlanHistoryCarriedIntoExecution(t *testing.T) {
 	// The approved-plan instruction lands last (after the proposed plan).
 	last := m.messages[len(m.messages)-1]
 	require.Equal(t, proto.RoleSystem, last.Role)
+	require.Equal(t, proto.SystemSectionProjectApprovedPlan, last.SystemSection())
 	require.Contains(t, last.Content, "approved")
 	require.Empty(t, m.planHistory)
 }

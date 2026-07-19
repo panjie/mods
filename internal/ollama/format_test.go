@@ -79,6 +79,24 @@ func TestFromProtoMessage(t *testing.T) {
 	})
 }
 
+func TestFromProtoMessagesMergesStructuredSystemPrompt(t *testing.T) {
+	identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
+	identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
+	format := proto.Message{Role: proto.RoleSystem, Content: "format"}
+	format.SetSystemSection(proto.SystemSectionOutputFormat)
+
+	got := fromProtoMessages([]proto.Message{
+		format,
+		{Role: proto.RoleUser, Content: "hello"},
+		identity,
+	})
+	require.Len(t, got, 2)
+	require.Equal(t, proto.RoleSystem, got[0].Role)
+	require.Contains(t, got[0].Content, "identity")
+	require.Contains(t, got[0].Content, "format")
+	require.Equal(t, proto.RoleUser, got[1].Role)
+}
+
 func TestToProtoMessage(t *testing.T) {
 	t.Run("basic message", func(t *testing.T) {
 		input := api.Message{

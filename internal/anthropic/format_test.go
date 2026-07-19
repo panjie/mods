@@ -90,6 +90,22 @@ func TestStripSchema(t *testing.T) {
 }
 
 func TestFromProtoMessages(t *testing.T) {
+	t.Run("structured system messages merge into one block", func(t *testing.T) {
+		identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
+		identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
+		format := proto.Message{Role: proto.RoleSystem, Content: "format"}
+		format.SetSystemSection(proto.SystemSectionOutputFormat)
+		system, messages := fromProtoMessages([]proto.Message{
+			format,
+			{Role: proto.RoleUser, Content: "hello"},
+			identity,
+		})
+		require.Len(t, system, 1)
+		require.Contains(t, system[0].Text, "identity")
+		require.Contains(t, system[0].Text, "format")
+		require.Len(t, messages, 1)
+	})
+
 	t.Run("system messages", func(t *testing.T) {
 		input := []proto.Message{
 			{Role: proto.RoleSystem, Content: "You are helpful."},

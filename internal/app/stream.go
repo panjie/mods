@@ -47,41 +47,35 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 	}
 	sysParts = append(sysParts, fmt.Sprintf("date=%s", time.Now().Format("2006-01-02")))
 	sysInfo := "System info: " + strings.Join(sysParts, ", ")
-	m.messages = append(m.messages, proto.Message{
-		Role:    proto.RoleSystem,
-		Content: sysInfo,
-	})
+	m.messages = append(m.messages, structuredSystemMessage(sysInfo, proto.SystemSectionExecutionContext))
 	if !cfg.Minimal {
 		identityPrompt, err := m.resolvePrompt(prompts.KeyIdentity, modsIdentityPrompt)
 		if err != nil {
 			return err
 		}
-		m.messages = append(m.messages, proto.Message{
-			Role:    proto.RoleSystem,
-			Content: identityPrompt,
-		})
+		m.messages = append(m.messages, structuredSystemMessage(identityPrompt, proto.SystemSectionRuntimeIdentity))
 		m.toolSelectionInsertAt = len(m.messages)
 		if !cfg.Plan {
 			safeDir := os.TempDir()
-			m.messages = append(m.messages, proto.Message{
-				Role:    proto.RoleSystem,
-				Content: formatSafeWorkspacePrompt(safeDir),
-			})
+			m.messages = append(m.messages, structuredSystemMessage(
+				formatSafeWorkspacePrompt(safeDir),
+				proto.SystemSectionExecutionWorkspace,
+			))
 		}
 		if instructions := loadProjectInstructions(cfg); instructions != "" {
-			msg := proto.Message{
-				Role:    proto.RoleSystem,
-				Content: "Project instructions (AGENTS.md):\n\n" + instructions,
-			}
+			msg := structuredSystemMessage(
+				"Project instructions (AGENTS.md):\n\n"+instructions,
+				proto.SystemSectionProjectInstructions,
+			)
 			msg.SetContextClass(proto.ContextClassProjectInstructions)
 			m.messages = append(m.messages, msg)
 		}
 		if len(m.skillCatalog) > 0 {
 			debug.Printf("Skills: injected catalog (%d skill(s)) into system prompt", len(m.skillCatalog))
-			msg := proto.Message{
-				Role:    proto.RoleSystem,
-				Content: skills.CatalogPrompt(m.skillCatalog),
-			}
+			msg := structuredSystemMessage(
+				skills.CatalogPrompt(m.skillCatalog),
+				proto.SystemSectionExecutionSkills,
+			)
 			msg.SetContextClass(proto.ContextClassSkillCatalog)
 			m.messages = append(m.messages, msg)
 		}
@@ -102,10 +96,7 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 					ReasonText: "Could not use role",
 				}
 			}
-			m.messages = append(m.messages, proto.Message{
-				Role:    proto.RoleSystem,
-				Content: content,
-			})
+			m.messages = append(m.messages, structuredSystemMessage(content, proto.SystemSectionUserRole))
 		}
 	}
 
@@ -115,18 +106,15 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 			txt = fallbackFormatText(cfg.Format)
 		}
 		if txt != "" {
-			m.messages = append(m.messages, proto.Message{
-				Role:    proto.RoleSystem,
-				Content: txt,
-			})
+			m.messages = append(m.messages, structuredSystemMessage(txt, proto.SystemSectionOutputFormat))
 		}
 	}
 
 	if cfg.Minimal {
-		m.messages = append(m.messages, proto.Message{
-			Role:    proto.RoleSystem,
-			Content: MinimalSystemPrompt,
-		})
+		m.messages = append(m.messages, structuredSystemMessage(
+			MinimalSystemPrompt,
+			proto.SystemSectionOutputFormat,
+		))
 	}
 
 	if prefix := cfg.Prefix; prefix != "" {

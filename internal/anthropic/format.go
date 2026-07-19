@@ -51,6 +51,7 @@ func schemaRequired(schema map[string]any) []string {
 }
 
 func fromProtoMessages(input []proto.Message) (system []anthropic.TextBlockParam, messages []anthropic.MessageParam) {
+	input = proto.NormalizeSystemMessages(input)
 	for _, msg := range input {
 		switch msg.Role {
 		case proto.RoleSystem:

@@ -134,7 +134,7 @@ func (m *Mods) injectSelfHelpFallback() {
 	for insertAt < len(m.messages) && m.messages[insertAt].Role == proto.RoleSystem {
 		insertAt++
 	}
-	msg := proto.Message{Role: proto.RoleSystem, Content: content}
+	msg := structuredSystemMessage(content, proto.SystemSectionExecutionSelfHelp)
 	m.messages = append(m.messages, proto.Message{})
 	copy(m.messages[insertAt+1:], m.messages[insertAt:])
 	m.messages[insertAt] = msg

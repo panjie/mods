@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -200,6 +201,29 @@ func TestContextBudgetCountsOpaqueThoughtSignatures(t *testing.T) {
 	withSize, err := estimateInputBytes(with, nil)
 	require.NoError(t, err)
 	require.Greater(t, withSize, withoutSize+250)
+}
+
+func TestContextBudgetEstimatesStructuredSystemWireShape(t *testing.T) {
+	identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
+	identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
+	format := proto.Message{Role: proto.RoleSystem, Content: "format"}
+	format.SetSystemSection(proto.SystemSectionOutputFormat)
+	current := classifiedMessage(proto.RoleUser, "hello", proto.ContextClassCurrentUser)
+	messages := []proto.Message{format, current, identity}
+
+	rawMessages, err := json.Marshal(messages)
+	require.NoError(t, err)
+	rawTools, err := json.Marshal([]proto.ToolSpec(nil))
+	require.NoError(t, err)
+	estimated, err := estimateInputBytes(messages, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, len(rawMessages)+len(rawTools), estimated)
+
+	normalized := proto.NormalizeSystemMessages(messages)
+	require.Len(t, normalized, 2)
+	normalizedMessages, err := json.Marshal(normalized)
+	require.NoError(t, err)
+	require.Equal(t, len(normalizedMessages)+len(rawTools), estimated)
 }
 
 func toolCallMessage(id, name string) proto.Message {

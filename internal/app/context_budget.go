@@ -310,7 +310,8 @@ func (b *contextBudgeter) tooLargeError() error {
 }
 
 func estimateInputBytes(messages []proto.Message, tools []proto.ToolSpec) (int, error) {
-	messageJSON, err := json.Marshal(messages)
+	normalized := proto.NormalizeSystemMessages(messages)
+	messageJSON, err := json.Marshal(normalized)
 	if err != nil {
 		return 0, fmt.Errorf("estimate messages: %w", err)
 	}
@@ -319,7 +320,7 @@ func estimateInputBytes(messages []proto.Message, tools []proto.ToolSpec) (int, 
 		return 0, fmt.Errorf("estimate tool schemas: %w", err)
 	}
 	signatureBytes := 0
-	for _, message := range messages {
+	for _, message := range normalized {
 		signatureBytes += thoughtSignatureBytes(message)
 	}
 	return len(messageJSON) + len(toolJSON) + signatureBytes, nil

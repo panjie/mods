@@ -28,6 +28,7 @@ func fromToolSpecs(specs []proto.ToolSpec) []api.Tool {
 }
 
 func fromProtoMessages(input []proto.Message) []api.Message {
+	input = proto.NormalizeSystemMessages(input)
 	messages := make([]api.Message, 0, len(input))
 	for _, msg := range input {
 		messages = append(messages, fromProtoMessage(msg))

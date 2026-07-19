@@ -133,10 +133,7 @@ func (m *Mods) setupPlanContext(content string, mod Model) error {
 	if err != nil {
 		return err
 	}
-	planMsg := proto.Message{
-		Role:    proto.RoleSystem,
-		Content: planPrompt,
-	}
+	planMsg := structuredSystemMessage(planPrompt, proto.SystemSectionRuntimePlan)
 	if len(m.messages) > 0 && m.messages[0].Role == proto.RoleSystem {
 		m.messages = append(
 			m.messages[:1],

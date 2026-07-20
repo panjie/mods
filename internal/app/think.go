@@ -15,6 +15,10 @@ const defaultThinkingBudget = 8192
 var (
 	gpt5OriginalReasoningModelRe  = regexp.MustCompile(`^gpt-5(?:-(?:mini|nano))?(?:-\d{4}-\d{2}-\d{2})?$`)
 	gpt5VersionedReasoningModelRe = regexp.MustCompile(`^gpt-5\.[1-9][0-9]*(?:-|$)`)
+	anthropicAlwaysAdaptiveRe     = regexp.MustCompile(`^claude-(?:(?:fable|mythos)-5|mythos-preview)(?:-|$)`)
+	anthropicAdaptiveRe           = regexp.MustCompile(`^claude-(?:opus-4-(?:6|7|8)|sonnet-(?:4-6|5))(?:-|$)`)
+	anthropicManualThinkingRe     = regexp.MustCompile(`^claude-(?:sonnet-3-7|(?:sonnet|opus)-4(?:-(?:1|5))?|haiku-4-5)(?:-\d{8})?$`)
+	anthropicSonnet5Re            = regexp.MustCompile(`^claude-sonnet-5(?:-|$)`)
 )
 
 func (m *Mods) resolveThink(
@@ -52,19 +56,94 @@ func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config,
 		debug.Printf("Think: google thinking_budget=0 (thinking off)")
 		return false
 	case "anthropic":
-		if requested {
-			accfg.ThinkingBudget = resolvedThinkingBudget(mod, accfg.ThinkingBudget)
-			debug.Printf("Think: anthropic thinking_budget=%d", accfg.ThinkingBudget)
-			return true
-		}
-		// Anthropic defaults to thinking off; no request field is needed.
-		return false
+		return applyAnthropicThinking(mod, accfg, requested)
 	case "ollama":
 		debug.Printf("Think: %s does not support thinking, skipped", mod.API)
 		return false
 	default:
 		return applyOpenAICompatibleThinking(mod, ccfg, requested)
 	}
+}
+
+func applyAnthropicThinking(mod Model, accfg *anthropic.Config, requested bool) bool {
+	name := strings.ToLower(strings.TrimSpace(mod.Name))
+	accfg.ThinkingType = ""
+	accfg.ThinkingActive = false
+	accfg.ReasoningEffort = ""
+
+	if !requested {
+		if anthropicSonnet5Re.MatchString(name) {
+			accfg.ThinkingType = "disabled"
+			debug.Printf("Think: anthropic thinking.type=disabled (thinking off for %s)", mod.Name)
+		} else if anthropicAlwaysAdaptiveRe.MatchString(name) {
+			debug.Printf("Think: anthropic thinking field omitted (model-managed and cannot be disabled for %s)", mod.Name)
+		} else {
+			debug.Printf("Think: anthropic thinking field omitted (thinking off)")
+		}
+		return false
+	}
+
+	if mod.ThinkingType != "" {
+		accfg.ThinkingType = strings.ToLower(strings.TrimSpace(mod.ThinkingType))
+		switch accfg.ThinkingType {
+		case "enabled":
+			accfg.ThinkingBudget = resolvedThinkingBudget(mod, accfg.ThinkingBudget)
+			accfg.ThinkingActive = true
+			debug.Printf("Think: anthropic thinking.type=enabled, budget_tokens=%d (explicit)", accfg.ThinkingBudget)
+			return true
+		case "adaptive":
+			accfg.ThinkingActive = true
+			accfg.ReasoningEffort = mod.ReasoningEffort
+			debugAnthropicEffort(accfg.ReasoningEffort)
+			debug.Printf("Think: anthropic thinking.type=adaptive (explicit)")
+			return true
+		case "disabled":
+			debug.Printf("Think: anthropic thinking.type=disabled (explicit)")
+			return false
+		default:
+			// Preserve the explicit value so the Anthropic adapter can return a
+			// clear configuration error before making an HTTP request.
+			debug.Printf("Think: anthropic thinking.type=%s (explicit)", accfg.ThinkingType)
+			return false
+		}
+	}
+
+	switch {
+	case anthropicAlwaysAdaptiveRe.MatchString(name):
+		accfg.ThinkingActive = true
+		accfg.ReasoningEffort = mod.ReasoningEffort
+		debug.Printf("Think: anthropic thinking field omitted (model-managed adaptive for %s)", mod.Name)
+		debugAnthropicEffort(accfg.ReasoningEffort)
+		return true
+	case anthropicAdaptiveRe.MatchString(name):
+		accfg.ThinkingType = "adaptive"
+		accfg.ThinkingActive = true
+		accfg.ReasoningEffort = mod.ReasoningEffort
+		debug.Printf("Think: anthropic thinking.type=adaptive (automatic for %s)", mod.Name)
+		debugAnthropicEffort(accfg.ReasoningEffort)
+		return true
+	case anthropicManualThinkingRe.MatchString(name):
+		accfg.ThinkingType = "enabled"
+		accfg.ThinkingBudget = resolvedThinkingBudget(mod, accfg.ThinkingBudget)
+		accfg.ThinkingActive = true
+		debug.Printf(
+			"Think: anthropic thinking.type=enabled, budget_tokens=%d (automatic for %s)",
+			accfg.ThinkingBudget,
+			mod.Name,
+		)
+		return true
+	default:
+		debug.Printf("Think: anthropic thinking field omitted (capability unknown for %s)", mod.Name)
+		return false
+	}
+}
+
+func debugAnthropicEffort(effort string) {
+	if effort == "" {
+		debug.Printf("Think: anthropic output_config.effort omitted (provider default)")
+		return
+	}
+	debug.Printf("Think: anthropic output_config.effort=%s", effort)
 }
 
 func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, requested bool) bool {

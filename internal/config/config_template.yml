@@ -199,6 +199,23 @@ apis:
     base-url: https://api.anthropic.com/v1
     api-key:
     api-key-env: ANTHROPIC_API_KEY
+    # Anthropic always uses the Messages API. With -t, mods automatically
+    # selects adaptive thinking for current Claude models and manual
+    # budget_tokens for older extended-thinking models. Complete thinking,
+    # signature, redacted_thinking, and tool_use blocks are kept in the local
+    # session and replayed unchanged when tools continue a response.
+    #
+    # models:
+    #   claude-opus-4-8:
+    #     # Optional override. Recognized models do not normally need it.
+    #     thinking-type: adaptive
+    #     # Adaptive thinking maps this to output_config.effort. When omitted,
+    #     Anthropic's model default is used.
+    #     reasoning-effort: high
+    #   claude-sonnet-4-5-20250929:
+    #     thinking-type: enabled
+    #     # Manual thinking requires at least 1024 and less than max-tokens.
+    #     thinking-budget: 8192
 
   azure:
     base-url: https://YOUR_RESOURCE_NAME.openai.azure.com
@@ -272,8 +289,9 @@ apis:
   #       # the provider. All are optional with sensible defaults.
   #
   #       # thinking-type: override the provider default used by -t / --think.
-  #       # Built-in providers usually do not need this. Custom providers can
-  #       # set it to send thinking.type. Common values: enabled, adaptive.
+  #       # Built-in providers usually do not need this. Custom OpenAI-compatible
+  #       # providers commonly use enabled or adaptive; native Anthropic
+  #       # Messages endpoints support adaptive, enabled, or disabled.
   #       thinking-type: enabled
   #
   #       # extra-params: arbitrary fields merged into the request body.
@@ -293,8 +311,9 @@ apis:
   #       # Default: "think" renders as <think>...</think>. Only parsed when -t is on.
   #       # think-tag: reasoning
   #
-  #       # reasoning-effort: target reasoning_effort value for -t.
-  #       # Default "medium". Options: low, medium, high.
+  #       # reasoning-effort: target reasoning effort for -t. OpenAI defaults
+  #       # to medium. Anthropic adaptive thinking maps this to
+  #       # output_config.effort and omits it when not configured.
   #       # reasoning-effort: high
   #
   #       # reasoning-effort-off: override the reasoning_effort value sent
@@ -319,6 +338,10 @@ apis:
   #   models:
   #     claude-sonnet-4:
   #       aliases: ["acme-sonnet"]
+  #       # Opaque model names are not assumed to support thinking. Set this
+  #       # explicitly when the compatible endpoint documents support.
+  #       thinking-type: enabled
+  #       thinking-budget: 8192
   #
   # api-type also works for the other native adapters: ollama, google,
   # azure, azure-ad. Omit it to use the OpenAI-compatible

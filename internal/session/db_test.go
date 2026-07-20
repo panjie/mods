@@ -256,6 +256,9 @@ func TestSessionProviderDataRoundTrip(t *testing.T) {
 			"openai.responses.output": json.RawMessage(
 				`[{"type":"reasoning","encrypted_content":"opaque"}]`,
 			),
+			"anthropic.messages.content": json.RawMessage(
+				`[{"type":"thinking","thinking":"summary","signature":"opaque-signature"}]`,
+			),
 		},
 	}}
 

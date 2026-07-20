@@ -207,8 +207,8 @@ func TestContextBudgetCountsOpaqueProviderData(t *testing.T) {
 	without := []proto.Message{{Role: proto.RoleAssistant, Content: "answer"}}
 	with := []proto.Message{{Role: proto.RoleAssistant, Content: "answer"}}
 	with[0].ProviderData = map[string]json.RawMessage{
-		"openai.responses.output": json.RawMessage(
-			`[{"type":"reasoning","encrypted_content":"` + strings.Repeat("x", 300) + `"}]`,
+		"anthropic.messages.content": json.RawMessage(
+			`[{"type":"thinking","thinking":"summary","signature":"` + strings.Repeat("x", 300) + `"}]`,
 		),
 	}
 	withoutSize, err := estimateInputBytes(without, nil)

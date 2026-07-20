@@ -121,22 +121,153 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 		require.True(t, gccfg.ThinkingBudgetExplicit)
 	})
 
-	t.Run("Anthropic without thinking-type sends budget when requested", func(t *testing.T) {
+	t.Run("Anthropic manual model sends budget when requested", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(Model{API: "anthropic"}, nil, &accfg, nil, true)
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-sonnet-4-5-20250929"},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
 
 		require.True(t, active)
+		require.Equal(t, "enabled", accfg.ThinkingType)
 		require.Equal(t, defaultThinkingBudget, accfg.ThinkingBudget)
 	})
 
-	t.Run("Anthropic with thinking-type sends budget", func(t *testing.T) {
+	t.Run("Anthropic explicit enabled sends budget for opaque model", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(Model{API: "anthropic", ThinkingType: "enabled"}, nil, &accfg, nil, true)
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "deployment-name", ThinkingType: "enabled"},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
 
 		require.True(t, active)
+		require.Equal(t, "enabled", accfg.ThinkingType)
 		require.Equal(t, defaultThinkingBudget, accfg.ThinkingBudget)
+	})
+
+	t.Run("Anthropic adaptive model uses adaptive and explicit effort", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-opus-4-8", ReasoningEffort: "xhigh"},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
+
+		require.True(t, active)
+		require.Equal(t, "adaptive", accfg.ThinkingType)
+		require.Equal(t, "xhigh", accfg.ReasoningEffort)
+		require.Zero(t, accfg.ThinkingBudget)
+	})
+
+	t.Run("Anthropic adaptive model omits effort by default", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-sonnet-4-6"},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
+
+		require.True(t, active)
+		require.Equal(t, "adaptive", accfg.ThinkingType)
+		require.Empty(t, accfg.ReasoningEffort)
+	})
+
+	t.Run("Anthropic always-adaptive model leaves thinking model-managed", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-fable-5", ReasoningEffort: "high"},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
+
+		require.True(t, active)
+		require.Empty(t, accfg.ThinkingType)
+		require.True(t, accfg.ThinkingActive)
+		require.Equal(t, "high", accfg.ReasoningEffort)
+	})
+
+	t.Run("Anthropic Sonnet 5 is explicitly disabled without -t", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-sonnet-5"},
+			nil,
+			&accfg,
+			nil,
+			false,
+		)
+
+		require.False(t, active)
+		require.Equal(t, "disabled", accfg.ThinkingType)
+	})
+
+	t.Run("Anthropic always-adaptive model cannot be disabled", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-mythos-preview"},
+			nil,
+			&accfg,
+			nil,
+			false,
+		)
+
+		require.False(t, active)
+		require.Empty(t, accfg.ThinkingType)
+	})
+
+	t.Run("Anthropic opaque model omits thinking unless explicitly configured", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "deployment-name"},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
+
+		require.False(t, active)
+		require.Empty(t, accfg.ThinkingType)
+		require.Zero(t, accfg.ThinkingBudget)
+	})
+
+	t.Run("Anthropic explicit adaptive overrides opaque model inference", func(t *testing.T) {
+		accfg := anthropic.Config{}
+
+		active := applyThinkConfigs(
+			Model{
+				API:             "anthropic",
+				Name:            "deployment-name",
+				ThinkingType:    "adaptive",
+				ReasoningEffort: "medium",
+			},
+			nil,
+			&accfg,
+			nil,
+			true,
+		)
+
+		require.True(t, active)
+		require.Equal(t, "adaptive", accfg.ThinkingType)
+		require.Equal(t, "medium", accfg.ReasoningEffort)
 	})
 
 	t.Run("Qwen without thinking-type sends enable_thinking true when requested", func(t *testing.T) {
@@ -198,6 +329,48 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 		require.True(t, active)
 		require.Equal(t, "high", string(ccfg.ReasoningEffort))
 		require.Empty(t, ccfg.ExtraParams)
+	})
+}
+
+func TestAnthropicThinkingModelFamilies(t *testing.T) {
+	tests := []struct {
+		name, model, wantType string
+	}{
+		{"Sonnet 3.7 snapshot", "claude-sonnet-3-7-20250219", "enabled"},
+		{"original Sonnet 4 snapshot", "claude-sonnet-4-20250514", "enabled"},
+		{"Opus 4.1 snapshot", "claude-opus-4-1-20250805", "enabled"},
+		{"Opus 4.5 alias", "claude-opus-4-5", "enabled"},
+		{"Haiku 4.5 snapshot", "claude-haiku-4-5-20251001", "enabled"},
+		{"Opus 4.6", "claude-opus-4-6", "adaptive"},
+		{"Opus 4.7", "claude-opus-4-7", "adaptive"},
+		{"Sonnet 5", "claude-sonnet-5", "adaptive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := anthropic.Config{}
+			active := applyThinkConfigs(
+				Model{API: "anthropic", Name: tt.model},
+				nil,
+				&cfg,
+				nil,
+				true,
+			)
+			require.True(t, active)
+			require.Equal(t, tt.wantType, cfg.ThinkingType)
+		})
+	}
+
+	t.Run("known non-thinking Claude model stays off", func(t *testing.T) {
+		cfg := anthropic.Config{}
+		active := applyThinkConfigs(
+			Model{API: "anthropic", Name: "claude-3-5-haiku-20241022"},
+			nil,
+			&cfg,
+			nil,
+			true,
+		)
+		require.False(t, active)
+		require.Empty(t, cfg.ThinkingType)
 	})
 }
 

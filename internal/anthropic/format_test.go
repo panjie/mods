@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	SDK "github.com/anthropics/anthropic-sdk-go"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -95,11 +96,12 @@ func TestFromProtoMessages(t *testing.T) {
 		identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
 		format := proto.Message{Role: proto.RoleSystem, Content: "format"}
 		format.SetSystemSection(proto.SystemSectionOutputFormat)
-		system, messages := fromProtoMessages([]proto.Message{
+		system, messages, err := fromProtoMessages([]proto.Message{
 			format,
 			{Role: proto.RoleUser, Content: "hello"},
 			identity,
 		})
+		require.NoError(t, err)
 		require.Len(t, system, 1)
 		require.Contains(t, system[0].Text, "identity")
 		require.Contains(t, system[0].Text, "format")
@@ -111,7 +113,8 @@ func TestFromProtoMessages(t *testing.T) {
 			{Role: proto.RoleSystem, Content: "You are helpful."},
 			{Role: proto.RoleSystem, Content: "Be concise."},
 		}
-		system, messages := fromProtoMessages(input)
+		system, messages, err := fromProtoMessages(input)
+		require.NoError(t, err)
 		require.Len(t, system, 2)
 		require.Empty(t, messages)
 	})
@@ -120,7 +123,8 @@ func TestFromProtoMessages(t *testing.T) {
 		input := []proto.Message{
 			{Role: proto.RoleUser, Content: "Hello"},
 		}
-		system, messages := fromProtoMessages(input)
+		system, messages, err := fromProtoMessages(input)
+		require.NoError(t, err)
 		require.Empty(t, system)
 		require.Len(t, messages, 1)
 	})
@@ -131,7 +135,8 @@ func TestFromProtoMessages(t *testing.T) {
 				{Data: []byte{0x89, 0x50, 0x4E, 0x47}, MimeType: "image/png"},
 			}},
 		}
-		_, messages := fromProtoMessages(input)
+		_, messages, err := fromProtoMessages(input)
+		require.NoError(t, err)
 		require.Len(t, messages, 1)
 	})
 
@@ -139,36 +144,95 @@ func TestFromProtoMessages(t *testing.T) {
 		input := []proto.Message{
 			{Role: proto.RoleAssistant, Content: "Hi there!"},
 		}
-		_, messages := fromProtoMessages(input)
+		_, messages, err := fromProtoMessages(input)
+		require.NoError(t, err)
 		require.Len(t, messages, 1)
 	})
 
 	t.Run("tool message", func(t *testing.T) {
 		input := []proto.Message{
-			{Role: proto.RoleTool, Content: "result", ToolCalls: []proto.ToolCall{
+			{Role: proto.RoleTool, Content: "result one", ToolCalls: []proto.ToolCall{
 				{ID: "call_1", IsError: false},
 			}},
+			{Role: proto.RoleTool, Content: "result two", ToolCalls: []proto.ToolCall{
+				{ID: "call_2", IsError: true},
+			}},
 		}
-		_, messages := fromProtoMessages(input)
+		_, messages, err := fromProtoMessages(input)
+		require.NoError(t, err)
 		require.Len(t, messages, 1)
+		require.Len(t, messages[0].Content, 2)
+	})
+
+	t.Run("provider content is replayed before visible fallback", func(t *testing.T) {
+		state := json.RawMessage(`[
+			{"type":"thinking","thinking":"summary","signature":"opaque-signature"},
+			{"type":"redacted_thinking","data":"encrypted"},
+			{"type":"tool_use","id":"tool_1","name":"search","input":{"q":"mods"}}
+		]`)
+		input := []proto.Message{{
+			Role:    proto.RoleAssistant,
+			Content: "must not replace provider state",
+			ProviderData: map[string]json.RawMessage{
+				messagesProviderDataKey: state,
+			},
+		}}
+		_, messages, err := fromProtoMessages(input)
+		require.NoError(t, err)
+		require.Len(t, messages, 1)
+		require.Len(t, messages[0].Content, 3)
+		require.Equal(t, "opaque-signature", messages[0].Content[0].OfThinking.Signature)
+		require.Equal(t, "encrypted", messages[0].Content[1].OfRedactedThinking.Data)
+		require.Equal(t, "tool_1", messages[0].Content[2].OfToolUse.ID)
+	})
+
+	t.Run("malformed provider content fails instead of rebuilding", func(t *testing.T) {
+		input := []proto.Message{{
+			Role: proto.RoleAssistant,
+			ProviderData: map[string]json.RawMessage{
+				messagesProviderDataKey: json.RawMessage(`{"not":"an array"}`),
+			},
+		}}
+		_, _, err := fromProtoMessages(input)
+		require.ErrorContains(t, err, "decode Anthropic provider content")
 	})
 }
 
 func TestToProtoMessage(t *testing.T) {
-	t.Run("assistant with text", func(t *testing.T) {
-		_ = json.RawMessage(`{"key":"value"}`)
-		input := []proto.Message{
-			{Role: proto.RoleAssistant, Content: "I think so.", ToolCalls: []proto.ToolCall{
-				{
-					ID: "tool_1",
-					Function: proto.Function{
-						Name:      "search",
-						Arguments: []byte(`{"q":"test"}`),
-					},
-				},
-			}},
-		}
-		_, msgs := fromProtoMessages(input)
-		require.Len(t, msgs, 1)
+	t.Run("assistant preserves ordered opaque blocks", func(t *testing.T) {
+		var input SDK.Message
+		err := json.Unmarshal([]byte(`{
+			"id":"msg_1",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-sonnet-4-6",
+			"stop_reason":"tool_use",
+			"stop_sequence":null,
+			"usage":{"input_tokens":1,"output_tokens":2},
+			"content":[
+				{"type":"thinking","thinking":"summary","signature":"opaque-signature"},
+				{"type":"redacted_thinking","data":"encrypted"},
+				{"type":"text","text":"Checking."},
+				{"type":"tool_use","id":"tool_1","name":"search","input":{"q":"test"}}
+			]
+		}`), &input)
+		require.NoError(t, err)
+
+		msg, err := toProtoMessage(input)
+		require.NoError(t, err)
+		require.Equal(t, proto.RoleAssistant, msg.Role)
+		require.Equal(t, "Checking.", msg.Content)
+		require.Len(t, msg.ToolCalls, 1)
+		require.JSONEq(t, `{"q":"test"}`, string(msg.ToolCalls[0].Function.Arguments))
+		require.NotEmpty(t, msg.ProviderData[messagesProviderDataKey])
+
+		_, replayed, err := fromProtoMessages([]proto.Message{msg})
+		require.NoError(t, err)
+		require.Len(t, replayed, 1)
+		require.Len(t, replayed[0].Content, 4)
+		require.Equal(t, "opaque-signature", replayed[0].Content[0].OfThinking.Signature)
+		require.Equal(t, "encrypted", replayed[0].Content[1].OfRedactedThinking.Data)
+		require.Equal(t, "Checking.", replayed[0].Content[2].OfText.Text)
+		require.Equal(t, "tool_1", replayed[0].Content[3].OfToolUse.ID)
 	})
 }

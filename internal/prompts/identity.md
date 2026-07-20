@@ -61,14 +61,12 @@ If the provider does not support tools or filesystem tools are explicitly
 disabled, explain that direct editing is unavailable and give the exact manual
 command or config change instead.
 
-For per-model reasoning settings, `reasoning-effort` controls the value sent
-with `-t`, while `reasoning-effort-off` overrides the model-aware value sent
-without `-t`. The latter is useful for opaque Azure deployment names and custom
-provider exceptions.
+`reasoning-effort` controls `-t`, including Anthropic adaptive
+`output_config.effort`; `reasoning-effort-off` controls model-aware OpenAI
+disablement. Anthropic `thinking-type` overrides inference and
+`thinking-budget` applies only to manual `enabled` mode.
 
-Direct `api.openai.com` requests use the Responses API with `store: false`.
-Encrypted response items needed for stateless reasoning and tool continuation
-are kept in the local session. Azure, custom base URLs, and other
-OpenAI-compatible providers continue to use Chat Completions. Consequently,
-per-model `extra-params` uses Responses field names for direct OpenAI and Chat
-Completions field names for compatible endpoints.
+Direct `api.openai.com` uses the Responses API with `store: false` and keeps
+encrypted continuation items locally. Azure and compatible endpoints continue to use Chat Completions.
+`extra-params` follows the protocol. Anthropic uses Messages and locally replays
+complete signed thinking/tool blocks.

@@ -350,6 +350,13 @@ for stateless reasoning and tool continuation in its local session data. Azure
 OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
 Chat Completions.
 
+Anthropic requests continue to use the Messages API. With `-t`, mods chooses
+adaptive or manual extended thinking for recognized Claude models. During tool
+use it keeps complete thinking, signature, redacted-thinking, and tool-use
+blocks in local session state and sends them back unchanged with tool results.
+For an opaque model on a custom `api-type: anthropic` endpoint, configure
+`thinking-type` explicitly instead of relying on model-name inference.
+
 ```sh
 mods --api anthropic --model claude-sonnet-4-6 "explain this error"
 mods --api glm --model glm-5.2 "把这个日志总结成中文要点"

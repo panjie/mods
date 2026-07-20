@@ -3,6 +3,7 @@ package anthropic
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -34,7 +35,10 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		}
 		request.Messages = messages
 	}
-	system, messages := fromProtoMessages(request.Messages)
+	system, messages, err := fromProtoMessages(request.Messages)
+	if err != nil {
+		return &Stream{budgetErr: err, messages: request.Messages}
+	}
 	body := anthropic.MessageNewParams{
 		Model:    anthropic.Model(request.Model),
 		Messages: messages,
@@ -42,18 +46,61 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		Tools:    fromToolSpecs(request.Tools),
 	}
 
-	if request.MaxTokens != nil {
+	explicitMaxTokens := request.MaxTokens != nil
+	if explicitMaxTokens {
 		body.MaxTokens = *request.MaxTokens
 	} else {
 		body.MaxTokens = 4096
 	}
 
-	if request.Temperature != nil {
+	thinkingActive := c.config.ThinkingActive ||
+		c.config.ThinkingType == "adaptive" ||
+		c.config.ThinkingType == "enabled"
+	if request.Temperature != nil && !thinkingActive {
 		body.Temperature = anthropic.Float(*request.Temperature)
 	}
 
-	if c.config.ThinkingBudget > 0 {
+	switch c.config.ThinkingType {
+	case "":
+	case "adaptive":
+		adaptive := anthropic.NewThinkingConfigAdaptiveParam()
+		body.Thinking = anthropic.ThinkingConfigParamUnion{OfAdaptive: &adaptive}
+	case "disabled":
+		disabled := anthropic.NewThinkingConfigDisabledParam()
+		body.Thinking = anthropic.ThinkingConfigParamUnion{OfDisabled: &disabled}
+	case "enabled":
+		if c.config.ThinkingBudget < 1024 {
+			return &Stream{
+				budgetErr: fmt.Errorf(
+					"Anthropic thinking-budget must be at least 1024 tokens, got %d",
+					c.config.ThinkingBudget,
+				),
+				messages: request.Messages,
+			}
+		}
+		if explicitMaxTokens && body.MaxTokens <= int64(c.config.ThinkingBudget) {
+			return &Stream{
+				budgetErr: fmt.Errorf(
+					"Anthropic max-tokens (%d) must be greater than thinking-budget (%d)",
+					body.MaxTokens,
+					c.config.ThinkingBudget,
+				),
+				messages: request.Messages,
+			}
+		}
+		if !explicitMaxTokens {
+			body.MaxTokens = max(body.MaxTokens, int64(c.config.ThinkingBudget)+4096)
+		}
 		body.Thinking = anthropic.ThinkingConfigParamOfEnabled(int64(c.config.ThinkingBudget))
+	default:
+		return &Stream{
+			budgetErr: fmt.Errorf("unsupported Anthropic thinking-type %q", c.config.ThinkingType),
+			messages:  request.Messages,
+		}
+	}
+
+	if c.config.ReasoningEffort != "" {
+		body.OutputConfig.Effort = anthropic.OutputConfigEffort(c.config.ReasoningEffort)
 	}
 
 	s := &Stream{
@@ -78,6 +125,9 @@ type Config struct {
 	HTTPClient         *http.Client
 	EmptyMessagesLimit uint
 	ThinkingBudget     int
+	ThinkingType       string
+	ThinkingActive     bool
+	ReasoningEffort    string
 }
 
 // DefaultConfig returns the default configuration for the Anthropic API client.
@@ -140,6 +190,7 @@ type Stream struct {
 // CallTools implements stream.Stream.
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	var statuses []proto.ToolCallStatus
+	var results []anthropic.ContentBlockParamUnion
 	for _, block := range s.message.Content {
 		switch call := block.AsAny().(type) {
 		case anthropic.ToolUseBlock:
@@ -149,17 +200,16 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 				[]byte(call.JSON.Input.Raw()),
 				s.toolCall,
 			)
-			resp := anthropic.NewUserMessage(
-				newToolResultBlock(
-					call.ID,
-					msg.Content,
-					status.Err != nil,
-				),
+			results = append(
+				results,
+				newToolResultBlock(call.ID, msg.Content, status.Err != nil),
 			)
-			s.request.Messages = append(s.request.Messages, resp)
 			s.messages = append(s.messages, msg)
 			statuses = append(statuses, status)
 		}
+	}
+	if len(results) > 0 {
+		s.request.Messages = append(s.request.Messages, anthropic.NewUserMessage(results...))
 	}
 	return statuses
 }
@@ -237,7 +287,12 @@ func (s *Stream) Next() bool {
 				return false
 			}
 			s.messages = messages
-			s.request.System, s.request.Messages = fromProtoMessages(messages)
+			system, requestMessages, err := fromProtoMessages(messages)
+			if err != nil {
+				s.budgetErr = err
+				return false
+			}
+			s.request.System, s.request.Messages = system, requestMessages
 		}
 		s.stream = s.factory()
 		s.message = anthropic.Message{}
@@ -252,7 +307,12 @@ func (s *Stream) Next() bool {
 		s.usage.Add(tokenUsageFromMessage(s.message))
 	}
 	s.request.Messages = append(s.request.Messages, s.message.ToParam())
-	s.messages = append(s.messages, toProtoMessage(s.message.ToParam()))
+	message, err := toProtoMessage(s.message)
+	if err != nil {
+		s.budgetErr = err
+		return false
+	}
+	s.messages = append(s.messages, message)
 
 	return false
 }

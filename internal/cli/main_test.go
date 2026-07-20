@@ -327,8 +327,17 @@ func TestBuildTeaProgramOptionsDisablesRendererWithoutTerminalInput(t *testing.T
 }
 
 func TestShowTokenUsageFlagAndFormatting(t *testing.T) {
+	flag := rootCmd.Flags().Lookup("show-token-usage")
+	require.NotNil(t, flag)
+	require.Equal(t, "s", flag.Shorthand)
+
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Parse([]string{"--show-token-usage"}))
+		require.True(t, config.ShowTokenUsage)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-s"}))
 		require.True(t, config.ShowTokenUsage)
 	})
 	require.Equal(t, "Token usage: unavailable", tokenUsageLine(proto.TokenUsage{}))

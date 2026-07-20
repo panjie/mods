@@ -299,7 +299,7 @@ status line at the bottom shows what Mods is doing between tool calls
 with `--hide-tool-status`, which also suppresses the compact one-line record
 each completed tool call leaves in normal output (for example
 `> ✓ shell_run: ls -la · exit 0`).
-Use `--show-token-usage` to print the input, output, and total token count for
+Use `--show-token-usage` (or `-s`) to print the input, output, and total token count for
 an interaction to stderr without mixing it into the model response on stdout.
 
 ### MCP

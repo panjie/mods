@@ -151,7 +151,7 @@ func initFlags() {
 	regBool(flags, &config.List, flagListSessions, "l", config.List)
 	regBool(flags, &config.Chat, flagChat, "", false)
 	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
-	regBool(flags, &config.ShowTokenUsage, "show-token-usage", "", config.ShowTokenUsage)
+	regBool(flags, &config.ShowTokenUsage, "show-token-usage", "s", config.ShowTokenUsage)
 	regBool(flags, &config.ShowHelp, "help", "h", false)
 	regBool(flags, &config.Version, "version", "v", false)
 	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)

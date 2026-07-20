@@ -282,7 +282,7 @@ func resolvedOpenAICompatibleThinkingType(mod Model, ccfg *openai.Config) (strin
 		return mod.ThinkingType, true
 	}
 	switch mod.API {
-	case "deepseek", "glm":
+	case "deepseek", "glm", "kimi":
 		return "enabled", true
 	case "minimax":
 		return "adaptive", true
@@ -339,7 +339,7 @@ func isProReasoningModel(model string) bool {
 
 func usesThinkingType(mod Model, ccfg *openai.Config) bool {
 	switch mod.API {
-	case "deepseek", "glm", "minimax":
+	case "deepseek", "glm", "kimi", "minimax":
 		return true
 	}
 	if mod.ThinkingType != "" {

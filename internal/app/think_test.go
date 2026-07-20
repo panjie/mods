@@ -101,6 +101,16 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 		require.Equal(t, 4096, thinking["budget_tokens"])
 	})
 
+	t.Run("Kimi defaults to enabled when requested", func(t *testing.T) {
+		ccfg := openai.Config{}
+
+		active := applyThinkConfigs(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, &ccfg, true)
+
+		require.True(t, active)
+		require.True(t, ccfg.ThinkTags)
+		require.Equal(t, "enabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
+	})
+
 	t.Run("Google without thinking-type sends configured budget when requested", func(t *testing.T) {
 		gccfg := google.Config{ThinkingBudget: 2048}
 
@@ -477,6 +487,15 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 		require.False(t, active)
 		require.Equal(t, 0, gccfg.ThinkingBudget)
 		require.True(t, gccfg.ThinkingBudgetExplicit)
+	})
+
+	t.Run("Kimi off sends disabled", func(t *testing.T) {
+		ccfg := openai.Config{}
+
+		active := applyThinkConfigs(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, &ccfg, false)
+
+		require.False(t, active)
+		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
 	})
 
 	t.Run("Ollama skips thinking entirely", func(t *testing.T) {

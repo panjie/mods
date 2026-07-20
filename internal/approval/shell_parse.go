@@ -2,6 +2,7 @@ package approval
 
 import (
 	"bytes"
+	"os"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -182,6 +183,73 @@ func shellWords(words []*syntax.Word) []string {
 	args := make([]string, 0, len(words))
 	for _, word := range words {
 		value, ok := staticShellWord(word)
+		if !ok {
+			return nil
+		}
+		args = append(args, value)
+	}
+	return args
+}
+
+// accessShellWord resolves the narrow set of dynamic words whose value and
+// filesystem scope are known to the approval layer. It is deliberately
+// separate from staticShellWord: approval-rule parsing must continue treating
+// every expansion as dynamic and therefore exact.
+func accessShellWord(word *syntax.Word) (string, bool) {
+	if word == nil {
+		return "", false
+	}
+	var result strings.Builder
+	for _, part := range word.Parts {
+		if !appendAccessWordPart(&result, part) {
+			return "", false
+		}
+	}
+	return result.String(), true
+}
+
+func appendAccessWordPart(result *strings.Builder, part syntax.WordPart) bool {
+	switch value := part.(type) {
+	case *syntax.Lit:
+		result.WriteString(value.Value)
+	case *syntax.SglQuoted:
+		result.WriteString(value.Value)
+	case *syntax.DblQuoted:
+		for _, quotedPart := range value.Parts {
+			if !appendAccessWordPart(result, quotedPart) {
+				return false
+			}
+		}
+	case *syntax.ParamExp:
+		home, ok := simpleHomeExpansion(value)
+		if !ok {
+			return false
+		}
+		result.WriteString(home)
+	default:
+		return false
+	}
+	return true
+}
+
+func simpleHomeExpansion(exp *syntax.ParamExp) (string, bool) {
+	if exp == nil || exp.Param == nil || exp.Param.Value != "HOME" ||
+		exp.Flags != nil || exp.Excl || exp.Length || exp.Width || exp.IsSet ||
+		exp.NestedParam != nil || exp.Index != nil || len(exp.Modifiers) > 0 ||
+		exp.Slice != nil || exp.Repl != nil || exp.Names != 0 || exp.Exp != nil {
+		return "", false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return "", false
+	}
+	return home, true
+}
+
+func shellWordsForAccess(words []*syntax.Word) []string {
+	args := make([]string, 0, len(words))
+	for _, word := range words {
+		value, ok := accessShellWord(word)
 		if !ok {
 			return nil
 		}

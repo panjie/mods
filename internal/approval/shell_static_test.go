@@ -61,6 +61,37 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 		got := AnalyzeShellStatic("cat ${FILE}", true)
 		require.Equal(t, ShellStaticWrite, got.Class)
 	})
+
+	t.Run("oldest downloads pipeline is read-only", func(t *testing.T) {
+		got := AnalyzeShellStatic(
+			`find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`,
+			true,
+		)
+		require.Equal(t, ShellStaticRead, got.Class)
+		require.Empty(t, got.AffectedDirs)
+	})
+
+	t.Run("home-expanded write target remains deterministic", func(t *testing.T) {
+		got := AnalyzeShellStatic(`rm "$HOME/Downloads/old.txt"`, true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.NotEmpty(t, got.AffectedDirs)
+	})
+
+	t.Run("find delete is a write", func(t *testing.T) {
+		got := AnalyzeShellStatic(`find "$HOME/Downloads" -type f -delete`, true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+	})
+
+	t.Run("sort output is a write", func(t *testing.T) {
+		got := AnalyzeShellStatic("sort -o /tmp/output input", true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Equal(t, []string{"/tmp"}, got.AffectedDirs)
+	})
+
+	t.Run("xargs writer is not read-only", func(t *testing.T) {
+		got := AnalyzeShellStatic(`find . -print0 | xargs -0 touch`, true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+	})
 }
 
 func TestAnalyzeShellStaticPowerShell(t *testing.T) {

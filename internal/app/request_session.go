@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/anthropic"
@@ -25,6 +26,25 @@ type requestSession struct {
 	runner  *streamRunner
 	cleanup *toolregistry.Registry
 	errh    func(error) tea.Msg
+}
+
+func memoizedShellAnalyzer(analyze func(string, string) shellCommandAnalysis) func(string, string) shellCommandAnalysis {
+	if analyze == nil {
+		return nil
+	}
+	var mu sync.Mutex
+	cache := make(map[string]shellCommandAnalysis)
+	return func(tool, command string) shellCommandAnalysis {
+		key := tool + "\x00" + command
+		mu.Lock()
+		defer mu.Unlock()
+		if result, ok := cache[key]; ok {
+			return result
+		}
+		result := analyze(tool, command)
+		cache[key] = result
+		return result
+	}
 }
 
 func (m *Mods) buildRequestSession(content string) (requestSession, error) {
@@ -281,7 +301,8 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			return registry.Call(ctx, name, data)
 		}
 
-		intent := buildAccessIntent(name, data, registry, m.analyzeShellCommand)
+		analyzeShell := memoizedShellAnalyzer(m.analyzeShellCommand)
+		intent := buildAccessIntent(name, data, registry, analyzeShell)
 		scope := m.reviewer.scope
 		safeDirs := safeDirs()
 		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
@@ -300,7 +321,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		if err := m.reviewer.requestApproval(reviewerDeps{
 			ctx:              m.ctx,
 			isShellExecution: registry.ShellExecution,
-			analyzeShell:     m.analyzeShellCommand,
+			analyzeShell:     analyzeShell,
 			accessIntent:     intent,
 		}, name, data); err != nil {
 			return "", err

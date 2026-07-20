@@ -74,3 +74,24 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentNil := buildAccessIntent("anything", []byte(`{}`), nil, nil)
 	require.Equal(t, AccessWrite, intentNil.Class)
 }
+
+func TestMemoizedShellAnalyzerClassifiesEachCommandOnce(t *testing.T) {
+	calls := 0
+	analyze := memoizedShellAnalyzer(func(tool, command string) shellCommandAnalysis {
+		calls++
+		return shellCommandAnalysis{
+			NeedsReview:  true,
+			AffectedDirs: []string{"/tmp"},
+			Reason:       tool + ": " + command,
+			Effect:       shellEffectUnknown,
+		}
+	})
+
+	first := analyze("shell_run", "opaque-command")
+	second := analyze("shell_run", "opaque-command")
+	require.Equal(t, first, second)
+	require.Equal(t, 1, calls)
+
+	analyze("shell_run", "different-command")
+	require.Equal(t, 2, calls)
+}

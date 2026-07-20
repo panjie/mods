@@ -103,7 +103,7 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 	if name != "env" && name != "xxd" && readOnlyCommands[name] {
 		return true, "read-only command: " + name
 	}
-	args := shellWords(call.Args)
+	args := shellWordsForAccess(call.Args)
 	if len(args) > 0 {
 		args[0] = name
 	}
@@ -128,6 +128,23 @@ func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool
 	if name == "env" {
 		return envInvocationReadOnly(args[1:], policy)
 	}
+	switch name {
+	case "find":
+		if findInvocationReadOnly(args[1:]) {
+			return true, "read-only command: find"
+		}
+		return false, ""
+	case "sort":
+		if sortInvocationReadOnly(args[1:]) {
+			return true, "read-only command: sort"
+		}
+		return false, ""
+	case "xargs":
+		if xargsInvocationReadOnly(args[1:]) {
+			return true, "read-only command: xargs"
+		}
+		return false, ""
+	}
 	if readOnlyCommands[name] {
 		if name == "xxd" && hasAnyArg(args[1:], "-r", "--revert") {
 			return false, ""
@@ -138,6 +155,156 @@ func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool
 		return true, "read-only subcommand: " + name + " " + strings.ToLower(args[1])
 	}
 	return false, ""
+}
+
+func findInvocationReadOnly(args []string) bool {
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "-H", "-L", "-P":
+			i++
+		default:
+			goto paths
+		}
+	}
+
+paths:
+	for i < len(args) && !findExpressionToken(args[i]) {
+		if strings.HasPrefix(args[i], "-") {
+			return false
+		}
+		i++
+	}
+	for i < len(args) {
+		arg := args[i]
+		switch arg {
+		case "!", "-not", "(", ")", "-a", "-and", "-o", "-or",
+			"-print", "-print0", "-prune", "-true", "-false", "-empty",
+			"-nouser", "-nogroup":
+			i++
+		case "-type", "-name", "-iname", "-path", "-ipath", "-regex", "-iregex",
+			"-mtime", "-mmin", "-atime", "-amin", "-ctime", "-cmin", "-size",
+			"-maxdepth", "-mindepth", "-user", "-group", "-perm", "-links",
+			"-inum", "-newer", "-fstype":
+			if i+1 >= len(args) {
+				return false
+			}
+			i += 2
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func findExpressionToken(arg string) bool {
+	return arg == "!" || arg == "(" || arg == ")" || strings.HasPrefix(arg, "-")
+}
+
+func sortInvocationReadOnly(args []string) bool {
+	options := true
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !options || arg == "-" || !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if arg == "--" {
+			options = false
+			continue
+		}
+		if strings.HasPrefix(arg, "--") {
+			name, _, hasValue := strings.Cut(arg, "=")
+			switch name {
+			case "--ignore-leading-blanks", "--check", "--dictionary-order",
+				"--ignore-case", "--general-numeric-sort", "--ignore-nonprinting",
+				"--month-sort", "--human-numeric-sort", "--numeric-sort",
+				"--random-sort", "--reverse", "--stable", "--unique",
+				"--version-sort", "--zero-terminated", "--merge":
+				continue
+			case "--key", "--field-separator":
+				if !hasValue {
+					if i+1 >= len(args) {
+						return false
+					}
+					i++
+				}
+				continue
+			default:
+				return false
+			}
+		}
+		short := strings.TrimPrefix(arg, "-")
+		for len(short) > 0 {
+			option := short[0]
+			short = short[1:]
+			if strings.ContainsRune("bcCdfghimMnRrsuVz", rune(option)) {
+				continue
+			}
+			if option == 'k' || option == 't' {
+				if short == "" {
+					if i+1 >= len(args) {
+						return false
+					}
+					i++
+				}
+				short = ""
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func xargsInvocationReadOnly(args []string) bool {
+	nested, ok := xargsCommandArgs(args)
+	if !ok || len(nested) == 0 {
+		return false
+	}
+	name := path.Base(nested[0])
+	if !readOnlyCommands[name] || name == "xxd" {
+		return false
+	}
+	return true
+}
+
+func xargsCommandArgs(args []string) ([]string, bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--":
+			if i+1 >= len(args) {
+				return nil, false
+			}
+			return args[i+1:], true
+		case "-0", "--null", "-x", "--exit", "-t", "--verbose",
+			"-r", "--no-run-if-empty":
+			continue
+		case "-n", "--max-args", "-L", "--max-lines", "-s", "--max-chars":
+			if i+1 >= len(args) {
+				return nil, false
+			}
+			i++
+			continue
+		}
+		if strings.HasPrefix(arg, "--max-args=") ||
+			strings.HasPrefix(arg, "--max-lines=") ||
+			strings.HasPrefix(arg, "--max-chars=") ||
+			shortXargsOptionWithValue(arg, 'n') ||
+			shortXargsOptionWithValue(arg, 'L') ||
+			shortXargsOptionWithValue(arg, 's') {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return nil, false
+		}
+		return args[i:], true
+	}
+	return nil, false
+}
+
+func shortXargsOptionWithValue(arg string, option byte) bool {
+	return len(arg) > 2 && arg[0] == '-' && arg[1] == option
 }
 
 func envInvocationReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, string) {
@@ -237,10 +404,12 @@ func wordIsReadOnly(word *syntax.Word, policy ReadOnlyCommandPolicy) bool {
 			}
 			return false
 		case *syntax.ParamExp:
-			// Runtime values may resolve to paths outside the workspace. The
-			// approval layer cannot prove their access scope statically.
-			readonly = false
-			return false
+			if _, ok := simpleHomeExpansion(n); !ok {
+				// Arbitrary runtime values may resolve outside the workspace.
+				readonly = false
+				return false
+			}
+			return true
 		default:
 			return true
 		}

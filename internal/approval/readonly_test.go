@@ -76,7 +76,21 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		// --- ParamExp ---
 		{"param exp", "echo $VAR", false},
 		{"param exp braced", "cat ${FILE}", false},
+		{"home param path", `cat "$HOME/Downloads/file"`, true},
+		{"braced home param path", `cat "${HOME}/Downloads/file"`, true},
+		{"home param modifier", `cat "${HOME:-$(touch owned.txt)}/file"`, false},
 		{"env wraps readonly command", "env LC_ALL=C git status", true},
+
+		// --- Option-sensitive read-only commands ---
+		{"find print0", `find "$HOME/Downloads" -type f -print0`, true},
+		{"sort numeric", "sort -n", true},
+		{"sort combined flags", "sort -rn", true},
+		{"xargs stat", `xargs -0 stat -f '%m %N'`, true},
+		{
+			"oldest downloads pipeline",
+			`find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`,
+			true,
+		},
 
 		// --- Multiple statements ---
 		{"multi stmt", "git status; git diff", true},
@@ -86,8 +100,15 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"append redirect", "ls >> out.log", false},
 		{"pipe with tee", "cat file | tee output", false},
 		{"rm", "rm file", false},
-		{"find", "find . -name '*.go'", false},
-		{"sort", "sort file", false},
+		{"find delete", "find . -delete", false},
+		{"find exec", "find . -exec rm {} +", false},
+		{"find unknown primary", "find . -unknown", false},
+		{"sort output", "sort -o output file", false},
+		{"sort temp dir", "sort -T /tmp file", false},
+		{"sort unknown option", "sort --unknown file", false},
+		{"xargs rm", "xargs -0 rm", false},
+		{"xargs touch", "xargs touch", false},
+		{"xargs unknown nested command", "xargs custom-reader", false},
 		{"make", "make", false},
 		{"git push", "git push", false},
 		{"git commit", "git commit -m msg", false},

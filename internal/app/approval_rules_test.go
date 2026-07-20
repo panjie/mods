@@ -107,6 +107,69 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	require.NoError(t, <-errCh)
 }
 
+func TestOldestDownloadsPipelineOffersReadOnlyDirectoryRule(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX pipeline coverage applies to non-Windows shell_run")
+	}
+	oldInputTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldInputTTY })
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	downloads := filepath.Join(home, "Downloads")
+	workspace := canonicalTestPath(t, t.TempDir())
+	registry := testReviewRegistry(t)
+	mods := &Mods{
+		ctx:                 context.Background(),
+		Config:              testConfigForWorkspace(workspace),
+		currentToolRegistry: registry,
+		shellAnalyzer: func(string, string) shellCommandAnalysis {
+			t.Fatal("LLM classifier should not be called")
+			return defaultShellCommandAnalysis()
+		},
+	}
+	reviewer := &toolReviewer{
+		reviewMode: ReviewAuto,
+		scope:      WorkspaceScope(workspace),
+		reviewChan: make(chan toolReviewItem, 1),
+	}
+	cmd := `find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`
+	data := []byte(fmt.Sprintf(`{"command":%q}`, cmd))
+	intent := buildAccessIntent("shell_run", data, registry, mods.analyzeShellCommand)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- reviewer.requestApproval(reviewerDeps{
+			ctx:              context.Background(),
+			isShellExecution: registry.ShellExecution,
+			analyzeShell:     mods.analyzeShellCommand,
+			accessIntent:     intent,
+		}, "shell_run", data)
+	}()
+
+	item := receiveReviewItem(t, reviewer.reviewChan)
+	require.Equal(t, interactionToneInfo, item.presentation.tone)
+	require.Equal(t, "Info", item.presentation.toneText)
+	require.Equal(t, "Read data outside the workspace", item.presentation.headline)
+	require.Len(t, item.candidateRules, 1)
+	require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
+	require.Equal(t, AccessRead, item.candidateRules[0].Mode)
+	require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
+	item.resp <- reviewResponse{approved: true}
+	require.NoError(t, <-errCh)
+
+	reviewer.rules.Add(item.candidateRules...)
+	reviewer.reviewChan = nil
+	writeIntent := AccessIntent{Class: AccessWrite, Dirs: []string{downloads}}
+	err = reviewer.requestApproval(
+		reviewerDeps{ctx: context.Background(), accessIntent: writeIntent},
+		"fs_delete_file",
+		[]byte(fmt.Sprintf(`{"path":%q}`, filepath.Join(downloads, "old.txt"))),
+	)
+	require.ErrorIs(t, err, errReviewUnavailable)
+}
+
 func TestReviewKeys(t *testing.T) {
 	t.Run("yes does not remember", func(t *testing.T) {
 		reviewer := &toolReviewer{

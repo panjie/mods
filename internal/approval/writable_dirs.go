@@ -55,7 +55,7 @@ func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string) {
 		if redir == nil || redir.Word == nil || !redirectionWritesPersistent(redir) {
 			continue
 		}
-		target, ok := staticShellWord(redir.Word)
+		target, ok := accessShellWord(redir.Word)
 		if !ok || target == "" {
 			continue
 		}
@@ -70,7 +70,7 @@ func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string) {
 	if !ok || len(call.Args) == 0 {
 		return
 	}
-	args := shellWords(call.Args)
+	args := shellWordsForAccess(call.Args)
 	if len(args) == 0 {
 		return
 	}
@@ -140,6 +140,16 @@ func writableDirsFromTokens(args []string, posix bool) []string {
 		return []string{destinationDir(operands[len(operands)-1])}
 	case "tee":
 		return parentDirs(commandOperands(args[1:]))
+	case "find":
+		if !findHasWriteAction(args[1:]) {
+			return nil
+		}
+		return targetDirs(findRootOperands(args[1:]))
+	case "sort":
+		if output := sortOutputPath(args[1:]); output != "" {
+			return []string{parentDir(output)}
+		}
+		return nil
 	case "git":
 		if output := flagValue(args[1:], "--output"); output != "" {
 			return []string{parentDir(output)}
@@ -213,6 +223,15 @@ func hasKnownRiskyInvocation(args []string, posix bool) bool {
 	case "env":
 		nested, ok := envCommandArgs(args[1:])
 		return ok && hasKnownRiskyInvocation(nested, posix)
+	case "rm", "rmdir", "unlink", "touch", "chmod", "chown", "mkdir", "cp", "mv", "tee":
+		return true
+	case "find":
+		return findHasWriteAction(args[1:])
+	case "sort":
+		return sortOutputPath(args[1:]) != "" || sortUsesWritableScratch(args[1:])
+	case "xargs":
+		nested, ok := xargsCommandArgs(args[1:])
+		return ok && hasKnownRiskyInvocation(nested, posix)
 	case "git":
 		return hasAnyArg(args[1:], "--output", "--ext-diff", "--textconv")
 	case "xxd":
@@ -241,23 +260,86 @@ func hasKnownRiskyShellCommand(command string, posix bool) bool {
 		if risky {
 			return false
 		}
-		if _, ok := node.(*syntax.ParamExp); ok {
+		if exp, ok := node.(*syntax.ParamExp); ok {
 			// Runtime-expanded arguments may resolve to external paths that the
 			// approval matrix cannot derive from the command text.
-			risky = true
-			return false
+			if _, known := simpleHomeExpansion(exp); !known {
+				risky = true
+				return false
+			}
+			return true
 		}
 		call, ok := node.(*syntax.CallExpr)
 		if !ok {
 			return true
 		}
-		if args := shellWords(call.Args); len(args) > 0 && hasKnownRiskyInvocation(args, true) {
+		if args := shellWordsForAccess(call.Args); len(args) > 0 && hasKnownRiskyInvocation(args, true) {
 			risky = true
 			return false
 		}
 		return true
 	})
 	return risky
+}
+
+func findHasWriteAction(args []string) bool {
+	for _, arg := range args {
+		switch arg {
+		case "-delete", "-exec", "-execdir", "-ok", "-okdir",
+			"-fprint", "-fprint0", "-fprintf", "-fls":
+			return true
+		}
+	}
+	return false
+}
+
+func findRootOperands(args []string) []string {
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "-H", "-L", "-P":
+			i++
+		default:
+			goto roots
+		}
+	}
+roots:
+	var paths []string
+	for i < len(args) && !findExpressionToken(args[i]) {
+		paths = append(paths, args[i])
+		i++
+	}
+	if len(paths) == 0 {
+		return []string{"."}
+	}
+	return paths
+}
+
+func sortOutputPath(args []string) string {
+	for i, arg := range args {
+		switch {
+		case arg == "-o" || arg == "--output":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(arg, "--output="):
+			return strings.TrimPrefix(arg, "--output=")
+		case strings.HasPrefix(arg, "-o") && len(arg) > 2:
+			return strings.TrimPrefix(arg, "-o")
+		}
+	}
+	return ""
+}
+
+func sortUsesWritableScratch(args []string) bool {
+	for _, arg := range args {
+		if arg == "-T" || strings.HasPrefix(arg, "-T") ||
+			arg == "--temporary-directory" || strings.HasPrefix(arg, "--temporary-directory=") ||
+			arg == "--compress-program" || strings.HasPrefix(arg, "--compress-program=") {
+			return true
+		}
+	}
+	return false
 }
 
 func powerShellParamValues(args []string, names ...string) []string {

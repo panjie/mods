@@ -453,6 +453,30 @@ func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	}
 }
 
+func TestAnalyzeShellCommandOldestDownloadsPipelineIsExternalRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX pipeline coverage applies to non-Windows shell_run")
+	}
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+	cmd := `find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`
+	result := mods.analyzeShellCommand("shell_run", cmd)
+
+	require.False(t, result.NeedsReview)
+	require.Equal(t, shellEffectRead, result.Effect)
+	require.Equal(t, []string{filepath.Join(home, "Downloads")}, result.AffectedDirs)
+}
+
 func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	// Read-only command with external path: AST classifier says read-only,
 	// extractExternalPaths provides AffectedDirs, no LLM call needed.

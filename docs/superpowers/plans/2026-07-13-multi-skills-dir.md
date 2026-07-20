@@ -2,6 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Mechanism superseded (2026-07-20):** Task 4 and any other references to
+> `TestIdentityCoversAllFlags` / `TestIdentityCoversConfigKeys` (or the
+> `-run "TestIdentityCovers"` pattern) in `internal/prompts/prompts_test.go`,
+> and to identity.md as a catalog of flags/config keys, describe a design
+> that has since been replaced. identity.md now carries only behavioral
+> policy; CLI flags are exposed to the model at runtime by introspecting
+> the pflag set in `internal/cli/self_help.go` (`mods_help` tool), and
+> config keys via the `config` help topic. The guarding tests are now
+> `TestSelfHelpCatalogMatchesEveryPublicFlag` (`internal/cli/main_test.go`)
+> and `TestIdentityHasSelfHelpPolicy` (`internal/prompts/prompts_test.go`).
+> See `AGENTS.md` for the authoritative current mechanism. The historical
+> task steps below are preserved unchanged as a record of the original plan.
+
 **Goal:** Replace single-directory skills configuration with `skills-dirs`, an ordered list of skill directories.
 
 **Architecture:** Remove the old `skills-dir` config field, flag, and env var from the target implementation. Store only `SkillsDirs []string`, resolve it to a normalized ordered list with a default of `~/.agents/skills` plus `<mods executable directory>/skills` in portable mode, and scan all effective directories with later same-name skills overriding earlier ones.

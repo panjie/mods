@@ -4,6 +4,21 @@
 **Status:** Current (local loading only; discovery and installation are external)
 **Scope:** Add a built-in skills system to mods that lets the LLM autonomously load user-defined skill instructions based on the user's request.
 
+> **Mechanism superseded (2026-07-20):** The identity-prompt / test
+> approach described below — where `internal/prompts/identity.md` acts
+> as a catalog of flags and config keys, guarded by
+> `TestIdentityCoversAllFlags` / `TestIdentityCoversConfigKeys` in
+> `internal/prompts/prompts_test.go` — has been replaced. identity.md
+> now carries only behavioral policy (not flag/config-key listings).
+> CLI flags are exposed to the model at runtime by introspecting the
+> pflag set in `internal/cli/self_help.go` (`mods_help` tool), and
+> config keys are surfaced via the `config` help topic. The guarding
+> tests are now `TestSelfHelpCatalogMatchesEveryPublicFlag`
+> (`internal/cli/main_test.go`) and `TestIdentityHasSelfHelpPolicy`
+> (`internal/prompts/prompts_test.go`). See `AGENTS.md` for the
+> authoritative current mechanism. The historical text below is
+> preserved as a record of the original design intent.
+
 ## Goal
 
 When a user asks mods to do something, mods should be able to load a relevant "skill" — a markdown file of instructions/knowledge written by the user — and inject its content into the conversation so the LLM follows it. The LLM decides which skill to load by reading a compact catalog of available skills injected into the system prompt.

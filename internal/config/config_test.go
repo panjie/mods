@@ -70,6 +70,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 		"apis.<provider>.api-type",
 		"apis.<provider>.api-key-env",
 		"apis.<provider>.models.<model>.reasoning-effort",
+		"apis.<provider>.models.<model>.reasoning-effort-off",
 		"apis.<provider>.models.<model>.extra-params",
 	} {
 		require.Contains(t, documented, path)
@@ -108,6 +109,22 @@ func TestPromptConfig(t *testing.T) {
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
+}
+
+func TestReasoningEffortOffYAML(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte(`apis:
+  azure:
+    models:
+      deployment-name:
+        reasoning-effort: high
+        reasoning-effort-off: none
+`), &cfg))
+
+	require.Len(t, cfg.APIs, 1)
+	model := cfg.APIs[0].Models["deployment-name"]
+	require.Equal(t, "high", model.ReasoningEffort)
+	require.Equal(t, "none", model.ReasoningEffortOff)
 }
 
 func TestValidateReviewMode(t *testing.T) {
@@ -382,6 +399,15 @@ func TestConfigTemplateDocumentsAPIType(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "api-type: anthropic")
+}
+
+func TestConfigTemplateDocumentsReasoningEffortOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "reasoning-effort-off: none")
 }
 
 func TestFilesystemModeYAML(t *testing.T) {

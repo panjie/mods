@@ -28,9 +28,13 @@ type Client struct {
 
 // Config represents the configuration for the OpenAI API client.
 type Config struct {
-	AuthToken  string
-	BaseURL    string
-	HTTPClient interface {
+	AuthToken string
+	BaseURL   string
+	// UseResponses selects OpenAI's Responses API. It is enabled only for the
+	// official OpenAI endpoint; Azure and OpenAI-compatible providers continue
+	// to use Chat Completions.
+	UseResponses bool
+	HTTPClient   interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	APIType         string
@@ -90,6 +94,9 @@ func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities
 
 // Request makes a new request and returns a stream.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	if c.config.UseResponses {
+		return c.requestResponses(ctx, request)
+	}
 	if request.MessageBudgeter != nil {
 		messages, err := request.MessageBudgeter(request.Messages)
 		if err != nil {

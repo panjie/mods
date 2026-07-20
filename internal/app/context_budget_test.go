@@ -203,6 +203,21 @@ func TestContextBudgetCountsOpaqueThoughtSignatures(t *testing.T) {
 	require.Greater(t, withSize, withoutSize+250)
 }
 
+func TestContextBudgetCountsOpaqueProviderData(t *testing.T) {
+	without := []proto.Message{{Role: proto.RoleAssistant, Content: "answer"}}
+	with := []proto.Message{{Role: proto.RoleAssistant, Content: "answer"}}
+	with[0].ProviderData = map[string]json.RawMessage{
+		"openai.responses.output": json.RawMessage(
+			`[{"type":"reasoning","encrypted_content":"` + strings.Repeat("x", 300) + `"}]`,
+		),
+	}
+	withoutSize, err := estimateInputBytes(without, nil)
+	require.NoError(t, err)
+	withSize, err := estimateInputBytes(with, nil)
+	require.NoError(t, err)
+	require.Greater(t, withSize, withoutSize+300)
+}
+
 func TestContextBudgetEstimatesStructuredSystemWireShape(t *testing.T) {
 	identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
 	identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)

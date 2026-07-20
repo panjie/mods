@@ -36,11 +36,11 @@ func TestResolveThink(t *testing.T) {
 		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: false}}}
 		ccfg := openai.Config{}
 
-		active, err := m.resolveThink(&Model{API: "openai"}, nil, nil, &ccfg)
+		active, err := m.resolveThink(&Model{API: "openai", Name: "gpt-5.4-mini-2026-03-17"}, nil, nil, &ccfg)
 
 		require.NoError(t, err)
 		require.False(t, active)
-		require.Equal(t, "minimal", ccfg.ExtraParams["reasoning_effort"])
+		require.Equal(t, "none", ccfg.ExtraParams["reasoning_effort"])
 	})
 }
 
@@ -184,25 +184,116 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 		require.True(t, active)
 		require.Equal(t, "high", string(ccfg.ReasoningEffort))
 	})
+
+	t.Run("custom provider with off override preserves enabled effort", func(t *testing.T) {
+		ccfg := openai.Config{}
+
+		active := applyThinkConfigs(Model{
+			API:                "custom",
+			Name:               "opaque-deployment",
+			ReasoningEffort:    "high",
+			ReasoningEffortOff: "none",
+		}, nil, nil, &ccfg, true)
+
+		require.True(t, active)
+		require.Equal(t, "high", string(ccfg.ReasoningEffort))
+		require.Empty(t, ccfg.ExtraParams)
+	})
 }
 
 func TestApplyThinkConfigsDisable(t *testing.T) {
-	t.Run("OpenAI off sends reasoning_effort minimal", func(t *testing.T) {
-		ccfg := openai.Config{}
+	tests := []struct {
+		name   string
+		model  Model
+		effort string
+	}{
+		{
+			name:   "GPT-5.4 mini snapshot uses none",
+			model:  Model{API: "openai", Name: "gpt-5.4-mini-2026-03-17"},
+			effort: "none",
+		},
+		{
+			name:   "GPT-5.1 uses none",
+			model:  Model{API: "openai", Name: "gpt-5.1"},
+			effort: "none",
+		},
+		{
+			name:   "future versioned GPT-5 family uses none",
+			model:  Model{API: "openai", Name: "gpt-5.6-terra"},
+			effort: "none",
+		},
+		{
+			name:   "original GPT-5 uses minimal",
+			model:  Model{API: "openai", Name: "gpt-5"},
+			effort: "minimal",
+		},
+		{
+			name:   "original GPT-5 mini snapshot uses minimal",
+			model:  Model{API: "openai", Name: "gpt-5-mini-2025-08-07"},
+			effort: "minimal",
+		},
+		{
+			name:   "o-series uses low",
+			model:  Model{API: "openai", Name: "o3-2025-04-16"},
+			effort: "low",
+		},
+		{
+			name:  "GPT-4o omits effort",
+			model: Model{API: "openai", Name: "gpt-4o"},
+		},
+		{
+			name:  "Pro model omits effort",
+			model: Model{API: "openai", Name: "gpt-5.4-pro"},
+		},
+		{
+			name:  "opaque Azure deployment omits effort",
+			model: Model{API: "azure", Name: "production-deployment"},
+		},
+		{
+			name:   "explicit Azure override is used",
+			model:  Model{API: "azure", Name: "production-deployment", ReasoningEffortOff: "none"},
+			effort: "none",
+		},
+		{
+			name:   "explicit override wins over automatic selection",
+			model:  Model{API: "openai", Name: "gpt-5.4-mini", ReasoningEffortOff: "low"},
+			effort: "low",
+		},
+		{
+			name:   "custom provider can opt in with override",
+			model:  Model{API: "custom", Name: "opaque-model", ReasoningEffortOff: "minimal"},
+			effort: "minimal",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "openai", ThinkingType: "enabled"}, nil, nil, &ccfg, false)
+			active := applyThinkConfigs(tt.model, nil, nil, &ccfg, false)
+
+			require.False(t, active)
+			if tt.effort == "" {
+				require.NotContains(t, ccfg.ExtraParams, "reasoning_effort")
+				require.Empty(t, ccfg.ReasoningEffort)
+			} else {
+				require.Equal(t, tt.effort, ccfg.ExtraParams["reasoning_effort"])
+			}
+		})
+	}
+
+	t.Run("omitting effort preserves other extra params", func(t *testing.T) {
+		configuredExtraParams := map[string]any{
+			"reasoning_effort": "high",
+			"custom":           true,
+		}
+		ccfg := openai.Config{ExtraParams: configuredExtraParams}
+
+		active := applyThinkConfigs(Model{API: "openai", Name: "gpt-4o"}, nil, nil, &ccfg, false)
 
 		require.False(t, active)
-		require.Equal(t, "minimal", ccfg.ExtraParams["reasoning_effort"])
-	})
-
-	t.Run("Azure off sends reasoning_effort minimal", func(t *testing.T) {
-		ccfg := openai.Config{}
-
-		active := applyThinkConfigs(Model{API: "azure", ThinkingType: "enabled"}, nil, nil, &ccfg, false)
-
-		require.False(t, active)
-		require.Equal(t, "minimal", ccfg.ExtraParams["reasoning_effort"])
+		require.NotContains(t, ccfg.ExtraParams, "reasoning_effort")
+		require.Equal(t, true, ccfg.ExtraParams["custom"])
+		require.Equal(t, "high", configuredExtraParams["reasoning_effort"])
 	})
 
 	t.Run("Google off resets existing budget to zero", func(t *testing.T) {

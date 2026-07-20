@@ -111,6 +111,11 @@ type Message struct {
 	Content   string
 	Images    []Image
 	ToolCalls []ToolCall
+	// ProviderData carries opaque, provider-tagged state required to continue a
+	// conversation. Provider adapters must ignore keys they do not own. The
+	// data is persisted with the session but is intentionally excluded from
+	// human-readable transcripts.
+	ProviderData map[string]json.RawMessage `json:"provider_data,omitempty"`
 
 	// contextClass is request-local budget metadata. Keeping it unexported
 	// intentionally excludes it from JSON and gob session persistence.

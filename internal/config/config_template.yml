@@ -172,6 +172,10 @@ apis:
   # Hosted Providers
   # ---------------------------------------------------------------------------
   openai:
+    # The official api.openai.com endpoint uses the Responses API with
+    # store: false. Encrypted response items needed for stateless reasoning
+    # and tool continuation are persisted only in the local mods session.
+    # A custom base-url continues to use Chat Completions.
     # {{ index .Help "apis.<provider>.base-url" }}
     base-url: https://api.openai.com/v1
     # {{ index .Help "apis.<provider>.api-key" }}
@@ -273,6 +277,8 @@ apis:
   #       thinking-type: enabled
   #
   #       # extra-params: arbitrary fields merged into the request body.
+  #       # Official OpenAI expects Responses API field names; custom
+  #       # OpenAI-compatible endpoints expect Chat Completions field names.
   #       # Provider-specific thinking toggles are normally handled by mods'
   #       # unified thinking policy; use this only for unsupported fields.
   #       extra-params:
@@ -290,6 +296,12 @@ apis:
   #       # reasoning-effort: target reasoning_effort value for -t.
   #       # Default "medium". Options: low, medium, high.
   #       # reasoning-effort: high
+  #
+  #       # reasoning-effort-off: override the reasoning_effort value sent
+  #       # without -t. Known OpenAI models use model-aware defaults; set this
+  #       # for opaque Azure deployment names or custom provider exceptions.
+  #       # Common values: none, minimal, low.
+  #       # reasoning-effort-off: none
 
   # Example: custom Anthropic-compatible server (speaks the Anthropic
   # Messages API, e.g. a Claude proxy or a third-party gateway). Set

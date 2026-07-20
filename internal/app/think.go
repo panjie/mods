@@ -1,6 +1,9 @@
 package app
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/openai/openai-go/shared"
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/google"
@@ -8,6 +11,11 @@ import (
 )
 
 const defaultThinkingBudget = 8192
+
+var (
+	gpt5OriginalReasoningModelRe  = regexp.MustCompile(`^gpt-5(?:-(?:mini|nano))?(?:-\d{4}-\d{2}-\d{2})?$`)
+	gpt5VersionedReasoningModelRe = regexp.MustCompile(`^gpt-5\.[1-9][0-9]*(?:-|$)`)
+)
 
 func (m *Mods) resolveThink(
 	mod *Model,
@@ -120,9 +128,16 @@ func disableOpenAICompatibleThink(mod Model, ccfg *openai.Config) {
 	}
 
 	if useReasoningEffort(mod, ccfg) {
+		effort, ok := disabledReasoningEffort(mod)
+		if !ok {
+			omitExtraParam(ccfg, "reasoning_effort")
+			ccfg.ReasoningEffort = ""
+			debug.Printf("Think: reasoning_effort omitted (thinking off, no compatible value known for %s/%s)", mod.API, mod.Name)
+			return
+		}
 		ensureExtraParams(ccfg)
-		ccfg.ExtraParams["reasoning_effort"] = "minimal"
-		debug.Printf("Think: reasoning_effort=minimal (thinking off, cannot fully disable for %s)", mod.API)
+		ccfg.ExtraParams["reasoning_effort"] = effort
+		debug.Printf("Think: reasoning_effort=%s (thinking off for %s/%s)", effort, mod.API, mod.Name)
 		return
 	}
 
@@ -158,6 +173,19 @@ func hasExtraParam(ccfg *openai.Config, key string) bool {
 	}
 	_, ok := ccfg.ExtraParams[key]
 	return ok
+}
+
+func omitExtraParam(ccfg *openai.Config, key string) {
+	if !hasExtraParam(ccfg, key) {
+		return
+	}
+	extraParams := make(map[string]any, len(ccfg.ExtraParams)-1)
+	for k, v := range ccfg.ExtraParams {
+		if k != key {
+			extraParams[k] = v
+		}
+	}
+	ccfg.ExtraParams = extraParams
 }
 
 func ensureThinkingParam(ccfg *openai.Config) map[string]any {
@@ -197,7 +225,37 @@ func useReasoningEffort(mod Model, ccfg *openai.Config) bool {
 	if hasExtraParam(ccfg, "reasoning_effort") {
 		return true
 	}
-	return mod.ReasoningEffort != ""
+	return mod.ReasoningEffort != "" || mod.ReasoningEffortOff != ""
+}
+
+func disabledReasoningEffort(mod Model) (string, bool) {
+	if mod.ReasoningEffortOff != "" {
+		return mod.ReasoningEffortOff, true
+	}
+
+	model := strings.ToLower(strings.TrimSpace(mod.Name))
+	if isProReasoningModel(model) {
+		return "", false
+	}
+	switch {
+	case gpt5VersionedReasoningModelRe.MatchString(model):
+		return "none", true
+	case gpt5OriginalReasoningModelRe.MatchString(model):
+		return "minimal", true
+	case isOSeries(model):
+		return "low", true
+	default:
+		return "", false
+	}
+}
+
+func isProReasoningModel(model string) bool {
+	for part := range strings.SplitSeq(model, "-") {
+		if part == "pro" {
+			return true
+		}
+	}
+	return false
 }
 
 func usesThinkingType(mod Model, ccfg *openai.Config) bool {

@@ -48,6 +48,9 @@ func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Identity, "call `mods_help`")
 	require.Contains(t, Identity, "exact active config path")
 	require.Contains(t, Identity, "next mods invocation")
+	require.Contains(t, Identity, "`reasoning-effort-off`")
+	require.Contains(t, Identity, "Responses API with `store: false`")
+	require.Contains(t, Identity, "continue to use Chat Completions")
 }
 
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {

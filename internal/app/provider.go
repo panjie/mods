@@ -73,6 +73,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		cfgs.OpenAI = openai.Config{
 			AuthToken:     key,
 			BaseURL:       api.BaseURL,
+			UseResponses:  useOfficialOpenAIResponses(mod.API, api.BaseURL),
 			ExtraParams:   mod.ExtraParams,
 			ThoughtFields: mod.ThinkFields,
 			ThinkTag:      mod.ThinkTag,
@@ -99,8 +100,24 @@ func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
 		}
 		return c, nil
 	default:
+		if ccfg.UseResponses {
+			debug.Printf("OpenAI protocol: responses (store=false)")
+		} else {
+			debug.Printf("OpenAI protocol: chat-completions")
+		}
 		return openai.New(ccfg), nil
 	}
+}
+
+func useOfficialOpenAIResponses(api, baseURL string) bool {
+	if api != "openai" {
+		return false
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		return true
+	}
+	u, err := url.Parse(baseURL)
+	return err == nil && strings.EqualFold(u.Hostname(), "api.openai.com")
 }
 
 // applyGoogleBaseURLOverride combines a user-supplied Google API URL with

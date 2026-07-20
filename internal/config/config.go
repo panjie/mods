@@ -137,15 +137,16 @@ var Help = map[string]string{
 	"apis.<provider>.user":        "Provider-specific user or Azure deployment identifier",
 	"apis.<provider>.api-type":    "Wire protocol used by this provider",
 
-	"apis.<provider>.models.<model>.max-input-chars":  "Complete input byte estimate limit for this model",
-	"apis.<provider>.models.<model>.aliases":          "Alternative names that select this model",
-	"apis.<provider>.models.<model>.fallback":         "Fallback model used after a provider failure",
-	"apis.<provider>.models.<model>.thinking-budget":  "Provider-specific reasoning token budget",
-	"apis.<provider>.models.<model>.extra-params":     "Additional provider request fields for this model",
-	"apis.<provider>.models.<model>.thinking-type":    "Provider-specific thinking mode override",
-	"apis.<provider>.models.<model>.thought-fields":   "Stream fields inspected for reasoning content",
-	"apis.<provider>.models.<model>.think-tag":        "Inline tag used to extract reasoning content",
-	"apis.<provider>.models.<model>.reasoning-effort": "Reasoning effort sent when thinking is enabled",
+	"apis.<provider>.models.<model>.max-input-chars":      "Complete input byte estimate limit for this model",
+	"apis.<provider>.models.<model>.aliases":              "Alternative names that select this model",
+	"apis.<provider>.models.<model>.fallback":             "Fallback model used after a provider failure",
+	"apis.<provider>.models.<model>.thinking-budget":      "Provider-specific reasoning token budget",
+	"apis.<provider>.models.<model>.extra-params":         "Additional provider request fields for this model; official OpenAI uses Responses fields, compatible endpoints use Chat Completions fields",
+	"apis.<provider>.models.<model>.thinking-type":        "Provider-specific thinking mode override",
+	"apis.<provider>.models.<model>.thought-fields":       "Stream fields inspected for reasoning content",
+	"apis.<provider>.models.<model>.think-tag":            "Inline tag used to extract reasoning content",
+	"apis.<provider>.models.<model>.reasoning-effort":     "Reasoning effort sent when thinking is enabled",
+	"apis.<provider>.models.<model>.reasoning-effort-off": "Reasoning effort sent when thinking is disabled; overrides model-aware defaults",
 }
 
 // Model represents the LLM model used in the API call.
@@ -170,6 +171,9 @@ type Model struct {
 	// ReasoningEffort is the target reasoning_effort value when thinking
 	// is enabled. Defaults to "medium".
 	ReasoningEffort string `yaml:"reasoning-effort,omitempty"`
+	// ReasoningEffortOff overrides the model-aware reasoning_effort value sent
+	// when thinking is disabled. Empty uses the built-in model policy.
+	ReasoningEffortOff string `yaml:"reasoning-effort-off,omitempty"`
 }
 
 // API represents an API endpoint and its models.

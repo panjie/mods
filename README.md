@@ -344,6 +344,12 @@ manually and select a model with `--api` and `--model`.
 | Kimi         | `kimi`         | `MOONSHOT_API_KEY`           | [platform.moonshot.cn][Kimi]                  |
 | MiniMax      | `minimax`      | `MINIMAX_API_KEY`            | [www.minimaxi.com][MiniMax]                   |
 
+Direct requests to `api.openai.com` use the Responses API for every model and
+feature. Mods sends `store: false` and keeps the encrypted response items needed
+for stateless reasoning and tool continuation in its local session data. Azure
+OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
+Chat Completions.
+
 ```sh
 mods --api anthropic --model claude-sonnet-4-6 "explain this error"
 mods --api glm --model glm-5.2 "把这个日志总结成中文要点"

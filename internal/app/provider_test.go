@@ -46,6 +46,53 @@ func TestApplyGoogleBaseURLOverride(t *testing.T) {
 	})
 }
 
+func TestUseOfficialOpenAIResponses(t *testing.T) {
+	tests := []struct {
+		name    string
+		api     string
+		baseURL string
+		want    bool
+	}{
+		{name: "empty official URL", api: "openai", want: true},
+		{name: "official URL", api: "openai", baseURL: "https://api.openai.com/v1", want: true},
+		{name: "official URL case insensitive", api: "openai", baseURL: "https://API.OPENAI.COM/v1/", want: true},
+		{name: "custom URL under openai profile", api: "openai", baseURL: "https://proxy.example.com/v1"},
+		{name: "custom provider", api: "groq", baseURL: "https://api.openai.com/v1"},
+		{name: "Azure", api: "azure", baseURL: "https://example.openai.azure.com"},
+		{name: "malformed URL", api: "openai", baseURL: "://bad"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, useOfficialOpenAIResponses(tt.api, tt.baseURL))
+		})
+	}
+}
+
+func TestBuildProviderConfigsSelectsResponsesOnlyForOfficialOpenAI(t *testing.T) {
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+
+	official, err := mods.buildProviderConfigs(
+		Model{Name: "gpt-5.4-mini", API: "openai"},
+		API{Name: "openai", APIKey: "test-key", BaseURL: "https://api.openai.com/v1"},
+	)
+	require.NoError(t, err)
+	require.True(t, official.OpenAI.UseResponses)
+
+	custom, err := mods.buildProviderConfigs(
+		Model{Name: "gpt-5.4-mini", API: "openai"},
+		API{Name: "openai", APIKey: "test-key", BaseURL: "https://proxy.example.com/v1"},
+	)
+	require.NoError(t, err)
+	require.False(t, custom.OpenAI.UseResponses)
+
+	azure, err := mods.buildProviderConfigs(
+		Model{Name: "deployment", API: "azure"},
+		API{Name: "azure", APIKey: "test-key", BaseURL: "https://example.openai.azure.com"},
+	)
+	require.NoError(t, err)
+	require.False(t, azure.OpenAI.UseResponses)
+}
+
 // TestBuildProviderConfigsGoogleUsesUserBaseURL closes the regression that
 // originally motivated the fix: an api.BaseURL entry in mods.yml was
 // silently ignored for Google, so users targeting a Vertex proxy or a

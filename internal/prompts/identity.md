@@ -60,3 +60,15 @@ When the user asks mods to change its own non-secret configuration:
 If the provider does not support tools or filesystem tools are explicitly
 disabled, explain that direct editing is unavailable and give the exact manual
 command or config change instead.
+
+For per-model reasoning settings, `reasoning-effort` controls the value sent
+with `-t`, while `reasoning-effort-off` overrides the model-aware value sent
+without `-t`. The latter is useful for opaque Azure deployment names and custom
+provider exceptions.
+
+Direct `api.openai.com` requests use the Responses API with `store: false`.
+Encrypted response items needed for stateless reasoning and tool continuation
+are kept in the local session. Azure, custom base URLs, and other
+OpenAI-compatible providers continue to use Chat Completions. Consequently,
+per-model `extra-params` uses Responses field names for direct OpenAI and Chat
+Completions field names for compatible endpoints.

@@ -2,6 +2,7 @@ package session
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -243,6 +244,26 @@ func TestSessionDB(t *testing.T) {
 			fmt.Sprintf("%s\t%s", testid1, title1),
 		}, results)
 	})
+}
+
+func TestSessionProviderDataRoundTrip(t *testing.T) {
+	const id = "af31ae23ab8b75b5643c2f846c570997edc71333"
+	db := testDB(t)
+	messages := []proto.Message{{
+		Role:    proto.RoleAssistant,
+		Content: "visible",
+		ProviderData: map[string]json.RawMessage{
+			"openai.responses.output": json.RawMessage(
+				`[{"type":"reasoning","encrypted_content":"opaque"}]`,
+			),
+		},
+	}}
+
+	require.NoError(t, db.SaveSession(id, "provider state", "openai", "gpt-5.4-mini", messages, nil))
+	var loaded []proto.Message
+	require.NoError(t, db.ReadMessages(id, &loaded))
+	require.Equal(t, messages, loaded)
+	require.Equal(t, "**Assistant**: visible\n\n", proto.Session(loaded).String())
 }
 
 func TestUpdatedAtIndexExists(t *testing.T) {

@@ -24,9 +24,8 @@ import (
 )
 
 const (
-	addProviderOption         = "__mods_add_provider__"
-	addModelOption            = "__mods_add_model__"
-	defaultNewModelInputChars = 1000000
+	addProviderOption = "__mods_add_provider__"
+	addModelOption    = "__mods_add_model__"
 )
 
 // RunConfigWizard launches an interactive TUI that guides the user through
@@ -971,8 +970,13 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-type"}, Value: d.apiType})
 	}
 
-	// Add a max-input-chars default for each chosen model that isn't already
-	// configured, so previously curated model entries keep their metadata.
+	// Register each newly added model as an empty entry under
+	// apis.<api>.models.<name>. mods treats any model listed here as
+	// selectable; per-model fields (max-input-chars, fallback, thinking-*
+	// etc.) can be added by the user later. Previously curated model
+	// entries are left untouched. An empty mapping is written instead of a
+	// placeholder scalar so the model entry renders as `name: {}` and the
+	// top-level max-input-chars setting is inherited without override.
 	existing := existingModelNames(d.apiName)
 	for _, modelName := range d.addedModelNames {
 		modelName = strings.TrimSpace(modelName)
@@ -983,8 +987,8 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 			continue
 		}
 		updates = append(updates, FieldUpdate{
-			Path:  []string{"apis", d.apiName, "models", modelName, "max-input-chars"},
-			Value: defaultNewModelInputChars,
+			Path:  []string{"apis", d.apiName, "models", modelName},
+			Value: map[string]any{},
 		})
 	}
 

@@ -167,11 +167,11 @@ func setNestedValue(mapping *yaml.Node, parts []string, value any) {
 	if len(parts) == 1 {
 		// Leaf: set or create the value.
 		if valNode != nil {
-			setScalarValue(valNode, value)
+			setLeafValue(valNode, value)
 		} else {
 			mapping.Content = append(mapping.Content,
 				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-				scalarNodeFor(value),
+				newLeafNode(value),
 			)
 		}
 		return
@@ -199,8 +199,24 @@ func setNestedValue(mapping *yaml.Node, parts []string, value any) {
 	setNestedValue(valNode, parts[1:], value)
 }
 
-// setScalarValue overwrites an existing scalar node's value and type tag.
-func setScalarValue(node *yaml.Node, value any) {
+// setLeafValue overwrites an existing leaf node's value and type tag. It
+// accepts scalar values (bool/int/string) and YAML mappings expressed as
+// map[string]any, including the empty mapping which renders as `{}`. This
+// lets callers create placeholder entries like `apis.foo.models.bar: {}`
+// without writing a fake field under the model.
+func setLeafValue(node *yaml.Node, value any) {
+	if m, ok := value.(map[string]any); ok {
+		node.Kind = yaml.MappingNode
+		node.Tag = "!!map"
+		node.Content = nil
+		for k, vv := range m {
+			node.Content = append(node.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
+				newLeafNode(vv),
+			)
+		}
+		return
+	}
 	node.Kind = yaml.ScalarNode
 	node.Content = nil
 	switch v := value.(type) {
@@ -223,9 +239,10 @@ func setScalarValue(node *yaml.Node, value any) {
 	}
 }
 
-// scalarNodeFor creates a fresh scalar node for the given value.
-func scalarNodeFor(value any) *yaml.Node {
-	node := &yaml.Node{Kind: yaml.ScalarNode}
-	setScalarValue(node, value)
+// newLeafNode creates a fresh leaf node for the given value, supporting
+// scalars and YAML mappings (map[string]any).
+func newLeafNode(value any) *yaml.Node {
+	node := &yaml.Node{}
+	setLeafValue(node, value)
 	return node
 }

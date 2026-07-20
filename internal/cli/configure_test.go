@@ -118,8 +118,8 @@ func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) 
 	requireUpdateValue(t, updates, []string{"apis", "groq", "base-url"}, "https://api.groq.com/openai/v1")
 	requireUpdateValue(t, updates, []string{"apis", "groq", "api-key-env"}, "GROQ_API_KEY")
 	requireUpdateValue(t, updates, []string{"default-model"}, "llama-3.3-70b-versatile")
-	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.3-70b-versatile", "max-input-chars"}, defaultNewModelInputChars)
-	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.1-8b-instant", "max-input-chars"}, defaultNewModelInputChars)
+	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.3-70b-versatile"}, map[string]any{})
+	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.1-8b-instant"}, map[string]any{})
 	requireNoUpdatePath(t, updates, []string{"builtin-tools", "sequential-thinking"})
 
 	path := writeCLIConfig(t, `default-api: openai
@@ -134,10 +134,15 @@ apis: {}
 	require.Equal(t, "https://api.groq.com/openai/v1", groq["base-url"])
 	require.Equal(t, "GROQ_API_KEY", groq["api-key-env"])
 	models := groq["models"].(map[string]any)
+	// Each newly added model is registered as an empty mapping so the
+	// model is selectable, while leaving max-input-chars (and every other
+	// per-model field) unset so the top-level default is inherited.
 	model := models["llama-3.3-70b-versatile"].(map[string]any)
-	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
+	require.Empty(t, model)
+	require.NotContains(t, model, "max-input-chars")
 	model = models["llama-3.1-8b-instant"].(map[string]any)
-	require.Equal(t, defaultNewModelInputChars, model["max-input-chars"])
+	require.Empty(t, model)
+	require.NotContains(t, model, "max-input-chars")
 }
 
 func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testing.T) {
@@ -153,7 +158,7 @@ func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testi
 		addedModelNames:        []string{"deepseek-v4-flash"},
 	})
 
-	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "max-input-chars"}, defaultNewModelInputChars)
+	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash"}, map[string]any{})
 	requireNoUpdatePath(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "thinking-type"})
 }
 
@@ -208,7 +213,7 @@ func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testin
 
 	requireNoUpdatePath(t, updates, []string{"apis", "openrouter", "base-url"})
 	requireNoUpdatePath(t, updates, []string{"apis", "openrouter", "api-type"})
-	requireUpdateValue(t, updates, []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "max-input-chars"}, defaultNewModelInputChars)
+	requireUpdateValue(t, updates, []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest"}, map[string]any{})
 }
 
 // TestSeedThenSaveBootstrapsPortableConfig exercises the seed-then-save

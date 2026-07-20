@@ -171,6 +171,51 @@ func TestSaveFields_BoolSerialization(t *testing.T) {
 	require.NotContains(t, string(data), `"true"`)
 }
 
+func TestSaveFieldPaths_EmptyMapCreatesEmptyMapping(t *testing.T) {
+	path := writeTestConfig(t, `default-api: openai
+apis: {}
+`)
+
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"apis", "groq", "models", "llama-3.3-70b-versatile"}, Value: map[string]any{}},
+	}))
+
+	// Round-trip: the model entry exists as an empty mapping.
+	m := loadAsMap(t, path)
+	apis := m["apis"].(map[string]any)
+	groq := apis["groq"].(map[string]any)
+	models := groq["models"].(map[string]any)
+	model := models["llama-3.3-70b-versatile"].(map[string]any)
+	require.Empty(t, model)
+
+	// On disk the model renders as `name: {}` so the file stays readable
+	// and the entry is unmistakably empty rather than missing.
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "llama-3.3-70b-versatile: {}")
+}
+
+func TestSaveFieldPaths_NonEmptyMapWritesMapping(t *testing.T) {
+	path := writeTestConfig(t, `default-api: openai
+apis: {}
+`)
+
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"apis", "groq", "models", "llama-3.3-70b-versatile"}, Value: map[string]any{
+			"max-input-chars": 800000,
+			"fallback":        "llama-3.1-8b-instant",
+		}},
+	}))
+
+	m := loadAsMap(t, path)
+	apis := m["apis"].(map[string]any)
+	groq := apis["groq"].(map[string]any)
+	models := groq["models"].(map[string]any)
+	model := models["llama-3.3-70b-versatile"].(map[string]any)
+	require.Equal(t, 800000, model["max-input-chars"])
+	require.Equal(t, "llama-3.1-8b-instant", model["fallback"])
+}
+
 func TestSaveFields_DeleteField(t *testing.T) {
 	path := writeTestConfig(t, `web-search: true
 web-search-provider: tavily

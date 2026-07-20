@@ -65,7 +65,7 @@ theme: charm
 # Model Parameters
 # -----------------------------------------------------------------------------
 # {{ index .Help "max-input-chars" }}
-max-input-chars: 12250
+max-input-chars: 0
 # {{ index .Help "max-tokens" }}
 # max-tokens: 100
 # {{ index .Help "no-limit" }}
@@ -262,7 +262,6 @@ apis:
   #   models:
   #     your-model:
   #       aliases: ["ym"]
-  #       max-input-chars: 100000
   #
   #       # Reasoning / Thinking configuration
   #       # These fields control how -t / --think on interacts with
@@ -308,7 +307,6 @@ apis:
   #   models:
   #     claude-sonnet-4:
   #       aliases: ["acme-sonnet"]
-  #       max-input-chars: 800000
   #
   # api-type also works for the other native adapters: ollama, google,
   # azure, azure-ad. Omit it to use the OpenAI-compatible
@@ -330,10 +328,8 @@ apis:
   #   models:
   #     qwen3.7-plus:
   #       aliases: ["qwen-plus"]
-  #       max-input-chars: 1000000
   #     minimax-m3:
   #       aliases: ["mimo"]
-  #       max-input-chars: 1000000
   #
   # opencode-openai:     # OpenAI-protocol models (GLM, Kimi, DeepSeek, MiMo)
   #   base-url: https://opencode.ai/zen/go/v1
@@ -342,7 +338,5 @@ apis:
   #   models:
   #     glm-5.2:
   #       aliases: ["glm"]
-  #       max-input-chars: 1000000
   #     kimi-k2.7-code:
   #       aliases: ["kimi"]
-  #       max-input-chars: 1000000

@@ -298,8 +298,12 @@ func (m *Mods) appendResponseBoundary() {
 // RenderedOutput remain model-output-only. When Bubble Tea owns stderr, Println
 // inserts the record safely above the live renderer; otherwise write it
 // directly to stderr.
+//
+// HideToolStatus suppresses these records too: the flag's name promises to hide
+// tool status, and the completed-call summary is part of that surface (the
+// footer's running label is gated separately via showOperationStatus).
 func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd {
-	if m.Config.Raw || m.Config.Minimal {
+	if m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus {
 		return nil
 	}
 	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())

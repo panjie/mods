@@ -66,7 +66,7 @@ var Help = map[string]string{
 	"list-skills":      "List installed skills from the configured skills directories",
 	"prompts":          "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":              "Render output as raw text when connected to a TTY",
-	"hide-tool-status": "Hide the tool-operation label while tools run (the spinner stays visible)",
+	"hide-tool-status": "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
 	"show-token-usage": "Show input, output, and total token usage after each interaction",
 	"help":             "Show Help and exit",
 	"version":          "Show version and exit",

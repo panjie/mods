@@ -1269,6 +1269,16 @@ func TestToolResultOutput(t *testing.T) {
 		require.Empty(t, stderr)
 	})
 
+	t.Run("hide-tool-status suppresses tool results", func(t *testing.T) {
+		m := newMods()
+		m.Config.HideToolStatus = true
+		stderr := captureStderr(t, func() {
+			require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"/a"}`), nil))
+		})
+		require.Empty(t, m.Output)
+		require.Empty(t, stderr)
+	})
+
 	t.Run("non shell tool writes stderr", func(t *testing.T) {
 		m := newMods()
 		stderr := captureStderr(t, func() {

@@ -485,6 +485,9 @@ func (s *Stream) Current() (proto.Chunk, error) {
 		var text, thought string
 		for _, part := range parts {
 			if part.FunctionCall != nil {
+				if part.FunctionCall.ThoughtSignature == "" && part.ThoughtSignature != "" {
+					part.FunctionCall.ThoughtSignature = part.ThoughtSignature
+				}
 				s.addFunctionCall(part.FunctionCall)
 			}
 			if part.Text == "" {

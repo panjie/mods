@@ -85,23 +85,14 @@ func fromProtoMessageOK(input proto.Message) (Content, bool) {
 			if args == nil {
 				args = map[string]any{}
 			}
-			// Google requires thought parts preceding a function call to
-			// carry their thoughtSignature back in subsequent requests.
-			// mods discards the thought text but preserves the signature
-			// as an empty thought part so the API stays satisfied.
+			p := Part{FunctionCall: &FunctionCall{
+				Name: call.Function.Name,
+				Args: args,
+			}}
 			if call.Function.ThoughtSignature != "" {
-				thoughtTrue := true
-				c.Parts = append(c.Parts, Part{
-					Thought:          &thoughtTrue,
-					ThoughtSignature: call.Function.ThoughtSignature,
-				})
+				p.ThoughtSignature = call.Function.ThoughtSignature
 			}
-			c.Parts = append(c.Parts, Part{FunctionCall: &FunctionCall{
-				ID:               call.ID,
-				Name:             call.Function.Name,
-				Args:             args,
-				ThoughtSignature: call.Function.ThoughtSignature,
-			}})
+			c.Parts = append(c.Parts, p)
 		}
 		return c, len(c.Parts) > 0
 	case proto.RoleTool:
@@ -112,7 +103,6 @@ func fromProtoMessageOK(input proto.Message) (Content, bool) {
 				key = "error"
 			}
 			c.Parts = append(c.Parts, Part{FunctionResponse: &FunctionResponse{
-				ID:   call.ID,
 				Name: call.Function.Name,
 				Response: map[string]any{
 					key: input.Content,

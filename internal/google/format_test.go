@@ -412,16 +412,10 @@ func TestFromProtoMessagePreservesThoughtSignature(t *testing.T) {
 	})
 	require.True(t, ok)
 
-	// The thought part must carry the signature back as an empty thought.
-	require.Len(t, content.Parts, 2, "expected thought part + functionCall part")
-	require.NotNil(t, content.Parts[0].Thought)
-	require.True(t, *content.Parts[0].Thought)
-	require.Empty(t, content.Parts[0].Text, "thought text is discarded; only signature preserved")
+	// The thoughtSignature is carried at the Part level.
+	require.Len(t, content.Parts, 1)
 	require.Equal(t, "sig_xyz", content.Parts[0].ThoughtSignature)
-
-	// The functionCall part must also carry the signature.
-	require.NotNil(t, content.Parts[1].FunctionCall)
-	require.Equal(t, "sig_xyz", content.Parts[1].FunctionCall.ThoughtSignature)
+	require.NotNil(t, content.Parts[0].FunctionCall)
 }
 
 func TestFromProtoMessageOmitsThoughtPartWhenNoSignature(t *testing.T) {
@@ -496,13 +490,12 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	assistant := contents[1].(map[string]any)
 	require.Equal(t, geminiRoleModel, assistant["role"])
 	parts := assistant["parts"].([]any)
-	require.Len(t, parts, 2, "budget rebuild must preserve the thought-signature part")
-	functionCall := parts[1].(map[string]any)["functionCall"].(map[string]any)
-	require.Equal(t, "sig_budget", functionCall["thoughtSignature"])
+	require.Len(t, parts, 1)
+	part := parts[0].(map[string]any)
+	require.Equal(t, "sig_budget", part["thoughtSignature"])
 	toolResult := contents[2].(map[string]any)
 	require.Equal(t, geminiRoleUser, toolResult["role"])
 	fnResp := toolResult["parts"].([]any)[0].(map[string]any)["functionResponse"].(map[string]any)
-	require.Equal(t, "call_1", fnResp["id"])
 	require.Equal(t, "read_file", fnResp["name"])
 	require.Equal(t, map[string]any{"result": "README contents"}, fnResp["response"])
 

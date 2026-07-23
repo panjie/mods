@@ -210,6 +210,14 @@ func disableOpenAICompatibleThink(mod Model, ccfg *openai.Config) {
 		return
 	}
 
+	// Kimi's thinking parameter only accepts type=enabled. Omitting the
+	// parameter is its off signal; type=disabled is rejected by the API.
+	if mod.API == "kimi" {
+		omitExtraParam(ccfg, "thinking")
+		debug.Printf("Think: thinking field omitted (thinking off for kimi)")
+		return
+	}
+
 	if useReasoningEffort(mod, ccfg) {
 		effort, ok := disabledReasoningEffort(mod)
 		if !ok {

@@ -499,13 +499,19 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 		require.True(t, gccfg.ThinkingBudgetExplicit)
 	})
 
-	t.Run("Kimi off sends disabled", func(t *testing.T) {
-		ccfg := openai.Config{}
+	t.Run("Kimi off omits thinking because the API only accepts enabled", func(t *testing.T) {
+		configuredExtraParams := map[string]any{
+			"thinking": map[string]any{"type": "enabled"},
+			"custom":   true,
+		}
+		ccfg := openai.Config{ExtraParams: configuredExtraParams}
 
 		active := applyThinkConfigs(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, &ccfg, false)
 
 		require.False(t, active)
-		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
+		require.NotContains(t, ccfg.ExtraParams, "thinking")
+		require.Equal(t, true, ccfg.ExtraParams["custom"])
+		require.Contains(t, configuredExtraParams, "thinking")
 	})
 
 	t.Run("Ollama skips thinking entirely", func(t *testing.T) {

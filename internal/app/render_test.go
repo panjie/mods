@@ -231,6 +231,39 @@ func TestCompletionOutputThoughtField(t *testing.T) {
 	require.Less(t, thoughtIdx, answerIdx, "thinking block should appear before the answer")
 }
 
+func TestCompletionOutputDiscardsThoughtFieldWhenThinkInactive(t *testing.T) {
+	oldIsOutputTTY := isOutputTTY
+	isOutputTTY = func() bool { return false }
+	defer func() { isOutputTTY = oldIsOutputTTY }()
+
+	m := &Mods{
+		Config:              &Config{},
+		Styles:              makeStyles(true),
+		state:               requestState,
+		contentMutex:        &sync.Mutex{},
+		thinkActive:         false,
+		showOperationStatus: true,
+		reviewer:            &toolReviewer{},
+	}
+	m.Config.Raw = true
+	runner := newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return nil })
+
+	_, _ = m.Update(streamEventMsg{
+		kind:   streamEventChunk,
+		chunk:  proto.Chunk{Thought: "private reasoning"},
+		runner: runner,
+	})
+	_, _ = m.Update(streamEventMsg{
+		kind:   streamEventChunk,
+		chunk:  proto.Chunk{Content: "final answer"},
+		runner: runner,
+	})
+
+	require.Equal(t, "final answer", m.Output)
+	require.NotContains(t, m.Output, "private reasoning")
+	require.True(t, m.thoughtFlushed)
+}
+
 func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
 	oldIsOutputTTY := isOutputTTY
 	isOutputTTY = func() bool { return false }

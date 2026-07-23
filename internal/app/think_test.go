@@ -88,6 +88,16 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 		require.False(t, hasBudget)
 	})
 
+	t.Run("MiniMax still parses inline thinking when not requested", func(t *testing.T) {
+		ccfg := openai.Config{}
+
+		active := applyThinkConfigs(Model{API: "minimax"}, nil, nil, &ccfg, false)
+
+		require.False(t, active)
+		require.True(t, ccfg.ThinkTags)
+		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
+	})
+
 	t.Run("GLM defaults to enabled and preserves non-adaptive budget_tokens", func(t *testing.T) {
 		ccfg := openai.Config{ExtraParams: map[string]any{
 			"thinking": map[string]any{"type": "disabled", "budget_tokens": 4096},

@@ -148,7 +148,11 @@ func debugAnthropicEffort(effort string) {
 
 func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, requested bool) bool {
 	if !requested {
-		ccfg.ThinkTags = false
+		// MiniMax reasoning models can still return <think>...</think> in the
+		// content stream when their undocumented thinking-off parameter is
+		// ignored. Keep parsing enabled so -t controls display only; parsed
+		// thought is discarded by the app when thinking is inactive.
+		ccfg.ThinkTags = mod.API == "minimax"
 		disableOpenAICompatibleThink(mod, ccfg)
 		return false
 	}

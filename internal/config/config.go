@@ -725,6 +725,13 @@ func settingsFilePath() (string, error) {
 	if p, ok := portableConfigPath(); ok {
 		return p, nil
 	}
+	return StandardSettingsPath()
+}
+
+// StandardSettingsPath returns the XDG/home configuration path without
+// considering portable mode. Callers use it when offering an explicit choice
+// between standard and portable storage.
+func StandardSettingsPath() (string, error) {
 	relPath := filepath.Join("mods", "mods.yml")
 	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
 		return filepath.Join(configHome, relPath), nil

@@ -268,6 +268,7 @@ func (*Input) Zoom() bool { return false }
 
 // Focus focuses the input field.
 func (i *Input) Focus() tea.Cmd {
+	i.syncAccessorValue()
 	i.focused = true
 	return i.textinput.Focus()
 }
@@ -303,8 +304,10 @@ func (i *Input) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		i.hasDarkBg = msg.IsDark()
+		i.syncAccessorValue()
 	case updateFieldMsg:
 		var cmds []tea.Cmd
+		i.syncAccessorValue()
 		if ok, hash := i.title.shouldUpdate(); ok {
 			i.title.bindingsHash = hash
 			if !i.title.loadFromCache() {
@@ -387,6 +390,12 @@ func (i *Input) Update(msg tea.Msg) (Model, tea.Cmd) {
 	i.accessor.Set(i.textinput.Value())
 
 	return i, tea.Batch(cmds...)
+}
+
+func (i *Input) syncAccessorValue() {
+	if value := i.accessor.Get(); value != i.textinput.Value() {
+		i.textinput.SetValue(value)
+	}
 }
 
 func (i *Input) activeStyles() *FieldStyles {

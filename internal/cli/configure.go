@@ -39,7 +39,7 @@ const (
 func RunConfigWizard() error {
 	// Pre-fill with current config values.
 	chosenAPI := config.API
-	var apiKey, keyStorage, baseURL, newProviderName string
+	var newProviderName string
 	// apiType is the protocol chosen for a newly added provider (the page is
 	// only shown then). "openai" means OpenAI-compatible and writes nothing.
 	apiType := "openai"
@@ -69,13 +69,15 @@ func RunConfigWizard() error {
 	if config.PortableDir != "" {
 		saveLocation = "portable"
 	}
+	standardPath, err := cfgpkg.StandardSettingsPath()
+	if err != nil {
+		return fmt.Errorf("resolve standard config path: %w", err)
+	}
 	portablePath := ""
 	if exeDir := cfgpkg.ExeDir(); exeDir != "" {
 		portablePath = filepath.Join(exeDir, "mods.yml")
 	}
 
-	// Default storage: "env" (recommended), unless a key is already saved.
-	keyStorage = "env"
 	copilotSignIn := true
 	copilotPostAuth := false
 
@@ -94,23 +96,28 @@ func RunConfigWizard() error {
 	currentProvider := func() string {
 		return wizardProviderName(chosenAPI, newProviderName)
 	}
+	providerDrafts := newConfigWizardProviderDrafts(config)
+	baseURLAccessor := providerDrafts.accessor(currentProvider, configWizardProviderDraftBaseURL)
+	apiKeyAccessor := providerDrafts.accessor(currentProvider, configWizardProviderDraftAPIKey)
+	keyStorageAccessor := providerDrafts.accessor(currentProvider, configWizardProviderDraftKeyStorage)
 	discoverOptions := func() []huh.Option[string] {
 		api := currentProvider()
 		modelState.switchProvider(api, providerCatalog)
+		draft := providerDrafts.forProvider(api)
 		eff := configWizardDiscoveryType(chosenAPI, newProviderName, apiType)
 		if chosenAPI != addProviderOption {
 			if at := findAPIType(api); at != "" {
 				eff = at
 			}
 		}
-		base := strings.TrimSpace(baseURL)
+		base := strings.TrimSpace(draft.baseURL)
 		if base == "" {
 			base = findBaseURL(api)
 		}
 		if base == "" {
 			base = builtinBaseURL(api)
 		}
-		if configWizardWaitingForCopilotAuth(api, apiKey) {
+		if configWizardWaitingForCopilotAuth(api, draft.apiKey) {
 			modelState.setDiscoveryFailure(api, fmt.Errorf("GitHub Copilot device authentication is required before model discovery"))
 			return nil
 		}
@@ -118,10 +125,10 @@ func RunConfigWizard() error {
 		var derr error
 		if eff == "github-copilot" {
 			var endpoints map[string]string
-			discovered, endpoints, derr = discoverCopilotModels(base, resolveKeyForDiscovery(api, apiKey))
+			discovered, endpoints, derr = discoverCopilotModels(base, resolveKeyForDiscovery(api, draft.apiKey))
 			modelState.copilotEndpoints = endpoints
 		} else {
-			discovered, derr = discoverModels(eff, base, resolveKeyForDiscovery(api, apiKey))
+			discovered, derr = discoverModels(eff, base, resolveKeyForDiscovery(api, draft.apiKey))
 		}
 		if derr != nil || len(discovered) == 0 {
 			if derr == nil {
@@ -146,7 +153,8 @@ func RunConfigWizard() error {
 
 	wizardTheme := configWizardTheme(config.Theme)
 	waitingForCopilotAuth := func() bool {
-		return configWizardWaitingForCopilotAuth(wizardProviderName(chosenAPI, newProviderName), apiKey)
+		api := currentProvider()
+		return configWizardWaitingForCopilotAuth(api, providerDrafts.forProvider(api).apiKey)
 	}
 	manualModelsAccessor := configWizardManualModelsAccessor{
 		state:   modelState,
@@ -154,7 +162,15 @@ func RunConfigWizard() error {
 		apiName: currentProvider,
 	}
 	for {
-		form := huh.NewForm(
+		form := newConfigWizardForm(configWizardFormConfig{
+			theme:           wizardTheme,
+			keymap:          keymap,
+			standardPath:    standardPath,
+			portablePath:    portablePath,
+			saveLocation:    &saveLocation,
+			storageHidden:   func() bool { return waitingForCopilotAuth() || portablePath == "" },
+			escapeAbortText: "Press Esc again to exit.",
+		},
 			// Page 1: Provider
 			huh.NewGroup(
 				huh.NewSelect[string]().
@@ -208,7 +224,7 @@ func RunConfigWizard() error {
 						}
 						return builtinBaseURL(chosenAPI)
 					}, &chosenAPI).
-					Value(&baseURL).
+					Accessor(baseURLAccessor).
 					Validate(func(value string) error {
 						return validateWizardBaseURL(chosenAPI, value)
 					}),
@@ -229,7 +245,8 @@ func RunConfigWizard() error {
 				Title("credentials").
 				Description("Authenticate with GitHub Copilot using device authorization.").
 				WithHideFunc(func() bool {
-					return copilotPostAuth || !configWizardWaitingForCopilotAuth(wizardProviderName(chosenAPI, newProviderName), apiKey)
+					api := currentProvider()
+					return copilotPostAuth || !configWizardWaitingForCopilotAuth(api, providerDrafts.forProvider(api).apiKey)
 				}),
 
 			// Page 6: API key storage method (skip for ollama and copilot)
@@ -244,7 +261,7 @@ func RunConfigWizard() error {
 							huh.NewOption("Save in config file", "config"),
 						}
 					}, []any{&chosenAPI, &newProviderName}).
-					Value(&keyStorage),
+					Accessor(keyStorageAccessor),
 			).
 				Title("credentials").
 				Description("Tell mods where to read the API key from.").
@@ -260,13 +277,14 @@ func RunConfigWizard() error {
 					Description("The key is stored in plaintext in your config file.").
 					Placeholder("sk-...").
 					Password(true).
-					Value(&apiKey),
+					Accessor(apiKeyAccessor),
 			).
 				Title("saved key").
 				Description("Only use this on a machine and config file you control.").
 				WithHideFunc(func() bool {
 					api := wizardProviderName(chosenAPI, newProviderName)
-					return copilotPostAuth || api == "ollama" || api == "github-copilot" || keyStorage != "config"
+					return copilotPostAuth || api == "ollama" || api == "github-copilot" ||
+						providerDrafts.forProvider(api).keyStorage != "config"
 				}),
 
 			// Discover models: live fetch with a spinner. Selected discovered
@@ -286,7 +304,9 @@ func RunConfigWizard() error {
 						}
 						return nil
 					}).
-					OptionsFunc(discoverOptions, []any{&chosenAPI, &newProviderName, &apiType, &baseURL, &apiKey}).
+					OptionsFunc(discoverOptions, []any{
+						&chosenAPI, &newProviderName, &apiType, &providerDrafts.revision,
+					}).
 					Value(discoveredPick),
 			).
 				Title("discover models").
@@ -439,17 +459,7 @@ func RunConfigWizard() error {
 				Title("review").
 				Description("Tune the approval behavior for tool execution.").
 				WithHideFunc(waitingForCopilotAuth),
-
-			// Page 15: Config file location
-			configWizardStorageGroup(config.SettingsPath, portablePath, &saveLocation).
-				WithHideFunc(func() bool {
-					return waitingForCopilotAuth() || portablePath == ""
-				}),
-		).
-			WithTheme(wizardTheme).
-			WithLayout(configWizardLayoutForTheme(wizardTheme)).
-			WithKeyMap(keymap).
-			WithEscapeAbortConfirmation("Press Esc again to exit.")
+		)
 
 		if err := form.Run(); err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
@@ -461,13 +471,17 @@ func RunConfigWizard() error {
 
 		apiName := wizardProviderName(chosenAPI, newProviderName)
 		if waitingForCopilotAuth() {
-			if err := runConfigWizardCopilotAuth(context.Background(), apiName, &apiKey, &keyStorage); err != nil {
+			draft := providerDrafts.forProvider(apiName)
+			if err := runConfigWizardCopilotAuth(
+				context.Background(), apiName, &draft.apiKey, &draft.keyStorage,
+			); err != nil {
 				if errors.Is(err, huh.ErrUserAborted) {
 					fmt.Fprintln(os.Stderr, "\nCanceled.")
 					return nil
 				}
 				return fmt.Errorf("github copilot authentication: %w", err)
 			}
+			providerDrafts.revision++
 			copilotPostAuth = true
 			continue
 		}
@@ -475,10 +489,11 @@ func RunConfigWizard() error {
 	}
 
 	apiName := wizardProviderName(chosenAPI, newProviderName)
+	providerDraft := providerDrafts.forProvider(apiName)
 
 	// Resolve provider identity and base URL.
 	envVarName := resolveEnvVar(apiName)
-	providerBaseURL := strings.TrimSpace(baseURL)
+	providerBaseURL := strings.TrimSpace(providerDraft.baseURL)
 	if providerBaseURL == "" {
 		providerBaseURL = findBaseURL(apiName)
 	}
@@ -505,7 +520,7 @@ func RunConfigWizard() error {
 	modelName := addedModelNames[0]
 
 	saveConnection, err := confirmConfigWizardConnection(
-		apiName, effType, modelName, providerBaseURL, apiKey, newProvider,
+		apiName, effType, modelName, providerBaseURL, providerDraft.apiKey, newProvider,
 	)
 	if err != nil {
 		return err
@@ -514,7 +529,7 @@ func RunConfigWizard() error {
 		return nil
 	}
 
-	savePath := config.SettingsPath
+	savePath := standardPath
 	if saveLocation == "portable" {
 		savePath = portablePath
 	}
@@ -538,21 +553,24 @@ func RunConfigWizard() error {
 		webSearchKeyStorage:    webSearchKeyStorage,
 		webSearchAPIKey:        webSearchAPIKey,
 		webSearchAPIKeyEnv:     webSearchAPIKeyEnv,
-		keyStorage:             keyStorage,
-		apiKey:                 apiKey,
+		keyStorage:             providerDraft.keyStorage,
+		apiKey:                 providerDraft.apiKey,
 		envVarName:             envVarName,
-		baseURLInput:           baseURL,
+		baseURLInput:           providerDraft.baseURL,
 		addedModelNames:        addedModelNames,
 		copilotModelEndpoints:  modelState.copilotEndpoints,
+		portable:               saveLocation == "portable",
 	}
+	newModelNames := configWizardNewModelNames(apiName, addedModelNames)
 	return saveConfigWizard(savePath, previousPath, saveData, summaryData{
 		api:                 apiName,
 		model:               modelName,
 		apiType:             apiType,
-		keyStorage:          keyStorage,
+		keyStorage:          providerDraft.keyStorage,
 		envVarName:          envVarName,
 		baseURL:             providerBaseURL,
-		addedModelCount:     len(addedModelNames),
+		modelCount:          len(addedModelNames),
+		addedModelCount:     len(newModelNames),
 		fsMode:              fsMode,
 		shellOn:             shellOn,
 		webSearchOn:         webSearchOn,
@@ -599,6 +617,33 @@ func confirmConfigWizardConnection(apiName, apiType, modelName, baseURL, apiKey 
 	return true, nil
 }
 
+type configWizardFormConfig struct {
+	theme           huh.Theme
+	keymap          *huh.KeyMap
+	standardPath    string
+	portablePath    string
+	saveLocation    *string
+	storageHidden   func() bool
+	escapeAbortText string
+}
+
+func newConfigWizardForm(cfg configWizardFormConfig, groups ...*huh.Group) *huh.Form {
+	storage := configWizardStorageGroup(cfg.standardPath, cfg.portablePath, cfg.saveLocation)
+	if cfg.storageHidden != nil {
+		storage = storage.WithHideFunc(cfg.storageHidden)
+	}
+	groups = append(groups, storage)
+
+	form := huh.NewForm(groups...).
+		WithTheme(cfg.theme).
+		WithLayout(configWizardLayoutForTheme(cfg.theme)).
+		WithKeyMap(cfg.keymap)
+	if cfg.escapeAbortText != "" {
+		form = form.WithEscapeAbortConfirmation(cfg.escapeAbortText)
+	}
+	return form
+}
+
 func configWizardStorageGroup(settingsPath, portablePath string, saveLocation *string) *huh.Group {
 	return huh.NewGroup(
 		huh.NewSelect[string]().
@@ -616,6 +661,9 @@ func configWizardStorageGroup(settingsPath, portablePath string, saveLocation *s
 
 func saveConfigWizard(savePath, previousPath string, data configWizardSaveData, summary summaryData) error {
 	printConfigSummary(summary)
+	if err := os.MkdirAll(filepath.Dir(savePath), 0o700); err != nil {
+		return fmt.Errorf("prepare config directory: %w", err)
+	}
 	if err := WriteDefaultFile(savePath); err != nil {
 		return fmt.Errorf("prepare config file: %w", err)
 	}
@@ -623,16 +671,20 @@ func saveConfigWizard(savePath, previousPath string, data configWizardSaveData, 
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	if savePath != previousPath && !config.SettingsExisted {
+	if savePath != previousPath && (config.PortableDir != "" || !config.SettingsExisted) {
 		if err := os.Remove(previousPath); err != nil && !os.IsNotExist(err) {
-			_, _ = lipgloss.Fprintf(os.Stderr, "Warning: could not remove auto-created config %s: %v\n",
+			_, _ = lipgloss.Fprintf(os.Stderr, "Warning: could not remove previous config %s: %v\n",
 				StderrStyles().InlineCode.Render(previousPath), err)
 		}
 	}
 
 	_, _ = lipgloss.Fprintf(os.Stderr, "\nSaved to %s\n", StderrStyles().InlineCode.Render(savePath))
 	if savePath != previousPath {
-		fmt.Fprintln(os.Stderr, "Portable mode will be active on the next launch.")
+		if data.portable {
+			fmt.Fprintln(os.Stderr, "Portable mode will be active on the next launch.")
+		} else {
+			fmt.Fprintln(os.Stderr, "Standard mode will be active on the next launch.")
+		}
 	}
 	if data.keyStorage == "env" && data.apiName != "ollama" && data.apiName != "github-copilot" {
 		fmt.Fprintf(os.Stderr, "\nRemember to export your key:\n  export %s=sk-...\n", data.envVarName)
@@ -673,6 +725,10 @@ func buildProviderOptions() []huh.Option[string] {
 	opts := make([]huh.Option[string], 0, len(config.APIs)+len(builtins)+1)
 	for _, api := range config.APIs {
 		if len(api.Models) == 0 {
+			if _, builtIn := providerinfo.Lookup(api.Name); !builtIn {
+				seen[api.Name] = struct{}{}
+				opts = append(opts, huh.NewOption(incompleteProviderLabel(api), api.Name))
+			}
 			continue
 		}
 		seen[api.Name] = struct{}{}
@@ -690,6 +746,10 @@ func buildProviderOptions() []huh.Option[string] {
 
 func configuredProviderLabel(api API) string {
 	return fmt.Sprintf("✓ %-12s  %s", api.Name, configuredProviderModelsSummary(api))
+}
+
+func incompleteProviderLabel(api API) string {
+	return fmt.Sprintf("+ %-12s  %s", api.Name, configuredProviderModelsSummary(api))
 }
 
 func availableProviderLabel(provider providerinfo.NamedDescriptor) string {
@@ -752,6 +812,7 @@ var runConfigWizardCopilotAuthScreen = func(ctx context.Context, device copilotD
 		device: device,
 		theme:  configWizardTheme(config.Theme),
 	})
+	defer model.cancel()
 	result, err := tea.NewProgram(model, buildTeaProgramOptions()...).Run()
 	if err != nil {
 		return "", err
@@ -777,6 +838,7 @@ type configWizardCopilotAuthData struct {
 
 type configWizardCopilotAuthModel struct {
 	data     configWizardCopilotAuthData
+	cancel   context.CancelFunc
 	width    int
 	height   int
 	token    string
@@ -796,10 +858,17 @@ func newConfigWizardCopilotAuthModel(data configWizardCopilotAuthData) configWiz
 	if data.ctx == nil {
 		data.ctx = context.Background()
 	}
+	pollCtx, cancel := context.WithCancel(data.ctx)
+	data.ctx = pollCtx
 	if data.theme == nil {
 		data.theme = configWizardTheme(config.Theme)
 	}
-	return configWizardCopilotAuthModel{data: data, width: 80, height: 20}
+	return configWizardCopilotAuthModel{
+		data:   data,
+		cancel: cancel,
+		width:  80,
+		height: 20,
+	}
 }
 
 func (m configWizardCopilotAuthModel) Init() tea.Cmd {
@@ -821,13 +890,16 @@ func (m configWizardCopilotAuthModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if msg.Code == tea.KeyEsc || msg.String() == "ctrl+c" {
 			m.canceled = true
+			m.cancel()
 			return m, tea.Quit
 		}
 	case configWizardCopilotAuthDoneMsg:
 		m.token = msg.token
+		m.cancel()
 		return m, tea.Quit
 	case configWizardCopilotAuthErrMsg:
 		m.err = msg.err
+		m.cancel()
 		return m, tea.Quit
 	}
 	return m, nil
@@ -1211,6 +1283,96 @@ type configWizardProviderCatalog struct {
 	sets   map[string]map[string]struct{}
 }
 
+type configWizardProviderDraft struct {
+	baseURL    string
+	apiKey     string
+	keyStorage string
+}
+
+type configWizardProviderDraftField int
+
+const (
+	configWizardProviderDraftBaseURL configWizardProviderDraftField = iota
+	configWizardProviderDraftAPIKey
+	configWizardProviderDraftKeyStorage
+)
+
+type configWizardProviderDrafts struct {
+	drafts   map[string]*configWizardProviderDraft
+	revision int
+}
+
+func newConfigWizardProviderDrafts(cfg Config) *configWizardProviderDrafts {
+	drafts := &configWizardProviderDrafts{
+		drafts: make(map[string]*configWizardProviderDraft, len(cfg.APIs)),
+	}
+	for _, api := range cfg.APIs {
+		draft := &configWizardProviderDraft{keyStorage: "env"}
+		if api.APIKey != "" {
+			draft.apiKey = api.APIKey
+			draft.keyStorage = "config"
+		}
+		drafts.drafts[api.Name] = draft
+	}
+	return drafts
+}
+
+func (d *configWizardProviderDrafts) forProvider(apiName string) *configWizardProviderDraft {
+	if draft := d.drafts[apiName]; draft != nil {
+		return draft
+	}
+	draft := &configWizardProviderDraft{keyStorage: "env"}
+	d.drafts[apiName] = draft
+	return draft
+}
+
+func (d *configWizardProviderDrafts) accessor(
+	apiName func() string,
+	field configWizardProviderDraftField,
+) huh.Accessor[string] {
+	return configWizardProviderDraftAccessor{
+		drafts:  d,
+		apiName: apiName,
+		field:   field,
+	}
+}
+
+type configWizardProviderDraftAccessor struct {
+	drafts  *configWizardProviderDrafts
+	apiName func() string
+	field   configWizardProviderDraftField
+}
+
+func (a configWizardProviderDraftAccessor) Get() string {
+	draft := a.drafts.forProvider(a.apiName())
+	switch a.field {
+	case configWizardProviderDraftBaseURL:
+		return draft.baseURL
+	case configWizardProviderDraftAPIKey:
+		return draft.apiKey
+	case configWizardProviderDraftKeyStorage:
+		return draft.keyStorage
+	default:
+		return ""
+	}
+}
+
+func (a configWizardProviderDraftAccessor) Set(value string) {
+	draft := a.drafts.forProvider(a.apiName())
+	current := a.Get()
+	switch a.field {
+	case configWizardProviderDraftBaseURL:
+		draft.baseURL = value
+	case configWizardProviderDraftAPIKey:
+		draft.apiKey = value
+	case configWizardProviderDraftKeyStorage:
+		draft.keyStorage = value
+	}
+	if current != value {
+		a.drafts.revision++
+	}
+}
+
 func newConfigWizardProviderCatalog(cfg Config) configWizardProviderCatalog {
 	catalog := configWizardProviderCatalog{
 		models: make(map[string][]string, len(cfg.APIs)),
@@ -1385,7 +1547,7 @@ type configWizardSaveData struct {
 	keyStorage, apiKey, envVarName, baseURLInput    string
 	addedModelNames                                 []string
 	copilotModelEndpoints                           map[string]string
-	shellOn, webSearchOn                            bool
+	shellOn, webSearchOn, portable                  bool
 }
 
 func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
@@ -1416,7 +1578,9 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		}
 		if d.keyStorage == "config" && d.apiKey != "" {
 			updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-key"}, Value: d.apiKey})
+			updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-key-env"}, Value: nil})
 		} else if d.envVarName != "" {
+			updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-key"}, Value: nil})
 			updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-key-env"}, Value: d.envVarName})
 		}
 	}
@@ -1439,15 +1603,7 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 	// entries are left untouched. An empty mapping is written instead of a
 	// placeholder scalar so the model entry renders as `name: {}` and the
 	// top-level max-input-chars setting is inherited without override.
-	existing := existingModelNames(d.apiName)
-	for _, modelName := range d.addedModelNames {
-		modelName = strings.TrimSpace(modelName)
-		if modelName == "" {
-			continue
-		}
-		if _, ok := existing[modelName]; ok {
-			continue
-		}
+	for _, modelName := range configWizardNewModelNames(d.apiName, d.addedModelNames) {
 		value := map[string]any{}
 		if d.apiName == "github-copilot" {
 			if endpoint := d.copilotModelEndpoints[modelName]; endpoint != "" {
@@ -1461,6 +1617,27 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 	}
 
 	return updates
+}
+
+func configWizardNewModelNames(apiName string, modelNames []string) []string {
+	existing := existingModelNames(apiName)
+	seen := make(map[string]struct{}, len(modelNames))
+	newModelNames := make([]string, 0, len(modelNames))
+	for _, modelName := range modelNames {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
+		if _, ok := existing[modelName]; ok {
+			continue
+		}
+		if _, ok := seen[modelName]; ok {
+			continue
+		}
+		seen[modelName] = struct{}{}
+		newModelNames = append(newModelNames, modelName)
+	}
+	return newModelNames
 }
 
 func isHTTPURL(value string) bool {
@@ -1754,6 +1931,7 @@ func configuredAPIKey(apiName string) string {
 type summaryData struct {
 	api, model, apiType, keyStorage, envVarName, baseURL string
 	fsMode                                               string
+	modelCount                                           int
 	addedModelCount                                      int
 	shellOn, webSearchOn                                 bool
 	webSearchProvider, webSearchKeyStorage               string
@@ -1778,7 +1956,7 @@ func printConfigSummary(d summaryData) {
 		Foreground(lightDark(lipgloss.Color("#202124"), lipgloss.Color("#F2F2F7")))
 
 	modelValue := d.model
-	if d.addedModelCount > 1 {
+	if d.modelCount > 1 {
 		modelValue += " (default, first line)"
 	}
 	rows := []string{

@@ -285,6 +285,7 @@ func (*Select[T]) Zoom() bool { return false }
 
 // Focus focuses the select field.
 func (s *Select[T]) Focus() tea.Cmd {
+	s.syncAccessorValue()
 	s.focused = true
 	return nil
 }
@@ -345,6 +346,7 @@ func (s *Select[T]) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		s.hasDarkBg = msg.IsDark()
+		s.syncAccessorValue()
 	case updateFieldMsg:
 		var cmds []tea.Cmd
 		if ok, hash := s.title.shouldUpdate(); ok {
@@ -519,6 +521,11 @@ func (s *Select[T]) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	return s, cmd
+}
+
+func (s *Select[T]) syncAccessorValue() {
+	s.selectValue(s.accessor.Get())
+	s.ensureCursorVisible()
 }
 
 func (s *Select[T]) updateValue() {

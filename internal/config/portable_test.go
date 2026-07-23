@@ -61,6 +61,22 @@ func TestSettingsFilePathPortableWinsOverXDG(t *testing.T) {
 	require.Equal(t, filepath.Join(dir, "mods.yml"), p)
 }
 
+func TestStandardSettingsPathIgnoresActivePortableConfig(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "mods.yml"), []byte(""), 0o600))
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	defer swapExecutableDir(dir)()
+
+	activePath, err := settingsFilePath()
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(dir, "mods.yml"), activePath)
+
+	standardPath, err := StandardSettingsPath()
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(configHome, "mods", "mods.yml"), standardPath)
+}
+
 func TestDefaultSessionDirPortableUsesExeDir(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mods.yml"), []byte(""), 0o600))

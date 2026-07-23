@@ -974,6 +974,45 @@ func TestTextFieldSyncsExternalAccessorUpdate(t *testing.T) {
 	}
 }
 
+func TestInputFieldSyncsExternalAccessorUpdate(t *testing.T) {
+	value := "before"
+	field := NewInput().Title("API key").Value(&value)
+	f := NewForm(NewGroup(field))
+
+	f = batchUpdate(f, f.Init()).(*Form)
+	if view := ansi.Strip(f.View()); !strings.Contains(view, "before") {
+		t.Fatalf("expected initial value, got %q", view)
+	}
+
+	value = "after"
+	f.Update(tea.BackgroundColorMsg{})
+
+	if view := ansi.Strip(f.View()); !strings.Contains(view, "after") {
+		t.Fatalf("expected updated value, got %q", view)
+	}
+}
+
+func TestSelectFieldSyncsExternalAccessorUpdate(t *testing.T) {
+	value := "before"
+	field := NewSelect[string]().
+		Title("Storage").
+		Options(NewOption("Before", "before"), NewOption("After", "after")).
+		Value(&value)
+	f := NewForm(NewGroup(field))
+
+	f = batchUpdate(f, f.Init()).(*Form)
+	if view := ansi.Strip(f.View()); !strings.Contains(view, "> Before") {
+		t.Fatalf("expected initial selection, got %q", view)
+	}
+
+	value = "after"
+	f.Update(tea.BackgroundColorMsg{})
+
+	if view := ansi.Strip(f.View()); !strings.Contains(view, "> After") {
+		t.Fatalf("expected updated selection, got %q", view)
+	}
+}
+
 func TestPrevGroup(t *testing.T) {
 	f := NewForm(
 		NewGroup(NewNote().Description("Bar")),

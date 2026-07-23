@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -52,6 +54,7 @@ func TestBuildProviderOptionsGroupsConfiguredAndAvailableProviders(t *testing.T)
 					},
 				},
 				{Name: "anthropic"},
+				{Name: "empty-custom"},
 			},
 		},
 	}, func() {
@@ -75,13 +78,47 @@ func TestBuildProviderOptionsGroupsConfiguredAndAvailableProviders(t *testing.T)
 		}
 		require.NotContains(t, values[2:len(values)-1], "openai")
 		require.Contains(t, values[2:len(values)-1], "anthropic")
+		require.Contains(t, values[2:len(values)-1], "empty-custom")
 		require.Contains(t, values, "github-copilot")
 		anthropicLabel := providerOptionLabel(t, opts, "anthropic")
 		require.Contains(t, anthropicLabel, "Anthropic API")
 		require.NotContains(t, anthropicLabel, "Claude")
+		emptyCustomLabel := providerOptionLabel(t, opts, "empty-custom")
+		require.Contains(t, emptyCustomLabel, "+")
+		require.Contains(t, emptyCustomLabel, "no models configured")
 		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
 		require.Contains(t, opts[len(opts)-1].Key, "Add new provider")
 	})
+}
+
+func TestConfigWizardProviderDraftsAreIsolated(t *testing.T) {
+	provider := "openai"
+	drafts := newConfigWizardProviderDrafts(Config{PersistentConfig: PersistentConfig{
+		APIs: []API{
+			{Name: "openai", APIKey: "saved-openai-key"},
+			{Name: "anthropic"},
+		},
+	}})
+	baseURL := drafts.accessor(func() string { return provider }, configWizardProviderDraftBaseURL)
+	apiKey := drafts.accessor(func() string { return provider }, configWizardProviderDraftAPIKey)
+	keyStorage := drafts.accessor(func() string { return provider }, configWizardProviderDraftKeyStorage)
+
+	require.Equal(t, "saved-openai-key", apiKey.Get())
+	require.Equal(t, "config", keyStorage.Get())
+	baseURL.Set("https://openai.example/v1")
+
+	provider = "anthropic"
+	require.Empty(t, baseURL.Get())
+	require.Empty(t, apiKey.Get())
+	require.Equal(t, "env", keyStorage.Get())
+	baseURL.Set("https://anthropic.example/v1")
+	apiKey.Set("anthropic-key")
+	keyStorage.Set("config")
+
+	provider = "openai"
+	require.Equal(t, "https://openai.example/v1", baseURL.Get())
+	require.Equal(t, "saved-openai-key", apiKey.Get())
+	require.Equal(t, "config", keyStorage.Get())
 }
 
 func TestBuildProviderOptionsIncludesUnconfiguredBuiltInProviders(t *testing.T) {
@@ -175,6 +212,7 @@ func TestConfigWizardCopilotAuthViewShowsDeviceCode(t *testing.T) {
 		},
 		theme: configWizardTheme("charm"),
 	})
+	defer model.cancel()
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
 	model = updated.(configWizardCopilotAuthModel)
 
@@ -194,10 +232,51 @@ func TestConfigWizardCopilotAuthCancel(t *testing.T) {
 		},
 		theme: configWizardTheme("charm"),
 	})
+	defer model.cancel()
 	updated, cmd := model.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	require.NotNil(t, cmd)
 	authModel := updated.(configWizardCopilotAuthModel)
 	require.True(t, authModel.canceled)
+}
+
+func TestConfigWizardCopilotAuthCancelStopsPolling(t *testing.T) {
+	oldPoll := pollCopilotDeviceFlow
+	defer func() { pollCopilotDeviceFlow = oldPoll }()
+
+	started := make(chan struct{})
+	var once sync.Once
+	pollCopilotDeviceFlow = func(ctx context.Context, _ copilotDeviceCode) (string, error) {
+		once.Do(func() { close(started) })
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+
+	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
+		ctx:    context.Background(),
+		device: copilotDeviceCode{UserCode: "ABCD-EFGH"},
+		theme:  configWizardTheme("charm"),
+	})
+	defer model.cancel()
+
+	result := make(chan tea.Msg, 1)
+	go func() { result <- model.Init()() }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("Copilot polling did not start")
+	}
+
+	updated, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	require.True(t, updated.(configWizardCopilotAuthModel).canceled)
+
+	select {
+	case msg := <-result:
+		errMsg, ok := msg.(configWizardCopilotAuthErrMsg)
+		require.True(t, ok)
+		require.ErrorIs(t, errMsg.err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("Copilot polling did not stop after Esc")
+	}
 }
 
 func TestConfigWizardCopilotAuthCancelDoesNotSaveToken(t *testing.T) {
@@ -265,7 +344,15 @@ func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 func TestConfigWizardStorageEscapeReturnsToReview(t *testing.T) {
 	reviewMode := "auto"
 	saveLocation := "standard"
-	form := huh.NewForm(
+	theme := configWizardTheme("charm")
+	form := newConfigWizardForm(configWizardFormConfig{
+		theme:           theme,
+		keymap:          configWizardKeyMap(),
+		standardPath:    "/tmp/config/mods.yml",
+		portablePath:    "/tmp/portable/mods.yml",
+		saveLocation:    &saveLocation,
+		escapeAbortText: "Press Esc again to exit.",
+	},
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Tool review").
@@ -273,14 +360,7 @@ func TestConfigWizardStorageEscapeReturnsToReview(t *testing.T) {
 				Value(&reviewMode),
 		).
 			Title("review"),
-		configWizardStorageGroup(
-			"/tmp/config/mods.yml",
-			"/tmp/portable/mods.yml",
-			&saveLocation,
-		),
-	).
-		WithKeyMap(configWizardKeyMap()).
-		WithEscapeAbortConfirmation("Press Esc again to exit.")
+	)
 
 	form.Init()
 	form.NextGroup()
@@ -462,7 +542,7 @@ func TestBuildConfigWizardUpdatesGitHubCopilotStoresDeviceTokenInConfig(t *testi
 	})
 
 	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key"}, "github-oauth-token")
-	requireNoUpdatePath(t, updates, []string{"apis", "github-copilot", "api-key-env"})
+	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key-env"}, nil)
 	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "models", "gpt-5"}, map[string]any{"endpoint": "responses"})
 	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "models", "claude-sonnet-4"}, map[string]any{"endpoint": "messages"})
 }
@@ -484,7 +564,25 @@ func TestBuildConfigWizardUpdatesGitHubCopilotKeepsExistingConfigToken(t *testin
 		})
 
 		requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key"}, "saved-github-oauth-token")
-		requireNoUpdatePath(t, updates, []string{"apis", "github-copilot", "api-key-env"})
+		requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key-env"}, nil)
+	})
+}
+
+func TestConfigWizardNewModelNamesOnlyCountsNewUniqueModels(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name: "openrouter",
+			Models: map[string]Model{
+				"existing": {},
+			},
+		}},
+	}}, func() {
+		require.Equal(t,
+			[]string{"new-a", "new-b"},
+			configWizardNewModelNames("openrouter", []string{
+				"existing", " new-a ", "", "new-a", "new-b",
+			}),
+		)
 	})
 }
 
@@ -570,6 +668,51 @@ func TestSeedThenSaveBootstrapsPortableConfig(t *testing.T) {
 	require.Equal(t, "llama-3.3-70b-versatile", m["default-model"])
 }
 
+func TestSaveConfigWizardMigratesPortableConfigToStandard(t *testing.T) {
+	portableDir := t.TempDir()
+	portablePath := filepath.Join(portableDir, "mods.yml")
+	require.NoError(t, os.WriteFile(portablePath, []byte("default-api: ollama\n"), 0o600))
+	standardPath := filepath.Join(t.TempDir(), "mods", "mods.yml")
+
+	withTestConfig(t, Config{
+		PersistentConfig: PersistentConfig{
+			APIs: []API{{
+				Name:   "ollama",
+				Models: map[string]Model{"llama3.1": {}},
+			}},
+		},
+		SettingsPath:    portablePath,
+		SettingsExisted: true,
+		PortableDir:     portableDir,
+	}, func() {
+		output := captureStderr(t, func() {
+			err := saveConfigWizard(standardPath, portablePath, configWizardSaveData{
+				apiName:                "ollama",
+				modelName:              "llama3.1",
+				reviewMode:             "auto",
+				fsMode:                 "auto",
+				webSearchProviderValue: "duckduckgo",
+				addedModelNames:        []string{"llama3.1"},
+				portable:               false,
+			}, summaryData{
+				api:          "ollama",
+				model:        "llama3.1",
+				modelCount:   1,
+				fsMode:       "auto",
+				reviewMode:   "auto",
+				settingsPath: standardPath,
+			})
+			require.NoError(t, err)
+		})
+
+		require.FileExists(t, standardPath)
+		_, err := os.Stat(portablePath)
+		require.ErrorIs(t, err, os.ErrNotExist,
+			"the old portable file must be removed or it will keep taking precedence")
+		require.Contains(t, output, "Standard mode will be active on the next launch.")
+	})
+}
+
 func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 	output := captureStderr(t, func() {
 		printConfigSummary(summaryData{
@@ -578,6 +721,7 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 			keyStorage:          "env",
 			envVarName:          "OPENROUTER_API_KEY",
 			baseURL:             "https://openrouter.ai/api/v1",
+			modelCount:          2,
 			addedModelCount:     2,
 			fsMode:              "auto",
 			webSearchProvider:   "duckduckgo",
@@ -593,6 +737,29 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 	require.Contains(t, output, "default, first line")
 	// Default (OpenAI-compatible) providers must not show an API type row.
 	require.NotContains(t, output, "API type")
+}
+
+func TestPrintConfigSummaryUsesConfiguredCopilotKeyStorage(t *testing.T) {
+	drafts := newConfigWizardProviderDrafts(Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{Name: "github-copilot", APIKey: "saved-github-oauth-token"}},
+	}})
+	draft := drafts.forProvider("github-copilot")
+
+	output := captureStderr(t, func() {
+		printConfigSummary(summaryData{
+			api:          "github-copilot",
+			model:        "gpt-5",
+			modelCount:   1,
+			keyStorage:   draft.keyStorage,
+			envVarName:   "GITHUB_COPILOT_API_KEY",
+			fsMode:       "auto",
+			reviewMode:   "auto",
+			settingsPath: "/tmp/mods.yml",
+		})
+	})
+
+	require.Contains(t, output, "saved in config")
+	require.NotContains(t, output, "env var GITHUB_COPILOT_API_KEY")
 }
 
 func TestPrintConfigSummaryShowsAPITypeForAnthropic(t *testing.T) {

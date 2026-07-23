@@ -351,7 +351,7 @@ apis:
   #       thinking-budget: 8192
   #
   # api-type also works for the other native adapters: ollama, google,
-  # azure, azure-ad. Omit it to use the OpenAI-compatible
+  # azure. Omit it to use the OpenAI-compatible
   # adapter (the default for any unrecognized provider name).
 
   # Example: a service that splits models across TWO protocols. OpenCode's

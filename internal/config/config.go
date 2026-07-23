@@ -51,7 +51,7 @@ var Help = map[string]string{
 	"apis":             "Aliases and endpoints for OpenAI compatible REST API",
 	"default-api":      "Active provider name configured under apis",
 	"default-model":    "Default model name or alias configured under the active provider",
-	"api-type":         "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, azure, or azure-ad. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
+	"api-type":         "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, or azure. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
 	"http-proxy":       "HTTP proxy to use for API requests",
 	"model":            "Default model name configured under the selected API provider",
 	"ask-model":        "Ask which model to use via interactive prompt",
@@ -192,7 +192,7 @@ type API struct {
 	// name-based routing. When empty, mods routes by the provider name and
 	// defaults unknown names to the OpenAI-compatible adapter. Set this to
 	// "anthropic" for any endpoint that implements the Anthropic Messages API,
-	// or one of "openai", "ollama", "google", "azure", "azure-ad".
+	// or one of "openai", "ollama", "google", "azure".
 	APIType string `yaml:"api-type,omitempty"`
 }
 

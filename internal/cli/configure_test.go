@@ -34,6 +34,52 @@ func TestBuildProviderOptionsIncludesAddProvider(t *testing.T) {
 	})
 }
 
+func TestBuildProviderOptionsGroupsConfiguredAndAvailableProviders(t *testing.T) {
+	withTestConfig(t, Config{
+		PersistentConfig: PersistentConfig{
+			APIs: []API{
+				{
+					Name: "openai",
+					Models: map[string]Model{
+						"gpt-5.4": {},
+						"o4-mini": {},
+					},
+				},
+				{
+					Name: "custom",
+					Models: map[string]Model{
+						"my-model": {},
+					},
+				},
+				{Name: "anthropic"},
+			},
+		},
+	}, func() {
+		opts := buildProviderOptions()
+
+		require.Greater(t, len(opts), 4)
+		require.Equal(t, "openai", opts[0].Value)
+		require.Equal(t, "custom", opts[1].Value)
+		require.Contains(t, opts[0].Key, "✓")
+		require.NotContains(t, opts[0].Key, "Configured")
+		require.Contains(t, opts[0].Key, "gpt-5.4")
+		require.Contains(t, opts[0].Key, "o4-mini")
+		require.Contains(t, opts[1].Key, "✓")
+		require.NotContains(t, opts[1].Key, "Configured")
+		require.Contains(t, opts[1].Key, "my-model")
+
+		values := make([]string, 0, len(opts))
+		for _, opt := range opts {
+			values = append(values, opt.Value)
+		}
+		require.NotContains(t, values[2:len(values)-1], "openai")
+		require.Contains(t, values[2:len(values)-1], "anthropic")
+		require.Contains(t, values, "github-copilot")
+		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
+		require.Contains(t, opts[len(opts)-1].Key, "Add new provider")
+	})
+}
+
 func TestBuildProviderOptionsIncludesUnconfiguredBuiltInProviders(t *testing.T) {
 	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{

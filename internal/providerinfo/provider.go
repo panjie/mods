@@ -54,11 +54,6 @@ var descriptors = map[string]Descriptor{
 		APIKeyEnv:   "AZURE_OPENAI_KEY",
 		APIKeyURL:   "https://aka.ms/oai/access",
 	},
-	"azure-ad": {
-		Protocol:  "azure-ad",
-		APIKeyEnv: "AZURE_OPENAI_KEY",
-		APIKeyURL: "https://aka.ms/oai/access",
-	},
 	"deepseek":   {Protocol: "openai", Description: "DeepSeek V4 (reasoning)"},
 	"glm":        {Protocol: "openai", Description: "GLM-5.2 (Zhipu)"},
 	"qwen":       {Protocol: "openai", Description: "Qwen (Alibaba)"},
@@ -73,7 +68,7 @@ type NamedDescriptor struct {
 	Descriptor
 }
 
-var protocols = []string{"openai", "anthropic", "google", "ollama", "azure", "azure-ad", "github-copilot"}
+var protocols = []string{"openai", "anthropic", "google", "ollama", "azure", "github-copilot"}
 
 // Descriptors returns built-in provider metadata in stable name order.
 func Descriptors() []NamedDescriptor {

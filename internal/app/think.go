@@ -298,7 +298,7 @@ func resolvedOpenAICompatibleThinkingType(mod Model, ccfg *openai.Config) (strin
 }
 
 func useReasoningEffort(mod Model, ccfg *openai.Config) bool {
-	if mod.API == "openai" || mod.API == "azure" || mod.API == "azure-ad" {
+	if mod.API == "openai" || mod.API == "azure" {
 		return true
 	}
 	if hasExtraParam(ccfg, "reasoning_effort") {

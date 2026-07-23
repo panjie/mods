@@ -73,7 +73,7 @@ func New(config Config) *Client {
 	}
 
 	switch config.APIType {
-	case "azure", "azure-ad":
+	case "azure":
 		opts = append(opts, azure.WithAPIKey(config.AuthToken))
 		if config.BaseURL != "" {
 			opts = append(opts, azure.WithEndpoint(config.BaseURL, "v1"))

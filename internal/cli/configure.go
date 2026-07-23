@@ -662,31 +662,59 @@ func configWizardKeyMap() *huh.KeyMap {
 	return keymap
 }
 
-// buildProviderOptions returns huh options for each configured provider,
-// annotated with a short description for well-known providers.
+// buildProviderOptions returns configured providers first, then built-in
+// providers that are still available to add.
 func buildProviderOptions() []huh.Option[string] {
 	seen := map[string]struct{}{}
-	opts := make([]huh.Option[string], 0, len(config.APIs)+1)
+	builtins := providerinfo.Descriptors()
+	opts := make([]huh.Option[string], 0, len(config.APIs)+len(builtins)+1)
 	for _, api := range config.APIs {
-		seen[api.Name] = struct{}{}
-		label := api.Name
-		if info, ok := providerinfo.Lookup(api.Name); ok && info.Description != "" {
-			label = fmt.Sprintf("%-12s  %s", api.Name, info.Description)
+		if len(api.Models) == 0 {
+			continue
 		}
-		opts = append(opts, huh.NewOption(label, api.Name))
+		seen[api.Name] = struct{}{}
+		opts = append(opts, huh.NewOption(configuredProviderLabel(api), api.Name))
 	}
-	for _, provider := range providerinfo.Descriptors() {
+	for _, provider := range builtins {
 		if _, ok := seen[provider.Name]; ok {
 			continue
 		}
-		label := provider.Name
-		if provider.Description != "" {
-			label = fmt.Sprintf("%-12s  %s", provider.Name, provider.Description)
-		}
-		opts = append(opts, huh.NewOption(label, provider.Name))
+		opts = append(opts, huh.NewOption(availableProviderLabel(provider), provider.Name))
 	}
-	opts = append(opts, huh.NewOption("Add new provider", addProviderOption))
+	opts = append(opts, huh.NewOption("+ Add new provider", addProviderOption))
 	return opts
+}
+
+func configuredProviderLabel(api API) string {
+	return fmt.Sprintf("✓ %-12s  %s", api.Name, configuredProviderModelsSummary(api))
+}
+
+func availableProviderLabel(provider providerinfo.NamedDescriptor) string {
+	if provider.Description == "" {
+		return fmt.Sprintf("+ %-12s", provider.Name)
+	}
+	return fmt.Sprintf("+ %-12s  %s", provider.Name, provider.Description)
+}
+
+func configuredProviderModelsSummary(api API) string {
+	names := configuredProviderModelNames(api)
+	if len(names) == 0 {
+		return "no models configured"
+	}
+	const maxShown = 3
+	if len(names) <= maxShown {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s, +%d more", strings.Join(names[:maxShown], ", "), len(names)-maxShown)
+}
+
+func configuredProviderModelNames(api API) []string {
+	names := make([]string, 0, len(api.Models))
+	for name := range api.Models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 type copilotDeviceCode struct {

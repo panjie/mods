@@ -58,7 +58,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		if api.BaseURL != "" {
 			cfgs.Google.BaseURL = applyGoogleBaseURLOverride(api.BaseURL, mod.Name)
 		}
-	case "azure", "azure-ad":
+	case "azure":
 		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "Azure authentication failed"}
@@ -70,11 +70,7 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			ThoughtFields: mod.ThinkFields,
 			ThinkTag:      mod.ThinkTag,
 		}
-		if mod.API == "azure-ad" {
-			cfgs.OpenAI.APIType = "azure-ad"
-		} else {
-			cfgs.OpenAI.APIType = "azure"
-		}
+		cfgs.OpenAI.APIType = "azure"
 	case "github-copilot":
 		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {

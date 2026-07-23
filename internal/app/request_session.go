@@ -71,7 +71,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	ccfg := cfgs.OpenAI
 
 	requestUser := cfg.User
-	if (mod.API == "azure" || mod.API == "azure-ad") && api.User != "" {
+	if mod.API == "azure" && api.User != "" {
 		requestUser = api.User
 	}
 

@@ -64,6 +64,7 @@ func TestBuildProviderOptionsGroupsConfiguredAndAvailableProviders(t *testing.T)
 		require.NotContains(t, opts[0].Key, "Configured")
 		require.Contains(t, opts[0].Key, "gpt-5.4")
 		require.Contains(t, opts[0].Key, "o4-mini")
+		require.NotContains(t, opts[0].Key, "OpenAI API")
 		require.Contains(t, opts[1].Key, "✓")
 		require.NotContains(t, opts[1].Key, "Configured")
 		require.Contains(t, opts[1].Key, "my-model")
@@ -75,6 +76,9 @@ func TestBuildProviderOptionsGroupsConfiguredAndAvailableProviders(t *testing.T)
 		require.NotContains(t, values[2:len(values)-1], "openai")
 		require.Contains(t, values[2:len(values)-1], "anthropic")
 		require.Contains(t, values, "github-copilot")
+		anthropicLabel := providerOptionLabel(t, opts, "anthropic")
+		require.Contains(t, anthropicLabel, "Anthropic API")
+		require.NotContains(t, anthropicLabel, "Claude")
 		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
 		require.Contains(t, opts[len(opts)-1].Key, "Add new provider")
 	})
@@ -94,6 +98,31 @@ func TestBuildProviderOptionsIncludesUnconfiguredBuiltInProviders(t *testing.T) 
 		require.Contains(t, values, "github-copilot")
 		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
 	})
+}
+
+func TestConfiguredProviderModelsSummarySortsAndTruncates(t *testing.T) {
+	api := API{
+		Name: "custom",
+		Models: map[string]Model{
+			"delta": {},
+			"alpha": {},
+			"gamma": {},
+			"beta":  {},
+		},
+	}
+
+	require.Equal(t, "alpha, beta, delta, +1 more", configuredProviderModelsSummary(api))
+}
+
+func providerOptionLabel(t *testing.T, options []huh.Option[string], value string) string {
+	t.Helper()
+	for _, option := range options {
+		if option.Value == value {
+			return option.Key
+		}
+	}
+	t.Fatalf("provider option %q not found", value)
+	return ""
 }
 
 func TestDiscoverOptionsUsesCopilotProtocolForNewProviderNamedGitHubCopilot(t *testing.T) {
@@ -233,6 +262,58 @@ func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
 	}
 }
 
+func TestConfigWizardStorageEscapeReturnsToReview(t *testing.T) {
+	reviewMode := "auto"
+	saveLocation := "standard"
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Tool review").
+				Options(huh.NewOption("Auto", "auto")).
+				Value(&reviewMode),
+		).
+			Title("review"),
+		configWizardStorageGroup(
+			"/tmp/config/mods.yml",
+			"/tmp/portable/mods.yml",
+			&saveLocation,
+		),
+	).
+		WithKeyMap(configWizardKeyMap()).
+		WithEscapeAbortConfirmation("Press Esc again to exit.")
+
+	form.Init()
+	form.NextGroup()
+	require.Contains(t, ansi.Strip(form.View()), "storage")
+
+	_, cmd := form.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	runConfigWizardFormCommands(t, form, cmd, 32)
+
+	require.Equal(t, huh.StateNormal, form.State)
+	view := ansi.Strip(form.View())
+	require.Contains(t, view, "review")
+	require.NotContains(t, view, "storage")
+}
+
+func runConfigWizardFormCommands(t *testing.T, form *huh.Form, cmd tea.Cmd, remaining int) {
+	t.Helper()
+	if cmd == nil {
+		return
+	}
+	require.Positive(t, remaining, "form command chain did not settle")
+
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, batchCmd := range batch {
+			runConfigWizardFormCommands(t, form, batchCmd, remaining-1)
+		}
+		return
+	}
+
+	_, next := form.Update(msg)
+	runConfigWizardFormCommands(t, form, next, remaining-1)
+}
+
 func TestConfigWizardLayoutKeepsFocusedBorderWithinWindow(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	for _, windowWidth := range []int{30, 60, 64, 80, 120} {
@@ -276,6 +357,30 @@ func TestConfigWizardThemeUsesInteractionPalette(t *testing.T) {
 			require.Equal(t, palette.Muted, theme.Focused.Description.GetForeground())
 			require.Equal(t, palette.Success, theme.Focused.SelectedOption.GetForeground())
 			require.Equal(t, palette.Danger, theme.Focused.ErrorMessage.GetForeground())
+		})
+	}
+}
+
+func TestConfigWizardThemeUsesUnifiedListCursor(t *testing.T) {
+	for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
+		t.Run(name, func(t *testing.T) {
+			palette := ui.MakeStylesWithTheme(name, true).Interaction.Palette
+			theme := configWizardTheme(name).Theme(true)
+
+			require.Equal(t, "> ", theme.Focused.SelectSelector.Value())
+			require.Equal(t, theme.Focused.SelectSelector.Value(), theme.Focused.MultiSelectSelector.Value())
+			require.Equal(t, palette.Accent, theme.Focused.SelectSelector.GetForeground())
+			require.Equal(t, palette.Accent, theme.Focused.MultiSelectSelector.GetForeground())
+			require.True(t, theme.Focused.SelectSelector.GetBold())
+			require.True(t, theme.Focused.MultiSelectSelector.GetBold())
+
+			require.Equal(t, "  ", theme.Blurred.SelectSelector.Value())
+			require.Equal(t, theme.Blurred.SelectSelector.Value(), theme.Blurred.MultiSelectSelector.Value())
+			require.Equal(
+				t,
+				lipgloss.Width(theme.Focused.SelectSelector.Value()),
+				lipgloss.Width(theme.Blurred.SelectSelector.Value()),
+			)
 		})
 	}
 }

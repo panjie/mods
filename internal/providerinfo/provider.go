@@ -19,21 +19,21 @@ type Descriptor struct {
 var descriptors = map[string]Descriptor{
 	"openai": {
 		Protocol:       "openai",
-		Description:    "GPT-5.x, o3, o4-mini",
+		Description:    "OpenAI API",
 		DefaultBaseURL: "https://api.openai.com/v1",
 		APIKeyEnv:      "OPENAI_API_KEY",
 		APIKeyURL:      "https://platform.openai.com/account/api-keys",
 	},
 	"anthropic": {
 		Protocol:       "anthropic",
-		Description:    "Claude Opus/Sonnet/Haiku",
+		Description:    "Anthropic API",
 		DefaultBaseURL: "https://api.anthropic.com/v1",
 		APIKeyEnv:      "ANTHROPIC_API_KEY",
 		APIKeyURL:      "https://console.anthropic.com/settings/keys",
 	},
 	"google": {
 		Protocol:       "google",
-		Description:    "Gemini Pro/Flash",
+		Description:    "Google AI",
 		DefaultBaseURL: "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse",
 		APIKeyEnv:      "GOOGLE_API_KEY",
 		APIKeyURL:      "https://aistudio.google.com/app/apikey",
@@ -45,7 +45,7 @@ var descriptors = map[string]Descriptor{
 	},
 	"ollama": {
 		Protocol:       "ollama",
-		Description:    "Local models (no API key needed)",
+		Description:    "Local model runtime (no API key needed)",
 		DefaultBaseURL: "http://localhost:11434",
 	},
 	"azure": {
@@ -54,12 +54,12 @@ var descriptors = map[string]Descriptor{
 		APIKeyEnv:   "AZURE_OPENAI_KEY",
 		APIKeyURL:   "https://aka.ms/oai/access",
 	},
-	"deepseek":   {Protocol: "openai", Description: "DeepSeek V4 (reasoning)"},
-	"glm":        {Protocol: "openai", Description: "GLM-5.2 (Zhipu)"},
-	"qwen":       {Protocol: "openai", Description: "Qwen (Alibaba)"},
-	"kimi":       {Protocol: "openai", Description: "Kimi K2 (Moonshot)"},
-	"minimax":    {Protocol: "openai", Description: "MiniMax M3"},
-	"openrouter": {Protocol: "openai", Description: "Multi-provider aggregator"},
+	"deepseek":   {Protocol: "openai", Description: "DeepSeek API"},
+	"glm":        {Protocol: "openai", Description: "Zhipu AI"},
+	"qwen":       {Protocol: "openai", Description: "Alibaba Cloud"},
+	"kimi":       {Protocol: "openai", Description: "Moonshot AI"},
+	"minimax":    {Protocol: "openai", Description: "MiniMax API"},
+	"openrouter": {Protocol: "openai", Description: "Multi-provider API gateway"},
 }
 
 // NamedDescriptor associates built-in provider metadata with its config name.

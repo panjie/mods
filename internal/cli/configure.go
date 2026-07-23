@@ -65,6 +65,14 @@ func RunConfigWizard() error {
 	if reviewMode == "" {
 		reviewMode = "auto"
 	}
+	saveLocation := "standard"
+	if config.PortableDir != "" {
+		saveLocation = "portable"
+	}
+	portablePath := ""
+	if exeDir := cfgpkg.ExeDir(); exeDir != "" {
+		portablePath = filepath.Join(exeDir, "mods.yml")
+	}
 
 	// Default storage: "env" (recommended), unless a key is already saved.
 	keyStorage = "env"
@@ -431,6 +439,12 @@ func RunConfigWizard() error {
 				Title("review").
 				Description("Tune the approval behavior for tool execution.").
 				WithHideFunc(waitingForCopilotAuth),
+
+			// Page 15: Config file location
+			configWizardStorageGroup(config.SettingsPath, portablePath, &saveLocation).
+				WithHideFunc(func() bool {
+					return waitingForCopilotAuth() || portablePath == ""
+				}),
 		).
 			WithTheme(wizardTheme).
 			WithLayout(configWizardLayoutForTheme(wizardTheme)).
@@ -500,12 +514,9 @@ func RunConfigWizard() error {
 		return nil
 	}
 
-	savePath, canceled, err := chooseConfigWizardSavePath(keymap)
-	if err != nil {
-		return err
-	}
-	if canceled {
-		return nil
+	savePath := config.SettingsPath
+	if saveLocation == "portable" {
+		savePath = portablePath
 	}
 
 	// Reflect the chosen path so the summary, save, and post-save message
@@ -588,48 +599,19 @@ func confirmConfigWizardConnection(apiName, apiType, modelName, baseURL, apiKey 
 	return true, nil
 }
 
-func chooseConfigWizardSavePath(keymap *huh.KeyMap) (path string, canceled bool, err error) {
-	path = config.SettingsPath
-	exeDir := cfgpkg.ExeDir()
-	if exeDir == "" {
-		return path, false, nil
-	}
-
-	saveLocation := "standard"
-	if config.PortableDir != "" {
-		saveLocation = "portable"
-	}
-	portablePath := filepath.Join(exeDir, "mods.yml")
-	storageTheme := configWizardTheme(config.Theme)
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Config file location").
-				Description("Portable stores the config and sessions next to this executable, so the whole folder is self-contained.").
-				Options(
-					huh.NewOption(fmt.Sprintf("Standard — %s", config.SettingsPath), "standard"),
-					huh.NewOption(fmt.Sprintf("Portable — %s", portablePath), "portable"),
-				).
-				Value(&saveLocation),
-		).
-			Title("storage").
-			Description("Choose where mods writes its configuration file."),
+func configWizardStorageGroup(settingsPath, portablePath string, saveLocation *string) *huh.Group {
+	return huh.NewGroup(
+		huh.NewSelect[string]().
+			Title("Config file location").
+			Description("Portable stores the config and sessions next to this executable, so the whole folder is self-contained.").
+			Options(
+				huh.NewOption(fmt.Sprintf("Standard — %s", settingsPath), "standard"),
+				huh.NewOption(fmt.Sprintf("Portable — %s", portablePath), "portable"),
+			).
+			Value(saveLocation),
 	).
-		WithTheme(storageTheme).
-		WithLayout(configWizardLayoutForTheme(storageTheme)).
-		WithKeyMap(keymap).
-		WithEscapeAbortConfirmation("Press Esc again to exit.")
-	if err := form.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			fmt.Fprintln(os.Stderr, "\nCanceled.")
-			return path, true, nil
-		}
-		return "", false, fmt.Errorf("config wizard: %w", err)
-	}
-	if saveLocation == "portable" {
-		path = portablePath
-	}
-	return path, false, nil
+		Title("storage").
+		Description("Choose where mods writes its configuration file.")
 }
 
 func saveConfigWizard(savePath, previousPath string, data configWizardSaveData, summary summaryData) error {
@@ -1011,10 +993,12 @@ func configWizardStyles(theme string, isDark bool) *huh.Styles {
 		Foreground(muted)
 	t.Focused.ErrorIndicator = lipgloss.NewStyle().Foreground(danger).SetString(" *")
 	t.Focused.ErrorMessage = lipgloss.NewStyle().Foreground(danger).SetString(" *")
-	t.Focused.SelectSelector = lipgloss.NewStyle().
+	listCursor := lipgloss.NewStyle().
 		Foreground(accent).
 		Bold(true).
-		SetString("▸ ")
+		SetString("> ")
+	t.Focused.SelectSelector = listCursor
+	t.Focused.MultiSelectSelector = listCursor
 	t.Focused.Option = lipgloss.NewStyle().Foreground(text)
 	t.Focused.UnselectedOption = lipgloss.NewStyle().Foreground(text)
 	t.Focused.SelectedOption = lipgloss.NewStyle().
@@ -1049,7 +1033,10 @@ func configWizardStyles(theme string, isDark bool) *huh.Styles {
 	t.Blurred.Card = t.Blurred.Base
 	t.Blurred.Title = lipgloss.NewStyle().Foreground(muted)
 	t.Blurred.Description = lipgloss.NewStyle().Foreground(muted)
-	t.Blurred.SelectSelector = lipgloss.NewStyle().SetString("  ")
+	blurredListCursor := lipgloss.NewStyle().
+		SetString(strings.Repeat(" ", lipgloss.Width(listCursor.String())))
+	t.Blurred.SelectSelector = blurredListCursor
+	t.Blurred.MultiSelectSelector = blurredListCursor
 	t.Blurred.NextIndicator = lipgloss.NewStyle()
 	t.Blurred.PrevIndicator = lipgloss.NewStyle()
 

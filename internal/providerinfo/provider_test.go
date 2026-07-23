@@ -33,6 +33,30 @@ func TestSharedProviderMetadata(t *testing.T) {
 	require.Equal(t, "https://your-server.com/v1", DefaultBaseURL("custom"))
 }
 
+func TestProviderDescriptionsIdentifyProviders(t *testing.T) {
+	expected := map[string]string{
+		"anthropic":      "Anthropic API",
+		"azure":          "Azure OpenAI",
+		"deepseek":       "DeepSeek API",
+		"github-copilot": "GitHub Copilot",
+		"glm":            "Zhipu AI",
+		"google":         "Google AI",
+		"kimi":           "Moonshot AI",
+		"minimax":        "MiniMax API",
+		"ollama":         "Local model runtime (no API key needed)",
+		"openai":         "OpenAI API",
+		"openrouter":     "Multi-provider API gateway",
+		"qwen":           "Alibaba Cloud",
+	}
+
+	require.Len(t, Descriptors(), len(expected))
+	for name, want := range expected {
+		provider, ok := Lookup(name)
+		require.True(t, ok, name)
+		require.Equal(t, want, provider.Description, name)
+	}
+}
+
 func TestProviderCatalogIsStableAndDrivesKnownProtocols(t *testing.T) {
 	catalog := Descriptors()
 	names := make([]string, 0, len(catalog))

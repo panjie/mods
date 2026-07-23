@@ -387,3 +387,30 @@ func TestStreamingTokenUsage(t *testing.T) {
 	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14}, st.Usage())
 	require.Contains(t, string(captured), `"stream_options":{"include_usage":true}`)
 }
+
+func TestConfigHeadersAreSentWithChatCompletionRequests(t *testing.T) {
+	var gotEditorVersion string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotEditorVersion = r.Header.Get("Editor-Version")
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+		AuthToken:  "k",
+		Headers:    map[string]string{"Editor-Version": "mods/test"},
+	})
+	st := client.Request(context.Background(), proto.Request{
+		Model:    "test",
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+	for st.Next() {
+	}
+	require.NoError(t, st.Err())
+	require.Equal(t, "mods/test", gotEditorVersion)
+}

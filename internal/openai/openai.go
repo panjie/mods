@@ -37,6 +37,7 @@ type Config struct {
 	HTTPClient   interface {
 		Do(*http.Request) (*http.Response, error)
 	}
+	Headers         map[string]string
 	APIType         string
 	ReasoningEffort shared.ReasoningEffort
 	ExtraParams     map[string]any
@@ -66,6 +67,9 @@ func New(config Config) *Client {
 
 	if config.HTTPClient != nil {
 		opts = append(opts, option.WithHTTPClient(config.HTTPClient))
+	}
+	for k, v := range config.Headers {
+		opts = append(opts, option.WithHeader(k, v))
 	}
 
 	switch config.APIType {

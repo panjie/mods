@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +32,75 @@ func TestBuildProviderOptionsIncludesAddProvider(t *testing.T) {
 		require.NotEmpty(t, opts)
 		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
 	})
+}
+
+func TestBuildProviderOptionsIncludesUnconfiguredBuiltInProviders(t *testing.T) {
+	withTestConfig(t, Config{
+		PersistentConfig: PersistentConfig{
+			APIs: []API{{Name: "openai"}},
+		},
+	}, func() {
+		opts := buildProviderOptions()
+		values := make([]string, 0, len(opts))
+		for _, opt := range opts {
+			values = append(values, opt.Value)
+		}
+		require.Contains(t, values, "github-copilot")
+		require.Equal(t, addProviderOption, opts[len(opts)-1].Value)
+	})
+}
+
+func TestDiscoverOptionsUsesCopilotProtocolForNewProviderNamedGitHubCopilot(t *testing.T) {
+	require.Equal(t, "github-copilot", configWizardDiscoveryType(addProviderOption, "github-copilot", "openai"))
+	require.Equal(t, "openai", configWizardDiscoveryType(addProviderOption, "groq", "openai"))
+}
+
+func TestConfigWizardDiscoveryDescriptionIncludesError(t *testing.T) {
+	err := fmt.Errorf("invalid token (HTTP 401)")
+	desc := configWizardDiscoveryDescription("github-copilot", err)
+	require.Contains(t, desc, "Select models to add")
+	require.Contains(t, desc, "invalid token (HTTP 401)")
+}
+
+func TestConfigWizardCopilotAuthRunsOutsideFormValidation(t *testing.T) {
+	oldStart := startCopilotDeviceFlow
+	oldPoll := pollCopilotDeviceFlow
+	defer func() {
+		startCopilotDeviceFlow = oldStart
+		pollCopilotDeviceFlow = oldPoll
+	}()
+
+	startCopilotDeviceFlow = func(context.Context) (copilotDeviceCode, error) {
+		return copilotDeviceCode{UserCode: "ABCD-EFGH", VerificationURI: "https://github.com/login/device"}, nil
+	}
+	pollCopilotDeviceFlow = func(context.Context, copilotDeviceCode) (string, error) {
+		return "github-oauth-token", nil
+	}
+
+	var apiKey, keyStorage string
+	out := captureStderr(t, func() {
+		err := runConfigWizardCopilotAuth(context.Background(), "github-copilot", &apiKey, &keyStorage)
+		require.NoError(t, err)
+	})
+	require.Contains(t, out, "Starting GitHub Copilot device authentication")
+	require.Equal(t, "github-oauth-token", apiKey)
+	require.Equal(t, "config", keyStorage)
+
+	out = captureStderr(t, func() {
+		err := validateConfigWizardCopilotChoice(true)
+		require.NoError(t, err)
+	})
+	require.Empty(t, out, "validation must not write while the TUI owns stderr")
+}
+
+func TestConfigWizardDiscoversCopilotOnlyAfterAuthToken(t *testing.T) {
+	require.True(t, configWizardWaitingForCopilotAuth("github-copilot", ""),
+		"Copilot model discovery must wait for device auth")
+
+	require.False(t, configWizardWaitingForCopilotAuth("github-copilot", "fresh-github-oauth-token"),
+		"Copilot model discovery can run after device auth")
+	require.False(t, configWizardWaitingForCopilotAuth("openai", ""),
+		"non-Copilot providers do not need Copilot device auth")
 }
 
 func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
@@ -160,6 +230,27 @@ func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testi
 
 	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash"}, map[string]any{})
 	requireNoUpdatePath(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "thinking-type"})
+}
+
+func TestBuildConfigWizardUpdatesGitHubCopilotStoresDeviceTokenInConfig(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:                "github-copilot",
+		modelName:              "gpt-5",
+		reviewMode:             "auto",
+		fsMode:                 "auto",
+		webSearchProvider:      "duckduckgo",
+		webSearchProviderValue: "duckduckgo",
+		keyStorage:             "config",
+		apiKey:                 "github-oauth-token",
+		baseURLInput:           "https://api.githubcopilot.com",
+		addedModelNames:        []string{"gpt-5", "claude-sonnet-4"},
+		copilotModelEndpoints:  map[string]string{"gpt-5": "responses", "claude-sonnet-4": "messages"},
+	})
+
+	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key"}, "github-oauth-token")
+	requireNoUpdatePath(t, updates, []string{"apis", "github-copilot", "api-key-env"})
+	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "models", "gpt-5"}, map[string]any{"endpoint": "responses"})
+	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "models", "claude-sonnet-4"}, map[string]any{"endpoint": "messages"})
 }
 
 func TestBuildConfigWizardUpdatesWritesAPITypeForAnthropic(t *testing.T) {
@@ -535,6 +626,37 @@ func TestDiscoverModelsGoogle(t *testing.T) {
 	require.Equal(t, []string{"gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"}, ids)
 }
 
+func TestDiscoverModelsGitHubCopilot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/copilot_internal/v2/token":
+			require.Equal(t, "Bearer github-oauth-token", r.Header.Get("Authorization"))
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"token": "copilot-token"})
+		case "/models":
+			require.Equal(t, "Bearer copilot-token", r.Header.Get("Authorization"))
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{"id": "gpt-5", "supported_endpoints": []string{"/responses"}},
+					{"id": "claude-sonnet-4", "supported_endpoints": []string{"/v1/messages"}},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	oldGitHubAPIBaseURL := copilotGitHubAPIBaseURL
+	defer func() { copilotGitHubAPIBaseURL = oldGitHubAPIBaseURL }()
+	copilotGitHubAPIBaseURL = srv.URL
+
+	ids, err := discoverModels("github-copilot", srv.URL, "github-oauth-token")
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-sonnet-4", "gpt-5"}, ids)
+}
+
 func TestDiscoverModelsGoogleFiltersNonGenerative(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -565,6 +687,7 @@ func TestBuiltinBaseURL(t *testing.T) {
 		want    string
 	}{
 		{"google", "google", "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"},
+		{"github-copilot", "github-copilot", "https://api.githubcopilot.com"},
 		{"openai", "openai", "https://api.openai.com/v1"},
 		{"anthropic", "anthropic", "https://api.anthropic.com/v1"},
 		{"ollama", "ollama", "http://localhost:11434"},

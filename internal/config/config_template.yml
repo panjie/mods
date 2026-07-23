@@ -222,6 +222,13 @@ apis:
     api-key:
     api-key-env: AZURE_OPENAI_KEY
 
+  github-copilot:
+    # Run `mods --config` and choose GitHub Copilot to complete device
+    # authentication. The wizard stores the resulting GitHub token here and
+    # discovers available Copilot models automatically.
+    base-url: https://api.githubcopilot.com
+    api-key:
+
   deepseek:
     base-url: https://api.deepseek.com/
     api-key:

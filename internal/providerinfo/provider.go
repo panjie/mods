@@ -38,6 +38,11 @@ var descriptors = map[string]Descriptor{
 		APIKeyEnv:      "GOOGLE_API_KEY",
 		APIKeyURL:      "https://aistudio.google.com/app/apikey",
 	},
+	"github-copilot": {
+		Protocol:       "github-copilot",
+		Description:    "GitHub Copilot",
+		DefaultBaseURL: "https://api.githubcopilot.com",
+	},
 	"ollama": {
 		Protocol:       "ollama",
 		Description:    "Local models (no API key needed)",
@@ -68,7 +73,7 @@ type NamedDescriptor struct {
 	Descriptor
 }
 
-var protocols = []string{"openai", "anthropic", "google", "ollama", "azure", "azure-ad"}
+var protocols = []string{"openai", "anthropic", "google", "ollama", "azure", "azure-ad", "github-copilot"}
 
 // Descriptors returns built-in provider metadata in stable name order.
 func Descriptors() []NamedDescriptor {

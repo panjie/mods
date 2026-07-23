@@ -93,6 +93,65 @@ func TestBuildProviderConfigsSelectsResponsesOnlyForOfficialOpenAI(t *testing.T)
 	require.False(t, azure.OpenAI.UseResponses)
 }
 
+func TestBuildProviderConfigsGitHubCopilotUsesOpenAICompatibleChat(t *testing.T) {
+	oldExchange := exchangeCopilotToken
+	defer func() { exchangeCopilotToken = oldExchange }()
+	exchangeCopilotToken = func(_ string) (string, error) { return "copilot-api-token", nil }
+
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	cfgs, err := mods.buildProviderConfigs(
+		Model{Name: "gemini-2.5-pro", API: "github-copilot", Endpoint: "chat-completions"},
+		API{Name: "github-copilot", APIKey: "github-oauth-token", BaseURL: "https://api.githubcopilot.com"},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "copilot-api-token", cfgs.OpenAI.AuthToken)
+	require.Equal(t, "https://api.githubcopilot.com", cfgs.OpenAI.BaseURL)
+	require.False(t, cfgs.OpenAI.UseResponses)
+	require.Equal(t, "mods/1.0", cfgs.OpenAI.Headers["Editor-Version"])
+}
+
+func TestBuildProviderConfigsGitHubCopilotUsesResponsesEndpoint(t *testing.T) {
+	oldExchange := exchangeCopilotToken
+	defer func() { exchangeCopilotToken = oldExchange }()
+	exchangeCopilotToken = func(_ string) (string, error) { return "copilot-api-token", nil }
+
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	cfgs, err := mods.buildProviderConfigs(
+		Model{Name: "gpt-5.4-mini", API: "github-copilot", Endpoint: "responses"},
+		API{Name: "github-copilot", APIKey: "github-oauth-token", BaseURL: "https://api.githubcopilot.com"},
+	)
+	require.NoError(t, err)
+	require.True(t, cfgs.OpenAI.UseResponses)
+}
+
+func TestBuildProviderConfigsGitHubCopilotFallbacksGpt5ToResponses(t *testing.T) {
+	oldExchange := exchangeCopilotToken
+	defer func() { exchangeCopilotToken = oldExchange }()
+	exchangeCopilotToken = func(_ string) (string, error) { return "copilot-api-token", nil }
+
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	cfgs, err := mods.buildProviderConfigs(
+		Model{Name: "gpt-5.4-mini", API: "github-copilot"},
+		API{Name: "github-copilot", APIKey: "github-oauth-token", BaseURL: "https://api.githubcopilot.com"},
+	)
+	require.NoError(t, err)
+	require.True(t, cfgs.OpenAI.UseResponses)
+}
+
+func TestBuildProviderConfigsGitHubCopilotMessagesEndpointUnsupported(t *testing.T) {
+	oldExchange := exchangeCopilotToken
+	defer func() { exchangeCopilotToken = oldExchange }()
+	exchangeCopilotToken = func(_ string) (string, error) { return "copilot-api-token", nil }
+
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	_, err := mods.buildProviderConfigs(
+		Model{Name: "claude-sonnet-4", API: "github-copilot", Endpoint: "messages"},
+		API{Name: "github-copilot", APIKey: "github-oauth-token", BaseURL: "https://api.githubcopilot.com"},
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires /v1/messages")
+}
+
 // TestBuildProviderConfigsGoogleUsesUserBaseURL closes the regression that
 // originally motivated the fix: an api.BaseURL entry in mods.yml was
 // silently ignored for Google, so users targeting a Vertex proxy or a

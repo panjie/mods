@@ -1,17 +1,27 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/panjie/mods/internal/anthropic"
+	"github.com/panjie/mods/internal/copilot"
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/stream"
 )
+
+var exchangeCopilotToken = func(githubToken string) (string, error) {
+	tok, err := copilot.ExchangeCopilotToken(context.Background(), copilot.Client{}, githubToken)
+	if err != nil {
+		return "", err
+	}
+	return tok.Token, nil
+}
 
 type providerConfigs struct {
 	Anthropic anthropic.Config
@@ -65,6 +75,33 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		} else {
 			cfgs.OpenAI.APIType = "azure"
 		}
+	case "github-copilot":
+		key, err := m.ensureKey(api, keyEnv, keyURL)
+		if err != nil {
+			return cfgs, modsError{Err: err, ReasonText: "GitHub Copilot authentication failed"}
+		}
+		copilotToken, err := exchangeCopilotToken(key)
+		if err != nil {
+			return cfgs, modsError{Err: err, ReasonText: "GitHub Copilot authentication failed"}
+		}
+		baseURL := api.BaseURL
+		if baseURL == "" {
+			baseURL = copilot.DefaultCopilotBaseURL
+		}
+		if strings.EqualFold(mod.Endpoint, copilot.EndpointMessages) {
+			return cfgs, modsError{
+				ReasonText: fmt.Sprintf("GitHub Copilot model %s requires /v1/messages, which is not supported yet", mod.Name),
+			}
+		}
+		cfgs.OpenAI = openai.Config{
+			AuthToken:     copilotToken,
+			BaseURL:       baseURL,
+			UseResponses:  useCopilotResponses(mod),
+			Headers:       copilot.Headers(),
+			ExtraParams:   mod.ExtraParams,
+			ThoughtFields: mod.ThinkFields,
+			ThinkTag:      mod.ThinkTag,
+		}
 	default:
 		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
@@ -80,6 +117,17 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		}
 	}
 	return cfgs, nil
+}
+
+func useCopilotResponses(mod Model) bool {
+	switch strings.ToLower(strings.TrimSpace(mod.Endpoint)) {
+	case copilot.EndpointResponses:
+		return true
+	case copilot.EndpointChatCompletions, "":
+		return strings.HasPrefix(strings.ToLower(mod.Name), "gpt-5")
+	default:
+		return false
+	}
 }
 
 // newStreamClient creates the appropriate stream.Client for the given API

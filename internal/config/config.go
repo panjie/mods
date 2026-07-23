@@ -128,7 +128,7 @@ var Help = map[string]string{
 	"mcp-servers.<server>.url":          "Endpoint URL for an SSE or HTTP MCP server",
 	"mcp-servers.<server>.pass-env-all": "Forward the entire parent environment to a trusted stdio MCP server",
 
-	"apis.<provider>.api-key":     "Provider API key; prefer api-key-env",
+	"apis.<provider>.api-key":     "Provider API key; prefer api-key-env. For github-copilot this stores the GitHub device-flow token written by --config",
 	"apis.<provider>.api-key-env": "Environment variable containing the provider API key",
 	"apis.<provider>.api-key-cmd": "Shell command that resolves the provider API key at runtime",
 	"apis.<provider>.version":     "Provider API version when required by the adapter",
@@ -140,6 +140,7 @@ var Help = map[string]string{
 	"apis.<provider>.models.<model>.max-input-chars":      "Complete input byte estimate limit for this model",
 	"apis.<provider>.models.<model>.aliases":              "Alternative names that select this model",
 	"apis.<provider>.models.<model>.fallback":             "Fallback model used after a provider failure",
+	"apis.<provider>.models.<model>.endpoint":             "Provider-specific endpoint route for this model; GitHub Copilot discovery writes responses, messages, or chat-completions",
 	"apis.<provider>.models.<model>.thinking-budget":      "Manual reasoning token budget; Anthropic uses it only with thinking-type enabled",
 	"apis.<provider>.models.<model>.extra-params":         "Additional provider request fields for this model; official OpenAI uses Responses fields, compatible endpoints use Chat Completions fields",
 	"apis.<provider>.models.<model>.thinking-type":        "Provider-specific thinking mode override; Anthropic supports adaptive, enabled, or disabled",
@@ -156,6 +157,7 @@ type Model struct {
 	MaxChars       int64          `yaml:"max-input-chars"`
 	Aliases        []string       `yaml:"aliases"`
 	Fallback       string         `yaml:"fallback"`
+	Endpoint       string         `yaml:"endpoint,omitempty"`
 	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
 	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
 	// ThinkingType overrides the provider default value used by -t / --think.

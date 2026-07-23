@@ -10,9 +10,11 @@ import (
 func TestProtocolResolution(t *testing.T) {
 	require.Equal(t, "anthropic", Protocol("custom", "anthropic"))
 	require.Equal(t, "google", Protocol("google", ""))
+	require.Equal(t, "github-copilot", Protocol("github-copilot", ""))
 	require.Equal(t, "openai", Protocol("custom", ""))
 	require.Equal(t, "openai", Protocol("custom", "typo"))
 	require.True(t, KnownProtocol("azure-ad"))
+	require.True(t, KnownProtocol("github-copilot"))
 	require.False(t, KnownProtocol("typo"))
 }
 
@@ -22,6 +24,10 @@ func TestSharedProviderMetadata(t *testing.T) {
 	require.Contains(t, google.DefaultBaseURL, "{model}")
 	require.Equal(t, "GOOGLE_API_KEY", google.APIKeyEnv)
 	require.NotEmpty(t, google.Description)
+	copilot, ok := Lookup("github-copilot")
+	require.True(t, ok)
+	require.Equal(t, "github-copilot", copilot.Protocol)
+	require.Equal(t, "https://api.githubcopilot.com", copilot.DefaultBaseURL)
 	require.Equal(t, "https://your-server.com/v1", DefaultBaseURL("custom"))
 }
 

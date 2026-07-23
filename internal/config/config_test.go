@@ -72,6 +72,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 		"apis.<provider>.models.<model>.reasoning-effort",
 		"apis.<provider>.models.<model>.reasoning-effort-off",
 		"apis.<provider>.models.<model>.extra-params",
+		"apis.<provider>.models.<model>.endpoint",
 	} {
 		require.Contains(t, documented, path)
 		require.NotEmpty(t, documented[path].Description, path)
@@ -89,6 +90,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 		"apis.<provider>.api-key",
 		"apis.<provider>.api-key-cmd",
 		"apis.<provider>.models.<model>.extra-params",
+		"apis.<provider>.models.<model>.endpoint",
 	} {
 		require.Empty(t, documented[path].Default, path)
 	}

@@ -80,15 +80,15 @@ func RunConfigWizard() error {
 	// spinner. discoveredPick/manualModelsText are bound to the model-entry
 	// pages and read after the form. (The MultiSelect preserves option order,
 	// so discoveredPick is already in fetched/sorted order.)
-	var (
-		discoveredPick     []string
-		manualModelsText   string
-		discoverySucceeded bool
-		discoveryErr       error
-		copilotEndpoints   map[string]string
-	)
+	providerCatalog := newConfigWizardProviderCatalog(config)
+	modelState := newConfigWizardModelState(wizardProviderName(chosenAPI, newProviderName), providerCatalog)
+	discoveredPick := &modelState.discoveredPick
+	currentProvider := func() string {
+		return wizardProviderName(chosenAPI, newProviderName)
+	}
 	discoverOptions := func() []huh.Option[string] {
-		api := wizardProviderName(chosenAPI, newProviderName)
+		api := currentProvider()
+		modelState.switchProvider(api, providerCatalog)
 		eff := configWizardDiscoveryType(chosenAPI, newProviderName, apiType)
 		if chosenAPI != addProviderOption {
 			if at := findAPIType(api); at != "" {
@@ -103,27 +103,26 @@ func RunConfigWizard() error {
 			base = builtinBaseURL(api)
 		}
 		if configWizardWaitingForCopilotAuth(api, apiKey) {
-			discoverySucceeded = false
-			discoveryErr = fmt.Errorf("GitHub Copilot device authentication is required before model discovery")
+			modelState.setDiscoveryFailure(api, fmt.Errorf("GitHub Copilot device authentication is required before model discovery"))
 			return nil
 		}
 		var discovered []string
 		var derr error
 		if eff == "github-copilot" {
-			discovered, copilotEndpoints, derr = discoverCopilotModels(base, resolveKeyForDiscovery(api, apiKey))
+			var endpoints map[string]string
+			discovered, endpoints, derr = discoverCopilotModels(base, resolveKeyForDiscovery(api, apiKey))
+			modelState.copilotEndpoints = endpoints
 		} else {
 			discovered, derr = discoverModels(eff, base, resolveKeyForDiscovery(api, apiKey))
 		}
 		if derr != nil || len(discovered) == 0 {
-			discoverySucceeded = false
-			discoveryErr = derr
 			if derr == nil {
-				discoveryErr = fmt.Errorf("no models returned")
+				derr = fmt.Errorf("no models returned")
 			}
+			modelState.setDiscoveryFailure(api, derr)
 			return nil
 		}
-		discoverySucceeded = true
-		discoveryErr = nil
+		modelState.setDiscoverySuccess(api, providerCatalog.preselectedDiscoveredModels(api, discovered))
 		// Show every fetched model; already-configured ones are picked out
 		// only at save time, so their curated metadata is preserved.
 		const maxPickerModels = 200
@@ -140,6 +139,11 @@ func RunConfigWizard() error {
 	wizardTheme := configWizardTheme(config.Theme)
 	waitingForCopilotAuth := func() bool {
 		return configWizardWaitingForCopilotAuth(wizardProviderName(chosenAPI, newProviderName), apiKey)
+	}
+	manualModelsAccessor := configWizardManualModelsAccessor{
+		state:   modelState,
+		catalog: providerCatalog,
+		apiName: currentProvider,
 	}
 	for {
 		form := huh.NewForm(
@@ -263,17 +267,26 @@ func RunConfigWizard() error {
 			huh.NewGroup(
 				huh.NewMultiSelect[string]().
 					TitleFunc(func() string {
-						return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
+						api := currentProvider()
+						modelState.switchProvider(api, providerCatalog)
+						return fmt.Sprintf("Models for %s", api)
 					}, []any{&chosenAPI, &newProviderName}).
-					DescriptionFunc(func() string {
-						return configWizardDiscoveryDescription(wizardProviderName(chosenAPI, newProviderName), discoveryErr)
-					}, []any{&chosenAPI, &newProviderName, &discoveryErr}).
+					Description(configWizardDiscoveryDescription()).
+					Validate(func(value []string) error {
+						if modelState.discoveryErrFor(currentProvider()) != nil && len(value) == 0 {
+							return nil
+						}
+						return nil
+					}).
 					OptionsFunc(discoverOptions, []any{&chosenAPI, &newProviderName, &apiType, &baseURL, &apiKey}).
-					Value(&discoveredPick),
+					Value(discoveredPick),
 			).
 				Title("discover models").
 				Description("Fetch the model list from the provider's API now.").
-				WithHideFunc(waitingForCopilotAuth),
+				WithHideFunc(func() bool {
+					api := currentProvider()
+					return modelState.hideDiscovery(api, waitingForCopilotAuth())
+				}),
 
 			// Manual model entry: shown when discovery failed or when the user did
 			// not select a discovered model, so setup never writes an unselected
@@ -281,21 +294,24 @@ func RunConfigWizard() error {
 			huh.NewGroup(
 				huh.NewText().
 					TitleFunc(func() string {
-						return fmt.Sprintf("Models for %s", wizardProviderName(chosenAPI, newProviderName))
+						return fmt.Sprintf("Models for %s", currentProvider())
 					}, []any{&chosenAPI, &newProviderName}).
-					Description("Enter one model identifier per line. The first model becomes the default.").
-					Placeholder("llama-3.3-70b-versatile\nllama-3.1-8b-instant").
+					Description("Enter model identifiers here, one per line. The first line becomes the default model.").
+					Placeholder("").
 					Lines(6).
 					ExternalEditor(false).
-					Value(&manualModelsText).
+					Accessor(manualModelsAccessor).
 					Validate(func(value string) error {
-						_, err := parseNewModelNames(wizardProviderName(chosenAPI, newProviderName), value)
+						_, err := parseModelNames(wizardProviderName(chosenAPI, newProviderName), value, true)
 						return err
 					}),
 			).
 				Title("new models").
-				Description("Type model identifiers manually.").
-				WithHideFunc(func() bool { return waitingForCopilotAuth() || discoverySucceeded && len(discoveredPick) > 0 }),
+				Description("Type model identifiers manually if discovery is unavailable or incomplete.").
+				WithHideFunc(func() bool {
+					api := currentProvider()
+					return modelState.hideManual(api, waitingForCopilotAuth())
+				}),
 
 			// Page 8: Built-in tools
 			huh.NewGroup(
@@ -432,6 +448,10 @@ func RunConfigWizard() error {
 		apiName := wizardProviderName(chosenAPI, newProviderName)
 		if waitingForCopilotAuth() {
 			if err := runConfigWizardCopilotAuth(context.Background(), apiName, &apiKey, &keyStorage); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					fmt.Fprintln(os.Stderr, "\nCanceled.")
+					return nil
+				}
 				return fmt.Errorf("github copilot authentication: %w", err)
 			}
 			copilotPostAuth = true
@@ -463,7 +483,8 @@ func RunConfigWizard() error {
 	// Models come from the discover picker only when the user selected one;
 	// all other cases require manually-entered model names. The first entry
 	// becomes the default model.
-	addedModelNames, err := configWizardModelNames(apiName, discoveredPick, manualModelsText)
+	modelState.switchProvider(apiName, providerCatalog)
+	addedModelNames, err := configWizardModelNames(apiName, modelState.discoveredPick, modelState.manualModelsText)
 	if err != nil {
 		return err
 	}
@@ -511,7 +532,7 @@ func RunConfigWizard() error {
 		envVarName:             envVarName,
 		baseURLInput:           baseURL,
 		addedModelNames:        addedModelNames,
-		copilotModelEndpoints:  copilotEndpoints,
+		copilotModelEndpoints:  modelState.copilotEndpoints,
 	}
 	return saveConfigWizard(savePath, previousPath, saveData, summaryData{
 		api:                 apiName,
@@ -743,6 +764,124 @@ var pollCopilotDeviceFlow = func(ctx context.Context, code copilotDeviceCode) (s
 	return token.AccessToken, nil
 }
 
+var runConfigWizardCopilotAuthScreen = func(ctx context.Context, device copilotDeviceCode) (string, error) {
+	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
+		ctx:    ctx,
+		device: device,
+		theme:  configWizardTheme(config.Theme),
+	})
+	result, err := tea.NewProgram(model, buildTeaProgramOptions()...).Run()
+	if err != nil {
+		return "", err
+	}
+	final, ok := result.(configWizardCopilotAuthModel)
+	if !ok {
+		return "", fmt.Errorf("github copilot authentication: unexpected TUI model %T", result)
+	}
+	if final.canceled {
+		return "", huh.ErrUserAborted
+	}
+	if final.err != nil {
+		return "", final.err
+	}
+	return final.token, nil
+}
+
+type configWizardCopilotAuthData struct {
+	ctx    context.Context
+	device copilotDeviceCode
+	theme  huh.Theme
+}
+
+type configWizardCopilotAuthModel struct {
+	data     configWizardCopilotAuthData
+	width    int
+	height   int
+	token    string
+	err      error
+	canceled bool
+}
+
+type configWizardCopilotAuthDoneMsg struct {
+	token string
+}
+
+type configWizardCopilotAuthErrMsg struct {
+	err error
+}
+
+func newConfigWizardCopilotAuthModel(data configWizardCopilotAuthData) configWizardCopilotAuthModel {
+	if data.ctx == nil {
+		data.ctx = context.Background()
+	}
+	if data.theme == nil {
+		data.theme = configWizardTheme(config.Theme)
+	}
+	return configWizardCopilotAuthModel{data: data, width: 80, height: 20}
+}
+
+func (m configWizardCopilotAuthModel) Init() tea.Cmd {
+	return func() tea.Msg {
+		token, err := pollCopilotDeviceFlow(m.data.ctx, m.data.device)
+		if err != nil {
+			return configWizardCopilotAuthErrMsg{err: err}
+		}
+		return configWizardCopilotAuthDoneMsg{token: token}
+	}
+}
+
+func (m configWizardCopilotAuthModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+	case tea.KeyPressMsg:
+		if msg.Code == tea.KeyEsc || msg.String() == "ctrl+c" {
+			m.canceled = true
+			return m, tea.Quit
+		}
+	case configWizardCopilotAuthDoneMsg:
+		m.token = msg.token
+		return m, tea.Quit
+	case configWizardCopilotAuthErrMsg:
+		m.err = msg.err
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m configWizardCopilotAuthModel) View() tea.View {
+	styles := m.data.theme.Theme(true)
+	palette := ui.MakeStylesWithTheme(config.Theme, true).Interaction.Palette
+	url := StderrStyles().InlineCode.Render(m.data.device.VerificationURI)
+	code := lipgloss.NewStyle().
+		Foreground(palette.Accent).
+		Bold(true).
+		Render(m.data.device.UserCode)
+	status := lipgloss.NewStyle().Foreground(palette.Muted).Render("Waiting for GitHub authorization...")
+	help := lipgloss.NewStyle().Foreground(palette.Muted).Render("Esc cancel")
+	body := lipgloss.JoinVertical(lipgloss.Left,
+		"Open this URL in your browser:",
+		url,
+		"",
+		"Enter this code:",
+		code,
+		"",
+		status,
+		"",
+		help,
+	)
+	cardWidth := min(max(40, m.width-8), 78)
+	card := styles.Focused.Base.
+		Width(cardWidth).
+		Render(lipgloss.JoinVertical(lipgloss.Left,
+			styles.Focused.Title.Render("GitHub Copilot sign in"),
+			body,
+		))
+	return tea.NewView("\n" + card + "\n")
+}
+
 func validateConfigWizardCopilotChoice(ok bool) error {
 	if !ok {
 		return fmt.Errorf("GitHub Copilot sign in is required")
@@ -751,35 +890,36 @@ func validateConfigWizardCopilotChoice(ok bool) error {
 }
 
 func configWizardWaitingForCopilotAuth(apiName, apiKey string) bool {
-	return apiName == "github-copilot" && strings.TrimSpace(apiKey) == ""
+	return apiName == "github-copilot" && strings.TrimSpace(resolveKeyForDiscovery(apiName, apiKey)) == ""
 }
 
 func runConfigWizardCopilotAuth(ctx context.Context, apiName string, apiKey, keyStorage *string) error {
 	if apiName != "github-copilot" || strings.TrimSpace(*apiKey) != "" {
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, "\nStarting GitHub Copilot device authentication...")
 	device, err := startCopilotDeviceFlow(ctx)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Open %s and enter code %s\n", device.VerificationURI, device.UserCode)
-	token, err := pollCopilotDeviceFlow(ctx, device)
+	token, err := runConfigWizardCopilotAuthScreen(ctx, device)
 	if err != nil {
 		return err
 	}
 	*apiKey = token
 	*keyStorage = "config"
-	fmt.Fprintln(os.Stderr, "GitHub Copilot authentication complete.")
 	return nil
 }
 
-func configWizardDiscoveryDescription(provider string, err error) string {
-	desc := "Select models to add, or leave empty to enter a model name manually. The first selected becomes the default."
-	if err == nil {
-		return desc
-	}
-	return fmt.Sprintf("%s\nDiscovery failed for %s: %v. Leave the list empty to enter model names manually.", desc, provider, err)
+func configWizardDiscoveryDescription() string {
+	return "Select models to add, or press Enter to enter model names manually. The first selected becomes the default."
+}
+
+func configWizardHideDiscoveryModels(waitingForCopilotAuth bool, discoveryErr error) bool {
+	return waitingForCopilotAuth || discoveryErr != nil
+}
+
+func configWizardHideManualModels(waitingForCopilotAuth, discoverySucceeded bool, discoveredPick []string) bool {
+	return waitingForCopilotAuth || discoverySucceeded && len(discoveredPick) > 0
 }
 
 func configWizardDiscoveryType(chosenAPI, newProviderName, apiType string) string {
@@ -967,8 +1107,13 @@ func validateNewModelName(provider, value string) error {
 }
 
 func parseNewModelNames(provider, value string) ([]string, error) {
+	return parseModelNames(provider, value, false)
+}
+
+func parseModelNames(provider, value string, allowExisting bool) ([]string, error) {
 	seen := make(map[string]struct{})
 	models := make([]string, 0)
+	existing := existingModelNames(provider)
 	for _, line := range strings.Split(value, "\n") {
 		model := strings.TrimSpace(line)
 		if model == "" {
@@ -977,8 +1122,10 @@ func parseNewModelNames(provider, value string) ([]string, error) {
 		if _, ok := seen[model]; ok {
 			continue
 		}
-		if err := validateNewModelName(provider, model); err != nil {
-			return nil, err
+		if _, ok := existing[model]; !(allowExisting && ok) {
+			if err := validateNewModelName(provider, model); err != nil {
+				return nil, err
+			}
 		}
 		seen[model] = struct{}{}
 		models = append(models, model)
@@ -995,7 +1142,7 @@ func configWizardModelNames(provider string, discoveredPick []string, manualMode
 		// entry is a deterministic default.
 		return discoveredPick, nil
 	}
-	return parseNewModelNames(provider, manualModelsText)
+	return parseModelNames(provider, manualModelsText, true)
 }
 
 func validateWizardBaseURL(chosenAPI, value string) error {
@@ -1072,6 +1219,141 @@ func existingModelNames(apiName string) map[string]struct{} {
 	return out
 }
 
+type configWizardProviderCatalog struct {
+	models map[string][]string
+	sets   map[string]map[string]struct{}
+}
+
+func newConfigWizardProviderCatalog(cfg Config) configWizardProviderCatalog {
+	catalog := configWizardProviderCatalog{
+		models: make(map[string][]string, len(cfg.APIs)),
+		sets:   make(map[string]map[string]struct{}, len(cfg.APIs)),
+	}
+	for _, api := range cfg.APIs {
+		set := make(map[string]struct{}, len(api.Models))
+		names := make([]string, 0, len(api.Models))
+		for name := range api.Models {
+			set[name] = struct{}{}
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		catalog.models[api.Name] = names
+		catalog.sets[api.Name] = set
+	}
+	return catalog
+}
+
+func (c configWizardProviderCatalog) configuredModels(apiName string) []string {
+	models := c.models[apiName]
+	out := make([]string, len(models))
+	copy(out, models)
+	return out
+}
+
+func (c configWizardProviderCatalog) existingSet(apiName string) map[string]struct{} {
+	set := c.sets[apiName]
+	if set == nil {
+		return map[string]struct{}{}
+	}
+	return set
+}
+
+type configWizardModelState struct {
+	provider           string
+	manualModelsText   string
+	discoveredPick     []string
+	discoveryProvider  string
+	discoverySucceeded bool
+	discoveryErr       error
+	copilotEndpoints   map[string]string
+}
+
+func newConfigWizardModelState(apiName string, catalog configWizardProviderCatalog) *configWizardModelState {
+	state := &configWizardModelState{}
+	state.switchProvider(apiName, catalog)
+	return state
+}
+
+func (s *configWizardModelState) switchProvider(apiName string, catalog configWizardProviderCatalog) {
+	if s.provider == apiName {
+		return
+	}
+	s.provider = apiName
+	s.manualModelsText = strings.Join(catalog.configuredModels(apiName), "\n")
+	s.discoveredPick = nil
+	s.discoveryProvider = ""
+	s.discoverySucceeded = false
+	s.discoveryErr = nil
+	s.copilotEndpoints = nil
+}
+
+func (s *configWizardModelState) setDiscoverySuccess(apiName string, selected []string) {
+	s.provider = apiName
+	s.discoveryProvider = apiName
+	s.discoverySucceeded = true
+	s.discoveryErr = nil
+	s.discoveredPick = selected
+}
+
+func (s *configWizardModelState) setDiscoveryFailure(apiName string, err error) {
+	s.provider = apiName
+	s.discoveryProvider = apiName
+	s.discoverySucceeded = false
+	s.discoveryErr = err
+	s.discoveredPick = nil
+}
+
+func (s *configWizardModelState) discoveryErrFor(apiName string) error {
+	if s.discoveryProvider != apiName {
+		return nil
+	}
+	return s.discoveryErr
+}
+
+func (s *configWizardModelState) hideDiscovery(apiName string, waitingForCopilotAuth bool) bool {
+	return configWizardHideDiscoveryModels(waitingForCopilotAuth, s.discoveryErrFor(apiName))
+}
+
+func (s *configWizardModelState) hideManual(apiName string, waitingForCopilotAuth bool) bool {
+	if s.discoveryProvider != apiName {
+		return configWizardHideManualModels(waitingForCopilotAuth, false, nil)
+	}
+	return configWizardHideManualModels(waitingForCopilotAuth, s.discoverySucceeded, s.discoveredPick)
+}
+
+func (c configWizardProviderCatalog) preselectedDiscoveredModels(apiName string, discovered []string) []string {
+	existing := c.existingSet(apiName)
+	selected := make([]string, 0, len(existing))
+	for _, modelName := range discovered {
+		if _, ok := existing[modelName]; ok {
+			selected = append(selected, modelName)
+		}
+	}
+	return selected
+}
+
+func (c configWizardProviderCatalog) manualModelText(apiName string) string {
+	return strings.Join(c.configuredModels(apiName), "\n")
+}
+
+type configWizardManualModelsAccessor struct {
+	state   *configWizardModelState
+	catalog configWizardProviderCatalog
+	apiName func() string
+}
+
+func (a configWizardManualModelsAccessor) Get() string {
+	api := a.apiName()
+	a.state.switchProvider(api, a.catalog)
+	return a.state.manualModelsText
+}
+
+func (a configWizardManualModelsAccessor) Set(value string) {
+	api := a.apiName()
+	a.state.switchProvider(api, a.catalog)
+	a.state.manualModelsText = value
+}
+
 func normalizeWebSearchProviderForWizard(provider string) string {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	if isHTTPURL(provider) {
@@ -1139,6 +1421,12 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 	}
 
 	if d.apiName != "ollama" {
+		if d.apiName == "github-copilot" && d.apiKey == "" {
+			if key := configuredAPIKey(d.apiName); key != "" {
+				d.apiKey = key
+				d.keyStorage = "config"
+			}
+		}
 		if d.keyStorage == "config" && d.apiKey != "" {
 			updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-key"}, Value: d.apiKey})
 		} else if d.envVarName != "" {
@@ -1452,17 +1740,26 @@ func resolveKeyForDiscovery(apiName, enteredKey string) string {
 	if k := strings.TrimSpace(enteredKey); k != "" {
 		return k
 	}
+	if k := configuredAPIKey(apiName); k != "" {
+		return k
+	}
 	for _, api := range config.APIs {
 		if api.Name != apiName {
 			continue
-		}
-		if api.APIKey != "" {
-			return api.APIKey
 		}
 		if api.APIKeyEnv != "" {
 			return os.Getenv(api.APIKeyEnv)
 		}
 		break
+	}
+	return ""
+}
+
+func configuredAPIKey(apiName string) string {
+	for _, api := range config.APIs {
+		if api.Name == apiName {
+			return api.APIKey
+		}
 	}
 	return ""
 }

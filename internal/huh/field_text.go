@@ -261,6 +261,7 @@ func (*Text) Zoom() bool { return false }
 
 // Focus focuses the text field.
 func (t *Text) Focus() tea.Cmd {
+	t.syncAccessorValue()
 	t.focused = true
 	return t.textarea.Focus()
 }
@@ -296,6 +297,7 @@ func (t *Text) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		t.hasDarkBg = msg.IsDark()
+		t.syncAccessorValue()
 	case updateValueMsg:
 		t.textarea.SetValue(string(msg))
 		t.textarea, cmd = t.textarea.Update(msg)
@@ -303,6 +305,7 @@ func (t *Text) Update(msg tea.Msg) (Model, tea.Cmd) {
 		t.accessor.Set(t.textarea.Value())
 	case updateFieldMsg:
 		var cmds []tea.Cmd
+		t.syncAccessorValue()
 		if ok, hash := t.placeholder.shouldUpdate(); ok {
 			t.placeholder.bindingsHash = hash
 			if t.placeholder.loadFromCache() {
@@ -381,6 +384,12 @@ func (t *Text) Update(msg tea.Msg) (Model, tea.Cmd) {
 	t.accessor.Set(t.textarea.Value())
 
 	return t, tea.Batch(cmds...)
+}
+
+func (t *Text) syncAccessorValue() {
+	if value := t.accessor.Get(); value != t.textarea.Value() {
+		t.textarea.SetValue(value)
+	}
 }
 
 func (t *Text) activeStyles() *FieldStyles {

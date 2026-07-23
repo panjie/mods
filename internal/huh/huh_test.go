@@ -932,6 +932,48 @@ func TestHideGroupLastAndFirstGroupsNotHidden(t *testing.T) {
 	}
 }
 
+func TestCurrentGroupBecomingHiddenMovesToNextVisibleGroup(t *testing.T) {
+	hideFirst := false
+	f := NewForm(
+		NewGroup(NewNote().Description("Foo")).WithHideFunc(func() bool { return hideFirst }),
+		NewGroup(NewNote().Description("Bar")),
+	)
+
+	f = batchUpdate(f, f.Init()).(*Form)
+	if v := ansi.Strip(f.View()); !strings.Contains(v, "Foo") {
+		t.Fatalf("expected Foo before hide, got %q", v)
+	}
+
+	hideFirst = true
+	f.Update(tea.BackgroundColorMsg{})
+
+	view := ansi.Strip(f.View())
+	if !strings.Contains(view, "Bar") {
+		t.Fatalf("expected Bar after hide, got %q", view)
+	}
+	if strings.Contains(view, "Foo") {
+		t.Fatalf("expected Foo to be hidden, got %q", view)
+	}
+}
+
+func TestTextFieldSyncsExternalAccessorUpdate(t *testing.T) {
+	value := "before"
+	field := NewText().Title("Models").Value(&value)
+	f := NewForm(NewGroup(field))
+
+	f = batchUpdate(f, f.Init()).(*Form)
+	if view := ansi.Strip(f.View()); !strings.Contains(view, "before") {
+		t.Fatalf("expected initial value, got %q", view)
+	}
+
+	value = "after"
+	f.Update(tea.BackgroundColorMsg{})
+
+	if view := ansi.Strip(f.View()); !strings.Contains(view, "after") {
+		t.Fatalf("expected updated value, got %q", view)
+	}
+}
+
 func TestPrevGroup(t *testing.T) {
 	f := NewForm(
 		NewGroup(NewNote().Description("Bar")),

@@ -101,25 +101,24 @@ func TestDiscoverOptionsUsesCopilotProtocolForNewProviderNamedGitHubCopilot(t *t
 	require.Equal(t, "openai", configWizardDiscoveryType(addProviderOption, "groq", "openai"))
 }
 
-func TestConfigWizardDiscoveryDescriptionIncludesError(t *testing.T) {
-	err := fmt.Errorf("invalid token (HTTP 401)")
-	desc := configWizardDiscoveryDescription("github-copilot", err)
+func TestConfigWizardDiscoveryDescriptionOmitsFailureDetails(t *testing.T) {
+	desc := configWizardDiscoveryDescription()
 	require.Contains(t, desc, "Select models to add")
-	require.Contains(t, desc, "invalid token (HTTP 401)")
+	require.NotContains(t, desc, "HTTP 401")
 }
 
 func TestConfigWizardCopilotAuthRunsOutsideFormValidation(t *testing.T) {
 	oldStart := startCopilotDeviceFlow
-	oldPoll := pollCopilotDeviceFlow
+	oldRunScreen := runConfigWizardCopilotAuthScreen
 	defer func() {
 		startCopilotDeviceFlow = oldStart
-		pollCopilotDeviceFlow = oldPoll
+		runConfigWizardCopilotAuthScreen = oldRunScreen
 	}()
 
 	startCopilotDeviceFlow = func(context.Context) (copilotDeviceCode, error) {
 		return copilotDeviceCode{UserCode: "ABCD-EFGH", VerificationURI: "https://github.com/login/device"}, nil
 	}
-	pollCopilotDeviceFlow = func(context.Context, copilotDeviceCode) (string, error) {
+	runConfigWizardCopilotAuthScreen = func(context.Context, copilotDeviceCode) (string, error) {
 		return "github-oauth-token", nil
 	}
 
@@ -128,7 +127,7 @@ func TestConfigWizardCopilotAuthRunsOutsideFormValidation(t *testing.T) {
 		err := runConfigWizardCopilotAuth(context.Background(), "github-copilot", &apiKey, &keyStorage)
 		require.NoError(t, err)
 	})
-	require.Contains(t, out, "Starting GitHub Copilot device authentication")
+	require.Empty(t, out, "auth flow should render through the TUI, not write raw stderr")
 	require.Equal(t, "github-oauth-token", apiKey)
 	require.Equal(t, "config", keyStorage)
 
@@ -139,6 +138,61 @@ func TestConfigWizardCopilotAuthRunsOutsideFormValidation(t *testing.T) {
 	require.Empty(t, out, "validation must not write while the TUI owns stderr")
 }
 
+func TestConfigWizardCopilotAuthViewShowsDeviceCode(t *testing.T) {
+	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
+		device: copilotDeviceCode{
+			UserCode:        "ABCD-EFGH",
+			VerificationURI: "https://github.com/login/device",
+		},
+		theme: configWizardTheme("charm"),
+	})
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	model = updated.(configWizardCopilotAuthModel)
+
+	view := ansi.Strip(model.View().Content)
+	require.Contains(t, view, "GitHub Copilot sign in")
+	require.Contains(t, view, "https://github.com/login/device")
+	require.Contains(t, view, "ABCD-EFGH")
+	require.Contains(t, view, "Waiting for GitHub authorization")
+	require.Contains(t, view, "Esc cancel")
+}
+
+func TestConfigWizardCopilotAuthCancel(t *testing.T) {
+	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
+		device: copilotDeviceCode{
+			UserCode:        "ABCD-EFGH",
+			VerificationURI: "https://github.com/login/device",
+		},
+		theme: configWizardTheme("charm"),
+	})
+	updated, cmd := model.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	require.NotNil(t, cmd)
+	authModel := updated.(configWizardCopilotAuthModel)
+	require.True(t, authModel.canceled)
+}
+
+func TestConfigWizardCopilotAuthCancelDoesNotSaveToken(t *testing.T) {
+	oldStart := startCopilotDeviceFlow
+	oldRunScreen := runConfigWizardCopilotAuthScreen
+	defer func() {
+		startCopilotDeviceFlow = oldStart
+		runConfigWizardCopilotAuthScreen = oldRunScreen
+	}()
+
+	startCopilotDeviceFlow = func(context.Context) (copilotDeviceCode, error) {
+		return copilotDeviceCode{UserCode: "ABCD-EFGH", VerificationURI: "https://github.com/login/device"}, nil
+	}
+	runConfigWizardCopilotAuthScreen = func(context.Context, copilotDeviceCode) (string, error) {
+		return "", huh.ErrUserAborted
+	}
+
+	var apiKey, keyStorage string
+	err := runConfigWizardCopilotAuth(context.Background(), "github-copilot", &apiKey, &keyStorage)
+	require.ErrorIs(t, err, huh.ErrUserAborted)
+	require.Empty(t, apiKey)
+	require.Empty(t, keyStorage)
+}
+
 func TestConfigWizardDiscoversCopilotOnlyAfterAuthToken(t *testing.T) {
 	require.True(t, configWizardWaitingForCopilotAuth("github-copilot", ""),
 		"Copilot model discovery must wait for device auth")
@@ -147,6 +201,15 @@ func TestConfigWizardDiscoversCopilotOnlyAfterAuthToken(t *testing.T) {
 		"Copilot model discovery can run after device auth")
 	require.False(t, configWizardWaitingForCopilotAuth("openai", ""),
 		"non-Copilot providers do not need Copilot device auth")
+}
+
+func TestConfigWizardUsesExistingCopilotToken(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{Name: "github-copilot", APIKey: "saved-github-oauth-token"}},
+	}}, func() {
+		require.False(t, configWizardWaitingForCopilotAuth("github-copilot", ""),
+			"configured Copilot auth token should not require device auth again")
+	})
 }
 
 func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
@@ -297,6 +360,27 @@ func TestBuildConfigWizardUpdatesGitHubCopilotStoresDeviceTokenInConfig(t *testi
 	requireNoUpdatePath(t, updates, []string{"apis", "github-copilot", "api-key-env"})
 	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "models", "gpt-5"}, map[string]any{"endpoint": "responses"})
 	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "models", "claude-sonnet-4"}, map[string]any{"endpoint": "messages"})
+}
+
+func TestBuildConfigWizardUpdatesGitHubCopilotKeepsExistingConfigToken(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{Name: "github-copilot", APIKey: "saved-github-oauth-token"}},
+	}}, func() {
+		updates := buildConfigWizardUpdates(configWizardSaveData{
+			apiName:                "github-copilot",
+			modelName:              "gpt-5",
+			reviewMode:             "auto",
+			fsMode:                 "auto",
+			webSearchProvider:      "duckduckgo",
+			webSearchProviderValue: "duckduckgo",
+			keyStorage:             "env",
+			envVarName:             "GITHUB_COPILOT_API_KEY",
+			addedModelNames:        []string{"gpt-5"},
+		})
+
+		requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key"}, "saved-github-oauth-token")
+		requireNoUpdatePath(t, updates, []string{"apis", "github-copilot", "api-key-env"})
+	})
 }
 
 func TestBuildConfigWizardUpdatesWritesAPITypeForAnthropic(t *testing.T) {
@@ -491,6 +575,120 @@ func TestConfigWizardModelNamesRequiresManualWhenNoDiscoverySelection(t *testing
 
 	_, err = configWizardModelNames("openai", nil, "\n\t")
 	require.Error(t, err)
+}
+
+func TestConfigWizardModelNamesAllowsConfiguredManualModels(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name: "google",
+			Models: map[string]Model{
+				"gemini-2.5-flash": {},
+			},
+		}},
+	}}, func() {
+		models, err := configWizardModelNames("google", nil, "gemini-2.5-flash\ngemini-2.5-pro")
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"gemini-2.5-flash", "gemini-2.5-pro"}, models)
+	})
+}
+
+func TestConfigWizardPreselectsConfiguredDiscoveredModels(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name: "openai",
+			Models: map[string]Model{
+				"gpt-5.4":         {},
+				"configured-only": {},
+			},
+		}},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		got := catalog.preselectedDiscoveredModels("openai", []string{"gpt-5.4-mini", "gpt-5.4", "gpt-5.5"})
+
+		require.Equal(t, []string{"gpt-5.4"}, got)
+	})
+}
+
+func TestConfigWizardModelPageVisibilityAfterDiscoveryFailure(t *testing.T) {
+	discoveryErr := fmt.Errorf("invalid API key")
+
+	require.True(t, configWizardHideDiscoveryModels(false, discoveryErr),
+		"discovery picker should hide after discovery fails")
+	require.True(t, configWizardHideDiscoveryModels(true, nil),
+		"discovery picker should hide while waiting for Copilot auth")
+	require.False(t, configWizardHideManualModels(false, false, nil),
+		"manual entry should show after discovery fails")
+}
+
+func TestManualModelTextForProviderUsesConfiguredModels(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name: "google",
+			Models: map[string]Model{
+				"gemini-2.5-pro":   {},
+				"gemini-2.5-flash": {},
+			},
+		}},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		got := catalog.manualModelText("google")
+
+		require.Equal(t, "gemini-2.5-flash\ngemini-2.5-pro", got)
+	})
+}
+
+func TestConfigWizardModelStateRefreshesManualTextWhenProviderChanges(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{
+			{Name: "github-copilot", Models: map[string]Model{"gpt-5-mini": {}, "gpt-5.4-mini": {}}},
+			{Name: "fujitsu-google", Models: map[string]Model{"fujitsu-gemini": {}}},
+			{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}},
+		},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		state := newConfigWizardModelState("github-copilot", catalog)
+
+		state.switchProvider("google", catalog)
+		require.Equal(t, "gemini-3.5-flash", state.manualModelsText)
+
+		state.switchProvider("fujitsu-google", catalog)
+		require.Equal(t, "fujitsu-gemini", state.manualModelsText)
+	})
+}
+
+func TestConfigWizardModelStateKeepsEditsForSameProvider(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}}},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		state := newConfigWizardModelState("google", catalog)
+		state.manualModelsText = "user-edited-model"
+
+		state.switchProvider("google", catalog)
+
+		require.Equal(t, "google", state.provider)
+		require.Equal(t, "user-edited-model", state.manualModelsText)
+	})
+}
+
+func TestConfigWizardModelStateScopesDiscoveryFailureByProvider(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{
+			{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}},
+			{Name: "github-copilot", Models: map[string]Model{"gpt-5.4-mini": {}}},
+		},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		state := newConfigWizardModelState("google", catalog)
+		state.setDiscoveryFailure("google", fmt.Errorf("invalid API key"))
+
+		require.True(t, state.hideDiscovery("google", false))
+
+		state.switchProvider("github-copilot", catalog)
+		require.False(t, state.hideDiscovery("github-copilot", false),
+			"Google discovery failure must not hide Copilot discovery after provider switch")
+	})
 }
 
 func TestValidateWizardBaseURLRequiresNewProviderURL(t *testing.T) {

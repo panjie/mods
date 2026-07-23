@@ -645,6 +645,9 @@ func (f *Form) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	m, cmd := group.Update(msg)
 	f.selector.Set(f.selector.Index(), m.(*Group))
+	if f.isGroupHidden(f.selector.Selected()) {
+		return f.Update(nextGroup())
+	}
 
 	// A user input a key, this could hide or show other groups,
 	// let's update all of their positions.

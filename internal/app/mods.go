@@ -39,6 +39,7 @@ const (
 	defaultFanciness     = 10
 	maxToolFailedRounds  = 3
 	renderFrameInterval  = time.Second / 30
+	terminalProbeTimeout = 250 * time.Millisecond
 )
 
 const numPlanReviewOptions = 4
@@ -51,6 +52,7 @@ type Mods struct {
 	Styles         Styles
 	Error          *modsError
 	state          state
+	terminalReady  bool
 	retries        int
 	toolCallRounds int
 	totalRounds    int
@@ -218,9 +220,28 @@ func (m *Mods) Init() tea.Cmd {
 	// reader available to consume their replies. Otherwise those replies can
 	// arrive after the program exits and be echoed by the user's shell.
 	if m.Config.Raw || !m.Config.InteractiveTTYAvailable {
+		m.terminalReady = true
 		return m.findSessionDetails()
 	}
-	return tea.Batch(m.findSessionDetails(), tea.RequestBackgroundColor)
+	// Bubble Tea queries terminal modes 2026 and 2027 before running Init.
+	// Wait for the subsequently requested background-color reply before doing
+	// work that can fail and quit immediately. Terminal replies are ordered,
+	// so receiving BackgroundColorMsg also means the earlier mode replies have
+	// been consumed by Bubble Tea's input loop.
+	return tea.Batch(
+		tea.RequestBackgroundColor,
+		tea.Tick(terminalProbeTimeout, func(time.Time) tea.Msg {
+			return terminalProbeTimeoutMsg{}
+		}),
+	)
+}
+
+func (m *Mods) continueAfterTerminalProbe() tea.Cmd {
+	if m.terminalReady {
+		return nil
+	}
+	m.terminalReady = true
+	return m.findSessionDetails()
 }
 
 // Update implements tea.Model.
@@ -228,6 +249,14 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	if msg, ok := msg.(tea.BackgroundColorMsg); ok {
 		m.Styles = ui.MakeStylesWithTheme(m.Config.Theme, msg.IsDark())
+		if cmd := m.continueAfterTerminalProbe(); cmd != nil {
+			return m, cmd
+		}
+	}
+	if _, ok := msg.(terminalProbeTimeoutMsg); ok {
+		if cmd := m.continueAfterTerminalProbe(); cmd != nil {
+			return m, cmd
+		}
 	}
 
 	if inputMsg, ok := msg.(tea.KeyMsg); ok {

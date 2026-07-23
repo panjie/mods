@@ -34,6 +34,11 @@ type completionInput struct {
 	content string
 }
 
+// terminalProbeTimeoutMsg releases interactive startup when a terminal does
+// not answer the background-color query. Terminals that do answer normally
+// continue as soon as BackgroundColorMsg arrives.
+type terminalProbeTimeoutMsg struct{}
+
 // retryMsg signals that a retryable provider error occurred and the
 // completion should be re-attempted after a backoff delay. retry() returns
 // this message instead of calling time.Sleep so the Bubble Tea Update loop

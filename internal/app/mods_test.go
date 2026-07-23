@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -52,17 +54,80 @@ func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 func TestInitQueriesBackgroundColorOnlyWithInteractiveTerminal(t *testing.T) {
 	nonInteractive := &Mods{Config: &Config{}}
 	require.IsType(t, sessionDetailsMsg{}, nonInteractive.Init()())
+	require.True(t, nonInteractive.terminalReady)
 
 	raw := &Mods{Config: &Config{
 		PersistentConfig:        PersistentConfig{Raw: true},
 		InteractiveTTYAvailable: true,
 	}}
 	require.IsType(t, sessionDetailsMsg{}, raw.Init()())
+	require.True(t, raw.terminalReady)
 
 	interactive := &Mods{Config: &Config{InteractiveTTYAvailable: true}}
 	batch, ok := interactive.Init()().(tea.BatchMsg)
 	require.True(t, ok)
 	require.Len(t, batch, 2)
+	require.False(t, interactive.terminalReady)
+}
+
+func TestInteractiveStartupContinuesOnceAfterBackgroundReply(t *testing.T) {
+	m := testMods(t)
+	m.Config.InteractiveTTYAvailable = true
+
+	_ = m.Init()
+	_, cmd := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	require.NotNil(t, cmd)
+	require.IsType(t, sessionDetailsMsg{}, cmd())
+	require.True(t, m.terminalReady)
+
+	_, duplicate := m.Update(terminalProbeTimeoutMsg{})
+	require.Nil(t, duplicate)
+}
+
+func TestInteractiveStartupFallsBackAfterTerminalProbeTimeout(t *testing.T) {
+	m := testMods(t)
+	m.Config.InteractiveTTYAvailable = true
+
+	_ = m.Init()
+	_, cmd := m.Update(terminalProbeTimeoutMsg{})
+	require.NotNil(t, cmd)
+	require.IsType(t, sessionDetailsMsg{}, cmd())
+	require.True(t, m.terminalReady)
+
+	_, duplicate := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	require.Nil(t, duplicate)
+}
+
+func TestTerminalProbeTimeoutIsBounded(t *testing.T) {
+	require.Equal(t, 250*time.Millisecond, terminalProbeTimeout)
+}
+
+func TestInvalidModelFailureStartsOnlyAfterTerminalProbe(t *testing.T) {
+	m := testMods(t)
+	m.Config.InteractiveTTYAvailable = true
+	m.Config.API = "openai"
+	m.Config.Model = "missing-model"
+	m.Config.Prefix = "help"
+	m.Config.APIs = []API{{
+		Name: "openai",
+		Models: map[string]Model{
+			"configured-model": {},
+		},
+	}}
+
+	_ = m.Init()
+	require.False(t, m.terminalReady)
+	require.Nil(t, m.Error)
+
+	_, startup := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	require.NotNil(t, startup)
+	require.IsType(t, sessionDetailsMsg{}, startup())
+	require.True(t, m.terminalReady)
+
+	failure := m.startCompletionCmd("")()
+	merr, ok := failure.(modsError)
+	require.True(t, ok)
+	require.Contains(t, merr.ReasonText, "does not contain the model")
 }
 
 func TestFindSessionDetails(t *testing.T) {

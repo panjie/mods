@@ -1,8 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -77,6 +80,147 @@ func SaveFieldPaths(path string, updates []FieldUpdate) error {
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
+}
+
+// MergeSettingsYAML recursively merges a YAML mapping into an existing
+// settings file. Mapping values merge by key; all other node kinds replace the
+// existing value. The complete merged document is validated before an atomic
+// write, so a bad patch cannot leave the settings file partially updated.
+func MergeSettingsYAML(path string, patch []byte) error {
+	_, mapping, err := decodeSettingsDocument(patch, false)
+	if err != nil {
+		return fmt.Errorf("parse settings YAML: %w", err)
+	}
+	if len(mapping.Content) == 0 {
+		return fmt.Errorf("parse settings YAML: expected a non-empty mapping")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config %s: %w", path, err)
+	}
+
+	existingDoc, existingMapping, err := decodeSettingsDocument(data, true)
+	if err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+	mergeYAMLMapping(existingMapping, mapping)
+
+	out, err := yaml.Marshal(existingDoc)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+
+	var candidate Config
+	if err := yaml.Unmarshal(out, &candidate); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+	if err := validateShellReadOnlyCommands(&candidate); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+	validateReviewMode(&candidate)
+
+	if err := writeSettingsFileAtomic(path, out); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	return nil
+}
+
+// decodeSettingsDocument reads exactly one YAML document whose root is a
+// mapping. Empty existing files are treated as an empty mapping so a valid
+// patch can bootstrap them; patches themselves are checked for non-emptiness
+// by MergeSettingsYAML.
+func decodeSettingsDocument(data []byte, allowEmpty bool) (*yaml.Node, *yaml.Node, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var doc yaml.Node
+	if err := decoder.Decode(&doc); err != nil {
+		if err == io.EOF && allowEmpty {
+			mapping := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{mapping}}
+			return &doc, mapping, nil
+		}
+		if err == io.EOF {
+			return nil, nil, fmt.Errorf("expected a YAML mapping")
+		}
+		return nil, nil, err
+	}
+
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, nil, fmt.Errorf("expected exactly one YAML document")
+		}
+		return nil, nil, err
+	}
+
+	if doc.Kind != yaml.DocumentNode ||
+		len(doc.Content) != 1 ||
+		doc.Content[0].Kind != yaml.MappingNode {
+		return nil, nil, fmt.Errorf("expected a YAML mapping")
+	}
+	return &doc, doc.Content[0], nil
+}
+
+func mergeYAMLMapping(destination, patch *yaml.Node) {
+	for i := 0; i+1 < len(patch.Content); i += 2 {
+		patchKey := patch.Content[i]
+		patchValue := patch.Content[i+1]
+		index := mappingValueIndex(destination, patchKey.Value)
+		if index < 0 {
+			destination.Content = append(destination.Content, patchKey, patchValue)
+			continue
+		}
+
+		existingValue := destination.Content[index]
+		if existingValue.Kind == yaml.MappingNode && patchValue.Kind == yaml.MappingNode {
+			mergeYAMLMapping(existingValue, patchValue)
+			continue
+		}
+
+		preserveYAMLComments(patchValue, existingValue)
+		destination.Content[index] = patchValue
+	}
+}
+
+func mappingValueIndex(mapping *yaml.Node, key string) int {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return i + 1
+		}
+	}
+	return -1
+}
+
+func preserveYAMLComments(replacement, existing *yaml.Node) {
+	if replacement.HeadComment == "" {
+		replacement.HeadComment = existing.HeadComment
+	}
+	if replacement.LineComment == "" {
+		replacement.LineComment = existing.LineComment
+	}
+	if replacement.FootComment == "" {
+		replacement.FootComment = existing.FootComment
+	}
+}
+
+func writeSettingsFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
 	}
 	return nil
 }

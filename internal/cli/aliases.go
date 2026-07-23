@@ -30,6 +30,7 @@ var (
 	Ensure                = cfgpkg.Ensure
 	WriteDefaultFile      = cfgpkg.WriteDefaultFile
 	SaveFieldPaths        = cfgpkg.SaveFieldPaths
+	MergeSettingsYAML     = cfgpkg.MergeSettingsYAML
 	HasAPIKey             = cfgpkg.HasAPIKey
 	Help                  = cfgpkg.Help
 	Open                  = session.Open

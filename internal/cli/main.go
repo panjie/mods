@@ -163,7 +163,7 @@ func initFlags() {
 	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
 	regBool(flags, &config.NoInstructions, "no-instructions", "", config.NoInstructions)
 	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
-	regBool(flags, &config.Settings, "settings", "", false)
+	regSettingsFlag(flags, &config)
 	regBool(flags, &config.ConfigSetup, "config", "", false)
 	regBool(flags, &config.Dirs, "dirs", "", false)
 	regStr(flags, &config.Role, "role", "R", config.Role)
@@ -262,7 +262,7 @@ func execute() {
 	config, err = Ensure()
 	if err != nil {
 		handleError(modsError{Err: err, ReasonText: "Could not load your configuration file."})
-		if !slices.Contains(os.Args, "--settings") && !slices.Contains(os.Args, "--config") {
+		if !hasSettingsArg(os.Args) && !slices.Contains(os.Args, "--config") {
 			os.Exit(1)
 		}
 	}
@@ -307,7 +307,8 @@ func execute() {
 		rootCmd.InitDefaultCompletionCmd()
 	}
 
-	args, showDirs := extractSkillsDirsAction(os.Args[1:])
+	args := normalizeSettingsArgs(os.Args[1:])
+	args, showDirs := extractSkillsDirsAction(args)
 	showSkillsDirs = showDirs
 	rootCmd.SetArgs(args)
 

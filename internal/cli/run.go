@@ -133,6 +133,9 @@ func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
 	}
 
 	if config.Settings {
+		if config.SettingsImport {
+			return true, runSettingsImportAction()
+		}
 		return true, runSettingsEditorAction()
 	}
 
@@ -317,6 +320,18 @@ func runSettingsEditorAction() error {
 				"Missing %s.",
 				StderrStyles().InlineCode.Render("$EDITOR"),
 			),
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, "Wrote config file to:", config.SettingsPath)
+	return nil
+}
+
+func runSettingsImportAction() error {
+	if err := MergeSettingsYAML(config.SettingsPath, []byte(config.SettingsYAML)); err != nil {
+		return modsError{
+			Err:        err,
+			ReasonText: "Could not import settings into your configuration file.",
 		}
 	}
 

@@ -125,6 +125,26 @@ Prefer to edit the raw YAML? Open it in your `$EDITOR`:
 mods --settings
 ```
 
+You can also recursively merge a YAML mapping into `mods.yml` directly from
+the command line. Existing values at the same path are overwritten, while
+unmentioned settings are preserved:
+
+```sh
+mods --settings 'default-api: openai'
+
+mods --settings 'apis:
+  fujitsu-google:
+    api-type: google
+    base-url: https://abc.com
+    api-key-env: FUJITSU_GOOGLE_API_KEY
+    models:
+      gemini-3.0-pro: {}'
+```
+
+The `--settings='<yaml>'` spelling is also supported. Avoid passing `api-key`
+values directly because command arguments may be recorded in shell history or
+visible to other local processes; prefer `api-key-env`.
+
 Set a provider and model with the interactive wizard, or edit the YAML directly:
 
 ```yaml
@@ -388,7 +408,8 @@ mods [OPTIONS] [PROMPT...]
 
 mods --help      # all options, grouped by purpose
 mods --config    # interactive setup wizard (recommended for new users)
-mods --settings  # open mods.yml in $EDITOR
+mods --settings              # open mods.yml in $EDITOR
+mods --settings '<yaml>'     # recursively merge YAML into mods.yml
 mods --dirs      # show where mods stores its data
 ```
 

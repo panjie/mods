@@ -104,6 +104,8 @@ const (
 	flagListTools     = "list-tools"
 	flagListPrompts   = "list-prompts"
 	flagListSkills    = "list-skills"
+
+	settingsEditorFlagValue = "__MODS_OPEN_SETTINGS_EDITOR__"
 )
 
 // sessionActionFlags are mutually exclusive: at most one may be passed per
@@ -167,6 +169,105 @@ func regInt64(flags *pflag.FlagSet, p *int64, name string, def int64) {
 // regFloat64 registers a float64 flag with auto-rendered help.
 func regFloat64(flags *pflag.FlagSet, p *float64, name string, def float64) {
 	flags.Float64Var(p, name, def, flagDesc(name))
+}
+
+type settingsFlagValue struct {
+	settings   *bool
+	importYAML *bool
+	yaml       *string
+}
+
+func newSettingsFlagValue(settings, importYAML *bool, yamlInput *string) *settingsFlagValue {
+	return &settingsFlagValue{
+		settings:   settings,
+		importYAML: importYAML,
+		yaml:       yamlInput,
+	}
+}
+
+func (v *settingsFlagValue) Set(value string) error {
+	*v.settings = true
+	*v.importYAML = value != settingsEditorFlagValue
+	if *v.importYAML {
+		*v.yaml = value
+	} else {
+		*v.yaml = ""
+	}
+	return nil
+}
+
+func (v *settingsFlagValue) String() string {
+	if v == nil || v.yaml == nil {
+		return ""
+	}
+	return *v.yaml
+}
+
+func (*settingsFlagValue) Type() string {
+	return "yaml"
+}
+
+func regSettingsFlag(flags *pflag.FlagSet, c *Config) {
+	flag := flags.VarPF(
+		newSettingsFlagValue(&c.Settings, &c.SettingsImport, &c.SettingsYAML),
+		flagSettings,
+		"",
+		flagDesc(flagSettings),
+	)
+	flag.NoOptDefVal = settingsEditorFlagValue
+}
+
+// normalizeSettingsArgs lets --settings retain its historical valueless form
+// while also accepting a space-separated YAML argument. pflag stops consuming
+// the next argument whenever NoOptDefVal is set, so rewrite only that spelling
+// to the equivalent --settings=<yaml> form before Cobra parses it.
+func normalizeSettingsArgs(args []string) []string {
+	normalized := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			normalized = append(normalized, args[i:]...)
+			break
+		}
+		if arg == "--"+flagSettings &&
+			i+1 < len(args) &&
+			!isKnownCLIFlag(args[i+1]) {
+			normalized = append(normalized, arg+"="+args[i+1])
+			i++
+			continue
+		}
+		normalized = append(normalized, arg)
+	}
+	return normalized
+}
+
+func hasSettingsArg(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return false
+		}
+		if arg == "--"+flagSettings || strings.HasPrefix(arg, "--"+flagSettings+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func isKnownCLIFlag(arg string) bool {
+	if arg == "--" {
+		return true
+	}
+	if strings.HasPrefix(arg, "--") {
+		name := strings.TrimPrefix(arg, "--")
+		if index := strings.IndexByte(name, '='); index >= 0 {
+			name = name[:index]
+		}
+		return rootCmd.Flags().Lookup(name) != nil
+	}
+	if strings.HasPrefix(arg, "-") && len(arg) == 2 {
+		return rootCmd.Flags().ShorthandLookup(arg[1:]) != nil
+	}
+	return false
 }
 
 // regStrArr registers a []string flag with auto-rendered help, optional shorthand.

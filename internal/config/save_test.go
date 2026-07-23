@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -230,6 +231,123 @@ web-search-api-key: tvly-test
 	require.Equal(t, true, m["web-search"])
 	require.Equal(t, "tavily", m["web-search-provider"])
 	require.NotContains(t, m, "web-search-api-key")
+}
+
+func TestMergeSettingsYAMLRecursivelyMergesMappings(t *testing.T) {
+	path := writeTestConfig(t, `# user config
+default-api: openai
+apis:
+  fujitsu-google:
+    base-url: https://old.example.com  # keep this comment
+    api-key-env: FUJITSU_GOOGLE_API_KEY
+    models:
+      existing-model: {}
+skills-dirs:
+  - ./existing-skills
+`)
+
+	patch := []byte(`default-api: fujitsu-google
+apis:
+  fujitsu-google:
+    api-type: google
+    base-url: https://abc.com
+    api-key: sk-abcde
+    models:
+      gemini-3.0-pro: {}
+`)
+	require.NoError(t, MergeSettingsYAML(path, patch))
+
+	m := loadAsMap(t, path)
+	require.Equal(t, "fujitsu-google", m["default-api"])
+	apis := m["apis"].(map[string]any)
+	provider := apis["fujitsu-google"].(map[string]any)
+	require.Equal(t, "google", provider["api-type"])
+	require.Equal(t, "https://abc.com", provider["base-url"])
+	require.Equal(t, "sk-abcde", provider["api-key"])
+	require.Equal(t, "FUJITSU_GOOGLE_API_KEY", provider["api-key-env"])
+	models := provider["models"].(map[string]any)
+	require.Contains(t, models, "existing-model")
+	require.Contains(t, models, "gemini-3.0-pro")
+	require.Equal(t, []any{"./existing-skills"}, m["skills-dirs"])
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "# user config")
+	require.Contains(t, string(data), "# keep this comment")
+	require.Less(t,
+		strings.Index(string(data), "existing-model"),
+		strings.Index(string(data), "gemini-3.0-pro"),
+	)
+}
+
+func TestMergeSettingsYAMLReplacesSequencesScalarsAndNodeKinds(t *testing.T) {
+	path := writeTestConfig(t, `skills-dirs:
+  - ./old
+custom-value:
+  nested: old
+default-model: old-model
+`)
+
+	require.NoError(t, MergeSettingsYAML(path, []byte(`skills-dirs:
+  - ./one
+  - ./two
+custom-value:
+  - replacement
+default-model: null
+`)))
+
+	m := loadAsMap(t, path)
+	require.Equal(t, []any{"./one", "./two"}, m["skills-dirs"])
+	require.Equal(t, []any{"replacement"}, m["custom-value"])
+	require.Contains(t, m, "default-model")
+	require.Nil(t, m["default-model"])
+}
+
+func TestMergeSettingsYAMLBootstrapsDefaultFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, WriteDefaultFile(path))
+
+	require.NoError(t, MergeSettingsYAML(path, []byte("default-api: ollama\n")))
+
+	m := loadAsMap(t, path)
+	require.Equal(t, "ollama", m["default-api"])
+	require.Contains(t, m, "format-text")
+}
+
+func TestMergeSettingsYAMLRejectsInvalidPatchWithoutChangingFile(t *testing.T) {
+	tests := map[string]string{
+		"empty":                "",
+		"empty mapping":        "{}",
+		"sequence root":        "- default-api\n- openai\n",
+		"scalar root":          "default-api",
+		"multiple documents":   "default-api: openai\n---\ndefault-api: ollama\n",
+		"invalid YAML":         "apis: [",
+		"invalid config shape": "apis:\n  custom:\n    models: model-name\n",
+	}
+
+	for name, patch := range tests {
+		t.Run(name, func(t *testing.T) {
+			original := []byte("# untouched\ndefault-api: openai\n")
+			path := writeTestConfig(t, string(original))
+
+			require.Error(t, MergeSettingsYAML(path, []byte(patch)))
+
+			after, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, original, after)
+		})
+	}
+}
+
+func TestMergeSettingsYAMLRejectsInvalidExistingConfig(t *testing.T) {
+	original := []byte("apis: [")
+	path := writeTestConfig(t, string(original))
+
+	require.Error(t, MergeSettingsYAML(path, []byte("default-api: openai\n")))
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, original, after)
 }
 
 func TestHasAPIKey(t *testing.T) {

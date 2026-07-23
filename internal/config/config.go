@@ -75,7 +75,7 @@ var Help = map[string]string{
 	"no-instructions":  "Disable auto-loading AGENTS.md from the workspace root as project context",
 	"word-wrap":        "Wrap formatted output at specific width (default is 80)",
 	"max-tokens":       "Maximum number of tokens in response",
-	"settings":         "Open settings in your $EDITOR",
+	"settings":         "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
 	"config":           "Interactive setup wizard for provider, model, API key, and tools",
 	"dirs":             "Print the directories in which mods store its data",
 	"reset-settings":   "Backup your old settings file and reset everything to the defaults",
@@ -286,23 +286,25 @@ type Config struct {
 	PersistentConfig `yaml:",inline"`
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
-	AskModel      bool
-	Chat          bool
-	Plan          bool
-	ShowHelp      bool
-	ResetSettings bool
-	Version       bool
-	Settings      bool
-	ConfigSetup   bool
-	Dirs          bool
-	ContinueLast  bool
-	Continue      string
-	List          bool
-	ListRoles     bool
-	ListPrompts   bool
-	ListSkills    bool
-	MCPList       bool
-	MCPListTools  bool
+	AskModel       bool
+	Chat           bool
+	Plan           bool
+	ShowHelp       bool
+	ResetSettings  bool
+	Version        bool
+	Settings       bool
+	SettingsImport bool
+	SettingsYAML   string
+	ConfigSetup    bool
+	Dirs           bool
+	ContinueLast   bool
+	Continue       string
+	List           bool
+	ListRoles      bool
+	ListPrompts    bool
+	ListSkills     bool
+	MCPList        bool
+	MCPListTools   bool
 
 	NoSave bool
 

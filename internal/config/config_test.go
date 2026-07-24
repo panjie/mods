@@ -250,6 +250,32 @@ func TestSessionSaveConfig(t *testing.T) {
 	})
 }
 
+func TestImageInputsAreCLIOnly(t *testing.T) {
+	t.Run("yaml", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte(`
+images:
+  - screenshot.png
+stdin-image: true
+clipboard-image: true
+`), &cfg))
+		require.Empty(t, cfg.Images)
+		require.False(t, cfg.StdinImage)
+		require.False(t, cfg.ClipboardImage)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("MODS_IMAGES", "screenshot.png")
+		t.Setenv("MODS_STDIN_IMAGE", "true")
+		t.Setenv("MODS_CLIPBOARD_IMAGE", "true")
+		var cfg Config
+		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+		require.Empty(t, cfg.Images)
+		require.False(t, cfg.StdinImage)
+		require.False(t, cfg.ClipboardImage)
+	})
+}
+
 func TestHideToolStatusConfig(t *testing.T) {
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config
@@ -304,6 +330,18 @@ func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "show-token-usage: false")
+}
+
+func TestConfigTemplateOmitsCLIOnlyImageInputs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(content)
+	require.NotContains(t, text, "\n# Images\n")
+	require.NotContains(t, text, "\n# images:")
+	require.NotContains(t, text, "\n# stdin-image:")
+	require.NotContains(t, text, "\n# clipboard-image:")
 }
 
 func TestConfigTemplateIncludesDefaultToolSettings(t *testing.T) {

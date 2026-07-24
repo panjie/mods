@@ -139,22 +139,13 @@ web-search: {{ .Config.WebSearch }}
 web-search-provider: {{ .Config.WebSearchProvider }}
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
+# {{ index .Help "web-search-api-key-env" }}
+web-search-api-key-env: {{ .Config.WebSearchAPIKeyEnv }}
+
 # {{ index .Help "skills-dirs" }}
 # skills-dirs:
 #   - ~/.agents/skills
 #   - ./project-skills
-# {{ index .Help "web-search-api-key-env" }}
-web-search-api-key-env: {{ .Config.WebSearchAPIKeyEnv }}
-
-# -----------------------------------------------------------------------------
-# Images
-# -----------------------------------------------------------------------------
-# {{ index .Help "images" }}
-# images: []
-# {{ index .Help "stdin-image" }}
-# stdin-image: false
-# {{ index .Help "clipboard-image" }}
-# clipboard-image: false
 
 # -----------------------------------------------------------------------------
 # Debug

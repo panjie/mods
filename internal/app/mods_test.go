@@ -1189,16 +1189,15 @@ func TestBuildRequestSessionValidatesImagesBeforeAPIKey(t *testing.T) {
 	m := testMods(t)
 	m.ctx = context.Background()
 	m.Config = &Config{PersistentConfig: PersistentConfig{
-		API:    "openai",
-		Model:  "gpt-4",
-		Images: []string{filepath.Join(t.TempDir(), "missing.png")},
+		API:   "openai",
+		Model: "gpt-4",
 		APIs: APIs{{
 			Name: "openai",
 			Models: map[string]Model{
 				"gpt-4": {},
 			},
 		}},
-	}}
+	}, Images: []string{filepath.Join(t.TempDir(), "missing.png")}}
 
 	_, err := m.buildRequestSession("describe image")
 	require.Error(t, err)

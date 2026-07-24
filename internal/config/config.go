@@ -102,7 +102,6 @@ var Help = map[string]string{
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
 	"image":                  "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
-	"images":                 "Default image paths to attach to each prompt",
 	"stdin-image":            "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
@@ -269,9 +268,6 @@ type PersistentConfig struct {
 	WebSearchProvider   string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
 	WebSearchAPIKey     string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
 	WebSearchAPIKeyEnv  string                     `yaml:"web-search-api-key-env"`
-	Images              []string                   `yaml:"images" env:"IMAGES"`
-	StdinImage          bool                       `yaml:"stdin-image" env:"STDIN_IMAGE"`
-	ClipboardImage      bool                       `yaml:"clipboard-image" env:"CLIPBOARD_IMAGE"`
 	Think               bool                       `yaml:"think" env:"THINK"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
@@ -310,6 +306,9 @@ type Config struct {
 	ListSkills     bool
 	MCPList        bool
 	MCPListTools   bool
+	Images         []string `yaml:"-" env:"-"`
+	StdinImage     bool     `yaml:"-" env:"-"`
+	ClipboardImage bool     `yaml:"-" env:"-"`
 
 	NoSave bool
 

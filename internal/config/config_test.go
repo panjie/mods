@@ -177,6 +177,9 @@ func TestToolSelectionRulesCoverCoreChoices(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Use shell tools for repository-wide")
 	require.Contains(t, ToolSelectionRules, "review step")
 	require.Contains(t, ToolSelectionRules, "PowerShell 5.1")
+	require.Contains(t, ToolSelectionRules, "Get-ChildItem")
+	require.Contains(t, ToolSelectionRules, "Select-String")
+	require.Contains(t, ToolSelectionRules, "Return inspection output directly")
 	require.Contains(t, ToolSelectionRules, "Do not retry blindly")
 }
 

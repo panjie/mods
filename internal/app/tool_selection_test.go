@@ -63,6 +63,9 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	windowsPrompt := renderToolSelectionPrompt(shellOnly, false, "windows")
 	require.Contains(t, windowsPrompt, prompts.ToolSelectionShellWindows)
 	require.NotContains(t, windowsPrompt, prompts.ToolSelectionShellPOSIX)
+	require.Contains(t, windowsPrompt, "Get-ChildItem")
+	require.Contains(t, windowsPrompt, "Select-String")
+	require.Contains(t, windowsPrompt, "Return inspection output directly")
 
 	both := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(both, toolregistry.FilesystemConfig{Root: t.TempDir()}))

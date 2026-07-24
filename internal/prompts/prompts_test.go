@@ -41,6 +41,11 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "call the appropriate tool")
 	require.Contains(t, ToolSelection, "fs_replace")
 	require.Contains(t, ToolSelection, "PowerShell 5.1")
+	require.Contains(t, ToolSelection, "Get-ChildItem")
+	require.Contains(t, ToolSelection, "Select-String")
+	require.Contains(t, ToolSelection, "Where-Object")
+	require.Contains(t, ToolSelection, "Measure-Object")
+	require.Contains(t, ToolSelection, "Return inspection output directly")
 	require.Contains(t, ToolSelection, "Do not retry blindly")
 }
 

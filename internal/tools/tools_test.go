@@ -86,6 +86,26 @@ func TestRegistryCloseRunsClosersReverseOrder(t *testing.T) {
 	}
 }
 
+func TestPowerShellGuidanceDescriptions(t *testing.T) {
+	for _, desc := range []string{
+		WindowsShellRunDescription,
+		PowerShellRunDescription,
+	} {
+		if !strings.Contains(desc, "Get-ChildItem") {
+			t.Fatalf("expected description to mention Get-ChildItem: %q", desc)
+		}
+		if !strings.Contains(desc, "Select-String") {
+			t.Fatalf("expected description to mention Select-String: %q", desc)
+		}
+		if !strings.Contains(desc, "native PowerShell cmdlets") {
+			t.Fatalf("expected description to prefer native PowerShell cmdlets: %q", desc)
+		}
+		if !strings.Contains(desc, "do not use Out-File") {
+			t.Fatalf("expected description to discourage Out-File: %q", desc)
+		}
+	}
+}
+
 func TestFilesystemToolsStayInsideRoot(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

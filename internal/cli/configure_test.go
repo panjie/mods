@@ -467,14 +467,29 @@ func TestConfigWizardThemeUsesUnifiedListCursor(t *testing.T) {
 	}
 }
 
+func TestNormalizeWebSearchProviderForWizard(t *testing.T) {
+	tests := map[string]string{
+		"":          "tavily",
+		"tavily":    "tavily",
+		"custom":    "custom",
+		"https://x": "custom",
+		"unknown":   "tavily",
+	}
+	for input, expected := range tests {
+		t.Run(input, func(t *testing.T) {
+			require.Equal(t, expected, normalizeWebSearchProviderForWizard(input))
+		})
+	}
+}
+
 func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "groq",
 		modelName:              "llama-3.3-70b-versatile",
 		reviewMode:             "auto",
 		fsMode:                 "auto",
-		webSearchProvider:      "duckduckgo",
-		webSearchProviderValue: "duckduckgo",
+		webSearchProvider:      "tavily",
+		webSearchProviderValue: "tavily",
 		keyStorage:             "env",
 		envVarName:             "GROQ_API_KEY",
 		baseURLInput:           " https://api.groq.com/openai/v1 ",
@@ -517,8 +532,8 @@ func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testi
 		modelName:              "deepseek-v4-flash",
 		reviewMode:             "auto",
 		fsMode:                 "auto",
-		webSearchProvider:      "duckduckgo",
-		webSearchProviderValue: "duckduckgo",
+		webSearchProvider:      "tavily",
+		webSearchProviderValue: "tavily",
 		keyStorage:             "env",
 		envVarName:             "DEEPSEEK_API_KEY",
 		addedModelNames:        []string{"deepseek-v4-flash"},
@@ -544,8 +559,8 @@ func TestBuildConfigWizardUpdatesGitHubCopilotStoresDeviceTokenInConfig(t *testi
 		modelName:              "gpt-5",
 		reviewMode:             "auto",
 		fsMode:                 "auto",
-		webSearchProvider:      "duckduckgo",
-		webSearchProviderValue: "duckduckgo",
+		webSearchProvider:      "tavily",
+		webSearchProviderValue: "tavily",
 		keyStorage:             "config",
 		apiKey:                 "github-oauth-token",
 		baseURLInput:           "https://api.githubcopilot.com",
@@ -568,8 +583,8 @@ func TestBuildConfigWizardUpdatesGitHubCopilotKeepsExistingConfigToken(t *testin
 			modelName:              "gpt-5",
 			reviewMode:             "auto",
 			fsMode:                 "auto",
-			webSearchProvider:      "duckduckgo",
-			webSearchProviderValue: "duckduckgo",
+			webSearchProvider:      "tavily",
+			webSearchProviderValue: "tavily",
 			keyStorage:             "env",
 			envVarName:             "GITHUB_COPILOT_API_KEY",
 			addedModelNames:        []string{"gpt-5"},
@@ -640,8 +655,8 @@ func TestBuildConfigWizardUpdatesExistingProviderDoesNotRewriteBaseURL(t *testin
 		modelName:              "vendor/gpt-5.5:latest",
 		reviewMode:             "auto",
 		fsMode:                 "auto",
-		webSearchProvider:      "duckduckgo",
-		webSearchProviderValue: "duckduckgo",
+		webSearchProvider:      "tavily",
+		webSearchProviderValue: "tavily",
 		keyStorage:             "env",
 		envVarName:             "OPENROUTER_API_KEY",
 		addedModelNames:        []string{"vendor/gpt-5.5:latest"},
@@ -703,7 +718,7 @@ func TestSaveConfigWizardMigratesPortableConfigToStandard(t *testing.T) {
 				modelName:              "llama3.1",
 				reviewMode:             "auto",
 				fsMode:                 "auto",
-				webSearchProviderValue: "duckduckgo",
+				webSearchProviderValue: "tavily",
 				addedModelNames:        []string{"llama3.1"},
 				portable:               false,
 			}, summaryData{
@@ -736,7 +751,7 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 			modelCount:          2,
 			addedModelCount:     2,
 			fsMode:              "auto",
-			webSearchProvider:   "duckduckgo",
+			webSearchProvider:   "tavily",
 			webSearchKeyStorage: "env",
 			reviewMode:          "auto",
 			settingsPath:        "/tmp/mods.yml",

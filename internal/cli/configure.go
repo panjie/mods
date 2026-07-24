@@ -426,9 +426,8 @@ func RunConfigWizard() error {
 			huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Web search provider").
-					Description("DuckDuckGo needs no key. Tavily requires an API key.").
+					Description("Tavily is recommended and requires an API key; custom endpoints are also supported.").
 					Options(
-						huh.NewOption("DuckDuckGo - no API key", "duckduckgo"),
 						huh.NewOption("Tavily - API key required", "tavily"),
 						huh.NewOption("Custom URL - JSON search endpoint", "custom"),
 					).
@@ -1612,14 +1611,10 @@ func normalizeWebSearchProviderForWizard(provider string) string {
 		return "custom"
 	}
 	switch provider {
-	case "", "duckduckgo", "ddg", "google", "bing":
-		return "duckduckgo"
-	case "tavily":
-		return "tavily"
 	case "custom":
 		return "custom"
 	default:
-		return "duckduckgo"
+		return cfgpkg.DefaultWebSearchProvider
 	}
 }
 

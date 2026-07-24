@@ -80,7 +80,8 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 
 	require.Equal(t, "80", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
-	require.Equal(t, "true", documented["web-search"].Default)
+	require.Equal(t, "false", documented["web-search"].Default)
+	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
 	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
 	require.Equal(t, "30s", documented["builtin-tools.shell-timeout"].Default)
 	for _, path := range []string{
@@ -192,7 +193,24 @@ func TestDefaultToolSettings(t *testing.T) {
 
 	require.Equal(t, FilesystemAuto, cfg.BuiltinTools.Filesystem)
 	require.True(t, cfg.BuiltinTools.Shell)
-	require.True(t, cfg.WebSearch)
+	require.False(t, cfg.WebSearch)
+	require.Equal(t, DefaultWebSearchProvider, cfg.WebSearchProvider)
+}
+
+func TestWebSearchDefaultsPreserveExplicitCustomProvider(t *testing.T) {
+	t.Run("missing fields use defaults", func(t *testing.T) {
+		cfg := Default()
+		require.NoError(t, yaml.Unmarshal([]byte("word-wrap: 100\n"), &cfg))
+		require.False(t, cfg.WebSearch)
+		require.Equal(t, DefaultWebSearchProvider, cfg.WebSearchProvider)
+	})
+
+	t.Run("explicit custom provider remains enabled", func(t *testing.T) {
+		cfg := Default()
+		require.NoError(t, yaml.Unmarshal([]byte("web-search: true\nweb-search-provider: https://search.example.com\n"), &cfg))
+		require.True(t, cfg.WebSearch)
+		require.Equal(t, "https://search.example.com", cfg.WebSearchProvider)
+	})
 }
 
 func TestRemovedSequentialThinkingConfigIsIgnored(t *testing.T) {
@@ -299,7 +317,9 @@ func TestConfigTemplateIncludesDefaultToolSettings(t *testing.T) {
 	require.Contains(t, text, "filesystem: auto")
 	require.Contains(t, text, "shell: true")
 	require.NotContains(t, text, "sequential-thinking")
-	require.Contains(t, text, "web-search: true")
+	require.Contains(t, text, "web-search: false")
+	require.Contains(t, text, "web-search-provider: tavily")
+	require.Contains(t, text, "web-search-api-key-env: TAVILY_API_KEY")
 }
 
 func TestCreateConfigFileUsesLFLineEndings(t *testing.T) {

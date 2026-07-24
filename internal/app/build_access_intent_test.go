@@ -48,7 +48,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	require.Len(t, intentFs.Dirs, 1)
 
 	// read-only tools without directory semantics stay read-only.
-	require.NoError(t, toolregistry.RegisterWebSearch(regFs, websearch.Config{Provider: "duckduckgo"}))
+	require.NoError(t, toolregistry.RegisterWebSearch(regFs, websearch.Config{Provider: "tavily"}))
 	intentWeb := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), regFs, nil)
 	require.Equal(t, AccessRead, intentWeb.Class)
 	require.Empty(t, intentWeb.Dirs)

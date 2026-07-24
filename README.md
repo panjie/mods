@@ -45,8 +45,8 @@ It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
   plan before anything runs? Use `--plan`.
 - **Stays in your pipeline.** Pipe command output in, get structured answers out.
   `--minimal` prints one item per line — perfect for `| gum choose` and friends.
-- **Knows the live web.** `--web-search` pulls fresh results (DuckDuckGo by
-  default, no API key needed; Tavily and custom providers also supported).
+- **Knows the live web.** Web search is opt-in; `--web-search` uses Tavily by
+  default with `TAVILY_API_KEY` (custom providers are also supported).
 - **Sees images.** Attach pictures via `--image`, `--clipboard-image`, or piped
   stdin for any vision-capable model.
 - **Remembers.** Every session is saved locally with a title and a SHA-1 —
@@ -230,6 +230,7 @@ mods "scan for TODO/FIXME comments and write prioritized TODO-report.md"
 find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important files" | gum choose
 
 # Ask the live web, then act on the answer
+export TAVILY_API_KEY="tvly-..."
 mods --web-search "what changed in the latest Go release? update go.mod if relevant"
 
 # Ask a vision-capable model about an image

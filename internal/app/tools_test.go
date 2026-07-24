@@ -168,7 +168,7 @@ func TestToolCapabilities(t *testing.T) {
 	cfg.BuiltinTools.Filesystem = FilesystemAlways
 	cfg.BuiltinTools.Shell = true
 	cfg.WebSearch = true
-	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello", nil)
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "tavily"}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 	cfg.BuiltinTools.Filesystem = FilesystemAlways
 	cfg.BuiltinTools.Shell = true
 	cfg.WebSearch = true
-	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "duckduckgo"}, "hello", nil)
+	registry, err := buildToolRegistry(context.Background(), &cfg, websearch.Config{Provider: "tavily"}, "hello", nil)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}

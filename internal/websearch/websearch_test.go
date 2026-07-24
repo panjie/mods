@@ -10,24 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCleanHTML(t *testing.T) {
-	t.Run("removes tags", func(t *testing.T) {
-		require.Equal(t, "Hello World", cleanHTML("<p>Hello <b>World</b></p>"))
-	})
-	t.Run("decodes entities", func(t *testing.T) {
-		require.Equal(t, "A & B < C", cleanHTML("A &amp; B &lt; C"))
-	})
-	t.Run("handles quotes", func(t *testing.T) {
-		require.Equal(t, `"hello" 'world'`, cleanHTML("&quot;hello&quot; &#39;world&#39;"))
-	})
-	t.Run("collapse whitespace", func(t *testing.T) {
-		require.Equal(t, "a b c", cleanHTML("  a   b   c  "))
-	})
-	t.Run("empty", func(t *testing.T) {
-		require.Empty(t, cleanHTML(""))
-	})
-}
-
 func TestSearchResultFormat(t *testing.T) {
 	results := []Result{
 		{Title: "T1", URL: "https://u1.com", Snippet: "S1"},
@@ -41,86 +23,13 @@ func TestSearchResultFormat(t *testing.T) {
 	require.Contains(t, output, "S1")
 }
 
-func TestParseDuckDuckGoInstant(t *testing.T) {
-	t.Run("answer", func(t *testing.T) {
-		results := parseDuckDuckGoInstant("life", duckDuckGoInstantResponse{
-			Answer:     "42",
-			AnswerType: "answer",
-		}, 5)
-		require.Len(t, results, 1)
-		require.Equal(t, "answer", results[0].Title)
-		require.Equal(t, "https://duckduckgo.com/?q=life", results[0].URL)
-		require.Equal(t, "42", results[0].Snippet)
-	})
-
-	t.Run("abstract", func(t *testing.T) {
-		results := parseDuckDuckGoInstant("go", duckDuckGoInstantResponse{
-			Heading:      "Go",
-			AbstractText: "Go is a programming language.",
-			AbstractURL:  "https://example.com/go",
-		}, 5)
-		require.Len(t, results, 1)
-		require.Equal(t, "Go", results[0].Title)
-		require.Equal(t, "https://example.com/go", results[0].URL)
-		require.Equal(t, "Go is a programming language.", results[0].Snippet)
-	})
-
-	t.Run("definition", func(t *testing.T) {
-		results := parseDuckDuckGoInstant("term", duckDuckGoInstantResponse{
-			Heading:       "Term",
-			Definition:    "A word or phrase.",
-			DefinitionURL: "https://example.com/term",
-		}, 5)
-		require.Len(t, results, 1)
-		require.Equal(t, "Term", results[0].Title)
-		require.Equal(t, "https://example.com/term", results[0].URL)
-		require.Equal(t, "A word or phrase.", results[0].Snippet)
-	})
-
-	t.Run("nested related topics", func(t *testing.T) {
-		results := parseDuckDuckGoInstant("mods", duckDuckGoInstantResponse{
-			RelatedTopics: []duckDuckGoTopic{
-				{
-					Topics: []duckDuckGoTopic{
-						{
-							FirstURL: "https://example.com/mods",
-							Text:     "mods - AI on the command line",
-						},
-					},
-				},
-			},
-		}, 5)
-		require.Len(t, results, 1)
-		require.Equal(t, "mods", results[0].Title)
-		require.Equal(t, "https://example.com/mods", results[0].URL)
-		require.Equal(t, "mods - AI on the command line", results[0].Snippet)
-	})
-
-	t.Run("respects max results", func(t *testing.T) {
-		results := parseDuckDuckGoInstant("x", duckDuckGoInstantResponse{
-			Answer:       "answer",
-			AbstractText: "abstract",
-			Definition:   "definition",
-		}, 2)
-		require.Len(t, results, 2)
-	})
-
-	t.Run("empty response", func(t *testing.T) {
-		require.Empty(t, parseDuckDuckGoInstant("empty", duckDuckGoInstantResponse{}, 5))
-	})
-}
-
 func TestNormalizeProvider(t *testing.T) {
 	tests := map[string]provider{
-		"":           providerDuckDuckGo,
-		"duckduckgo": providerDuckDuckGo,
-		"ddg":        providerDuckDuckGo,
-		"google":     providerDuckDuckGo,
-		"bing":       providerDuckDuckGo,
-		"tavily":     providerTavily,
-		"custom":     providerCustom,
-		"https://x":  providerCustom,
-		"unknown":    providerDuckDuckGo,
+		"":          providerTavily,
+		"tavily":    providerTavily,
+		"custom":    providerCustom,
+		"https://x": providerCustom,
+		"unknown":   providerTavily,
 	}
 	for input, expected := range tests {
 		t.Run(input, func(t *testing.T) {
@@ -131,6 +40,11 @@ func TestNormalizeProvider(t *testing.T) {
 
 func TestSearchProviderValidation(t *testing.T) {
 	ctx := context.Background()
+
+	t.Run("default tavily requires api key", func(t *testing.T) {
+		_, err := search(ctx, Config{}, "query")
+		require.EqualError(t, err, "web search: tavily provider requires an API key")
+	})
 
 	t.Run("tavily requires api key", func(t *testing.T) {
 		_, err := search(ctx, Config{Provider: "tavily"}, "query")

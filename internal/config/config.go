@@ -21,11 +21,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DefaultWebSearchAPIKeyEnv is the canonical environment-variable name
-// consulted when WebSearchAPIKeyEnv is unset. It is referenced from
-// Ensure / applyDefaults and the configuration wizard so the literal
-// cannot drift between call sites.
-const DefaultWebSearchAPIKeyEnv = "TAVILY_API_KEY"
+const (
+	// DefaultWebSearchProvider is the provider selected when web search is
+	// enabled without an explicit provider.
+	DefaultWebSearchProvider = "tavily"
+	// DefaultWebSearchAPIKeyEnv is the canonical environment-variable name
+	// consulted when WebSearchAPIKeyEnv is unset. It is referenced from
+	// Ensure / applyDefaults and the configuration wizard so the literal
+	// cannot drift between call sites.
+	DefaultWebSearchAPIKeyEnv = "TAVILY_API_KEY"
+)
 
 //go:embed config_template.yml
 var configTemplate string
@@ -92,8 +97,8 @@ var Help = map[string]string{
 	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
 	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
 	"builtin-tools":          "Native tool configuration for filesystem and shell tools",
-	"web-search":             "Enable or disable the web_search tool",
-	"web-search-provider":    "Web search provider: duckduckgo (default), tavily, or custom",
+	"web-search":             "Enable or disable the web_search tool (disabled by default)",
+	"web-search-provider":    "Web search provider: tavily (default) or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
 	"image":                  "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
@@ -811,7 +816,8 @@ func Default() Config {
 			ReviewMode:         ReviewAuto,
 			WordWrap:           80,
 			MCPTimeout:         15 * time.Second,
-			WebSearch:          true,
+			WebSearch:          false,
+			WebSearchProvider:  DefaultWebSearchProvider,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
 				Filesystem: FilesystemAuto,

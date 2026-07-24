@@ -133,10 +133,10 @@ builtin-tools:
   # {{ index .Help "builtin-tools.workspace" }}
   workspace: ""
 # {{ index .Help "web-search" }}
-web-search: true
+web-search: {{ .Config.WebSearch }}
 # {{ index .Help "web-search-provider" }}
-# Supported: duckduckgo (default), tavily, custom
-web-search-provider: duckduckgo
+# Supported: tavily (default), custom
+web-search-provider: {{ .Config.WebSearchProvider }}
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
 # {{ index .Help "skills-dirs" }}
@@ -144,7 +144,7 @@ web-search-provider: duckduckgo
 #   - ~/.agents/skills
 #   - ./project-skills
 # {{ index .Help "web-search-api-key-env" }}
-# web-search-api-key-env: TAVILY_API_KEY
+web-search-api-key-env: {{ .Config.WebSearchAPIKeyEnv }}
 
 # -----------------------------------------------------------------------------
 # Images

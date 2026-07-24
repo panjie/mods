@@ -113,6 +113,13 @@ type Mods struct {
 
 	ctx context.Context
 
+	// ctxCancel cancels ctx. Invoked by quit() so every provider HTTP request,
+	// tool call, shell-classifier call, and approval/user-input select derived
+	// from ctx aborts promptly when the user quits (Ctrl+C) instead of leaking
+	// until process exit. Nil when *Mods is built without New (tests);
+	// cancelContext is nil-safe.
+	ctxCancel context.CancelFunc
+
 	reviewer  *toolReviewer
 	userInput *userInputManager
 	secrets   *secrets.Store
@@ -170,6 +177,11 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("could not build self-help reference: %w", err)
 	}
+	// Derive a cancellable child of ctx so quit() can abort every in-flight
+	// provider HTTP request, tool call, shell-classifier call, and approval/
+	// user-input select (all descend from m.ctx) when the user quits. The
+	// parent ctx is untouched, so cancelling m.ctx does not affect any caller.
+	requestCtx, requestCancel := context.WithCancel(ctx)
 	return &Mods{
 		Styles:              ui.MakeStylesWithTheme(cfg.Theme, true),
 		glam:                gr,
@@ -182,7 +194,8 @@ func New(
 		reviewer:            newToolReviewer(cfg),
 		userInput:           newUserInputManager(cfg),
 		secrets:             secrets.New(),
-		ctx:                 ctx,
+		ctx:                 requestCtx,
+		ctxCancel:           requestCancel,
 		skillCatalog:        skillCatalog,
 		selfHelpReference:   selfHelpReference,
 	}, nil
@@ -529,6 +542,16 @@ func (m *Mods) addCancel(cancel context.CancelFunc) {
 	m.cancelRequest = append(m.cancelRequest, cancel)
 }
 
+// cancelContext cancels the request context (m.ctx), aborting every in-flight
+// provider HTTP request, tool call, shell-classifier call, and approval/user-
+// input select derived from it. Nil-safe so tests that build *Mods directly
+// (without New) can still call quit().
+func (m *Mods) cancelContext() {
+	if m.ctxCancel != nil {
+		m.ctxCancel()
+	}
+}
+
 // setActiveRunner registers the runner that owns the current in-flight stream
 // so quit() and the next startCompletion/startPlan can cancel + release it.
 // Replaces any previously registered runner without closing it; callers that
@@ -560,6 +583,14 @@ func (m *Mods) closeActiveRunner() {
 }
 
 func (m *Mods) quit() tea.Msg {
+	// Cancel the request context first so every in-flight provider HTTP
+	// request, tool call, shell-classifier call, and approval/user-input
+	// select derived from m.ctx aborts immediately. This closes the window
+	// before setActiveRunner registers the stream runner, where
+	// closeActiveRunner and the cancelRequest slice are both still empty and
+	// would otherwise let an already-spawned completion goroutine continue
+	// making HTTP requests against a context that never cancels.
+	m.cancelContext()
 	// Tear down the in-flight stream (cancels its context, releases HTTP
 	// body + MCP resources) before draining the cancel slice for any tool
 	// calls. close() is idempotent so racing with receiveCmd's error path

@@ -1575,3 +1575,28 @@ func TestStreamDoneAccumulatesUsageAcrossLineagesOnce(t *testing.T) {
 		InputTokens: 30, OutputTokens: 10, TotalTokens: 40,
 	}, m.TokenUsage())
 }
+
+// TestQuitCancelsRequestContext guards the C1 fix: quitting must cancel the
+// request context (m.ctx) so every in-flight provider HTTP request, tool call,
+// shell-classifier call, and approval/user-input select derived from it aborts
+// promptly instead of leaking until process exit. Interactive Ctrl+C routes
+// through Update -> quit(), so this covers the dominant case in the report.
+func TestQuitCancelsRequestContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := &Mods{
+		ctx:       ctx,
+		ctxCancel: cancel,
+		userInput: newUserInputManager(&Config{}),
+	}
+
+	_ = m.quit()
+
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+}
+
+// TestCancelContextNilSafe ensures *Mods built without New (ctxCancel left nil,
+// as many existing tests do) can still call cancelContext without panicking.
+func TestCancelContextNilSafe(t *testing.T) {
+	m := &Mods{userInput: newUserInputManager(&Config{})}
+	require.NotPanics(t, func() { m.cancelContext() })
+}

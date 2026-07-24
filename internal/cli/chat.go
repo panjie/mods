@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -190,7 +192,18 @@ func chatPrompt() {
 }
 
 func runOneTurn(ctx context.Context, opts []tea.ProgramOption) (*Mods, error) {
-	mods, err := newMods(ctx, &config, db, withSelfHelpCLI(registeredSelfHelpFlags))
+	// Wrap ctx with signal handling so SIGINT/SIGTERM cancel the request
+	// context that every provider HTTP call and tool call descends from. This
+	// covers `kill` and non-TTY Ctrl+C; interactive Ctrl+C in raw mode is a
+	// KeyMsg handled by Mods.quit(), which cancels the same context. Bubble
+	// Tea's own signal handler is left enabled (we do not pass tea.WithContext,
+	// so its internal context stays decoupled from this one) — the program
+	// still exits on these signals, and we only add request cancellation on top
+	// with no risk of double-handling.
+	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	mods, err := newMods(signalCtx, &config, db, withSelfHelpCLI(registeredSelfHelpFlags))
 	if err != nil {
 		return nil, modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 	}

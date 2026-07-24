@@ -171,7 +171,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if maxTokens > 0 {
 		request.MaxTokens = &maxTokens
 	}
-	if supportsJSONResponseFormat(mod.API) && cfg.Format == "json" {
+	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
 		request.ResponseFormat = &cfg.Format
 	}
 
@@ -271,15 +271,6 @@ func (m *Mods) injectApprovedPlan() {
 		proto.SystemSectionProjectApprovedPlan,
 	))
 	m.planContent = ""
-}
-
-func supportsJSONResponseFormat(api string) bool {
-	switch api {
-	case "anthropic", "google", "ollama":
-		return false
-	default:
-		return true
-	}
 }
 
 func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(name string, data []byte) (string, error) {

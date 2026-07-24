@@ -68,6 +68,32 @@ func TestUseOfficialOpenAIResponses(t *testing.T) {
 	}
 }
 
+func TestProviderCapabilitiesOwnJSONResponseFormatSupport(t *testing.T) {
+	tests := []struct {
+		api  string
+		want bool
+	}{
+		{api: "openai", want: true},
+		{api: "custom-openai-compatible", want: true},
+		{api: "anthropic"},
+		{api: "google"},
+		{api: "ollama"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.api, func(t *testing.T) {
+			client, err := newStreamClient(
+				tt.api,
+				anthropic.Config{},
+				google.Config{},
+				ollama.Config{},
+				openai.Config{},
+			)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, client.Capabilities().JSONResponseFormat)
+		})
+	}
+}
+
 func TestBuildProviderConfigsSelectsResponsesOnlyForOfficialOpenAI(t *testing.T) {
 	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
 

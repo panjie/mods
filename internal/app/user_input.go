@@ -37,14 +37,15 @@ type userInputDisplay struct {
 }
 
 type userInputManager struct {
-	mu       sync.Mutex
-	ch       chan userInputItem
-	pending  bool
-	item     *userInputItem
-	text     textarea.Model
-	secret   textinput.Model
-	selected int
-	cfg      *Config
+	mu          sync.Mutex
+	ch          chan userInputItem
+	sessionDone chan struct{}
+	pending     bool
+	item        *userInputItem
+	text        textarea.Model
+	secret      textinput.Model
+	selected    int
+	cfg         *Config
 }
 
 func newUserInputManager(cfg *Config) *userInputManager { return &userInputManager{cfg: cfg} }
@@ -53,10 +54,18 @@ func (u *userInputManager) available() bool {
 	return u != nil && IsInputTTY() && u.cfg != nil && !u.cfg.Raw && !u.cfg.Minimal
 }
 
-func (u *userInputManager) snapshotChan() chan userInputItem {
+func (u *userInputManager) snapshotSession() (chan userInputItem, <-chan struct{}) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.ch
+	return u.ch, u.sessionDone
+}
+
+func (u *userInputManager) stopSessionLocked() {
+	if u.sessionDone != nil {
+		close(u.sessionDone)
+	}
+	u.ch = nil
+	u.sessionDone = nil
 }
 
 func (u *userInputManager) startSession() tea.Cmd {
@@ -64,29 +73,34 @@ func (u *userInputManager) startSession() tea.Cmd {
 		return nil
 	}
 	u.mu.Lock()
+	u.stopSessionLocked()
 	u.ch = make(chan userInputItem, 4)
+	u.sessionDone = make(chan struct{})
 	ch := u.ch
+	done := u.sessionDone
 	u.mu.Unlock()
 	return func() tea.Msg {
-		item, ok := <-ch
-		if !ok {
+		select {
+		case item := <-ch:
+			return userInputStartMsg{item: item}
+		case <-done:
 			return nil
 		}
-		return userInputStartMsg{item: item}
 	}
 }
 
 func (u *userInputManager) pollCmd() tea.Cmd {
-	ch := u.snapshotChan()
+	ch, done := u.snapshotSession()
 	return func() tea.Msg {
 		if ch == nil {
 			return nil
 		}
-		item, ok := <-ch
-		if !ok {
+		select {
+		case item := <-ch:
+			return userInputStartMsg{item: item}
+		case <-done:
 			return nil
 		}
-		return userInputStartMsg{item: item}
 	}
 }
 
@@ -95,10 +109,7 @@ func (u *userInputManager) reset() {
 		return
 	}
 	u.mu.Lock()
-	if u.ch != nil {
-		close(u.ch)
-	}
-	u.ch = nil
+	u.stopSessionLocked()
 	u.mu.Unlock()
 	u.pending = false
 	u.item = nil
@@ -114,13 +125,15 @@ func (u *userInputManager) requestWithDisplay(ctx context.Context, req toolregis
 	if !u.available() {
 		return toolregistry.UserInputResponse{}, errUserInputUnavailable
 	}
-	ch := u.snapshotChan()
+	ch, done := u.snapshotSession()
 	if ch == nil {
 		return toolregistry.UserInputResponse{}, errUserInputUnavailable
 	}
 	resp := make(chan userInputResult, 1)
 	select {
 	case ch <- userInputItem{req: req, display: display, resp: resp}:
+	case <-done:
+		return toolregistry.UserInputResponse{}, errUserInputUnavailable
 	case <-ctx.Done():
 		return toolregistry.UserInputResponse{}, ctx.Err()
 	}
@@ -130,6 +143,8 @@ func (u *userInputManager) requestWithDisplay(ctx context.Context, req toolregis
 			return toolregistry.UserInputResponse{}, result.err
 		}
 		return toolregistry.UserInputResponse{Answer: result.value}, nil
+	case <-done:
+		return toolregistry.UserInputResponse{}, errUserInputUnavailable
 	case <-ctx.Done():
 		return toolregistry.UserInputResponse{}, ctx.Err()
 	}

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -36,11 +38,12 @@ type FieldUpdate struct {
 //	    "apis.openai.api-key-env":   "OPENAI_API_KEY",
 //	})
 func SaveFields(path string, updates map[string]any) error {
-	pathUpdates := make([]FieldUpdate, 0, len(updates))
-	for keyPath, value := range updates {
+	keys := slices.Sorted(maps.Keys(updates))
+	pathUpdates := make([]FieldUpdate, 0, len(keys))
+	for _, keyPath := range keys {
 		pathUpdates = append(pathUpdates, FieldUpdate{
 			Path:  strings.Split(keyPath, "."),
-			Value: value,
+			Value: updates[keyPath],
 		})
 	}
 	return SaveFieldPaths(path, pathUpdates)
@@ -74,20 +77,20 @@ func SaveFieldPaths(path string, updates []FieldUpdate) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o600); err != nil {
-		return fmt.Errorf("write temp file: %w", err)
+	if err := validateSettingsForWrite(out); err != nil {
+		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("rename temp file: %w", err)
+	if err := writeSettingsFileAtomic(path, out); err != nil {
+		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
 }
 
 // MergeSettingsYAML recursively merges a YAML mapping into an existing
 // settings file. Mapping values merge by key; all other node kinds replace the
-// existing value. The complete merged document is validated before an atomic
-// write, so a bad patch cannot leave the settings file partially updated.
+// existing value. The complete merged document is decoded and its validated
+// invariants are checked before an atomic write, so a bad patch cannot leave
+// the settings file partially updated.
 func MergeSettingsYAML(path string, patch []byte) error {
 	_, mapping, err := decodeSettingsDocument(patch, false)
 	if err != nil {
@@ -112,19 +115,60 @@ func MergeSettingsYAML(path string, patch []byte) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 
+	if err := validateSettingsForWrite(out); err != nil {
+		return err
+	}
+	if err := writeSettingsFileAtomic(path, out); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	return nil
+}
+
+func validateSettingsForWrite(data []byte) error {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+	if err := validateFilesystemModeForWrite(rootMapping(&doc)); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+
 	var candidate Config
-	if err := yaml.Unmarshal(out, &candidate); err != nil {
+	if err := yaml.Unmarshal(data, &candidate); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
 	if err := validateShellReadOnlyCommands(&candidate); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
-	validateReviewMode(&candidate)
-
-	if err := writeSettingsFileAtomic(path, out); err != nil {
-		return fmt.Errorf("write config: %w", err)
+	if err := validateReviewModeStrict(candidate.ReviewMode); err != nil {
+		return fmt.Errorf("validate config: %w", err)
 	}
 	return nil
+}
+
+func validateFilesystemModeForWrite(root *yaml.Node) error {
+	builtinIndex := mappingValueIndex(root, "builtin-tools")
+	if builtinIndex < 0 {
+		return nil
+	}
+	builtin := root.Content[builtinIndex]
+	if builtin.Kind != yaml.MappingNode {
+		return nil
+	}
+	filesystemIndex := mappingValueIndex(builtin, "filesystem")
+	if filesystemIndex < 0 {
+		return nil
+	}
+	node := builtin.Content[filesystemIndex]
+	if node.Tag == "!!bool" {
+		return nil
+	}
+	var value string
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	_, err := parseFilesystemMode(value)
+	return err
 }
 
 // decodeSettingsDocument reads exactly one YAML document whose root is a

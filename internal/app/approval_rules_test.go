@@ -1400,11 +1400,10 @@ func TestRequestApprovalAfterResetIsUnavailable(t *testing.T) {
 	require.ErrorIs(t, err, errReviewUnavailable)
 }
 
-// TestPollReviewCmdSnapshotsChannel makes sure pollReviewCmd captures the
-// review channel at construction time rather than reading r.reviewChan from
-// inside the goroutine. A subsequent reset() must therefore unblock the
-// existing poll goroutine via the snapshotted channel close, regardless of
-// what r.reviewChan is replaced with later.
+// TestPollReviewCmdSnapshotsChannel makes sure pollReviewCmd captures one
+// review session at construction time. A subsequent reset() must unblock the
+// existing poll goroutine through that session's done signal, regardless of
+// what session is installed later.
 func TestPollReviewCmdSnapshotsChannel(t *testing.T) {
 	r := &toolReviewer{}
 	cmd := r.startSession()
@@ -1419,9 +1418,42 @@ func TestPollReviewCmdSnapshotsChannel(t *testing.T) {
 
 	select {
 	case msg := <-done:
-		require.Nil(t, msg, "closed channel must yield a nil tea.Msg from pollReviewCmd")
+		require.Nil(t, msg, "ended session must yield a nil tea.Msg from pollReviewCmd")
 	case <-time.After(2 * time.Second):
-		t.Fatal("pollReviewCmd did not return after reset() closed its snapshotted channel")
+		t.Fatal("pollReviewCmd did not return after reset() ended its snapshotted session")
+	}
+}
+
+func TestToolReviewerResetUnblocksPendingApproval(t *testing.T) {
+	r := &toolReviewer{
+		reviewMode:                 ReviewAlways,
+		reviewAvailabilityKnown:    true,
+		interactiveReviewAvailable: true,
+		scope:                      testApprovalScope,
+	}
+	_ = r.startSession()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- r.requestApproval(reviewerDeps{
+			ctx:          context.Background(),
+			accessIntent: AccessIntent{Class: AccessWrite},
+		}, "mutable_tool", []byte(`{}`))
+	}()
+
+	ch, _ := r.snapshotSession()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("approval request was not queued")
+	}
+	r.reset()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, errReviewUnavailable)
+	case <-time.After(time.Second):
+		t.Fatal("pending approval was not released by reset")
 	}
 }
 

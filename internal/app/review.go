@@ -51,6 +51,7 @@ type reviewOption struct {
 type toolReviewer struct {
 	mu                         sync.Mutex
 	reviewChan                 chan toolReviewItem
+	reviewSessionDone          chan struct{}
 	reviewMode                 ReviewMode
 	reviewPending              bool
 	reviewItem                 *toolReviewItem
@@ -87,47 +88,60 @@ func (r *toolReviewer) isPending() bool {
 	return r.reviewPending && r.reviewItem != nil && r.reviewItem.resp != nil
 }
 
-// snapshotChan returns the current review channel under the mutex so callers
-// in tea.Cmd / tool-caller goroutines can operate on a stable reference even
-// if Update replaces the channel via startSession or reset.
-func (r *toolReviewer) snapshotChan() chan toolReviewItem {
+// snapshotSession returns the current review channel and its lifetime signal
+// atomically. The request channel itself is never closed: senders may already
+// hold a snapshot when Update ends the session, so closing it would create a
+// send-on-closed-channel race. Closing done wakes both senders and receivers.
+func (r *toolReviewer) snapshotSession() (chan toolReviewItem, <-chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.reviewChan
+	return r.reviewChan, r.reviewSessionDone
+}
+
+func (r *toolReviewer) snapshotChan() chan toolReviewItem {
+	ch, _ := r.snapshotSession()
+	return ch
+}
+
+func (r *toolReviewer) stopSessionLocked() {
+	if r.reviewSessionDone != nil {
+		close(r.reviewSessionDone)
+	}
+	r.reviewChan = nil
+	r.reviewSessionDone = nil
 }
 
 func (r *toolReviewer) pollReviewCmd() tea.Cmd {
-	ch := r.snapshotChan()
+	ch, done := r.snapshotSession()
 	return func() tea.Msg {
 		if ch == nil {
 			return nil
 		}
-		item, ok := <-ch
-		if !ok {
+		select {
+		case item := <-ch:
+			return toolReviewStartMsg{item: item}
+		case <-done:
 			return nil
 		}
-		return toolReviewStartMsg{item: item}
 	}
 }
 
 func (r *toolReviewer) startSession() tea.Cmd {
 	r.mu.Lock()
-	if r.reviewChan != nil {
-		close(r.reviewChan)
-	}
+	r.stopSessionLocked()
 	r.reviewChan = make(chan toolReviewItem, 4)
+	r.reviewSessionDone = make(chan struct{})
 	ch := r.reviewChan
+	done := r.reviewSessionDone
 	r.mu.Unlock()
 	debug.Printf("toolReviewer: session started, reviewChan created")
-	// Capture ch (not r.reviewChan) so a subsequent reset/startSession that
-	// replaces the field cannot leave this goroutine receiving from a
-	// closed channel without warning.
 	return func() tea.Msg {
-		item, ok := <-ch
-		if !ok {
+		select {
+		case item := <-ch:
+			return toolReviewStartMsg{item: item}
+		case <-done:
 			return nil
 		}
-		return toolReviewStartMsg{item: item}
 	}
 }
 
@@ -140,10 +154,7 @@ func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
 
 func (r *toolReviewer) reset() {
 	r.mu.Lock()
-	if r.reviewChan != nil {
-		close(r.reviewChan)
-	}
-	r.reviewChan = nil
+	r.stopSessionLocked()
 	r.mu.Unlock()
 	r.reviewPending = false
 	r.reviewItem = nil
@@ -395,11 +406,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		presentation:   formatReviewPresentationWithIntent(name, data, presentationAnalysis, r.scope, intent),
 		resp:           respCh,
 	}
-	// Snapshot the channel under the lock so a concurrent reset() that
-	// replaces r.reviewChan does not leave this send dispatching to a stale
-	// reference; a closed-channel panic here is impossible because reset()
-	// holds the lock while closing and assigning nil.
-	ch := r.snapshotChan()
+	ch, done := r.snapshotSession()
 	if ch == nil {
 		debug.Printf("requestApproval: no review channel registered (session ended)")
 		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
@@ -407,6 +414,8 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	select {
 	case ch <- item:
 		debug.Printf("requestApproval: review item sent to channel, waiting for user...")
+	case <-done:
+		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	case <-deps.ctx.Done():
 		debug.Printf("requestApproval: context cancelled while sending review item")
 		return fmt.Errorf("execution denied by user for: %s", name)
@@ -418,6 +427,8 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			return nil
 		}
 		return fmt.Errorf("execution denied by user for: %s", name)
+	case <-done:
+		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	case <-deps.ctx.Done():
 		debug.Printf("requestApproval: context cancelled while waiting for user response")
 		return fmt.Errorf("execution denied by user for: %s", name)
@@ -447,12 +458,14 @@ func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, d
 		},
 		resp: respCh,
 	}
-	ch := r.snapshotChan()
+	ch, done := r.snapshotSession()
 	if ch == nil {
 		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	}
 	select {
 	case ch <- item:
+	case <-done:
+		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -462,6 +475,8 @@ func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, d
 			return nil
 		}
 		return fmt.Errorf("protected credential use denied by user for: %s", name)
+	case <-done:
+		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	case <-ctx.Done():
 		return ctx.Err()
 	}

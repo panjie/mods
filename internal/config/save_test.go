@@ -350,6 +350,60 @@ func TestMergeSettingsYAMLRejectsInvalidExistingConfig(t *testing.T) {
 	require.Equal(t, original, after)
 }
 
+func TestMergeSettingsYAMLRejectsInvalidReviewModeWithoutChangingFile(t *testing.T) {
+	original := []byte("# untouched\nreview-mode: auto\n")
+	path := writeTestConfig(t, string(original))
+
+	err := MergeSettingsYAML(path, []byte("review-mode: sometimes\n"))
+	require.ErrorContains(t, err, "invalid review mode")
+
+	after, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, original, after)
+}
+
+func TestSaveFieldPathsValidatesBeforeReplacingFile(t *testing.T) {
+	original := []byte("# untouched\nreview-mode: auto\n")
+	path := writeTestConfig(t, string(original))
+
+	err := SaveFieldPaths(path, []FieldUpdate{{
+		Path:  []string{"review-mode"},
+		Value: "sometimes",
+	}})
+	require.ErrorContains(t, err, "invalid review mode")
+
+	after, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, original, after)
+}
+
+func TestSettingsWritersRejectInvalidFilesystemMode(t *testing.T) {
+	tests := map[string]func(string) error{
+		"merge": func(path string) error {
+			return MergeSettingsYAML(path, []byte("builtin-tools:\n  filesystem: sometimes\n"))
+		},
+		"field update": func(path string) error {
+			return SaveFieldPaths(path, []FieldUpdate{{
+				Path:  []string{"builtin-tools", "filesystem"},
+				Value: "sometimes",
+			}})
+		},
+	}
+	for name, write := range tests {
+		t.Run(name, func(t *testing.T) {
+			original := []byte("builtin-tools:\n  filesystem: auto\n")
+			path := writeTestConfig(t, string(original))
+
+			err := write(path)
+			require.ErrorContains(t, err, "invalid builtin-tools.filesystem mode")
+
+			after, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			require.Equal(t, original, after)
+		})
+	}
+}
+
 func TestHasAPIKey(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 

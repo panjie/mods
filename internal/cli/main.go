@@ -132,8 +132,7 @@ func Run(version, commit string) int {
 	Version = version
 	CommitSHA = commit
 	buildVersion()
-	execute()
-	return 0
+	return execute()
 }
 
 func initFlags() {
@@ -256,14 +255,19 @@ func sessionCompletions(toComplete string) []string {
 	return results
 }
 
-func execute() {
-	defer maybeWriteMemProfile()
+func execute() (exitCode int) {
+	defer func() {
+		if err := maybeWriteMemProfile(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			exitCode = 1
+		}
+	}()
 	var err error
 	config, err = Ensure()
 	if err != nil {
 		handleError(modsError{Err: err, ReasonText: "Could not load your configuration file."})
 		if !hasSettingsArg(os.Args) && !slices.Contains(os.Args, "--config") {
-			os.Exit(1)
+			return 1
 		}
 	}
 
@@ -281,12 +285,12 @@ func execute() {
 	if !isCompletionCmd(os.Args) && !isVersionOrHelpCmd(os.Args) {
 		if err := MigrateDefaultStorage(config.SessionDir); err != nil {
 			handleError(modsError{Err: err, ReasonText: "Could not migrate session storage."})
-			os.Exit(1)
+			return 1
 		}
 		db, err = Open(filepath.Join(config.SessionDir, "mods.db"))
 		if err != nil {
 			handleError(modsError{Err: err, ReasonText: "Could not open database."})
-			os.Exit(1)
+			return 1
 		}
 		defer db.Close() //nolint:errcheck
 		if err := db.MigrateLegacySessions(config.SessionDir); err != nil {
@@ -314,57 +318,37 @@ func execute() {
 
 	if err := rootCmd.Execute(); err != nil {
 		handleError(err)
-		if db != nil {
-			_ = db.Close()
-		}
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
-func maybeWriteMemProfile() {
+func maybeWriteMemProfile() error {
 	if !memprofile {
-		return
-	}
-
-	var closers []func() error
-	if db != nil {
-		closers = append(closers, db.Close)
-	}
-	defer func() {
-		for _, cl := range closers {
-			_ = cl()
-		}
-	}()
-
-	handle := func(err error) {
-		fmt.Println(err)
-		for _, cl := range closers {
-			_ = cl()
-		}
-		os.Exit(1)
+		return nil
 	}
 
 	heap, err := os.Create("mods_heap.profile")
 	if err != nil {
-		handle(err)
+		return fmt.Errorf("create heap profile: %w", err)
 	}
-	closers = append(closers, heap.Close)
+	defer func() { _ = heap.Close() }()
 	allocs, err := os.Create("mods_allocs.profile")
 	if err != nil {
-		handle(err)
+		return fmt.Errorf("create allocations profile: %w", err)
 	}
-	closers = append(closers, allocs.Close)
+	defer func() { _ = allocs.Close() }()
 
 	if err := pprof.Lookup("heap").WriteTo(heap, 0); err != nil {
-		handle(err)
+		return fmt.Errorf("write heap profile: %w", err)
 	}
 	if err := pprof.Lookup("allocs").WriteTo(allocs, 0); err != nil {
-		handle(err)
+		return fmt.Errorf("write allocations profile: %w", err)
 	}
+	return nil
 }
 
 func handleError(err error) {
-	maybeWriteMemProfile()
 	// exhaust stdin
 	if !IsInputTTY() {
 		_, _ = io.ReadAll(os.Stdin)

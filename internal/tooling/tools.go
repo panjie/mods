@@ -21,6 +21,12 @@ var filesystemPathPattern = regexp.MustCompile(`(?i)(^|\s)(\.?/[\w.-]+|[\w.-]+/[
 
 func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Config, prompt string, skillCatalog []skills.Skill, interaction ...toolregistry.InteractionHandlers) (*toolregistry.Registry, error) {
 	registry := toolregistry.NewRegistry()
+	complete := false
+	defer func() {
+		if !complete {
+			_ = registry.Close()
+		}
+	}()
 	var handlers toolregistry.InteractionHandlers
 	if len(interaction) > 0 {
 		handlers = interaction[0]
@@ -75,10 +81,6 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		}
 	}
 
-	if err := mcpclient.RegisterTools(ctx, cfg, registry); err != nil {
-		return nil, err
-	}
-
 	if len(skillCatalog) > 0 {
 		if err := toolregistry.RegisterSkill(registry, skillCatalog); err != nil {
 			return nil, err
@@ -91,6 +93,15 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		}
 	}
 
+	// MCP registration may start subprocesses or open network connections.
+	// Keep it last so no subsequent fallible registration can strand those
+	// resources; RegisterTools closes its session if an MCP name collides with
+	// one of the built-ins registered above.
+	if err := mcpclient.RegisterTools(ctx, cfg, registry); err != nil {
+		return nil, err
+	}
+
+	complete = true
 	return registry, nil
 }
 

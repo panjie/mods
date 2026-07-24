@@ -425,7 +425,7 @@ const (
 )
 
 // UnmarshalYAML accepts both the new string modes and old boolean values.
-// Invalid values cause a warning and fall back to "auto".
+// Invalid values cause a warning and preserve the legacy "true" fallback.
 func (m *FilesystemMode) UnmarshalYAML(node *yaml.Node) error {
 	if node.Tag == "!!bool" {
 		var enabled bool
@@ -618,12 +618,19 @@ func defaultFormatTextFor(format string) string {
 }
 
 func validateReviewMode(c *Config) {
-	switch c.ReviewMode {
-	case "", ReviewAuto, ReviewAlways, ReviewNever:
+	if validateReviewModeStrict(c.ReviewMode) == nil {
 		return
+	}
+	fmt.Fprintf(os.Stderr, "Warning: invalid review mode %q, defaulting to \"auto\"\n", c.ReviewMode)
+	c.ReviewMode = ReviewAuto
+}
+
+func validateReviewModeStrict(mode ReviewMode) error {
+	switch mode {
+	case "", ReviewAuto, ReviewAlways, ReviewNever:
+		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "Warning: invalid review mode %q, defaulting to \"auto\"\n", c.ReviewMode)
-		c.ReviewMode = ReviewAuto
+		return fmt.Errorf("invalid review mode %q; expected auto, always, or never", mode)
 	}
 }
 

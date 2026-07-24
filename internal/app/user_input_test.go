@@ -57,6 +57,40 @@ func TestUserInputUnavailableInRawMode(t *testing.T) {
 	require.ErrorIs(t, err, errUserInputUnavailable)
 }
 
+func TestUserInputResetUnblocksPendingRequest(t *testing.T) {
+	oldTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldTTY })
+
+	cfg := defaultConfig()
+	manager := newUserInputManager(&cfg)
+	_ = manager.startSession()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := manager.request(context.Background(), toolregistry.UserInputRequest{
+			Question: "Continue?",
+			Kind:     "text",
+		})
+		done <- err
+	}()
+
+	ch, _ := manager.snapshotSession()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("input request was not queued")
+	}
+	manager.reset()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, errUserInputUnavailable)
+	case <-time.After(time.Second):
+		t.Fatal("pending input request was not released by reset")
+	}
+}
+
 func TestSecretUseApprovalIgnoresReviewNever(t *testing.T) {
 	oldTTY := IsInputTTY
 	IsInputTTY = func() bool { return true }

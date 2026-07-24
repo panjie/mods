@@ -81,6 +81,12 @@ func Open(ds string) (*DB, error) {
 			handleSqliteErr(err),
 		)
 	}
+	initialized := false
+	defer func() {
+		if !initialized {
+			_ = db.Close()
+		}
+	}()
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf(
 			"could not ping db: %w",
@@ -202,6 +208,7 @@ func Open(ds string) (*DB, error) {
 		}
 	}
 
+	initialized = true
 	return &DB{db: db}, nil
 }
 

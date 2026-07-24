@@ -36,6 +36,10 @@ type Capabilities struct {
 	// tool registration rather than sending tool specs the backend
 	// cannot honor.
 	Tools bool
+	// JSONResponseFormat reports whether the backend accepts a native JSON
+	// response-format request. False means callers should rely on prompt-level
+	// formatting instructions only.
+	JSONResponseFormat bool
 }
 
 // Stream is an ongoing stream.

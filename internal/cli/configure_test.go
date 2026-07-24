@@ -170,6 +170,8 @@ func TestDiscoverOptionsUsesCopilotProtocolForNewProviderNamedGitHubCopilot(t *t
 func TestConfigWizardDiscoveryDescriptionOmitsFailureDetails(t *testing.T) {
 	desc := configWizardDiscoveryDescription()
 	require.Contains(t, desc, "Select models to add")
+	require.Contains(t, desc, "choose the default model next")
+	require.NotContains(t, desc, "first selected")
 	require.NotContains(t, desc, "HTTP 401")
 }
 
@@ -526,6 +528,16 @@ func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testi
 	requireNoUpdatePath(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "thinking-type"})
 }
 
+func TestBuildConfigWizardUpdatesUsesExplicitDefaultModel(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:         "qwen",
+		modelName:       "qwen3.6-flash",
+		addedModelNames: []string{"qwen3.6-35b-a3b", "qwen3.6-flash"},
+	})
+
+	requireUpdateValue(t, updates, []string{"default-model"}, "qwen3.6-flash")
+}
+
 func TestBuildConfigWizardUpdatesGitHubCopilotStoresDeviceTokenInConfig(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "github-copilot",
@@ -734,7 +746,8 @@ func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
 	require.Contains(t, output, "Base URL")
 	require.Contains(t, output, "https://openrouter.ai/api/v1")
 	require.Contains(t, output, "Added models")
-	require.Contains(t, output, "default, first line")
+	require.Contains(t, output, "Default model")
+	require.NotContains(t, output, "first line")
 	// Default (OpenAI-compatible) providers must not show an API type row.
 	require.NotContains(t, output, "API type")
 }
@@ -839,6 +852,58 @@ func TestConfigWizardModelNamesUsesDiscoveredSelection(t *testing.T) {
 	require.Equal(t, []string{"gpt-5.4", "gpt-5.4-mini"}, models)
 }
 
+func TestConfigWizardModelNamesDoesNotAddUnselectedConfiguredModels(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		APIs: []API{{
+			Name: "qwen",
+			Models: map[string]Model{
+				"configured-only": {},
+			},
+		}},
+	}}, func() {
+		models, err := configWizardModelNames("qwen", []string{"selected-model"}, "")
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"selected-model"}, models)
+	})
+}
+
+func TestConfigWizardModelOptionLabelMarksOnlyCurrentProviderDefault(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		API:   "qwen",
+		Model: "qwen3.6-flash",
+	}}, func() {
+		require.Equal(t,
+			"qwen3.6-flash (current default)",
+			configWizardModelOptionLabel("qwen", "qwen3.6-flash"),
+		)
+		require.Equal(t,
+			"qwen3.6-flash",
+			configWizardModelOptionLabel("other", "qwen3.6-flash"),
+		)
+		require.Equal(t,
+			"qwen3.6-35b-a3b",
+			configWizardModelOptionLabel("qwen", "qwen3.6-35b-a3b"),
+		)
+	})
+}
+
+func TestConfigWizardPreferredDefaultModelPreservesOrFallsBack(t *testing.T) {
+	models := []string{"first", "current", "last"}
+
+	require.Equal(t, "current", configWizardPreferredDefaultModel("current", models))
+	require.Equal(t, "first", configWizardPreferredDefaultModel("removed", models))
+	require.Empty(t, configWizardPreferredDefaultModel("removed", nil))
+}
+
+func TestValidateConfigWizardDefaultModelRequiresCandidate(t *testing.T) {
+	models := []string{"first", "chosen"}
+
+	require.NoError(t, validateConfigWizardDefaultModel("chosen", models))
+	require.Error(t, validateConfigWizardDefaultModel("configured-only", models))
+	require.Error(t, validateConfigWizardDefaultModel("", models))
+}
+
 func TestConfigWizardModelNamesRequiresManualWhenNoDiscoverySelection(t *testing.T) {
 	models, err := configWizardModelNames("openai", nil, "\n manual-model \n")
 
@@ -931,16 +996,67 @@ func TestConfigWizardModelStateRefreshesManualTextWhenProviderChanges(t *testing
 
 func TestConfigWizardModelStateKeepsEditsForSameProvider(t *testing.T) {
 	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		APIs: []API{{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}}},
+		API:   "google",
+		Model: "gemini-3.5-flash",
+		APIs:  []API{{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}}},
 	}}, func() {
 		catalog := newConfigWizardProviderCatalog(config)
 		state := newConfigWizardModelState("google", catalog)
 		state.manualModelsText = "user-edited-model"
+		state.defaultModel = "user-selected-default"
 
 		state.switchProvider("google", catalog)
 
 		require.Equal(t, "google", state.provider)
 		require.Equal(t, "user-edited-model", state.manualModelsText)
+		require.Equal(t, "user-selected-default", state.defaultModel)
+	})
+}
+
+func TestConfigWizardModelStateInitializesSavedDefaultOnlyForCurrentProvider(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		API:   "qwen",
+		Model: "qwen3.6-flash",
+		APIs: []API{
+			{Name: "qwen", Models: map[string]Model{"qwen3.6-flash": {}}},
+			{Name: "openai", Models: map[string]Model{"gpt-5.4": {}}},
+		},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		state := newConfigWizardModelState("qwen", catalog)
+		require.Equal(t, "qwen3.6-flash", state.defaultModel)
+
+		state.switchProvider("openai", catalog)
+		require.Empty(t, state.defaultModel)
+	})
+}
+
+func TestConfigWizardDefaultModelAccessorPreservesValidChoiceAndFallsBackAfterRemoval(t *testing.T) {
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+		API:   "qwen",
+		Model: "second",
+		APIs: []API{{
+			Name:   "qwen",
+			Models: map[string]Model{"first": {}, "second": {}},
+		}},
+	}}, func() {
+		catalog := newConfigWizardProviderCatalog(config)
+		state := newConfigWizardModelState("qwen", catalog)
+		state.discoveredPick = []string{"first", "second"}
+		accessor := configWizardDefaultModelAccessor{
+			state:   state,
+			catalog: catalog,
+			apiName: func() string { return "qwen" },
+		}
+
+		require.Equal(t, "second", accessor.Get())
+		accessor.Set("first")
+		require.Equal(t, "first", accessor.Get())
+
+		accessor.Set("second")
+		state.discoveredPick = []string{"first"}
+		require.Equal(t, "first", accessor.Get())
+		require.Equal(t, "first", state.defaultModel)
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -87,9 +88,8 @@ func RunConfigWizard() error {
 
 	// Model discovery happens inside the form: the "discover models" page
 	// fetches the list via OptionsFunc, which huh runs asynchronously with a
-	// spinner. discoveredPick/manualModelsText are bound to the model-entry
-	// pages and read after the form. (The MultiSelect preserves option order,
-	// so discoveredPick is already in fetched/sorted order.)
+	// spinner. The model-entry pages determine which models to register, and
+	// the following select page chooses the default explicitly.
 	providerCatalog := newConfigWizardProviderCatalog(config)
 	modelState := newConfigWizardModelState(wizardProviderName(chosenAPI, newProviderName), providerCatalog)
 	discoveredPick := &modelState.discoveredPick
@@ -146,7 +146,7 @@ func RunConfigWizard() error {
 			if i >= maxPickerModels {
 				break
 			}
-			opts = append(opts, huh.NewOption(m, m))
+			opts = append(opts, huh.NewOption(configWizardModelOptionLabel(api, m), m))
 		}
 		return opts
 	}
@@ -160,6 +160,28 @@ func RunConfigWizard() error {
 		state:   modelState,
 		catalog: providerCatalog,
 		apiName: currentProvider,
+	}
+	defaultModelAccessor := configWizardDefaultModelAccessor{
+		state:   modelState,
+		catalog: providerCatalog,
+		apiName: currentProvider,
+	}
+	defaultModelOptions := func() []huh.Option[string] {
+		api := currentProvider()
+		modelState.switchProvider(api, providerCatalog)
+		models, err := configWizardModelNames(api, modelState.discoveredPick, modelState.manualModelsText)
+		if err != nil {
+			return nil
+		}
+		preferred := configWizardPreferredDefaultModel(modelState.defaultModel, models)
+		opts := make([]huh.Option[string], 0, len(models))
+		for _, model := range models {
+			opts = append(opts,
+				huh.NewOption(configWizardModelOptionLabel(api, model), model).
+					Selected(model == preferred),
+			)
+		}
+		return opts
 	}
 	for {
 		form := newConfigWizardForm(configWizardFormConfig{
@@ -324,7 +346,7 @@ func RunConfigWizard() error {
 					TitleFunc(func() string {
 						return fmt.Sprintf("Models for %s", currentProvider())
 					}, []any{&chosenAPI, &newProviderName}).
-					Description("Enter model identifiers here, one per line. The first line becomes the default model.").
+					Description("Enter model identifiers here, one per line. You will choose the default model next.").
 					Placeholder("").
 					Lines(6).
 					ExternalEditor(false).
@@ -340,6 +362,34 @@ func RunConfigWizard() error {
 					api := currentProvider()
 					return modelState.hideManual(api, waitingForCopilotAuth())
 				}),
+
+			// Choose the default explicitly from exactly the models selected or
+			// entered on the preceding page. This keeps registration and default
+			// selection separate and makes the saved value visible before submit.
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					TitleFunc(func() string {
+						return fmt.Sprintf("Default model for %s", currentProvider())
+					}, []any{&chosenAPI, &newProviderName}).
+					Description("Choose the model mods uses when no model is specified.").
+					OptionsFunc(defaultModelOptions, []any{
+						&chosenAPI, &newProviderName, discoveredPick, &modelState.manualModelsText,
+					}).
+					Accessor(defaultModelAccessor).
+					Validate(func(value string) error {
+						api := currentProvider()
+						models, err := configWizardModelNames(
+							api, modelState.discoveredPick, modelState.manualModelsText,
+						)
+						if err != nil {
+							return err
+						}
+						return validateConfigWizardDefaultModel(value, models)
+					}),
+			).
+				Title("default model").
+				Description("Select one of the models from the previous step.").
+				WithHideFunc(waitingForCopilotAuth),
 
 			// Page 8: Built-in tools
 			huh.NewGroup(
@@ -510,14 +560,17 @@ func RunConfigWizard() error {
 	}
 
 	// Models come from the discover picker only when the user selected one;
-	// all other cases require manually-entered model names. The first entry
-	// becomes the default model.
+	// all other cases require manually-entered model names. The default is
+	// selected explicitly on the following form page.
 	modelState.switchProvider(apiName, providerCatalog)
 	addedModelNames, err := configWizardModelNames(apiName, modelState.discoveredPick, modelState.manualModelsText)
 	if err != nil {
 		return err
 	}
-	modelName := addedModelNames[0]
+	modelName := modelState.defaultModel
+	if err := validateConfigWizardDefaultModel(modelName, addedModelNames); err != nil {
+		return err
+	}
 
 	saveConnection, err := confirmConfigWizardConnection(
 		apiName, effType, modelName, providerBaseURL, providerDraft.apiKey, newProvider,
@@ -965,7 +1018,7 @@ func runConfigWizardCopilotAuth(ctx context.Context, apiName string, apiKey, key
 }
 
 func configWizardDiscoveryDescription() string {
-	return "Select models to add, or press Enter to enter model names manually. The first selected becomes the default."
+	return "Select models to add, or press Enter to enter model names manually. You will choose the default model next."
 }
 
 func configWizardHideDiscoveryModels(waitingForCopilotAuth bool, discoveryErr error) bool {
@@ -1197,11 +1250,33 @@ func parseModelNames(provider, value string, allowExisting bool) ([]string, erro
 
 func configWizardModelNames(provider string, discoveredPick []string, manualModelsText string) ([]string, error) {
 	if len(discoveredPick) > 0 {
-		// The MultiSelect value is in option (fetched) order, so the first
-		// entry is a deterministic default.
 		return discoveredPick, nil
 	}
 	return parseModelNames(provider, manualModelsText, true)
+}
+
+func configWizardModelOptionLabel(apiName, modelName string) string {
+	if apiName == config.API && modelName == config.Model {
+		return modelName + " (current default)"
+	}
+	return modelName
+}
+
+func configWizardPreferredDefaultModel(selected string, models []string) string {
+	if slices.Contains(models, selected) {
+		return selected
+	}
+	if len(models) == 0 {
+		return ""
+	}
+	return models[0]
+}
+
+func validateConfigWizardDefaultModel(selected string, models []string) error {
+	if !slices.Contains(models, selected) {
+		return fmt.Errorf("select a default model from the models above")
+	}
+	return nil
 }
 
 func validateWizardBaseURL(chosenAPI, value string) error {
@@ -1411,6 +1486,7 @@ type configWizardModelState struct {
 	provider           string
 	manualModelsText   string
 	discoveredPick     []string
+	defaultModel       string
 	discoveryProvider  string
 	discoverySucceeded bool
 	discoveryErr       error
@@ -1430,6 +1506,10 @@ func (s *configWizardModelState) switchProvider(apiName string, catalog configWi
 	s.provider = apiName
 	s.manualModelsText = strings.Join(catalog.configuredModels(apiName), "\n")
 	s.discoveredPick = nil
+	s.defaultModel = ""
+	if apiName == config.API {
+		s.defaultModel = config.Model
+	}
 	s.discoveryProvider = ""
 	s.discoverySucceeded = false
 	s.discoveryErr = nil
@@ -1501,6 +1581,29 @@ func (a configWizardManualModelsAccessor) Set(value string) {
 	api := a.apiName()
 	a.state.switchProvider(api, a.catalog)
 	a.state.manualModelsText = value
+}
+
+type configWizardDefaultModelAccessor struct {
+	state   *configWizardModelState
+	catalog configWizardProviderCatalog
+	apiName func() string
+}
+
+func (a configWizardDefaultModelAccessor) Get() string {
+	api := a.apiName()
+	a.state.switchProvider(api, a.catalog)
+	models, err := configWizardModelNames(api, a.state.discoveredPick, a.state.manualModelsText)
+	if err != nil {
+		return a.state.defaultModel
+	}
+	a.state.defaultModel = configWizardPreferredDefaultModel(a.state.defaultModel, models)
+	return a.state.defaultModel
+}
+
+func (a configWizardDefaultModelAccessor) Set(value string) {
+	api := a.apiName()
+	a.state.switchProvider(api, a.catalog)
+	a.state.defaultModel = value
 }
 
 func normalizeWebSearchProviderForWizard(provider string) string {
@@ -1951,17 +2054,13 @@ func printConfigSummary(d summaryData) {
 		Render("Configuration summary")
 	labelStyle := lipgloss.NewStyle().
 		Foreground(muted).
-		Width(12)
+		Width(14)
 	valueStyle := lipgloss.NewStyle().
 		Foreground(lightDark(lipgloss.Color("#202124"), lipgloss.Color("#F2F2F7")))
 
-	modelValue := d.model
-	if d.modelCount > 1 {
-		modelValue += " (default, first line)"
-	}
 	rows := []string{
 		summaryRow(labelStyle, valueStyle, "Provider", d.api),
-		summaryRow(labelStyle, valueStyle, "Model", modelValue),
+		summaryRow(labelStyle, valueStyle, "Default model", d.model),
 	}
 	if d.addedModelCount > 0 {
 		rows = append(rows, summaryRow(labelStyle, valueStyle, "Added models", fmt.Sprintf("%d", d.addedModelCount)))

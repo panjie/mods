@@ -57,6 +57,95 @@ func buildTranscriptDocument(messages []proto.Message) transcriptDocument {
 	return transcriptDocument{content: strings.Join(contentLines, "\n"), lines: lineInfo}
 }
 
+func formatSessionDebug(session Session, messages []proto.Message) string {
+	var sb strings.Builder
+	sb.WriteString("mods session debug\n")
+	sb.WriteString("==================\n")
+	writeDebugField(&sb, "id", session.ID)
+	writeDebugField(&sb, "title", session.Title)
+	writeDebugField(&sb, "api", stringPtrValue(session.API))
+	writeDebugField(&sb, "model", stringPtrValue(session.Model))
+	writeDebugField(&sb, "updated_at", session.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
+	writeDebugField(&sb, "messages", stringInt(len(messages)))
+
+	sb.WriteString("\ntranscript\n")
+	sb.WriteString("----------\n")
+	if len(messages) == 0 {
+		sb.WriteString("(empty)\n")
+		return sb.String()
+	}
+
+	for i, msg := range messages {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("--- message ")
+		sb.WriteString(stringInt(i + 1))
+		sb.WriteString("/")
+		sb.WriteString(stringInt(len(messages)))
+		sb.WriteString(" role=")
+		role := msg.Role
+		if role == "" {
+			role = "unknown"
+		}
+		sb.WriteString(role)
+		sb.WriteString(" ---\n")
+
+		if len(msg.Images) > 0 {
+			sb.WriteString("images:\n")
+			for imageIndex, img := range msg.Images {
+				sb.WriteString("- ")
+				sb.WriteString(stringInt(imageIndex + 1))
+				sb.WriteString(": ")
+				mime := img.MimeType
+				if mime == "" {
+					mime = "unknown"
+				}
+				sb.WriteString(mime)
+				sb.WriteString(", ")
+				sb.WriteString(stringInt(len(img.Data)))
+				sb.WriteString(" bytes\n")
+			}
+		}
+
+		content := plainTranscriptContent(proto.TranscriptContent(msg))
+		if len(msg.ProviderData) > 0 {
+			if content != "" {
+				content += "\n\n"
+			}
+			content += "provider_data: omitted (" + stringInt(len(msg.ProviderData)) + " keys)"
+		}
+		if content == "" && len(msg.Images) == 0 {
+			sb.WriteString("(empty)\n")
+			continue
+		}
+		if content != "" {
+			sb.WriteString(content)
+			if !strings.HasSuffix(content, "\n") {
+				sb.WriteString("\n")
+			}
+		}
+	}
+	return sb.String()
+}
+
+func writeDebugField(sb *strings.Builder, name, value string) {
+	if value == "" {
+		value = "(empty)"
+	}
+	sb.WriteString(name)
+	sb.WriteString(": ")
+	sb.WriteString(value)
+	sb.WriteString("\n")
+}
+
+func stringPtrValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func plainTranscriptContent(content string) string {
 	content = ansi.Strip(content)
 	content = strings.ReplaceAll(content, "\r\n", "\n")

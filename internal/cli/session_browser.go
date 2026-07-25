@@ -33,6 +33,11 @@ const (
 	browserFooterHeight = 1
 )
 
+var copyTextToClipboard = func(text string) {
+	_ = clipboard.WriteAll(text)
+	termenv.Copy(text)
+}
+
 type browserState int
 
 const (
@@ -206,24 +211,22 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 
 	// Layout:  cursor glyph id  TITLE  meta   <pad>   timeago
 	// Reserve room for the title, truncating it so the row never wraps.
-	fixedLeft := lipgloss.Width(cursor) + 1 + lipgloss.Width(glyph) + 1 +
-		lipgloss.Width(id) + 2
-	fixedRight := lipgloss.Width(meta) + lipgloss.Width(timeStr) + 1
-	titleMax := width - fixedLeft - fixedRight
-	title := ci.conv.Title
-	if titleMax < 1 {
-		titleMax = 1
-	}
-	if len([]rune(title)) > titleMax {
-		title = truncateRune(title, titleMax)
-	}
-	if title == "" {
-		title = "(untitled)"
-	}
 	titleStyle := styles.SessionList
 	if selected {
 		titleStyle = titleStyle.Bold(true)
 	}
+	fixedLeft := lipgloss.Width(cursor) + 1 + lipgloss.Width(glyph) + 1 +
+		lipgloss.Width(id) + 2
+	fixedRight := lipgloss.Width(meta) + lipgloss.Width(timeStr) + 1
+	titleMax := width - fixedLeft - fixedRight - titleStyle.GetHorizontalFrameSize()
+	title := ci.conv.Title
+	if title == "" {
+		title = "(untitled)"
+	}
+	if titleMax < 1 {
+		titleMax = 1
+	}
+	title = truncateDisplay(title, titleMax)
 	titleRendered := titleStyle.Render(title)
 
 	left := cursor + glyph + " " + id + "  " + titleRendered + meta
@@ -272,6 +275,7 @@ type browserModel struct {
 	viewerDoc    transcriptDocument
 	viewerLayout transcriptLayout
 	viewerSearch viewerSearch
+	viewerMsgs   []proto.Message
 	viewerLoaded bool
 	viewErr      string
 
@@ -506,8 +510,7 @@ func (m *browserModel) copyFocused() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	_ = clipboard.WriteAll(ci.conv.ID)
-	termenv.Copy(ci.conv.ID)
+	copyTextToClipboard(ci.conv.ID)
 	m.statusMsg = "copied " + ci.conv.ID
 	return m, nil
 }
@@ -535,6 +538,7 @@ func (m *browserModel) openViewer() (tea.Model, tea.Cmd) {
 	m.viewerDoc = transcriptDocument{}
 	m.viewerLayout = transcriptLayout{}
 	m.viewerSearch = newViewerSearch(m.width)
+	m.viewerMsgs = nil
 	m.viewerLoaded = false
 	m.viewerHeader = m.buildViewerHeader(ci)
 	headerH := lipgloss.Height(m.viewerHeader)
@@ -549,6 +553,7 @@ func (m *browserModel) closeViewer() {
 	m.viewerDoc = transcriptDocument{}
 	m.viewerLayout = transcriptLayout{}
 	m.viewerSearch = viewerSearch{}
+	m.viewerMsgs = nil
 	m.viewerLoaded = false
 	m.viewErr = ""
 }
@@ -568,8 +573,10 @@ func (m *browserModel) handleLoaded(msg loadedContentMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.viewErr = msg.err.Error()
 		m.viewerDoc = transcriptDocument{}
+		m.viewerMsgs = nil
 		return m, nil
 	}
+	m.viewerMsgs = append([]proto.Message(nil), msg.messages...)
 	m.viewerDoc = buildTranscriptDocument(msg.messages)
 	m.viewport.SetContent(m.viewerDoc.content)
 	m.rebuildViewerLayout()
@@ -600,6 +607,8 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "w":
 		m.toggleViewerWrap()
 		return m, nil
+	case "c":
+		return m.copyViewedSession()
 	case "j", "down":
 		m.scrollViewer(1)
 		return m, nil
@@ -629,6 +638,21 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	return m, nil
+}
+
+func (m *browserModel) copyViewedSession() (tea.Model, tea.Cmd) {
+	if !m.viewerLoaded {
+		m.statusMsg = "session is still loading"
+		return m, nil
+	}
+	if m.viewErr != "" {
+		m.statusMsg = "copy failed: session did not load"
+		return m, nil
+	}
+	text := formatSessionDebug(m.viewing.conv, m.viewerMsgs)
+	copyTextToClipboard(text)
+	m.statusMsg = fmt.Sprintf("copied session debug (%d chars)", len([]rune(text)))
 	return m, nil
 }
 
@@ -850,6 +874,7 @@ func (m *browserModel) viewFooter() string {
 			{"↑↓/jk", "scroll"},
 			{"/", "find"},
 			{"n/N", "match"},
+			{"c", "copy debug"},
 			{"w", m.viewerWrapLabel()},
 			{"q / esc", "back"},
 		}
@@ -866,7 +891,7 @@ func (m *browserModel) viewFooter() string {
 			{"space", "mark"},
 			{"d", "delete"},
 			{"D", "delete marked"},
-			{"c", "copy"},
+			{"c", "copy id"},
 			{"q", "quit"},
 		}
 	}
@@ -891,7 +916,7 @@ func (m *browserModel) viewConfirmPanel() string {
 		if titleMax < 8 {        //nolint:mnd
 			titleMax = 8
 		}
-		rows = append(rows, fmt.Sprintf("  %s  %s", id, truncateRune(t.conv.Title, titleMax)))
+		rows = append(rows, fmt.Sprintf("  %s  %s", id, truncateDisplay(t.conv.Title, titleMax)))
 	}
 	body := strings.Join(rows, "\n")
 	note := styles.Comment.Render("this cannot be undone")
@@ -945,6 +970,13 @@ func truncateRune(s string, max int) string {
 		return "…"
 	}
 	return string(r[:max-1]) + "…"
+}
+
+func truncateDisplay(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	return ansi.Truncate(s, max, "…")
 }
 
 func plural(n int) string {

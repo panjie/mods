@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"image/color"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -63,6 +65,82 @@ func TestBuildTranscriptDocumentIsPlainRoleAwareContent(t *testing.T) {
 	require.Equal(t, transcriptLine{role: proto.RoleTool, start: true}, doc.lines[3])
 	require.Equal(t, transcriptLine{role: proto.RoleTool}, doc.lines[4])
 	require.Equal(t, transcriptLine{role: proto.RoleAssistant, start: true}, doc.lines[11])
+}
+
+func TestFormatSessionDebugIncludesMetadataAndTranscript(t *testing.T) {
+	api := "deepseek"
+	model := "deepseek-v4-flash"
+	debugText := formatSessionDebug(Session{
+		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
+		Title:     "debug session",
+		UpdatedAt: time.Date(2026, 7, 25, 14, 30, 0, 0, time.UTC),
+		API:       &api,
+		Model:     &model,
+	}, []proto.Message{
+		{
+			Role:         proto.RoleUser,
+			Content:      "hello\a",
+			Images:       []proto.Image{{MimeType: "image/png", Data: []byte{1, 2, 3}}},
+			ProviderData: map[string]json.RawMessage{"opaque": json.RawMessage(`{"id":"secret"}`)},
+		},
+		{
+			Role: proto.RoleAssistant,
+			ToolCalls: []proto.ToolCall{{
+				ID: "call-1",
+				Function: proto.Function{
+					Name:      "powershell_run",
+					Arguments: []byte(`{"command":"Get-ChildItem"}`),
+				},
+			}},
+		},
+		{
+			Role:    proto.RoleTool,
+			Content: "ok",
+			ToolCalls: []proto.ToolCall{{
+				ID:       "call-1",
+				Function: proto.Function{Name: "powershell_run"},
+			}},
+		},
+	})
+
+	require.Contains(t, debugText, "mods session debug")
+	require.Contains(t, debugText, "id: df31ae23ab8b75b5643c2f846c570997edc71333")
+	require.Contains(t, debugText, "title: debug session")
+	require.Contains(t, debugText, "api: deepseek")
+	require.Contains(t, debugText, "model: deepseek-v4-flash")
+	require.Contains(t, debugText, "updated_at: 2026-07-25T14:30:00Z")
+	require.Contains(t, debugText, "--- message 1/3 role=user ---")
+	require.Contains(t, debugText, "- 1: image/png, 3 bytes")
+	require.Contains(t, debugText, "hello")
+	require.Contains(t, debugText, "provider_data: omitted (1 keys)")
+	require.Contains(t, debugText, "Tool call: powershell_run (call-1)")
+	require.Contains(t, debugText, "command:\nGet-ChildItem")
+	require.Contains(t, debugText, "Tool result: powershell_run (call-1)")
+	require.Contains(t, debugText, "status: success")
+	require.Contains(t, debugText, "output:\nok")
+	require.NotContains(t, debugText, "secret")
+	require.Equal(t, debugText, ansi.Strip(debugText))
+}
+
+func TestViewerCopiesSessionDebugWithC(t *testing.T) {
+	savedCopy := copyTextToClipboard
+	t.Cleanup(func() { copyTextToClipboard = savedCopy })
+	var copied string
+	copyTextToClipboard = func(text string) { copied = text }
+
+	m := newLoadedViewer(t, 120, 12, []proto.Message{{Role: proto.RoleUser, Content: "debug me"}})
+	m.viewing = convItem{conv: Session{
+		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
+		Title:     "copy debug",
+		UpdatedAt: time.Date(2026, 7, 25, 14, 30, 0, 0, time.UTC),
+	}}
+
+	sendViewerKey(m, 'c', "c")
+
+	require.Contains(t, copied, "mods session debug")
+	require.Contains(t, copied, "debug me")
+	require.Contains(t, m.statusMsg, "copied session debug")
+	require.Contains(t, ansi.Strip(m.viewFooter()), "copy debug")
 }
 
 func TestViewerGutterShowsToolMarker(t *testing.T) {

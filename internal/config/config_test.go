@@ -541,14 +541,12 @@ func TestConfigTemplateIncludesShellReadOnlyCommands(t *testing.T) {
 	require.Contains(t, string(content), "all arguments, subcommands, and internal side effects")
 }
 
-func TestSettingsFilePathDarwin(t *testing.T) {
+func TestSettingsFilePathUsesUniversalXDG(t *testing.T) {
 	defer swapExecutableDir("")()
-	if runtime.GOOS != "darwin" {
-		t.Skip("darwin-specific default config path")
-	}
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	path, err := settingsFilePath()

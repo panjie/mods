@@ -92,7 +92,17 @@ func TestDefaultSessionDirFallsBackToXDG(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	defer swapExecutableDir("")()
 
-	require.Equal(t, filepath.Join(xdg.DataHome, "mods", "sessions"), defaultSessionDir())
+	require.Equal(t, filepath.Join(dataHome, "mods", "sessions"), defaultSessionDir())
+}
+
+func TestDefaultSessionDirFallsBackToHomeLocalShare(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_DATA_HOME", "")
+	defer swapExecutableDir("")()
+
+	require.Equal(t, filepath.Join(home, ".local", "share", "mods", "sessions"), defaultSessionDir())
 }
 
 func TestDefaultSkillsDirsPortableIncludesUserAndExeDirs(t *testing.T) {

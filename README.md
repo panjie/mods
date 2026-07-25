@@ -79,11 +79,11 @@ Build from source with [Task](https://taskfile.dev):
 git clone https://github.com/panjie/mods.git
 cd mods
 go run github.com/go-task/task/v3/cmd/task@v3.51.1 build        # binary lands in bin/mods
-go run github.com/go-task/task/v3/cmd/task@v3.51.1 install      # installs to /usr/local/bin/mods (or $XDG_BIN_HOME)
+go run github.com/go-task/task/v3/cmd/task@v3.51.1 install      # installs to ~/.local/bin/mods (or $XDG_BIN_HOME)
 ```
 
-The `install` task honors `PREFIX`, `BINDIR`, `DESTDIR`, `XDG_BIN_HOME`, and `XDG=1`.
-On Windows the default install path is `%USERPROFILE%\.local\bin\mods.exe`.
+The `install` task honors `PREFIX`, `BINDIR`, `DESTDIR`, and `XDG_BIN_HOME`.
+On all platforms the default install path is `$HOME/.local/bin/mods` (`mods.exe` on Windows).
 
 Prebuilt Windows portable ZIPs are published on the [releases] page.
 The latest nightly build is published as the [nightly prerelease].
@@ -113,6 +113,12 @@ mods --config
 The wizard walks you through provider and model selection, API key entry,
 built-in tools, and review mode — then saves everything to `mods.yml`
 automatically.
+
+The standard config path is `$XDG_CONFIG_HOME/mods/mods.yml`, or
+`$HOME/.config/mods/mods.yml` when `XDG_CONFIG_HOME` is unset. If a `mods.yml`
+file exists next to the executable, portable mode uses that file instead.
+Sessions are stored in `$XDG_DATA_HOME/mods/sessions`, or
+`$HOME/.local/share/mods/sessions` when `XDG_DATA_HOME` is unset.
 
 On first real use, if `mods.yml` does not exist and there are no saved
 sessions, Mods starts this setup wizard automatically. Help, version,

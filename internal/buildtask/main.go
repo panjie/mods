@@ -143,26 +143,7 @@ func installDir() (string, error) {
 	if v := os.Getenv("PREFIX"); v != "" {
 		return filepath.Join(v, "bin"), nil
 	}
-	if hasXDGEnv() {
-		return xdgInstallDir()
-	}
-	return defaultInstallDir()
-}
-
-func defaultInstallDir() (string, error) {
-	prefix := "/usr/local"
-	if runtime.GOOS == "windows" {
-		home, err := userHome()
-		if err != nil {
-			return "", err
-		}
-		prefix = filepath.Join(home, ".local")
-	}
-	return filepath.Join(prefix, "bin"), nil
-}
-
-func hasXDGEnv() bool {
-	return os.Getenv("XDG") == "1" || os.Getenv("XDG_BIN_HOME") != ""
+	return xdgInstallDir()
 }
 
 func xdgInstallDir() (string, error) {

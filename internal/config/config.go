@@ -276,7 +276,7 @@ type PersistentConfig struct {
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
-	Debug bool `yaml:"debug" env:"DEBUG"`
+	Debug  bool   `yaml:"debug" env:"DEBUG"`
 }
 
 // Config holds the full application configuration. PersistentConfig is embedded
@@ -657,7 +657,7 @@ func defaultSessionDir() string {
 	if portableActive() {
 		return filepath.Join(executableDir(), "sessions")
 	}
-	return filepath.Join(xdg.DataHome, "mods", "sessions")
+	return filepath.Join(xdgDataHome(), "mods", "sessions")
 }
 
 // defaultSkillsDirs resolves the default skills directories. Portable mode
@@ -745,18 +745,44 @@ func settingsFilePath() (string, error) {
 // between standard and portable storage.
 func StandardSettingsPath() (string, error) {
 	relPath := filepath.Join("mods", "mods.yml")
-	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
-		return filepath.Join(configHome, relPath), nil
-	}
-	if runtime.GOOS != "darwin" {
-		return xdg.ConfigFile(relPath)
-	}
-
-	home, err := os.UserHomeDir()
+	configHome, err := xdgConfigHome()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", relPath), nil
+	return filepath.Join(configHome, relPath), nil
+}
+
+func xdgConfigHome() (string, error) {
+	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
+		return configHome, nil
+	}
+	home, err := userHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config"), nil
+}
+
+func xdgDataHome() string {
+	if dataHome := os.Getenv("XDG_DATA_HOME"); dataHome != "" {
+		return dataHome
+	}
+	home, err := userHomeDir()
+	if err == nil {
+		return filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(xdg.Home, ".local", "share")
+}
+
+func userHomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err == nil && home != "" {
+		return home, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return "", errors.New("could not determine user home directory")
 }
 
 func WriteDefaultFile(path string) error {

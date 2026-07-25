@@ -456,6 +456,30 @@ prompts:
 Issues and pull requests are welcome on this fork. Use `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` to verify
 the project compiles and `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` to run the test suite before opening a PR.
 
+Real-AI CLI black-box tests are kept behind the `integration` build tag and
+are not part of the default CI suite. They build and execute the `mods` binary
+with isolated config, data, cache, home, and workspace directories. To run the
+real-AI scenarios:
+
+```sh
+export DEEPSEEK_API_KEY=...
+go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-blackbox-ai
+```
+
+These scenarios make paid network requests and cover structured pipe input,
+session continuation across processes, and filesystem tool use. The runner uses
+the first available key in this provider order: DeepSeek, Qwen, OpenAI,
+Anthropic, GLM, then Google. Google runs the non-tool scenarios because its
+adapter does not expose built-in filesystem tools.
+
+Set `MODS_BLACKBOX_PROVIDER` to select a provider explicitly and
+`MODS_BLACKBOX_MODEL` to override its default model:
+
+```sh
+MODS_BLACKBOX_PROVIDER=qwen MODS_BLACKBOX_MODEL=qwen-plus \
+  go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-blackbox-ai
+```
+
 ## License
 
 [MIT](https://github.com/panjie/mods/raw/main/LICENSE)

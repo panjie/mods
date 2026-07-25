@@ -41,6 +41,11 @@ tasks:
       - go test ./...
       - go -C internal/huh test ./...
 
+  test-blackbox-ai:
+    desc: Run real-AI CLI black-box tests with the first available provider key.
+    cmds:
+      - go test -tags integration -v -count=1 -timeout=10m ./tests/blackbox
+
   ci:
     desc: Run the CI build and test baseline.
     cmds:

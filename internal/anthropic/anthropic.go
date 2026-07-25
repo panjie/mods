@@ -72,7 +72,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		if c.config.ThinkingBudget < 1024 {
 			return &Stream{
 				budgetErr: fmt.Errorf(
-					"Anthropic thinking-budget must be at least 1024 tokens, got %d",
+					"anthropic thinking-budget must be at least 1024 tokens, got %d",
 					c.config.ThinkingBudget,
 				),
 				messages: request.Messages,
@@ -81,7 +81,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		if explicitMaxTokens && body.MaxTokens <= int64(c.config.ThinkingBudget) {
 			return &Stream{
 				budgetErr: fmt.Errorf(
-					"Anthropic max-tokens (%d) must be greater than thinking-budget (%d)",
+					"anthropic max-tokens (%d) must be greater than thinking-budget (%d)",
 					body.MaxTokens,
 					c.config.ThinkingBudget,
 				),

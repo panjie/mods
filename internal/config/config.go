@@ -276,7 +276,6 @@ type PersistentConfig struct {
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
-	// Deprecated: retained for YAML backward compatibility; prefer SetDebugEnabled().
 	Debug bool `yaml:"debug" env:"DEBUG"`
 }
 

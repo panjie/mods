@@ -52,7 +52,7 @@ func RenderInteractionPanelView(styles InteractionStyles, width int, panel Inter
 	if width <= 0 {
 		width = 80
 	}
-	panelStyle := styles.Panel.Copy().BorderForeground(interactionToneColor(styles, panel.Tone))
+	panelStyle := styles.Panel.BorderForeground(interactionToneColor(styles, panel.Tone))
 	innerWidth := max(1, width-panelStyle.GetHorizontalFrameSize())
 	lines := []string{renderInteractionTitle(styles, innerWidth, panel.Tone, panel.Title, panel.Meta)}
 	var cursor *tea.Cursor

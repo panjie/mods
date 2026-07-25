@@ -60,7 +60,7 @@ func makeChatStylesForInteraction(interaction ui.InteractionStyles) chatStyles {
 func renderChatBanner(width int) string {
 	styles := makeChatStyles()
 	width = normalizedChatWidth(width)
-	meta := strings.Trim(strings.TrimSpace(config.API)+" / "+strings.TrimSpace(config.Model), " / ")
+	meta := strings.Trim(strings.TrimSpace(config.API)+" / "+strings.TrimSpace(config.Model), " /")
 	if role := strings.TrimSpace(config.Role); role != "" && role != "default" {
 		if meta != "" {
 			meta += "  ·  "

@@ -179,18 +179,6 @@ func staticShellWord(word *syntax.Word) (string, bool) {
 	return result.String(), true
 }
 
-func shellWords(words []*syntax.Word) []string {
-	args := make([]string, 0, len(words))
-	for _, word := range words {
-		value, ok := staticShellWord(word)
-		if !ok {
-			return nil
-		}
-		args = append(args, value)
-	}
-	return args
-}
-
 // accessShellWord resolves the narrow set of dynamic words whose value and
 // filesystem scope are known to the approval layer. It is deliberately
 // separate from staticShellWord: approval-rule parsing must continue treating
@@ -287,7 +275,7 @@ func StaticPOSIXLiteralArgs(command string) []string {
 
 func redirectionWrites(op syntax.RedirOperator) bool {
 	switch op {
-	case syntax.RdrOut, syntax.AppOut, syntax.ClbOut, syntax.RdrAll, syntax.AppAll, syntax.RdrInOut:
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrClob, syntax.RdrAll, syntax.AppAll, syntax.RdrInOut:
 		return true
 	default:
 		return false

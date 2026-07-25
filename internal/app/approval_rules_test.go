@@ -46,14 +46,6 @@ func scopedRule(rule ApprovalRule) ApprovalRule {
 	return rule
 }
 
-func scopedRules(rules []ApprovalRule) []ApprovalRule {
-	result := make([]ApprovalRule, 0, len(rules))
-	for _, rule := range rules {
-		result = append(result, scopedRule(rule))
-	}
-	return result
-}
-
 func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T) {
 	oldInputTTY := IsInputTTY
 	IsInputTTY = func() bool { return true }

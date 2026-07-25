@@ -298,7 +298,7 @@ func RunConfigWizard() error {
 					Title("Enter your API key").
 					Description("The key is stored in plaintext in your config file.").
 					Placeholder("sk-...").
-					Password(true).
+					EchoMode(huh.EchoModePassword).
 					Accessor(apiKeyAccessor),
 			).
 				Title("saved key").
@@ -484,7 +484,7 @@ func RunConfigWizard() error {
 					Title("Enter your web search API key").
 					Description("The key is stored in plaintext in your config file.").
 					Placeholder("tvly-...").
-					Password(true).
+					EchoMode(huh.EchoModePassword).
 					Value(&webSearchAPIKey),
 			).
 				Title("saved search key").

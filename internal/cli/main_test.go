@@ -845,15 +845,6 @@ func ensureTestFlags() {
 	}
 }
 
-func groupHasFlag(groups map[string][]*pflag.Flag, category, name string) bool {
-	for _, f := range groups[category] {
-		if f.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 func captureStdout(tb testing.TB, fn func()) string {
 	tb.Helper()
 

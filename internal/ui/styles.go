@@ -2,7 +2,6 @@ package ui
 
 import (
 	"image/color"
-	"os"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -136,18 +135,4 @@ func makeInteractionStyles(p InteractionPalette) InteractionStyles {
 		Info:     lipgloss.NewStyle().Foreground(p.Accent).Bold(true),
 		Success:  lipgloss.NewStyle().Foreground(p.Success).Bold(true),
 	}
-}
-
-// action messages
-
-const defaultAction = "WROTE"
-
-var outputHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1F1F1")).Background(lipgloss.Color("#6C50FF")).Bold(true).Padding(0, 1).MarginRight(1)
-
-func PrintConfirmation(action, content string) {
-	if action == "" {
-		action = defaultAction
-	}
-	outputHeader = outputHeader.SetString(strings.ToUpper(action))
-	_, _ = lipgloss.Fprintln(os.Stdout, lipgloss.JoinHorizontal(lipgloss.Center, outputHeader.String(), content))
 }

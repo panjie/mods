@@ -166,11 +166,6 @@ func regInt64(flags *pflag.FlagSet, p *int64, name string, def int64) {
 	flags.Int64Var(p, name, def, flagDesc(name))
 }
 
-// regFloat64 registers a float64 flag with auto-rendered help.
-func regFloat64(flags *pflag.FlagSet, p *float64, name string, def float64) {
-	flags.Float64Var(p, name, def, flagDesc(name))
-}
-
 type settingsFlagValue struct {
 	settings   *bool
 	importYAML *bool

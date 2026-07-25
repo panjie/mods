@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -291,10 +290,6 @@ func normalizeAffectedDirsForWorkspace(dirs []string, workspace string) []string
 	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
 }
 
-func normalizeShellAffectedDirsForWorkspace(dirs []string, workspace string) []string {
-	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
-}
-
 func normalizeShellAffectedDirsForTool(dirs []string, workspace string, tool string) []string {
 	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, shellPathFlavor(tool)))
 }
@@ -540,15 +535,6 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles) stri
 		Rows:     rows,
 		Actions:  actions,
 	})
-}
-
-func padRight(s string, w int) string {
-	s = strings.TrimSpace(s)
-	runes := []rune(s)
-	if len(runes) >= w {
-		return s
-	}
-	return s + strings.Repeat(" ", w-len(runes))
 }
 
 func formatReviewLabel(name string, args []byte) string {

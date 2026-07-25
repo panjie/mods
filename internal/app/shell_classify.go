@@ -52,10 +52,6 @@ func shellToolUsesPowerShell(tool string) bool {
 	return tool == "powershell_run" || (tool == "shell_run" && runtime.GOOS == "windows")
 }
 
-func (m *Mods) classifyShellCommand(tool, command string) bool {
-	return m.analyzeShellCommand(tool, command).NeedsReview
-}
-
 func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	ws := ""
 	if m.Config != nil {
@@ -436,7 +432,6 @@ var (
 	reCMDHomePath       = regexp.MustCompile(`(?i)%(?:USERPROFILE|HOMEDRIVE%%HOMEPATH)%[\\/][^\s'"<>|;,&(){}]*`)
 	reUnixAbsPath       = regexp.MustCompile(`(?:^|[\s="'"])(/(?:[A-Za-z0-9._][^\s'"<>|;,&(){}]*)?)`)
 	reSingleQuoted      = regexp.MustCompile(`'[^']*'`)
-	reSingleQuotedValue = regexp.MustCompile(`'([^'\r\n]*)'`)
 	reDoubleQuotedValue = regexp.MustCompile(`"([^"\r\n]*)"`)
 	reWinAbsPath        = regexp.MustCompile(`(?:^|[\s='"])([A-Za-z]:[\\/][^\s'"<>|;,&(){}]*)`)
 	reWinUNCPath        = regexp.MustCompile(`(?:^|[\s='"])(\\\\[^\\/\s'"<>|;,&(){}]+[\\/][^\s'"<>|;,&(){}]*)`)

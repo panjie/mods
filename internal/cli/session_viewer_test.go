@@ -343,7 +343,7 @@ func TestViewerNoWrapHorizontalKeysAndShiftWheel(t *testing.T) {
 		Mod:    tea.ModShift,
 	}))
 	require.Equal(t, viewerHorizontalStep, m.viewport.XOffset())
-	require.Equal(t, tea.MouseModeCellMotion, m.View().MouseMode)
+	require.Equal(t, tea.MouseModeNone, m.View().MouseMode)
 }
 
 func TestViewerHighlightLimitSummary(t *testing.T) {

@@ -757,9 +757,6 @@ func (m *browserModel) View() tea.View {
 	}
 	view := tea.NewView(content)
 	view.AltScreen = true
-	if m.state == stateViewing {
-		view.MouseMode = tea.MouseModeCellMotion
-	}
 	if m.state == stateBrowsing && m.list.FilterState() == list.Filtering {
 		if cursor := m.list.FilterInput.Cursor(); cursor != nil {
 			copy := *cursor

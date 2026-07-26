@@ -134,6 +134,24 @@ func TestSaveFields_CreatesMissingDeepPath(t *testing.T) {
 	require.Equal(t, "GROQ_API_KEY", groq["api-key-env"])
 }
 
+func TestSaveFieldsWritesTwoSpaceIndent(t *testing.T) {
+	path := writeTestConfig(t, `apis:
+  openai:
+    models:
+      existing: {}
+`)
+
+	require.NoError(t, SaveFields(path, map[string]any{
+		"apis.openai.models.gpt-5.max-input-chars": 1000,
+	}))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	require.Contains(t, content, "  openai:\n    models:\n      existing: {}\n      gpt-5:\n        max-input-chars: 1000")
+	require.NotContains(t, content, "    openai:")
+}
+
 func TestSaveFieldPaths_ModelNameWithSeparators(t *testing.T) {
 	path := writeTestConfig(t, `apis:
   openrouter:
@@ -353,6 +371,24 @@ func TestMergeSettingsYAMLAppendsNestedKeysInExistingOrder(t *testing.T) {
 		strings.Index(content, "existing"),
 		strings.Index(content, "added"),
 	)
+}
+
+func TestMergeSettingsYAMLWritesTwoSpaceIndent(t *testing.T) {
+	path := writeTestConfig(t, `apis:
+  custom:
+    models: {}
+`)
+
+	require.NoError(t, MergeSettingsYAML(path, []byte(`apis:
+  custom:
+    api-key-env: CUSTOM_API_KEY
+`)))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	require.Contains(t, content, "  custom:\n    models: {}\n    api-key-env: CUSTOM_API_KEY")
+	require.NotContains(t, content, "    custom:")
 }
 
 func TestMergeSettingsYAMLRejectsInvalidPatchWithoutChangingFile(t *testing.T) {

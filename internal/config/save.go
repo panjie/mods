@@ -72,7 +72,7 @@ func SaveFieldPaths(path string, updates []FieldUpdate) error {
 		setNestedValue(mapping, update.Path, update.Value)
 	}
 
-	out, err := yaml.Marshal(&doc)
+	out, err := marshalSettingsYAML(&doc)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
@@ -110,7 +110,7 @@ func MergeSettingsYAML(path string, patch []byte) error {
 	}
 	mergeYAMLMapping(existingMapping, mapping, true)
 
-	out, err := yaml.Marshal(existingDoc)
+	out, err := marshalSettingsYAML(existingDoc)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
@@ -144,6 +144,20 @@ func validateSettingsForWrite(data []byte) error {
 		return fmt.Errorf("validate config: %w", err)
 	}
 	return nil
+}
+
+func marshalSettingsYAML(node *yaml.Node) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(node); err != nil {
+		_ = encoder.Close()
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func validateFilesystemModeForWrite(root *yaml.Node) error {

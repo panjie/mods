@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	localereader "github.com/mattn/go-localereader"
 
@@ -29,7 +30,7 @@ const (
 	DefaultShellTimeout = 30 * time.Second
 	// DefaultShellMaxOutput is the canonical default output cap for the
 	// native shell tool when BuiltinToolsConfig.ShellMaxOutput is unset.
-	DefaultShellMaxOutput = 20000
+	DefaultShellMaxOutput = 100000
 
 	// defaultShellTimeout / defaultShellOutput are aliases kept so the
 	// in-file references read naturally; they mirror the exported names
@@ -353,6 +354,9 @@ func (w *cappedOutput) LastLine() string {
 }
 
 func decodeOutput(out []byte) string {
+	if utf8.Valid(out) {
+		return string(out)
+	}
 	if decoded, decErr := localereader.UTF8(out); decErr == nil {
 		out = decoded
 	}

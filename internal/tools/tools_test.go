@@ -988,6 +988,19 @@ func TestPowerShellRun(t *testing.T) {
 	})
 }
 
+func TestDecodeOutputPrefersUTF8(t *testing.T) {
+	want := `[{"creator":"潘捷","receiveTime":"7-14","title":"差旅费报销申请"}]`
+	if got := decodeOutput([]byte(want)); got != want {
+		t.Fatalf("decodeOutput() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultShellMaxOutput(t *testing.T) {
+	if DefaultShellMaxOutput != 100000 {
+		t.Fatalf("DefaultShellMaxOutput = %d, want 100000", DefaultShellMaxOutput)
+	}
+}
+
 func TestShellCommandUsesPowerShellOnWindows(t *testing.T) {
 	cmd := shellCommand(context.Background(), "Write-Output ok")
 	if runtime.GOOS == "windows" {

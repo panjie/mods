@@ -108,7 +108,7 @@ func MergeSettingsYAML(path string, patch []byte) error {
 	if err != nil {
 		return fmt.Errorf("parse config: %w", err)
 	}
-	mergeYAMLMapping(existingMapping, mapping)
+	mergeYAMLMapping(existingMapping, mapping, true)
 
 	out, err := yaml.Marshal(existingDoc)
 	if err != nil {
@@ -206,25 +206,114 @@ func decodeSettingsDocument(data []byte, allowEmpty bool) (*yaml.Node, *yaml.Nod
 	return &doc, doc.Content[0], nil
 }
 
-func mergeYAMLMapping(destination, patch *yaml.Node) {
+func mergeYAMLMapping(destination, patch *yaml.Node, topLevel bool) {
 	for i := 0; i+1 < len(patch.Content); i += 2 {
 		patchKey := patch.Content[i]
 		patchValue := patch.Content[i+1]
 		index := mappingValueIndex(destination, patchKey.Value)
 		if index < 0 {
-			destination.Content = append(destination.Content, patchKey, patchValue)
+			insertYAMLMappingPair(destination, patchKey, patchValue, topLevel)
 			continue
 		}
 
 		existingValue := destination.Content[index]
 		if existingValue.Kind == yaml.MappingNode && patchValue.Kind == yaml.MappingNode {
-			mergeYAMLMapping(existingValue, patchValue)
+			mergeYAMLMapping(existingValue, patchValue, false)
 			continue
 		}
 
 		preserveYAMLComments(patchValue, existingValue)
 		destination.Content[index] = patchValue
 	}
+}
+
+var configTemplateTopLevelKeyRanks = templateTopLevelKeyRanks(configTemplate)
+
+func insertYAMLMappingPair(mapping, key, value *yaml.Node, topLevel bool) {
+	insertAt := len(mapping.Content)
+	if topLevel {
+		if keyRank, ok := configTemplateTopLevelKeyRanks[key.Value]; ok {
+			for i := 0; i+1 < len(mapping.Content); i += 2 {
+				existingRank, ok := configTemplateTopLevelKeyRanks[mapping.Content[i].Value]
+				if ok && existingRank > keyRank {
+					insertAt = i
+					break
+				}
+			}
+		}
+	}
+
+	if insertAt == len(mapping.Content) {
+		mapping.Content = append(mapping.Content, key, value)
+		return
+	}
+	mapping.Content = append(mapping.Content, nil, nil)
+	copy(mapping.Content[insertAt+2:], mapping.Content[insertAt:])
+	mapping.Content[insertAt] = key
+	mapping.Content[insertAt+1] = value
+}
+
+func templateTopLevelKeyRanks(template string) map[string]int {
+	keys := make([]string, 0)
+	seen := make(map[string]struct{})
+	appendKey := func(key string) {
+		if key == "" || strings.Contains(key, ".") {
+			return
+		}
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+
+	for _, line := range strings.Split(template, "\n") {
+		if line == "" || line[0] == ' ' || line[0] == '\t' {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if key, ok := templateHelpKey(trimmed); ok {
+			appendKey(key)
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if key, ok := templateMappingKey(trimmed); ok {
+			appendKey(key)
+		}
+	}
+
+	ranks := make(map[string]int, len(keys))
+	for i, key := range keys {
+		ranks[key] = i
+	}
+	return ranks
+}
+
+func templateHelpKey(line string) (string, bool) {
+	const prefix = `# {{ index .Help "`
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(line, prefix)
+	end := strings.IndexByte(rest, '"')
+	if end <= 0 {
+		return "", false
+	}
+	return rest[:end], true
+}
+
+func templateMappingKey(line string) (string, bool) {
+	idx := strings.IndexByte(line, ':')
+	if idx <= 0 {
+		return "", false
+	}
+	key := strings.TrimSpace(line[:idx])
+	if key == "" || strings.ContainsAny(key, "{}[]") {
+		return "", false
+	}
+	return strings.Trim(key, `"'`), true
 }
 
 func mappingValueIndex(mapping *yaml.Node, key string) int {

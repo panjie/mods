@@ -314,6 +314,47 @@ func TestMergeSettingsYAMLBootstrapsDefaultFile(t *testing.T) {
 	require.Contains(t, m, "format-text")
 }
 
+func TestMergeSettingsYAMLInsertsNewTopLevelKeysInTemplateOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, WriteDefaultFile(path))
+
+	require.NoError(t, MergeSettingsYAML(path, []byte("default-model: gemini\n")))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	defaultAPI := strings.Index(content, "\ndefault-api: openai")
+	defaultModel := strings.Index(content, "\ndefault-model: gemini")
+	formatText := strings.Index(content, "\nformat-text:")
+	require.NotEqual(t, -1, defaultAPI)
+	require.NotEqual(t, -1, defaultModel)
+	require.NotEqual(t, -1, formatText)
+	require.Less(t, defaultAPI, defaultModel)
+	require.Less(t, defaultModel, formatText)
+}
+
+func TestMergeSettingsYAMLAppendsNestedKeysInExistingOrder(t *testing.T) {
+	path := writeTestConfig(t, `apis:
+  custom:
+    models:
+      existing: {}
+`)
+
+	require.NoError(t, MergeSettingsYAML(path, []byte(`apis:
+  custom:
+    models:
+      added: {}
+`)))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	require.Less(t,
+		strings.Index(content, "existing"),
+		strings.Index(content, "added"),
+	)
+}
+
 func TestMergeSettingsYAMLRejectsInvalidPatchWithoutChangingFile(t *testing.T) {
 	tests := map[string]string{
 		"empty":                "",

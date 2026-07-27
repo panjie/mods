@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -463,6 +464,13 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		require.NotEmpty(t, m.messages)
 		require.Contains(t, m.messages[0].Content, "workspace=")
 		require.NotContains(t, m.messages[0].Content, "workspace_root=")
+	})
+
+	t.Run("system info includes timezone with utc offset", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NotEmpty(t, m.messages)
+		require.Regexp(t, regexp.MustCompile(`timezone=[^,]+ \(UTC[+-]\d{2}:\d{2}\)`), m.messages[0].Content)
 	})
 
 	t.Run("minimal mode skips identity", func(t *testing.T) {

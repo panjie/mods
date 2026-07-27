@@ -45,7 +45,11 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 	if runtime.GOOS == "windows" {
 		sysParts = append(sysParts, windowsPowerShellCapabilities())
 	}
-	sysParts = append(sysParts, fmt.Sprintf("date=%s", time.Now().Format("2006-01-02")))
+	now := time.Now()
+	sysParts = append(sysParts,
+		fmt.Sprintf("date=%s", now.Format("2006-01-02")),
+		fmt.Sprintf("timezone=%s", formatTimezone(now)),
+	)
 	sysInfo := "System info: " + strings.Join(sysParts, ", ")
 	m.messages = append(m.messages, structuredSystemMessage(sysInfo, proto.SystemSectionExecutionContext))
 	if !cfg.Minimal {
@@ -201,6 +205,18 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 	}
 
 	return nil
+}
+
+func formatTimezone(t time.Time) string {
+	name, offset := t.Zone()
+	sign := "+"
+	if offset < 0 {
+		sign = "-"
+		offset = -offset
+	}
+	hours := offset / 3600
+	minutes := offset % 3600 / 60
+	return fmt.Sprintf("%s (UTC%s%02d:%02d)", name, sign, hours, minutes)
 }
 
 type shellVersionProbe func(context.Context, string) (string, error)

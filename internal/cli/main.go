@@ -224,6 +224,13 @@ func initFlags() {
 	rootCmd.MarkFlagsMutuallyExclusive(sessionActionFlags...)
 }
 
+func initFlagsOnce() {
+	if rootCmd.Flags().Lookup("model") != nil {
+		return
+	}
+	initFlags()
+}
+
 func sessionCompletions(toComplete string) []string {
 	// Cobra invokes flag completions via the __complete subcommand on
 	// every shell tab, so the package-level db may already be opened by
@@ -262,6 +269,15 @@ func execute() (exitCode int) {
 			exitCode = 1
 		}
 	}()
+	if isVersionOrHelpCmd(os.Args) {
+		initFlagsOnce()
+		rootCmd.SetArgs(os.Args[1:])
+		if err := rootCmd.Execute(); err != nil {
+			handleError(err)
+			return 1
+		}
+		return 0
+	}
 	var err error
 	config, err = Ensure()
 	if err != nil {

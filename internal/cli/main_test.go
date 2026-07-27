@@ -89,6 +89,54 @@ func TestIsVersionOrHelpCmd(t *testing.T) {
 	}
 }
 
+func TestExecuteHelpAndVersionBypassConfigLoad(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		args       []string
+		wantOutput string
+	}{
+		{name: "help", args: []string{"mods", "--help"}, wantOutput: "Usage:"},
+		{name: "version", args: []string{"mods", "--version"}, wantOutput: "mods version"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			savedArgs := os.Args
+			savedEnsure := Ensure
+			savedConfig := config
+			savedDB := db
+			savedIsInputTTY := IsInputTTY
+			t.Cleanup(func() {
+				os.Args = savedArgs
+				Ensure = savedEnsure
+				config = savedConfig
+				db = savedDB
+				IsInputTTY = savedIsInputTTY
+				rootCmd.SetArgs(nil)
+			})
+
+			calledEnsure := false
+			Ensure = func() (Config, error) {
+				calledEnsure = true
+				return Config{}, fmt.Errorf("Ensure must not be called for %v", tc.args)
+			}
+			IsInputTTY = func() bool { return true }
+			os.Args = tc.args
+
+			var code int
+			var stderr string
+			stdout := captureStdout(t, func() {
+				stderr = captureStderr(t, func() {
+					code = execute()
+				})
+			})
+
+			require.False(t, calledEnsure)
+			require.Equal(t, 0, code)
+			require.Empty(t, stderr)
+			require.Contains(t, stdout, tc.wantOutput)
+		})
+	}
+}
+
 func TestThemeFrom(t *testing.T) {
 	t.Run("charm", func(t *testing.T) {
 		require.NotNil(t, themeFrom("charm"))

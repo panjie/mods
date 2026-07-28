@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/internal/selector"
@@ -427,7 +428,7 @@ func (g *Group) Footer() string {
 	var parts []string
 	errors := g.Errors()
 	if g.showHelp && len(errors) <= 0 {
-		parts = append(parts, g.help.ShortHelpView(g.selector.Selected().KeyBinds()))
+		parts = append(parts, g.help.ShortHelpView(g.footerKeyBinds()))
 	}
 	if g.showErrors {
 		for _, err := range errors {
@@ -439,4 +440,12 @@ func (g *Group) Footer() string {
 	}
 	return g.styles().Base.
 		Render(strings.Join(parts, "\n"))
+}
+
+func (g *Group) footerKeyBinds() []key.Binding {
+	bindings := g.selector.Selected().KeyBinds()
+	if g.keymap == nil {
+		return bindings
+	}
+	return append(bindings, g.keymap.Quit)
 }

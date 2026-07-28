@@ -1167,6 +1167,26 @@ func TestAbort(t *testing.T) {
 	}
 }
 
+func TestFormFooterShowsQuitHelp(t *testing.T) {
+	f := NewForm(
+		NewGroup(
+			NewSelect[string]().
+				Title("Choose one").
+				Options(NewOptions("first", "second")...),
+		),
+	)
+	f.Update(f.Init())
+
+	footer := ansi.Strip(f.selector.Selected().Footer())
+
+	if !strings.Contains(footer, "Ctrl+C") {
+		t.Fatalf("expected footer to contain Ctrl+C quit help, got %q", footer)
+	}
+	if strings.Contains(viewModel(f), "Choose one\nCtrl+C") {
+		t.Fatalf("expected Ctrl+C help in footer, not field description:\n%s", viewModel(f))
+	}
+}
+
 const (
 	title       = "A Title"
 	description = "A Description"

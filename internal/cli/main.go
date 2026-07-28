@@ -617,26 +617,7 @@ func isNoArgs() bool {
 }
 
 func askInfo() error {
-	var foundModel bool
-	apis := make([]huh.Option[string], 0, len(config.APIs))
-	opts := map[string][]huh.Option[string]{}
-	for _, api := range config.APIs {
-		apis = append(apis, huh.NewOption(api.Name, api.Name))
-		for name, model := range api.Models {
-			opts[api.Name] = append(opts[api.Name], huh.NewOption(name, name))
-
-			// checks if this is the model we intend to use if not using
-			// `--ask-model`:
-			if !config.AskModel &&
-				(config.API == "" || config.API == api.Name) &&
-				(config.Model == name || slices.Contains(model.Aliases, config.Model)) {
-				// if it is, adjusts api and model so its cheaper later on.
-				config.API = api.Name
-				config.Model = name
-				foundModel = true
-			}
-		}
-	}
+	apis, opts, foundModel := askInfoOptions(&config)
 
 	if config.ContinueLast {
 		found, err := db.FindHEAD()
@@ -649,6 +630,9 @@ func askInfo() error {
 
 	if !config.AskModel && foundModel {
 		return nil
+	}
+	if len(apis) == 0 {
+		return fmt.Errorf("no API models are configured; run %s to add one", "mods --config")
 	}
 
 	// wrapping is done by the caller
@@ -671,6 +655,33 @@ func askInfo() error {
 	).
 		WithTheme(themeFrom(config.Theme)).
 		Run()
+}
+
+func askInfoOptions(cfg *Config) ([]huh.Option[string], map[string][]huh.Option[string], bool) {
+	var foundModel bool
+	apis := make([]huh.Option[string], 0, len(cfg.APIs))
+	opts := map[string][]huh.Option[string]{}
+	for _, api := range cfg.APIs {
+		if len(api.Models) == 0 {
+			continue
+		}
+		apis = append(apis, huh.NewOption(api.Name, api.Name))
+		for name, model := range api.Models {
+			opts[api.Name] = append(opts[api.Name], huh.NewOption(name, name))
+
+			// checks if this is the model we intend to use if not using
+			// `--ask-model`:
+			if !cfg.AskModel &&
+				(cfg.API == "" || cfg.API == api.Name) &&
+				(cfg.Model == name || slices.Contains(model.Aliases, cfg.Model)) {
+				// if it is, adjusts api and model so its cheaper later on.
+				cfg.API = api.Name
+				cfg.Model = name
+				foundModel = true
+			}
+		}
+	}
+	return apis, opts, foundModel
 }
 
 //nolint:mnd

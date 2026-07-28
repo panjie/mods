@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
@@ -226,6 +227,48 @@ func TestChatFlagRegistered(t *testing.T) {
 	flag := rootCmd.Flags().Lookup("chat")
 	require.NotNil(t, flag)
 	require.Empty(t, flag.Shorthand)
+}
+
+func TestAskInfoOptionsOnlyIncludesAPIsWithConfiguredModels(t *testing.T) {
+	cfg := Config{PersistentConfig: PersistentConfig{
+		API:   "fujitsu-google",
+		Model: "gemini-3.5-flash",
+		APIs: APIs{
+			{Name: "openai"},
+			{Name: "google"},
+			{Name: "fujitsu-google", Models: map[string]Model{"gemini-3.5-flash": {}}},
+			{Name: "custom", Models: map[string]Model{"custom-model": {}}},
+		},
+	}}
+
+	apis, models, foundModel := askInfoOptions(&cfg)
+
+	require.Equal(t, []string{"fujitsu-google", "custom"}, optionValues(apis))
+	require.Equal(t, []string{"gemini-3.5-flash"}, optionValues(models["fujitsu-google"]))
+	require.Equal(t, []string{"custom-model"}, optionValues(models["custom"]))
+	require.True(t, foundModel)
+	require.Equal(t, "fujitsu-google", cfg.API)
+	require.Equal(t, "gemini-3.5-flash", cfg.Model)
+}
+
+func TestAskInfoOptionsReportsNoConfiguredModels(t *testing.T) {
+	cfg := Config{PersistentConfig: PersistentConfig{
+		APIs: APIs{{Name: "openai"}, {Name: "google"}},
+	}}
+
+	apis, models, foundModel := askInfoOptions(&cfg)
+
+	require.Empty(t, apis)
+	require.Empty(t, models)
+	require.False(t, foundModel)
+}
+
+func optionValues(options []huh.Option[string]) []string {
+	values := make([]string, 0, len(options))
+	for _, option := range options {
+		values = append(values, option.Value)
+	}
+	return values
 }
 
 func TestImageShortFlagStillUsesLowercaseI(t *testing.T) {

@@ -62,7 +62,7 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 		if !cfg.Plan {
 			safeDir := os.TempDir()
 			m.messages = append(m.messages, structuredSystemMessage(
-				formatSafeWorkspacePrompt(safeDir),
+				formatSafeWorkspacePrompt(safeDir, m.skillSafeDirs()),
 				proto.SystemSectionExecutionWorkspace,
 			))
 		}

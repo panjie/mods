@@ -316,7 +316,7 @@ func normalizeAccessIntentDirs(intent AccessIntent, workspace, tool string, shel
 	return intent
 }
 
-// reviewerDeps carries the three things requestApproval needs from its
+// reviewerDeps carries the dependencies requestApproval needs from its
 // caller. Keeping them in a struct (instead of reaching into *Mods)
 // lets the reviewer stay physically independent of the main model: it
 // can be constructed, tested, and reasoned about without a live Mods.
@@ -329,10 +329,15 @@ type reviewerDeps struct {
 	isShellExecution func(name string) bool
 	analyzeShell     func(tool, command string) shellCommandAnalysis
 	accessIntent     AccessIntent
+	safeDirs         []string
 }
 
 func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []byte) error {
 	debug.Printf("requestApproval called: name=%s", name)
+	safeDirSet := deps.safeDirs
+	if len(safeDirSet) == 0 {
+		safeDirSet = safeDirs()
+	}
 	shellExecution := deps.isShellExecution != nil && deps.isShellExecution(name)
 	intent := deps.accessIntent
 	var analysis shellCommandAnalysis
@@ -369,12 +374,12 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		}
 		debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", debug.Truncate(cmd, 500), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
 	}
-	if intent.HasAccess() && RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode)) {
+	if intent.HasAccess() && RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
 		debug.Printf("requestApproval: matched affected dirs against saved approval rule")
 		return nil
 	}
 	if r.reviewMode != ReviewAlways && intent.HasAccess() {
-		if ClassifyAccess(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
+		if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
 			debug.Printf("requestApproval: approval matrix allowed access")
 			return nil
 		}
@@ -390,7 +395,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
 	if intent.HasAccess() {
-		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirs(), ApprovalReviewMode(r.reviewMode), shellExecution)
+		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode), shellExecution)
 	}
 	presentationAnalysis := analysis
 	item := toolReviewItem{

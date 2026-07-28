@@ -34,6 +34,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	workspace := cfg.ResolveWorkspace()
 	root := workspace.Canonical
+	safeDirs := approval.SafeDirsWith(skills.SafeDirs(skillCatalog))
 
 	if err := toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{
 		SettingsPath:   cfg.SettingsPath,
@@ -47,7 +48,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 	if ShouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
 			Root:     root,
-			SafeDirs: approval.SafeDirs(),
+			SafeDirs: safeDirs,
 		}); err != nil {
 			return nil, err
 		}

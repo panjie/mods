@@ -500,6 +500,20 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("auto allows write in loaded skill safe directory", func(t *testing.T) {
+		skillDir := filepath.Join(t.TempDir(), "demo")
+		intent := AccessIntent{Class: AccessWrite, Dirs: []string{skillDir}}
+		deps := reviewerDeps{
+			ctx:              context.Background(),
+			isShellExecution: func(name string) bool { return name == "shell_run" },
+			accessIntent:     intent,
+			safeDirs:         approval.SafeDirsWith([]string{skillDir}),
+		}
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
+		err := reviewer.requestApproval(deps, "shell_run", []byte(`{"command":"touch generated.txt"}`))
+		require.NoError(t, err)
+	})
+
 	t.Run("auto requires review for shell command when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		command := "echo ok"
@@ -585,6 +599,20 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
 		require.Equal(t, AccessRead, intent.Class)
 		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
+		require.ErrorIs(t, err, errReviewUnavailable)
+	})
+
+	t.Run("always still reviews write in loaded skill safe directory", func(t *testing.T) {
+		skillDir := filepath.Join(t.TempDir(), "demo")
+		intent := AccessIntent{Class: AccessWrite, Dirs: []string{skillDir}}
+		deps := reviewerDeps{
+			ctx:              context.Background(),
+			isShellExecution: func(name string) bool { return name == "shell_run" },
+			accessIntent:     intent,
+			safeDirs:         approval.SafeDirsWith([]string{skillDir}),
+		}
+		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
+		err := reviewer.requestApproval(deps, "shell_run", []byte(`{"command":"touch generated.txt"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
@@ -1018,7 +1046,7 @@ func receiveReviewItem(t *testing.T, ch <-chan toolReviewItem) toolReviewItem {
 // than mods.shellAnalyzer (the field) so the local regex fallback
 // inside the method still runs when shellAnalyzer is unset.
 func testReviewerDeps(mods *Mods) reviewerDeps {
-	deps := reviewerDeps{ctx: mods.ctx}
+	deps := reviewerDeps{ctx: mods.ctx, safeDirs: mods.safeDirs()}
 	if mods.currentToolRegistry != nil {
 		deps.isShellExecution = mods.currentToolRegistry.ShellExecution
 	}

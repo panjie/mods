@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -136,6 +137,14 @@ func TestScanDirsMergesAndLaterDirsOverride(t *testing.T) {
 	require.Equal(t, []string{"alpha", "beta", "shared"}, []string{got[0].Name, got[1].Name, got[2].Name})
 	require.Equal(t, "Shared from second.", got[2].Description)
 	require.Equal(t, filepath.Join(second, "shared"), got[2].Dir)
+
+	safeDirs := SafeDirs(got)
+	sharedWinner, err := filepath.Abs(filepath.Join(second, "shared"))
+	require.NoError(t, err)
+	sharedLoser, err := filepath.Abs(filepath.Join(first, "shared"))
+	require.NoError(t, err)
+	require.Contains(t, safeDirs, filepath.Clean(sharedWinner))
+	require.NotContains(t, safeDirs, filepath.Clean(sharedLoser))
 }
 
 func TestScanDirsMissingDirsAreIgnored(t *testing.T) {
@@ -197,4 +206,38 @@ func TestCatalogPromptBudgetCanOmitEntireCatalog(t *testing.T) {
 	render := CatalogPromptBudget([]Skill{{Name: "alpha", Description: "desc"}}, 8)
 	require.Empty(t, render.Prompt)
 	require.Equal(t, 1, render.Omitted)
+}
+
+func TestSafeDirsNormalizesDeduplicatesAndSorts(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	rel := filepath.Join("relative", "skill")
+	abs := filepath.Join(cwd, rel)
+
+	got := SafeDirs([]Skill{
+		{Dir: rel},
+		{Dir: filepath.Join(abs, ".")},
+		{Dir: ""},
+	})
+
+	require.Equal(t, []string{filepath.Clean(abs)}, got)
+}
+
+func TestSafeDirsIncludesSymlinkAndResolvedBoundary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks can require elevated privileges on Windows")
+	}
+	target := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.MkdirAll(target, 0o700))
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(target, link))
+
+	got := SafeDirs([]Skill{{Dir: link}})
+	absLink, err := filepath.Abs(link)
+	require.NoError(t, err)
+	resolved, err := filepath.EvalSymlinks(absLink)
+	require.NoError(t, err)
+
+	require.Contains(t, got, filepath.Clean(absLink))
+	require.Contains(t, got, filepath.Clean(resolved))
 }

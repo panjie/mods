@@ -295,7 +295,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		analyzeShell := memoizedShellAnalyzer(m.analyzeShellCommand)
 		intent := buildAccessIntent(name, data, registry, analyzeShell)
 		scope := m.reviewer.scope
-		safeDirs := safeDirs()
+		safeDirs := m.safeDirs()
 		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
 
 		// Inject authorized external directories so resolveWorkspacePath honors
@@ -314,6 +314,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			isShellExecution: registry.ShellExecution,
 			analyzeShell:     analyzeShell,
 			accessIntent:     intent,
+			safeDirs:         safeDirs,
 		}, name, data); err != nil {
 			return "", err
 		}

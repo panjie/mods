@@ -52,6 +52,14 @@ func TestClassifyAccessModeOverride(t *testing.T) {
 	require.Equal(t, DecisionAllow, ClassifyAccess(read, ws, nil, ReviewNever))
 }
 
+func TestSafeDirsWithMergesAndDeduplicates(t *testing.T) {
+	extra := filepath.Join(t.TempDir(), "skill")
+	got := SafeDirsWith([]string{extra, filepath.Join(extra, ".")})
+
+	require.Contains(t, got, filepath.Clean(extra))
+	require.Equal(t, len(SafeDirs())+1, len(got))
+}
+
 func TestLocateDir(t *testing.T) {
 	ws := wsScope(t)
 	tempDir := filepath.Clean(t.TempDir())

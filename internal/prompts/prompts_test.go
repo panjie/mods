@@ -59,8 +59,10 @@ func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 }
 
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024,
-		"default identity and tool-selection prompts must stay within 5 KiB")
+	// Budget includes the form input kind; bump if a new tool capability
+	// legitimately grows the runtime prompts.
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+64,
+		"default identity and tool-selection prompts must stay within ~5 KiB")
 }
 
 func TestDefaultPlanPromptStaysCompactAndComplete(t *testing.T) {

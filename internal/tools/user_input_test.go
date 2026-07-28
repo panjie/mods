@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"runtime"
 	"testing"
 
@@ -30,14 +31,84 @@ func TestUserInputValidation(t *testing.T) {
 		{Question: "Pick", Kind: "select", Options: []string{"one"}},
 		{Question: "Secret", Kind: "secret"},
 		{Question: "Bad", Kind: "unknown"},
+		{Question: "Form", Kind: "form"},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{}},
+		{Question: "Form", Kind: "form", Options: []string{"x"}, Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "bad key", Label: "A", Kind: "text"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "1up", Label: "A", Kind: "text"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "", Kind: "text"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{
+			{Key: "a", Label: "A", Kind: "text"},
+			{Key: "a", Label: "A2", Kind: "text"},
+		}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "secret"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "select"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "select", Options: []string{"only"}}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text", Target: UserInputTarget{Tool: "x", Path: "/y"}}}},
+		{Question: "Text", Kind: "text", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text"}}},
 	}
 	for _, req := range tests {
-		require.Error(t, validateUserInputRequest(req))
+		require.Error(t, validateUserInputRequest(req), "expected error for %+v", req)
 	}
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Password", Kind: "secret",
 		Target: UserInputTarget{Tool: "db_query", Path: "/password"},
 	}))
+}
+
+func TestUserInputFormValidation(t *testing.T) {
+	// Mixed form: text + secret + select, with per-field targets and options.
+	require.NoError(t, validateUserInputRequest(UserInputRequest{
+		Question: "Sign in",
+		Kind:     "form",
+		Fields: []UserInputField{
+			{Key: "username", Label: "Username", Kind: "text", Placeholder: "you@example.com"},
+			{Key: "password", Label: "Password", Kind: "secret", Target: UserInputTarget{Tool: "acme_login", Path: "/password"}},
+			{Key: "scope", Label: "Scope", Kind: "select", Options: []string{"machine", "session"}},
+		},
+	}))
+
+	// Two secrets must bind to distinct paths.
+	err := validateUserInputRequest(UserInputRequest{
+		Question: "Creds",
+		Kind:     "form",
+		Fields: []UserInputField{
+			{Key: "api_key", Label: "Key", Kind: "secret", Target: UserInputTarget{Tool: "api", Path: "/headers/Auth"}},
+			{Key: "api_secret", Label: "Secret", Kind: "secret", Target: UserInputTarget{Tool: "api", Path: "/headers/Auth"}},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicate secret target path")
+
+	// Cap at maxFormFields.
+	tooMany := make([]UserInputField, maxFormFields+1)
+	for i := range tooMany {
+		tooMany[i] = UserInputField{Key: fmt.Sprintf("f%d", i), Label: "F", Kind: "text"}
+	}
+	require.Error(t, validateUserInputRequest(UserInputRequest{Question: "Q", Kind: "form", Fields: tooMany}))
+}
+
+func TestRegisterUserInputForm(t *testing.T) {
+	registry := NewRegistry()
+	var got UserInputRequest
+	require.NoError(t, RegisterUserInput(registry, func(_ context.Context, req UserInputRequest) (UserInputResponse, error) {
+		got = req
+		return UserInputResponse{Form: map[string]FieldResponse{
+			"username": {Answer: "alice"},
+			"password": {SecretRef: "mods-secret://abc"},
+		}}, nil
+	}))
+	out, err := registry.Call(context.Background(), UserInputToolName, json.RawMessage(`{
+		"question":"Sign in","kind":"form",
+		"fields":[
+			{"key":"username","label":"Username","kind":"text"},
+			{"key":"password","label":"Password","kind":"secret","target":{"tool":"acme_login","path":"/password"}}
+		]
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, "form", got.Kind)
+	require.Len(t, got.Fields, 2)
+	require.JSONEq(t, `{"form":{"username":{"answer":"alice"},"password":{"secret_ref":"mods-secret://abc"}}}`, out)
 }
 
 func TestShellSecretEnvironment(t *testing.T) {

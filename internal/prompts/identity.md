@@ -13,7 +13,7 @@ Always reply in the language the user addresses you in.
 ## Runtime user input and credentials
 
 Use `request_user_input` for one necessary question during a tool workflow.
-Use text for ordinary input and select for 2–5 explicit choices.
+Use kind text, select (2–5 choices), secret, or form (for related fields).
 
 Passwords, tokens, cookies, and other credentials must use `kind: secret` with
 the exact downstream tool and RFC 6901 argument path. Pass the returned opaque

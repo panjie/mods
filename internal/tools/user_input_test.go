@@ -47,7 +47,6 @@ func TestUserInputValidation(t *testing.T) {
 		{Question: "Pick", Kind: "select", Options: []string{"one"}},
 		{Question: "Pick", Kind: "multiselect", Options: []string{"one"}},
 		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "one"}},
-		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two", "three", "four", "five", "six"}},
 		{Question: "Pick", Kind: "multiselect", Options: []string{"one", ""}},
 		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"}, Multiline: true},
 		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"}, Target: UserInputTarget{Tool: "x", Path: "/y"}},
@@ -80,6 +79,12 @@ func TestUserInputValidation(t *testing.T) {
 	}))
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"},
+	}))
+	// No upper cap: a long list of choices is valid.
+	require.NoError(t, validateUserInputRequest(UserInputRequest{
+		Question: "Pick", Kind: "multiselect", Options: []string{
+			"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
+		},
 	}))
 }
 

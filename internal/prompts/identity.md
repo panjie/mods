@@ -13,7 +13,7 @@ Always reply in the language the user addresses you in.
 ## Runtime user input and credentials
 
 Use `request_user_input` for one necessary question during a tool workflow.
-Use kind text, select (one of 2–5 choices), multiselect (one or more of 2–5
+Use kind text, select (one of 2+ choices), multiselect (one or more of 2+
 choices), secret, or form (for related fields).
 
 Passwords, tokens, cookies, and other credentials must use `kind: secret` with

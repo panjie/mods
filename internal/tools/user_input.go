@@ -90,7 +90,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 				},
 				"options": map[string]any{
 					"type": "array", "items": map[string]any{"type": "string"},
-					"description": "Required for select and multiselect; 2 to 5 unique non-empty choices.",
+					"description": "Required for select and multiselect; at least 2 unique non-empty choices.",
 				},
 				"multiline": booleanProp("Allow Ctrl+J newlines for text input."),
 				"target": map[string]any{
@@ -125,7 +125,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 							"options": map[string]any{
 								"type":        "array",
 								"items":       map[string]any{"type": "string"},
-								"description": "Required when field kind=select; 2 to 5 unique non-empty choices.",
+								"description": "Required when field kind=select; at least 2 unique non-empty choices.",
 							},
 							"multiline":   booleanProp("Allow Ctrl+J newlines when field kind=text."),
 							"placeholder": stringProp("Optional placeholder shown when the field is empty."),
@@ -189,8 +189,8 @@ func validateInputKind(kind string, options []string, multiline bool, target Use
 		if multiline || target.Tool != "" || target.Path != "" {
 			return fmt.Errorf("%s input does not accept multiline or target", kind)
 		}
-		if len(options) < 2 || len(options) > 5 {
-			return fmt.Errorf("%s input requires 2 to 5 options", kind)
+		if len(options) < 2 {
+			return fmt.Errorf("%s input requires at least 2 options", kind)
 		}
 		seen := map[string]bool{}
 		for _, option := range options {

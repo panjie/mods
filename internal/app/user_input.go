@@ -514,12 +514,13 @@ func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int,
 	switch state.field.Kind {
 	case "secret":
 		if focused {
-			contentWidth := max(1, innerWidth-formLabelWidth-1-2-styles.Input.GetHorizontalFrameSize())
+			prefix = focusedFormPrefix(state.field.Label, styles.Input)
+			prefixWidth := lipgloss.Width(prefix)
+			contentWidth := max(1, innerWidth-prefixWidth-styles.Input.GetHorizontalFrameSize())
 			state.secret.SetWidth(max(1, contentWidth-1))
-			view := ui.NewCursorView("› "+state.secret.View(), state.secret.Cursor()).
-				Translate(2, 0).
+			view := ui.NewCursorView(state.secret.View(), state.secret.Cursor()).
 				InStyle(styles.Input).
-				Translate(formLabelWidth+1, 0)
+				Translate(prefixWidth, 0)
 			return prefix + view.Content, view.Cursor
 		}
 		return prefix + styles.Muted.Render(renderMaskedValue(state.secret.Value())), nil
@@ -529,17 +530,18 @@ func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int,
 			current = state.field.Options[state.selected]
 		}
 		if focused {
-			return prefix + styles.Input.Render("› " + current + "  ← →"), nil
+			return prefix + styles.Input.Render("› "+current+"  ← →"), nil
 		}
 		return prefix + styles.Muted.Render(current), nil
 	default: // text
 		if focused {
-			contentWidth := max(1, innerWidth-formLabelWidth-1-2-styles.Input.GetHorizontalFrameSize())
+			prefix = focusedFormPrefix(state.field.Label, styles.Input)
+			prefixWidth := lipgloss.Width(prefix)
+			contentWidth := max(1, innerWidth-prefixWidth-styles.Input.GetHorizontalFrameSize())
 			state.text.SetWidth(contentWidth)
-			view := ui.NewCursorView("› "+state.text.View(), state.text.Cursor()).
-				Translate(2, 0).
+			view := ui.NewCursorView(state.text.View(), state.text.Cursor()).
 				InStyle(styles.Input).
-				Translate(formLabelWidth+1, 0)
+				Translate(prefixWidth, 0)
 			return prefix + view.Content, view.Cursor
 		}
 		val := strings.TrimSpace(state.text.Value())
@@ -551,6 +553,22 @@ func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int,
 		}
 		return prefix + styles.Muted.Render(val), nil
 	}
+}
+
+func focusedFormPrefix(label string, inputStyle lipgloss.Style) string {
+	normalWidth := lipgloss.Width(padFormLabel(label, formLabelWidth)) + 1
+	inputLeftFrame := inputStyle.GetMarginLeft() + inputStyle.GetBorderLeftSize() + inputStyle.GetPaddingLeft()
+	width := normalWidth - inputLeftFrame
+	if width <= 0 {
+		return ""
+	}
+	const marker = "›"
+	labelWidth := lipgloss.Width(label)
+	markerWidth := lipgloss.Width(marker)
+	if labelWidth+markerWidth > width {
+		return padFormLabel(label, width)
+	}
+	return label + strings.Repeat(" ", width-labelWidth-markerWidth) + marker
 }
 
 func renderMaskedValue(value string) string {

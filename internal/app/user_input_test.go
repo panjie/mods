@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -333,6 +335,33 @@ func TestFormRendersAllFieldLabels(t *testing.T) {
 	require.Contains(t, view, "machine")
 }
 
+func TestFormFocusedSecretPlaceholderAlignsWithUnfocusedTextValue(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "请输入您的OA登录凭证", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "username", Label: "OA用户名", Kind: "text"},
+				{Key: "password", Label: "OA密码", Kind: "secret"},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+
+	for _, r := range "panjie" {
+		manager.handleKey(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	lines := strings.Split(ansi.Strip(manager.render(80, makeStyles(true).Interaction)), "\n")
+	usernameLine := lineContaining(lines, "OA用户名")
+	passwordLine := lineContaining(lines, "OA密码")
+	require.NotEmpty(t, usernameLine)
+	require.NotEmpty(t, passwordLine)
+
+	require.Equal(t, visualColumn(usernameLine, "panjie"), visualColumn(passwordLine, "Enter secret"))
+}
+
 func TestFormSelectFieldArrowKeysChangeValue(t *testing.T) {
 	oldTTY := IsInputTTY
 	IsInputTTY = func() bool { return true }
@@ -432,8 +461,8 @@ func TestFormRealCursorPropagatesToModsView(t *testing.T) {
 func TestHandleFormInputRejectsSecretsInPlanMode(t *testing.T) {
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, registry.Register(toolregistry.Tool{
-		Kind: toolregistry.ToolKindShell,
-		Spec: proto.ToolSpec{Name: "shell_run"},
+		Kind:         toolregistry.ToolKindShell,
+		Spec:         proto.ToolSpec{Name: "shell_run"},
 		Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true},
 		Call:         noopToolCall,
 	}))
@@ -555,7 +584,6 @@ func TestHandleFormInputStoresPerFieldSecrets(t *testing.T) {
 	}
 }
 
-
 func TestUserInputRealCursorPropagatesToModsView(t *testing.T) {
 	for _, kind := range []string{"text", "secret"} {
 		t.Run(kind, func(t *testing.T) {
@@ -609,4 +637,12 @@ func lineContaining(lines []string, value string) string {
 		}
 	}
 	return ""
+}
+
+func visualColumn(line, value string) int {
+	idx := strings.Index(line, value)
+	if idx < 0 {
+		return -1
+	}
+	return lipgloss.Width(line[:idx])
 }

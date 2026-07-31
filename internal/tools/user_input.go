@@ -41,6 +41,7 @@ type UserInputField struct {
 
 type UserInputResponse struct {
 	Answer    string                   `json:"answer,omitempty"`
+	Answers   []string                 `json:"answers,omitempty"`
 	SecretRef string                   `json:"secret_ref,omitempty"`
 	Form      map[string]FieldResponse `json:"form,omitempty"`
 }
@@ -80,16 +81,16 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 		},
 		Spec: proto.ToolSpec{
 			Name:        UserInputToolName,
-			Description: "Pause and ask the local terminal user one necessary question or a short form of related fields. Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. Use kind=form when two or more fields belong together (e.g. username and password).",
+			Description: "Pause and ask the local terminal user one necessary question or a short form of related fields. Use kind=multiselect when one or more choices may be selected. Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. Use kind=form when two or more fields belong together (e.g. username and password).",
 			InputSchema: objectSchema(map[string]any{
 				"question": stringProp("A concise question or prompt shown verbatim to the user."),
 				"kind": map[string]any{
-					"type": "string", "enum": []string{"text", "select", "secret", "form"},
-					"description": "text for free-form input, select for one choice, secret for a masked credential, form for multiple related fields at once.",
+					"type": "string", "enum": []string{"text", "select", "multiselect", "secret", "form"},
+					"description": "text for free-form input, select for one choice, multiselect for one or more choices, secret for a masked credential, form for multiple related fields at once.",
 				},
 				"options": map[string]any{
 					"type": "array", "items": map[string]any{"type": "string"},
-					"description": "Required for select; 2 to 5 unique non-empty choices.",
+					"description": "Required for select and multiselect; 2 to 5 unique non-empty choices.",
 				},
 				"multiline": booleanProp("Allow Ctrl+J newlines for text input."),
 				"target": map[string]any{
@@ -115,7 +116,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 								"pattern":     "^[a-zA-Z_][a-zA-Z0-9_]*$",
 								"description": "Unique key within the form. Returned as the response map key.",
 							},
-							"label":       stringProp("Short label shown to the user."),
+							"label": stringProp("Short label shown to the user."),
 							"kind": map[string]any{
 								"type":        "string",
 								"enum":        []string{"text", "select", "secret"},
@@ -184,17 +185,17 @@ func validateInputKind(kind string, options []string, multiline bool, target Use
 		if len(options) != 0 || target.Tool != "" || target.Path != "" {
 			return fmt.Errorf("text input does not accept options or target")
 		}
-	case "select":
+	case "select", "multiselect":
 		if multiline || target.Tool != "" || target.Path != "" {
-			return fmt.Errorf("select input does not accept multiline or target")
+			return fmt.Errorf("%s input does not accept multiline or target", kind)
 		}
 		if len(options) < 2 || len(options) > 5 {
-			return fmt.Errorf("select input requires 2 to 5 options")
+			return fmt.Errorf("%s input requires 2 to 5 options", kind)
 		}
 		seen := map[string]bool{}
 		for _, option := range options {
 			if option == "" || seen[option] {
-				return fmt.Errorf("select options must be unique and non-empty")
+				return fmt.Errorf("%s options must be unique and non-empty", kind)
 			}
 			seen[option] = true
 		}
@@ -233,6 +234,9 @@ func validateFormFields(fields []UserInputField, options []string, multiline boo
 		seenKeys[field.Key] = true
 		if field.Label == "" {
 			return fmt.Errorf("field %d (%s): label is required", i+1, field.Key)
+		}
+		if field.Kind == "multiselect" {
+			return fmt.Errorf("field %d (%s): form fields do not support multiselect", i+1, field.Key)
 		}
 		if err := validateInputKind(field.Kind, field.Options, field.Multiline, field.Target); err != nil {
 			return fmt.Errorf("field %d (%s): %w", i+1, field.Key, err)

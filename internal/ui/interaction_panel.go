@@ -38,7 +38,10 @@ type InteractionPanel struct {
 	Rows     []InteractionRow
 	Body     []string
 	Choices  []InteractionAction
-	Actions  []InteractionAction
+	// StackChoices renders one choice per line instead of packing choices
+	// horizontally. This is useful when choices are navigated with up/down.
+	StackChoices bool
+	Actions      []InteractionAction
 	// Cursor is relative to Body[CursorBody]. It is ignored when nil.
 	Cursor     *tea.Cursor
 	CursorBody int
@@ -75,7 +78,13 @@ func RenderInteractionPanelView(styles InteractionStyles, width int, panel Inter
 	}
 	if len(panel.Choices) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, packInteractionActions(styles, innerWidth, panel.Choices)...)
+		if panel.StackChoices {
+			for _, choice := range panel.Choices {
+				lines = append(lines, renderInteractionAction(styles, choice))
+			}
+		} else {
+			lines = append(lines, packInteractionActions(styles, innerWidth, panel.Choices)...)
+		}
 	}
 	if len(panel.Actions) > 0 {
 		lines = append(lines, "")

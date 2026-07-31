@@ -25,10 +25,33 @@ func TestRegisterUserInput(t *testing.T) {
 	require.JSONEq(t, `{"answer":"prod"}`, out)
 }
 
+func TestRegisterUserInputMultiselect(t *testing.T) {
+	registry := NewRegistry()
+	var got UserInputRequest
+	require.NoError(t, RegisterUserInput(registry, func(_ context.Context, req UserInputRequest) (UserInputResponse, error) {
+		got = req
+		return UserInputResponse{Answers: []string{"tests", "docs"}}, nil
+	}))
+	out, err := registry.Call(context.Background(), UserInputToolName, json.RawMessage(
+		`{"question":"What should run?","kind":"multiselect","options":["tests","lint","docs"]}`,
+	))
+	require.NoError(t, err)
+	require.Equal(t, "multiselect", got.Kind)
+	require.Equal(t, []string{"tests", "lint", "docs"}, got.Options)
+	require.JSONEq(t, `{"answers":["tests","docs"]}`, out)
+}
+
 func TestUserInputValidation(t *testing.T) {
 	tests := []UserInputRequest{
 		{Question: "", Kind: "text"},
 		{Question: "Pick", Kind: "select", Options: []string{"one"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "one"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two", "three", "four", "five", "six"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one", ""}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"}, Multiline: true},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"}, Target: UserInputTarget{Tool: "x", Path: "/y"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"}, Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text"}}},
 		{Question: "Secret", Kind: "secret"},
 		{Question: "Bad", Kind: "unknown"},
 		{Question: "Form", Kind: "form"},
@@ -44,6 +67,7 @@ func TestUserInputValidation(t *testing.T) {
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "secret"}}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "select"}}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "select", Options: []string{"only"}}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "multiselect", Options: []string{"one", "two"}}}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text", Target: UserInputTarget{Tool: "x", Path: "/y"}}}},
 		{Question: "Text", Kind: "text", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text"}}},
 	}
@@ -53,6 +77,9 @@ func TestUserInputValidation(t *testing.T) {
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Password", Kind: "secret",
 		Target: UserInputTarget{Tool: "db_query", Path: "/password"},
+	}))
+	require.NoError(t, validateUserInputRequest(UserInputRequest{
+		Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"},
 	}))
 }
 

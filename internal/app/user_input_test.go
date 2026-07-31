@@ -50,6 +50,128 @@ func TestUserInputManagerTextRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUserInputManagerMultiselectRoundTrip(t *testing.T) {
+	oldTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldTTY })
+	cfg := defaultConfig()
+	manager := newUserInputManager(&cfg)
+	start := manager.startSession()
+
+	type result struct {
+		resp toolregistry.UserInputResponse
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp, err := manager.request(context.Background(), toolregistry.UserInputRequest{
+			Question: "What should run?",
+			Kind:     "multiselect",
+			Options:  []string{"tests", "lint", "docs"},
+		})
+		done <- result{resp: resp, err: err}
+	}()
+	manager.handleStartMsg(start().(userInputStartMsg))
+
+	// Empty selections cannot be submitted.
+	handled, _ := manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.True(t, handled)
+	require.True(t, manager.isPending())
+
+	// Select docs first, then tests. Results must retain original option order.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	require.Equal(t, 3, manager.selected, "up wraps to the last real option")
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	require.Equal(t, 0, manager.selected, "tab wraps to the select-all row")
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	require.Equal(t, 1, manager.selected, "tab advances to the first real option")
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+
+	// Toggle tests off and back on to cover deselection.
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	require.False(t, manager.checked[0])
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	require.True(t, manager.checked[0])
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	select {
+	case got := <-done:
+		require.NoError(t, got.err)
+		require.Equal(t, []string{"tests", "docs"}, got.resp.Answers)
+		require.Empty(t, got.resp.Answer)
+	case <-time.After(time.Second):
+		t.Fatal("multiselect request did not complete")
+	}
+}
+
+func TestUserInputMultiselectRenderAndCancel(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	response := make(chan userInputResult, 1)
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Choose checks",
+			Kind:     "multiselect",
+			Options:  []string{"tests", "lint"},
+		},
+		resp: response,
+	}})
+
+	// Space on the virtual first row selects and clears every real option.
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	require.Equal(t, []bool{true, true}, manager.checked)
+	allView := ansi.Strip(manager.render(80, makeStyles(true).Interaction))
+	require.Contains(t, allView, "[x] Select all")
+	require.Contains(t, allView, "[x] tests")
+	require.Contains(t, allView, "[x] lint")
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	require.Equal(t, []bool{false, false}, manager.checked)
+
+	// A partial selection renders the select-all row indeterminately.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	require.Equal(t, 1, manager.selected)
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	partialView := ansi.Strip(manager.render(80, makeStyles(true).Interaction))
+	require.Contains(t, partialView, "[-] Select all")
+	require.Contains(t, partialView, "[x] tests")
+	require.Contains(t, partialView, "[ ] lint")
+
+	// The shortcut works from a real option: partial -> all -> none.
+	manager.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	require.Equal(t, []bool{true, true}, manager.checked)
+	manager.handleKey(tea.KeyPressMsg{Code: 'A', Text: "A"})
+	require.Equal(t, []bool{false, false}, manager.checked)
+
+	view := ansi.Strip(manager.render(80, makeStyles(true).Interaction))
+	require.Contains(t, view, "[ ] Select all")
+	require.Contains(t, view, "[ ] tests")
+	require.Contains(t, view, "[ ] lint")
+	require.Contains(t, view, "Space")
+	require.Contains(t, view, "Toggle")
+	require.Contains(t, view, "A Toggle all")
+	lines := strings.Split(view, "\n")
+	selectAllLine := lineIndexContaining(lines, "Select all")
+	testsLine := lineIndexContaining(lines, "tests")
+	lintLine := lineIndexContaining(lines, "lint")
+	require.Greater(t, selectAllLine, -1)
+	require.Equal(t, selectAllLine+1, testsLine, "select-all row must precede real choices")
+	require.Equal(t, testsLine+1, lintLine, "multiselect choices must be stacked vertically")
+
+	// Clearing all restores the empty-submit guard.
+	handled, _ := manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.True(t, handled)
+	require.True(t, manager.isPending())
+
+	handled, _ = manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEsc})
+	require.True(t, handled)
+	select {
+	case got := <-response:
+		require.ErrorContains(t, got.err, "user canceled input")
+	case <-time.After(time.Second):
+		t.Fatal("esc did not cancel multiselect")
+	}
+}
+
 func TestUserInputUnavailableInRawMode(t *testing.T) {
 	oldTTY := IsInputTTY
 	IsInputTTY = func() bool { return true }

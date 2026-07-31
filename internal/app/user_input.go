@@ -21,9 +21,10 @@ import (
 var errUserInputUnavailable = errors.New("interactive user input is unavailable")
 
 type userInputResult struct {
-	value string
-	form  map[string]string
-	err   error
+	value  string
+	values []string
+	form   map[string]string
+	err    error
 }
 
 type userInputItem struct {
@@ -57,6 +58,7 @@ type userInputManager struct {
 	text        textarea.Model
 	secret      textinput.Model
 	selected    int
+	checked     []bool
 	formFields  []userFormFieldState
 	focus       int
 	cfg         *Config
@@ -127,6 +129,7 @@ func (u *userInputManager) reset() {
 	u.mu.Unlock()
 	u.pending = false
 	u.item = nil
+	u.checked = nil
 	u.formFields = nil
 	u.focus = 0
 }
@@ -157,6 +160,9 @@ func (u *userInputManager) requestWithDisplay(ctx context.Context, req toolregis
 	case result := <-resp:
 		if result.err != nil {
 			return toolregistry.UserInputResponse{}, result.err
+		}
+		if req.Kind == "multiselect" {
+			return toolregistry.UserInputResponse{Answers: result.values}, nil
 		}
 		return toolregistry.UserInputResponse{Answer: result.value}, nil
 	case <-done:
@@ -206,6 +212,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 	item := msg.item
 	u.item = &item
 	u.selected = 0
+	u.checked = nil
 	u.focus = 0
 	u.formFields = nil
 	if item.req.Kind == "form" {
@@ -223,6 +230,10 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 			u.formFields[i] = state
 		}
 		u.focusFormEditor(0)
+		return
+	}
+	if item.req.Kind == "multiselect" {
+		u.checked = make([]bool, len(item.req.Options))
 		return
 	}
 	if item.req.Kind == "secret" {
@@ -320,6 +331,31 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		}
 		return true, nil
 	}
+	if req.Kind == "multiselect" {
+		choiceCount := len(req.Options) + 1 // Include the virtual "Select all" row.
+		switch msg.String() {
+		case "up":
+			u.selected = (u.selected - 1 + choiceCount) % choiceCount
+		case "down", "tab":
+			u.selected = (u.selected + 1) % choiceCount
+		case " ", "space":
+			if u.selected == 0 {
+				u.toggleAll()
+			} else {
+				optionIndex := u.selected - 1
+				u.checked[optionIndex] = !u.checked[optionIndex]
+			}
+		case "a", "A":
+			u.toggleAll()
+		case "enter":
+			values := u.selectedValues(req.Options)
+			if len(values) == 0 {
+				return true, nil
+			}
+			return true, u.finish(userInputResult{values: values})
+		}
+		return true, nil
+	}
 	if msg.String() == "enter" {
 		value := strings.TrimSpace(u.text.Value())
 		if req.Kind == "secret" {
@@ -337,6 +373,44 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		u.text, cmd = u.text.Update(msg)
 	}
 	return true, cmd
+}
+
+func (u *userInputManager) toggleAll() {
+	selectAll := !u.allChecked()
+	for i := range u.checked {
+		u.checked[i] = selectAll
+	}
+}
+
+func (u *userInputManager) allChecked() bool {
+	if len(u.checked) == 0 {
+		return false
+	}
+	for _, checked := range u.checked {
+		if !checked {
+			return false
+		}
+	}
+	return true
+}
+
+func (u *userInputManager) anyChecked() bool {
+	for _, checked := range u.checked {
+		if checked {
+			return true
+		}
+	}
+	return false
+}
+
+func (u *userInputManager) selectedValues(options []string) []string {
+	values := make([]string, 0, len(options))
+	for i, option := range options {
+		if i < len(u.checked) && u.checked[i] {
+			values = append(values, option)
+		}
+	}
+	return values
 }
 
 // handleFormKey dispatches keys for a kind=form prompt. Tab/Shift+Tab cycles
@@ -451,6 +525,25 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 		}
 		panel.Choices = options
 		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Enter", Label: "Select"}, {Key: "Esc", Label: "Cancel"}}
+	case "multiselect":
+		options := make([]interactionAction, len(req.Options)+1)
+		selectAllCheckbox := "[ ]"
+		if u.allChecked() {
+			selectAllCheckbox = "[x]"
+		} else if u.anyChecked() {
+			selectAllCheckbox = "[-]"
+		}
+		options[0] = interactionAction{Key: selectAllCheckbox, Label: "Select all", Selected: u.selected == 0}
+		for i, option := range req.Options {
+			checkbox := "[ ]"
+			if i < len(u.checked) && u.checked[i] {
+				checkbox = "[x]"
+			}
+			options[i+1] = interactionAction{Key: checkbox, Label: option, Selected: i+1 == u.selected}
+		}
+		panel.Choices = options
+		panel.StackChoices = true
+		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Space", Label: "Toggle"}, {Key: "A", Label: "Toggle all"}, {Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}}
 	case "secret":
 		contentWidth := max(1, innerWidth-styles.Input.GetHorizontalFrameSize()-2)
 		// textinput renders an additional cursor cell when the value is

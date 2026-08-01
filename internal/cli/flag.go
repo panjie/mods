@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -94,6 +95,36 @@ func (r *reviewFlag) String() string {
 
 func (*reviewFlag) Type() string {
 	return "review-mode"
+}
+
+// reviewNeverFlag is the boolean -N/--no-review convenience alias for
+// --review-mode=never. It writes directly to the same ReviewMode value so
+// normal command-line ordering applies when both spellings are present.
+type reviewNeverFlag struct {
+	target *ReviewMode
+}
+
+func newReviewNeverFlag(target *ReviewMode) *reviewNeverFlag {
+	return &reviewNeverFlag{target: target}
+}
+
+func (f *reviewNeverFlag) Set(s string) error {
+	enabled, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	if enabled {
+		*f.target = ReviewNever
+	}
+	return nil
+}
+
+func (*reviewNeverFlag) String() string {
+	return "false"
+}
+
+func (*reviewNeverFlag) Type() string {
+	return "bool"
 }
 
 func newFormatFlag(val string, p *string) *formatFlag {

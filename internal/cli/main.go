@@ -183,6 +183,8 @@ func initFlags() {
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
 	regBool(flags, &config.Think, "think", "t", config.Think)
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
+	noReviewFlag := flags.VarPF(newReviewNeverFlag(&config.ReviewMode), "no-review", "N", flagDesc("no-review"))
+	noReviewFlag.NoOptDefVal = "true"
 
 	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")

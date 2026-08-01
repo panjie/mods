@@ -282,7 +282,8 @@ Always allows writes in /path/to/workspace
 - `Ctrl+C` — cancel the whole run
 
 Pick the mode that fits the task with `-V` / `--review-mode` (or `review-mode` in
-`mods.yml`, or the `MODS_REVIEW_MODE` env var):
+`mods.yml`, or the `MODS_REVIEW_MODE` env var). Use `-N` / `--no-review` as a
+shortcut for `--review-mode=never`:
 
 | Mode       | Behavior                                                          |
 |------------|-------------------------------------------------------------------|

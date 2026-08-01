@@ -57,7 +57,7 @@ var flagCategorySpecs = []flagCategorySpec{
 	},
 	{
 		Name:  flagCategoryWorkspaceReview,
-		Flags: []string{"workspace", "review-mode"},
+		Flags: []string{"workspace", "review-mode", "no-review"},
 	},
 	{
 		Name: flagCategoryToolsIntegrations,

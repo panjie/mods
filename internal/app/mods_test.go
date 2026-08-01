@@ -1182,7 +1182,8 @@ func TestResolveModel(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "acme-claude", api.Name, "provider keeps its own name")
 		require.Equal(t, "acme-sonnet-4", mod.Name)
-		require.Equal(t, "anthropic", mod.API, "api-type should route through the Anthropic adapter")
+		require.Equal(t, "acme-claude", mod.API, "provider identity remains distinct from its protocol")
+		require.Equal(t, "anthropic", mod.Protocol)
 	})
 
 	t.Run("api-type absent falls back to name", func(t *testing.T) {
@@ -1203,13 +1204,12 @@ func TestResolveModel(t *testing.T) {
 		require.Equal(t, "acme-claude", mod.API, "api-type openai keeps the provider name (true no-op)")
 	})
 
-	t.Run("api-type unknown falls back to name", func(t *testing.T) {
+	t.Run("api-type typo is rejected", func(t *testing.T) {
 		cfg := &Config{PersistentConfig: PersistentConfig{API: "acme-claude", Model: "acme", APIs: APIs{
 			{Name: "acme-claude", APIType: "anthrpic", Models: map[string]Model{"acme-sonnet-4": {Aliases: []string{"acme"}}}},
 		}}}
-		_, mod, err := m.resolveModel(cfg)
-		require.NoError(t, err)
-		require.Equal(t, "acme-claude", mod.API, "an unrecognized api-type falls back to the provider name instead of keeping the typo")
+		_, _, err := m.resolveModel(cfg)
+		require.ErrorContains(t, err, "api-type \"anthrpic\" is invalid")
 	})
 }
 

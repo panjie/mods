@@ -11,9 +11,9 @@ func TestTokenUsageAddAndAvailable(t *testing.T) {
 	if usage.Available() {
 		t.Fatal("zero usage must be unavailable")
 	}
-	usage.Add(TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14})
-	usage.Add(TokenUsage{InputTokens: 8, OutputTokens: 2, TotalTokens: 10})
-	if usage != (TokenUsage{InputTokens: 18, OutputTokens: 6, TotalTokens: 24}) {
+	usage.Add(TokenUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ReasoningOutputTokens: 2, TotalTokens: 14})
+	usage.Add(TokenUsage{InputTokens: 8, CachedInputTokens: 1, OutputTokens: 2, ReasoningOutputTokens: 1, TotalTokens: 10})
+	if usage != (TokenUsage{InputTokens: 18, CachedInputTokens: 4, OutputTokens: 6, ReasoningOutputTokens: 3, TotalTokens: 24}) {
 		t.Fatalf("unexpected accumulated usage: %#v", usage)
 	}
 	if !usage.Available() {

@@ -53,6 +53,13 @@ endpoints normally use `api-type: openai` and their own `base-url`. The default
 config has no provider model lists; `mods --config` discovers models when
 possible and otherwise accepts model identifiers entered manually.
 
+`api-type` selects the transport protocol. `provider-profile` selects the
+provider dialect used on an OpenAI-compatible transport and may be overridden
+per model. `endpoint` selects `responses` or `chat-completions`. For example, a
+custom DeepSeek gateway uses `api-type: openai`,
+`provider-profile: deepseek`, and `endpoint: responses`. Unknown enum values
+are rejected, and custom providers require an explicit `base-url`.
+
 `-t` or `think: true` enables thinking where supported. Provider-specific model
 settings can override thinking type, budget, reasoning effort, returned thought
 fields, and inline thought tags.

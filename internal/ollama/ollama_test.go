@@ -2,6 +2,7 @@ package ollama
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -79,6 +80,15 @@ func TestNewChatRequestOptions(t *testing.T) {
 	}
 }
 
+func TestNewChatRequestIncludesThinkValue(t *testing.T) {
+	require.Equal(t, false, newChatRequest(proto.Request{Model: "llama"}, false).Think)
+	require.Equal(t, true, newChatRequest(proto.Request{Model: "llama"}, true).Think)
+	require.Equal(t, "high", newChatRequest(proto.Request{Model: "llama"}, "high").Think)
+	wire, err := json.Marshal(newChatRequest(proto.Request{Model: "llama"}, false))
+	require.NoError(t, err)
+	require.Contains(t, string(wire), `"think":false`)
+}
+
 func TestCurrentBlocksUntilResponse(t *testing.T) {
 	s := &Stream{respCh: make(chan api.ChatResponse, 1)}
 	done := make(chan proto.Chunk, 1)
@@ -106,6 +116,16 @@ func TestCurrentBlocksUntilResponse(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Current did not return after response")
 	}
+}
+
+func TestCurrentRoutesOllamaThinkingSeparately(t *testing.T) {
+	s := &Stream{respCh: make(chan api.ChatResponse, 1)}
+	s.respCh <- api.ChatResponse{Message: api.Message{Content: "answer", Thinking: "reason"}}
+	chunk, err := s.Current()
+	require.NoError(t, err)
+	require.Equal(t, "answer", chunk.Content)
+	require.Equal(t, "reason", chunk.Thought)
+	require.Equal(t, "reason", s.message.Thinking)
 }
 
 func TestCurrentCollectsFinalTokenUsage(t *testing.T) {

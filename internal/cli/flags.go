@@ -63,7 +63,7 @@ var flagCategorySpecs = []flagCategorySpec{
 		Name: flagCategoryToolsIntegrations,
 		Flags: []string{
 			"max-tool-rounds", flagListTools, "skills-dirs", flagListSkills,
-			"web-search", flagListMCPs,
+			"web-search", "web-search-backend", flagListMCPs,
 		},
 	},
 	{

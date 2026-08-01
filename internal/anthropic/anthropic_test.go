@@ -84,7 +84,7 @@ func TestTokenUsageFromMessageIncludesCacheTokens(t *testing.T) {
 		InputTokens: 7, CacheCreationInputTokens: 3,
 		CacheReadInputTokens: 5, OutputTokens: 4,
 	}}
-	want := proto.TokenUsage{InputTokens: 15, OutputTokens: 4, TotalTokens: 19}
+	want := proto.TokenUsage{InputTokens: 15, CachedInputTokens: 5, OutputTokens: 4, TotalTokens: 19}
 	if got := tokenUsageFromMessage(message); got != want {
 		t.Fatalf("tokenUsageFromMessage() = %#v, want %#v", got, want)
 	}

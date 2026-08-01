@@ -51,6 +51,18 @@ func patchIntent(root string) func(json.RawMessage) approval.AccessIntent {
 		var dirs []string
 		seen := map[string]struct{}{}
 		for _, line := range strings.Split(args.Patch, "\n") {
+			for _, prefix := range []string{"*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "} {
+				if strings.HasPrefix(line, prefix) {
+					p := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+					if p != "" {
+						d := filepath.Dir(filepath.Join(root, filepath.Clean(filepath.FromSlash(p))))
+						if _, ok := seen[d]; !ok {
+							seen[d] = struct{}{}
+							dirs = append(dirs, d)
+						}
+					}
+				}
+			}
 			if !strings.HasPrefix(line, "+++ ") {
 				continue
 			}

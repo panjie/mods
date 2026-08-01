@@ -295,10 +295,11 @@ func TestSessionData(t *testing.T) {
 			Role:    proto.RoleAssistant,
 			Content: "done",
 			ToolCalls: []proto.ToolCall{{
-				ID: "call-1",
+				ID:   "call-1",
+				Type: "custom",
 				Function: proto.Function{
-					Name:      "shell_run",
-					Arguments: []byte(`{"command":"git status"}`),
+					Name:      "fs_apply_patch",
+					Arguments: []byte(`{"patch":"*** Begin Patch\\n*** End Patch"}`),
 				},
 			}},
 		},

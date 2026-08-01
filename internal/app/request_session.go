@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -71,11 +73,11 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	ccfg := cfgs.OpenAI
 
 	requestUser := cfg.User
-	if mod.API == "azure" && api.User != "" {
+	if modelProtocol(mod) == "azure" && api.User != "" {
 		requestUser = api.User
 	}
 
-	thinkActive, err := m.resolveThink(&mod, &accfg, &gccfg, &ccfg)
+	thinkActive, err := m.resolveThinkWithOllama(&mod, &accfg, &gccfg, &occfg, &ccfg)
 	if err != nil {
 		return requestSession{}, err
 	}
@@ -102,10 +104,21 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// instead of an app-layer string switch keyed on the API name. The
 	// client has no side effects until Request is called, so creating it
 	// here (rather than after the registry) does not change behavior.
-	client, err := newStreamClient(mod.API, accfg, gccfg, occfg, ccfg)
+	client, err := newStreamClient(modelProtocol(mod), accfg, gccfg, occfg, ccfg)
 	if err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
+	if len(cfg.Images) > 0 && !client.Capabilities().Images {
+		return requestSession{}, modsError{
+			Err:        fmt.Errorf("%s/%s does not accept image or file input on endpoint %s", mod.API, mod.Name, normalizedEndpointName(ccfg.UseResponses)),
+			ReasonText: "The selected provider endpoint does not support image input",
+		}
+	}
+	localWebSearch, providerWebSearch, err := resolveWebSearchBackend(cfg, client.Capabilities())
+	if err != nil {
+		return requestSession{}, modsError{Err: err, ReasonText: "Could not configure web search"}
+	}
+	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
 
 	if cfg.Plan {
 		err = m.setupPlanContext(content, mod)
@@ -126,11 +139,15 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		m.injectPlanHistory()
 		m.injectApprovedPlan()
 	}
+	m.sanitizeProviderContinuation(mod, ccfg.UseResponses)
 
 	registryCtx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
 	m.addCancel(cancel)
+	toolCfg := *cfg
+	toolCfg.WebSearch = localWebSearch
+	wscfg.Enabled = localWebSearch
 	registry, err := m.buildToolRegistryForProvider(
-		registryCtx, cfg, wscfg, toolIntentContext(m.messages), client,
+		registryCtx, &toolCfg, wscfg, toolIntentContext(m.messages), client,
 	)
 	if err != nil {
 		cancel()
@@ -141,6 +158,17 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 
 	tools := registry.Specs()
+	if client.Capabilities().CustomApplyPatch {
+		for i := range tools {
+			if tools[i].Name == "fs_apply_patch" {
+				tools[i].WireType = "custom"
+				tools[i].WireName = "apply_patch"
+			}
+		}
+	}
+	if providerWebSearch {
+		tools = append(tools, proto.ToolSpec{Name: "web_search", WireType: "web_search"})
+	}
 	debugTools(tools, registry.Len())
 
 	budgeter := newContextBudgeter(mod.MaxChars, maxTokens, cfg.NoLimit, tools, m.skillCatalog)
@@ -194,6 +222,69 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		cleanup: registry,
 		errh:    errh,
 	}, nil
+}
+
+func (m *Mods) sanitizeProviderContinuation(mod Model, useResponses bool) {
+	allowed := allowedProviderDataKeys(mod, useResponses)
+	crossProvider := false
+	if m.db != nil && m.Config.SessionReadFromID != "" {
+		if session, err := m.db.Find(m.Config.SessionReadFromID); err == nil && session != nil && session.API != nil {
+			crossProvider = !strings.EqualFold(strings.TrimSpace(*session.API), strings.TrimSpace(mod.API))
+			if crossProvider {
+				debug.Printf(
+					"Session provider changed: saved=%s/%s current=%s/%s; dropping opaque provider continuation data",
+					*session.API, stringPtrValue(session.Model), mod.API, mod.Name,
+				)
+			}
+		}
+	}
+	for i := range m.messages {
+		if len(m.messages[i].ProviderData) == 0 {
+			continue
+		}
+		if crossProvider || len(allowed) == 0 {
+			m.messages[i].ProviderData = nil
+			continue
+		}
+		filtered := make(map[string]json.RawMessage)
+		for key, value := range m.messages[i].ProviderData {
+			if _, ok := allowed[key]; ok {
+				filtered[key] = value
+			}
+		}
+		if len(filtered) == 0 {
+			m.messages[i].ProviderData = nil
+		} else {
+			m.messages[i].ProviderData = filtered
+		}
+	}
+}
+
+func allowedProviderDataKeys(mod Model, useResponses bool) map[string]struct{} {
+	switch modelProtocol(mod) {
+	case "anthropic":
+		return map[string]struct{}{"anthropic.messages.content": {}}
+	case "openai", "github-copilot", "azure":
+		profile := string(modelProviderProfile(mod))
+		if useResponses {
+			key := "openai.responses.output.v1"
+			if profile == "deepseek" {
+				key = "deepseek.responses.output.v1"
+			}
+			return map[string]struct{}{key: {}, "openai.responses.output": {}}
+		}
+		if profile == "deepseek" {
+			return map[string]struct{}{"deepseek.chat.assistant.v1": {}}
+		}
+	}
+	return nil
+}
+
+func stringPtrValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (m *Mods) activateToolRegistry(registry *toolregistry.Registry, cancel context.CancelFunc) error {
@@ -256,9 +347,17 @@ func debugTools(tools []proto.ToolSpec, total int) {
 	if !debug.Enabled() {
 		return
 	}
-	debug.Printf("Tools: %d total tool(s)", len(tools))
+	debug.Printf("Tools: %d advertised tool(s), %d local executable(s)", len(tools), total)
 	for _, t := range tools {
-		debug.Printf("  Tool: %s", t.Name)
+		wireType := t.WireType
+		if wireType == "" {
+			wireType = "function"
+		}
+		wireName := t.WireName
+		if wireName == "" {
+			wireName = t.Name
+		}
+		debug.Printf("  Tool: %s (wire=%s/%s)", t.Name, wireType, wireName)
 	}
 }
 

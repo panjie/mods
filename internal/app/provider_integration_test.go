@@ -27,6 +27,7 @@ var providerTests = []providerTest{
 	{api: "openai", model: "gpt-4o-mini", envKey: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1"},
 	{api: "google", model: "gemini-2.5-flash", envKey: "GOOGLE_API_KEY"},
 	{api: "anthropic", model: "claude-3-5-haiku-20241022", envKey: "ANTHROPIC_API_KEY", baseURL: "https://api.anthropic.com/v1"},
+	{api: "deepseek", model: "deepseek-v4-flash", envKey: "DEEPSEEK_API_KEY", baseURL: "https://api.deepseek.com/"},
 	{api: "ollama", model: "llama3.1"},
 }
 
@@ -84,6 +85,25 @@ func TestAnthropicIntegration(t *testing.T) {
 	runIntegrationPrompt(t, m, "say hello")
 }
 
+func TestDeepSeekResponsesIntegration(t *testing.T) {
+	skipIfNoKey(t, "DEEPSEEK_API_KEY", "deepseek")
+	m := testIntegrationModsWithBaseURL(t, "deepseek", "deepseek-v4-flash", "https://api.deepseek.com/")
+	m.Config.Think = true
+	m.Config.ShowTokenUsage = true
+	runIntegrationPrompt(t, m, "say hello")
+}
+
+func TestDeepSeekChatIntegration(t *testing.T) {
+	skipIfNoKey(t, "DEEPSEEK_API_KEY", "deepseek")
+	m := testIntegrationModsWithBaseURL(t, "deepseek", "deepseek-v4-flash", "https://api.deepseek.com/")
+	model := m.Config.APIs[0].Models["deepseek-v4-flash"]
+	model.Endpoint = "chat-completions"
+	m.Config.APIs[0].Models["deepseek-v4-flash"] = model
+	m.Config.Think = true
+	m.Config.ShowTokenUsage = true
+	runIntegrationPrompt(t, m, "say hello")
+}
+
 func TestOllamaIntegration(t *testing.T) {
 	m := testIntegrationMods(t, "ollama", "llama3.1")
 	m.Config.APIs[0].BaseURL = ollamaBaseURL()
@@ -122,10 +142,11 @@ func runIntegrationPrompt(t *testing.T, m *Mods, prompt string) {
 		t.Fatalf("expected streamEventMsg, got %T: %v", msg, msg)
 	}
 	require.Equal(t, streamEventChunk, output.kind)
-	require.NotEmpty(t, output.chunk.Content, "expected non-empty first chunk from %s API", m.Config.API)
 
 	var fullText strings.Builder
+	var fullThought strings.Builder
 	fullText.WriteString(output.chunk.Content)
+	fullThought.WriteString(output.chunk.Thought)
 	runner := output.runner
 	for {
 		msg := runner.receiveCmd()()
@@ -136,9 +157,19 @@ func runIntegrationPrompt(t *testing.T, m *Mods, prompt string) {
 		if event.chunk.Content != "" {
 			fullText.WriteString(event.chunk.Content)
 		}
+		if event.chunk.Thought != "" {
+			fullThought.WriteString(event.chunk.Thought)
+		}
+	}
+	require.NotEmpty(t, fullText.String(), "expected non-empty streamed content from %s API", m.Config.API)
+	if m.Config.Think {
+		require.NotEmpty(t, fullThought.String(), "expected streamed reasoning from %s API", m.Config.API)
 	}
 	if err := runner.stream.Err(); err != nil && !errors.Is(err, stream.ErrNoContent) {
 		t.Logf("stream ended with error: %v", err)
+	}
+	if m.Config.ShowTokenUsage {
+		require.True(t, runner.stream.Usage().Available(), "expected token usage from %s API", m.Config.API)
 	}
 	runner.close()
 

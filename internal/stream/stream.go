@@ -36,10 +36,31 @@ type Capabilities struct {
 	// tool registration rather than sending tool specs the backend
 	// cannot honor.
 	Tools bool
+	// FunctionTools and CustomTools distinguish structured JSON function calls
+	// from free-form Responses custom tools. Tools remains the compatibility
+	// aggregate used by registry setup.
+	FunctionTools bool
+	CustomTools   bool
 	// JSONResponseFormat reports whether the backend accepts a native JSON
 	// response-format request. False means callers should rely on prompt-level
 	// formatting instructions only.
 	JSONResponseFormat bool
+	// NativeWebSearch reports support for a provider-hosted Responses search
+	// tool that does not require a local web-search backend.
+	NativeWebSearch bool
+	HostedWebSearch bool
+	// CustomApplyPatch reports support for the Codex free-form apply_patch tool.
+	CustomApplyPatch bool
+	// Images reports whether image input is accepted by the selected endpoint.
+	Images bool
+	Files  bool
+	// Reasoning reports provider-native reasoning support; ReasoningReplay
+	// means opaque or plaintext reasoning state can be continued after tools.
+	Reasoning       bool
+	ReasoningReplay bool
+	// StatefulResponses is false for the current clients: mods deliberately
+	// replays local history instead of relying on previous_response_id.
+	StatefulResponses bool
 }
 
 // Stream is an ongoing stream.

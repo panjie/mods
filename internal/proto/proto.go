@@ -72,21 +72,28 @@ type Image struct {
 type Chunk struct {
 	Content string
 	Thought string // reasoning/thinking content from the model
+	// Activity is a transient provider-side operation status such as hosted
+	// web search. It is displayed by the app but is not appended to the answer.
+	Activity string
 }
 
 // TokenUsage is provider-neutral token consumption for one or more model
 // calls. Providers accumulate usage across tool-call rounds before exposing it
 // to the application.
 type TokenUsage struct {
-	InputTokens  int64
-	OutputTokens int64
-	TotalTokens  int64
+	InputTokens           int64
+	CachedInputTokens     int64
+	OutputTokens          int64
+	ReasoningOutputTokens int64
+	TotalTokens           int64
 }
 
 // Add accumulates another usage value.
 func (u *TokenUsage) Add(other TokenUsage) {
 	u.InputTokens += other.InputTokens
+	u.CachedInputTokens += other.CachedInputTokens
 	u.OutputTokens += other.OutputTokens
+	u.ReasoningOutputTokens += other.ReasoningOutputTokens
 	u.TotalTokens += other.TotalTokens
 }
 
@@ -94,7 +101,8 @@ func (u *TokenUsage) Add(other TokenUsage) {
 // request always consumes input tokens, so an all-zero value means the
 // provider omitted usage metadata.
 func (u TokenUsage) Available() bool {
-	return u.InputTokens != 0 || u.OutputTokens != 0 || u.TotalTokens != 0
+	return u.InputTokens != 0 || u.CachedInputTokens != 0 || u.OutputTokens != 0 ||
+		u.ReasoningOutputTokens != 0 || u.TotalTokens != 0
 }
 
 // ToolCallStatus is the status of a tool call.
@@ -154,7 +162,10 @@ func (m Message) SystemSection() SystemSection { return m.systemSection }
 
 // ToolCall is a tool call in a message.
 type ToolCall struct {
-	ID       string
+	ID string
+	// Type is empty/function for ordinary function calling and "custom" for
+	// Responses free-form custom tools.
+	Type     string `json:"type,omitempty"`
 	Function Function
 	IsError  bool
 }
@@ -175,6 +186,13 @@ type ToolSpec struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
+	// WireType selects a Responses tool representation. Empty and "function"
+	// use ordinary function calling; "custom" is a free-form client tool and
+	// "web_search" is provider-hosted.
+	WireType string `json:"wire_type,omitempty"`
+	// WireName overrides Name on the provider wire while preserving the local
+	// registry name used for execution and approval.
+	WireName string `json:"wire_name,omitempty"`
 }
 
 // Request is a chat request.

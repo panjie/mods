@@ -190,7 +190,159 @@ func TestResponsesStreamingContentThoughtRefusalAndUsage(t *testing.T) {
 	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14}, st.Usage())
 	require.Len(t, st.Messages(), 2)
 	require.Equal(t, "hello no", st.Messages()[1].Content)
-	require.NotEmpty(t, st.Messages()[1].ProviderData[responsesProviderDataKey])
+	require.NotEmpty(t, st.Messages()[1].ProviderData[openAIResponsesProviderDataKey])
+}
+
+func TestDeepSeekResponsesWireFormat(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured, _ = io.ReadAll(r.Body)
+		writeResponsesSSE(t, w, completedResponseEvent(`[]`, 7, 2))
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		BaseURL:          server.URL,
+		HTTPClient:       server.Client(),
+		AuthToken:        "k",
+		UseResponses:     true,
+		ResponsesProfile: ResponsesProfileDeepSeek,
+		ThinkTags:        true,
+		ExtraParams: map[string]any{
+			"reasoning_effort":     "minimal",
+			"include":              []string{"reasoning.encrypted_content"},
+			"store":                true,
+			"previous_response_id": "ignored",
+			"service_tier":         "priority",
+			"background":           true,
+		},
+	})
+	st := client.Request(context.Background(), proto.Request{
+		Model:    "deepseek-v4-flash",
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+		Tools: []proto.ToolSpec{
+			{Name: "fs_apply_patch", WireName: "apply_patch", WireType: "custom"},
+			{Name: "web_search", WireType: "web_search"},
+		},
+	})
+	_, _ = drainStream(t, st)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(captured, &body))
+	require.NotContains(t, body, "store")
+	require.NotContains(t, body, "include")
+	require.NotContains(t, body, "previous_response_id")
+	require.NotContains(t, body, "service_tier")
+	require.NotContains(t, body, "background")
+	reasoning := body["reasoning"].(map[string]any)
+	require.Equal(t, "low", reasoning["effort"])
+	require.NotContains(t, reasoning, "summary")
+	tools := body["tools"].([]any)
+	require.Equal(t, map[string]any{"type": "custom", "name": "apply_patch"}, tools[0])
+	require.Equal(t, map[string]any{"type": "web_search"}, tools[1])
+}
+
+func TestDeepSeekResponsesReasoningSearchSourcesAndUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: "+`{"type":"response.reasoning_text.delta","delta":"reason","item_id":"rs_1","output_index":0,"content_index":0,"sequence_number":1}`+"\n\n")
+		_, _ = io.WriteString(w, "data: "+`{"type":"response.web_search_call.searching","item_id":"ws_1","output_index":1,"sequence_number":2}`+"\n\n")
+		_, _ = io.WriteString(w, "data: "+`{"type":"response.output_text.delta","delta":"answer","item_id":"msg_1","output_index":2,"content_index":0,"sequence_number":3,"logprobs":[]}`+"\n\n")
+		_, _ = io.WriteString(w, "data: "+`{"type":"response.completed","sequence_number":4,"response":{"id":"resp_1","object":"response","created_at":0,"status":"completed","model":"deepseek-v4-flash","output":[{"id":"ws_1","type":"web_search_call","status":"completed"},{"id":"msg_1","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"answer","annotations":[{"type":"url_citation","url":"https://example.com/a","title":"Example"},{"type":"url_citation","url":"https://example.com/a","title":"Duplicate"}]}]}],"usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":4},"output_tokens":6,"output_tokens_details":{"reasoning_tokens":3},"total_tokens":16}}}`+"\n\n")
+	}))
+	defer server.Close()
+
+	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: true, ResponsesProfile: ResponsesProfileDeepSeek})
+	st := client.Request(context.Background(), proto.Request{
+		Model: "deepseek-v4-flash", TrackUsage: true,
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+	content, thought := drainStream(t, st)
+	require.Equal(t, "reason", thought)
+	require.Equal(t, "answer\n\nSources:\n- [Example](https://example.com/a)", content)
+	require.Equal(t, proto.TokenUsage{
+		InputTokens: 10, CachedInputTokens: 4, OutputTokens: 6,
+		ReasoningOutputTokens: 3, TotalTokens: 16,
+	}, st.Usage())
+	require.Contains(t, st.Messages()[1].Content, "Sources:")
+	require.NotEmpty(t, st.Messages()[1].ProviderData[deepSeekResponsesProviderDataKey])
+	require.Empty(t, st.Messages()[1].ProviderData[openAIResponsesProviderDataKey])
+}
+
+func TestLegacyResponsesProviderDataReplaysUnderResolvedProfile(t *testing.T) {
+	state := json.RawMessage(`[{"id":"rs_1","type":"reasoning","status":"completed","summary":[],"encrypted_content":"opaque"}]`)
+	input, err := fromProtoResponseInput([]proto.Message{{
+		Role:         proto.RoleAssistant,
+		ProviderData: map[string]json.RawMessage{legacyResponsesProviderDataKey: state},
+	}}, ProviderProfileOpenAI)
+	require.NoError(t, err)
+	require.Len(t, input, 1)
+}
+
+func TestDeepSeekResponsesCustomApplyPatchRound(t *testing.T) {
+	var bodies [][]byte
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, bytes.Clone(body))
+		requestCount++
+		if requestCount == 1 {
+			writeResponsesSSE(t, w, completedResponseEvent(
+				`[{"id":"rs_1","type":"reasoning","status":"completed","summary":[],"content":[{"type":"reasoning_text","text":"plain reasoning"}]},{"id":"ct_1","type":"custom_tool_call","status":"completed","call_id":"call_1","name":"apply_patch","input":"*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"}]`,
+				8, 3,
+			))
+			return
+		}
+		writeResponsesSSE(t, w,
+			`{"type":"response.output_text.delta","delta":"done","item_id":"msg_2","output_index":0,"content_index":0,"sequence_number":1,"logprobs":[]}`,
+			completedResponseEvent(`[{"id":"msg_2","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"done","annotations":[]}]}]`, 12, 2),
+		)
+	}))
+	defer server.Close()
+
+	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: true, ResponsesProfile: ResponsesProfileDeepSeek})
+	st := client.Request(context.Background(), proto.Request{
+		Model:    "deepseek-v4-flash",
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "edit"}},
+		Tools:    []proto.ToolSpec{{Name: "fs_apply_patch", WireName: "apply_patch", WireType: "custom"}},
+		ToolCaller: func(name string, data []byte) (string, error) {
+			require.Equal(t, "fs_apply_patch", name)
+			require.JSONEq(t, `{"patch":"*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"}`, string(data))
+			return "Patch applied", nil
+		},
+	})
+	content, _ := drainStream(t, st)
+	require.Empty(t, content)
+	statuses := st.CallTools()
+	require.Len(t, statuses, 1)
+	require.Equal(t, "fs_apply_patch", statuses[0].Name)
+	content, _ = drainStream(t, st)
+	require.Equal(t, "done", content)
+	require.Equal(t, 2, requestCount)
+
+	var followup map[string]any
+	require.NoError(t, json.Unmarshal(bodies[1], &followup))
+	input := followup["input"].([]any)
+	require.Equal(t, "reasoning", input[1].(map[string]any)["type"])
+	require.Equal(t, "plain reasoning", input[1].(map[string]any)["content"].([]any)[0].(map[string]any)["text"])
+	require.Equal(t, "custom_tool_call", input[2].(map[string]any)["type"])
+	require.Equal(t, "custom_tool_call_output", input[3].(map[string]any)["type"])
+	require.Equal(t, "call_1", input[3].(map[string]any)["call_id"])
+	require.Equal(t, "Patch applied", input[3].(map[string]any)["output"])
+}
+
+func TestDeepSeekResponsesRejectsImagesBeforeHTTP(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+	defer server.Close()
+	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: true, ResponsesProfile: ResponsesProfileDeepSeek})
+	st := client.Request(context.Background(), proto.Request{
+		Model:    "deepseek-v4-flash",
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "see", Images: []proto.Image{{Data: []byte("x"), MimeType: "image/png"}}}},
+	})
+	require.False(t, st.Next())
+	require.ErrorContains(t, st.Err(), "does not support image")
+	require.Zero(t, requests)
 }
 
 func TestResponsesToolRoundReplaysEncryptedReasoning(t *testing.T) {

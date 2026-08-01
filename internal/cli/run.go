@@ -230,23 +230,37 @@ func tokenUsageLine(usage proto.TokenUsage) string {
 	if !usage.Available() {
 		return "Token usage: unavailable"
 	}
-	return fmt.Sprintf("Token usage: input %s, output %s, total %s",
+	line := fmt.Sprintf("Token usage: input %s, output %s, total %s",
 		formatTokenCount(usage.InputTokens),
 		formatTokenCount(usage.OutputTokens),
 		formatTokenCount(usage.TotalTokens))
+	if usage.CachedInputTokens != 0 {
+		line += ", cached input " + formatTokenCount(usage.CachedInputTokens)
+	}
+	if usage.ReasoningOutputTokens != 0 {
+		line += ", reasoning output " + formatTokenCount(usage.ReasoningOutputTokens)
+	}
+	return line
 }
 
 func styledTokenUsageLine(usage proto.TokenUsage, styles Styles) string {
 	if !usage.Available() {
 		return styles.Comment.Render("  Tokens  unavailable")
 	}
-	return styles.Comment.Render("  Tokens  ") +
+	line := styles.Comment.Render("  Tokens  ") +
 		styles.Flag.Render(formatTokenCount(usage.InputTokens)) +
 		styles.Comment.Render(" input  ·  ") +
 		styles.Flag.Render(formatTokenCount(usage.OutputTokens)) +
 		styles.Comment.Render(" output  ·  ") +
 		styles.Flag.Render(formatTokenCount(usage.TotalTokens)) +
 		styles.Comment.Render(" total")
+	if usage.CachedInputTokens != 0 {
+		line += styles.Comment.Render("  ·  ") + styles.Flag.Render(formatTokenCount(usage.CachedInputTokens)) + styles.Comment.Render(" cached input")
+	}
+	if usage.ReasoningOutputTokens != 0 {
+		line += styles.Comment.Render("  ·  ") + styles.Flag.Render(formatTokenCount(usage.ReasoningOutputTokens)) + styles.Comment.Render(" reasoning output")
+	}
+	return line
 }
 
 func formatTokenCount(value int64) string {

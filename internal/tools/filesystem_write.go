@@ -329,9 +329,9 @@ func filesystemApplyPatchTool(root string, safeDirs []string) Tool {
 		IntentExtractor: patchIntent(root),
 		Spec: proto.ToolSpec{
 			Name:        "fs_apply_patch",
-			Description: "Apply a unified diff with git apply. Use this for multi-file or git-style diffs; for small single-file edits, prefer fs_replace after reading the file. Patches must use exact current file context with --- a/path and +++ b/path headers; quote paths with spaces using git C-style quotes.",
+			Description: "Apply a unified diff or Codex *** Begin Patch block. Use this for multi-file edits; for small single-file edits, prefer fs_replace after reading the file. All paths and contexts are validated before the patch is applied atomically.",
 			InputSchema: objectSchema(map[string]any{
-				"patch": stringProp("Unified diff patch text with exact context from the current files. Hunk line counts are recounted automatically, but context lines must match."),
+				"patch": stringProp("Unified diff or Codex *** Begin Patch text with exact context from the current files."),
 			}, "patch"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
@@ -344,13 +344,17 @@ func filesystemApplyPatchTool(root string, safeDirs []string) Tool {
 			if strings.TrimSpace(args.Patch) == "" {
 				return "", fmt.Errorf("patch is required")
 			}
-			if err := validatePatchPaths(ctx, root, args.Patch); err != nil {
+			patch, err := normalizeApplyPatch(ctx, root, args.Patch)
+			if err != nil {
+				return "", err
+			}
+			if err := validatePatchPaths(ctx, root, patch); err != nil {
 				return "", err
 			}
 			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn", "--recount")
 			platform.HideCommandWindow(cmd)
 			cmd.Dir = root
-			cmd.Stdin = strings.NewReader(args.Patch)
+			cmd.Stdin = strings.NewReader(patch)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				return "", fmt.Errorf("git apply failed: %w\n%s\nRe-read the target files and regenerate the patch with exact current context, or use fs_replace for a small single-file edit", err, strings.TrimSpace(string(out)))

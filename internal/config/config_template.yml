@@ -134,6 +134,9 @@ builtin-tools:
   workspace: ""
 # {{ index .Help "web-search" }}
 web-search: {{ .Config.WebSearch }}
+# {{ index .Help "web-search-backend" }}
+# auto uses provider-hosted search when the selected endpoint supports it.
+web-search-backend: {{ .Config.WebSearchBackend }}
 # {{ index .Help "web-search-provider" }}
 # Supported: tavily (default), custom
 web-search-provider: {{ .Config.WebSearchProvider }}
@@ -224,6 +227,10 @@ apis:
     base-url: https://api.deepseek.com/
     api-key:
     api-key-env: DEEPSEEK_API_KEY
+    # deepseek-v4-flash automatically uses the Responses API on this official
+    # endpoint. Set endpoint: chat-completions on the model to opt out.
+    # Reasoning returned by DeepSeek Responses is plaintext and is persisted
+    # in the local conversation database for stateless continuation.
 
   # GLM
   # Recent GLM models use thinking.type: "enabled" (Anthropic-style) and
@@ -344,6 +351,20 @@ apis:
   # api-type also works for the other native adapters: ollama, google,
   # azure. Omit it to use the OpenAI-compatible
   # adapter (the default for any unrecognized provider name).
+
+  # OpenAI-compatible gateways can additionally declare a provider-profile.
+  # api-type selects the wire protocol; provider-profile selects dialect
+  # details such as thinking fields and Responses continuation data. It can be
+  # set here as the provider default or overridden on an individual model.
+  # company-router:
+  #   api-type: openai
+  #   provider-profile: openai
+  #   base-url: https://gateway.example.com/v1
+  #   api-key-env: COMPANY_ROUTER_KEY
+  #   models:
+  #     deepseek-v4-flash:
+  #       provider-profile: deepseek
+  #       endpoint: responses
 
   # Example: a service that splits models across TWO protocols. OpenCode's
   # zen gateway serves some models only via its OpenAI-compatible endpoint

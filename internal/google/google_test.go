@@ -235,7 +235,7 @@ func TestCurrentCollectsUsageOnlyChunk(t *testing.T) {
 	require.ErrorIs(t, err, stream.ErrNoContent)
 	_, err = s.Current() // consume EOF and commit the completed round
 	require.ErrorIs(t, err, stream.ErrNoContent)
-	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}, s.Usage())
+	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 5, ReasoningOutputTokens: 2, TotalTokens: 15}, s.Usage())
 }
 
 func TestCurrentUsageFallsBackToComponentsWithoutTotal(t *testing.T) {
@@ -243,7 +243,7 @@ func TestCurrentUsageFallsBackToComponentsWithoutTotal(t *testing.T) {
 	s.trackUsage = true
 	_, _ = s.Current()
 	_, _ = s.Current()
-	require.Equal(t, proto.TokenUsage{InputTokens: 8, OutputTokens: 4, TotalTokens: 12}, s.Usage())
+	require.Equal(t, proto.TokenUsage{InputTokens: 8, OutputTokens: 4, ReasoningOutputTokens: 1, TotalTokens: 12}, s.Usage())
 }
 
 // TestCurrentDoesNotPolluteMessageHistory verifies that reasoning content is

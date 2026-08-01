@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"net/url"
 	"testing"
 
@@ -8,8 +9,27 @@ import (
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSanitizeProviderContinuationFiltersIncompatibleOpaqueState(t *testing.T) {
+	m := &Mods{
+		Config: &Config{},
+		messages: []proto.Message{{
+			Role: proto.RoleAssistant,
+			ProviderData: map[string]json.RawMessage{
+				"openai.responses.output.v1":   json.RawMessage(`[]`),
+				"deepseek.responses.output.v1": json.RawMessage(`[]`),
+				"deepseek.chat.assistant.v1":   json.RawMessage(`{}`),
+			},
+		}},
+	}
+	m.sanitizeProviderContinuation(Model{API: "deepseek", ProviderProfile: "deepseek"}, true)
+	require.Equal(t, map[string]json.RawMessage{
+		"deepseek.responses.output.v1": json.RawMessage(`[]`),
+	}, m.messages[0].ProviderData)
+}
 
 // TestApplyGoogleBaseURLOverride pins the {model} template semantics for the
 // user-supplied Gemini endpoint. The placeholder must be path-escaped, the
@@ -66,6 +86,17 @@ func TestUseOfficialOpenAIResponses(t *testing.T) {
 			require.Equal(t, tt.want, useOfficialOpenAIResponses(tt.api, tt.baseURL))
 		})
 	}
+
+	t.Run("empty official URL resolves before SDK construction", func(t *testing.T) {
+		mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+		cfgs, err := mods.buildProviderConfigs(
+			Model{Name: "deepseek-v4-flash", API: "deepseek"},
+			API{Name: "deepseek", APIKey: "test-key"},
+		)
+		require.NoError(t, err)
+		require.Equal(t, "https://api.deepseek.com", cfgs.OpenAI.BaseURL)
+		require.True(t, cfgs.OpenAI.UseResponses)
+	})
 }
 
 func TestProviderCapabilitiesOwnJSONResponseFormatSupport(t *testing.T) {
@@ -117,6 +148,77 @@ func TestBuildProviderConfigsSelectsResponsesOnlyForOfficialOpenAI(t *testing.T)
 	)
 	require.NoError(t, err)
 	require.False(t, azure.OpenAI.UseResponses)
+}
+
+func TestBuildProviderConfigsDeepSeekResponsesRouting(t *testing.T) {
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	tests := []struct {
+		name      string
+		model     Model
+		baseURL   string
+		responses bool
+		profile   openai.ResponsesProfile
+	}{
+		{name: "official flash", model: Model{Name: "deepseek-v4-flash", API: "deepseek"}, baseURL: "https://api.deepseek.com/", responses: true, profile: openai.ResponsesProfileDeepSeek},
+		{name: "official pro stays chat", model: Model{Name: "deepseek-v4-pro", API: "deepseek"}, baseURL: "https://api.deepseek.com/", profile: openai.ResponsesProfileDeepSeek},
+		{name: "explicit chat wins", model: Model{Name: "deepseek-v4-flash", API: "deepseek", Endpoint: "chat-completions"}, baseURL: "https://api.deepseek.com/", profile: openai.ResponsesProfileDeepSeek},
+		{name: "custom gateway defaults chat", model: Model{Name: "deepseek-v4-flash", API: "deepseek"}, baseURL: "https://proxy.example.com/v1", profile: openai.ResponsesProfileDeepSeek},
+		{name: "custom gateway explicit responses", model: Model{Name: "deepseek-v4-flash", API: "deepseek", Endpoint: "responses"}, baseURL: "https://proxy.example.com/v1", responses: true, profile: openai.ResponsesProfileDeepSeek},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgs, err := mods.buildProviderConfigs(tt.model, API{Name: "deepseek", APIKey: "test-key", BaseURL: tt.baseURL})
+			require.NoError(t, err)
+			require.Equal(t, tt.responses, cfgs.OpenAI.UseResponses)
+			require.Equal(t, tt.profile, cfgs.OpenAI.ResponsesProfile)
+		})
+	}
+}
+
+func TestBuildProviderConfigsCustomDeepSeekProfile(t *testing.T) {
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	cfgs, err := mods.buildProviderConfigs(
+		Model{
+			Name: "deepseek-v4-flash", API: "company-router", Protocol: "openai",
+			ProviderProfile: "deepseek", Endpoint: "responses",
+		},
+		API{Name: "company-router", APIKey: "test-key", BaseURL: "https://gateway.example.com/v1"},
+	)
+	require.NoError(t, err)
+	require.True(t, cfgs.OpenAI.UseResponses)
+	require.Equal(t, openai.ProviderProfileDeepSeek, cfgs.OpenAI.ProviderProfile)
+}
+
+func TestBuildProviderConfigsClonesExtraParams(t *testing.T) {
+	extra := map[string]any{"thinking": map[string]any{"type": "disabled"}, "items": []any{map[string]any{"x": true}}}
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	cfgs, err := mods.buildProviderConfigs(
+		Model{Name: "deepseek-v4-flash", API: "deepseek", ExtraParams: extra},
+		API{Name: "deepseek", APIKey: "test-key"},
+	)
+	require.NoError(t, err)
+	cfgs.OpenAI.ExtraParams["thinking"].(map[string]any)["type"] = "enabled"
+	cfgs.OpenAI.ExtraParams["items"].([]any)[0].(map[string]any)["x"] = false
+	require.Equal(t, "disabled", extra["thinking"].(map[string]any)["type"])
+	require.Equal(t, true, extra["items"].([]any)[0].(map[string]any)["x"])
+}
+
+func TestBuildProviderConfigsCustomProviderRequiresBaseURL(t *testing.T) {
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	_, err := mods.buildProviderConfigs(
+		Model{Name: "model", API: "custom", Protocol: "openai"},
+		API{Name: "custom", APIKey: "test-key"},
+	)
+	require.ErrorContains(t, err, "requires base-url")
+}
+
+func TestBuildProviderConfigsRejectsInvalidEndpoint(t *testing.T) {
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	_, err := mods.buildProviderConfigs(
+		Model{Name: "deepseek-v4-flash", API: "deepseek", Endpoint: "messages"},
+		API{Name: "deepseek", APIKey: "test-key", BaseURL: "https://api.deepseek.com/"},
+	)
+	require.ErrorContains(t, err, "expected responses or chat-completions")
 }
 
 func TestBuildProviderConfigsGitHubCopilotUsesOpenAICompatibleChat(t *testing.T) {

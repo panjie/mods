@@ -272,6 +272,22 @@ func TestThinkParser(t *testing.T) {
 			t.Fatalf("thought: got %q", thought)
 		}
 	})
+
+	t.Run("flushes an unterminated reasoning block at EOF", func(t *testing.T) {
+		p := newDefaultParser()
+		content, thought := p.feed("answer<think>unfinished")
+		finalContent, finalThought := p.flush()
+		require.Equal(t, "answer", content+finalContent)
+		require.Equal(t, "unfinished", thought+finalThought)
+	})
+
+	t.Run("flushes a partial opening tag as content at EOF", func(t *testing.T) {
+		p := newDefaultParser()
+		content, thought := p.feed("answer<thi")
+		finalContent, finalThought := p.flush()
+		require.Equal(t, "answer<thi", content+finalContent)
+		require.Empty(t, thought+finalThought)
+	})
 }
 
 func TestPartialTagSuffixLen(t *testing.T) {
@@ -365,7 +381,7 @@ func TestStreamingTokenUsage(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w,
 			"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}\n\n"+
-				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4,\"total_tokens\":14}}\n\n"+
+				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4,\"total_tokens\":14,\"prompt_tokens_details\":{\"cached_tokens\":6},\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\n\n"+
 				"data: [DONE]\n\n")
 	}))
 	defer server.Close()
@@ -384,8 +400,54 @@ func TestStreamingTokenUsage(t *testing.T) {
 	}
 	require.NoError(t, st.Err())
 	require.Equal(t, "hello", content, "usage-only chunk must not become response content")
-	require.Equal(t, proto.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14}, st.Usage())
+	require.Equal(t, proto.TokenUsage{InputTokens: 10, CachedInputTokens: 6, OutputTokens: 4, ReasoningOutputTokens: 2, TotalTokens: 14}, st.Usage())
 	require.Contains(t, string(captured), `"stream_options":{"include_usage":true}`)
+}
+
+func TestDeepSeekChatReplaysReasoningContentAfterToolCall(t *testing.T) {
+	var requests [][]byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requests = append(requests, body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if len(requests) == 1 {
+			_, _ = io.WriteString(w,
+				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"inspect files\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a.go\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n"+
+					"data: [DONE]\n\n")
+			return
+		}
+		_, _ = io.WriteString(w,
+			"data: {\"id\":\"chatcmpl-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\n"+
+				"data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k",
+		ProviderProfile: ProviderProfileDeepSeek,
+	})
+	st := client.Request(context.Background(), proto.Request{
+		Model:      "deepseek-v4-flash",
+		Messages:   []proto.Message{{Role: proto.RoleUser, Content: "inspect"}},
+		Tools:      []proto.ToolSpec{{Name: "read_file", InputSchema: map[string]any{"type": "object"}}},
+		ToolCaller: func(string, []byte) (string, error) { return "contents", nil },
+	})
+	for st.Next() {
+		_, _ = st.Current()
+	}
+	require.Len(t, st.CallTools(), 1)
+	for st.Next() {
+		_, _ = st.Current()
+	}
+	require.NoError(t, st.Err())
+	require.Len(t, requests, 2)
+
+	var followup map[string]any
+	require.NoError(t, json.Unmarshal(requests[1], &followup))
+	messages := followup["messages"].([]any)
+	assistant := messages[1].(map[string]any)
+	require.Equal(t, "inspect files", assistant["reasoning_content"])
+	require.NotEmpty(t, st.Messages()[1].ProviderData[deepSeekChatProviderDataKey])
 }
 
 func TestConfigHeadersAreSentWithChatCompletionRequests(t *testing.T) {

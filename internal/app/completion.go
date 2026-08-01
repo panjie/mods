@@ -213,25 +213,27 @@ func (m *Mods) resolveModel(cfg *Config) (API, Model, error) {
 		if ok {
 			mod.Name = cfg.Model
 			mod.API = api.Name
-			// An explicit api-type overrides name-based routing so a custom
-			// provider can declare the adapter/protocol it speaks (e.g. an
-			// Anthropic Messages API gateway), independent of its name. Only a
-			// recognized, non-openai type overrides: "openai" is a true no-op
-			// (keeps the provider name), and an unknown value falls back to the
-			// name (OpenAI-compatible default) with a debug warning rather than
-			// leaving a bogus value in mod.API.
-			if api.APIType != "" {
-				t := strings.ToLower(api.APIType)
-				switch {
-				case t == "openai":
-					// no-op: name-based routing already defaults to OpenAI-compatible
-				case providerinfo.KnownProtocol(t):
-					mod.API = t
-				default:
-					debug.Printf("api-type %q on %s is not a recognized adapter; using OpenAI-compatible",
-						api.APIType, api.Name)
+			apiType := strings.ToLower(strings.TrimSpace(api.APIType))
+			if apiType != "" && !providerinfo.KnownProtocol(apiType) {
+				return API{}, Model{}, modsError{
+					Err:        fmt.Errorf("api-type %q is invalid; expected one of %s", api.APIType, strings.Join(providerinfo.Protocols(), ", ")),
+					ReasonText: fmt.Sprintf("Provider %s has an invalid api-type configuration", api.Name),
 				}
 			}
+			for scope, value := range map[string]string{
+				"provider": api.ProviderProfile,
+				"model":    mod.ProviderProfile,
+			} {
+				profile := strings.ToLower(strings.TrimSpace(value))
+				if profile != "" && !providerinfo.KnownProfile(profile) {
+					return API{}, Model{}, modsError{
+						Err:        fmt.Errorf("%s provider-profile %q is invalid; expected one of %s", scope, value, strings.Join(providerinfo.Profiles(), ", ")),
+						ReasonText: fmt.Sprintf("Provider %s has an invalid provider-profile configuration", api.Name),
+					}
+				}
+			}
+			mod.Protocol = providerinfo.Protocol(api.Name, apiType)
+			mod.ProviderProfile = providerinfo.Profile(api.Name, api.ProviderProfile, mod.ProviderProfile)
 			return api, mod, nil
 		}
 		if cfg.API != "" {

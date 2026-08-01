@@ -377,6 +377,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamEventMsg:
 		switch msg.kind {
 		case streamEventChunk:
+			if msg.chunk.Activity != "" {
+				m.setActiveOperation(msg.chunk.Activity)
+			}
 			if msg.chunk.Thought != "" {
 				m.Thought += msg.chunk.Thought
 				if m.thinkActive {
@@ -393,7 +396,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case streamEventToolCalls:
 			return m, m.handleToolCallsDone(msg)
 		case streamEventDone:
-			m.tokenUsage.Add(msg.runner.takeUsage())
+			usage := msg.runner.takeUsage()
+			m.tokenUsage.Add(usage)
+			if usage.Available() {
+				debug.Printf("Token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",
+					usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.ReasoningOutputTokens, usage.TotalTokens)
+			}
 			if m.Config.Plan {
 				return m, msgCmd(planCompleteMsg{plan: m.Output})
 			}

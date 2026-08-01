@@ -21,6 +21,7 @@ type Config struct {
 	BaseURL            string
 	HTTPClient         *http.Client
 	EmptyMessagesLimit uint
+	Think              any
 }
 
 // DefaultConfig returns the default configuration for the Ollama API client.
@@ -34,6 +35,7 @@ func DefaultConfig() Config {
 // Client ollama client.
 type Client struct {
 	*api.Client
+	config Config
 }
 
 // New creates a new [Client] with the given [Config].
@@ -45,12 +47,15 @@ func New(config Config) (*Client, error) {
 	client := api.NewClient(u, config.HTTPClient)
 	return &Client{
 		Client: client,
+		config: config,
 	}, nil
 }
 
 // Capabilities reports Ollama backend features. The Ollama adapter
 // supports tool/function calling via CallTools.
-func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
+func (c *Client) Capabilities() stream.Capabilities {
+	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, Reasoning: true}
+}
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
@@ -70,7 +75,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		}
 		request.Messages = messages
 	}
-	body := newChatRequest(request)
+	body := newChatRequest(request, c.config.Think)
 	s.request = body
 	s.messages = request.Messages
 	s.factory = func() {
@@ -93,14 +98,19 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	return s
 }
 
-func newChatRequest(request proto.Request) api.ChatRequest {
+func newChatRequest(request proto.Request, configuredThink ...any) api.ChatRequest {
 	b := true
+	var think any
+	if len(configuredThink) > 0 {
+		think = configuredThink[0]
+	}
 	body := api.ChatRequest{
 		Model:    request.Model,
 		Messages: fromProtoMessages(request.Messages),
 		Stream:   &b,
 		Tools:    fromToolSpecs(request.Tools),
 		Options:  map[string]any{},
+		Think:    think,
 	}
 
 	if request.MaxTokens != nil {
@@ -124,6 +134,7 @@ type Stream struct {
 	respCh     chan api.ChatResponse
 	message    api.Message
 	content    strings.Builder
+	thinking   strings.Builder
 	toolCall   func(name string, data []byte) (string, error)
 	messages   []proto.Message
 	trackUsage bool
@@ -188,6 +199,7 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 		}
 		s.message = api.Message{}
 		s.content.Reset()
+		s.thinking.Reset()
 		s.factory()
 	}
 	return statuses
@@ -218,10 +230,13 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	}
 	chunk := proto.Chunk{
 		Content: resp.Message.Content,
+		Thought: resp.Message.Thinking,
 	}
 	s.mu.Lock()
 	s.content.WriteString(resp.Message.Content)
+	s.thinking.WriteString(resp.Message.Thinking)
 	s.message.Content = s.content.String()
+	s.message.Thinking = s.thinking.String()
 	s.message.ToolCalls = append(s.message.ToolCalls, resp.Message.ToolCalls...)
 	if resp.Done {
 		if s.trackUsage {

@@ -7,6 +7,7 @@ import (
 	"github.com/openai/openai-go/shared"
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/google"
+	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 )
 
@@ -27,7 +28,20 @@ func (m *Mods) resolveThink(
 	gccfg *google.Config,
 	ccfg *openai.Config,
 ) (bool, error) {
-	active := applyThinkConfigs(*mod, gccfg, accfg, ccfg, m.Config.Think)
+	return m.resolveThinkWithOllama(mod, accfg, gccfg, nil, ccfg)
+}
+
+func (m *Mods) resolveThinkWithOllama(
+	mod *Model,
+	accfg *anthropic.Config,
+	gccfg *google.Config,
+	occfg *ollama.Config,
+	ccfg *openai.Config,
+) (bool, error) {
+	if err := validateThinkingConfig(*mod, ccfg, m.Config.Think); err != nil {
+		return false, err
+	}
+	active := applyThinkConfigsWithOllama(*mod, gccfg, accfg, occfg, ccfg, m.Config.Think)
 	if m.Config.Think && active {
 		debug.Printf("Think: enabled for %s/%s", mod.API, mod.Name)
 	} else if m.Config.Think {
@@ -41,28 +55,156 @@ func (m *Mods) resolveThink(
 // provider's default thinking mechanism; thinking-type only overrides the
 // provider default or opts custom providers into a thinking.type request.
 func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config, requested bool) bool {
-	switch mod.API {
+	return applyThinkConfigsWithOllama(mod, gccfg, accfg, nil, ccfg, requested)
+}
+
+type thinkingPlan struct {
+	Active    bool
+	Mechanism string
+	Effort    string
+	Budget    int
+	Level     string
+	Value     any
+}
+
+func applyThinkConfigsWithOllama(
+	mod Model,
+	gccfg *google.Config,
+	accfg *anthropic.Config,
+	occfg *ollama.Config,
+	ccfg *openai.Config,
+	requested bool,
+) bool {
+	switch modelProtocol(mod) {
 	case "google":
-		if requested {
-			gccfg.ThinkingBudget = resolvedThinkingBudget(mod, gccfg.ThinkingBudget)
-			gccfg.ThinkingBudgetExplicit = true
-			debug.Printf("Think: google thinking_budget=%d", gccfg.ThinkingBudget)
-			return true
+		plan := googleThinkingPlan(mod, gccfg, requested)
+		gccfg.ThinkingBudget = plan.Budget
+		gccfg.ThinkingLevel = plan.Level
+		gccfg.ThinkingBudgetExplicit = plan.Mechanism == "budget"
+		if plan.Level != "" {
+			debug.Printf("Think: google thinking_level=%s (active=%v)", plan.Level, plan.Active)
+		} else if gccfg.ThinkingBudgetExplicit {
+			debug.Printf("Think: google thinking_budget=%d (active=%v)", plan.Budget, plan.Active)
+		} else {
+			debug.Printf("Think: google thinking config omitted (active=%v)", plan.Active)
 		}
-		// Gemini defaults to thinking enabled; explicitly send budget=0 to
-		// keep thinking off unless -t / --think is requested.
-		gccfg.ThinkingBudget = 0
-		gccfg.ThinkingBudgetExplicit = true
-		debug.Printf("Think: google thinking_budget=0 (thinking off)")
-		return false
+		return plan.Active
 	case "anthropic":
 		return applyAnthropicThinking(mod, accfg, requested)
 	case "ollama":
-		debug.Printf("Think: %s does not support thinking, skipped", mod.API)
-		return false
+		if occfg == nil {
+			return false
+		}
+		plan := ollamaThinkingPlan(mod, requested)
+		occfg.Think = plan.Value
+		debug.Printf("Think: ollama think=%v", plan.Value)
+		return plan.Active
 	default:
 		return applyOpenAICompatibleThinking(mod, ccfg, requested)
 	}
+}
+
+func googleThinkingPlan(mod Model, current *google.Config, requested bool) thinkingPlan {
+	name := strings.ToLower(strings.TrimSpace(mod.Name))
+	if strings.HasPrefix(name, "gemini-3") {
+		if !requested {
+			return thinkingPlan{Mechanism: "level", Level: "low"}
+		}
+		level := normalizeGoogleThinkingLevel(mod.ReasoningEffort)
+		return thinkingPlan{Active: true, Mechanism: "level", Level: level}
+	}
+	if !requested {
+		if strings.Contains(name, "2.5-pro") {
+			return thinkingPlan{}
+		}
+		return thinkingPlan{Mechanism: "budget", Budget: 0}
+	}
+	budget := -1
+	if current != nil && current.ThinkingBudget != 0 {
+		budget = current.ThinkingBudget
+	}
+	if mod.ThinkingBudget != 0 {
+		budget = mod.ThinkingBudget
+	}
+	return thinkingPlan{Active: true, Mechanism: "budget", Budget: budget}
+}
+
+func normalizeGoogleThinkingLevel(effort string) string {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "minimal", "low", "medium", "high":
+		return strings.ToLower(strings.TrimSpace(effort))
+	case "xhigh", "max":
+		return "high"
+	default:
+		return ""
+	}
+}
+
+func ollamaThinkingPlan(mod Model, requested bool) thinkingPlan {
+	if !requested {
+		return thinkingPlan{Mechanism: "ollama", Value: false}
+	}
+	effort := strings.ToLower(strings.TrimSpace(mod.ReasoningEffort))
+	switch effort {
+	case "minimal":
+		effort = "low"
+	case "xhigh", "max":
+		effort = "high"
+	}
+	if effort == "" {
+		return thinkingPlan{Active: true, Mechanism: "ollama", Value: true}
+	}
+	return thinkingPlan{Active: true, Mechanism: "ollama", Effort: effort, Value: effort}
+}
+
+func validateThinkingConfig(mod Model, ccfg *openai.Config, requested bool) error {
+	effort := strings.ToLower(strings.TrimSpace(mod.ReasoningEffort))
+	if modelProtocol(mod) == "openai" && string(modelProviderProfile(mod)) == "deepseek" {
+		if ccfg != nil && ccfg.UseResponses && !requested {
+			effort = strings.ToLower(strings.TrimSpace(mod.ReasoningEffortOff))
+			if effort == "" {
+				return nil
+			}
+			if effort != "none" && effort != "low" {
+				return newUserErrorf("reasoning-effort-off %q is invalid for DeepSeek Responses; expected none or low", mod.ReasoningEffortOff)
+			}
+			return nil
+		}
+		if !requested || effort == "" {
+			return nil
+		}
+		switch effort {
+		case "low", "high", "max":
+			return nil
+		default:
+			return newUserErrorf("reasoning-effort %q is invalid for DeepSeek; expected low, high, or max", mod.ReasoningEffort)
+		}
+	}
+	if !requested || effort == "" {
+		return nil
+	}
+	switch modelProtocol(mod) {
+	case "google":
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mod.Name)), "gemini-3") && normalizeGoogleThinkingLevel(effort) == "" {
+			return newUserErrorf("reasoning-effort %q is invalid for Gemini 3; expected minimal, low, medium, or high", mod.ReasoningEffort)
+		}
+	case "ollama":
+		normalized := ollamaThinkingPlan(mod, true).Effort
+		if normalized != "" && normalized != "low" && normalized != "medium" && normalized != "high" {
+			return newUserErrorf("reasoning-effort %q is invalid for Ollama; expected low, medium, or high", mod.ReasoningEffort)
+		}
+	}
+	return nil
+}
+
+func openAIConfigProfile(cfg *openai.Config) openai.ProviderProfile {
+	if cfg.ProviderProfile != "" {
+		return cfg.ProviderProfile
+	}
+	if cfg.ResponsesProfile != "" {
+		return cfg.ResponsesProfile
+	}
+	return openai.ProviderProfileOpenAI
 }
 
 func applyAnthropicThinking(mod Model, accfg *anthropic.Config, requested bool) bool {
@@ -147,17 +289,57 @@ func debugAnthropicEffort(effort string) {
 }
 
 func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, requested bool) bool {
+	profile := string(modelProviderProfile(mod))
+	if ccfg.UseResponses && openAIConfigProfile(ccfg) == openai.ProviderProfileDeepSeek {
+		ccfg.ThinkTags = requested
+		if !requested {
+			effort := strings.ToLower(strings.TrimSpace(mod.ReasoningEffortOff))
+			if effort == "" {
+				effort = "none"
+			}
+			ensureExtraParams(ccfg)
+			ccfg.ExtraParams["reasoning_effort"] = effort
+			debug.Printf("Think: reasoning.effort=%s (thinking off for DeepSeek Responses)", effort)
+			return false
+		}
+		effort := strings.ToLower(strings.TrimSpace(mod.ReasoningEffort))
+		if effort == "" {
+			effort = "high"
+		}
+		ensureExtraParams(ccfg)
+		ccfg.ExtraParams["reasoning_effort"] = effort
+		debug.Printf("Think: reasoning.effort=%s (DeepSeek Responses)", effort)
+		return true
+	}
+	if profile == "deepseek" {
+		ccfg.ThinkTags = requested
+		thinking := ensureThinkingParam(ccfg)
+		if !requested {
+			thinking["type"] = "disabled"
+			omitExtraParam(ccfg, "reasoning_effort")
+			debug.Printf("Think: DeepSeek Chat thinking.type=disabled")
+			return false
+		}
+		thinking["type"] = "enabled"
+		effort := strings.ToLower(strings.TrimSpace(mod.ReasoningEffort))
+		if effort == "" {
+			effort = "high"
+		}
+		ccfg.ExtraParams["reasoning_effort"] = effort
+		debug.Printf("Think: DeepSeek Chat thinking.type=enabled, reasoning_effort=%s", effort)
+		return true
+	}
 	if !requested {
 		// MiniMax reasoning models can still return <think>...</think> in the
 		// content stream when their undocumented thinking-off parameter is
 		// ignored. Keep parsing enabled so -t controls display only; parsed
 		// thought is discarded by the app when thinking is inactive.
-		ccfg.ThinkTags = mod.API == "minimax"
+		ccfg.ThinkTags = profile == "minimax"
 		disableOpenAICompatibleThink(mod, ccfg)
 		return false
 	}
 
-	if mod.API == "qwen" || hasExtraParam(ccfg, "enable_thinking") {
+	if profile == "qwen" || hasExtraParam(ccfg, "enable_thinking") {
 		ccfg.ThinkTags = true
 		ensureExtraParams(ccfg)
 		ccfg.ExtraParams["enable_thinking"] = true
@@ -203,7 +385,8 @@ func applyOpenAICompatibleThinking(mod Model, ccfg *openai.Config, requested boo
 // disableOpenAICompatibleThink sends the provider-appropriate off signal so
 // models discovered into config stay non-thinking by default.
 func disableOpenAICompatibleThink(mod Model, ccfg *openai.Config) {
-	if mod.API == "qwen" || hasExtraParam(ccfg, "enable_thinking") {
+	profile := string(modelProviderProfile(mod))
+	if profile == "qwen" || hasExtraParam(ccfg, "enable_thinking") {
 		ensureExtraParams(ccfg)
 		ccfg.ExtraParams["enable_thinking"] = false
 		debug.Printf("Think: enable_thinking=false (thinking off)")
@@ -212,7 +395,7 @@ func disableOpenAICompatibleThink(mod Model, ccfg *openai.Config) {
 
 	// Kimi's thinking parameter only accepts type=enabled. Omitting the
 	// parameter is its off signal; type=disabled is rejected by the API.
-	if mod.API == "kimi" {
+	if profile == "kimi" {
 		omitExtraParam(ccfg, "thinking")
 		debug.Printf("Think: thinking field omitted (thinking off for kimi)")
 		return
@@ -293,7 +476,7 @@ func resolvedOpenAICompatibleThinkingType(mod Model, ccfg *openai.Config) (strin
 	if mod.ThinkingType != "" {
 		return mod.ThinkingType, true
 	}
-	switch mod.API {
+	switch string(modelProviderProfile(mod)) {
 	case "deepseek", "glm", "kimi":
 		return "enabled", true
 	case "minimax":
@@ -310,13 +493,20 @@ func resolvedOpenAICompatibleThinkingType(mod Model, ccfg *openai.Config) (strin
 }
 
 func useReasoningEffort(mod Model, ccfg *openai.Config) bool {
-	if mod.API == "openai" || mod.API == "azure" {
-		return true
-	}
 	if hasExtraParam(ccfg, "reasoning_effort") {
 		return true
 	}
-	return mod.ReasoningEffort != "" || mod.ReasoningEffortOff != ""
+	if mod.ReasoningEffort != "" || mod.ReasoningEffortOff != "" {
+		return true
+	}
+	protocol := modelProtocol(mod)
+	if string(modelProviderProfile(mod)) != "openai" ||
+		(protocol != "openai" && protocol != "azure" && protocol != "github-copilot") {
+		return false
+	}
+	name := strings.ToLower(strings.TrimSpace(mod.Name))
+	return gpt5OriginalReasoningModelRe.MatchString(name) ||
+		gpt5VersionedReasoningModelRe.MatchString(name) || isOSeries(name)
 }
 
 func disabledReasoningEffort(mod Model) (string, bool) {
@@ -350,7 +540,7 @@ func isProReasoningModel(model string) bool {
 }
 
 func usesThinkingType(mod Model, ccfg *openai.Config) bool {
-	switch mod.API {
+	switch string(modelProviderProfile(mod)) {
 	case "deepseek", "glm", "kimi", "minimax":
 		return true
 	}

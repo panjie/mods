@@ -242,7 +242,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 	gccfg := cfgs.Google
 	occfg := cfgs.Ollama
 	ccfg := cfgs.OpenAI
-	applyThinkConfigs(mod, &gccfg, &accfg, &ccfg, false)
+	applyThinkConfigsWithOllama(mod, &gccfg, &accfg, &occfg, &ccfg, false)
 
 	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
@@ -260,7 +260,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 		MaxTokens:   &maxTokens,
 	}
 
-	client, err := newStreamClient(mod.API, accfg, gccfg, occfg, ccfg)
+	client, err := newStreamClient(modelProtocol(mod), accfg, gccfg, occfg, ccfg)
 	if err != nil {
 		return defaultShellCommandAnalysis()
 	}

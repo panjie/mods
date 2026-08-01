@@ -35,6 +35,9 @@ type Config struct {
 	// zero, so callers can explicitly disable Gemini's thinking (which is on
 	// by default) by setting budget=0 + Explicit=true.
 	ThinkingBudgetExplicit bool
+	// ThinkingLevel is used by Gemini 3 models. When set it takes precedence
+	// over ThinkingBudget.
+	ThinkingLevel string
 }
 
 // DefaultConfig returns the default configuration for the Google API client.
@@ -107,7 +110,8 @@ type FunctionDeclaration struct {
 
 // ThinkingConfig - for more details see https://ai.google.dev/gemini-api/docs/thinking#rest .
 type ThinkingConfig struct {
-	ThinkingBudget int `json:"thinkingBudget,omitempty"`
+	ThinkingBudget int    `json:"thinkingBudget,omitempty"`
+	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
 }
 
 // GenerationConfig are the options for model generation and outputs. Not all parameters are configurable for every model.
@@ -169,7 +173,9 @@ type Client struct {
 // Capabilities reports Google backend features. The Google adapter supports
 // tool/function calling via Gemini function declarations and functionResponse
 // parts.
-func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
+func (c *Client) Capabilities() stream.Capabilities {
+	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, Reasoning: true, ReasoningReplay: true}
+}
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
@@ -204,7 +210,11 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		body.GenerationConfig.MaxOutputTokens = uint(*request.MaxTokens) //nolint:gosec
 	}
 
-	if c.config.ThinkingBudget != 0 || c.config.ThinkingBudgetExplicit {
+	if c.config.ThinkingLevel != "" {
+		body.GenerationConfig.ThinkingConfig = &ThinkingConfig{
+			ThinkingLevel: c.config.ThinkingLevel,
+		}
+	} else if c.config.ThinkingBudget != 0 || c.config.ThinkingBudgetExplicit {
 		body.GenerationConfig.ThinkingConfig = &ThinkingConfig{
 			ThinkingBudget: c.config.ThinkingBudget,
 		}
@@ -470,7 +480,8 @@ func (s *Stream) Current() (proto.Chunk, error) {
 			}
 			if input != 0 || output != 0 || total != 0 {
 				s.roundUsage = proto.TokenUsage{
-					InputTokens: input, OutputTokens: output, TotalTokens: total,
+					InputTokens: input, OutputTokens: output,
+					ReasoningOutputTokens: meta.ThoughtsTokenCount, TotalTokens: total,
 				}
 			}
 		}

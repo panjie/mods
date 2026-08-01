@@ -24,7 +24,9 @@ type Client struct {
 
 // Capabilities reports Anthropic backend features. The Anthropic
 // adapter supports tool/function calling via CallTools.
-func (c *Client) Capabilities() stream.Capabilities { return stream.Capabilities{Tools: true} }
+func (c *Client) Capabilities() stream.Capabilities {
+	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, Reasoning: true, ReasoningReplay: true}
+}
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
@@ -267,9 +269,10 @@ func tokenUsageFromMessage(message anthropic.Message) proto.TokenUsage {
 		message.Usage.CacheReadInputTokens
 	output := message.Usage.OutputTokens
 	return proto.TokenUsage{
-		InputTokens:  input,
-		OutputTokens: output,
-		TotalTokens:  input + output,
+		InputTokens:       input,
+		CachedInputTokens: message.Usage.CacheReadInputTokens,
+		OutputTokens:      output,
+		TotalTokens:       input + output,
 	}
 }
 

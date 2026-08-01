@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,7 +26,14 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		}
 		request.Messages = messages
 	}
-	input, err := fromProtoResponseInput(request.Messages)
+	profile := c.profile()
+	if profile == ProviderProfileDeepSeek && messagesContainImages(request.Messages) {
+		return &responseStream{
+			requestErr: fmt.Errorf("DeepSeek Responses API does not support image or file input; use endpoint: chat-completions or remove the attachment"),
+			messages:   request.Messages,
+		}
+	}
+	input, err := fromProtoResponseInput(request.Messages, profile)
 	if err != nil {
 		return &responseStream{requestErr: err, messages: request.Messages}
 	}
@@ -39,11 +47,13 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 			OfInputItemList: input,
 		},
 		Tools: fromResponseToolSpecs(request.Tools),
-		Store: openai.Bool(false),
-		Include: []responses.ResponseIncludable{
+		User:  openai.String(request.User),
+	}
+	if profile != ProviderProfileDeepSeek {
+		body.Store = openai.Bool(false)
+		body.Include = []responses.ResponseIncludable{
 			responses.ResponseIncludableReasoningEncryptedContent,
-		},
-		User: openai.String(request.User),
+		}
 	}
 	if request.Temperature != nil {
 		body.Temperature = openai.Float(*request.Temperature)
@@ -55,13 +65,19 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		body.Text.Format.OfJSONObject = &shared.ResponseFormatJSONObjectParam{}
 	}
 	if hasEffort {
+		if profile == ProviderProfileDeepSeek {
+			effort, err = deepSeekReasoningEffort(effort)
+			if err != nil {
+				return &responseStream{requestErr: err, messages: request.Messages}
+			}
+		}
 		body.Reasoning.Effort = shared.ReasoningEffort(effort)
 	}
-	if c.config.ThinkTags {
+	if c.config.ThinkTags && profile != ProviderProfileDeepSeek {
 		body.Reasoning.Summary = shared.ReasoningSummaryAuto
 	}
 
-	opts := responsesRequestOptions(c.config.ExtraParams)
+	opts := responsesRequestOptions(c.config.ExtraParams, profile)
 	s := &responseStream{
 		stream:     c.Responses.NewStreaming(ctx, body, opts...),
 		request:    body,
@@ -69,11 +85,36 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		messages:   request.Messages,
 		budgeter:   request.MessageBudgeter,
 		trackUsage: request.TrackUsage,
+		profile:    profile,
 	}
 	s.factory = func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
 		return c.Responses.NewStreaming(ctx, s.request, opts...)
 	}
 	return s
+}
+
+func messagesContainImages(messages []proto.Message) bool {
+	for _, msg := range messages {
+		if len(msg.Images) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func deepSeekReasoningEffort(effort string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "none":
+		return "none", nil
+	case "minimal", "low":
+		return "low", nil
+	case "medium", "high", "xhigh":
+		return "high", nil
+	case "max":
+		return "max", nil
+	default:
+		return "", fmt.Errorf("DeepSeek Responses reasoning_effort %q is invalid; expected none, low, high, or max", effort)
+	}
 }
 
 func (c *Client) responsesReasoningEffort() (string, bool, error) {
@@ -93,12 +134,17 @@ func (c *Client) responsesReasoningEffort() (string, bool, error) {
 	return string(c.config.ReasoningEffort), true, nil
 }
 
-func responsesRequestOptions(extra map[string]any) []option.RequestOption {
+func responsesRequestOptions(extra map[string]any, profile ResponsesProfile) []option.RequestOption {
 	opts := make([]option.RequestOption, 0, len(extra)*2)
 	flattenMap("", extra, func(key string, value any) {
 		switch key {
 		case "reasoning_effort", "store", "previous_response_id", "conversation", "include", "stream":
 			return
+		case "background", "metadata", "prompt", "truncation", "service_tier", "prompt_cache_key", "safety_identifier":
+			if profile == ResponsesProfileDeepSeek {
+				return
+			}
+			opts = append(opts, option.WithJSONSet(key, value))
 		default:
 			opts = append(opts, option.WithJSONSet(key, value))
 		}
@@ -115,6 +161,7 @@ type responseStream struct {
 	toolCall   func(name string, data []byte) (string, error)
 	budgeter   proto.MessageBudgeter
 	trackUsage bool
+	profile    ResponsesProfile
 
 	terminal     *responses.Response
 	terminalSeen bool
@@ -124,16 +171,39 @@ type responseStream struct {
 	usage        proto.TokenUsage
 	requestErr   error
 	responseErr  error
+	customInputs map[string]*strings.Builder
 }
 
-func (s *responseStream) pendingToolCalls() []responses.ResponseFunctionToolCall {
+type pendingResponseToolCall struct {
+	id        string
+	name      string
+	arguments []byte
+	custom    bool
+}
+
+func (s *responseStream) pendingToolCalls() []pendingResponseToolCall {
 	if s.terminal == nil || s.incomplete || s.responseErr != nil {
 		return nil
 	}
-	var calls []responses.ResponseFunctionToolCall
+	var calls []pendingResponseToolCall
 	for _, item := range s.terminal.Output {
 		if item.Type == "function_call" {
-			calls = append(calls, item.AsFunctionCall())
+			call := item.AsFunctionCall()
+			calls = append(calls, pendingResponseToolCall{id: call.CallID, name: call.Name, arguments: []byte(call.Arguments)})
+		} else if item.Type == "custom_tool_call" {
+			call, err := customToolCallFromRaw(item.RawJSON())
+			if err != nil {
+				s.responseErr = err
+				return nil
+			}
+			input := call.Input
+			if input == "" && s.customInputs != nil && s.customInputs[item.ID] != nil {
+				input = s.customInputs[item.ID].String()
+			}
+			calls = append(calls, pendingResponseToolCall{
+				id: call.CallID, name: canonicalCustomToolName(call.Name),
+				arguments: customToolArguments(call.Name, input), custom: true,
+			})
 		}
 	}
 	return calls
@@ -144,11 +214,14 @@ func (s *responseStream) CallTools() []proto.ToolCallStatus {
 	statuses := make([]proto.ToolCallStatus, 0, len(calls))
 	for _, call := range calls {
 		msg, status := stream.CallTool(
-			call.CallID,
-			call.Name,
-			[]byte(call.Arguments),
+			call.id,
+			call.name,
+			call.arguments,
 			s.toolCall,
 		)
+		if call.custom && len(msg.ToolCalls) > 0 {
+			msg.ToolCalls[0].Type = "custom"
+		}
 		s.messages = append(s.messages, msg)
 		statuses = append(statuses, status)
 	}
@@ -164,6 +237,42 @@ func (s *responseStream) Close() error {
 
 func (s *responseStream) Current() (proto.Chunk, error) {
 	event := s.stream.Current()
+	switch event.Type {
+	case "response.reasoning_text.delta":
+		var delta struct {
+			Delta string `json:"delta"`
+		}
+		if err := json.Unmarshal([]byte(event.RawJSON()), &delta); err != nil {
+			return proto.Chunk{}, fmt.Errorf("decode DeepSeek reasoning event: %w", err)
+		}
+		return proto.Chunk{Thought: delta.Delta}, nil
+	case "response.custom_tool_call_input.delta", "response.custom_tool_call_input.done":
+		var inputEvent struct {
+			ItemID string `json:"item_id"`
+			Delta  string `json:"delta"`
+			Input  string `json:"input"`
+		}
+		if err := json.Unmarshal([]byte(event.RawJSON()), &inputEvent); err != nil {
+			return proto.Chunk{}, fmt.Errorf("decode DeepSeek custom tool input event: %w", err)
+		}
+		if inputEvent.ItemID != "" {
+			if s.customInputs == nil {
+				s.customInputs = map[string]*strings.Builder{}
+			}
+			builder := s.customInputs[inputEvent.ItemID]
+			if builder == nil {
+				builder = &strings.Builder{}
+				s.customInputs[inputEvent.ItemID] = builder
+			}
+			if inputEvent.Input != "" {
+				builder.Reset()
+				builder.WriteString(inputEvent.Input)
+			} else {
+				builder.WriteString(inputEvent.Delta)
+			}
+		}
+		return proto.Chunk{}, stream.ErrNoContent
+	}
 	switch value := event.AsAny().(type) {
 	case responses.ResponseTextDeltaEvent:
 		s.roundContent.WriteString(value.Delta)
@@ -175,13 +284,21 @@ func (s *responseStream) Current() (proto.Chunk, error) {
 		return proto.Chunk{Content: value.Delta}, nil
 	case responses.ResponseCompletedEvent:
 		s.setTerminal(value.Response, false)
+		if sources := responseSources(value.Response); sources != "" {
+			s.roundContent.WriteString(sources)
+			return proto.Chunk{Content: sources}, nil
+		}
 	case responses.ResponseIncompleteEvent:
 		s.setTerminal(value.Response, true)
 	case responses.ResponseFailedEvent:
 		s.setTerminal(value.Response, false)
-		s.responseErr = responseFailureError(value.Response)
+		s.responseErr = responseFailureError(value.Response, responsesProviderName(s.profile))
 	case responses.ResponseErrorEvent:
-		s.responseErr = fmt.Errorf("OpenAI Responses API error %s: %s", value.Code, value.Message)
+		s.responseErr = fmt.Errorf("%s Responses API error %s: %s", responsesProviderName(s.profile), value.Code, value.Message)
+	case responses.ResponseWebSearchCallInProgressEvent, responses.ResponseWebSearchCallSearchingEvent:
+		return proto.Chunk{Activity: "Searching the web"}, nil
+	case responses.ResponseWebSearchCallCompletedEvent:
+		return proto.Chunk{Activity: "Web search completed"}, nil
 	}
 	return proto.Chunk{}, stream.ErrNoContent
 }
@@ -192,21 +309,63 @@ func (s *responseStream) setTerminal(response responses.Response, incomplete boo
 	s.incomplete = incomplete
 	if s.trackUsage {
 		s.roundUsage = proto.TokenUsage{
-			InputTokens:  response.Usage.InputTokens,
-			OutputTokens: response.Usage.OutputTokens,
-			TotalTokens:  response.Usage.TotalTokens,
+			InputTokens:           response.Usage.InputTokens,
+			CachedInputTokens:     response.Usage.InputTokensDetails.CachedTokens,
+			OutputTokens:          response.Usage.OutputTokens,
+			ReasoningOutputTokens: response.Usage.OutputTokensDetails.ReasoningTokens,
+			TotalTokens:           response.Usage.TotalTokens,
 		}
 	}
 }
 
-func responseFailureError(response responses.Response) error {
+func responseSources(response responses.Response) string {
+	seen := map[string]struct{}{}
+	var sources []string
+	for _, item := range response.Output {
+		if item.Type != "message" {
+			continue
+		}
+		for _, content := range item.Content {
+			if content.Type != "output_text" {
+				continue
+			}
+			for _, annotation := range content.Annotations {
+				if annotation.Type != "url_citation" || annotation.URL == "" {
+					continue
+				}
+				if _, ok := seen[annotation.URL]; ok {
+					continue
+				}
+				seen[annotation.URL] = struct{}{}
+				title := strings.TrimSpace(annotation.Title)
+				if title == "" {
+					title = annotation.URL
+				}
+				sources = append(sources, fmt.Sprintf("- [%s](%s)", title, annotation.URL))
+			}
+		}
+	}
+	if len(sources) == 0 {
+		return ""
+	}
+	return "\n\nSources:\n" + strings.Join(sources, "\n")
+}
+
+func responsesProviderName(profile ResponsesProfile) string {
+	if profile == ResponsesProfileDeepSeek {
+		return "DeepSeek"
+	}
+	return "OpenAI"
+}
+
+func responseFailureError(response responses.Response, provider string) error {
 	if response.Error.Message != "" {
 		if response.Error.Code != "" {
-			return fmt.Errorf("OpenAI Responses API failed (%s): %s", response.Error.Code, response.Error.Message)
+			return fmt.Errorf("%s Responses API failed (%s): %s", provider, response.Error.Code, response.Error.Message)
 		}
-		return fmt.Errorf("OpenAI Responses API failed: %s", response.Error.Message)
+		return fmt.Errorf("%s Responses API failed: %s", provider, response.Error.Message)
 	}
-	return errors.New("OpenAI Responses API failed")
+	return fmt.Errorf("%s Responses API failed", provider)
 }
 
 func (s *responseStream) Err() error {
@@ -264,7 +423,7 @@ func (s *responseStream) Next() bool {
 		})
 		return false
 	}
-	msg, err := responseToProtoMessage(*s.terminal, s.roundContent.String())
+	msg, err := responseToProtoMessage(*s.terminal, s.roundContent.String(), s.profile)
 	if err != nil {
 		s.requestErr = err
 		return false
@@ -282,7 +441,7 @@ func (s *responseStream) startFollowup() error {
 		}
 		s.messages = messages
 	}
-	input, err := fromProtoResponseInput(s.messages)
+	input, err := fromProtoResponseInput(s.messages, s.profile)
 	if err != nil {
 		return err
 	}
@@ -292,6 +451,7 @@ func (s *responseStream) startFollowup() error {
 	s.terminalSeen = false
 	s.incomplete = false
 	s.roundContent.Reset()
+	s.customInputs = nil
 	s.responseErr = nil
 	return nil
 }

@@ -49,11 +49,14 @@ type ChatRequest struct {
 	Stream   *bool          `json:"stream,omitempty"`
 	Tools    []Tool         `json:"tools,omitempty"`
 	Options  map[string]any `json:"options"`
+	// Think accepts false/true or an effort level such as low, medium, or high.
+	Think any `json:"think,omitempty"`
 }
 
 type Message struct {
 	Role      string      `json:"role"`
 	Content   string      `json:"content"`
+	Thinking  string      `json:"thinking,omitempty"`
 	Images    []ImageData `json:"images,omitempty"`
 	ToolCalls []ToolCall  `json:"tool_calls,omitempty"`
 }

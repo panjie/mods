@@ -175,6 +175,7 @@ func initFlags() {
 	regBool(flags, &config.MCPListTools, "list-tools", "", false)
 
 	regBool(flags, &config.WebSearch, "web-search", "", config.WebSearch)
+	regStr(flags, &config.WebSearchBackend, "web-search-backend", "", config.WebSearchBackend)
 	regStrArr(flags, &config.Images, "image", "i", config.Images)
 	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
@@ -200,6 +201,7 @@ func initFlags() {
 		"debug",
 		"stdin-image",
 		"clipboard-image",
+		"web-search-backend",
 		"no-save",
 		"no-instructions",
 	)
@@ -216,7 +218,7 @@ func initFlags() {
 	})
 
 	// Default-value normalization (WordWrap, MCPTimeout, FormatText,
-	// Format, WebSearchAPIKeyEnv, WebSearchAPIKey) is performed once in
+	// Format, WebSearchBackend, WebSearchAPIKeyEnv, WebSearchAPIKey) is performed once in
 	// Config.applyDefaults via Ensure(). The CLI flag defaults are
 	// registered from the already-normalized config below, so they
 	// inherit those canonical values without re-deriving them here.

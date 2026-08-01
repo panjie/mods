@@ -18,6 +18,24 @@ import (
 
 const ReasoningEffortMedium = shared.ReasoningEffortMedium
 
+// ProviderProfile identifies provider-specific behavior layered on the
+// OpenAI-compatible transport. It applies to both Responses and Chat
+// Completions because providers such as DeepSeek have dialect-specific state
+// that must be replayed across tool rounds.
+type ProviderProfile string
+
+const (
+	ProviderProfileOpenAI   ProviderProfile = "openai"
+	ProviderProfileDeepSeek ProviderProfile = "deepseek"
+
+	// Backward-compatible names retained for packages that constructed Config
+	// before provider profiles also applied to Chat Completions.
+	ResponsesProfileOpenAI   = ProviderProfileOpenAI
+	ResponsesProfileDeepSeek = ProviderProfileDeepSeek
+)
+
+type ResponsesProfile = ProviderProfile
+
 var _ stream.Client = &Client{}
 
 // Client is the openai client.
@@ -30,11 +48,13 @@ type Client struct {
 type Config struct {
 	AuthToken string
 	BaseURL   string
-	// UseResponses selects OpenAI's Responses API. It is enabled only for the
-	// official OpenAI endpoint; Azure and OpenAI-compatible providers continue
-	// to use Chat Completions.
-	UseResponses bool
-	HTTPClient   interface {
+	// UseResponses selects the Responses API.
+	UseResponses    bool
+	ProviderProfile ProviderProfile
+	// ResponsesProfile is deprecated. ProviderProfile takes precedence when
+	// set and this field remains for source compatibility.
+	ResponsesProfile ResponsesProfile
+	HTTPClient       interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	Headers         map[string]string
@@ -95,7 +115,32 @@ func New(config Config) *Client {
 // adapter supports tool/function calling (CallTools implements the
 // multi-round tool loop).
 func (c *Client) Capabilities() stream.Capabilities {
-	return stream.Capabilities{Tools: true, JSONResponseFormat: true}
+	capabilities := stream.Capabilities{
+		Tools: true, FunctionTools: true, JSONResponseFormat: true,
+		Images: true, Reasoning: true, ReasoningReplay: c.config.UseResponses,
+	}
+	if c.profile() == ProviderProfileDeepSeek {
+		capabilities.ReasoningReplay = true
+	}
+	if c.config.UseResponses && c.profile() == ProviderProfileDeepSeek {
+		capabilities.NativeWebSearch = true
+		capabilities.HostedWebSearch = true
+		capabilities.CustomApplyPatch = true
+		capabilities.CustomTools = true
+		capabilities.Images = false
+		capabilities.ReasoningReplay = true
+	}
+	return capabilities
+}
+
+func (c *Client) profile() ProviderProfile {
+	if c.config.ProviderProfile != "" {
+		return c.config.ProviderProfile
+	}
+	if c.config.ResponsesProfile != "" {
+		return c.config.ResponsesProfile
+	}
+	return ProviderProfileOpenAI
 }
 
 // Request makes a new request and returns a stream.
@@ -113,7 +158,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	body := openai.ChatCompletionNewParams{
 		Model:    request.Model,
 		User:     openai.String(request.User),
-		Messages: fromProtoMessages(request.Messages),
+		Messages: fromProtoMessagesForProfile(request.Messages, c.profile()),
 		Tools:    fromToolSpecs(request.Tools),
 	}
 	if request.TrackUsage {
@@ -159,6 +204,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		trackUsage:    request.TrackUsage,
 		parseThink:    c.config.ThinkTags,
 		thoughtFields: c.config.ThoughtFields,
+		profile:       c.profile(),
 		think: thinkParser{
 			openTag:  "<" + tag + ">",
 			closeTag: "</" + tag + ">",
@@ -172,21 +218,26 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 // Stream openai stream.
 type Stream struct {
-	done          bool
-	request       openai.ChatCompletionNewParams
-	stream        *ssestream.Stream[openai.ChatCompletionChunk]
-	factory       func() *ssestream.Stream[openai.ChatCompletionChunk]
-	message       openai.ChatCompletionAccumulator
-	messages      []proto.Message
-	toolCall      func(name string, data []byte) (string, error)
-	parseThink    bool
-	think         thinkParser
-	thoughtFields []string
-	trackUsage    bool
-	roundUsage    proto.TokenUsage
-	usage         proto.TokenUsage
-	budgeter      proto.MessageBudgeter
-	budgetErr     error
+	done           bool
+	request        openai.ChatCompletionNewParams
+	stream         *ssestream.Stream[openai.ChatCompletionChunk]
+	factory        func() *ssestream.Stream[openai.ChatCompletionChunk]
+	message        openai.ChatCompletionAccumulator
+	messages       []proto.Message
+	toolCall       func(name string, data []byte) (string, error)
+	parseThink     bool
+	think          thinkParser
+	thoughtFields  []string
+	trackUsage     bool
+	roundUsage     proto.TokenUsage
+	usage          proto.TokenUsage
+	budgeter       proto.MessageBudgeter
+	budgetErr      error
+	profile        ProviderProfile
+	reasoning      strings.Builder
+	visible        strings.Builder
+	finalChunk     *proto.Chunk
+	finalDelivered bool
 }
 
 func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
@@ -228,6 +279,10 @@ func (s *Stream) Close() error {
 
 // Current implements stream.Stream.
 func (s *Stream) Current() (proto.Chunk, error) {
+	if s.finalChunk != nil && !s.finalDelivered {
+		s.finalDelivered = true
+		return *s.finalChunk, nil
+	}
 	event := s.stream.Current()
 	s.message.AddChunk(event)
 	if s.trackUsage && event.JSON.Usage.Valid() {
@@ -236,9 +291,19 @@ func (s *Stream) Current() (proto.Chunk, error) {
 			total = event.Usage.PromptTokens + event.Usage.CompletionTokens
 		}
 		s.roundUsage = proto.TokenUsage{
-			InputTokens:  event.Usage.PromptTokens,
-			OutputTokens: event.Usage.CompletionTokens,
-			TotalTokens:  total,
+			InputTokens:           event.Usage.PromptTokens,
+			CachedInputTokens:     event.Usage.PromptTokensDetails.CachedTokens,
+			OutputTokens:          event.Usage.CompletionTokens,
+			ReasoningOutputTokens: event.Usage.CompletionTokensDetails.ReasoningTokens,
+			TotalTokens:           total,
+		}
+		if s.roundUsage.CachedInputTokens == 0 {
+			var providerUsage struct {
+				PromptCacheHitTokens int64 `json:"prompt_cache_hit_tokens"`
+			}
+			if err := json.Unmarshal([]byte(event.Usage.RawJSON()), &providerUsage); err == nil {
+				s.roundUsage.CachedInputTokens = providerUsage.PromptCacheHitTokens
+			}
 		}
 	}
 	if len(event.Choices) == 0 {
@@ -247,11 +312,15 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	choice := event.Choices[0]
 	content := choice.Delta.Content
 	thought := s.extractThought(choice.Delta)
+	if s.profile == ProviderProfileDeepSeek && thought != "" {
+		s.reasoning.WriteString(thought)
+	}
 	if s.parseThink {
 		c, t := s.think.feed(content)
 		content = c
 		thought += t
 	}
+	s.visible.WriteString(content)
 	return proto.Chunk{
 		Content: content,
 		Thought: thought,
@@ -347,6 +416,17 @@ func (p *thinkParser) feed(text string) (content, thought string) {
 	}
 }
 
+func (p *thinkParser) flush() (content, thought string) {
+	if p.inThink {
+		thought = p.buf
+	} else {
+		content = p.buf
+	}
+	p.buf = ""
+	p.inThink = false
+	return content, thought
+}
+
 // partialTagSuffixLen returns the length of the longest suffix of s that is
 // also a proper prefix of tag. This is the amount of trailing text that must
 // be held back because it might be the beginning of a tag completed by the
@@ -386,6 +466,14 @@ func (s *Stream) Next() bool {
 	if s.budgetErr != nil {
 		return false
 	}
+	if s.finalChunk != nil {
+		if !s.finalDelivered {
+			return true
+		}
+		s.finalChunk = nil
+		s.finalDelivered = false
+		return false
+	}
 	if s.done {
 		s.done = false
 		if s.budgeter != nil {
@@ -395,10 +483,12 @@ func (s *Stream) Next() bool {
 				return false
 			}
 			s.messages = messages
-			s.request.Messages = fromProtoMessages(messages)
+			s.request.Messages = fromProtoMessagesForProfile(messages, s.profile)
 		}
 		s.stream = s.factory()
 		s.message = openai.ChatCompletionAccumulator{}
+		s.reasoning.Reset()
+		s.visible.Reset()
 	}
 
 	if s.stream.Next() {
@@ -408,13 +498,30 @@ func (s *Stream) Next() bool {
 	s.done = true
 	s.usage.Add(s.roundUsage)
 	s.roundUsage = proto.TokenUsage{}
+	if s.parseThink {
+		content, thought := s.think.flush()
+		s.visible.WriteString(content)
+		if content != "" || thought != "" {
+			s.finalChunk = &proto.Chunk{Content: content, Thought: thought}
+		}
+	}
 	if len(s.message.Choices) > 0 {
 		msg := s.message.Choices[0].Message.ToParam()
-		s.request.Messages = append(s.request.Messages, msg)
-		s.messages = append(s.messages, toProtoMessage(msg))
+		protoMsg := toProtoMessage(msg)
+		if s.parseThink {
+			protoMsg.Content = s.visible.String()
+		}
+		if s.profile == ProviderProfileDeepSeek {
+			attachDeepSeekChatState(&protoMsg, s.reasoning.String())
+		}
+		s.messages = append(s.messages, protoMsg)
+		formatted := fromProtoMessagesForProfile([]proto.Message{protoMsg}, s.profile)
+		if len(formatted) > 0 {
+			s.request.Messages = append(s.request.Messages, formatted[0])
+		}
 	}
 
-	return false
+	return s.finalChunk != nil
 }
 
 func flattenMap(prefix string, m map[string]any, fn func(k string, v any)) {

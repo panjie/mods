@@ -435,6 +435,9 @@ func TestShowTokenUsageFlagAndFormatting(t *testing.T) {
 	require.Equal(t, "Token usage: input 7,735, output 9, total 7,744", tokenUsageLine(proto.TokenUsage{
 		InputTokens: 7735, OutputTokens: 9, TotalTokens: 7744,
 	}))
+	require.Equal(t, "Token usage: input 100, output 20, total 120, cached input 40, reasoning output 7", tokenUsageLine(proto.TokenUsage{
+		InputTokens: 100, CachedInputTokens: 40, OutputTokens: 20, ReasoningOutputTokens: 7, TotalTokens: 120,
+	}))
 }
 
 func TestFormatTokenCount(t *testing.T) {

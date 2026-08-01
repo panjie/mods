@@ -17,6 +17,7 @@ import (
 
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -569,6 +570,97 @@ func TestFilesystemApplyPatch(t *testing.T) {
 	if string(content) != "new\n" {
 		t.Fatalf("unexpected patched content: %q", content)
 	}
+}
+
+func TestFilesystemApplyPatchAcceptsCodexFormat(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "update.txt"), []byte("alpha\nbeta\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "delete.txt"), []byte("remove\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "move.txt"), []byte("before\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pure-move.txt"), []byte("same\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "no-newline.txt"), []byte("old"), 0o644))
+
+	patch := `*** Begin Patch
+*** Add File: nested/added.txt
++added
+*** Update File: update.txt
+@@
+ alpha
+-beta
++changed
+*** Delete File: delete.txt
+*** Update File: move.txt
+*** Move to: nested/moved.txt
+@@
+-before
++after
+*** Update File: pure-move.txt
+*** Move to: nested/pure-moved.txt
+*** Update File: no-newline.txt
+@@
+-old
++new
+*** End Patch
+`
+	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(root, "nested", "added.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "added\n", string(content))
+	content, err = os.ReadFile(filepath.Join(root, "update.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "alpha\nchanged\n", string(content))
+	require.NoFileExists(t, filepath.Join(root, "delete.txt"))
+	require.NoFileExists(t, filepath.Join(root, "move.txt"))
+	content, err = os.ReadFile(filepath.Join(root, "nested", "moved.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "after\n", string(content))
+	require.NoFileExists(t, filepath.Join(root, "pure-move.txt"))
+	content, err = os.ReadFile(filepath.Join(root, "nested", "pure-moved.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "same\n", string(content))
+	content, err = os.ReadFile(filepath.Join(root, "no-newline.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "new", string(content))
+}
+
+func TestFilesystemApplyPatchCodexFormatIsAtomic(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	path := filepath.Join(root, "keep.txt")
+	require.NoError(t, os.WriteFile(path, []byte("original\n"), 0o644))
+
+	patch := `*** Begin Patch
+*** Update File: keep.txt
+@@
+-original
++changed
+*** Update File: missing.txt
+@@
+-missing
++changed
+*** End Patch
+`
+	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	require.Error(t, err)
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "original\n", string(content))
+}
+
+func TestFilesystemApplyPatchCodexFormatRejectsTraversal(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+
+	patch := "*** Begin Patch\n*** Add File: ../escape.txt\n+pwned\n*** End Patch\n"
+	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	require.ErrorContains(t, err, "outside workspace")
+	require.NoFileExists(t, filepath.Join(root, "..", "escape.txt"))
 }
 
 func TestFilesystemReplace(t *testing.T) {

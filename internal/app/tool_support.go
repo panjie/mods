@@ -68,6 +68,28 @@ func (m *Mods) buildToolRegistryForProvider(
 	return toolregistry.NewRegistry(), nil
 }
 
+func resolveWebSearchBackend(cfg *Config, capabilities stream.Capabilities) (local, provider bool, err error) {
+	if !cfg.WebSearch {
+		return false, false, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.WebSearchBackend)) {
+	case "", cfgpkg.DefaultWebSearchBackend:
+		if capabilities.NativeWebSearch {
+			return false, true, nil
+		}
+		return true, false, nil
+	case "local":
+		return true, false, nil
+	case "provider":
+		if !capabilities.NativeWebSearch {
+			return false, false, fmt.Errorf("web-search-backend provider is not supported by the selected endpoint")
+		}
+		return false, true, nil
+	default:
+		return false, false, fmt.Errorf("invalid web-search-backend %q: expected auto, local, or provider", cfg.WebSearchBackend)
+	}
+}
+
 const maxToolIntentChars = 8 * 1024
 
 func toolIntentContext(messages []proto.Message) string {

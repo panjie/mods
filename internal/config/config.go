@@ -17,6 +17,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
+	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/tools"
 	"gopkg.in/yaml.v3"
 )
@@ -25,6 +26,9 @@ const (
 	// DefaultWebSearchProvider is the provider selected when web search is
 	// enabled without an explicit provider.
 	DefaultWebSearchProvider = "tavily"
+	// DefaultWebSearchBackend lets a capable Responses provider host search,
+	// while preserving the existing local search behavior elsewhere.
+	DefaultWebSearchBackend = "auto"
 	// DefaultWebSearchAPIKeyEnv is the canonical environment-variable name
 	// consulted when WebSearchAPIKeyEnv is unset. It is referenced from
 	// Ensure / applyDefaults and the configuration wizard so the literal
@@ -98,6 +102,7 @@ var Help = map[string]string{
 	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
 	"builtin-tools":          "Native tool configuration for filesystem and shell tools",
 	"web-search":             "Enable or disable the web_search tool (disabled by default)",
+	"web-search-backend":     "Web search execution backend: auto, local, or provider",
 	"web-search-provider":    "Web search provider: tavily (default) or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
@@ -132,21 +137,23 @@ var Help = map[string]string{
 	"mcp-servers.<server>.url":          "Endpoint URL for an SSE or HTTP MCP server",
 	"mcp-servers.<server>.pass-env-all": "Forward the entire parent environment to a trusted stdio MCP server",
 
-	"apis.<provider>.api-key":     "Provider API key; prefer api-key-env. For github-copilot this stores the GitHub device-flow token written by --config",
-	"apis.<provider>.api-key-env": "Environment variable containing the provider API key",
-	"apis.<provider>.api-key-cmd": "Shell command that resolves the provider API key at runtime",
-	"apis.<provider>.version":     "Provider API version when required by the adapter",
-	"apis.<provider>.base-url":    "Provider API endpoint",
-	"apis.<provider>.models":      "Models configured for this provider",
-	"apis.<provider>.user":        "Provider-specific user or Azure deployment identifier",
-	"apis.<provider>.api-type":    "Wire protocol used by this provider",
+	"apis.<provider>.api-key":          "Provider API key; prefer api-key-env. For github-copilot this stores the GitHub device-flow token written by --config",
+	"apis.<provider>.api-key-env":      "Environment variable containing the provider API key",
+	"apis.<provider>.api-key-cmd":      "Shell command that resolves the provider API key at runtime",
+	"apis.<provider>.version":          "Provider API version when required by the adapter",
+	"apis.<provider>.base-url":         "Provider API endpoint",
+	"apis.<provider>.models":           "Models configured for this provider",
+	"apis.<provider>.user":             "Provider-specific user or Azure deployment identifier",
+	"apis.<provider>.api-type":         "Wire protocol used by this provider",
+	"apis.<provider>.provider-profile": "Provider request dialect: openai, deepseek, qwen, glm, kimi, or minimax",
 
 	"apis.<provider>.models.<model>.max-input-chars":      "Complete input byte estimate limit for this model",
 	"apis.<provider>.models.<model>.aliases":              "Alternative names that select this model",
 	"apis.<provider>.models.<model>.fallback":             "Fallback model used after a provider failure",
-	"apis.<provider>.models.<model>.endpoint":             "Provider-specific endpoint route for this model; GitHub Copilot discovery writes responses, messages, or chat-completions",
+	"apis.<provider>.models.<model>.endpoint":             "Endpoint route for this model: responses or chat-completions; GitHub Copilot discovery may also report messages",
+	"apis.<provider>.models.<model>.provider-profile":     "Optional model-level provider dialect override",
 	"apis.<provider>.models.<model>.thinking-budget":      "Manual reasoning token budget; Anthropic uses it only with thinking-type enabled",
-	"apis.<provider>.models.<model>.extra-params":         "Additional provider request fields for this model; official OpenAI uses Responses fields, compatible endpoints use Chat Completions fields",
+	"apis.<provider>.models.<model>.extra-params":         "Additional provider request fields for this model; Responses endpoints use Responses fields, compatible chat endpoints use Chat Completions fields",
 	"apis.<provider>.models.<model>.thinking-type":        "Provider-specific thinking mode override; Anthropic supports adaptive, enabled, or disabled",
 	"apis.<provider>.models.<model>.thought-fields":       "Stream fields inspected for reasoning content",
 	"apis.<provider>.models.<model>.think-tag":            "Inline tag used to extract reasoning content",
@@ -156,14 +163,19 @@ var Help = map[string]string{
 
 // Model represents the LLM model used in the API call.
 type Model struct {
-	Name           string
-	API            string
-	MaxChars       int64          `yaml:"max-input-chars"`
-	Aliases        []string       `yaml:"aliases"`
-	Fallback       string         `yaml:"fallback"`
-	Endpoint       string         `yaml:"endpoint,omitempty"`
-	ThinkingBudget int            `yaml:"thinking-budget,omitempty"`
-	ExtraParams    map[string]any `yaml:"extra-params,omitempty"`
+	Name string
+	API  string
+	// Protocol is resolved at runtime from api-type and never persisted.
+	Protocol string `yaml:"-"`
+	// ProviderProfile selects provider-specific request semantics. It may be
+	// configured per model and is normalized during model resolution.
+	ProviderProfile string         `yaml:"provider-profile,omitempty"`
+	MaxChars        int64          `yaml:"max-input-chars"`
+	Aliases         []string       `yaml:"aliases"`
+	Fallback        string         `yaml:"fallback"`
+	Endpoint        string         `yaml:"endpoint,omitempty"`
+	ThinkingBudget  int            `yaml:"thinking-budget,omitempty"`
+	ExtraParams     map[string]any `yaml:"extra-params,omitempty"`
 	// ThinkingType overrides the provider default value used by -t / --think.
 	// Custom OpenAI-compatible providers can set it to opt into thinking.type.
 	ThinkingType string `yaml:"thinking-type,omitempty"`
@@ -198,6 +210,9 @@ type API struct {
 	// "anthropic" for any endpoint that implements the Anthropic Messages API,
 	// or one of "openai", "ollama", "google", "azure".
 	APIType string `yaml:"api-type,omitempty"`
+	// ProviderProfile supplies the default request dialect for models on this
+	// endpoint. A model-level value takes precedence.
+	ProviderProfile string `yaml:"provider-profile,omitempty"`
 }
 
 // APIs is a type alias to allow custom YAML decoding.
@@ -265,6 +280,7 @@ type PersistentConfig struct {
 	MCPTimeout          time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 	BuiltinTools        BuiltinToolsConfig         `yaml:"builtin-tools"`
 	WebSearch           bool                       `yaml:"web-search" env:"WEB_SEARCH"`
+	WebSearchBackend    string                     `yaml:"web-search-backend" env:"WEB_SEARCH_BACKEND"`
 	WebSearchProvider   string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
 	WebSearchAPIKey     string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
 	WebSearchAPIKeyEnv  string                     `yaml:"web-search-api-key-env"`
@@ -551,6 +567,9 @@ func Ensure() (Config, error) {
 	if err := validateShellReadOnlyCommands(&c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not validate settings file."}
 	}
+	if err := validateProviderEnums(&c); err != nil {
+		return fallback, modsError{Err: err, ReasonText: "Could not validate provider settings."}
+	}
 	validateReviewMode(&c)
 
 	applySessionDirDefault(&c)
@@ -566,6 +585,31 @@ func Ensure() (Config, error) {
 	c.applyDefaults()
 
 	return c, nil
+}
+
+func validateProviderEnums(c *Config) error {
+	for _, api := range c.APIs {
+		apiType := stdstrings.ToLower(stdstrings.TrimSpace(api.APIType))
+		if apiType != "" && !providerinfo.KnownProtocol(apiType) {
+			return fmt.Errorf("provider %s has invalid api-type %q; expected one of %s", api.Name, api.APIType, stdstrings.Join(providerinfo.Protocols(), ", "))
+		}
+		providerProfile := stdstrings.ToLower(stdstrings.TrimSpace(api.ProviderProfile))
+		if providerProfile != "" && !providerinfo.KnownProfile(providerProfile) {
+			return fmt.Errorf("provider %s has invalid provider-profile %q; expected one of %s", api.Name, api.ProviderProfile, stdstrings.Join(providerinfo.Profiles(), ", "))
+		}
+		for modelName, model := range api.Models {
+			profile := stdstrings.ToLower(stdstrings.TrimSpace(model.ProviderProfile))
+			if profile != "" && !providerinfo.KnownProfile(profile) {
+				return fmt.Errorf("provider %s model %s has invalid provider-profile %q; expected one of %s", api.Name, modelName, model.ProviderProfile, stdstrings.Join(providerinfo.Profiles(), ", "))
+			}
+			switch endpoint := stdstrings.ToLower(stdstrings.TrimSpace(model.Endpoint)); endpoint {
+			case "", "responses", "chat-completions", "messages":
+			default:
+				return fmt.Errorf("provider %s model %s has invalid endpoint %q; expected responses, chat-completions, or messages", api.Name, modelName, model.Endpoint)
+			}
+		}
+	}
+	return nil
 }
 
 // ApplyDefaults normalizes fields whose zero value (set explicitly via env,
@@ -602,6 +646,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.WebSearchAPIKeyEnv == "" {
 		c.WebSearchAPIKeyEnv = DefaultWebSearchAPIKeyEnv
+	}
+	if c.WebSearchBackend == "" {
+		c.WebSearchBackend = DefaultWebSearchBackend
 	}
 	if c.WebSearchAPIKey == "" {
 		c.WebSearchAPIKey = os.Getenv(c.WebSearchAPIKeyEnv)
@@ -841,6 +888,7 @@ func Default() Config {
 			WordWrap:           80,
 			MCPTimeout:         15 * time.Second,
 			WebSearch:          false,
+			WebSearchBackend:   DefaultWebSearchBackend,
 			WebSearchProvider:  DefaultWebSearchProvider,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{

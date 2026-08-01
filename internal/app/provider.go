@@ -30,14 +30,61 @@ type providerConfigs struct {
 	OpenAI    openai.Config
 }
 
+type resolvedProvider struct {
+	Name     string
+	Protocol string
+	Profile  openai.ProviderProfile
+	Endpoint string
+	BaseURL  string
+}
+
+func resolveProvider(mod Model, api API) (resolvedProvider, error) {
+	resolved := resolvedProvider{
+		Name: mod.API, Protocol: modelProtocol(mod), Profile: modelProviderProfile(mod),
+	}
+	if err := validateEndpointForProtocol(resolved.Protocol, mod.Endpoint); err != nil {
+		return resolved, err
+	}
+	baseURL, err := resolvedProviderBaseURL(api)
+	if err != nil {
+		return resolved, err
+	}
+	resolved.BaseURL = baseURL
+	switch resolved.Protocol {
+	case "openai":
+		resolved.Endpoint = normalizedEndpointName(useResponsesEndpoint(mod, baseURL))
+	case "github-copilot":
+		if strings.EqualFold(strings.TrimSpace(mod.Endpoint), copilot.EndpointMessages) {
+			resolved.Endpoint = copilot.EndpointMessages
+		} else {
+			resolved.Endpoint = normalizedEndpointName(useCopilotResponses(mod))
+		}
+	default:
+		resolved.Endpoint = resolved.Protocol
+	}
+	if resolved.Endpoint == copilot.EndpointResponses &&
+		resolved.Profile != openai.ProviderProfileOpenAI && resolved.Profile != openai.ProviderProfileDeepSeek {
+		return resolved, fmt.Errorf("endpoint responses is not implemented for provider-profile %s", resolved.Profile)
+	}
+	return resolved, nil
+}
+
 func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error) {
 	var cfgs providerConfigs
+	resolved, err := resolveProvider(mod, api)
+	if err != nil {
+		return cfgs, modsError{Err: err, ReasonText: "Invalid provider routing configuration"}
+	}
+	debug.Printf(
+		"Provider route: provider=%s protocol=%s profile=%s endpoint=%s base_url=%s",
+		resolved.Name, resolved.Protocol, resolved.Profile, resolved.Endpoint, safeBaseURLForDebug(resolved.BaseURL),
+	)
 	keyEnv, keyURL := providerinfo.Auth(mod.API)
-	switch mod.API {
+	switch resolved.Protocol {
 	case "ollama":
 		cfgs.Ollama = ollama.DefaultConfig()
-		if api.BaseURL != "" {
-			cfgs.Ollama.BaseURL = api.BaseURL
+		if resolved.BaseURL != "" {
+			cfgs.Ollama.BaseURL = resolved.BaseURL
 		}
 	case "anthropic":
 		key, err := m.ensureKey(api, keyEnv, keyURL)
@@ -45,8 +92,8 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			return cfgs, modsError{Err: err, ReasonText: "Anthropic authentication failed"}
 		}
 		cfgs.Anthropic = anthropic.DefaultConfig(key)
-		if api.BaseURL != "" {
-			cfgs.Anthropic.BaseURL = api.BaseURL
+		if resolved.BaseURL != "" {
+			cfgs.Anthropic.BaseURL = resolved.BaseURL
 		}
 	case "google":
 		key, err := m.ensureKey(api, keyEnv, keyURL)
@@ -55,8 +102,8 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		}
 		cfgs.Google = google.DefaultConfig(mod.Name, key)
 		cfgs.Google.ThinkingBudget = mod.ThinkingBudget
-		if api.BaseURL != "" {
-			cfgs.Google.BaseURL = applyGoogleBaseURLOverride(api.BaseURL, mod.Name)
+		if resolved.BaseURL != "" {
+			cfgs.Google.BaseURL = applyGoogleBaseURLOverride(resolved.BaseURL, mod.Name)
 		}
 	case "azure":
 		key, err := m.ensureKey(api, keyEnv, keyURL)
@@ -64,11 +111,12 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			return cfgs, modsError{Err: err, ReasonText: "Azure authentication failed"}
 		}
 		cfgs.OpenAI = openai.Config{
-			AuthToken:     key,
-			BaseURL:       api.BaseURL,
-			ExtraParams:   mod.ExtraParams,
-			ThoughtFields: mod.ThinkFields,
-			ThinkTag:      mod.ThinkTag,
+			AuthToken:       key,
+			BaseURL:         resolved.BaseURL,
+			ProviderProfile: openai.ProviderProfileOpenAI,
+			ExtraParams:     cloneAnyMap(mod.ExtraParams),
+			ThoughtFields:   mod.ThinkFields,
+			ThinkTag:        mod.ThinkTag,
 		}
 		cfgs.OpenAI.APIType = "azure"
 	case "github-copilot":
@@ -80,39 +128,141 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "GitHub Copilot authentication failed"}
 		}
-		baseURL := api.BaseURL
-		if baseURL == "" {
-			baseURL = copilot.DefaultCopilotBaseURL
-		}
-		if strings.EqualFold(mod.Endpoint, copilot.EndpointMessages) {
+		if strings.EqualFold(strings.TrimSpace(mod.Endpoint), copilot.EndpointMessages) {
 			return cfgs, modsError{
 				ReasonText: fmt.Sprintf("GitHub Copilot model %s requires /v1/messages, which is not supported yet", mod.Name),
 			}
 		}
 		cfgs.OpenAI = openai.Config{
-			AuthToken:     copilotToken,
-			BaseURL:       baseURL,
-			UseResponses:  useCopilotResponses(mod),
-			Headers:       copilot.Headers(),
-			ExtraParams:   mod.ExtraParams,
-			ThoughtFields: mod.ThinkFields,
-			ThinkTag:      mod.ThinkTag,
+			AuthToken:       copilotToken,
+			BaseURL:         resolved.BaseURL,
+			UseResponses:    resolved.Endpoint == copilot.EndpointResponses,
+			ProviderProfile: openai.ProviderProfileOpenAI,
+			Headers:         copilot.Headers(),
+			ExtraParams:     cloneAnyMap(mod.ExtraParams),
+			ThoughtFields:   mod.ThinkFields,
+			ThinkTag:        mod.ThinkTag,
 		}
 	default:
+		if err := validateResponsesEndpoint(mod.Endpoint); err != nil {
+			return cfgs, modsError{Err: err, ReasonText: "Invalid model endpoint configuration"}
+		}
 		key, err := m.ensureKey(api, keyEnv, keyURL)
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "OpenAI authentication failed"}
 		}
 		cfgs.OpenAI = openai.Config{
-			AuthToken:     key,
-			BaseURL:       api.BaseURL,
-			UseResponses:  useOfficialOpenAIResponses(mod.API, api.BaseURL),
-			ExtraParams:   mod.ExtraParams,
-			ThoughtFields: mod.ThinkFields,
-			ThinkTag:      mod.ThinkTag,
+			AuthToken:        key,
+			BaseURL:          resolved.BaseURL,
+			UseResponses:     resolved.Endpoint == copilot.EndpointResponses,
+			ProviderProfile:  resolved.Profile,
+			ResponsesProfile: resolved.Profile,
+			ExtraParams:      cloneAnyMap(mod.ExtraParams),
+			ThoughtFields:    mod.ThinkFields,
+			ThinkTag:         mod.ThinkTag,
 		}
 	}
 	return cfgs, nil
+}
+
+func modelProtocol(mod Model) string {
+	if value := strings.ToLower(strings.TrimSpace(mod.Protocol)); value != "" {
+		return value
+	}
+	return providerinfo.Protocol(mod.API, "")
+}
+
+func modelProviderProfile(mod Model) openai.ProviderProfile {
+	return openai.ProviderProfile(providerinfo.Profile(mod.API, "", mod.ProviderProfile))
+}
+
+func resolvedProviderBaseURL(api API) (string, error) {
+	if value := strings.TrimSpace(api.BaseURL); value != "" {
+		return value, nil
+	}
+	if descriptor, ok := providerinfo.Lookup(api.Name); ok && descriptor.DefaultBaseURL != "" {
+		return descriptor.DefaultBaseURL, nil
+	}
+	return "", fmt.Errorf("provider %q requires base-url; only built-in providers with an official endpoint may omit it", api.Name)
+}
+
+func cloneAnyMap(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		switch typed := value.(type) {
+		case map[string]any:
+			dst[key] = cloneAnyMap(typed)
+		case []any:
+			items := make([]any, len(typed))
+			for i := range typed {
+				if nested, ok := typed[i].(map[string]any); ok {
+					items[i] = cloneAnyMap(nested)
+				} else {
+					items[i] = typed[i]
+				}
+			}
+			dst[key] = items
+		default:
+			dst[key] = value
+		}
+	}
+	return dst
+}
+
+func validateResponsesEndpoint(endpoint string) error {
+	switch strings.ToLower(strings.TrimSpace(endpoint)) {
+	case "", copilot.EndpointResponses, copilot.EndpointChatCompletions:
+		return nil
+	default:
+		return fmt.Errorf("endpoint %q is invalid: expected responses or chat-completions", endpoint)
+	}
+}
+
+func validateEndpointForProtocol(protocol, endpoint string) error {
+	value := strings.ToLower(strings.TrimSpace(endpoint))
+	if value == "" {
+		return nil
+	}
+	switch protocol {
+	case "openai":
+		return validateResponsesEndpoint(value)
+	case "github-copilot":
+		switch value {
+		case copilot.EndpointResponses, copilot.EndpointChatCompletions, copilot.EndpointMessages:
+			return nil
+		}
+	case "azure":
+		if value == copilot.EndpointChatCompletions {
+			return nil
+		}
+		if value == copilot.EndpointResponses {
+			return fmt.Errorf("endpoint responses is not supported by the Azure adapter")
+		}
+	default:
+		return fmt.Errorf("endpoint %q is not valid for %s protocol; endpoint is only configurable for OpenAI-compatible providers", endpoint, protocol)
+	}
+	return fmt.Errorf("endpoint %q is invalid for %s protocol", endpoint, protocol)
+}
+
+func normalizedEndpointName(useResponses bool) string {
+	if useResponses {
+		return copilot.EndpointResponses
+	}
+	return copilot.EndpointChatCompletions
+}
+
+func safeBaseURLForDebug(value string) string {
+	u, err := url.Parse(value)
+	if err != nil {
+		return "(invalid)"
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }
 
 func useCopilotResponses(mod Model) bool {
@@ -124,6 +274,35 @@ func useCopilotResponses(mod Model) bool {
 	default:
 		return false
 	}
+}
+
+func useResponsesEndpoint(mod Model, baseURL string) bool {
+	switch strings.ToLower(strings.TrimSpace(mod.Endpoint)) {
+	case copilot.EndpointResponses:
+		return true
+	case copilot.EndpointChatCompletions:
+		return false
+	}
+	if useOfficialOpenAIResponses(mod.API, baseURL) {
+		return true
+	}
+	return useOfficialDeepSeekResponses(mod, baseURL)
+}
+
+func useOfficialDeepSeekResponses(mod Model, baseURL string) bool {
+	return strings.EqualFold(strings.TrimSpace(mod.Name), "deepseek-v4-flash") &&
+		useOfficialDeepSeekEndpoint(mod.API, baseURL)
+}
+
+func useOfficialDeepSeekEndpoint(api, baseURL string) bool {
+	if !strings.EqualFold(strings.TrimSpace(api), "deepseek") {
+		return false
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		return true
+	}
+	u, err := url.Parse(baseURL)
+	return err == nil && strings.EqualFold(u.Hostname(), "api.deepseek.com")
 }
 
 // newStreamClient creates the appropriate stream.Client for the given API
@@ -145,7 +324,7 @@ func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
 		return c, nil
 	default:
 		if ccfg.UseResponses {
-			debug.Printf("OpenAI protocol: responses (store=false)")
+			debug.Printf("OpenAI protocol: responses (profile=%s, store=false)", ccfg.ResponsesProfile)
 		} else {
 			debug.Printf("OpenAI protocol: chat-completions")
 		}
@@ -154,7 +333,7 @@ func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
 }
 
 func useOfficialOpenAIResponses(api, baseURL string) bool {
-	if api != "openai" {
+	if !strings.EqualFold(strings.TrimSpace(api), "openai") {
 		return false
 	}
 	if strings.TrimSpace(baseURL) == "" {

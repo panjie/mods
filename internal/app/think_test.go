@@ -5,6 +5,7 @@ import (
 
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/google"
+	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,80 @@ func TestResolveThink(t *testing.T) {
 	})
 }
 
+func TestProviderNativeThinkingPlans(t *testing.T) {
+	t.Run("Gemini 2.5 uses dynamic budget by default", func(t *testing.T) {
+		cfg := google.Config{}
+		active := applyThinkConfigsWithOllama(Model{API: "google", Name: "gemini-2.5-flash"}, &cfg, nil, nil, nil, true)
+		require.True(t, active)
+		require.Equal(t, -1, cfg.ThinkingBudget)
+		require.True(t, cfg.ThinkingBudgetExplicit)
+	})
+
+	t.Run("Gemini 2.5 Pro omits unsupported off budget", func(t *testing.T) {
+		cfg := google.Config{ThinkingBudget: 8192, ThinkingBudgetExplicit: true}
+		active := applyThinkConfigsWithOllama(Model{API: "google", Name: "gemini-2.5-pro"}, &cfg, nil, nil, nil, false)
+		require.False(t, active)
+		require.False(t, cfg.ThinkingBudgetExplicit)
+		require.Empty(t, cfg.ThinkingLevel)
+	})
+
+	t.Run("Gemini 3 maps reasoning effort to thinking level", func(t *testing.T) {
+		cfg := google.Config{}
+		active := applyThinkConfigsWithOllama(Model{API: "google", Name: "gemini-3-pro", ReasoningEffort: "high"}, &cfg, nil, nil, nil, true)
+		require.True(t, active)
+		require.Equal(t, "high", cfg.ThinkingLevel)
+		require.False(t, cfg.ThinkingBudgetExplicit)
+	})
+
+	t.Run("Gemini 3 off uses lowest common level", func(t *testing.T) {
+		cfg := google.Config{}
+		active := applyThinkConfigsWithOllama(Model{API: "google", Name: "gemini-3-pro"}, &cfg, nil, nil, nil, false)
+		require.False(t, active)
+		require.Equal(t, "low", cfg.ThinkingLevel)
+	})
+
+	t.Run("Ollama sends bool or level", func(t *testing.T) {
+		on := ollama.Config{}
+		require.True(t, applyThinkConfigsWithOllama(Model{API: "ollama", ReasoningEffort: "medium"}, nil, nil, &on, nil, true))
+		require.Equal(t, "medium", on.Think)
+		off := ollama.Config{}
+		require.False(t, applyThinkConfigsWithOllama(Model{API: "ollama"}, nil, nil, &off, nil, false))
+		require.Equal(t, false, off.Think)
+	})
+}
+
 func TestApplyThinkConfigsDefaults(t *testing.T) {
+	t.Run("DeepSeek Responses maps requested thinking to high effort", func(t *testing.T) {
+		ccfg := openai.Config{UseResponses: true, ResponsesProfile: openai.ResponsesProfileDeepSeek}
+
+		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, &ccfg, true)
+
+		require.True(t, active)
+		require.True(t, ccfg.ThinkTags)
+		require.Equal(t, "high", ccfg.ExtraParams["reasoning_effort"])
+		require.NotContains(t, ccfg.ExtraParams, "thinking")
+	})
+
+	t.Run("DeepSeek Responses maps disabled thinking to none", func(t *testing.T) {
+		ccfg := openai.Config{UseResponses: true, ResponsesProfile: openai.ResponsesProfileDeepSeek}
+
+		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, &ccfg, false)
+
+		require.False(t, active)
+		require.False(t, ccfg.ThinkTags)
+		require.Equal(t, "none", ccfg.ExtraParams["reasoning_effort"])
+		require.NotContains(t, ccfg.ExtraParams, "thinking")
+	})
+
+	t.Run("DeepSeek Responses preserves configured max effort", func(t *testing.T) {
+		ccfg := openai.Config{UseResponses: true, ResponsesProfile: openai.ResponsesProfileDeepSeek}
+
+		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash", ReasoningEffort: "max"}, nil, nil, &ccfg, true)
+
+		require.True(t, active)
+		require.Equal(t, "max", ccfg.ExtraParams["reasoning_effort"])
+	})
+
 	t.Run("DeepSeek without thinking-type sends enabled when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
@@ -311,7 +385,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("OpenAI without thinking-type sends reasoning effort when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "openai"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigs(Model{API: "openai", Name: "gpt-5.4-mini"}, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, openai.ReasoningEffortMedium, ccfg.ReasoningEffort)

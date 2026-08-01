@@ -2,12 +2,20 @@ package openai
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/shared/constant"
 	"github.com/panjie/mods/internal/proto"
 )
+
+const deepSeekChatProviderDataKey = "deepseek.chat.assistant.v1"
+
+type deepSeekChatAssistantState struct {
+	ReasoningContent string `json:"reasoning_content"`
+}
 
 func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 	var tools []openai.ChatCompletionToolParam
@@ -30,6 +38,10 @@ func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 }
 
 func fromProtoMessages(input []proto.Message) []openai.ChatCompletionMessageParamUnion {
+	return fromProtoMessagesForProfile(input, ProviderProfileOpenAI)
+}
+
+func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile) []openai.ChatCompletionMessageParamUnion {
 	input = proto.NormalizeSystemMessages(input)
 	var messages []openai.ChatCompletionMessageParamUnion
 	for _, msg := range input {
@@ -69,10 +81,54 @@ func fromProtoMessages(input []proto.Message) []openai.ChatCompletionMessagePara
 					},
 				})
 			}
+			if profile == ProviderProfileDeepSeek {
+				m = deepSeekAssistantMessage(m, msg.ProviderData[deepSeekChatProviderDataKey])
+			}
 			messages = append(messages, m)
 		}
 	}
 	return messages
+}
+
+func deepSeekAssistantMessage(
+	message openai.ChatCompletionMessageParamUnion,
+	stateJSON json.RawMessage,
+) openai.ChatCompletionMessageParamUnion {
+	if len(stateJSON) == 0 {
+		return message
+	}
+	var state deepSeekChatAssistantState
+	if err := json.Unmarshal(stateJSON, &state); err != nil || state.ReasoningContent == "" {
+		return message
+	}
+	raw, err := json.Marshal(message)
+	if err != nil {
+		return message
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return message
+	}
+	fields["reasoning_content"] = state.ReasoningContent
+	raw, err = json.Marshal(fields)
+	if err != nil {
+		return message
+	}
+	return param.Override[openai.ChatCompletionMessageParamUnion](json.RawMessage(raw))
+}
+
+func attachDeepSeekChatState(msg *proto.Message, reasoning string) {
+	if msg == nil || reasoning == "" {
+		return
+	}
+	state, err := json.Marshal(deepSeekChatAssistantState{ReasoningContent: reasoning})
+	if err != nil {
+		return
+	}
+	if msg.ProviderData == nil {
+		msg.ProviderData = map[string]json.RawMessage{}
+	}
+	msg.ProviderData[deepSeekChatProviderDataKey] = state
 }
 
 func toProtoMessage(in openai.ChatCompletionMessageParamUnion) proto.Message {

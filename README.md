@@ -45,8 +45,8 @@ It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
   plan before anything runs? Use `--plan`.
 - **Stays in your pipeline.** Pipe command output in, get structured answers out.
   `--minimal` prints one item per line — perfect for `| gum choose` and friends.
-- **Knows the live web.** Web search is opt-in; `--web-search` uses Tavily by
-  default with `TAVILY_API_KEY` (custom providers are also supported).
+- **Knows the live web.** Web search is opt-in; `--web-search` uses a supported
+  provider's hosted search when available, otherwise Tavily or a custom backend.
 - **Sees images.** Attach pictures via `--image`, `--clipboard-image`, or piped
   stdin for any vision-capable model.
 - **Remembers.** Every session is saved locally with a title and a SHA-1 —
@@ -239,6 +239,9 @@ find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important
 export TAVILY_API_KEY="tvly-..."
 mods --web-search "what changed in the latest Go release? update go.mod if relevant"
 
+# Force local Tavily/custom search even when the model offers hosted search
+mods --web-search --web-search-backend local "find the latest Go release"
+
 # Ask a vision-capable model about an image
 mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
@@ -305,7 +308,7 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `fs_write_file`      | Create or overwrite files in the workspace.               |
 | `fs_replace`         | Replace exact text in an existing file.                   |
 | `fs_search`          | Search file contents across the workspace.                |
-| `fs_apply_patch`     | Apply targeted edits to existing files.                   |
+| `fs_apply_patch`     | Atomically apply unified or Codex-format multi-file edits. |
 | `shell_run`          | Execute shell commands (prefix-allowable through review). |
 
 Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
@@ -378,12 +381,69 @@ for stateless reasoning and tool continuation in its local session data. Azure
 OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
 Chat Completions.
 
+Official `deepseek-v4-flash` requests to `api.deepseek.com` also use the
+[DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
+automatically. Mods uses its plaintext reasoning events, hosted web search, and
+Codex-compatible free-form `apply_patch` tool. DeepSeek Responses is stateless,
+so complete response items and tool outputs remain in the local session and are
+replayed on the next turn. It does not currently accept image or file input;
+mods rejects such requests before sending them. To opt out for this model, set
+`endpoint: chat-completions` in `mods.yml`:
+
+```yaml
+apis:
+  deepseek:
+    base-url: https://api.deepseek.com/
+    models:
+      deepseek-v4-flash:
+        endpoint: chat-completions # optional explicit fallback
+        reasoning-effort: high     # low, high, or max with --think
+```
+
+`api-type`, `provider-profile`, and `endpoint` are intentionally separate:
+
+- `api-type` chooses the transport adapter (`openai`, `anthropic`, `google`,
+  `ollama`, or `azure`).
+- `provider-profile` chooses provider-specific semantics on an
+  OpenAI-compatible transport (`openai`, `deepseek`, `qwen`, `glm`, `kimi`, or
+  `minimax`). A model-level value overrides the provider default.
+- `endpoint` chooses `responses` or `chat-completions` for a model.
+
+An arbitrarily named gateway can therefore use DeepSeek Responses explicitly:
+
+```yaml
+apis:
+  company-router:
+    api-type: openai
+    base-url: https://gateway.example.com/v1
+    api-key-env: COMPANY_ROUTER_KEY
+    models:
+      deepseek-v4-flash:
+        provider-profile: deepseek
+        endpoint: responses
+```
+
+Unknown enum values are rejected instead of silently falling back. Custom
+providers must configure `base-url`; only built-in providers with a known
+official endpoint may omit it.
+
+`web-search-backend` accepts `auto` (default), `local`, or `provider`. In auto
+mode DeepSeek Responses uses hosted search without a Tavily key; other endpoints
+keep the existing local search behavior. `provider` fails before the request if
+the selected endpoint has no hosted search capability.
+
 Anthropic requests continue to use the Messages API. With `-t`, mods chooses
 adaptive or manual extended thinking for recognized Claude models. During tool
 use it keeps complete thinking, signature, redacted-thinking, and tool-use
 blocks in local session state and sends them back unchanged with tool results.
 For an opaque model on a custom `api-type: anthropic` endpoint, configure
 `thinking-type` explicitly instead of relying on model-name inference.
+
+Gemini 2.5 uses `thinkingBudget` (`-1` requests a dynamic budget), while Gemini
+3 maps `reasoning-effort` to `thinkingLevel`. Ollama sends its native `think`
+field and renders `message.thinking` separately from the final answer. Exact
+effort values remain model/provider dependent; unsupported configured values
+fail before the HTTP request.
 
 ```sh
 mods --api anthropic --model claude-sonnet-4-6 "explain this error"

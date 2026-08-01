@@ -533,10 +533,11 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-blackbox-ai
 ```
 
 These scenarios make paid network requests and cover structured pipe input,
-session continuation across processes, and filesystem tool use. The runner uses
-the first available key in this provider order: DeepSeek, Qwen, OpenAI,
-Anthropic, GLM, then Google. Google runs the non-tool scenarios because its
-adapter does not expose built-in filesystem tools.
+session continuation across processes, complex read-only shell pipelines,
+filesystem tool use, and enforcement of the filesystem workspace boundary. The
+runner uses the first available key in this provider order: DeepSeek, Qwen,
+OpenAI, Anthropic, GLM, then Google. Google runs the non-tool scenarios because
+its adapter does not expose built-in filesystem or shell tools.
 
 Set `MODS_BLACKBOX_PROVIDER` to select a provider explicitly and
 `MODS_BLACKBOX_MODEL` to override its default model:

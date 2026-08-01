@@ -91,6 +91,45 @@ func TestProviderSelectionHonorsExplicitOverride(t *testing.T) {
 	}
 }
 
+func TestProviderSelectionRejectsUnsupportedOverride(t *testing.T) {
+	env := map[string]string{
+		providerOverrideEnv: "unknown-provider",
+		"DEEPSEEK_API_KEY":  "deepseek-key",
+	}
+
+	profile, reason := selectProvider(func(name string) string { return env[name] })
+	if profile != nil {
+		t.Fatalf("selected unsupported provider %s", profile.name)
+	}
+	if !strings.Contains(reason, `unsupported MODS_BLACKBOX_PROVIDER value "unknown-provider"`) {
+		t.Fatalf("unexpected unsupported-provider reason: %s", reason)
+	}
+	for _, supported := range []string{"deepseek", "qwen", "openai", "anthropic", "glm", "google"} {
+		if !strings.Contains(reason, supported) {
+			t.Errorf("unsupported-provider reason does not list %s: %s", supported, reason)
+		}
+	}
+}
+
+func TestProviderSelectionExplainsWhenNoKeyIsAvailable(t *testing.T) {
+	profile, reason := selectProvider(func(string) string { return "" })
+	if profile != nil {
+		t.Fatalf("selected provider %s without a key", profile.name)
+	}
+	for _, keyEnv := range []string{
+		"DEEPSEEK_API_KEY",
+		"DASHSCOPE_API_KEY",
+		"OPENAI_API_KEY",
+		"ANTHROPIC_API_KEY",
+		"ZAI_API_KEY",
+		"GOOGLE_API_KEY",
+	} {
+		if !strings.Contains(reason, keyEnv) {
+			t.Errorf("missing-key reason does not list %s: %s", keyEnv, reason)
+		}
+	}
+}
+
 func TestRealAIBlackBoxStructuredPipeInput(t *testing.T) {
 	h := newRealAIHarness(t, false)
 
@@ -188,6 +227,84 @@ func TestRealAIBlackBoxUsesFilesystemToolsToCompleteTask(t *testing.T) {
 	}
 	if got.InvoiceCount != 3 || got.TotalUnits != 10 || got.Subtotal != 138 || got.Status != "verified" {
 		t.Fatalf("result.json contains incorrect task results: %#v", got)
+	}
+}
+
+func TestRealAIBlackBoxExecutesComplexReadOnlyShellPipeline(t *testing.T) {
+	h := newRealAIHarnessWithTools(t, false, true, "auto")
+	if !h.profile.filesystemTools {
+		t.Skipf("%s does not support built-in shell tools", h.profile.name)
+	}
+
+	fixtures := map[string]string{
+		"alpha notes.txt":         "first\nsecond\n",
+		"nested/beta records.txt": "one\ntwo\nthree\n",
+	}
+	for name, content := range fixtures {
+		path := filepath.Join(h.workspace, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("create fixture directory: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write fixture %s: %v", name, err)
+		}
+	}
+
+	stdout, _ := h.run(
+		t,
+		"",
+		"Use the shell tool to inspect the workspace. You MUST run this exact command: "+
+			"find . -type f -name '*.txt' -print0 | xargs -0 wc -l | sort -n. "+
+			"Return only one JSON object with file_count and total_lines. Count only "+
+			"the individual files, not wc's total row.",
+	)
+
+	var got struct {
+		FileCount  int `json:"file_count"`
+		TotalLines int `json:"total_lines"`
+	}
+	decodeJSONObject(t, stdout, &got)
+	if got.FileCount != 2 || got.TotalLines != 5 {
+		t.Fatalf("complex read-only pipeline returned incorrect results: %#v", got)
+	}
+}
+
+func TestRealAIBlackBoxRejectsFilesystemAccessOutsideWorkspace(t *testing.T) {
+	h := newRealAIHarnessWithTools(t, true, false, "auto")
+	if !h.profile.filesystemTools {
+		t.Skipf("%s does not support built-in filesystem tools", h.profile.name)
+	}
+
+	repoRoot, err := repositoryRoot()
+	if err != nil {
+		t.Fatalf("find repository root: %v", err)
+	}
+	outsideDir, err := os.MkdirTemp(repoRoot, ".mods-blackbox-boundary-*")
+	if err != nil {
+		t.Fatalf("create outside-workspace fixture directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
+	outsideSecretPath := filepath.Join(outsideDir, "outside-secret.txt")
+	const outsideSecret = "BOUNDARY-SECRET-7391"
+	if err := os.WriteFile(outsideSecretPath, []byte(outsideSecret), 0o600); err != nil {
+		t.Fatalf("write outside-workspace fixture: %v", err)
+	}
+
+	stdout, stderr := h.runExpectFailure(
+		t,
+		"",
+		fmt.Sprintf(
+			"Use the filesystem read tool to read %q, which is outside the workspace. "+
+				"If the tool succeeds, return only the file contents. Do not guess them.",
+			outsideSecretPath,
+		),
+	)
+
+	if strings.Contains(stdout, outsideSecret) {
+		t.Fatalf("model exposed a file from outside the workspace:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "requires review") {
+		t.Fatalf("outside-workspace access failed without an approval error:\n%s", stderr)
 	}
 }
 
@@ -302,6 +419,10 @@ type realAIHarness struct {
 }
 
 func newRealAIHarness(t *testing.T, filesystemTools bool) *realAIHarness {
+	return newRealAIHarnessWithTools(t, filesystemTools, false, "never")
+}
+
+func newRealAIHarnessWithTools(t *testing.T, filesystemTools, shellTools bool, reviewMode string) *realAIHarness {
 	t.Helper()
 
 	if selectedProfile == nil {
@@ -335,6 +456,10 @@ func newRealAIHarness(t *testing.T, filesystemTools bool) *realAIHarness {
 	if filesystemTools {
 		filesystem = "true"
 	}
+	shell := "false"
+	if shellTools {
+		shell = "true"
+	}
 	model := os.Getenv(modelOverrideEnv)
 	if model == "" {
 		model = profile.defaultModel
@@ -352,18 +477,18 @@ hide-tool-status: true
 max-tokens: 1024
 max-retries: 2
 max-tool-rounds: 8
-review-mode: never
+review-mode: %s
 mcp-servers: {}
 builtin-tools:
   filesystem: %s
-  shell: false
+  shell: %s
   workspace: %q
 apis:
   %s:
 %s    api-key-env: %s
     models:
       %s: {}
-`, profile.name, model, filesystem, workspace, profile.name, baseURL, profile.keyEnv, model)
+`, profile.name, model, reviewMode, filesystem, shell, workspace, profile.name, baseURL, profile.keyEnv, model)
 
 	configPath := filepath.Join(configHome, "mods", "mods.yml")
 	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
@@ -390,6 +515,25 @@ apis:
 
 func (h *realAIHarness) run(t *testing.T, stdin string, args ...string) (string, string) {
 	t.Helper()
+	stdout, stderr, err := h.execute(t, stdin, args...)
+	if err != nil {
+		t.Fatalf("mods failed: %v\nstdout:\n%s\nstderr:\n%s",
+			err, stdout, stderr)
+	}
+	return stdout, stderr
+}
+
+func (h *realAIHarness) runExpectFailure(t *testing.T, stdin string, args ...string) (string, string) {
+	t.Helper()
+	stdout, stderr, err := h.execute(t, stdin, args...)
+	if err == nil {
+		t.Fatalf("mods unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	return stdout, stderr
+}
+
+func (h *realAIHarness) execute(t *testing.T, stdin string, args ...string) (string, string, error) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()
@@ -409,11 +553,7 @@ func (h *realAIHarness) run(t *testing.T, stdin string, args ...string) (string,
 		t.Fatalf("mods timed out after %s\nstdout:\n%s\nstderr:\n%s",
 			commandTimeout, stdout.String(), stderr.String())
 	}
-	if err != nil {
-		t.Fatalf("mods failed: %v\nstdout:\n%s\nstderr:\n%s",
-			err, stdout.String(), stderr.String())
-	}
-	return stdout.String(), stderr.String()
+	return stdout.String(), stderr.String(), err
 }
 
 func decodeJSONObject(t *testing.T, output string, dst any) {

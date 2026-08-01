@@ -453,6 +453,101 @@ func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	}
 }
 
+func TestAnalyzeShellCommandComplexPOSIXReadOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+
+	cases := []struct {
+		name string
+		cmd  string
+	}{
+		{
+			name: "nested groups with conditional operators",
+			cmd:  "(git status && git diff) || (git log --oneline -5 | head -2)",
+		},
+		{
+			name: "read-only command substitution in pipeline",
+			cmd:  `printf '%s\n' "$(git rev-parse --show-toplevel)" | head -1`,
+		},
+		{
+			name: "heredoc contents are data not commands",
+			cmd:  "cat <<'EOF' | grep rm\nrm -rf /tmp/not-executed\nEOF",
+		},
+		{
+			name: "null-delimited multi-stage pipeline",
+			cmd:  `find . -type f -name '*.txt' -print0 | xargs -0 wc -l | sort -n`,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := &Mods{
+				Config: testConfigForWorkspace(t.TempDir()),
+				shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+					t.Fatalf("LLM classifier should not be called for %q", command)
+					return defaultShellCommandAnalysis()
+				},
+			}
+			t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+			result := mods.analyzeShellCommand("shell_run", c.cmd)
+			require.Falsef(t, result.NeedsReview, "cmd=%q should be read-only", c.cmd)
+			require.Equal(t, shellEffectRead, result.Effect)
+			require.NotEmpty(t, result.Reason)
+		})
+	}
+}
+
+func TestAnalyzeShellCommandComplexPOSIXWrites(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+
+	externalDir := canonicalTestPath(t, t.TempDir())
+	cases := []struct {
+		name string
+		cmd  string
+	}{
+		{
+			name: "writer nested in conditional subshell",
+			cmd:  "(git status && touch " + filepath.Join(externalDir, "marker") + ") || rm -f " + filepath.Join(externalDir, "stale"),
+		},
+		{
+			name: "writer hidden in command substitution",
+			cmd:  `printf '%s\n' "$(touch ` + filepath.Join(externalDir, "nested") + `)"`,
+		},
+		{
+			name: "read pipeline ending in tee",
+			cmd:  "cat README.md | tee " + filepath.Join(externalDir, "report.txt") + " >/dev/null",
+		},
+		{
+			name: "short-circuited writer remains conservative",
+			cmd:  "false && rm -rf " + filepath.Join(externalDir, "cache"),
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mods := &Mods{
+				Config: testConfigForWorkspace(t.TempDir()),
+				shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+					t.Fatalf("LLM classifier should not be called for %q", command)
+					return defaultShellCommandAnalysis()
+				},
+			}
+			t.Cleanup(func() { mods.shellAnalyzer = nil })
+
+			result := mods.analyzeShellCommand("shell_run", c.cmd)
+			require.Truef(t, result.NeedsReview, "cmd=%q should require review", c.cmd)
+			require.Equal(t, shellEffectWrite, result.Effect)
+			require.Truef(t, hasPathUnder(result.AffectedDirs, externalDir),
+				"cmd=%q should affect %s; got %v", c.cmd, externalDir, result.AffectedDirs)
+			require.Contains(t, result.Reason, "static analysis")
+		})
+	}
+}
+
 func TestAnalyzeShellCommandOldestDownloadsPipelineIsExternalRead(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX pipeline coverage applies to non-Windows shell_run")

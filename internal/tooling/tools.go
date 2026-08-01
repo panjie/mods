@@ -34,7 +34,7 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	workspace := cfg.ResolveWorkspace()
 	root := workspace.Canonical
-	safeDirs := approval.SafeDirsWith(skills.SafeDirs(skillCatalog))
+	safeDirs := approval.SafeDirs()
 
 	if err := toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{
 		SettingsPath:   cfg.SettingsPath,

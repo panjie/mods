@@ -32,3 +32,4 @@
 - The Task `install` path precedence is `BINDIR` > `PREFIX/bin` > XDG local bin > default (`/usr/local/bin`, or `%USERPROFILE%\.local\bin` on Windows); `DESTDIR` wraps the final path.
 - CI runs on Ubuntu, macOS, and Windows; platform-specific code is split with build tags in `internal/tools`, `internal/platform`, and `internal/clipboard`.
 - `DirAllow` approval rules are conversation-scoped (persisted in `approval_rules`, restored via `--continue`, not shared across conversations); a read approval does not grant write and vice versa (mode-split). Legacy rules with empty `Mode` match both.
+- All text files use Unix (LF, `\n`) line endings; no root `.editorconfig` yet so keep new files consistent.

@@ -82,7 +82,7 @@ func TestThoughtDisplayBlock(t *testing.T) {
 
 		require.Contains(t, got, "┃")
 		require.Contains(t, plain, "THINKING")
-		require.Contains(t, plain, "-t")
+		require.NotContains(t, plain, "-t")
 		require.Contains(t, plain, "The user is asking about X.")
 		require.Contains(t, plain, "I should consider Y.")
 		require.NotContains(t, plain, "💭")

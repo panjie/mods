@@ -493,7 +493,6 @@ func thoughtMarkdown(thought string) string {
 func thoughtDisplayBlock(styles ui.InteractionStyles, width int, thought string) string {
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title: "Thinking",
-		Meta:  "-t",
 		Tone:  interactionToneInfo,
 		Body:  strings.Split(thought, "\n"),
 	})

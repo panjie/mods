@@ -105,7 +105,7 @@ func TestSetupStreamContextInjectsAgentsMD(t *testing.T) {
 
 	t.Run("injected by default", func(t *testing.T) {
 		m := newMods(nil)
-		require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+		require.NoError(t, m.setupStreamContext("hello"))
 		joined := systemJoin(m)
 		require.Contains(t, joined, "Project instructions (AGENTS.md)")
 		require.Contains(t, joined, "task check")
@@ -113,13 +113,13 @@ func TestSetupStreamContextInjectsAgentsMD(t *testing.T) {
 
 	t.Run("suppressed by no-instructions", func(t *testing.T) {
 		m := newMods(func(c *Config) { c.NoInstructions = true })
-		require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotContains(t, systemJoin(m), "Project instructions (AGENTS.md)")
 	})
 
 	t.Run("suppressed in minimal mode", func(t *testing.T) {
 		m := newMods(func(c *Config) { c.Minimal = true })
-		require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotContains(t, systemJoin(m), "Project instructions (AGENTS.md)")
 	})
 }

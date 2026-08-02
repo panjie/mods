@@ -57,25 +57,12 @@ func TestHandleAPIError(t *testing.T) {
 		require.Contains(t, merr.ReasonText, "Missing model")
 	})
 
-	t.Run("400 context_length_exceeded retries", func(t *testing.T) {
+	t.Run("400 context_length_exceeded returns error", func(t *testing.T) {
 		m := testMods(t)
-		m.Config.MaxRetries = 2
-		m.retries = 0
-		m.Config.NoLimit = false
 		apiErr := makeErr(http.StatusBadRequest, "context_length_exceeded")
 		apiErr.Message = "This model's maximum context length is 10 tokens. However, your messages resulted in 3 tokens"
 		mod := Model{Name: "gpt-4", API: "openai"}
 		msg := m.handleAPIError(apiErr, mod, "this is a long prompt I have no idea if its really 10 tokens")
-		_, ok := msg.(retryMsg)
-		require.True(t, ok, "expected retryMsg for retry")
-	})
-
-	t.Run("400 context_length_exceeded no_limit returns error", func(t *testing.T) {
-		m := testMods(t)
-		m.Config.NoLimit = true
-		apiErr := makeErr(http.StatusBadRequest, "context_length_exceeded")
-		mod := Model{Name: "gpt-4", API: "openai"}
-		msg := m.handleAPIError(apiErr, mod, "prompt")
 		merr, ok := msg.(modsError)
 		require.True(t, ok)
 		require.Contains(t, merr.ReasonText, "Maximum prompt size exceeded")
@@ -120,6 +107,7 @@ func TestHandleAPIError(t *testing.T) {
 		merr, ok := msg.(modsError)
 		require.True(t, ok)
 		require.Contains(t, merr.ReasonText, "Request too large")
+		require.NotContains(t, merr.ReasonText, "no-limit")
 	})
 
 	t.Run("500 openai retries", func(t *testing.T) {
@@ -275,32 +263,19 @@ func TestHandleGoogleAPIError(t *testing.T) {
 		require.Contains(t, merr.ReasonText, "Missing model")
 	})
 
-	t.Run("400 context length retries with CutPrompt", func(t *testing.T) {
+	t.Run("400 context length returns error", func(t *testing.T) {
 		m := testMods(t)
-		m.Config.MaxRetries = 2
-		m.retries = 0
-		m.Config.NoLimit = false
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusBadRequest, "Request exceeds context length"), mod, "a long prompt")
-		_, ok := msg.(retryMsg)
-		require.True(t, ok, "expected retry on context-length error")
+		merr, ok := msg.(modsError)
+		require.True(t, ok)
+		require.Contains(t, merr.ReasonText, "Maximum prompt size exceeded")
 	})
 
-	t.Run("400 token count retries", func(t *testing.T) {
+	t.Run("400 token count returns error", func(t *testing.T) {
 		m := testMods(t)
-		m.Config.MaxRetries = 2
-		m.retries = 0
 		mod := Model{Name: "gemini-2.5-pro", API: "google"}
 		msg := m.handleGoogleAPIError(makeErr(http.StatusBadRequest, "token count too high"), mod, "prompt")
-		_, ok := msg.(retryMsg)
-		require.True(t, ok, "expected retry on token-count error")
-	})
-
-	t.Run("400 context length no_limit returns error", func(t *testing.T) {
-		m := testMods(t)
-		m.Config.NoLimit = true
-		mod := Model{Name: "gemini-2.5-pro", API: "google"}
-		msg := m.handleGoogleAPIError(makeErr(http.StatusBadRequest, "context length exceeded"), mod, "prompt")
 		merr, ok := msg.(modsError)
 		require.True(t, ok)
 		require.Contains(t, merr.ReasonText, "Maximum prompt size exceeded")
@@ -388,32 +363,19 @@ func TestHandleAnthropicAPIError(t *testing.T) {
 		require.Contains(t, merr.ReasonText, "Missing model")
 	})
 
-	t.Run("400 prompt too long retries", func(t *testing.T) {
+	t.Run("400 prompt too long returns error", func(t *testing.T) {
 		m := testMods(t)
-		m.Config.MaxRetries = 2
-		m.retries = 0
-		m.Config.NoLimit = false
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusBadRequest, contextLenBody), mod, "a long prompt")
-		_, ok := msg.(retryMsg)
-		require.True(t, ok, "expected retry on prompt-too-long")
+		merr, ok := msg.(modsError)
+		require.True(t, ok)
+		require.Contains(t, merr.ReasonText, "Maximum prompt size exceeded")
 	})
 
-	t.Run("400 number of tokens retries", func(t *testing.T) {
+	t.Run("400 number of tokens returns error", func(t *testing.T) {
 		m := testMods(t)
-		m.Config.MaxRetries = 2
-		m.retries = 0
 		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
 		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusBadRequest, tokenCountBody), mod, "prompt")
-		_, ok := msg.(retryMsg)
-		require.True(t, ok, "expected retry on number-of-tokens")
-	})
-
-	t.Run("400 prompt too long no_limit returns error", func(t *testing.T) {
-		m := testMods(t)
-		m.Config.NoLimit = true
-		mod := Model{Name: "claude-sonnet-4", API: "anthropic"}
-		msg := m.handleAnthropicAPIError(newAnthropicError(t, http.StatusBadRequest, contextLenBody), mod, "prompt")
 		merr, ok := msg.(modsError)
 		require.True(t, ok)
 		require.Contains(t, merr.ReasonText, "Maximum prompt size exceeded")

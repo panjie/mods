@@ -62,18 +62,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	s := &Stream{
 		toolCall:   request.ToolCaller,
 		trackUsage: request.TrackUsage,
-		budgeter:   request.MessageBudgeter,
-	}
-	if request.MessageBudgeter != nil {
-		messages, err := request.MessageBudgeter(request.Messages)
-		if err != nil {
-			s.err = err
-			s.done = true
-			s.closed = true
-			s.messages = request.Messages
-			return s
-		}
-		request.Messages = messages
 	}
 	body := newChatRequest(request, c.config.Think)
 	s.request = body
@@ -139,7 +127,6 @@ type Stream struct {
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
-	budgeter   proto.MessageBudgeter
 }
 
 func (s *Stream) fn(run uint64, ch chan api.ChatResponse, resp api.ChatResponse) error {
@@ -185,18 +172,6 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 		statuses = append(statuses, status)
 	}
 	if len(statuses) > 0 {
-		if s.budgeter != nil {
-			messages, err := s.budgeter(s.messages)
-			if err != nil {
-				s.mu.Lock()
-				s.err = err
-				s.done = true
-				s.mu.Unlock()
-				return statuses
-			}
-			s.messages = messages
-			s.request.Messages = fromProtoMessages(messages)
-		}
 		s.message = api.Message{}
 		s.content.Reset()
 		s.thinking.Reset()

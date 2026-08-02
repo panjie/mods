@@ -293,7 +293,6 @@ func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []pr
 		maxTokStr = fmt.Sprintf("%d", *request.MaxTokens)
 	}
 	debug.Printf("Request: temp=%s, max_tokens=%s", tempStr, maxTokStr)
-	debug.Printf("Request: no-limit=%v, max-input-chars=%d", cfg.NoLimit, mod.MaxChars)
 	if cfg.HTTPProxy != "" {
 		debug.Printf("HTTP proxy: %s", cfg.HTTPProxy)
 	}

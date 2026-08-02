@@ -19,13 +19,6 @@ import (
 var errResponsesStreamEnded = errors.New("OpenAI Responses stream ended before a terminal event")
 
 func (c *Client) requestResponses(ctx context.Context, request proto.Request) stream.Stream {
-	if request.MessageBudgeter != nil {
-		messages, err := request.MessageBudgeter(request.Messages)
-		if err != nil {
-			return &responseStream{requestErr: err, messages: request.Messages}
-		}
-		request.Messages = messages
-	}
 	profile := c.profile()
 	if profile == ProviderProfileDeepSeek && messagesContainImages(request.Messages) {
 		return &responseStream{
@@ -83,7 +76,6 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		request:    body,
 		toolCall:   request.ToolCaller,
 		messages:   request.Messages,
-		budgeter:   request.MessageBudgeter,
 		trackUsage: request.TrackUsage,
 		profile:    profile,
 	}
@@ -159,7 +151,6 @@ type responseStream struct {
 	request    responses.ResponseNewParams
 	messages   []proto.Message
 	toolCall   func(name string, data []byte) (string, error)
-	budgeter   proto.MessageBudgeter
 	trackUsage bool
 	profile    ResponsesProfile
 
@@ -434,13 +425,6 @@ func (s *responseStream) Next() bool {
 
 func (s *responseStream) startFollowup() error {
 	s.done = false
-	if s.budgeter != nil {
-		messages, err := s.budgeter(s.messages)
-		if err != nil {
-			return err
-		}
-		s.messages = messages
-	}
 	input, err := fromProtoResponseInput(s.messages, s.profile)
 	if err != nil {
 		return err

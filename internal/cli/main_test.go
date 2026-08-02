@@ -648,6 +648,9 @@ func TestUsageIntroAndPromptSyntax(t *testing.T) {
 func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 	groups := groupedUsageFlags(rootCmd.Flags())
 	require.Empty(t, groups[flagCategoryOther])
+	for _, removed := range []string{"max-tokens", "no-limit"} {
+		require.Nil(t, rootCmd.Flags().Lookup(removed))
+	}
 
 	seen := make(map[string]int)
 	for _, category := range flagCategorySpecs {

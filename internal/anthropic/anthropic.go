@@ -30,16 +30,9 @@ func (c *Client) Capabilities() stream.Capabilities {
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
-	if request.MessageBudgeter != nil {
-		messages, err := request.MessageBudgeter(request.Messages)
-		if err != nil {
-			return &Stream{budgetErr: err, messages: request.Messages}
-		}
-		request.Messages = messages
-	}
 	system, messages, err := fromProtoMessages(request.Messages)
 	if err != nil {
-		return &Stream{budgetErr: err, messages: request.Messages}
+		return &Stream{requestErr: err, messages: request.Messages}
 	}
 	body := anthropic.MessageNewParams{
 		Model:    anthropic.Model(request.Model),
@@ -73,7 +66,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	case "enabled":
 		if c.config.ThinkingBudget < 1024 {
 			return &Stream{
-				budgetErr: fmt.Errorf(
+				requestErr: fmt.Errorf(
 					"anthropic thinking-budget must be at least 1024 tokens, got %d",
 					c.config.ThinkingBudget,
 				),
@@ -82,8 +75,8 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		}
 		if explicitMaxTokens && body.MaxTokens <= int64(c.config.ThinkingBudget) {
 			return &Stream{
-				budgetErr: fmt.Errorf(
-					"anthropic max-tokens (%d) must be greater than thinking-budget (%d)",
+				requestErr: fmt.Errorf(
+					"anthropic output token budget (%d) must be greater than thinking-budget (%d)",
 					body.MaxTokens,
 					c.config.ThinkingBudget,
 				),
@@ -96,8 +89,8 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		body.Thinking = anthropic.ThinkingConfigParamOfEnabled(int64(c.config.ThinkingBudget))
 	default:
 		return &Stream{
-			budgetErr: fmt.Errorf("unsupported Anthropic thinking-type %q", c.config.ThinkingType),
-			messages:  request.Messages,
+			requestErr: fmt.Errorf("unsupported Anthropic thinking-type %q", c.config.ThinkingType),
+			messages:   request.Messages,
 		}
 	}
 
@@ -110,7 +103,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		request:    body,
 		toolCall:   request.ToolCaller,
 		messages:   request.Messages,
-		budgeter:   request.MessageBudgeter,
 		trackUsage: request.TrackUsage,
 	}
 
@@ -185,8 +177,7 @@ type Stream struct {
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
-	budgeter   proto.MessageBudgeter
-	budgetErr  error
+	requestErr error
 }
 
 // CallTools implements stream.Stream.
@@ -248,8 +239,8 @@ func (s *Stream) Current() (proto.Chunk, error) {
 
 // Err implements stream.Stream.
 func (s *Stream) Err() error {
-	if s.budgetErr != nil {
-		return s.budgetErr
+	if s.requestErr != nil {
+		return s.requestErr
 	}
 	if s.stream == nil {
 		return nil
@@ -278,25 +269,11 @@ func tokenUsageFromMessage(message anthropic.Message) proto.TokenUsage {
 
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
-	if s.budgetErr != nil {
+	if s.requestErr != nil {
 		return false
 	}
 	if s.done {
 		s.done = false
-		if s.budgeter != nil {
-			messages, err := s.budgeter(s.messages)
-			if err != nil {
-				s.budgetErr = err
-				return false
-			}
-			s.messages = messages
-			system, requestMessages, err := fromProtoMessages(messages)
-			if err != nil {
-				s.budgetErr = err
-				return false
-			}
-			s.request.System, s.request.Messages = system, requestMessages
-		}
 		s.stream = s.factory()
 		s.message = anthropic.Message{}
 	}
@@ -312,7 +289,7 @@ func (s *Stream) Next() bool {
 	s.request.Messages = append(s.request.Messages, s.message.ToParam())
 	message, err := toProtoMessage(s.message)
 	if err != nil {
-		s.budgetErr = err
+		s.requestErr = err
 		return false
 	}
 	s.messages = append(s.messages, message)

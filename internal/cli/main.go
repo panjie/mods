@@ -154,8 +154,6 @@ func initFlags() {
 	regBool(flags, &config.ShowHelp, "help", "h", false)
 	regBool(flags, &config.Version, "version", "v", false)
 	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)
-	regBool(flags, &config.NoLimit, "no-limit", "", config.NoLimit)
-	regInt64(flags, &config.MaxTokens, "max-tokens", config.MaxTokens)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
 	regStrArr(flags, &config.SkillsDirs, "skills-dirs", "", config.SkillsDirs)
@@ -190,8 +188,6 @@ func initFlags() {
 		flags,
 		"http-proxy",
 		"max-retries",
-		"max-tokens",
-		"no-limit",
 		"word-wrap",
 		"hide-tool-status",
 		"show-token-usage",

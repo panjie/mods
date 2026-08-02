@@ -64,12 +64,6 @@ theme: charm
 # -----------------------------------------------------------------------------
 # Model Parameters
 # -----------------------------------------------------------------------------
-# {{ index .Help "max-input-chars" }}
-max-input-chars: 0
-# {{ index .Help "max-tokens" }}
-# max-tokens: 100
-# {{ index .Help "no-limit" }}
-no-limit: false
 # {{ index .Help "no-instructions" }}
 no-instructions: false
 # {{ index .Help "http-proxy" }}
@@ -128,8 +122,6 @@ builtin-tools:
   shell-read-only-commands: []
   # {{ index .Help "builtin-tools.shell-timeout" }}
   shell-timeout: 30s
-  # {{ index .Help "builtin-tools.shell-max-output" }}
-  shell-max-output: 20000
   # {{ index .Help "builtin-tools.workspace" }}
   workspace: ""
 # {{ index .Help "web-search" }}
@@ -208,7 +200,7 @@ apis:
     #     reasoning-effort: high
     #   claude-sonnet-4-5-20250929:
     #     thinking-type: enabled
-    #     # Manual thinking requires at least 1024 and less than max-tokens.
+    #     # Manual thinking requires at least 1024 tokens.
     #     thinking-budget: 8192
 
   azure:

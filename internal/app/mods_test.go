@@ -287,40 +287,24 @@ func TestFindSessionDetails(t *testing.T) {
 	})
 }
 
-func TestSetupStreamContextDoesNotTruncateWhenMaxCharsUnset(t *testing.T) {
+func TestSetupStreamContextPreservesInput(t *testing.T) {
 	cfg := defaultConfig()
-	cfg.MaxInputChars = 0
 	cfg.FormatText = defaultConfig().FormatText
 	mods := &Mods{
 		ctx:    context.Background(),
 		db:     testDB(t),
 		Config: &cfg,
 	}
-	require.NoError(t, mods.setupStreamContext("hello world", Model{}))
+	require.NoError(t, mods.setupStreamContext("hello world"))
 	require.NotEmpty(t, mods.messages)
 	require.Equal(t, "hello world", mods.messages[len(mods.messages)-1].Content)
 }
 
-func TestSetupStreamContextDefersTruncationToFinalBudgeter(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.MaxInputChars = 5
-	cfg.FormatText = defaultConfig().FormatText
-	mods := &Mods{
-		ctx:    context.Background(),
-		db:     testDB(t),
-		Config: &cfg,
-	}
-	require.NoError(t, mods.setupStreamContext("hello world", Model{MaxChars: 5}))
-	require.Equal(t, "hello world", mods.messages[len(mods.messages)-1].Content)
-}
-
-func TestReadLimitedStdinTruncatesBeforeReadAll(t *testing.T) {
+func TestReadLimitedStdinPreservesFullInput(t *testing.T) {
 	m := &Mods{Config: &Config{}}
-	m.Config.MaxInputChars = 5
 	data, err := m.readLimitedStdin(bytes.NewBufferString("hello world"))
 	require.NoError(t, err)
-	require.Contains(t, string(data), "hello")
-	require.Contains(t, string(data), "Input truncated")
+	require.Equal(t, "hello world", string(data))
 }
 
 func systemContents(messages []proto.Message) []string {
@@ -345,23 +329,21 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 			ctx:    context.Background(),
 		}
 	}
-	model := Model{MaxChars: 1000}
-
 	t.Run("minimal disabled", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotContains(t, systemContents(m.messages), minimalSystemPrompt)
 	})
 
 	t.Run("minimal adds system prompt", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), minimalSystemPrompt)
 	})
 
 	t.Run("minimal suppresses format prompt", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true, Format: "markdown"}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		systemMessages := systemContents(m.messages)
 		require.Contains(t, systemMessages, minimalSystemPrompt)
 		require.NotContains(t, systemMessages, defaultMarkdownFormatText)
@@ -375,7 +357,7 @@ func TestSetupStreamContextMinimal(t *testing.T) {
 				Roles:   map[string][]string{"shell": {"role prompt"}},
 			},
 		})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		systemMessages := systemContents(m.messages)
 		roleIndex := slices.Index(systemMessages, "role prompt")
 		minimalIndex := slices.Index(systemMessages, minimalSystemPrompt)
@@ -399,25 +381,23 @@ func TestSetupStreamContextFormatFallback(t *testing.T) {
 			ctx:    context.Background(),
 		}
 	}
-	model := Model{MaxChars: 1000}
-
 	t.Run("defined format injects its format-text", func(t *testing.T) {
 		cfg := Config{PersistentConfig: PersistentConfig{Format: "csv"}}
 		cfg.FormatText = FormatText{"csv": "Return CSV only."}
 		m := newTestMods(cfg)
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), "Return CSV only.")
 	})
 
 	t.Run("undefined format falls back to markdown text", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Format: "xml"}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), defaultMarkdownFormatText)
 	})
 
 	t.Run("json format injects json text from format-text", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Format: "json"}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), defaultJSONFormatText)
 	})
 
@@ -425,13 +405,13 @@ func TestSetupStreamContextFormatFallback(t *testing.T) {
 		cfg := Config{PersistentConfig: PersistentConfig{Format: "json"}}
 		cfg.FormatText = FormatText{}
 		m := newTestMods(cfg)
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), defaultJSONFormatText)
 	})
 
 	t.Run("empty format injects nothing", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotContains(t, systemContents(m.messages), defaultMarkdownFormatText)
 	})
 }
@@ -450,17 +430,15 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 			ctx:    context.Background(),
 		}
 	}
-	model := Model{MaxChars: 1000}
-
 	t.Run("normal mode injects identity", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), modsIdentityPrompt)
 	})
 
 	t.Run("system info uses workspace field", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotEmpty(t, m.messages)
 		require.Contains(t, m.messages[0].Content, "workspace=")
 		require.NotContains(t, m.messages[0].Content, "workspace_root=")
@@ -468,20 +446,20 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 
 	t.Run("system info includes timezone with utc offset", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotEmpty(t, m.messages)
 		require.Regexp(t, regexp.MustCompile(`timezone=[^,]+ \(UTC[+-]\d{2}:\d{2}\)`), m.messages[0].Content)
 	})
 
 	t.Run("minimal mode skips identity", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.NotContains(t, systemContents(m.messages), modsIdentityPrompt)
 	})
 
 	t.Run("plan mode injects identity and plan prompt", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupPlanContext("hello", model))
+		require.NoError(t, m.setupPlanContext("hello"))
 		contents := systemContents(m.messages)
 		require.Contains(t, contents, modsIdentityPrompt)
 		require.Contains(t, contents, planSystemPrompt)
@@ -491,7 +469,7 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{
 			Prompts: PromptConfig{Identity: "custom identity"},
 		}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		contents := systemContents(m.messages)
 		require.Contains(t, contents, "custom identity")
 		require.NotContains(t, contents, modsIdentityPrompt)
@@ -501,7 +479,7 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{
 			Prompts: PromptConfig{ToolSelection: "custom tool rules"},
 		}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		registry := toolregistry.NewRegistry()
 		require.NoError(t, toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{}))
 		require.NoError(t, m.injectToolSelectionPrompt(registry))
@@ -516,7 +494,7 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{
 			Prompts: PromptConfig{Identity: "file://" + path},
 		}})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), "identity from file")
 	})
 }
@@ -535,8 +513,6 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 			ctx:    context.Background(),
 		}
 	}
-	model := Model{MaxChars: 1000}
-
 	t.Run("non-empty catalog injects Available skills section", func(t *testing.T) {
 		root := t.TempDir()
 		skillDir := filepath.Join(root, "demo", "SKILL.md")
@@ -548,7 +524,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 
 		m := newTestMods(Config{})
 		m.skillCatalog = catalog
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
 		require.Contains(t, joined, "## Available skills")
 		require.Contains(t, joined, "demo: Demo skill.")
@@ -558,7 +534,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 
 	t.Run("empty catalog skips injection", func(t *testing.T) {
 		m := newTestMods(Config{})
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
 		require.NotContains(t, joined, "Available skills")
 		require.NotContains(t, joined, "Skill safe directories:")
@@ -575,7 +551,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
 		m.skillCatalog = catalog
-		require.NoError(t, m.setupStreamContext("hello", model))
+		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
 		require.NotContains(t, joined, "Available skills")
 		require.NotContains(t, joined, "Skill safe directories:")
@@ -608,7 +584,7 @@ func TestSetupPlanContextPromptPolicy(t *testing.T) {
 		ctx:    context.Background(),
 	}
 
-	require.NoError(t, m.setupPlanContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, m.setupPlanContext("hello"))
 
 	systemMessages := systemContents(m.messages)
 	require.Contains(t, systemMessages, planSystemPrompt)
@@ -633,7 +609,7 @@ func TestSetupPlanContextPromptOverride(t *testing.T) {
 		ctx:    context.Background(),
 	}
 
-	require.NoError(t, m.setupPlanContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, m.setupPlanContext("hello"))
 
 	systemMessages := systemContents(m.messages)
 	require.Contains(t, systemMessages, "custom plan prompt")
@@ -709,7 +685,6 @@ func TestPlanHistoryCarriedIntoExecution(t *testing.T) {
 	require.Len(t, m.planHistory, 4) // user + assistant + tool + plan
 	for _, msg := range m.planHistory {
 		require.NotContains(t, msg.Content, "PLANNING PHASE ONLY")
-		require.Equal(t, proto.ContextClassHistory, msg.ContextClass())
 	}
 
 	// Execution rebuilds the system block fresh and re-appends the request.
@@ -778,7 +753,7 @@ func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
 		Styles: makeStyles(true),
 		ctx:    context.Background(),
 	}
-	require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, m.setupStreamContext("hello"))
 	require.NotEmpty(t, m.messages)
 	require.Contains(t, m.messages[0].Content, "powershell=")
 	require.Contains(t, m.messages[0].Content, "pwsh=")

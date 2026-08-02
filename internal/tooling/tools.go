@@ -62,20 +62,18 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	if cfg.BuiltinTools.Shell {
 		if err := toolregistry.RegisterShell(registry, toolregistry.ShellConfig{
-			Root:           root,
-			Timeout:        cfg.BuiltinTools.ShellTimeout,
-			MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
-			SudoPrompt:     handlers.SudoPrompt,
-			Progress:       handlers.ShellProgress,
+			Root:       root,
+			Timeout:    cfg.BuiltinTools.ShellTimeout,
+			SudoPrompt: handlers.SudoPrompt,
+			Progress:   handlers.ShellProgress,
 		}); err != nil {
 			return nil, err
 		}
 		if runtime.GOOS == "windows" {
 			if err := toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{
-				Root:           root,
-				Timeout:        cfg.BuiltinTools.ShellTimeout,
-				MaxOutputChars: cfg.BuiltinTools.ShellMaxOutput,
-				Progress:       handlers.ShellProgress,
+				Root:     root,
+				Timeout:  cfg.BuiltinTools.ShellTimeout,
+				Progress: handlers.ShellProgress,
 			}); err != nil {
 				return nil, err
 			}

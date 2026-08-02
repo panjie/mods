@@ -442,7 +442,6 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	})
 	defer closeServer()
 
-	budgetCalls := 0
 	identity := proto.Message{Role: proto.RoleSystem, Content: "identity"}
 	identity.SetSystemSection(proto.SystemSectionRuntimeIdentity)
 	format := proto.Message{Role: proto.RoleSystem, Content: "format"}
@@ -452,10 +451,6 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 			format,
 			{Role: proto.RoleUser, Content: "read README"},
 			identity,
-		},
-		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
-			budgetCalls++
-			return messages, nil
 		},
 		ToolCaller: func(name string, data []byte) (string, error) {
 			require.Equal(t, "read_file", name)
@@ -474,13 +469,14 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	statuses := st.CallTools()
 	require.Len(t, statuses, 1)
 	require.NoError(t, statuses[0].Err)
-	require.Equal(t, 2, budgetCalls, "budgeter must run for initial and tool follow-up requests")
 	require.Len(t, *captured, 2)
 	for _, body := range *captured {
 		var request map[string]any
 		require.NoError(t, json.Unmarshal(body, &request))
 		system := request["systemInstruction"].(map[string]any)
 		require.Len(t, system["parts"].([]any), 1)
+		generation := request["generationConfig"].(map[string]any)
+		require.NotContains(t, generation, "maxOutputTokens")
 	}
 
 	var followup map[string]any

@@ -84,14 +84,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if err := applyHTTPProxy(cfg, &accfg, &gccfg, &occfg, &ccfg); err != nil {
 		return requestSession{}, err
 	}
-	if mod.MaxChars == 0 {
-		mod.MaxChars = cfg.MaxInputChars
-	}
-	maxTokens := cfg.MaxTokens
-	if isOSeries(mod.Name) {
-		maxTokens = 0
-	}
-
 	wscfg := websearch.Config{
 		Enabled:    cfg.WebSearch,
 		Provider:   cfg.WebSearchProvider,
@@ -121,7 +113,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
 
 	if cfg.Plan {
-		err = m.setupPlanContext(content, mod)
+		err = m.setupPlanContext(content)
 	} else {
 		// Plan -> execution transition: snapshot the plan-phase conversation
 		// before setupStreamContext resets m.messages, so the investigation
@@ -130,7 +122,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		if m.planContent != "" {
 			m.capturePlanHistory()
 		}
-		err = m.setupStreamContext(content, mod)
+		err = m.setupStreamContext(content)
 	}
 	if err != nil {
 		return requestSession{}, err
@@ -171,17 +163,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	debugTools(tools, registry.Len())
 
-	budgeter := newContextBudgeter(mod.MaxChars, maxTokens, cfg.NoLimit, tools, m.skillCatalog)
-	budgetedMessages, budgetReport, err := budgeter.apply(m.messages)
-	if err != nil {
-		_ = registry.Close()
-		cancel()
-		m.currentToolRegistry = nil
-		return requestSession{}, modsError{Err: err, ReasonText: "Request context is too large"}
-	}
-	m.messages = budgetedMessages
-	debugContextBudget(budgetReport)
-
 	request := proto.Request{
 		Messages:   m.messages,
 		API:        mod.API,
@@ -190,14 +171,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		Tools:      tools,
 		TrackUsage: cfg.ShowTokenUsage,
 		ToolCaller: m.toolCaller(registry, cfg),
-		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
-			budgeted, report, budgetErr := budgeter.apply(messages)
-			debugContextBudget(report)
-			return budgeted, budgetErr
-		},
-	}
-	if maxTokens > 0 {
-		request.MaxTokens = &maxTokens
 	}
 	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
 		request.ResponseFormat = &cfg.Format

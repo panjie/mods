@@ -121,12 +121,12 @@ func (m *Mods) renderProposalSelectionBar(content string) string {
 	return appendInteractionPanel(content, block)
 }
 
-func (m *Mods) setupPlanContext(content string, mod Model) error {
+func (m *Mods) setupPlanContext(content string) error {
 	wasPlan := m.Config.Plan
 	m.Config.Plan = true
 	defer func() { m.Config.Plan = wasPlan }()
 
-	if err := m.setupStreamContext(content, mod); err != nil {
+	if err := m.setupStreamContext(content); err != nil {
 		return err
 	}
 	planPrompt, err := m.resolvePrompt(prompts.KeyPlan, planSystemPrompt)
@@ -242,7 +242,6 @@ func (m *Mods) capturePlanHistory() {
 		if msg.Role == proto.RoleSystem {
 			continue
 		}
-		msg.SetContextClass(proto.ContextClassHistory)
 		m.planHistory = append(m.planHistory, msg)
 	}
 }
@@ -261,9 +260,6 @@ func (m *Mods) injectPlanHistory() {
 	history := m.planHistory
 	for len(history) > 0 && history[0].Role == proto.RoleUser {
 		history = history[1:]
-	}
-	for i := range history {
-		history[i].SetContextClass(proto.ContextClassHistory)
 	}
 	m.planHistory = nil
 	m.messages = append(m.messages, history...)

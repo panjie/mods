@@ -4,10 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"unicode/utf8"
 )
 
-func TestCallTool_truncatesLongResults(t *testing.T) {
+func TestCallToolPreservesResults(t *testing.T) {
 	t.Run("short result unchanged", func(t *testing.T) {
 		short := "hello world"
 		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
@@ -21,45 +20,26 @@ func TestCallTool_truncatesLongResults(t *testing.T) {
 		}
 	})
 
-	t.Run("exactly maxToolResultChars unchanged", func(t *testing.T) {
-		long := strings.Repeat("x", maxToolResultChars)
+	t.Run("large result unchanged", func(t *testing.T) {
+		long := strings.Repeat("x", 100000)
 		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
 			return long, nil
 		})
 		if msg.Content != long {
-			t.Errorf("expected exactly maxToolResultChars chars unchanged")
+			t.Errorf("expected complete tool result")
 		}
 		if status.Err != nil {
 			t.Errorf("unexpected error: %v", status.Err)
 		}
 	})
 
-	t.Run("over maxToolResultChars truncated with hint", func(t *testing.T) {
-		long := strings.Repeat("x", maxToolResultChars+1000)
-		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
-			return long, nil
-		})
-		if len(msg.Content) == len(long) {
-			t.Errorf("expected truncation, got same length")
-		}
-		if !strings.Contains(msg.Content, "truncated at") {
-			t.Errorf("expected truncation hint in: %q", msg.Content)
-		}
-		if !strings.Contains(msg.Content, "Use more specific tools") {
-			t.Errorf("expected guidance hint in: %q", msg.Content)
-		}
-		if status.Err != nil {
-			t.Errorf("unexpected error: %v", status.Err)
-		}
-	})
-
-	t.Run("unicode truncation remains valid UTF-8", func(t *testing.T) {
-		long := strings.Repeat("你", maxToolResultChars/3+2)
+	t.Run("large unicode result unchanged", func(t *testing.T) {
+		long := strings.Repeat("你", 40000)
 		msg, _ := CallTool("tid", "tool", nil, func(string, []byte) (string, error) {
 			return long, nil
 		})
-		if !utf8.ValidString(msg.Content) {
-			t.Fatalf("truncated tool result is invalid UTF-8: %q", msg.Content[len(msg.Content)-20:])
+		if msg.Content != long {
+			t.Fatal("expected complete UTF-8 tool result")
 		}
 	})
 
@@ -103,13 +83,13 @@ func TestCallTool_truncatesLongResults(t *testing.T) {
 		}
 	})
 
-	t.Run("long error result is also truncated", func(t *testing.T) {
-		longErr := strings.Repeat("e", maxToolResultChars+500)
+	t.Run("large error result is unchanged", func(t *testing.T) {
+		longErr := strings.Repeat("e", 100000)
 		msg, _ := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
-			return longErr, nil // content = error text
+			return longErr, errors.New("failed")
 		})
-		if len(msg.Content) >= len(longErr) {
-			t.Errorf("expected truncation of long error content")
+		if msg.Content != longErr {
+			t.Error("expected complete error result")
 		}
 	})
 }

@@ -64,7 +64,6 @@ var Help = map[string]string{
 	"http-proxy":       "HTTP proxy to use for API requests",
 	"model":            "Default model name configured under the selected API provider",
 	"ask-model":        "Ask which model to use via interactive prompt",
-	"max-input-chars":  "Default UTF-8 byte estimate limit for the complete model input, including prompts, history, images, and tool schemas",
 	"format":           "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
 	"format-text":      "Text to append when using the -f flag",
 	"minimal":          "Output only the final result, optimized for pipelines",
@@ -80,10 +79,8 @@ var Help = map[string]string{
 	"help":             "Show Help and exit",
 	"version":          "Show version and exit",
 	"max-retries":      "Maximum number of times to retry API calls",
-	"no-limit":         "Turn off unified client-side model input trimming (skill catalog hard limits still apply)",
 	"no-instructions":  "Disable auto-loading AGENTS.md from the workspace root as project context",
 	"word-wrap":        "Wrap formatted output at specific width (default is 80)",
-	"max-tokens":       "Maximum number of tokens in response",
 	"settings":         "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
 	"config":           "Interactive setup wizard for provider, model, API key, and tools",
 	"dirs":             "Print the directories in which mods store its data",
@@ -127,7 +124,6 @@ var Help = map[string]string{
 	"builtin-tools.shell":                    "Enable the native shell execution tool",
 	"builtin-tools.shell-read-only-commands": "Additional executable names to trust as read-only; a match trusts all arguments, subcommands, and internal side effects, while unsafe shell structures are still reviewed",
 	"builtin-tools.shell-timeout":            "Maximum duration of a native shell command",
-	"builtin-tools.shell-max-output":         "Maximum shell output characters returned to the model",
 	"builtin-tools.workspace":                "Root directory for filesystem and shell tools; empty uses the current working directory",
 
 	"mcp-servers.<server>.type":         "MCP transport type: stdio, sse, or http",
@@ -147,7 +143,6 @@ var Help = map[string]string{
 	"apis.<provider>.api-type":         "Wire protocol used by this provider",
 	"apis.<provider>.provider-profile": "Provider request dialect: openai, deepseek, qwen, glm, kimi, or minimax",
 
-	"apis.<provider>.models.<model>.max-input-chars":      "Complete input byte estimate limit for this model",
 	"apis.<provider>.models.<model>.aliases":              "Alternative names that select this model",
 	"apis.<provider>.models.<model>.fallback":             "Fallback model used after a provider failure",
 	"apis.<provider>.models.<model>.endpoint":             "Endpoint route for this model: responses or chat-completions; GitHub Copilot discovery may also report messages",
@@ -170,7 +165,6 @@ type Model struct {
 	// ProviderProfile selects provider-specific request semantics. It may be
 	// configured per model and is normalized during model resolution.
 	ProviderProfile string         `yaml:"provider-profile,omitempty"`
-	MaxChars        int64          `yaml:"max-input-chars"`
 	Aliases         []string       `yaml:"aliases"`
 	Fallback        string         `yaml:"fallback"`
 	Endpoint        string         `yaml:"endpoint,omitempty"`
@@ -264,9 +258,6 @@ type PersistentConfig struct {
 	Raw                 bool       `yaml:"raw" env:"RAW"`
 	HideToolStatus      bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
 	ShowTokenUsage      bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
-	MaxTokens           int64      `yaml:"max-tokens" env:"MAX_TOKENS"`
-	MaxInputChars       int64      `yaml:"max-input-chars" env:"MAX_INPUT_CHARS"`
-	NoLimit             bool       `yaml:"no-limit" env:"NO_LIMIT"`
 	NoInstructions      bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
 	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
 	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
@@ -402,7 +393,6 @@ type BuiltinToolsConfig struct {
 	Shell                 bool           `yaml:"shell"`
 	ShellReadOnlyCommands []string       `yaml:"shell-read-only-commands"`
 	ShellTimeout          time.Duration  `yaml:"shell-timeout"`
-	ShellMaxOutput        int            `yaml:"shell-max-output"`
 	Workspace             string         `yaml:"workspace"`
 }
 
@@ -892,12 +882,9 @@ func Default() Config {
 			WebSearchProvider:  DefaultWebSearchProvider,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
-				Filesystem: FilesystemAuto,
-				Shell:      true,
-				// Reference the canonical tools-package defaults so the
-				// YAML template and the runtime fallback cannot drift.
-				ShellTimeout:   tools.DefaultShellTimeout,
-				ShellMaxOutput: tools.DefaultShellMaxOutput,
+				Filesystem:   FilesystemAuto,
+				Shell:        true,
+				ShellTimeout: tools.DefaultShellTimeout,
 			},
 		},
 	}

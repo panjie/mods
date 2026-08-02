@@ -18,7 +18,7 @@ import (
 	"github.com/panjie/mods/internal/skills"
 )
 
-func (m *Mods) setupStreamContext(content string, _ Model) error {
+func (m *Mods) setupStreamContext(content string) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
 	m.toolSelectionInsertAt = -1
@@ -71,7 +71,6 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 				"Project instructions (AGENTS.md):\n\n"+instructions,
 				proto.SystemSectionProjectInstructions,
 			)
-			msg.SetContextClass(proto.ContextClassProjectInstructions)
 			m.messages = append(m.messages, msg)
 		}
 		if len(m.skillCatalog) > 0 {
@@ -80,7 +79,6 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 				skills.CatalogPrompt(m.skillCatalog),
 				proto.SystemSectionExecutionSkills,
 			)
-			msg.SetContextClass(proto.ContextClassSkillCatalog)
 			m.messages = append(m.messages, msg)
 		}
 	}
@@ -146,7 +144,6 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 		}
 		for _, msg := range saved {
 			if msg.Role != proto.RoleSystem {
-				msg.SetContextClass(proto.ContextClassHistory)
 				m.messages = append(m.messages, msg)
 			}
 		}
@@ -157,7 +154,6 @@ func (m *Mods) setupStreamContext(content string, _ Model) error {
 		Role:    proto.RoleUser,
 		Content: content,
 	}
-	current.SetContextClass(proto.ContextClassCurrentUser)
 	m.messages = append(m.messages, current)
 	// Attach images from CLI flags
 	var images []proto.Image

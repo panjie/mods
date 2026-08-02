@@ -180,16 +180,6 @@ func (c *Client) Capabilities() stream.Capabilities {
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
 	stream := new(Stream)
-	if request.MessageBudgeter != nil {
-		messages, err := request.MessageBudgeter(request.Messages)
-		if err != nil {
-			stream.err = err
-			stream.isFinished = true
-			stream.messages = request.Messages
-			return stream
-		}
-		request.Messages = messages
-	}
 	sysInstr, contents := fromProtoMessages(request.Messages)
 	body := MessageCompletionRequest{
 		Contents:          contents,
@@ -198,7 +188,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		GenerationConfig: GenerationConfig{
 			ResponseMimeType: "",
 			CandidateCount:   1,
-			MaxOutputTokens:  4096,
 		},
 	}
 
@@ -243,7 +232,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	stream.ctx = ctx
 	stream.toolCall = request.ToolCaller
 	stream.trackUsage = request.TrackUsage
-	stream.budgeter = request.MessageBudgeter
 	return stream
 }
 
@@ -331,7 +319,6 @@ type Stream struct {
 	trackUsage  bool
 	roundUsage  proto.TokenUsage
 	usage       proto.TokenUsage
-	budgeter    proto.MessageBudgeter
 }
 
 // CallTools implements stream.Stream.
@@ -357,16 +344,6 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 		return statuses
 	}
 
-	if s.budgeter != nil {
-		messages, err := s.budgeter(s.messages)
-		if err != nil {
-			s.err = err
-			s.isFinished = true
-			return statuses
-		}
-		s.messages = messages
-		s.request.SystemInstruction, s.request.Contents = fromProtoMessages(messages)
-	}
 	s.message = proto.Message{}
 	s.isFinished = false
 	req, err := s.client.newRequest(s.ctx, http.MethodPost, s.client.config.BaseURL, withBody(s.request))

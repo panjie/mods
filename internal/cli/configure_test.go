@@ -515,15 +515,12 @@ apis: {}
 	require.Equal(t, "https://api.groq.com/openai/v1", groq["base-url"])
 	require.Equal(t, "GROQ_API_KEY", groq["api-key-env"])
 	models := groq["models"].(map[string]any)
-	// Each newly added model is registered as an empty mapping so the
-	// model is selectable, while leaving max-input-chars (and every other
-	// per-model field) unset so the top-level default is inherited.
+	// Each newly added model is registered as an empty mapping so the model is
+	// selectable while leaving every optional per-model field unset.
 	model := models["llama-3.3-70b-versatile"].(map[string]any)
 	require.Empty(t, model)
-	require.NotContains(t, model, "max-input-chars")
 	model = models["llama-3.1-8b-instant"].(map[string]any)
 	require.Empty(t, model)
-	require.NotContains(t, model, "max-input-chars")
 }
 
 func TestBuildConfigWizardUpdatesDeepSeekFlashUsesResponses(t *testing.T) {

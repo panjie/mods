@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -53,40 +52,9 @@ func TestTruncateOperationStatusUsesTerminalCellWidth(t *testing.T) {
 	}
 }
 
-func TestCutPromptPreservesUTF8(t *testing.T) {
-	msg := `This model's maximum context length is 9 tokens. However, your messages resulted in 10 tokens`
-	require.Equal(t, "你", CutPrompt(msg, "你好世界你好"))
-}
-
 func TestRemoveWhitespace(t *testing.T) {
 	require.Empty(t, RemoveWhitespace(" \n"))
 	require.Equal(t, " regular\n ", RemoveWhitespace(" regular\n "))
-}
-
-func TestCutPrompt(t *testing.T) {
-	tokenErr := func(result, maximum int) string {
-		return fmt.Sprintf(
-			`This model's maximum context length is %d tokens. However, your messages resulted in %d tokens`,
-			maximum, result,
-		)
-	}
-	tests := map[string]struct {
-		message, prompt, want string
-	}{
-		"unrelated error":            {"nope", "the prompt", "the prompt"},
-		"invalid token relationship": {tokenErr(10, 93), "the prompt", "the prompt"},
-		"cuts estimated excess": {
-			tokenErr(10, 3),
-			"this is a long prompt I have no idea if its really 10 tokens",
-			"this is a long prompt ",
-		},
-		"short prompt remains": {tokenErr(30000, 100), "tell me a joke", "tell me a joke"},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, CutPrompt(tc.message, tc.prompt))
-		})
-	}
 }
 
 func TestIncreaseIndent(t *testing.T) {

@@ -112,7 +112,7 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 			Description: "demo skill",
 		}},
 	}
-	require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, m.setupStreamContext("hello"))
 
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: root}))
@@ -164,7 +164,7 @@ func TestInjectToolSelectionPromptPlanAndMinimal(t *testing.T) {
 	planCfg := defaultConfig()
 	planCfg.Plan = true
 	planMods := &Mods{Config: &planCfg, Styles: makeStyles(true), ctx: context.Background()}
-	require.NoError(t, planMods.setupPlanContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, planMods.setupPlanContext("hello"))
 	require.NoError(t, planMods.injectToolSelectionPrompt(registry))
 	planContents := systemContents(planMods.messages)
 	require.NotEqual(t, -1, indexContaining(planContents, planSystemPrompt))
@@ -181,7 +181,7 @@ func TestInjectToolSelectionPromptPlanAndMinimal(t *testing.T) {
 	minimalCfg := defaultConfig()
 	minimalCfg.Minimal = true
 	minimalMods := &Mods{Config: &minimalCfg, Styles: makeStyles(true), ctx: context.Background()}
-	require.NoError(t, minimalMods.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, minimalMods.setupStreamContext("hello"))
 	require.NoError(t, minimalMods.injectToolSelectionPrompt(registry))
 	require.NotContains(t, strings.Join(systemContents(minimalMods.messages), "\n"), "Tool selection")
 	normalizedMinimal := proto.NormalizeSystemMessages(minimalMods.messages)
@@ -200,19 +200,19 @@ func TestInjectToolSelectionPromptCustomOverride(t *testing.T) {
 	require.NoError(t, toolregistry.RegisterModsHelp(helpOnly, toolregistry.ModsHelpConfig{}))
 
 	inline := newMods("custom tool rules")
-	require.NoError(t, inline.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, inline.setupStreamContext("hello"))
 	require.NoError(t, inline.injectToolSelectionPrompt(helpOnly))
 	require.Contains(t, systemContents(inline.messages), "custom tool rules")
 
 	file := filepath.Join(t.TempDir(), "tool-selection.txt")
 	require.NoError(t, os.WriteFile(file, []byte("rules from file"), 0o600))
 	fromFile := newMods("file://" + file)
-	require.NoError(t, fromFile.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, fromFile.setupStreamContext("hello"))
 	require.NoError(t, fromFile.injectToolSelectionPrompt(helpOnly))
 	require.Contains(t, systemContents(fromFile.messages), "rules from file")
 
 	noTools := newMods("custom tool rules")
-	require.NoError(t, noTools.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, noTools.setupStreamContext("hello"))
 	require.NoError(t, noTools.injectToolSelectionPrompt(toolregistry.NewRegistry()))
 	require.NotContains(t, systemContents(noTools.messages), "custom tool rules")
 }
@@ -221,7 +221,7 @@ func TestActivateToolRegistryCleansUpAfterPromptLoadFailure(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Prompts.ToolSelection = "file://" + filepath.Join(t.TempDir(), "missing.txt")
 	m := &Mods{Config: &cfg, Styles: makeStyles(true), ctx: context.Background()}
-	require.NoError(t, m.setupStreamContext("hello", Model{MaxChars: 1000}))
+	require.NoError(t, m.setupStreamContext("hello"))
 
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{}))
@@ -258,7 +258,7 @@ func TestContinuedSessionRefreshesSystemAndToolSelectionPrompts(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.SessionReadFromID = id
 	m := &Mods{Config: &cfg, Styles: makeStyles(true), ctx: context.Background(), db: db}
-	require.NoError(t, m.setupStreamContext("follow up", Model{MaxChars: 10000}))
+	require.NoError(t, m.setupStreamContext("follow up"))
 
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: t.TempDir()}))
@@ -271,14 +271,6 @@ func TestContinuedSessionRefreshesSystemAndToolSelectionPrompts(t *testing.T) {
 	require.Contains(t, joined, "previous request")
 	require.Contains(t, joined, "previous answer")
 	require.Equal(t, 1, strings.Count(joined, "Tool selection:"))
-	for _, message := range m.messages {
-		if message.Content == "previous request" || message.Content == "previous answer" {
-			require.Equal(t, proto.ContextClassHistory, message.ContextClass())
-		}
-		if message.Content == "follow up" {
-			require.Equal(t, proto.ContextClassCurrentUser, message.ContextClass())
-		}
-	}
 }
 
 func indexContaining(contents []string, needle string) int {

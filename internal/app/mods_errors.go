@@ -68,7 +68,7 @@ type appAPIError struct {
 type errorPolicy struct {
 	// isContextLength reports whether the error indicates the prompt
 	// exceeded the model's context window. Return false (or set to nil)
-	// to disable the CutPrompt retry path entirely (e.g. ollama).
+	// when the provider does not expose a recognizable context error.
 	isContextLength func(ae appAPIError) bool
 	// notFoundExtra is appended to the standard 404-no-fallback reason
 	// text. Empty for most providers; ollama uses it to mention
@@ -105,11 +105,7 @@ func (m *Mods) dispatchAPIError(ae appAPIError, mod Model, content string, p err
 		)}
 	case http.StatusBadRequest:
 		if p.isContextLength != nil && p.isContextLength(ae) {
-			pe := modsError{Err: ae.Err, ReasonText: "Maximum prompt size exceeded."}
-			if cfg.NoLimit {
-				return pe
-			}
-			return m.retry(CutPrompt(ae.Message, content), pe)
+			return modsError{Err: ae.Err, ReasonText: "Maximum prompt size exceeded."}
 		}
 		return modsError{Err: ae.Err, ReasonText: p.badRequestReason(mod, ae)}
 	case http.StatusUnauthorized:
@@ -122,9 +118,8 @@ func (m *Mods) dispatchAPIError(ae appAPIError, mod Model, content string, p err
 		// Previously OpenAI-only; the maintainability review (H1)
 		// extended it to every provider since the message is generic.
 		return modsError{Err: ae.Err, ReasonText: fmt.Sprintf(
-			"Request too large for %s API. Try reducing input size, removing images, or using %s.",
+			"Request too large for %s API. Try reducing input size or removing images.",
 			mod.API,
-			m.Styles.InlineCode.Render("--no-limit=false"),
 		)}
 	case http.StatusServiceUnavailable:
 		return m.retry(content, modsError{

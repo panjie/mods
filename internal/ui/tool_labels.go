@@ -3,38 +3,10 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/panjie/mods/internal/textutil"
 )
-
-var tokenErrRe = regexp.MustCompile(`This model's maximum context length is (\d+) tokens. However, your messages resulted in (\d+) tokens`)
-
-func CutPrompt(msg, prompt string) string {
-	found := tokenErrRe.FindStringSubmatch(msg)
-	if len(found) != 3 { //nolint:mnd
-		return prompt
-	}
-
-	maxt, _ := strconv.Atoi(found[1])
-	current, _ := strconv.Atoi(found[2])
-
-	if maxt > current {
-		return prompt
-	}
-
-	// 1 token =~ 4 chars
-	// cut 10 extra chars 'just in case'
-	reduceBy := 10 + (current-maxt)*4 //nolint:mnd
-	if len(prompt) > reduceBy {
-		return textutil.TruncateUTF8Bytes(prompt, len(prompt)-reduceBy)
-	}
-
-	return prompt
-}
 
 func IncreaseIndent(s string) string {
 	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")

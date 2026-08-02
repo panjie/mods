@@ -3,7 +3,6 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,34 +23,6 @@ func newTestClient(t *testing.T, cfg Config) *Client {
 	t.Cleanup(server.Close)
 	cfg.BaseURL = server.URL
 	return New(cfg)
-}
-
-func TestMessageBudgeterRunsInitiallyAndStopsFailedFollowup(t *testing.T) {
-	wantErr := errors.New("budget exceeded")
-	calls := 0
-	client := newTestClient(t, DefaultConfig("test"))
-	st := client.Request(context.Background(), proto.Request{
-		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
-		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
-			calls++
-			return nil, wantErr
-		},
-	})
-	require.False(t, st.Next())
-	require.ErrorIs(t, st.Err(), wantErr)
-	require.Equal(t, 1, calls)
-
-	followup := &Stream{
-		done:     true,
-		messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
-		budgeter: func(messages []proto.Message) ([]proto.Message, error) {
-			calls++
-			return nil, wantErr
-		},
-	}
-	require.False(t, followup.Next())
-	require.ErrorIs(t, followup.Err(), wantErr)
-	require.Equal(t, 2, calls)
 }
 
 func TestNormalizeBaseURL(t *testing.T) {
@@ -286,9 +257,6 @@ func TestThinkingToolRoundReplaysOpaqueBlocksAfterBudgeting(t *testing.T) {
 			require.Equal(t, "lookup", name)
 			require.JSONEq(t, `{"q":"mods"}`, string(data))
 			return "found", nil
-		},
-		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
-			return append([]proto.Message(nil), messages...), nil
 		},
 	})
 

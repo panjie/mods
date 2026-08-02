@@ -148,13 +148,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	if c.config.UseResponses {
 		return c.requestResponses(ctx, request)
 	}
-	if request.MessageBudgeter != nil {
-		messages, err := request.MessageBudgeter(request.Messages)
-		if err != nil {
-			return &Stream{budgetErr: err, messages: request.Messages}
-		}
-		request.Messages = messages
-	}
 	body := openai.ChatCompletionNewParams{
 		Model:    request.Model,
 		User:     openai.String(request.User),
@@ -200,7 +193,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		request:       body,
 		toolCall:      request.ToolCaller,
 		messages:      request.Messages,
-		budgeter:      request.MessageBudgeter,
 		trackUsage:    request.TrackUsage,
 		parseThink:    c.config.ThinkTags,
 		thoughtFields: c.config.ThoughtFields,
@@ -231,8 +223,6 @@ type Stream struct {
 	trackUsage     bool
 	roundUsage     proto.TokenUsage
 	usage          proto.TokenUsage
-	budgeter       proto.MessageBudgeter
-	budgetErr      error
 	profile        ProviderProfile
 	reasoning      strings.Builder
 	visible        strings.Builder
@@ -446,9 +436,6 @@ func partialTagSuffixLen(s, tag string) int {
 
 // Err implements stream.Stream.
 func (s *Stream) Err() error {
-	if s.budgetErr != nil {
-		return s.budgetErr
-	}
 	if s.stream == nil {
 		return nil
 	}
@@ -463,9 +450,6 @@ func (s *Stream) Usage() proto.TokenUsage { return s.usage }
 
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
-	if s.budgetErr != nil {
-		return false
-	}
 	if s.finalChunk != nil {
 		if !s.finalDelivered {
 			return true
@@ -476,15 +460,6 @@ func (s *Stream) Next() bool {
 	}
 	if s.done {
 		s.done = false
-		if s.budgeter != nil {
-			messages, err := s.budgeter(s.messages)
-			if err != nil {
-				s.budgetErr = err
-				return false
-			}
-			s.messages = messages
-			s.request.Messages = fromProtoMessagesForProfile(messages, s.profile)
-		}
 		s.stream = s.factory()
 		s.message = openai.ChatCompletionAccumulator{}
 		s.reasoning.Reset()

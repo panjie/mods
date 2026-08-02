@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Removed the DuckDuckGo web search provider.
+- Removed the `max-input-chars`, `max-tokens`, `no-limit`, and `builtin-tools.shell-max-output` settings and their related input, response, and tool-output truncation behavior.
 
 ## [3.3.0] - 2026-07-06
 

@@ -221,6 +221,33 @@ func TestRemovedSequentialThinkingConfigIsIgnored(t *testing.T) {
 	require.True(t, cfg.BuiltinTools.Shell)
 }
 
+func TestRemovedLimitConfigIsIgnored(t *testing.T) {
+	t.Setenv("MODS_MAX_INPUT_CHARS", "1000")
+	t.Setenv("MODS_MAX_TOKENS", "100")
+	t.Setenv("MODS_NO_LIMIT", "true")
+
+	cfg := Default()
+	require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+	require.NoError(t, yaml.Unmarshal([]byte(`
+max-input-chars: 1000
+max-tokens: 100
+no-limit: true
+builtin-tools:
+  shell-max-output: 2000
+apis:
+  openai:
+    models:
+      gpt-test:
+        max-input-chars: 3000
+`), &cfg))
+
+	encoded, err := yaml.Marshal(cfg)
+	require.NoError(t, err)
+	for _, removed := range []string{"max-input-chars", "max-tokens", "no-limit", "shell-max-output"} {
+		require.NotContains(t, string(encoded), removed)
+	}
+}
+
 func TestMinimalConfig(t *testing.T) {
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config

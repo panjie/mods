@@ -474,7 +474,6 @@ format: ""
 raw: true
 minimal: true
 hide-tool-status: true
-max-tokens: 1024
 max-retries: 2
 max-tool-rounds: 8
 review-mode: %s

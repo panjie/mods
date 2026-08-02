@@ -37,8 +37,7 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModelProvider,
 		Flags: []string{
-			"api", "model", "ask-model", "max-tokens", "no-limit",
-			"max-retries", "http-proxy",
+			"api", "model", "ask-model", "max-retries", "http-proxy",
 		},
 	},
 	{
@@ -159,11 +158,6 @@ func regBool(flags *pflag.FlagSet, p *bool, name, short string, def bool) {
 // regInt registers an int flag with auto-rendered help.
 func regInt(flags *pflag.FlagSet, p *int, name string, def int) {
 	flags.IntVar(p, name, def, flagDesc(name))
-}
-
-// regInt64 registers an int64 flag with auto-rendered help.
-func regInt64(flags *pflag.FlagSet, p *int64, name string, def int64) {
-	flags.Int64Var(p, name, def, flagDesc(name))
 }
 
 type settingsFlagValue struct {

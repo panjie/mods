@@ -160,8 +160,7 @@ apis:
   openai:
     api-key-env: OPENAI_API_KEY
     models:
-      gpt-5.4:
-        max-input-chars: 1000000
+      gpt-5.4: {}
 ```
 
 ```sh
@@ -319,7 +318,6 @@ builtin-tools:
   filesystem: auto          # auto, true, or false
   shell: true
   shell-timeout: 30s
-  shell-max-output: 20000
   workspace: ""             # defaults to the current working directory
 ```
 
@@ -465,7 +463,6 @@ apis:
     models:
       llama-3.3-70b-versatile:
         aliases: ["groq-llama"]
-        max-input-chars: 120000
 ```
 
 ## CLI & Configuration

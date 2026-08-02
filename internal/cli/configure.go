@@ -1699,10 +1699,9 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 
 	// Register each newly added model under
 	// apis.<api>.models.<name>. mods treats any model listed here as
-	// selectable; per-model fields (max-input-chars, fallback, thinking-*
-	// etc.) can be added by the user later. Provider-specific routing defaults
-	// are written explicitly; all other models use an empty mapping so the
-	// top-level max-input-chars setting is inherited without override.
+	// selectable; per-model fields (fallback, thinking-*, etc.) can be added by
+	// the user later. Provider-specific routing defaults are written explicitly;
+	// all other models use an empty mapping.
 	// Previously curated model entries are left untouched.
 	for _, modelName := range configWizardNewModelNames(d.apiName, d.addedModelNames) {
 		value := configWizardNewModelSettings(d.apiName, modelName, d.baseURLInput)

@@ -142,13 +142,13 @@ func TestSaveFieldsWritesTwoSpaceIndent(t *testing.T) {
 `)
 
 	require.NoError(t, SaveFields(path, map[string]any{
-		"apis.openai.models.gpt-5.max-input-chars": 1000,
+		"apis.openai.models.gpt-5.thinking-budget": 2048,
 	}))
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	content := string(data)
-	require.Contains(t, content, "  openai:\n    models:\n      existing: {}\n      gpt-5:\n        max-input-chars: 1000")
+	require.Contains(t, content, "  openai:\n    models:\n      existing: {}\n      gpt-5:\n        thinking-budget: 2048")
 	require.NotContains(t, content, "    openai:")
 }
 
@@ -160,8 +160,8 @@ func TestSaveFieldPaths_ModelNameWithSeparators(t *testing.T) {
 
 	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
 		{
-			Path:  []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "max-input-chars"},
-			Value: 1000000,
+			Path:  []string{"apis", "openrouter", "models", "vendor/gpt-5.5:latest", "thinking-budget"},
+			Value: 8192,
 		},
 	}))
 
@@ -170,7 +170,7 @@ func TestSaveFieldPaths_ModelNameWithSeparators(t *testing.T) {
 	openrouter := apis["openrouter"].(map[string]any)
 	models := openrouter["models"].(map[string]any)
 	model := models["vendor/gpt-5.5:latest"].(map[string]any)
-	require.Equal(t, 1000000, model["max-input-chars"])
+	require.Equal(t, 8192, model["thinking-budget"])
 	require.NotContains(t, models, "vendor/gpt-5")
 }
 
@@ -221,7 +221,7 @@ apis: {}
 
 	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
 		{Path: []string{"apis", "groq", "models", "llama-3.3-70b-versatile"}, Value: map[string]any{
-			"max-input-chars": 800000,
+			"thinking-budget": 2048,
 			"fallback":        "llama-3.1-8b-instant",
 		}},
 	}))
@@ -231,7 +231,7 @@ apis: {}
 	groq := apis["groq"].(map[string]any)
 	models := groq["models"].(map[string]any)
 	model := models["llama-3.3-70b-versatile"].(map[string]any)
-	require.Equal(t, 800000, model["max-input-chars"])
+	require.Equal(t, 2048, model["thinking-budget"])
 	require.Equal(t, "llama-3.1-8b-instant", model["fallback"])
 }
 

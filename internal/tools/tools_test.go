@@ -206,16 +206,16 @@ func TestShellRunnerProgress(t *testing.T) {
 	}
 }
 
-func TestCappedOutputLastLineTracksTailAfterTruncation(t *testing.T) {
-	out := newCappedOutput(8)
+func TestShellOutputPreservesContentAndTracksTail(t *testing.T) {
+	out := newShellOutput()
 	_, _ = out.Write([]byte("old line\n"))
-	_, _ = out.Write([]byte(strings.Repeat("x", shellProgressTailLimit+32)))
+	_, _ = out.Write([]byte(strings.Repeat("x", 100032)))
 	_, _ = out.Write([]byte("\nnew line\n"))
 	if got := out.LastLine(); got != "new line" {
 		t.Fatalf("LastLine() = %q, want new line", got)
 	}
-	if text := out.String(); !strings.Contains(text, "[Output truncated at 8 chars.]") {
-		t.Fatalf("expected capped output to remain truncated, got %q", text)
+	if text := out.String(); !strings.HasPrefix(text, "old line\n") || !strings.HasSuffix(text, "\nnew line\n") {
+		t.Fatalf("expected complete output, got %q", text)
 	}
 }
 
@@ -1051,20 +1051,17 @@ func TestPowerShellRun(t *testing.T) {
 		}
 	})
 
-	t.Run("captures large output with cap", func(t *testing.T) {
+	t.Run("captures complete large output", func(t *testing.T) {
 		limited := NewRegistry()
-		if err := RegisterPowerShell(limited, ShellConfig{Root: root, MaxOutputChars: 64}); err != nil {
+		if err := RegisterPowerShell(limited, ShellConfig{Root: root}); err != nil {
 			t.Fatalf("register powershell: %v", err)
 		}
 		out, err := limited.Call(context.Background(), "powershell_run", []byte(`{"command":"[Console]::Out.Write(('x' * 5000))"}`))
 		if err != nil {
 			t.Fatalf("call: %v", err)
 		}
-		if !strings.Contains(out, "[Output truncated at 64 chars.]") {
-			t.Fatalf("expected truncation marker, got %q", out)
-		}
-		if len(out) > 140 {
-			t.Fatalf("output was not capped enough: %d", len(out))
+		if out != strings.Repeat("x", 5000) {
+			t.Fatalf("expected complete output, got %d bytes", len(out))
 		}
 	})
 
@@ -1084,12 +1081,6 @@ func TestDecodeOutputPrefersUTF8(t *testing.T) {
 	want := `[{"creator":"潘捷","receiveTime":"7-14","title":"差旅费报销申请"}]`
 	if got := decodeOutput([]byte(want)); got != want {
 		t.Fatalf("decodeOutput() = %q, want %q", got, want)
-	}
-}
-
-func TestDefaultShellMaxOutput(t *testing.T) {
-	if DefaultShellMaxOutput != 100000 {
-		t.Fatalf("DefaultShellMaxOutput = %d, want 100000", DefaultShellMaxOutput)
 	}
 }
 

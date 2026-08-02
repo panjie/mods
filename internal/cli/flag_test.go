@@ -36,8 +36,8 @@ var flagParseErrorTests = []struct {
 		"Flag %s needs an argument.",
 	},
 	{
-		`invalid argument "sdfjasdl" for "--max-tokens" flag: strconv.ParseInt: parsing "sdfjasdl": invalid syntax`,
-		"--max-tokens",
+		`invalid argument "sdfjasdl" for "--max-retries" flag: strconv.ParseInt: parsing "sdfjasdl": invalid syntax`,
+		"--max-retries",
 		"Flag %s have an invalid argument.",
 	},
 }

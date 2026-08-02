@@ -28,15 +28,9 @@ const (
 	// shell tool when BuiltinToolsConfig.ShellTimeout is unset. The config
 	// layer references this constant so there is a single source of truth.
 	DefaultShellTimeout = 30 * time.Second
-	// DefaultShellMaxOutput is the canonical default output cap for the
-	// native shell tool when BuiltinToolsConfig.ShellMaxOutput is unset.
-	DefaultShellMaxOutput = 100000
-
-	// defaultShellTimeout / defaultShellOutput are aliases kept so the
-	// in-file references read naturally; they mirror the exported names
-	// above so external callers and internal usage cannot drift.
+	// defaultShellTimeout is an alias kept so in-file references read
+	// naturally while external callers share the same canonical value.
 	defaultShellTimeout = DefaultShellTimeout
-	defaultShellOutput  = DefaultShellMaxOutput
 
 	defaultShellProgressInterval = 2 * time.Second
 	shellProgressTailLimit       = 4096
@@ -56,11 +50,10 @@ type ShellProgressHandler func(context.Context, ShellProgress)
 
 // ShellConfig configures the native shell tool.
 type ShellConfig struct {
-	Root           string
-	Timeout        time.Duration
-	MaxOutputChars int
-	SudoPrompt     SecretPromptHandler
-	Progress       ShellProgressHandler
+	Root       string
+	Timeout    time.Duration
+	SudoPrompt SecretPromptHandler
+	Progress   ShellProgressHandler
 }
 
 // RegisterShell registers the native shell tool.
@@ -71,9 +64,6 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = defaultShellTimeout
-	}
-	if cfg.MaxOutputChars <= 0 {
-		cfg.MaxOutputChars = defaultShellOutput
 	}
 	desc := PosixShellRunDescription
 	if runtime.GOOS == "windows" {
@@ -115,9 +105,6 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = defaultShellTimeout
-	}
-	if cfg.MaxOutputChars <= 0 {
-		cfg.MaxOutputChars = defaultShellOutput
 	}
 	return registry.Register(Tool{
 		Kind:          ToolKindShell,
@@ -164,7 +151,6 @@ type ShellRunner struct {
 	Root             string
 	Tool             string
 	Timeout          time.Duration
-	MaxOutputChars   int
 	BuildCommand     func(context.Context, string) *exec.Cmd
 	Env              map[string]string
 	Progress         ShellProgressHandler
@@ -177,9 +163,6 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	}
 	if r.Timeout <= 0 {
 		r.Timeout = defaultShellTimeout
-	}
-	if r.MaxOutputChars <= 0 {
-		r.MaxOutputChars = defaultShellOutput
 	}
 	if r.BuildCommand == nil {
 		return "", fmt.Errorf("shell runner command builder is required")
@@ -194,7 +177,7 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 			cmd.Env = append(cmd.Env, key+"="+value)
 		}
 	}
-	out := newCappedOutput(r.MaxOutputChars)
+	out := newShellOutput()
 	cmd.Stdout = out
 	cmd.Stderr = out
 	if err := cmd.Start(); err != nil {
@@ -239,7 +222,7 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	}
 }
 
-func (r ShellRunner) reportProgress(ctx context.Context, command string, started time.Time, out *cappedOutput) {
+func (r ShellRunner) reportProgress(ctx context.Context, command string, started time.Time, out *shellOutput) {
 	if r.Progress == nil {
 		return
 	}
@@ -264,13 +247,12 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, root, toolName, comma
 		env[key] = value
 	}
 	return ShellRunner{
-		Root:           root,
-		Tool:           toolName,
-		Timeout:        cfg.Timeout,
-		MaxOutputChars: cfg.MaxOutputChars,
-		BuildCommand:   buildCmd,
-		Env:            env,
-		Progress:       cfg.Progress,
+		Root:         root,
+		Tool:         toolName,
+		Timeout:      cfg.Timeout,
+		BuildCommand: buildCmd,
+		Env:          env,
+		Progress:     cfg.Progress,
 	}.Run(ctx, prepared.Command)
 }
 
@@ -285,22 +267,15 @@ func validateSecretEnv(env map[string]string) error {
 	return nil
 }
 
-type cappedOutput struct {
-	mu        sync.Mutex
-	buf       bytes.Buffer
-	tail      []byte
-	limit     int
-	truncated bool
+type shellOutput struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	tail []byte
 }
 
-func newCappedOutput(limit int) *cappedOutput {
-	if limit <= 0 {
-		limit = defaultShellOutput
-	}
-	return &cappedOutput{limit: limit}
-}
+func newShellOutput() *shellOutput { return &shellOutput{} }
 
-func (w *cappedOutput) Write(p []byte) (int, error) {
+func (w *shellOutput) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if len(p) >= shellProgressTailLimit {
@@ -311,35 +286,19 @@ func (w *cappedOutput) Write(p []byte) (int, error) {
 	if len(w.tail) > shellProgressTailLimit {
 		w.tail = append([]byte(nil), w.tail[len(w.tail)-shellProgressTailLimit:]...)
 	}
-	remaining := w.limit - w.buf.Len()
-	if remaining > 0 {
-		if len(p) > remaining {
-			w.buf.Write(p[:remaining])
-			w.truncated = true
-		} else {
-			w.buf.Write(p)
-		}
-	} else if len(p) > 0 {
-		w.truncated = true
-	}
+	_, _ = w.buf.Write(p)
 	return len(p), nil
 }
 
-func (w *cappedOutput) String() string {
+func (w *shellOutput) String() string {
 	w.mu.Lock()
 	out := append([]byte(nil), w.buf.Bytes()...)
-	truncated := w.truncated
-	limit := w.limit
 	w.mu.Unlock()
 	text := decodeOutput(out)
-	text = textutil.ValidUTF8Prefix(text)
-	if truncated {
-		return text + fmt.Sprintf("\n\n[Output truncated at %d chars.]", limit)
-	}
-	return text
+	return textutil.ValidUTF8Prefix(text)
 }
 
-func (w *cappedOutput) LastLine() string {
+func (w *shellOutput) LastLine() string {
 	w.mu.Lock()
 	out := append([]byte(nil), w.tail...)
 	w.mu.Unlock()

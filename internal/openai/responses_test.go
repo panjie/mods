@@ -376,7 +376,6 @@ func TestResponsesToolRoundReplaysEncryptedReasoning(t *testing.T) {
 	}))
 	defer server.Close()
 
-	budgetCalls := 0
 	client := New(Config{
 		BaseURL:      server.URL,
 		HTTPClient:   server.Client(),
@@ -406,10 +405,6 @@ func TestResponsesToolRoundReplaysEncryptedReasoning(t *testing.T) {
 				return "", errors.New("unexpected tool")
 			}
 		},
-		MessageBudgeter: func(messages []proto.Message) ([]proto.Message, error) {
-			budgetCalls++
-			return messages, nil
-		},
 	})
 
 	content, _ := drainStream(t, st)
@@ -422,7 +417,6 @@ func TestResponsesToolRoundReplaysEncryptedReasoning(t *testing.T) {
 	content, _ = drainStream(t, st)
 	require.Equal(t, "done", content)
 	require.Equal(t, 2, requestCount)
-	require.Equal(t, 2, budgetCalls)
 	require.Equal(t, proto.TokenUsage{InputTokens: 23, OutputTokens: 5, TotalTokens: 28}, st.Usage())
 
 	var followup map[string]any

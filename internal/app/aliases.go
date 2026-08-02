@@ -39,7 +39,6 @@ var IsErrorTTY = ui.IsErrorTTY
 var isInputTTY = ui.IsInputTTY
 var isOutputTTY = ui.IsOutputTTY
 var IncreaseIndent = ui.IncreaseIndent
-var CutPrompt = ui.CutPrompt
 var ToolOperationLabel = ui.ToolOperationLabel
 var ToolOperationArgs = ui.ToolOperationArgs
 var ToolArgsSummary = ui.ToolArgsSummary

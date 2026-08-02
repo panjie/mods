@@ -102,6 +102,9 @@ func IsReadOnlyPowerShellWithPolicy(command string, policy ReadOnlyCommandPolicy
 }
 
 func readOnlyPowerShellInvocation(inv psCommandInvocation, policy ReadOnlyCommandPolicy) bool {
+	if !isBarePowerShellCommand(inv.Name) {
+		return false
+	}
 	name := normalizePowerShellCommandName(inv.Name)
 	if policy.matchesPowerShell(name) {
 		return true
@@ -113,6 +116,11 @@ func readOnlyPowerShellInvocation(inv psCommandInvocation, policy ReadOnlyComman
 		return true
 	}
 	return readOnlySubcommandInvocation(name, inv.Args)
+}
+
+func isBarePowerShellCommand(name string) bool {
+	name = trimPowerShellLiteral(name)
+	return name != "" && !strings.ContainsAny(name, `/\\:`)
 }
 
 func powerShellInvocationHasScriptBlockArg(inv psCommandInvocation) bool {

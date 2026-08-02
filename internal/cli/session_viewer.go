@@ -334,7 +334,7 @@ func (m *browserModel) viewerGutter(ctx viewport.GutterContext) string {
 	}
 
 	style := m.styles.roleSystem
-	marker := "S"
+	var marker string
 	switch line.role {
 	case proto.RoleUser:
 		style, marker = m.styles.roleUser, "U"

@@ -41,6 +41,12 @@ func fromProtoMessage(input proto.Message) api.Message {
 		Content: input.Content,
 		Role:    input.Role,
 	}
+	if input.Role == proto.RoleTool {
+		if len(input.ToolCalls) > 0 {
+			m.ToolName = input.ToolCalls[0].Function.Name
+		}
+		return m
+	}
 	for _, img := range input.Images {
 		b64 := base64.StdEncoding.EncodeToString(img.Data)
 		m.Images = append(m.Images, api.ImageData(b64))

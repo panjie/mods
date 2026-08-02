@@ -534,6 +534,12 @@ func TestFilesystemCopyMoveMkdir(t *testing.T) {
 	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy"}`)); err == nil {
 		t.Fatal("directory copy must require recursive=true")
 	}
+	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree/backup","recursive":true}`)); err == nil || !strings.Contains(err.Error(), "inside itself") {
+		t.Fatalf("directory copy into itself should fail, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "tree", "backup")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("failed self-copy must not leave a partial destination, stat err=%v", err)
+	}
 	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy","recursive":true}`)); err != nil {
 		t.Fatalf("copy dir: %v", err)
 	}

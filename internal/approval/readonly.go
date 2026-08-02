@@ -1,7 +1,6 @@
 package approval
 
 import (
-	"path"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -87,16 +86,22 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 	if call == nil || len(call.Args) == 0 {
 		return false, ""
 	}
+	// Prefix assignments can change executable resolution and inject runtime or
+	// provider-specific hooks (for example PATH, LD_PRELOAD, or
+	// GIT_EXTERNAL_DIFF). Leave them to the reviewed classifier instead of
+	// treating the command that follows as statically read-only.
+	if len(call.Assigns) > 0 {
+		return false, ""
+	}
 	for _, arg := range call.Args {
 		if !wordIsReadOnly(arg, policy) {
 			return false, ""
 		}
 	}
 	name, ok := staticShellWord(call.Args[0])
-	if !ok || name == "" {
+	if !ok || !isBarePOSIXCommand(name) {
 		return false, ""
 	}
-	name = path.Base(name)
 	if policy.matchesPOSIX(name) {
 		return true, policy.reason(name)
 	}
@@ -118,10 +123,10 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 // output-producing flags cannot inherit a read-only classification merely
 // from their first token.
 func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, string) {
-	if len(args) == 0 || args[0] == "" {
+	if len(args) == 0 || !isBarePOSIXCommand(args[0]) {
 		return false, ""
 	}
-	name := path.Base(args[0])
+	name := args[0]
 	if policy.matchesPOSIX(name) {
 		return true, policy.reason(name)
 	}
@@ -261,7 +266,10 @@ func xargsInvocationReadOnly(args []string) bool {
 	if !ok || len(nested) == 0 {
 		return false
 	}
-	name := path.Base(nested[0])
+	name := nested[0]
+	if !isBarePOSIXCommand(name) {
+		return false
+	}
 	if !readOnlyCommands[name] || name == "xxd" {
 		return false
 	}
@@ -319,25 +327,40 @@ func envInvocationReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, s
 }
 
 func envCommandArgs(args []string) ([]string, bool) {
+	unsafeAssignment := false
 	for len(args) > 0 {
 		arg := args[0]
 		switch {
 		case arg == "--":
-			if len(args) == 1 {
+			if len(args) == 1 || unsafeAssignment {
 				return nil, false
 			}
 			return args[1:], true
 		case isEnvAssignment(arg):
+			unsafeAssignment = unsafeAssignment || !readOnlyEnvAssignment(arg)
 			args = args[1:]
 		case strings.HasPrefix(arg, "-"):
 			// Options such as -S/--split-string can hide another command and
 			// require option-aware parsing. Treat them as unknown.
 			return nil, false
 		default:
+			if unsafeAssignment {
+				return nil, false
+			}
 			return args, true
 		}
 	}
 	return nil, true
+}
+
+func readOnlyEnvAssignment(arg string) bool {
+	name, _, ok := strings.Cut(arg, "=")
+	if !ok {
+		return false
+	}
+	return name == "LANG" || name == "LANGUAGE" || name == "TZ" ||
+		name == "TERM" || name == "COLORTERM" || name == "NO_COLOR" ||
+		name == "CLICOLOR" || strings.HasPrefix(name, "LC_")
 }
 
 func isEnvAssignment(arg string) bool {
@@ -368,7 +391,29 @@ func readOnlySubcommandInvocation(name string, args []string) bool {
 	if name == "git" && hasAnyArg(args[1:], "--output", "--ext-diff", "--textconv") {
 		return false
 	}
+	if name == "go" {
+		switch subcmd {
+		case "vet":
+			if hasAnyArg(args[1:], "-vettool") {
+				return false
+			}
+		case "list":
+			if hasAnyArg(args[1:], "-toolexec") {
+				return false
+			}
+		}
+	}
+	// kubectl diff honors KUBECTL_EXTERNAL_DIFF from the inherited process
+	// environment, which the command text classifier cannot verify.
+	if name == "kubectl" && subcmd == "diff" {
+		return false
+	}
 	return true
+}
+
+func isBarePOSIXCommand(name string) bool {
+	return name != "" && name != "." && name != ".." &&
+		!strings.ContainsAny(name, `/\\`)
 }
 
 func hasAnyArg(args []string, unsafe ...string) bool {

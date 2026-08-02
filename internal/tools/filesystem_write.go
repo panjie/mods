@@ -373,6 +373,9 @@ func copyPath(source, dest string, recursive, overwrite bool) (string, error) {
 		if !recursive {
 			return "", fmt.Errorf("%s is a directory; set recursive=true to copy directories", source)
 		}
+		if contains(source, dest) {
+			return "", fmt.Errorf("cannot copy a directory inside itself")
+		}
 		if err := copyDir(source, dest); err != nil {
 			return "", err
 		}

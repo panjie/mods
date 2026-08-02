@@ -118,6 +118,8 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 		{"git diff output file", "git diff --output=owned.txt"},
 		{"git show output file", "git show --output owned.txt HEAD"},
 		{"git diff external helper", "git diff --ext-diff"},
+		{"workspace executable with cmdlet basename", `.\Get-Content.exe file.txt`},
+		{"go vet external tool", `go vet -vettool=.\payload.exe .\...`},
 
 		// Excluded cmdlets (security traps)
 		{"get-command", "Get-Command"},
@@ -143,6 +145,9 @@ func TestIsReadOnlyPowerShellWithPolicy(t *testing.T) {
 	policy := ReadOnlyCommandPolicy{Commands: []string{"my-report"}}
 
 	readOnly, _, _ := IsReadOnlyPowerShellWithPolicy(`C:\Tools\MY-REPORT.EXE --write`, policy)
+	require.False(t, readOnly)
+
+	readOnly, _, _ = IsReadOnlyPowerShellWithPolicy(`MY-REPORT.EXE --write`, policy)
 	require.True(t, readOnly)
 
 	readOnly, _, _ = IsReadOnlyPowerShellWithPolicy(`my-report > out.txt`, policy)

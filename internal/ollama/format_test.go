@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"encoding/json"
 	"testing"
 
 	api "github.com/panjie/mods/internal/ollamaapi"
@@ -59,10 +60,9 @@ func TestFromProtoMessage(t *testing.T) {
 		require.Len(t, msg.Images, 1)
 	})
 
-	t.Run("with tool calls", func(t *testing.T) {
+	t.Run("assistant with tool calls", func(t *testing.T) {
 		input := proto.Message{
-			Role:    proto.RoleTool,
-			Content: "file contents",
+			Role: proto.RoleAssistant,
 			ToolCalls: []proto.ToolCall{
 				{
 					ID: "0",
@@ -76,6 +76,52 @@ func TestFromProtoMessage(t *testing.T) {
 		msg := fromProtoMessage(input)
 		require.Len(t, msg.ToolCalls, 1)
 		require.Equal(t, "read_file", msg.ToolCalls[0].Function.Name)
+	})
+
+	t.Run("tool result", func(t *testing.T) {
+		input := proto.Message{
+			Role:    proto.RoleTool,
+			Content: "file contents",
+			ToolCalls: []proto.ToolCall{{
+				ID: "0",
+				Function: proto.Function{
+					Name:      "read_file",
+					Arguments: []byte(`{"path":"/tmp/test.txt"}`),
+				},
+			}},
+		}
+		msg := fromProtoMessage(input)
+		require.Equal(t, "tool", msg.Role)
+		require.Equal(t, "read_file", msg.ToolName)
+		require.Empty(t, msg.ToolCalls)
+
+		wire, err := json.Marshal(msg)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"role":"tool","content":"file contents","tool_name":"read_file"}`, string(wire))
+	})
+
+	t.Run("parallel tool results preserve names", func(t *testing.T) {
+		messages := fromProtoMessages([]proto.Message{
+			{
+				Role:    proto.RoleTool,
+				Content: "22C",
+				ToolCalls: []proto.ToolCall{{
+					Function: proto.Function{Name: "get_temperature"},
+				}},
+			},
+			{
+				Role:    proto.RoleTool,
+				Content: "sunny",
+				ToolCalls: []proto.ToolCall{{
+					Function: proto.Function{Name: "get_conditions"},
+				}},
+			},
+		})
+		require.Len(t, messages, 2)
+		require.Equal(t, "get_temperature", messages[0].ToolName)
+		require.Equal(t, "get_conditions", messages[1].ToolName)
+		require.Empty(t, messages[0].ToolCalls)
+		require.Empty(t, messages[1].ToolCalls)
 	})
 }
 
@@ -110,7 +156,7 @@ func TestToProtoMessage(t *testing.T) {
 
 	t.Run("with tool calls", func(t *testing.T) {
 		input := api.Message{
-			Role:    "tool",
+			Role:    "assistant",
 			Content: "result",
 			ToolCalls: []api.ToolCall{
 				{

@@ -1,7 +1,6 @@
 package approval
 
 import (
-	"path"
 	"strings"
 )
 
@@ -14,7 +13,9 @@ type ReadOnlyCommandPolicy struct {
 }
 
 func (p ReadOnlyCommandPolicy) matchesPOSIX(name string) bool {
-	name = path.Base(name)
+	if !isBarePOSIXCommand(name) {
+		return false
+	}
 	for _, command := range p.Commands {
 		if name == command {
 			return true
@@ -24,9 +25,12 @@ func (p ReadOnlyCommandPolicy) matchesPOSIX(name string) bool {
 }
 
 func (p ReadOnlyCommandPolicy) matchesPowerShell(name string) bool {
+	if !isBarePowerShellCommand(name) {
+		return false
+	}
 	name = normalizePowerShellCommandName(name)
 	for _, command := range p.Commands {
-		if name == normalizePowerShellCommandName(command) {
+		if isBarePowerShellCommand(command) && name == normalizePowerShellCommandName(command) {
 			return true
 		}
 	}

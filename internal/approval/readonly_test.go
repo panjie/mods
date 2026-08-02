@@ -25,8 +25,9 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"false", "false", true},
 		{"seq", "seq 1 10", true},
 		{"md5sum", "md5sum file", true},
-		{"full path", "/bin/ls", true},
-		{"full path with arg", "/usr/bin/cat file", true},
+		{"full path", "/bin/ls", false},
+		{"full path with arg", "/usr/bin/cat file", false},
+		{"workspace executable with allowed basename", "./cat README.md", false},
 
 		// --- Pipes (all leaves read-only) ---
 		{"pipe cat grep", "cat file | grep foo", true},
@@ -80,6 +81,7 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"braced home param path", `cat "${HOME}/Downloads/file"`, true},
 		{"home param modifier", `cat "${HOME:-$(touch owned.txt)}/file"`, false},
 		{"env wraps readonly command", "env LC_ALL=C git status", true},
+		{"env alone with assignment", "env PATH=./bin", true},
 
 		// --- Option-sensitive read-only commands ---
 		{"find print0", `find "$HOME/Downloads" -type f -print0`, true},
@@ -121,9 +123,16 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"dynamic cmd name", "$CMD file", false},
 		{"env wraps writer", "env touch owned.txt", false},
 		{"env assignment wraps writer", "env LC_ALL=C rm -rf build", false},
+		{"prefix assignment wraps reader", "PATH=./bin cat README.md", false},
+		{"env path wraps reader", "env PATH=./bin cat README.md", false},
+		{"env loader hook wraps reader", "env LD_PRELOAD=./payload cat README.md", false},
+		{"git external diff environment hook", "env GIT_EXTERNAL_DIFF=./payload git diff", false},
 		{"git diff output file", "git diff --output=owned.txt", false},
 		{"git show output file", "git show --output owned.txt HEAD", false},
 		{"git diff external helper", "git diff --ext-diff", false},
+		{"go vet external tool", "go vet -vettool=./payload ./...", false},
+		{"go list external tool", "go list -toolexec=./payload ./...", false},
+		{"kubectl external diff hook", "kubectl diff -f deploy.yml", false},
 		{"xxd reverse writes output", "xxd -r input.hex output.bin", false},
 		{"empty", "", false},
 		{"bare git", "git", false},
@@ -146,7 +155,6 @@ func TestIsReadOnlyPOSIXWithPolicy(t *testing.T) {
 	policy := ReadOnlyCommandPolicy{Commands: []string{"rg", "jq", "find"}}
 	readOnly := []string{
 		"rg needle README.md",
-		"/usr/bin/rg needle README.md",
 		"env LC_ALL=C rg needle README.md",
 		"rg needle README.md | jq .",
 		"find . -delete",
@@ -160,6 +168,8 @@ func TestIsReadOnlyPOSIXWithPolicy(t *testing.T) {
 	}
 
 	notReadOnly := []string{
+		"/usr/bin/rg needle README.md",
+		"./rg needle README.md",
 		"rg needle README.md > matches.txt",
 		"rg needle README.md &",
 		"rg needle README.md | rm output.txt",

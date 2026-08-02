@@ -56,6 +56,7 @@ func SaveFieldPaths(path string, updates []FieldUpdate) error {
 	if err != nil {
 		return fmt.Errorf("read config %s: %w", path, err)
 	}
+	data, hasSectionBreakMarkers := normalizeUpdatedTopLevelPlaceholders(data, updates)
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
@@ -76,6 +77,9 @@ func SaveFieldPaths(path string, updates []FieldUpdate) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
+	if hasSectionBreakMarkers {
+		out = bytes.ReplaceAll(out, []byte(topLevelSectionBreakMarker+"\n"), nil)
+	}
 
 	if err := validateSettingsForWrite(out); err != nil {
 		return err
@@ -84,6 +88,71 @@ func SaveFieldPaths(path string, updates []FieldUpdate) error {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
+}
+
+const topLevelSectionBreakMarker = "# __mods_top_level_section_break__"
+
+// normalizeUpdatedTopLevelPlaceholders activates the template position for a
+// top-level setting before yaml.Node round-tripping. Optional settings are
+// represented in the default file as commented examples (for example,
+// "# default-model: your-model"). Replacing that line before decoding keeps
+// its help comment above the setting and the following section break below it.
+//
+// Older SaveFieldPaths versions appended the active setting elsewhere while
+// leaving the placeholder behind. When both forms are present, move the active
+// line into the placeholder position so rewriting the file repairs that layout.
+func normalizeUpdatedTopLevelPlaceholders(data []byte, updates []FieldUpdate) ([]byte, bool) {
+	lines := strings.Split(string(data), "\n")
+	seen := make(map[string]struct{})
+	hasSectionBreakMarkers := false
+	for _, update := range updates {
+		if update.Value == nil || len(update.Path) != 1 {
+			continue
+		}
+		key := update.Path[0]
+		if _, known := configTemplateTopLevelKeyRanks[key]; !known {
+			continue
+		}
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		placeholder, active := -1, -1
+		for i, line := range lines {
+			if line == "" || line[0] == ' ' || line[0] == '\t' {
+				continue
+			}
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "#") {
+				commented := strings.TrimSpace(strings.TrimPrefix(trimmed, "#"))
+				if candidate, ok := templateMappingKey(commented); ok && candidate == key && placeholder < 0 {
+					placeholder = i
+				}
+				continue
+			}
+			if candidate, ok := templateMappingKey(trimmed); ok && candidate == key && active < 0 {
+				active = i
+			}
+		}
+		if placeholder < 0 {
+			continue
+		}
+		hasSectionBreak := placeholder+1 < len(lines) && strings.TrimSpace(lines[placeholder+1]) == ""
+		if active < 0 {
+			lines[placeholder] = key + ": null"
+		} else if active > placeholder {
+			lines[placeholder] = lines[active]
+			lines = append(lines[:active], lines[active+1:]...)
+		}
+		if hasSectionBreak {
+			lines = append(lines, "")
+			copy(lines[placeholder+2:], lines[placeholder+1:])
+			lines[placeholder+1] = topLevelSectionBreakMarker
+			hasSectionBreakMarkers = true
+		}
+	}
+	return []byte(strings.Join(lines, "\n")), hasSectionBreakMarkers
 }
 
 // MergeSettingsYAML recursively merges a YAML mapping into an existing

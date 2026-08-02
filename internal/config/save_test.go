@@ -371,6 +371,43 @@ func TestSaveFieldPathsInsertsNewTopLevelKeysInTemplateOrder(t *testing.T) {
 	require.NotEqual(t, -1, formatText)
 	require.Less(t, defaultAPI, defaultModel)
 	require.Less(t, defaultModel, formatText)
+	require.NotContains(t, content, "# default-model: your-model")
+	require.Contains(t, content,
+		"# Default model name or alias configured under the active provider\n"+
+			"default-model: deepseek-v4-flash\n\n"+
+			"# -----------------------------------------------------------------------------\n"+
+			"# Formatting",
+	)
+}
+
+func TestSaveFieldPathsRepairsPreviouslyAppendedTemplateSetting(t *testing.T) {
+	path := writeTestConfig(t, `# Core
+# Active provider
+default-api: deepseek
+# Default model
+# default-model: your-model
+
+default-model: misplaced
+# Formatting
+format-text: {}
+`)
+
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{{
+		Path:  []string{"default-model"},
+		Value: "deepseek-v4-flash",
+	}}))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, `# Core
+# Active provider
+default-api: deepseek
+# Default model
+default-model: deepseek-v4-flash
+
+# Formatting
+format-text: {}
+`, string(data))
 }
 
 func TestMergeSettingsYAMLAppendsNestedKeysInExistingOrder(t *testing.T) {

@@ -526,7 +526,7 @@ apis: {}
 	require.NotContains(t, model, "max-input-chars")
 }
 
-func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testing.T) {
+func TestBuildConfigWizardUpdatesDeepSeekFlashUsesResponses(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:                "deepseek",
 		modelName:              "deepseek-v4-flash",
@@ -536,11 +536,36 @@ func TestBuildConfigWizardUpdatesDiscoveredModelsDoNotWriteThinkingType(t *testi
 		webSearchProviderValue: "tavily",
 		keyStorage:             "env",
 		envVarName:             "DEEPSEEK_API_KEY",
+		baseURLInput:           "https://api.deepseek.com/",
 		addedModelNames:        []string{"deepseek-v4-flash"},
 	})
 
-	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash"}, map[string]any{})
+	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash"}, map[string]any{
+		"endpoint": "responses",
+	})
 	requireNoUpdatePath(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash", "thinking-type"})
+
+	path := writeCLIConfig(t, `default-api: openai
+apis:
+  deepseek:
+    base-url: https://api.deepseek.com/
+`)
+	require.NoError(t, SaveFieldPaths(path, updates))
+	saved := loadCLIConfig(t, path)
+	deepseek := saved["apis"].(map[string]any)["deepseek"].(map[string]any)
+	model := deepseek["models"].(map[string]any)["deepseek-v4-flash"].(map[string]any)
+	require.Equal(t, "responses", model["endpoint"])
+}
+
+func TestBuildConfigWizardUpdatesDeepSeekCustomGatewayKeepsDefaultEndpoint(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:         "deepseek",
+		modelName:       "deepseek-v4-flash",
+		baseURLInput:    "https://gateway.example.com/v1",
+		addedModelNames: []string{"deepseek-v4-flash"},
+	})
+
+	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-flash"}, map[string]any{})
 }
 
 func TestBuildConfigWizardUpdatesUsesExplicitDefaultModel(t *testing.T) {

@@ -351,6 +351,28 @@ func TestMergeSettingsYAMLInsertsNewTopLevelKeysInTemplateOrder(t *testing.T) {
 	require.Less(t, defaultModel, formatText)
 }
 
+func TestSaveFieldPathsInsertsNewTopLevelKeysInTemplateOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, WriteDefaultFile(path))
+
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{{
+		Path:  []string{"default-model"},
+		Value: "deepseek-v4-flash",
+	}}))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	defaultAPI := strings.Index(content, "\ndefault-api: openai")
+	defaultModel := strings.Index(content, "\ndefault-model: deepseek-v4-flash")
+	formatText := strings.Index(content, "\nformat-text:")
+	require.NotEqual(t, -1, defaultAPI)
+	require.NotEqual(t, -1, defaultModel)
+	require.NotEqual(t, -1, formatText)
+	require.Less(t, defaultAPI, defaultModel)
+	require.Less(t, defaultModel, formatText)
+}
+
 func TestMergeSettingsYAMLAppendsNestedKeysInExistingOrder(t *testing.T) {
 	path := writeTestConfig(t, `apis:
   custom:

@@ -448,6 +448,10 @@ func findInMapping(mapping *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
 // setNestedValue walks the mapping tree by path parts and sets the leaf value,
 // creating intermediate mappings as needed.
 func setNestedValue(mapping *yaml.Node, parts []string, value any) {
+	setNestedValueAtLevel(mapping, parts, value, true)
+}
+
+func setNestedValueAtLevel(mapping *yaml.Node, parts []string, value any, topLevel bool) {
 	if len(parts) == 0 || mapping == nil {
 		return
 	}
@@ -460,9 +464,10 @@ func setNestedValue(mapping *yaml.Node, parts []string, value any) {
 		if valNode != nil {
 			setLeafValue(valNode, value)
 		} else {
-			mapping.Content = append(mapping.Content,
+			insertYAMLMappingPair(mapping,
 				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
 				newLeafNode(value),
+				topLevel,
 			)
 		}
 		return
@@ -471,23 +476,24 @@ func setNestedValue(mapping *yaml.Node, parts []string, value any) {
 	// Intermediate: navigate or create a child mapping.
 	if valNode == nil {
 		child := &yaml.Node{Kind: yaml.MappingNode}
-		mapping.Content = append(mapping.Content,
+		insertYAMLMappingPair(mapping,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
 			child,
+			topLevel,
 		)
-		setNestedValue(child, parts[1:], value)
+		setNestedValueAtLevel(child, parts[1:], value, false)
 		return
 	}
 
 	if valNode.Kind == yaml.MappingNode {
-		setNestedValue(valNode, parts[1:], value)
+		setNestedValueAtLevel(valNode, parts[1:], value, false)
 		return
 	}
 
 	// Existing node is not a mapping (e.g., a scalar); replace in-place
 	// so the rest of the tree (and comments on sibling nodes) is unaffected.
 	*valNode = yaml.Node{Kind: yaml.MappingNode}
-	setNestedValue(valNode, parts[1:], value)
+	setNestedValueAtLevel(valNode, parts[1:], value, false)
 }
 
 // setLeafValue overwrites an existing leaf node's value and type tag. It

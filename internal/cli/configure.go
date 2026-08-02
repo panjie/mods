@@ -608,10 +608,13 @@ func RunConfigWizard() error {
 		keyStorage:             providerDraft.keyStorage,
 		apiKey:                 providerDraft.apiKey,
 		envVarName:             envVarName,
-		baseURLInput:           providerDraft.baseURL,
-		addedModelNames:        addedModelNames,
-		copilotModelEndpoints:  modelState.copilotEndpoints,
-		portable:               saveLocation == "portable",
+		// Persist and use the effective URL, including the built-in default.
+		// Model defaults such as DeepSeek Responses routing must not depend on
+		// whether the user typed over the URL field or accepted its default.
+		baseURLInput:          providerBaseURL,
+		addedModelNames:       addedModelNames,
+		copilotModelEndpoints: modelState.copilotEndpoints,
+		portable:              saveLocation == "portable",
 	}
 	newModelNames := configWizardNewModelNames(apiName, addedModelNames)
 	return saveConfigWizard(savePath, previousPath, saveData, summaryData{
@@ -1694,15 +1697,15 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "api-type"}, Value: d.apiType})
 	}
 
-	// Register each newly added model as an empty entry under
+	// Register each newly added model under
 	// apis.<api>.models.<name>. mods treats any model listed here as
 	// selectable; per-model fields (max-input-chars, fallback, thinking-*
-	// etc.) can be added by the user later. Previously curated model
-	// entries are left untouched. An empty mapping is written instead of a
-	// placeholder scalar so the model entry renders as `name: {}` and the
+	// etc.) can be added by the user later. Provider-specific routing defaults
+	// are written explicitly; all other models use an empty mapping so the
 	// top-level max-input-chars setting is inherited without override.
+	// Previously curated model entries are left untouched.
 	for _, modelName := range configWizardNewModelNames(d.apiName, d.addedModelNames) {
-		value := map[string]any{}
+		value := configWizardNewModelSettings(d.apiName, modelName, d.baseURLInput)
 		if d.apiName == "github-copilot" {
 			if endpoint := d.copilotModelEndpoints[modelName]; endpoint != "" {
 				value["endpoint"] = endpoint
@@ -1715,6 +1718,21 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 	}
 
 	return updates
+}
+
+func configWizardNewModelSettings(apiName, modelName, baseURL string) map[string]any {
+	settings := map[string]any{}
+	if strings.EqualFold(strings.TrimSpace(apiName), "deepseek") &&
+		strings.EqualFold(strings.TrimSpace(modelName), "deepseek-v4-flash") &&
+		configWizardIsOfficialDeepSeekURL(baseURL) {
+		settings["endpoint"] = "responses"
+	}
+	return settings
+}
+
+func configWizardIsOfficialDeepSeekURL(baseURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	return err == nil && strings.EqualFold(u.Hostname(), "api.deepseek.com")
 }
 
 func configWizardNewModelNames(apiName string, modelNames []string) []string {

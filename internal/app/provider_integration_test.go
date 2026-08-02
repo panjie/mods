@@ -141,6 +141,9 @@ func runIntegrationPrompt(t *testing.T, m *Mods, prompt string) {
 		}
 		t.Fatalf("expected streamEventMsg, got %T: %v", msg, msg)
 	}
+	if output.kind == streamEventError {
+		t.Fatalf("stream request failed: %v", output.err)
+	}
 	require.Equal(t, streamEventChunk, output.kind)
 
 	var fullText strings.Builder
@@ -151,7 +154,13 @@ func runIntegrationPrompt(t *testing.T, m *Mods, prompt string) {
 	for {
 		msg := runner.receiveCmd()()
 		event, ok := msg.(streamEventMsg)
-		if !ok || event.kind != streamEventChunk {
+		if !ok {
+			t.Fatalf("expected streamEventMsg, got %T: %v", msg, msg)
+		}
+		if event.kind == streamEventError {
+			t.Fatalf("stream request failed: %v", event.err)
+		}
+		if event.kind != streamEventChunk {
 			break
 		}
 		if event.chunk.Content != "" {

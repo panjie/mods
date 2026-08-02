@@ -29,7 +29,9 @@ const (
 
 	ToolSelectionShellPOSIX = `- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
 
-	ToolSelectionShellWindows = `- Use shell tools for repo-wide searches, tests, builds, git, package managers, and pipelines. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use Windows PowerShell 5.1 syntax and pass only the command without powershell/pwsh -Command. Prefer native cmdlets (Get-ChildItem, Select-String, Where-Object, Test-Path, Get-Content, Measure-Object) over POSIX utilities. Return inspection output directly; do not use Out-File, Set-Content, redirection, or temp .ps1 scripts to see results.`
+	PowerShellIntentGuidance = `Prefer short, single-purpose commands with explicit filesystem paths. When an equivalent exists, avoid variable assignments, dynamic or nested invocation, and encoded commands; keep necessary pipelines intact.`
+
+	ToolSelectionShellWindows = `- Use shell tools for repo-wide searches, tests, builds, git, package managers, and pipelines. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use Windows PowerShell 5.1 syntax and pass only the command without powershell/pwsh -Command. Prefer native cmdlets (Get-ChildItem, Select-String, Where-Object, Test-Path, Get-Content, Measure-Object) over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not use Out-File, Set-Content, redirection, or temp .ps1 scripts to see results.`
 
 	ToolSelectionPlanGeneral = `Tool selection (PLAN mode):
 - Use only read-only tools for targeted investigation. Do not create, modify, delete, install, or persist anything.`
@@ -38,7 +40,7 @@ const (
 
 	ToolSelectionPlanShellPOSIX = `- Use shell only for necessary read-only repository inspection. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
 
-	ToolSelectionPlanShellWindows = `- Use shell only for necessary read-only repository inspection with Windows PowerShell 5.1-compatible syntax. Do not prefix commands with Set-Location, cd, or Push-Location. Prefer native cmdlets such as Get-ChildItem, Select-String, Where-Object, ForEach-Object, Test-Path, Get-Content, and Measure-Object over POSIX utilities. Return inspection output directly; do not redirect output, create temporary files, write temporary .ps1 scripts, install packages, or run generated scripts.`
+	ToolSelectionPlanShellWindows = `- Use shell only for necessary read-only repository inspection with Windows PowerShell 5.1-compatible syntax. Do not prefix commands with Set-Location, cd, or Push-Location. Prefer native cmdlets such as Get-ChildItem, Select-String, Where-Object, ForEach-Object, Test-Path, Get-Content, and Measure-Object over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not redirect output, create temporary files, write temporary .ps1 scripts, install packages, or run generated scripts.`
 
 	// ToolSelection is the complete normal-mode reference shown by
 	// --list-prompts. Runtime requests select only the capability blocks for

@@ -48,3 +48,23 @@ func TestAnalyzeShellCommandPowerShellUserProfileDoesNotInventPlaceholder(t *tes
 	require.True(t, strings.HasPrefix(strings.ToLower(got.AffectedDirs[0]), strings.ToLower(home)), got.AffectedDirs)
 	require.NotContains(t, got.AffectedDirs[0], "<user>")
 }
+
+func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkspaceRead(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	cmd := `Get-ChildItem -Recurse -Include *.go | Where-Object { $_.FullName -notmatch '\\(vendor|\.git|bin)\\' } | Get-Content | Measure-Object -Line | Select-Object -ExpandProperty Lines`
+
+	got := m.analyzeShellCommand("powershell_run", cmd)
+
+	require.False(t, got.NeedsReview)
+	require.Equal(t, shellEffectRead, got.Effect)
+	require.Equal(t, []string{workspace}, got.AffectedDirs)
+}

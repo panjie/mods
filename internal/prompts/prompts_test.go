@@ -45,6 +45,9 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "Select-String")
 	require.Contains(t, ToolSelection, "Where-Object")
 	require.Contains(t, ToolSelection, "Measure-Object")
+	require.Contains(t, ToolSelectionShellWindows, "short, single-purpose commands")
+	require.Contains(t, ToolSelectionPlanShellWindows, "short, single-purpose commands")
+	require.Contains(t, ToolSelectionShellWindows, "keep necessary pipelines intact")
 	require.Contains(t, ToolSelection, "Return inspection output directly")
 	require.Contains(t, ToolSelection, "Do not retry blindly")
 }
@@ -61,7 +64,7 @@ func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	// Budget includes the form input kind; bump if a new tool capability
 	// legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+64,
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+256,
 		"default identity and tool-selection prompts must stay within ~5 KiB")
 }
 

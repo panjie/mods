@@ -623,7 +623,7 @@ func isExplicitPowerShellPathArg(arg string) bool {
 	if len(arg) >= 3 && ((arg[0] >= 'A' && arg[0] <= 'Z') || (arg[0] >= 'a' && arg[0] <= 'z')) && arg[1] == ':' && (arg[2] == '\\' || arg[2] == '/') {
 		return true
 	}
-	if strings.HasPrefix(arg, `\\`) || strings.HasPrefix(arg, `//`) {
+	if isExplicitWindowsUNCPath(arg) {
 		return true
 	}
 	lower := strings.ToLower(arg)
@@ -633,6 +633,31 @@ func isExplicitPowerShellPathArg(arg string) bool {
 		}
 	}
 	return strings.HasPrefix(arg, "~") && (strings.Contains(arg, "/") || strings.Contains(arg, `\`))
+}
+
+func isExplicitWindowsUNCPath(arg string) bool {
+	if !strings.HasPrefix(arg, `\\`) && !strings.HasPrefix(arg, `//`) {
+		return false
+	}
+	rest := arg[2:]
+	serverEnd := strings.IndexAny(rest, `/\`)
+	if serverEnd <= 0 {
+		return false
+	}
+	server := rest[:serverEnd]
+	if strings.ContainsAny(server, " \t\r\n'\"<>|;,&(){}") {
+		return false
+	}
+	shareAndRest := rest[serverEnd+1:]
+	if shareAndRest == "" {
+		return false
+	}
+	shareEnd := strings.IndexAny(shareAndRest, `/\`)
+	share := shareAndRest
+	if shareEnd >= 0 {
+		share = shareAndRest[:shareEnd]
+	}
+	return share != "" && !strings.ContainsAny(share, `<>:"|?*`)
 }
 
 func hasDotPrefixedParentTraversal(arg string) bool {

@@ -317,6 +317,22 @@ func TestExtractExternalPathsWindowsFlavor(t *testing.T) {
 		require.Equal(t, []string{`\\server\share\notes.txt`}, got)
 	})
 
+	t.Run("quoted regex beginning with escaped separator is not a UNC path", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`Get-ChildItem -Recurse -Include *.go | Where-Object { $_.FullName -notmatch '\\(vendor|\.git|bin)\\' } | Get-Content | Measure-Object -Line | Select-Object -ExpandProperty Lines`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Empty(t, got)
+	})
+
+	t.Run("quoted UNC path with spaces is detected", func(t *testing.T) {
+		got := extractExternalPathsWithFlavor(
+			`Get-Content '\\server\share name\notes.txt'`,
+			ws, pathutil.FlavorPowerShell,
+		)
+		require.Equal(t, []string{`\\server\share name\notes.txt`}, got)
+	})
+
 	t.Run("semicolon-delimited paths are not concatenated", func(t *testing.T) {
 		got := extractExternalPathsWithFlavor("cmd /c set PATH=C:\\bin;C:\\tools", ws, pathutil.FlavorPowerShell)
 		for _, p := range got {

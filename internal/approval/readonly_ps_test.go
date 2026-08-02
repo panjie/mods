@@ -26,6 +26,8 @@ func TestIsReadOnlyPowerShellReadOnly(t *testing.T) {
 		// With parameters
 		{"get-childitem params", "Get-ChildItem -Path C:\\Users -Recurse"},
 		{"get-content params", "Get-Content -Path file.txt -TotalCount 10"},
+		{"get-content user profile", `Get-Content $env:USERPROFILE\.config\mods\mods.yml`},
+		{"get-content home", `Get-Content $HOME\.config\mods\mods.yml`},
 
 		// Pipelines (all read-only)
 		{"pipe sort", "Get-ChildItem | Sort-Object Name"},

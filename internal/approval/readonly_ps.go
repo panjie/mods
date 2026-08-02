@@ -58,7 +58,7 @@ func IsReadOnlyPowerShellWithPolicy(command string, policy ReadOnlyCommandPolicy
 	if !safePowerShellAssignments(ir) {
 		return false, "", nil
 	}
-	if !safePowerShellVariables(ir) {
+	if !safePowerShellVariables(ir, command) {
 		return false, "", nil
 	}
 	if !safePowerShellMethods(ir) {
@@ -203,16 +203,49 @@ func safePowerShellAssignments(ir *psBridgeIR) bool {
 	return true
 }
 
-func safePowerShellVariables(ir *psBridgeIR) bool {
+func safePowerShellVariables(ir *psBridgeIR, command string) bool {
 	assigned := assignedPowerShellLocals(ir)
 	for _, variable := range ir.Variables {
 		name := normalizePowerShellVariableName(variable)
 		if safePipelinePowerShellVariables[name] || assigned[name] {
 			continue
 		}
+		// Built-in home variables are safe only when every occurrence is the
+		// explicit root of a path. That exact form is resolved by the caller's
+		// external-path extractor, preserving the approval boundary. A bare use
+		// such as Join-Path $HOME '.ssh' remains unknown because its target cannot
+		// yet be recovered deterministically.
+		if (name == "home" || name == "env:userprofile") && powerShellHomeVariableUsesAreExplicitPaths(command, name) {
+			continue
+		}
 		return false
 	}
 	return true
+}
+
+func powerShellHomeVariableUsesAreExplicitPaths(command, variable string) bool {
+	prefixes := []string{"$HOME", "${HOME}"}
+	if variable == "env:userprofile" {
+		prefixes = []string{"$env:USERPROFILE", "${env:USERPROFILE}"}
+	}
+	lowerCommand := strings.ToLower(command)
+	found := false
+	for _, prefix := range prefixes {
+		prefix = strings.ToLower(prefix)
+		for remaining := lowerCommand; ; {
+			idx := strings.Index(remaining, prefix)
+			if idx < 0 {
+				break
+			}
+			found = true
+			after := idx + len(prefix)
+			if after >= len(remaining) || remaining[after] != '\\' && remaining[after] != '/' {
+				return false
+			}
+			remaining = remaining[after+1:]
+		}
+	}
+	return found
 }
 
 func safePowerShellMethods(ir *psBridgeIR) bool {

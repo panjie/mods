@@ -152,7 +152,7 @@ func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {
 	require.Equal(t, "safe-dir consistency", string(got))
 }
 
-func TestBuildRegistryFilesystemAllowsLoadedSkillDirOnly(t *testing.T) {
+func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
 	workspace := t.TempDir()
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -173,16 +173,7 @@ func TestBuildRegistryFilesystemAllowsLoadedSkillDirOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	target := filepath.Join(skillsRoot, "demo", "generated.txt")
-	args, err := json.Marshal(map[string]string{"path": target, "content": "skill-safe"})
-	require.NoError(t, err)
-	_, err = reg.Call(context.Background(), "fs_write_file", args)
-	require.NoError(t, err)
-	got, err := os.ReadFile(target)
-	require.NoError(t, err)
-	require.Equal(t, "skill-safe", string(got))
-
-	rootSibling := filepath.Join(skillsRoot, "not-loaded", "generated.txt")
-	args, err = json.Marshal(map[string]string{"path": rootSibling, "content": "not-safe"})
+	args, err := json.Marshal(map[string]string{"path": target, "content": "not-safe"})
 	require.NoError(t, err)
 	_, err = reg.Call(context.Background(), "fs_write_file", args)
 	require.ErrorContains(t, err, "outside workspace")

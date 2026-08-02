@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -114,59 +113,6 @@ func ScanDirs(dirs []string) ([]Skill, error) {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
-}
-
-// SafeDirs returns the concrete skill directories that may be treated as
-// approval-safe for a loaded catalog. Each directory is made absolute, and
-// when it is a symlink its evaluated target is included as an equivalent
-// boundary so lexical and resolved tool paths are both recognized.
-func SafeDirs(catalog []Skill) []string {
-	if len(catalog) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(catalog))
-	dirs := make([]string, 0, len(catalog))
-	add := func(dir string) {
-		dir = strings.TrimSpace(dir)
-		if dir == "" {
-			return
-		}
-		abs, err := filepath.Abs(dir)
-		if err == nil {
-			dir = abs
-		}
-		dir = filepath.Clean(dir)
-		key := safeDirKey(dir)
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		dirs = append(dirs, dir)
-	}
-	for _, skill := range catalog {
-		dir := strings.TrimSpace(skill.Dir)
-		if dir == "" {
-			continue
-		}
-		add(dir)
-		if abs, err := filepath.Abs(dir); err == nil {
-			if eval, evalErr := filepath.EvalSymlinks(abs); evalErr == nil {
-				add(eval)
-			}
-		}
-	}
-	sort.SliceStable(dirs, func(i, j int) bool {
-		return safeDirKey(dirs[i]) < safeDirKey(dirs[j])
-	})
-	return dirs
-}
-
-func safeDirKey(dir string) string {
-	key := filepath.ToSlash(filepath.Clean(dir))
-	if runtime.GOOS == "windows" {
-		key = strings.ToLower(key)
-	}
-	return key
 }
 
 // parseSkill parses SKILL.md content into a Skill. dir is the absolute

@@ -17,6 +17,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -500,18 +501,21 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("auto allows write in loaded skill safe directory", func(t *testing.T) {
-		skillDir := filepath.Join(t.TempDir(), "demo")
+	t.Run("auto requires review for write in loaded skill directory", func(t *testing.T) {
+		skillDir := filepath.Join(filepath.Dir(scope.Value), "mods-test-skill")
+		previousCatalog := mods.skillCatalog
+		mods.skillCatalog = []skills.Skill{{Name: "demo", Dir: skillDir}}
+		defer func() { mods.skillCatalog = previousCatalog }()
 		intent := AccessIntent{Class: AccessWrite, Dirs: []string{skillDir}}
 		deps := reviewerDeps{
 			ctx:              context.Background(),
 			isShellExecution: func(name string) bool { return name == "shell_run" },
 			accessIntent:     intent,
-			safeDirs:         approval.SafeDirsWith([]string{skillDir}),
+			safeDirs:         mods.safeDirs(),
 		}
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := reviewer.requestApproval(deps, "shell_run", []byte(`{"command":"touch generated.txt"}`))
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
 	t.Run("auto requires review for shell command when classifier unavailable", func(t *testing.T) {
@@ -599,20 +603,6 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
 		require.Equal(t, AccessRead, intent.Class)
 		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("always still reviews write in loaded skill safe directory", func(t *testing.T) {
-		skillDir := filepath.Join(t.TempDir(), "demo")
-		intent := AccessIntent{Class: AccessWrite, Dirs: []string{skillDir}}
-		deps := reviewerDeps{
-			ctx:              context.Background(),
-			isShellExecution: func(name string) bool { return name == "shell_run" },
-			accessIntent:     intent,
-			safeDirs:         approval.SafeDirsWith([]string{skillDir}),
-		}
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		err := reviewer.requestApproval(deps, "shell_run", []byte(`{"command":"touch generated.txt"}`))
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 

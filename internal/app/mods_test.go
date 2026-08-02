@@ -528,8 +528,8 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		joined := strings.Join(systemContents(m.messages), "\n")
 		require.Contains(t, joined, "## Available skills")
 		require.Contains(t, joined, "demo: Demo skill.")
-		require.Contains(t, joined, "Skill safe directories:")
-		require.Contains(t, joined, filepath.Dir(skillDir))
+		require.NotContains(t, joined, "Skill safe directories:")
+		require.NotContains(t, joined, filepath.Dir(skillDir))
 	})
 
 	t.Run("empty catalog skips injection", func(t *testing.T) {
@@ -556,21 +556,6 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		require.NotContains(t, joined, "Available skills")
 		require.NotContains(t, joined, "Skill safe directories:")
 	})
-}
-
-func TestFormatSafeWorkspacePromptLimitsSkillSafeDirs(t *testing.T) {
-	dirs := make([]string, maxSkillSafeDirsPrompt+1)
-	for i := range dirs {
-		dirs[i] = fmt.Sprintf("/skills/skill-%02d", i)
-	}
-
-	got := formatSafeWorkspacePrompt("/tmp/mods", dirs)
-
-	require.Contains(t, got, "Safe temporary workspace: /tmp/mods")
-	require.Contains(t, got, "/skills/skill-00")
-	require.Contains(t, got, "/skills/skill-19")
-	require.NotContains(t, got, "/skills/skill-20")
-	require.Contains(t, got, "- ... 1 more omitted")
 }
 
 func TestSetupPlanContextPromptPolicy(t *testing.T) {

@@ -184,10 +184,14 @@ func TestReasoningShortFlagUsesLowercaseR(t *testing.T) {
 	})
 }
 
-func TestReviewModeFlagUsesClearNameAndRejectsOldName(t *testing.T) {
+func TestReviewModeFlags(t *testing.T) {
 	flag := rootCmd.Flags().Lookup("review-mode")
 	require.NotNil(t, flag)
 	require.Equal(t, "V", flag.Shorthand)
+	noReviewFlag := rootCmd.Flags().Lookup("no-review")
+	require.NotNil(t, noReviewFlag)
+	require.Equal(t, "N", noReviewFlag.Shorthand)
+	require.Equal(t, "true", noReviewFlag.NoOptDefVal)
 
 	require.Nil(t, rootCmd.Flags().Lookup("review"))
 
@@ -203,6 +207,26 @@ func TestReviewModeFlagUsesClearNameAndRejectsOldName(t *testing.T) {
 
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Parse([]string{"-V", "never"}))
+		require.Equal(t, ReviewNever, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{ReviewMode: ReviewAuto}}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-N"}))
+		require.Equal(t, ReviewNever, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{ReviewMode: ReviewAlways}}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--no-review"}))
+		require.Equal(t, ReviewNever, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{ReviewMode: ReviewAuto}}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-N", "--review-mode", "always"}))
+		require.Equal(t, ReviewAlways, config.ReviewMode)
+	})
+
+	withTestConfig(t, Config{PersistentConfig: PersistentConfig{ReviewMode: ReviewAuto}}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"--review-mode", "always", "-N"}))
 		require.Equal(t, ReviewNever, config.ReviewMode)
 	})
 

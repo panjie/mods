@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,27 @@ func TestRegisterUserInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Environment?", got.Question)
 	require.JSONEq(t, `{"answer":"prod"}`, out)
+}
+
+func TestRegisterUserInputDescriptionGuidesSecrets(t *testing.T) {
+	registry := NewRegistry()
+	require.NoError(t, RegisterUserInput(registry, nil))
+	specs := registry.Specs()
+	require.Len(t, specs, 1)
+
+	desc := specs[0].Description
+	for _, want := range []string{
+		"Call this tool, not assistant text",
+		"kind=form",
+		"secret_ref",
+		"secret_env",
+		"/secret_env/OA_PASSWORD",
+		"powershell_run",
+		"$env:OA_PASSWORD",
+	} {
+		require.Contains(t, desc, want)
+	}
+	require.Less(t, strings.Count(desc, "Complete form example"), 2)
 }
 
 func TestRegisterUserInputMultiselect(t *testing.T) {

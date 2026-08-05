@@ -14,6 +14,15 @@ const UserInputToolName = "request_user_input"
 
 const maxFormFields = 8
 
+const userInputToolDescription = "Pause and ask the local terminal user one necessary question or a short form of related fields. " +
+	"Call this tool, not assistant text, when a tool workflow needs missing user input. " +
+	"Use kind=text, select, multiselect, secret, or form. Use kind=multiselect when one or more choices may be selected. " +
+	"Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. " +
+	"Use kind=form when related fields belong together, such as a username plus password. " +
+	"For shell credentials, request the secret with a target path under /secret_env/NAME for shell_run or powershell_run; after this tool returns a secret_ref, pass that opaque value unchanged in the downstream tool's secret_env map and reference the environment variable in the command. " +
+	"Complete form example: {\"question\":\"OA login\",\"kind\":\"form\",\"fields\":[{\"key\":\"username\",\"label\":\"Username\",\"kind\":\"text\"},{\"key\":\"password\",\"label\":\"Password\",\"kind\":\"secret\",\"target\":{\"tool\":\"powershell_run\",\"path\":\"/secret_env/OA_PASSWORD\"}}]}. " +
+	"If the response contains form.password.secret_ref=\"mods-secret://...\" and form.username.answer=\"alice\", call powershell_run with {\"command\":\"oa-cli --user alice\",\"secret_env\":{\"OA_PASSWORD\":\"mods-secret://...\"}} and read the password from $env:OA_PASSWORD."
+
 type UserInputTarget struct {
 	Tool string `json:"tool"`
 	Path string `json:"path"`
@@ -81,7 +90,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 		},
 		Spec: proto.ToolSpec{
 			Name:        UserInputToolName,
-			Description: "Pause and ask the local terminal user one necessary question or a short form of related fields. Use kind=multiselect when one or more choices may be selected. Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. Use kind=form when two or more fields belong together (e.g. username and password).",
+			Description: userInputToolDescription,
 			InputSchema: objectSchema(map[string]any{
 				"question": stringProp("A concise question or prompt shown verbatim to the user."),
 				"kind": map[string]any{

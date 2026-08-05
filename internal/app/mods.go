@@ -519,7 +519,14 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 	}
-	if m.shouldUpdateAnimation() {
+	// Always forward messages to the animation so its self-rescheduling tick
+	// chain survives hidden periods (pending user-input forms, approval
+	// banners, plan review). If a tick message were dropped while the footer
+	// is taken over by one of those surfaces, the chain would break and the
+	// spinner would render a frozen frame forever once it becomes visible
+	// again. Rendering stays gated by spinnerVisible in footerView; only the
+	// tick chain is kept alive unconditionally.
+	if m.anim != nil {
 		var cmd tea.Cmd
 		m.anim, cmd = m.anim.Update(msg)
 		cmds = append(cmds, cmd)
@@ -532,10 +539,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
-}
-
-func (m *Mods) shouldUpdateAnimation() bool {
-	return m.spinnerVisible()
 }
 
 func msgCmd(msg tea.Msg) tea.Cmd {

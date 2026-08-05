@@ -151,7 +151,10 @@ func (m *Mods) renderWithOperation(content string) string {
 //     non-debug, anim present). Its palette reflects the current phase.
 //
 // A pending tool approval takes over the footer with its review banner (that is
-// a "waiting on the user" state, not a running phase, so the spinner pauses).
+// a "waiting on the user" state, not a running phase, so the spinner is hidden).
+// While hidden the animation keeps cycling in the background (mods.Update
+// forwards every message to it), so the spinner resumes already-animating when
+// the banner is dismissed.
 // In the Tool phase both surfaces are active and composed as "spinner  label".
 func (m *Mods) footerView() string {
 	if m.userInput.isPending() {
@@ -200,7 +203,9 @@ func (m *Mods) spinnerPhase() SpinnerPhase {
 // spinnerVisible reports whether the bottom spinner should render right now.
 // It is false for terminal states, plan review (banner surface), pending
 // approval, debug, raw, and non-TTY — all the cases that previously suppressed
-// the spinner. It is the single shared gate for both rendering and ticking.
+// the spinner. It only gates rendering: the animation's tick chain is kept
+// alive unconditionally in mods.Update so the spinner is always animating
+// whenever it becomes visible.
 func (m *Mods) spinnerVisible() bool {
 	if debug.Enabled() || m.Config.Raw || !IsOutputTTY() || m.anim == nil || m.userInput.isPending() {
 		return false

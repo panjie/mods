@@ -36,6 +36,26 @@ func (s staticModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return s, nil }
 
 func (s staticModel) View() tea.View { return tea.NewView(string(s)) }
 
+// recordingModel records whether Update was invoked, so tests can assert the
+// app keeps forwarding messages to the animation even while it is hidden.
+type recordingModel struct {
+	updated bool
+}
+
+func (r *recordingModel) Init() tea.Cmd { return nil }
+
+func (r *recordingModel) Update(tea.Msg) (tea.Model, tea.Cmd) {
+	r.updated = true
+	return r, nil
+}
+
+func (r *recordingModel) View() tea.View { return tea.NewView("animating") }
+
+// hiddenPeriodProbeMsg falls through Mods.Update's message switch untouched, so
+// it reaches the animation forwarding path while a pending form keeps the
+// spinner hidden.
+type hiddenPeriodProbeMsg struct{}
+
 type staticStream struct{ usage proto.TokenUsage }
 
 func (staticStream) Next() bool { return false }
@@ -954,11 +974,12 @@ func TestSpinnerPhaseDerivation(t *testing.T) {
 	require.Equal(t, PhaseStreaming, m.spinnerPhase())
 }
 
-// TestShouldUpdateAnimationTicksDuringStreaming locks in the always-on change:
-// the spinner used to stop ticking the moment responseOutputStarted flipped
-// true. It must now keep ticking through every running phase and only pause in
-// terminal states.
-func TestShouldUpdateAnimationTicksDuringStreaming(t *testing.T) {
+// TestSpinnerVisibleRenderingGate locks in the rendering-only role of
+// spinnerVisible: it is true across every running phase (pre-output, streaming)
+// and only false in terminal states. The animation itself is updated
+// unconditionally (see TestAnimationTickChainSurvivesHiddenPeriod); this
+// function only decides whether the footer shows it.
+func TestSpinnerVisibleRenderingGate(t *testing.T) {
 	oldTTY := IsOutputTTY
 	IsOutputTTY = func() bool { return true }
 	t.Cleanup(func() { IsOutputTTY = oldTTY })
@@ -970,11 +991,49 @@ func TestShouldUpdateAnimationTicksDuringStreaming(t *testing.T) {
 		reviewer: &toolReviewer{},
 	}
 
-	require.True(t, m.shouldUpdateAnimation(), "pre-output ticks")
+	require.True(t, m.spinnerVisible(), "pre-output shows spinner")
 	m.responseOutputStarted = true
-	require.True(t, m.shouldUpdateAnimation(), "streaming still ticks (regression)")
+	require.True(t, m.spinnerVisible(), "streaming still shows spinner (regression)")
 	m.state = doneState
-	require.False(t, m.shouldUpdateAnimation(), "terminal state stops ticking")
+	require.False(t, m.spinnerVisible(), "terminal state hides spinner")
+}
+
+// TestAnimationTickChainSurvivesHiddenPeriod locks in the fix for the frozen
+// spinner. The animation only self-reschedules its next tick when a message
+// reaches anim.Update; if the app dropped every message while the footer is
+// taken over by a pending user-input form (or approval banner), the tick chain
+// would break and the spinner would render a frozen frame forever once visible
+// again. The app must keep forwarding messages to the anim while it is hidden.
+func TestAnimationTickChainSurvivesHiddenPeriod(t *testing.T) {
+	oldTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldTTY })
+
+	anim := &recordingModel{}
+	m := &Mods{
+		Config: &Config{},
+		Styles: makeStyles(true),
+		state:  requestState,
+		width:  80,
+		anim:   anim,
+		userInput: &userInputManager{
+			cfg:     &Config{},
+			pending: true,
+			item: &userInputItem{
+				req: toolregistry.UserInputRequest{Question: "Approve?", Kind: "select", Options: []string{"yes", "no"}},
+			},
+		},
+		reviewer: &toolReviewer{},
+	}
+
+	require.False(t, m.spinnerVisible(), "precondition: spinner hidden while the form is pending")
+	require.False(t, anim.updated)
+
+	_, _ = m.Update(hiddenPeriodProbeMsg{})
+
+	require.True(t, anim.updated,
+		"messages must still reach the anim while hidden, or the tick chain breaks and the spinner freezes")
+	require.Contains(t, m.View().Content, "Approve?", "footer still shows the form, not the spinner")
 }
 
 // TestPlanStreamingStaysInResponseState locks in the fix for the plan-mode

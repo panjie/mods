@@ -31,6 +31,17 @@ func TestScanNormal(t *testing.T) {
 	require.Contains(t, skills[0].Dir, "alpha")
 }
 
+func TestScanCRLFFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	writeSkill(t, root, "windows", "---\r\nname: windows\r\ndescription: Windows line endings.\r\n---\r\n\r\nBody text.\r\n")
+	skills, err := Scan(root)
+	require.NoError(t, err)
+	require.Len(t, skills, 1)
+	require.Equal(t, "windows", skills[0].Name)
+	require.Equal(t, "Windows line endings.", skills[0].Description)
+	require.Equal(t, "Body text.", skills[0].Body)
+}
+
 func TestScanMissingNameFallsBackToDirName(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "beta", "---\ndescription: Beta skill.\n---\n\nBody.\n")

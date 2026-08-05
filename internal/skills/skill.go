@@ -149,12 +149,16 @@ func parseSkill(content, dir string) (Skill, error) {
 // break parsing.
 func splitFrontmatter(content string) (name, description, body string, ok bool) {
 	const marker = "---"
+	content = textutil.NormalizeLineEndings(content)
 	// Frontmatter must be the very first thing in the file.
-	if !strings.HasPrefix(content, marker+"\n") && content != marker {
+	var rest string
+	if strings.HasPrefix(content, marker+"\n") {
+		rest = strings.TrimPrefix(content, marker+"\n")
+	} else if content == marker {
+		rest = ""
+	} else {
 		return "", "", "", false
 	}
-	rest := strings.TrimPrefix(content, marker+"\n")
-	rest = strings.TrimPrefix(rest, marker)
 	// Find the closing marker on its own line.
 	lines := strings.Split(rest, "\n")
 	closeIdx := -1

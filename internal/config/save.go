@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/panjie/mods/internal/textutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,7 +103,7 @@ const topLevelSectionBreakMarker = "# __mods_top_level_section_break__"
 // leaving the placeholder behind. When both forms are present, move the active
 // line into the placeholder position so rewriting the file repairs that layout.
 func normalizeUpdatedTopLevelPlaceholders(data []byte, updates []FieldUpdate) ([]byte, bool) {
-	lines := strings.Split(string(data), "\n")
+	lines := textutil.SplitLines(string(data))
 	seen := make(map[string]struct{})
 	hasSectionBreakMarkers := false
 	for _, update := range updates {
@@ -350,7 +351,7 @@ func templateTopLevelKeyRanks(template string) map[string]int {
 		keys = append(keys, key)
 	}
 
-	for _, line := range strings.Split(template, "\n") {
+	for _, line := range textutil.SplitLines(template) {
 		if line == "" || line[0] == ' ' || line[0] == '\t' {
 			continue
 		}

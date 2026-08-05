@@ -24,3 +24,11 @@ func TestValidUTF8Prefix(t *testing.T) {
 	require.Equal(t, "你好", ValidUTF8Prefix(input[:len(input)-1]))
 	require.Equal(t, input, ValidUTF8Prefix(input))
 }
+
+func TestNormalizeLineEndings(t *testing.T) {
+	require.Equal(t, "a\nb\nc\n", NormalizeLineEndings("a\r\nb\rc\n"))
+}
+
+func TestSplitLinesNormalizesLineEndings(t *testing.T) {
+	require.Equal(t, []string{"a", "b", "c", ""}, SplitLines("a\r\nb\rc\n"))
+}

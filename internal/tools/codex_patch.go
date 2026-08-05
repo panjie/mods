@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/panjie/mods/internal/textutil"
 )
 
 type codexPatchOperation struct {
@@ -17,7 +19,7 @@ type codexPatchOperation struct {
 }
 
 func normalizeApplyPatch(ctx context.Context, root, patch string) (string, error) {
-	normalized := strings.ReplaceAll(patch, "\r\n", "\n")
+	normalized := textutil.NormalizeLineEndings(patch)
 	if !strings.HasPrefix(strings.TrimSpace(normalized), "*** Begin Patch") {
 		return patch, nil
 	}
@@ -103,7 +105,7 @@ func normalizeApplyPatch(ctx context.Context, root, patch string) (string, error
 }
 
 func parseCodexPatch(patch string) ([]codexPatchOperation, error) {
-	lines := strings.Split(strings.TrimSuffix(patch, "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(textutil.NormalizeLineEndings(patch), "\n"), "\n")
 	if len(lines) < 2 || strings.TrimSpace(lines[0]) != "*** Begin Patch" || strings.TrimSpace(lines[len(lines)-1]) != "*** End Patch" {
 		return nil, fmt.Errorf("malformed Codex patch: expected *** Begin Patch and *** End Patch")
 	}
@@ -200,8 +202,10 @@ func codexAddedContent(lines []string) (string, error) {
 }
 
 func applyCodexUpdate(original string, body []string) (string, error) {
-	originalTrailingNewline := strings.HasSuffix(original, "\n")
-	current := strings.Split(strings.TrimSuffix(strings.ReplaceAll(original, "\r\n", "\n"), "\n"), "\n")
+	lineEnding := detectLineEnding(original)
+	normalizedOriginal := textutil.NormalizeLineEndings(original)
+	originalTrailingNewline := strings.HasSuffix(normalizedOriginal, "\n")
+	current := strings.Split(strings.TrimSuffix(normalizedOriginal, "\n"), "\n")
 	if original == "" {
 		current = nil
 	}
@@ -262,7 +266,28 @@ func applyCodexUpdate(original string, body []string) (string, error) {
 	if originalTrailingNewline && len(current) > 0 {
 		updated += "\n"
 	}
+	if lineEnding != "\n" {
+		updated = strings.ReplaceAll(updated, "\n", lineEnding)
+	}
 	return updated, nil
+}
+
+func detectLineEnding(content string) string {
+	for i := 0; i < len(content); i++ {
+		switch content[i] {
+		case '\n':
+			if i > 0 && content[i-1] == '\r' {
+				return "\r\n"
+			}
+			return "\n"
+		case '\r':
+			if i+1 < len(content) && content[i+1] == '\n' {
+				return "\r\n"
+			}
+			return "\r"
+		}
+	}
+	return "\n"
 }
 
 func findLineSequence(lines, sequence []string, start int) (index, matches int) {

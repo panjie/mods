@@ -636,6 +636,21 @@ func TestFilesystemApplyPatchAcceptsCodexFormat(t *testing.T) {
 	require.Equal(t, "new", string(content))
 }
 
+func TestFilesystemApplyPatchCodexFormatPreservesCRLF(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "crlf.txt"), []byte("alpha\r\nbeta\r\n"), 0o644))
+
+	patch := "*** Begin Patch\n*** Update File: crlf.txt\n@@\n alpha\n-beta\n+changed\n*** End Patch\n"
+	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(root, "crlf.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "alpha\r\nchanged\r\n", string(content))
+}
+
 func TestFilesystemApplyPatchCodexFormatIsAtomic(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

@@ -399,10 +399,6 @@ func TestCreateConfigFileUsesLFLineEndings(t *testing.T) {
 	require.NotContains(t, string(content), "\r")
 }
 
-func TestNormalizeLineEndings(t *testing.T) {
-	require.Equal(t, "a\nb\nc\n", normalizeLineEndings("a\r\nb\rc\n"))
-}
-
 func TestConfigTemplateUsesEnglishNeutralSections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))

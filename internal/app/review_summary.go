@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/panjie/mods/internal/pathutil"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 type patchFileChange struct {
@@ -194,7 +195,7 @@ func parsePatchSummary(patch string) []patchFileChange {
 		}
 		current = nil
 	}
-	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
+	for _, line := range textutil.SplitLines(patch) {
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			flush()

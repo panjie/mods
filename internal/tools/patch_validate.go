@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/panjie/mods/internal/textutil"
 )
 
 // Patch path validation. Runs before `git apply` to ensure every path
@@ -32,7 +34,7 @@ var patchPathLinePrefixes = []struct {
 }
 
 func validatePatchPaths(ctx context.Context, root, patch string) error {
-	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
+	for _, line := range textutil.SplitLines(patch) {
 		// Refuse symlink creation. A single patch can first create a symlink
 		// inside the workspace (e.g. `escape -> /etc`) and then write through
 		// it in a later diff. Because validation runs before `git apply`,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/pathutil"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 // pathParentIntent builds an AccessIntent extractor for single-path tools.
@@ -50,7 +51,7 @@ func patchIntent(root string) func(json.RawMessage) approval.AccessIntent {
 		_ = json.Unmarshal(data, &args)
 		var dirs []string
 		seen := map[string]struct{}{}
-		for _, line := range strings.Split(args.Patch, "\n") {
+		for _, line := range textutil.SplitLines(args.Patch) {
 			for _, prefix := range []string{"*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "} {
 				if strings.HasPrefix(line, prefix) {
 					p := strings.TrimSpace(strings.TrimPrefix(line, prefix))

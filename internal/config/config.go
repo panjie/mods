@@ -18,6 +18,7 @@ import (
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/providerinfo"
+	"github.com/panjie/mods/internal/textutil"
 	"github.com/panjie/mods/internal/tools"
 	"gopkg.in/yaml.v3"
 )
@@ -857,15 +858,10 @@ func createConfigFile(path string) error {
 	if err := tmpl.Execute(&buf, m); err != nil {
 		return modsError{Err: err, ReasonText: "Could not render template."}
 	}
-	if _, err := f.WriteString(normalizeLineEndings(buf.String())); err != nil {
+	if _, err := f.WriteString(textutil.NormalizeLineEndings(buf.String())); err != nil {
 		return modsError{Err: err, ReasonText: "Could not write configuration file."}
 	}
 	return nil
-}
-
-func normalizeLineEndings(s string) string {
-	s = stdstrings.ReplaceAll(s, "\r\n", "\n")
-	return stdstrings.ReplaceAll(s, "\r", "\n")
 }
 
 func Default() Config {

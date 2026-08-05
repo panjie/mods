@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -346,7 +347,9 @@ func RunConfigWizard() error {
 					TitleFunc(func() string {
 						return fmt.Sprintf("Models for %s", currentProvider())
 					}, []any{&chosenAPI, &newProviderName}).
-					Description("Enter model identifiers here, one per line. You will choose the default model next.").
+					DescriptionFunc(func() string {
+						return configWizardManualModelsDescription(modelState.discoveryErrFor(currentProvider()))
+					}, []any{&chosenAPI, &newProviderName, &modelState.revision}).
 					Placeholder("").
 					Lines(6).
 					ExternalEditor(false).
@@ -1023,6 +1026,14 @@ func configWizardDiscoveryDescription() string {
 	return "Select models to add, or press Enter to enter model names manually. You will choose the default model next."
 }
 
+func configWizardManualModelsDescription(discoveryErr error) string {
+	const manual = "Enter model identifiers here, one per line. You will choose the default model next."
+	if discoveryErr == nil {
+		return manual
+	}
+	return fmt.Sprintf("Model discovery failed: %v\n%s", discoveryErr, manual)
+}
+
 func configWizardHideDiscoveryModels(waitingForCopilotAuth bool, discoveryErr error) bool {
 	return waitingForCopilotAuth || discoveryErr != nil
 }
@@ -1493,6 +1504,7 @@ type configWizardModelState struct {
 	discoverySucceeded bool
 	discoveryErr       error
 	copilotEndpoints   map[string]string
+	revision           int
 }
 
 func newConfigWizardModelState(apiName string, catalog configWizardProviderCatalog) *configWizardModelState {
@@ -1524,6 +1536,7 @@ func (s *configWizardModelState) setDiscoverySuccess(apiName string, selected []
 	s.discoverySucceeded = true
 	s.discoveryErr = nil
 	s.discoveredPick = selected
+	s.revision++
 }
 
 func (s *configWizardModelState) setDiscoveryFailure(apiName string, err error) {
@@ -1532,6 +1545,7 @@ func (s *configWizardModelState) setDiscoveryFailure(apiName string, err error) 
 	s.discoverySucceeded = false
 	s.discoveryErr = err
 	s.discoveredPick = nil
+	s.revision++
 }
 
 func (s *configWizardModelState) discoveryErrFor(apiName string) error {
@@ -1956,16 +1970,34 @@ func googleListModelsBase(base string) string {
 // and returns model IDs that support generateContent (filtering out embedding
 // and text-only models). Auth is via the key= query parameter, not a header.
 func fetchGoogleModels(urlStr string) ([]string, error) {
+	ids, err := fetchGoogleModelsWithClient(urlStr, &http.Client{Timeout: 15 * time.Second})
+	if err == nil || !isNetworkError(err) {
+		return ids, err
+	}
+
+	// Some VPNs advertise an IPv6 route that fails immediately even though the
+	// same endpoint is reachable over IPv4. Preserve normal dual-stack behavior
+	// first, then retry transport failures over IPv4 before falling back to
+	// manual model entry.
+	ids, ipv4Err := fetchGoogleModelsWithClient(urlStr, newIPv4DiscoveryClient())
+	if ipv4Err == nil {
+		return ids, nil
+	}
+	return nil, fmt.Errorf("%v (IPv4 retry failed: %v)", err, ipv4Err)
+}
+
+func fetchGoogleModelsWithClient(urlStr string, client *http.Client) ([]string, error) {
 	req, err := http.NewRequest("GET", urlStr, nil) //nolint:gosec,noctx
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		// urlStr contains the API key in its query string, so never include the
+		// rejected URL in an error shown by the configuration UI.
+		return nil, fmt.Errorf("build request: invalid model discovery URL")
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("network error: %w", err)
+		return nil, modelDiscoveryNetworkError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	switch {
@@ -2012,6 +2044,34 @@ func fetchGoogleModels(urlStr string) ([]string, error) {
 	return ids, nil
 }
 
+func modelDiscoveryNetworkError(err error) error {
+	// http.Client wraps transport failures in url.Error, whose Error method
+	// includes the full request URL. Google's key is a query parameter, so
+	// unwrap it before formatting to keep credentials out of the terminal.
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	return fmt.Errorf("network error: %w", err)
+}
+
+func isNetworkError(err error) bool {
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
+}
+
+func newIPv4DiscoveryClient() *http.Client {
+	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = defaultTransport.Clone()
+	}
+	dialer := &net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}
+	transport.DialContext = func(ctx context.Context, _, address string) (net.Conn, error) {
+		return dialer.DialContext(ctx, "tcp4", address)
+	}
+	return &http.Client{Transport: transport, Timeout: 15 * time.Second}
+}
+
 // resolveKeyForDiscovery returns a usable API key for model discovery: the key
 // just entered in the wizard if present, otherwise the provider's configured
 // key (api-key or its env var). Returns "" if none is available.
@@ -2022,16 +2082,11 @@ func resolveKeyForDiscovery(apiName, enteredKey string) string {
 	if k := configuredAPIKey(apiName); k != "" {
 		return k
 	}
-	for _, api := range config.APIs {
-		if api.Name != apiName {
-			continue
-		}
-		if api.APIKeyEnv != "" {
-			return os.Getenv(api.APIKeyEnv)
-		}
-		break
-	}
-	return ""
+	// Use the same resolved environment-variable name shown on the preceding
+	// credentials page. During first-time setup that name has not been saved to
+	// the YAML yet, so consulting only api.APIKeyEnv would miss keys such as the
+	// built-in GOOGLE_API_KEY and make discovery send an empty credential.
+	return os.Getenv(resolveEnvVar(apiName))
 }
 
 func configuredAPIKey(apiName string) string {

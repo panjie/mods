@@ -38,6 +38,9 @@ type Config struct {
 	// ThinkingLevel is used by Gemini 3 models. When set it takes precedence
 	// over ThinkingBudget.
 	ThinkingLevel string
+	// IncludeThoughts asks Gemini to return thought summaries as parts marked
+	// with thought=true. It is enabled by mods only when -t is active.
+	IncludeThoughts bool
 }
 
 // DefaultConfig returns the default configuration for the Google API client.
@@ -47,7 +50,7 @@ func DefaultConfig(model, authToken string) Config {
 			"https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse",
 			url.PathEscape(model),
 		),
-		HTTPClient: &http.Client{},
+		HTTPClient: newHTTPClientWithIPv4Fallback(),
 		AuthToken:  authToken,
 	}
 }
@@ -110,8 +113,9 @@ type FunctionDeclaration struct {
 
 // ThinkingConfig - for more details see https://ai.google.dev/gemini-api/docs/thinking#rest .
 type ThinkingConfig struct {
-	ThinkingBudget int    `json:"thinkingBudget,omitempty"`
-	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
+	ThinkingBudget  int    `json:"thinkingBudget,omitempty"`
+	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+	IncludeThoughts bool   `json:"includeThoughts,omitempty"`
 }
 
 // GenerationConfig are the options for model generation and outputs. Not all parameters are configurable for every model.
@@ -201,12 +205,18 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 	if c.config.ThinkingLevel != "" {
 		body.GenerationConfig.ThinkingConfig = &ThinkingConfig{
-			ThinkingLevel: c.config.ThinkingLevel,
+			ThinkingLevel:   c.config.ThinkingLevel,
+			IncludeThoughts: c.config.IncludeThoughts,
 		}
 	} else if c.config.ThinkingBudget != 0 || c.config.ThinkingBudgetExplicit {
 		body.GenerationConfig.ThinkingConfig = &ThinkingConfig{
-			ThinkingBudget: c.config.ThinkingBudget,
+			ThinkingBudget:  c.config.ThinkingBudget,
+			IncludeThoughts: c.config.IncludeThoughts,
 		}
+	} else if c.config.IncludeThoughts {
+		// Omitting level/budget preserves the model's native default while still
+		// requesting the thought summaries that mods displays for -t.
+		body.GenerationConfig.ThinkingConfig = &ThinkingConfig{IncludeThoughts: true}
 	}
 
 	req, err := c.newRequest(ctx, http.MethodPost, c.config.BaseURL, withBody(body))

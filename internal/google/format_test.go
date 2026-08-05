@@ -349,6 +349,47 @@ func TestRequestBodyIncludesFunctionDeclarations(t *testing.T) {
 	require.Contains(t, params["properties"].(map[string]any), "path")
 }
 
+func TestRequestBodyIncludesThoughtSummariesWithProviderDefault(t *testing.T) {
+	client, captured, closeServer := newCapturingServer(t)
+	defer closeServer()
+	client.config.IncludeThoughts = true
+
+	_ = client.Request(context.Background(), proto.Request{
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "think"}},
+	})
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(*captured, &body))
+	generationConfig := body["generationConfig"].(map[string]any)
+	thinkingConfig := generationConfig["thinkingConfig"].(map[string]any)
+	require.Equal(t, true, thinkingConfig["includeThoughts"])
+	require.NotContains(t, thinkingConfig, "thinkingLevel")
+	require.NotContains(t, thinkingConfig, "thinkingBudget")
+}
+
+func TestFromToolSpecsRemovesUnsupportedAdditionalProperties(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"secret_env": map[string]any{
+				"type":                 "object",
+				"additionalProperties": map[string]any{"type": "string"},
+			},
+		},
+	}
+
+	tools := fromToolSpecs([]proto.ToolSpec{{Name: "shell", InputSchema: schema}})
+	require.Len(t, tools, 1)
+	require.Len(t, tools[0].FunctionDeclarations, 1)
+	properties := tools[0].FunctionDeclarations[0].Parameters["properties"].(map[string]any)
+	secretEnv := properties["secret_env"].(map[string]any)
+	require.NotContains(t, secretEnv, "additionalProperties")
+
+	originalProperties := schema["properties"].(map[string]any)
+	originalSecretEnv := originalProperties["secret_env"].(map[string]any)
+	require.Contains(t, originalSecretEnv, "additionalProperties", "schema conversion must not mutate registry input")
+}
+
 func TestStreamParsesFunctionCallsAndPreservesText(t *testing.T) {
 	st := &Stream{
 		reader: bufio.NewReader(bytes.NewBufferString(

@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,12 @@ import (
 	"github.com/panjie/mods/internal/stream"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestStreamMessagesIncludesAssistantResponse(t *testing.T) {
 	stream := &Stream{
@@ -45,6 +53,42 @@ func TestDefaultConfigEscapesModelName(t *testing.T) {
 	// A model name with characters that require escaping should be encoded.
 	cfg := DefaultConfig("models/gemini-2.5-pro", "k")
 	require.Contains(t, cfg.BaseURL, "models%2Fgemini-2.5-pro")
+}
+
+func TestIPv4FallbackTransportReplaysPOSTBodyAfterNetworkFailure(t *testing.T) {
+	const payload = `{"contents":[{"role":"user"}]}`
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		"https://example.com/models/test:streamGenerateContent", strings.NewReader(payload))
+	require.NoError(t, err)
+
+	primaryCalls := 0
+	fallbackCalls := 0
+	transport := &ipv4FallbackTransport{
+		primary: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			primaryCalls++
+			_, _ = io.ReadAll(req.Body)
+			return nil, &net.OpError{Op: "write", Net: "tcp6", Err: errors.New("socket is not connected")}
+		}),
+		fallback: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			fallbackCalls++
+			got, readErr := io.ReadAll(req.Body)
+			require.NoError(t, readErr)
+			require.Equal(t, payload, string(got))
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("data: {}\n\n")),
+				Header:     make(http.Header),
+				Request:    req,
+			}, nil
+		}),
+	}
+
+	response, err := transport.RoundTrip(request)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Equal(t, 1, primaryCalls)
+	require.Equal(t, 1, fallbackCalls)
+	require.NoError(t, response.Body.Close())
 }
 
 func TestRequestSendsAPIKeyHeader(t *testing.T) {

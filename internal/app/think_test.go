@@ -68,6 +68,16 @@ func TestProviderNativeThinkingPlans(t *testing.T) {
 		require.True(t, active)
 		require.Equal(t, "high", cfg.ThinkingLevel)
 		require.False(t, cfg.ThinkingBudgetExplicit)
+		require.True(t, cfg.IncludeThoughts)
+	})
+
+	t.Run("Gemini 3 uses provider default and requests thought summaries", func(t *testing.T) {
+		cfg := google.Config{}
+		active := applyThinkConfigsWithOllama(Model{API: "google", Name: "gemini-3.6-flash"}, &cfg, nil, nil, nil, true)
+		require.True(t, active)
+		require.Empty(t, cfg.ThinkingLevel)
+		require.False(t, cfg.ThinkingBudgetExplicit)
+		require.True(t, cfg.IncludeThoughts)
 	})
 
 	t.Run("Gemini 3 off uses lowest common level", func(t *testing.T) {
@@ -75,6 +85,7 @@ func TestProviderNativeThinkingPlans(t *testing.T) {
 		active := applyThinkConfigsWithOllama(Model{API: "google", Name: "gemini-3-pro"}, &cfg, nil, nil, nil, false)
 		require.False(t, active)
 		require.Equal(t, "low", cfg.ThinkingLevel)
+		require.False(t, cfg.IncludeThoughts)
 	})
 
 	t.Run("Ollama sends bool or level", func(t *testing.T) {

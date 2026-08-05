@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -173,6 +174,12 @@ func TestConfigWizardDiscoveryDescriptionOmitsFailureDetails(t *testing.T) {
 	require.Contains(t, desc, "choose the default model next")
 	require.NotContains(t, desc, "first selected")
 	require.NotContains(t, desc, "HTTP 401")
+}
+
+func TestConfigWizardManualModelsDescriptionShowsDiscoveryFailure(t *testing.T) {
+	require.NotContains(t, configWizardManualModelsDescription(nil), "failed")
+	require.Contains(t, configWizardManualModelsDescription(fmt.Errorf("network unavailable")),
+		"Model discovery failed: network unavailable")
 }
 
 func TestConfigWizardCopilotAuthRunsOutsideFormValidation(t *testing.T) {
@@ -1349,6 +1356,17 @@ func TestDiscoverModelsGoogleFiltersNonGenerative(t *testing.T) {
 	require.Contains(t, err.Error(), "no generative models")
 }
 
+func TestModelDiscoveryNetworkErrorRedactsGoogleAPIKey(t *testing.T) {
+	err := modelDiscoveryNetworkError(&url.Error{
+		Op:  "Get",
+		URL: "https://generativelanguage.googleapis.com/v1beta/models?key=secret-key",
+		Err: fmt.Errorf("socket is not connected"),
+	})
+
+	require.EqualError(t, err, "network error: socket is not connected")
+	require.NotContains(t, err.Error(), "secret-key")
+}
+
 func TestBuiltinBaseURL(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -1437,6 +1455,15 @@ func TestResolveKeyForDiscovery(t *testing.T) {
 			APIs: []API{{Name: "custom", APIKeyEnv: "CUSTOM_API_KEY"}},
 		}}, func() {
 			require.Equal(t, "env-key", resolveKeyForDiscovery("custom", ""))
+		})
+	})
+
+	t.Run("falls back to inferred env var before first save", func(t *testing.T) {
+		t.Setenv("GOOGLE_API_KEY", "google-env-key")
+		withTestConfig(t, Config{PersistentConfig: PersistentConfig{
+			APIs: []API{{Name: "google"}},
+		}}, func() {
+			require.Equal(t, "google-env-key", resolveKeyForDiscovery("google", ""))
 		})
 	})
 

@@ -81,10 +81,13 @@ func applyThinkConfigsWithOllama(
 		gccfg.ThinkingBudget = plan.Budget
 		gccfg.ThinkingLevel = plan.Level
 		gccfg.ThinkingBudgetExplicit = plan.Mechanism == "budget"
+		gccfg.IncludeThoughts = plan.Active
 		if plan.Level != "" {
-			debug.Printf("Think: google thinking_level=%s (active=%v)", plan.Level, plan.Active)
+			debug.Printf("Think: google thinking_level=%s include_thoughts=%v (active=%v)", plan.Level, gccfg.IncludeThoughts, plan.Active)
 		} else if gccfg.ThinkingBudgetExplicit {
-			debug.Printf("Think: google thinking_budget=%d (active=%v)", plan.Budget, plan.Active)
+			debug.Printf("Think: google thinking_budget=%d include_thoughts=%v (active=%v)", plan.Budget, gccfg.IncludeThoughts, plan.Active)
+		} else if gccfg.IncludeThoughts {
+			debug.Printf("Think: google provider-default thinking include_thoughts=true (active=true)")
 		} else {
 			debug.Printf("Think: google thinking config omitted (active=%v)", plan.Active)
 		}

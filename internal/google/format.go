@@ -128,8 +128,34 @@ func fromToolSpecs(specs []proto.ToolSpec) []Tool {
 		declarations = append(declarations, FunctionDeclaration{
 			Name:        spec.Name,
 			Description: spec.Description,
-			Parameters:  params,
+			Parameters:  sanitizeGeminiSchema(params).(map[string]any),
 		})
 	}
 	return []Tool{{FunctionDeclarations: declarations}}
+}
+
+// sanitizeGeminiSchema clones a provider-neutral JSON Schema while removing
+// keywords that Gemini's FunctionDeclaration schema rejects. In particular,
+// additionalProperties is valid JSON Schema and is used by the shell tool's
+// secret_env map, but the Gemini API does not accept that field.
+func sanitizeGeminiSchema(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, child := range typed {
+			if key == "additionalProperties" {
+				continue
+			}
+			out[key] = sanitizeGeminiSchema(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, child := range typed {
+			out[i] = sanitizeGeminiSchema(child)
+		}
+		return out
+	default:
+		return value
+	}
 }

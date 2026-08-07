@@ -177,6 +177,8 @@ func TestBuiltinSkillAndUserOverride(t *testing.T) {
 	require.Equal(t, "cross-platform-command-execution", builtin[0].Name)
 	require.Contains(t, builtin[0].Body, "process_run")
 	require.Contains(t, builtin[0].Body, "runtime_info")
+	require.Contains(t, builtin[0].Body, "one independently reviewable purpose")
+	require.Contains(t, builtin[0].Body, "$PROFILE.CurrentUserCurrentHost")
 
 	user := Skill{Name: builtin[0].Name, Description: "User override", Body: "custom", Dir: "/user/skill"}
 	merged := MergeCatalog(builtin, []Skill{user})

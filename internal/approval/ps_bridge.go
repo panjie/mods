@@ -42,6 +42,8 @@ type psBridgeIR struct {
 	MethodInvocations            []string              `json:"method_invocations"`
 	StaticMembers                []string              `json:"static_members"`
 	Invocations                  []psCommandInvocation `json:"command_invocations"`
+	TopLevelStatementCount       int                   `json:"top_level_statement_count"`
+	PipelineCount                int                   `json:"pipeline_count"`
 }
 
 type psCommandInvocation struct {

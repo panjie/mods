@@ -14,6 +14,10 @@ type exitCoder interface {
 	ExitCode() int
 }
 
+type correctionSuggester interface {
+	CorrectionSuggested() bool
+}
+
 // ToolResultLine returns a compact single-line markdown transcript block for a
 // completed tool call. It includes the tool name, a short argument summary, and
 // whether the call succeeded or failed.
@@ -43,6 +47,10 @@ func ToolResultStatus(name string, data []byte, err error, width int) string {
 	if err != nil {
 		prefix = "\u2717 " + name
 	}
+	var correction correctionSuggester
+	if errors.As(err, &correction) && correction.CorrectionSuggested() {
+		prefix = "\u21bb " + name
+	}
 	summary := toolResultSummary(name, data)
 	if summary != "" {
 		prefix += ": "
@@ -58,6 +66,11 @@ func ToolResultStatus(name string, data []byte, err error, width int) string {
 	var ec exitCoder
 	if errors.As(err, &ec) {
 		suffix = fmt.Sprintf(" \u00b7 exit %d", ec.ExitCode())
+		return toolStatusLine(prefix, summary, suffix, detail, width)
+	}
+	if correction != nil && correction.CorrectionSuggested() {
+		suffix = " \u00b7 retry suggested"
+		detail = OneLinePreview(err.Error())
 		return toolStatusLine(prefix, summary, suffix, detail, width)
 	}
 	suffix = " \u00b7 failed"

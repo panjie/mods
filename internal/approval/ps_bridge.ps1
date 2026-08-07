@@ -30,6 +30,8 @@ function New-IR {
         method_invocations = [System.Collections.Generic.List[string]]::new()
         static_members     = [System.Collections.Generic.List[string]]::new()
         command_invocations = [System.Collections.Generic.List[object]]::new()
+        top_level_statement_count = 0
+        pipeline_count      = 0
     }
 }
 
@@ -77,6 +79,11 @@ function Invoke-Parse {
         )
         $tokens = $tokenArr
         $parseErrors = $errorArr
+		try {
+			if ($ast.EndBlock -and $ast.EndBlock.Statements) {
+				$ir.top_level_statement_count = @($ast.EndBlock.Statements).Count
+			}
+		} catch {}
     } catch {
         Add-Unique $ir.risk_flags "syntax_error"
         $ir.parse_errors.Add($_.ToString()) | Out-Null
@@ -168,6 +175,7 @@ function Invoke-Parse {
         }
 
         if ($node -is [System.Management.Automation.Language.PipelineAst]) {
+			$ir.pipeline_count++
             if ($node.PipelineElements.Count -gt 1) {
                 Add-Unique $ir.operators "|"
             }

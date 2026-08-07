@@ -705,11 +705,17 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 // of genuine error loops.
 type shellExitCoder interface{ ExitCode() int }
 
+type correctionSuggester interface{ CorrectionSuggested() bool }
+
 // toolCallFailed reports whether a tool result error is a genuine execution
 // failure. A normal non-zero shell exit is treated as a successful execution
 // that happened to return a non-zero status, so it does not count as a failure.
 func toolCallFailed(err error) bool {
 	if err == nil {
+		return false
+	}
+	var correction correctionSuggester
+	if errors.As(err, &correction) && correction.CorrectionSuggested() {
 		return false
 	}
 	var exitErr shellExitCoder
@@ -730,6 +736,11 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			}
 		}
 		if call.Err != nil {
+			var correction correctionSuggester
+			if errors.As(call.Err, &correction) && correction.CorrectionSuggested() {
+				debug.Printf("Tool correction suggested: %s -> %v", call.Name, call.Err)
+				continue
+			}
 			var exitErr shellExitCoder
 			if errors.As(call.Err, &exitErr) {
 				debug.Printf("Tool non-zero exit: %s -> status %d, output: %s",

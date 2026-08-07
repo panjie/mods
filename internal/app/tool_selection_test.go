@@ -57,11 +57,11 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	shellOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterShell(shellOnly, toolregistry.ShellConfig{Root: t.TempDir()}))
 	posixPrompt := renderToolSelectionPrompt(shellOnly, false, "linux")
-	require.Contains(t, posixPrompt, prompts.ToolSelectionShellPOSIX)
+	require.Contains(t, posixPrompt, prompts.ToolSelectionShellPOSIXFallback)
 	require.NotContains(t, posixPrompt, "fs_*")
 
 	windowsPrompt := renderToolSelectionPrompt(shellOnly, false, "windows")
-	require.Contains(t, windowsPrompt, prompts.ToolSelectionShellWindows)
+	require.Contains(t, windowsPrompt, prompts.ToolSelectionShellWindowsFallback)
 	require.NotContains(t, windowsPrompt, prompts.ToolSelectionShellPOSIX)
 	require.Contains(t, windowsPrompt, "Get-ChildItem")
 	require.Contains(t, windowsPrompt, "Select-String")
@@ -72,13 +72,15 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	processPrompt := renderToolSelectionPrompt(processOnly, false, "linux")
 	require.Contains(t, processPrompt, prompts.ToolSelectionProcess)
 	require.Contains(t, processPrompt, prompts.ToolSelectionShellPOSIX)
+	require.NotContains(t, processPrompt, "Use shell tools for repository-wide searches, tests, builds, git, package managers")
+	require.Contains(t, processPrompt, "including git, tests, builds, package managers, and installers")
 
 	both := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(both, toolregistry.FilesystemConfig{Root: t.TempDir()}))
 	require.NoError(t, toolregistry.RegisterShell(both, toolregistry.ShellConfig{Root: t.TempDir()}))
 	bothPrompt := renderToolSelectionPrompt(both, false, "linux")
 	require.Contains(t, bothPrompt, prompts.ToolSelectionFilesystem)
-	require.Contains(t, bothPrompt, prompts.ToolSelectionShellPOSIX)
+	require.Contains(t, bothPrompt, prompts.ToolSelectionShellPOSIXFallback)
 }
 
 func TestRenderToolSelectionPromptPlanModeIsReadOnly(t *testing.T) {
@@ -89,7 +91,7 @@ func TestRenderToolSelectionPromptPlanModeIsReadOnly(t *testing.T) {
 	got := renderToolSelectionPrompt(registry, true, "linux")
 	require.Contains(t, got, "PLAN mode")
 	require.Contains(t, got, "fs_read_file")
-	require.Contains(t, got, "read-only repository inspection")
+	require.Contains(t, got, "read-only executable or shell inspection")
 	require.NotContains(t, got, "fs_replace")
 	require.NotContains(t, got, "tests, builds")
 	require.NotContains(t, got, "call the appropriate tool")

@@ -42,7 +42,7 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "fs_replace")
 	require.Contains(t, ToolSelection, "process_run")
 	require.Contains(t, ToolSelection, "runtime_info")
-	require.Contains(t, ToolSelection, "PowerShell 5.1")
+	require.Contains(t, ToolSelection, "reported PowerShell host")
 	require.Contains(t, ToolSelection, "Get-ChildItem")
 	require.Contains(t, ToolSelection, "Select-String")
 	require.Contains(t, ToolSelection, "Where-Object")

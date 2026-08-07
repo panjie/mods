@@ -176,9 +176,10 @@ func TestDefaultPromptText(t *testing.T) {
 
 func TestToolSelectionRulesCoverCoreChoices(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Prefer fs_* tools")
-	require.Contains(t, ToolSelectionRules, "Use shell tools for repository-wide")
+	require.Contains(t, ToolSelectionRules, "Use process_run for one executable")
+	require.Contains(t, ToolSelectionRules, "Use shell_run for commands that require POSIX shell syntax")
 	require.Contains(t, ToolSelectionRules, "review step")
-	require.Contains(t, ToolSelectionRules, "PowerShell 5.1")
+	require.Contains(t, ToolSelectionRules, "reported PowerShell host")
 	require.Contains(t, ToolSelectionRules, "Get-ChildItem")
 	require.Contains(t, ToolSelectionRules, "Select-String")
 	require.Contains(t, ToolSelectionRules, "Return inspection output directly")

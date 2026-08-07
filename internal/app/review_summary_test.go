@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/stretchr/testify/require"
 )
 
@@ -158,6 +159,26 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
 	require.Empty(t, rules, "runtime-resolved reads must never offer a persistent directory rule")
+}
+
+func TestCompoundShellReviewabilityPresentation(t *testing.T) {
+	analysis := shellCommandAnalysis{Reviewability: approval.CommandReviewability{
+		Level:              approval.ReviewabilityCompound,
+		Reasons:            []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
+		TopLevelStatements: 4,
+		PipelineCount:      2,
+		ShouldCorrect:      true,
+	}}
+	presentation := formatReviewPresentationWithIntent(
+		"powershell_run",
+		[]byte(`{"command":"Write-Output a; Write-Output b"}`),
+		analysis,
+		WorkspaceScope(`C:\workspace`),
+		AccessIntent{Class: AccessWrite},
+	)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Reviewability", Value: "compound"})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Composition", Value: "4 top-level actions, 2 pipelines"})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Suggestion", Value: "Split independent discovery, inspection, mutation, and verification steps"})
 }
 
 func TestFormatReviewSummaryExternalRead(t *testing.T) {

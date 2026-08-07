@@ -335,6 +335,14 @@ Shell paths that still depend on runtime expansion (for example PowerShell's
 approved once; they are never saved as directory rules. For a reusable scoped
 approval, resolve the path first and use its literal absolute value in the
 mutation command.
+Mods also performs a bounded reviewability preflight for model-generated shell
+calls. When a call unnecessarily wraps one executable in a shell, mixes
+inspection and mutation, writes through a runtime path, or combines several
+independent actions, the model receives one request to retry with smaller calls
+before anything runs. This correction happens at most once per request and does
+not replace the normal safety review; a legitimate complex command can still
+proceed to review on the next attempt. Pipelines that represent one operation
+are not split automatically.
 Use `--show-token-usage` (or `-s`) to print the input, output, and total token count for
 an interaction to stderr without mixing it into the model response on stdout.
 

@@ -2,8 +2,10 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/secrets"
 )
 
@@ -60,6 +62,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
+		result.rows = appendReviewabilityRows(result.rows, analysis)
 	case "process_run":
 		risk := shellRiskLevel(analysis, scope)
 		result.tone, result.toneText = toneForShellRisk(risk, ProcessCommandPreview(parsed))
@@ -78,6 +81,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
+		result.rows = appendReviewabilityRows(result.rows, analysis)
 	default:
 		result.headline = formatReviewLabel(name, args)
 		if summary := ToolArgsSummary(parsed); summary != "" {
@@ -91,6 +95,41 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 		result.tone, result.toneText = interactionToneInfo, "Info"
 	}
 	return result
+}
+
+func appendReviewabilityRows(rows []interactionRow, analysis shellCommandAnalysis) []interactionRow {
+	reviewability := analysis.Reviewability
+	if reviewability.Level == "" || reviewability.Level == approval.ReviewabilitySimple && !reviewability.ShouldCorrect && reviewability.RecommendedTool == "" {
+		return rows
+	}
+	rows = append(rows, interactionRow{Label: "Reviewability", Value: string(reviewability.Level)})
+	var shape []string
+	if reviewability.TopLevelStatements > 1 {
+		shape = append(shape, fmt.Sprintf("%d top-level actions", reviewability.TopLevelStatements))
+	}
+	if reviewability.PipelineCount > 0 {
+		shape = append(shape, fmt.Sprintf("%d pipelines", reviewability.PipelineCount))
+	}
+	if len(shape) > 0 {
+		rows = append(rows, interactionRow{Label: "Composition", Value: strings.Join(shape, ", ")})
+	}
+	if suggestion := reviewabilitySuggestion(reviewability); suggestion != "" {
+		rows = append(rows, interactionRow{Label: "Suggestion", Value: suggestion})
+	}
+	return rows
+}
+
+func reviewabilitySuggestion(reviewability approval.CommandReviewability) string {
+	if reviewability.RecommendedTool == "process_run" {
+		return "Use process_run with literal arguments"
+	}
+	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget) {
+		return "Resolve the path read-only, then write the literal absolute path"
+	}
+	if reviewability.ShouldCorrect {
+		return "Split independent discovery, inspection, mutation, and verification steps"
+	}
+	return ""
 }
 
 func processArgsForReview(parsed map[string]any) string {

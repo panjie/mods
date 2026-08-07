@@ -31,6 +31,8 @@ func TestParseWithBridgePipeline(t *testing.T) {
 	require.Contains(t, ir.Commands, "get-childitem")
 	require.Contains(t, ir.Commands, "sort-object")
 	require.Contains(t, ir.Operators, "|")
+	require.Equal(t, 1, ir.TopLevelStatementCount)
+	require.GreaterOrEqual(t, ir.PipelineCount, 1)
 }
 
 func TestParseWithBridgeScriptBlock(t *testing.T) {
@@ -137,7 +139,6 @@ func TestParseWithBridgeCommandSubexpressionStillFlagged(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, ir.Expansions, "subshell")
 }
-
 func TestParseWithBridgeUnsafeExpressionFacts(t *testing.T) {
 	t.Cleanup(func() { CloseBridge() })
 
@@ -170,6 +171,7 @@ func TestParseWithBridgeSemicolon(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ir)
 	require.Contains(t, ir.Operators, ";")
+	require.Equal(t, 2, ir.TopLevelStatementCount)
 }
 
 func TestParseWithBridgeCloseBridgeCleanup(t *testing.T) {

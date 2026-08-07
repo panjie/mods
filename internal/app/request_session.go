@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/anthropic"
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/google"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/ollama"
@@ -346,12 +347,11 @@ func (m *Mods) injectApprovedPlan() {
 }
 
 func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(name string, data []byte) (string, error) {
+	preflight := newCommandPreflightGate(cfg)
 	return func(name string, data []byte) (string, error) {
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
 		m.addCancel(cancel)
 		defer cancel()
-		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
-
 		// Reject malformed calls (missing/empty required args) before computing
 		// access intent or asking for approval. Without this, a call that omits
 		// a required path renders a misleading "unknown target" review prompt
@@ -359,13 +359,39 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		if err := registry.ValidateRequiredArgs(name, data); err != nil {
 			return "", err
 		}
-
 		if registry.Interactive(name) {
+			m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 			return registry.Call(ctx, name, data)
+		}
+		if name == "process_run" {
+			var invocation struct {
+				Program string   `json:"program"`
+				Args    []string `json:"args"`
+			}
+			if err := json.Unmarshal(data, &invocation); err == nil {
+				quick := shellCommandAnalysis{Reviewability: approval.AnalyzeProcessReviewability(
+					invocation.Program,
+					invocation.Args,
+					!shellToolUsesPowerShell("process_run"),
+				)}
+				if err := preflight.check(name, quick); err != nil {
+					return "", err
+				}
+			}
 		}
 
 		analyzeShell := memoizedShellAnalyzer(m.analyzeShellCommand)
 		intent := buildAccessIntent(name, data, registry, analyzeShell)
+		if registry.ShellExecution(name) {
+			command := ExtractShellCommand(data)
+			if name == "process_run" {
+				command = string(data)
+			}
+			if err := preflight.check(name, analyzeShell(name, command)); err != nil {
+				return "", err
+			}
+		}
+		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 		scope := m.reviewer.scope
 		safeDirs := m.safeDirs()
 		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))

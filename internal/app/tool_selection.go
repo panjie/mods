@@ -43,9 +43,17 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 		}
 		if hasShell {
 			if goos == "windows" {
-				parts = append(parts, prompts.ToolSelectionPlanShellWindows)
+				if hasProcess {
+					parts = append(parts, prompts.ToolSelectionPlanShellWindows)
+				} else {
+					parts = append(parts, prompts.ToolSelectionPlanShellWindowsFallback)
+				}
 			} else {
-				parts = append(parts, prompts.ToolSelectionPlanShellPOSIX)
+				if hasProcess {
+					parts = append(parts, prompts.ToolSelectionPlanShellPOSIX)
+				} else {
+					parts = append(parts, prompts.ToolSelectionPlanShellPOSIXFallback)
+				}
 			}
 		}
 	} else {
@@ -58,9 +66,17 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 		}
 		if hasShell {
 			if goos == "windows" {
-				parts = append(parts, prompts.ToolSelectionShellWindows)
+				if hasProcess {
+					parts = append(parts, prompts.ToolSelectionShellWindows)
+				} else {
+					parts = append(parts, prompts.ToolSelectionShellWindowsFallback)
+				}
 			} else {
-				parts = append(parts, prompts.ToolSelectionShellPOSIX)
+				if hasProcess {
+					parts = append(parts, prompts.ToolSelectionShellPOSIX)
+				} else {
+					parts = append(parts, prompts.ToolSelectionShellPOSIXFallback)
+				}
 			}
 		}
 	}

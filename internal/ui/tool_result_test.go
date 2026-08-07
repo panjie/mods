@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type correctionTestError struct{}
+
+func (correctionTestError) Error() string             { return "split this call" }
+func (correctionTestError) CorrectionSuggested() bool { return true }
+
 func TestToolResultLine(t *testing.T) {
 	shellArgs := []byte(`{"command":"ls -la"}`)
 
@@ -69,6 +74,13 @@ func TestToolResultLine(t *testing.T) {
 func TestToolResultStatusTruncates(t *testing.T) {
 	got := ToolResultStatus("fs_search", []byte(`{"query":"very long query","path":"/repo"}`), nil, 24)
 	require.Equal(t, "\u2713 fs_search: query=ve...", got)
+}
+
+func TestToolResultStatusShowsSuggestedRetry(t *testing.T) {
+	got := ToolResultStatus("powershell_run", []byte(`{"command":"complex"}`), correctionTestError{}, 200)
+	require.Contains(t, got, "↻ powershell_run")
+	require.Contains(t, got, "retry suggested")
+	require.Contains(t, got, "split this call")
 }
 
 func TestToolResultStatusTruncatesWideContentToOneTerminalLine(t *testing.T) {

@@ -27,13 +27,17 @@ const (
 
 	ToolSelectionFilesystem = `- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
 
-	ToolSelectionProcess = `- Prefer process_run for one executable: pass each argument separately, use cwd instead of prepending cd, and inspect its structured exit/stdout/stderr result. Use runtime_info only when OS, selected shell, or executable availability is relevant and unknown.`
+	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers, and installers, with literal args/cwd. Never run sh/cmd/powershell/pwsh with -c or -Command; use a shell tool. Inspect the result. Use runtime_info only when availability is unknown.`
 
-	ToolSelectionShellPOSIX = `- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
+	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax, including pipelines, redirection, variable expansion, globbing, or shell builtins. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
 
-	PowerShellIntentGuidance = `Prefer short, single-purpose commands with explicit paths. For writes to a runtime path such as $PROFILE, resolve it read-only, then use the literal absolute result. Avoid dynamic or encoded commands; keep necessary pipelines intact.`
+	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and commands that require POSIX shell syntax. Keep each call single-purpose. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
 
-	ToolSelectionShellWindows = `- Use shell tools for repo-wide searches, tests, builds, git, package managers, and pipelines. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use Windows PowerShell 5.1 syntax and pass only the command without powershell/pwsh -Command. Prefer native cmdlets (Get-ChildItem, Select-String, Where-Object, Test-Path, Get-Content, Measure-Object) over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not use Out-File, Set-Content, redirection, or temp .ps1 scripts to see results.`
+	PowerShellIntentGuidance = `Prefer short, single-purpose commands. Separate discovery, path inspection, mutation, and verification. Resolve runtime writes such as $PROFILE read-only, then use the literal absolute path. Do not change execution policy or unrelated settings unless requested. Avoid decorative formatting and dynamic or encoded commands; keep necessary pipelines intact.`
+
+	ToolSelectionShellWindows = `- Use powershell_run only for cmdlets, object pipelines, or runtime variables. Keep cwd, pass only the command, and match the reported PowerShell host. Prefer native cmdlets (Get-ChildItem, Select-String, Where-Object, Test-Path, Get-Content, Measure-Object) over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not write files merely to see results.`
+
+	ToolSelectionShellWindowsFallback = `- Use powershell_run for executable invocations and commands that require PowerShell cmdlets, object pipelines, runtime variables, or other PowerShell syntax. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use syntax compatible with the reported PowerShell host and pass only the command without powershell/pwsh -Command. Prefer native cmdlets such as Get-ChildItem and Select-String over POSIX-only utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not write temporary files merely to see results.`
 
 	ToolSelectionPlanGeneral = `Tool selection (PLAN mode):
 - Use only read-only tools for targeted investigation. Do not create, modify, delete, install, or persist anything.`
@@ -42,9 +46,13 @@ const (
 
 	ToolSelectionPlanProcess = `- Prefer process_run for a necessary read-only single-program inspection. Pass literal arguments separately and do not run programs that build, install, generate, or persist output.`
 
-	ToolSelectionPlanShellPOSIX = `- Use shell only for necessary read-only repository inspection. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
+	ToolSelectionPlanShellPOSIX = `- Use shell_run only for necessary read-only inspection that requires POSIX shell syntax. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
 
-	ToolSelectionPlanShellWindows = `- Use shell only for necessary read-only repository inspection with Windows PowerShell 5.1-compatible syntax. Do not prefix commands with Set-Location, cd, or Push-Location. Prefer native cmdlets such as Get-ChildItem, Select-String, Where-Object, ForEach-Object, Test-Path, Get-Content, and Measure-Object over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not redirect output, create temporary files, write temporary .ps1 scripts, install packages, or run generated scripts.`
+	ToolSelectionPlanShellPOSIXFallback = `- Use shell_run only for necessary read-only executable or shell inspection. Keep each call single-purpose. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
+
+	ToolSelectionPlanShellWindows = `- Use powershell_run only for necessary read-only inspection that requires PowerShell cmdlets, object pipelines, or runtime variables. Do not prefix commands with Set-Location, cd, or Push-Location. Prefer native cmdlets such as Get-ChildItem, Select-String, Where-Object, ForEach-Object, Test-Path, Get-Content, and Measure-Object over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not redirect output, create temporary files, write temporary .ps1 scripts, install packages, or run generated scripts.`
+
+	ToolSelectionPlanShellWindowsFallback = `- Use powershell_run only for necessary read-only executable or PowerShell inspection. Keep each call single-purpose. Do not prefix commands with Set-Location, cd, or Push-Location. ` + PowerShellIntentGuidance + ` Do not redirect output, create temporary files, install packages, or run generated scripts.`
 
 	// ToolSelection is the complete normal-mode reference shown by
 	// --list-prompts. Runtime requests select only the capability blocks for

@@ -36,6 +36,7 @@ type shellCommandAnalysis struct {
 	UnresolvedPaths []string
 	Reason          string
 	Effect          shellEffect
+	Reviewability   approval.CommandReviewability
 }
 
 func defaultShellCommandAnalysis() shellCommandAnalysis {
@@ -55,7 +56,8 @@ func shellToolUsesPowerShell(tool string) bool {
 
 func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	if tool == "process_run" {
-		return m.analyzeProcessInvocation(command)
+		result := m.analyzeProcessInvocation(command)
+		return result
 	}
 	ws := ""
 	if m.Config != nil {
@@ -78,7 +80,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 			affected = appendMissingShellDirs(affected, filterArgPaths(static.AffectedDirs, ws, flavor))
 		}
 		debug.Printf("analyzeShellCommand: cmd=%q -> static: read-only", debug.Truncate(command, 80))
-		return finalizeShellAnalysis(
+		return m.withCommandReviewability(tool, command, finalizeShellAnalysis(
 			shellCommandAnalysis{
 				NeedsReview:  false,
 				AffectedDirs: affected,
@@ -91,10 +93,10 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 			static.UnresolvedPaths,
 			ws,
 			flavor,
-		)
+		))
 	case approval.ShellStaticWrite:
 		debug.Printf("analyzeShellCommand: cmd=%q -> static: write dirs=%v", debug.Truncate(command, 80), static.AffectedDirs)
-		return finalizeShellAnalysis(
+		return m.withCommandReviewability(tool, command, finalizeShellAnalysis(
 			shellCommandAnalysis{
 				NeedsReview:     true,
 				AffectedDirs:    static.AffectedDirs,
@@ -108,7 +110,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 			static.UnresolvedPaths,
 			ws,
 			flavor,
-		)
+		))
 	}
 
 	// Test seam: short-circuits the LLM classifier. The static classifier runs
@@ -116,12 +118,66 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// delegates to the seam or the LLM.
 	if m.shellAnalyzer != nil {
 		result := m.shellAnalyzer(tool, command)
-		return finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor)
+		return m.withCommandReviewability(tool, command, finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor))
 	}
 
 	// LLM classifier
 	result := m.classifyShellWithLLM(tool, command)
-	return finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor)
+	return m.withCommandReviewability(tool, command, finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor))
+}
+
+func (m *Mods) withCommandReviewability(tool, command string, result shellCommandAnalysis) shellCommandAnalysis {
+	posix := !shellToolUsesPowerShell(tool)
+	reviewability := approval.AnalyzeCommandReviewability(command, posix, m.readOnlyCommandPolicy())
+	reviewability.DynamicTargets = mergeReviewabilityTargets(reviewability.DynamicTargets, result.UnresolvedPaths)
+	if result.Effect == shellEffectWrite && len(reviewability.DynamicTargets) > 0 {
+		reviewability.Level = approval.ReviewabilityCompound
+		reviewability.Reasons = appendReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget)
+		reviewability.ShouldCorrect = true
+	}
+	if result.Effect == shellEffectRead && reviewabilityOnlyRecommendsProcess(reviewability) {
+		// Keep the process_run recommendation in presentation metadata, but do
+		// not spend the request's single corrective round on a harmless read.
+		reviewability.ShouldCorrect = false
+	}
+	if len(reviewability.DynamicTargets) > 1 {
+		reviewability.Reasons = appendReviewabilityReason(reviewability.Reasons, approval.ReviewabilityMultipleDynamicTargets)
+	}
+	result.Reviewability = reviewability
+	return result
+}
+
+func reviewabilityOnlyRecommendsProcess(reviewability approval.CommandReviewability) bool {
+	return len(reviewability.Reasons) == 1 && reviewability.Reasons[0] == approval.ReviewabilitySingleProgramInShell
+}
+
+func mergeReviewabilityTargets(targets, extra []string) []string {
+	result := append([]string(nil), targets...)
+	seen := make(map[string]struct{}, len(result))
+	for _, target := range result {
+		seen[strings.ToLower(strings.TrimSpace(target))] = struct{}{}
+	}
+	for _, target := range extra {
+		key := strings.ToLower(strings.TrimSpace(target))
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, target)
+	}
+	return result
+}
+
+func appendReviewabilityReason(reasons []approval.ReviewabilityReason, reason approval.ReviewabilityReason) []approval.ReviewabilityReason {
+	for _, existing := range reasons {
+		if existing == reason {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
 }
 
 func (m *Mods) analyzeProcessInvocation(raw string) shellCommandAnalysis {
@@ -177,7 +233,9 @@ func (m *Mods) analyzeProcessInvocation(raw string) shellCommandAnalysis {
 	if len(result.AffectedDirs) == 0 && cwd != "" {
 		result.AffectedDirs = []string{cwd}
 	}
-	return normalizeShellEffect(result)
+	result = normalizeShellEffect(result)
+	result.Reviewability = approval.AnalyzeProcessReviewability(invocation.Program, invocation.Args, posix)
+	return result
 }
 
 func normalizeLiteralProcessDirs(dirs []string, cwd string, flavor pathutil.Flavor) []string {

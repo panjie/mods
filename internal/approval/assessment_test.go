@@ -7,12 +7,20 @@ import (
 )
 
 func TestCommandAssessmentAccessIntent(t *testing.T) {
-	read := CommandAssessment{Effect: EffectRead, KnownDirs: []string{"/etc"}, DynamicTargets: []string{"$PROFILE"}}
-	require.Equal(t, AccessRead, read.AccessIntent().Class)
-	require.Equal(t, []string{"/etc"}, read.AccessIntent().Dirs)
-	require.Equal(t, []string{"$PROFILE"}, read.AccessIntent().UnresolvedPaths)
+	readWithDir := CommandAssessment{Effect: EffectRead, KnownDirs: []string{"/etc"}, DynamicTargets: []string{"$PROFILE"}}
+	require.Equal(t, AccessRead, readWithDir.AccessIntent().Class)
+	require.Equal(t, []string{"/etc"}, readWithDir.AccessIntent().Dirs)
+	require.Equal(t, []string{"$PROFILE"}, readWithDir.AccessIntent().UnresolvedPaths)
 
-	require.Equal(t, AccessWrite, CommandAssessment{Effect: EffectWrite}.AccessIntent().Class)
+	dynamicRead := CommandAssessment{Effect: EffectRead, DynamicTargets: []string{"$PROFILE"}}
+	require.Equal(t, AccessRead, dynamicRead.AccessIntent().Class)
+	require.Empty(t, dynamicRead.AccessIntent().Dirs)
+	require.Equal(t, []string{"$PROFILE"}, dynamicRead.AccessIntent().UnresolvedPaths)
+	require.Equal(t, DecisionAllow, ClassifyAccess(dynamicRead.AccessIntent(), Scope{Value: "/workspace"}, nil, ReviewAuto))
+
+	dynamicWrite := CommandAssessment{Effect: EffectWrite, DynamicTargets: []string{"$PROFILE"}}
+	require.Equal(t, AccessWrite, dynamicWrite.AccessIntent().Class)
+	require.Equal(t, []string{"$PROFILE"}, dynamicWrite.AccessIntent().UnresolvedPaths)
 	require.Equal(t, AccessWrite, CommandAssessment{Effect: EffectUnknown}.AccessIntent().Class)
 }
 

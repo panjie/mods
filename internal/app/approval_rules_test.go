@@ -100,6 +100,26 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	require.NoError(t, <-errCh)
 }
 
+func TestDynamicReadWithoutConcreteDirectorySkipsAutoReview(t *testing.T) {
+	assessment := approval.CommandAssessment{
+		Effect:         approval.EffectRead,
+		DynamicTargets: []string{`$PROFILE.CurrentUserCurrentHost`},
+		Reason:         "read-only PowerShell command (AST analysis)",
+	}
+	intent := assessment.AccessIntent()
+	require.Equal(t, AccessRead, intent.Class)
+	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, intent.UnresolvedPaths)
+
+	reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
+	err := reviewer.requestApproval(reviewerDeps{
+		ctx:            context.Background(),
+		shellExecution: true,
+		assessment:     &assessment,
+		accessIntent:   intent,
+	}, "powershell_run", []byte(`{"command":"[PSCustomObject]@{ Path = $PROFILE.CurrentUserCurrentHost; Exists = Test-Path -LiteralPath $PROFILE.CurrentUserCurrentHost } | ConvertTo-Json -Compress"}`))
+	require.NoError(t, err)
+}
+
 func TestOldestDownloadsPipelineOffersReadOnlyDirectoryRule(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX pipeline coverage applies to non-Windows shell_run")

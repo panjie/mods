@@ -151,7 +151,31 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 		require.Equal(t, approval.EffectRead, assessment.Effect)
 		require.Contains(t, assessment.DynamicTargets, tc.target)
 		require.Equal(t, AccessRead, assessment.AccessIntent().Class)
+		require.Equal(t, []string{tc.target}, assessment.AccessIntent().UnresolvedPaths)
+		require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(m.Config.ResolveWorkspace().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
 		require.Equal(t, approval.ReviewabilityCompound, assessment.Reviewability.Level)
 		require.True(t, assessment.Reviewability.ShouldCorrect)
 	}
+}
+
+func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	command := `[PSCustomObject]@{ Path = $PROFILE.CurrentUserCurrentHost; Exists = Test-Path -LiteralPath $PROFILE.CurrentUserCurrentHost } | ConvertTo-Json -Compress`
+	assessment := m.assessCommand("powershell_run", command)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Contains(t, assessment.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
+	require.Equal(t, approval.ReviewabilitySimple, assessment.Reviewability.Level)
+	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, assessment.AccessIntent().UnresolvedPaths)
+	require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
 }

@@ -135,14 +135,17 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 //	  temp dir:  read=allow, write=allow
 //	  external:  read=ask,   write=ask
 //
-// ReviewNever forces allow. Unresolved paths always ask otherwise. Empty Dirs
-// degrades to read=allow / write=ask.
+// ReviewNever forces allow. A proven read with unresolved paths but no
+// concrete directory is capability discovery and is allowed in ReviewAuto;
+// other unresolved paths ask. Empty Dirs degrades to read=allow / write=ask.
 func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode ReviewMode) Decision {
 	if mode == ReviewNever {
 		return DecisionAllow
 	}
 	if intent.HasUnresolvedPaths() {
-		return DecisionAsk
+		if intent.DominantClass() != AccessRead || len(intent.AllDirs()) > 0 {
+			return DecisionAsk
+		}
 	}
 	groups := intent.Groups()
 	if len(groups) == 0 {

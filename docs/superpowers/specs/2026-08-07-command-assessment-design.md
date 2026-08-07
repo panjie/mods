@@ -15,9 +15,12 @@ not independently reconstruct command state.
   policy remains fail-closed.
 - `KnownDirs` contains concrete parser- or classifier-derived filesystem
   targets.
-- `DynamicTargets` contains runtime expressions. They map to
-  `AccessIntent.UnresolvedPaths`, always require per-use approval, never create
-  a `DirAllow` rule, and never authorize a directory for tool execution.
+- `DynamicTargets` contains runtime expressions and maps to
+  `AccessIntent.UnresolvedPaths`; it never creates a `DirAllow` rule or
+  authorizes a directory for tool execution. The approval matrix treats a
+  proven read with no concrete directory as capability discovery, so this
+  intent does not block `ReviewAuto`. Writes, unknown effects, and reads that
+  also identify concrete directories still require per-use approval.
 - `Shape` and `Reviewability` describe composition and correction guidance.
   They do not decide whether execution is safe.
 
@@ -77,8 +80,10 @@ between security effect and human reviewability.
 
 - Unknown effects are write-like for policy but remain visibly unknown.
 - LLM output cannot erase static dynamic targets or AST structure.
-- Dynamic reads are informational approvals, not unknown writes.
-- Dynamic reads and writes never match or produce reusable directory rules.
+- Dynamic reads with no concrete directory are auto-allowed in `ReviewAuto`;
+  `ReviewAlways` retains its explicit always-review semantics.
+- Other dynamic reads and all dynamic writes never match or produce reusable
+  directory rules.
 - At most one command-simplification correction occurs per user request; later
   compound calls enter normal approval.
 - No persistent configuration or approval database migration is required.

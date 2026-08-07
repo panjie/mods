@@ -110,13 +110,12 @@ The user will approve, revise, or reject the plan before execution.`
 For process_run, the command is a JSON description of a direct process invocation; program and args are literal and have no shell expansion.
 Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
 Use exactly this shape:
-{"needs_review":true,"affected_dirs":["/path/or/relative/dir"],"reason":"short reason","effect":"read|write|unknown"}
+{"effect":"read|write|unknown","affected_dirs":["/path/or/relative/dir"],"reason":"short reason"}
 
-Set needs_review to true if the command creates, deletes, modifies, or may modify files, directories, system settings, or persistent state. If unsure, set needs_review to true.
 Set affected_dirs to the directories that may be read, written, deleted, modified, or used as the command's working context. If none are affected or unknown, use an empty array.
 Every affected_dirs entry must be a concrete literal directory. Never return shell variables, PowerShell automatic variables, command substitutions, placeholders, or prose as a directory; use an empty array when the target is resolved only at runtime.
 Set effect to "read" only when the command is read-only, "write" when it writes or may write persistent state, and "unknown" when unsure.
-Example: ls -la /path/to/project => {"needs_review":false,"affected_dirs":["/path/to/project"],"reason":"lists directory contents only","effect":"read"}.`
+Example: ls -la /path/to/project => {"effect":"read","affected_dirs":["/path/to/project"],"reason":"lists directory contents only"}.`
 )
 
 type Definition struct {

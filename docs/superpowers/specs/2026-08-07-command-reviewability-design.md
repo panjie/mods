@@ -14,22 +14,24 @@ authority for execution approval.
 
 1. Capability-aware system guidance prefers `process_run` for one executable
    and reserves shell tools for actual shell syntax.
-2. A deterministic parser reports structural reviewability facts without
-   executing source or calling an LLM.
+2. The command's deterministic `CommandAssessment` reports structural
+   reviewability facts without a second parse or an LLM call.
 3. One bounded preflight correction per request gives the model an opportunity
    to split a needlessly compound call before approval.
 4. Commands that still reach review display reviewability separately from risk.
 
-## Static result
+## Assessment dimension
 
 `CommandReviewability` reports a level (`simple`, `compound`, or `opaque`),
-stable reason codes, top-level action and pipeline counts, dynamic targets, an
-optional recommended tool, and a narrow `ShouldCorrect` decision.
+stable reason codes, an optional recommended tool, and a narrow
+`ShouldCorrect` decision. It is only one dimension of `CommandAssessment`.
+Parser-derived action and pipeline counts live in `CommandShape`; runtime path
+expressions live in `CommandAssessment.DynamicTargets`. Those fields are the
+single facts used by correction messages and the review UI.
 
-POSIX analysis uses the existing mvdan AST. PowerShell analysis extends the
-persistent parser bridge with top-level statement and pipeline counts. Parse
-failure produces `opaque` metadata and never triggers an automatic correction;
-the existing classifier continues to fail closed.
+POSIX analysis uses the same mvdan AST as effect and path analysis. PowerShell
+analysis uses the same bridge IR as effect and dynamic-target analysis. Parse
+failure produces an opaque, unknown assessment; unknown effects fail closed.
 
 Pipelines count as one purpose. Semicolon-separated or conditional branches
 count as separate actions. Literal output decoration is advisory and cannot by

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/textutil"
 )
@@ -16,11 +17,11 @@ type patchFileChange struct {
 	removed int
 }
 
-func formatReviewSummary(name string, args []byte, analysis shellCommandAnalysis, scope Scope) string {
-	return formatReviewSummaryWithIntent(name, args, analysis, scope, AccessIntent{})
+func formatReviewSummary(name string, args []byte, assessment approval.CommandAssessment, scope Scope) string {
+	return formatReviewSummaryWithIntent(name, args, assessment, scope, AccessIntent{})
 }
 
-func formatReviewSummaryWithIntent(name string, args []byte, analysis shellCommandAnalysis, scope Scope, intent AccessIntent) string {
+func formatReviewSummaryWithIntent(name string, args []byte, assessment approval.CommandAssessment, scope Scope, intent AccessIntent) string {
 	parsed := ToolOperationArgs(args)
 	switch name {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
@@ -48,9 +49,9 @@ func formatReviewSummaryWithIntent(name string, args []byte, analysis shellComma
 		return patchSummary(ArgString(parsed, "patch"))
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
-		return shellRiskSummary(command, analysis, scope)
+		return shellRiskSummary(command, assessment, scope)
 	case "process_run":
-		return shellRiskSummary(ProcessCommandPreview(parsed), analysis, scope)
+		return shellRiskSummary(ProcessCommandPreview(parsed), assessment, scope)
 	default:
 		return ""
 	}
@@ -96,11 +97,11 @@ func writeTargetMode(path string, scope Scope) string {
 	}
 }
 
-func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope) string {
-	risk := shellRiskLevel(analysis, scope)
-	dirs := summarizeAffectedDirs(analysis.AffectedDirs)
-	dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths)
-	reason := strings.TrimSpace(analysis.Reason)
+func shellRiskSummary(command string, assessment approval.CommandAssessment, scope Scope) string {
+	risk := shellRiskLevel(assessment, scope)
+	dirs := summarizeAffectedDirs(assessment.KnownDirs)
+	dynamic := summarizeAffectedDirs(assessment.DynamicTargets)
+	reason := strings.TrimSpace(assessment.Reason)
 	if dynamic != "" {
 		s := fmt.Sprintf("Risk: %s - runtime target %s", risk, dynamic)
 		if dirs != "" {
@@ -125,33 +126,32 @@ func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope
 	return s
 }
 
-func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {
-	analysis = normalizeShellEffect(analysis)
-	if len(analysis.UnresolvedPaths) > 0 {
-		switch analysis.Effect {
-		case shellEffectRead:
+func shellRiskLevel(assessment approval.CommandAssessment, scope Scope) string {
+	if len(assessment.DynamicTargets) > 0 {
+		switch assessment.Effect {
+		case approval.EffectRead:
 			return "dynamic read"
-		case shellEffectWrite:
+		case approval.EffectWrite:
 			return "dynamic mutation"
 		default:
 			return "unknown"
 		}
 	}
-	if analysis.Effect == shellEffectUnknown {
+	if assessment.Effect == approval.EffectUnknown {
 		return "unknown"
 	}
-	if !analysis.NeedsReview || analysis.Effect == shellEffectRead {
-		for _, dir := range analysis.AffectedDirs {
+	if assessment.Effect == approval.EffectRead {
+		for _, dir := range assessment.KnownDirs {
 			if !pathWithinScope(dir, scope) {
 				return "external read"
 			}
 		}
 		return "read-only"
 	}
-	if len(analysis.AffectedDirs) == 0 {
+	if len(assessment.KnownDirs) == 0 {
 		return "unknown"
 	}
-	for _, dir := range analysis.AffectedDirs {
+	for _, dir := range assessment.KnownDirs {
 		if !pathWithinScope(dir, scope) {
 			return "external mutation"
 		}

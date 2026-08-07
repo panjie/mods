@@ -28,8 +28,10 @@ function New-IR {
         assignment_targets = [System.Collections.Generic.List[string]]::new()
         script_block_assignment_targets = [System.Collections.Generic.List[string]]::new()
         method_invocations = [System.Collections.Generic.List[string]]::new()
+        member_expressions = [System.Collections.Generic.List[string]]::new()
         static_members     = [System.Collections.Generic.List[string]]::new()
         command_invocations = [System.Collections.Generic.List[object]]::new()
+        top_level_value_expressions = [System.Collections.Generic.List[string]]::new()
         top_level_statement_count = 0
         pipeline_count      = 0
     }
@@ -82,6 +84,13 @@ function Invoke-Parse {
 		try {
 			if ($ast.EndBlock -and $ast.EndBlock.Statements) {
 				$ir.top_level_statement_count = @($ast.EndBlock.Statements).Count
+				foreach ($statement in @($ast.EndBlock.Statements)) {
+					if ($statement -is [System.Management.Automation.Language.PipelineAst] -and
+						$statement.PipelineElements.Count -eq 1 -and
+						$statement.PipelineElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+						Add-Value $ir.top_level_value_expressions $statement.PipelineElements[0].Expression.Extent.Text.Trim()
+					}
+				}
 			}
 		} catch {}
     } catch {
@@ -252,6 +261,7 @@ function Invoke-Parse {
             } catch {}
             try {
                 $exprText = $node.ToString()
+                if ($exprText) { Add-Unique $ir.member_expressions $exprText }
                 if ($exprText -like '*::*') { Add-Unique $ir.static_members $exprText }
             } catch {}
             continue
@@ -260,6 +270,7 @@ function Invoke-Parse {
         if ($node -is [System.Management.Automation.Language.MemberExpressionAst]) {
             try {
                 $exprText = $node.ToString()
+                if ($exprText) { Add-Unique $ir.member_expressions $exprText }
                 if ($exprText -like '*::*') { Add-Unique $ir.static_members $exprText }
             } catch {}
             continue
@@ -327,8 +338,10 @@ function Write-IR {
         assignment_targets = @($ir.assignment_targets)
         script_block_assignment_targets = @($ir.script_block_assignment_targets)
         method_invocations = @($ir.method_invocations)
+        member_expressions = @($ir.member_expressions)
         static_members     = @($ir.static_members)
         command_invocations = @($ir.command_invocations)
+        top_level_value_expressions = @($ir.top_level_value_expressions)
         top_level_statement_count = $ir.top_level_statement_count
         pipeline_count      = $ir.pipeline_count
     }

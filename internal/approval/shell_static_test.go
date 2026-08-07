@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -59,7 +60,8 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 
 	t.Run("runtime-expanded path requires review", func(t *testing.T) {
 		got := AnalyzeShellStatic("cat ${FILE}", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Equal(t, ShellStaticUnknown, got.Class)
+		require.Contains(t, got.UnresolvedPaths, "$FILE")
 	})
 
 	t.Run("oldest downloads pipeline is read-only", func(t *testing.T) {
@@ -102,6 +104,9 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 }
 
 func TestAnalyzeShellStaticPowerShell(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell AST classifier requires Windows")
+	}
 	t.Run("single-quoted write path with spaces", func(t *testing.T) {
 		got := AnalyzeShellStatic(`Set-Content 'C:\Program Files\App\notes.txt' 'hello'`, false)
 		require.Equal(t, ShellStaticWrite, got.Class)

@@ -16,21 +16,8 @@ func IsReadOnlyPOSIX(command string) (bool, string) {
 // IsReadOnlyPOSIXWithPolicy is IsReadOnlyPOSIX with additional command names
 // the user explicitly trusts as read-only.
 func IsReadOnlyPOSIXWithPolicy(command string, policy ReadOnlyCommandPolicy) (bool, string) {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return false, ""
-	}
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return false, ""
-	}
-	for _, stmt := range file.Stmts {
-		if ro, _ := stmtIsReadOnly(stmt, policy); !ro {
-			return false, ""
-		}
-	}
-	return true, "read-only command (AST analysis)"
+	assessment := AssessShellStaticWithPolicy(command, true, policy)
+	return assessment.Effect == EffectRead, assessment.Reason
 }
 
 // stmtIsReadOnly checks a single statement: background, redirects, then

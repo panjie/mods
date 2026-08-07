@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/pathutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
@@ -239,28 +240,19 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 }
 
 // buildAccessIntent derives the unified AccessIntent for a tool call. Shell
-// tools use the dynamic analyzer (class from NeedsReview, dirs from
-// AffectedDirs); runtime-resolved shell targets remain separate so they cannot
-// become directory rules. Tools with a registered IntentExtractor use that;
+// tools consume a completed CommandAssessment; runtime-resolved targets remain
+// separate so they cannot become directory rules. Tools with a registered IntentExtractor use that;
 // read-only tools without directory semantics become read intents; anything
 // else degrades fail-closed to a write with no known dirs.
-func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, analyze func(string, string) shellCommandAnalysis) AccessIntent {
+func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, assessment *approval.CommandAssessment) AccessIntent {
 	if registry != nil && registry.ShellExecution(name) {
-		if analyze == nil {
-			a := defaultShellCommandAnalysis()
-			return AccessIntent{Class: shellAccessMode(a)}
+		if assessment == nil {
+			unknown := approval.UnknownCommandAssessment()
+			return unknown.AccessIntent()
 		}
-		command := ExtractShellCommand(data)
-		if name == "process_run" {
-			command = string(data)
-		}
-		a := analyze(name, command)
-		return AccessIntent{
-			Class:           shellAccessMode(a),
-			Dirs:            normalizeShellAffectedDirsForTool(a.AffectedDirs, "", name),
-			UnresolvedPaths: append([]string(nil), a.UnresolvedPaths...),
-			Reason:          a.Reason,
-		}
+		intent := assessment.AccessIntent()
+		intent.Dirs = normalizeShellAffectedDirsForTool(intent.Dirs, "", name)
+		return intent
 	}
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
@@ -271,22 +263,6 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 		}
 	}
 	return AccessIntent{Class: AccessWrite}
-}
-
-// shellAccessMode derives the read/write access class from the classified
-// effect. NeedsReview is independent: a proven read may still require approval
-// when its target is resolved only at runtime.
-func shellAccessMode(a shellCommandAnalysis) AccessClass {
-	switch a.Effect {
-	case shellEffectRead:
-		return AccessRead
-	case shellEffectUnknown, shellEffectWrite:
-		return AccessWrite
-	}
-	if a.NeedsReview {
-		return AccessWrite
-	}
-	return AccessRead
 }
 
 // normalizeAffectedDirs reduces file paths to their parent directories and
@@ -334,15 +310,14 @@ func normalizeAccessIntentDirs(intent AccessIntent, workspace, tool string, shel
 // lets the reviewer stay physically independent of the main model: it
 // can be constructed, tested, and reasoned about without a live Mods.
 //
-// All fields are nil-safe; a nil func means "the answer is false" /
-// "no analysis available", matching the previous behaviour where a
-// missing currentToolRegistry produced shellExecution=false.
+// A nil assessment is fail-closed when buildAccessIntent runs; the reviewer
+// itself never reparses or reconstructs command facts.
 type reviewerDeps struct {
-	ctx              context.Context
-	isShellExecution func(name string) bool
-	analyzeShell     func(tool, command string) shellCommandAnalysis
-	accessIntent     AccessIntent
-	safeDirs         []string
+	ctx            context.Context
+	shellExecution bool
+	assessment     *approval.CommandAssessment
+	accessIntent   AccessIntent
+	safeDirs       []string
 }
 
 func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []byte) error {
@@ -351,48 +326,16 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if len(safeDirSet) == 0 {
 		safeDirSet = safeDirs()
 	}
-	shellExecution := deps.isShellExecution != nil && deps.isShellExecution(name)
+	shellExecution := deps.shellExecution
 	intent := deps.accessIntent
-	var analysis shellCommandAnalysis
+	assessment := approval.CommandAssessment{}
+	if deps.assessment != nil {
+		assessment = *deps.assessment
+	}
 	if shellExecution {
-		cmd := extractShellCommand(data)
-		analyzed := cmd != "" && deps.analyzeShell != nil
-		if analyzed {
-			analysis = deps.analyzeShell(name, cmd)
-			analysis.AffectedDirs = normalizeShellAffectedDirsForTool(analysis.AffectedDirs, r.scope.Value, name)
-		}
-		if intent.HasAccess() {
-			class := intent.DominantClass()
-			dirs := normalizeShellAffectedDirsForTool(intent.AllDirs(), r.scope.Value, name)
-			unresolved := append([]string(nil), intent.UnresolvedPaths...)
-			if len(analysis.UnresolvedPaths) > 0 {
-				unresolved = append(unresolved, analysis.UnresolvedPaths...)
-			}
-			_, unresolved = partitionShellAnalysisPaths(nil, unresolved, shellPathFlavor(name))
-			if analysis.Effect == "" {
-				reason := intent.Reason
-				if reason == "" {
-					reason = analysis.Reason
-				}
-				analysis = shellCommandAnalysis{
-					NeedsReview:     class == AccessWrite || len(unresolved) > 0,
-					AffectedDirs:    dirs,
-					UnresolvedPaths: unresolved,
-					Reason:          reason,
-				}
-				analysis = normalizeShellEffect(analysis)
-			} else if intent.Reason != "" && (analysis.Reason == "" || analysis.Reason == defaultShellCommandAnalysis().Reason) {
-				analysis.Reason = intent.Reason
-			}
-			analysis.UnresolvedPaths = unresolved
-			intent = AccessIntent{Class: class, Dirs: dirs, UnresolvedPaths: unresolved, Reason: intent.Reason}
-		} else if analyzed || analysis.Effect != "" {
-			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs, UnresolvedPaths: analysis.UnresolvedPaths, Reason: analysis.Reason}
-		} else {
-			analysis = defaultShellCommandAnalysis()
-			intent = AccessIntent{Class: shellAccessMode(analysis), Reason: analysis.Reason}
-		}
-		debug.Printf("shell analysis: cmd=%q needsReview=%v dirs=%v reason=%q", debug.Truncate(cmd, 500), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
+		intent = normalizeAccessIntentDirs(intent, r.scope.Value, name, true)
+		assessment.KnownDirs = normalizeShellAffectedDirsForTool(assessment.KnownDirs, r.scope.Value, name)
+		debug.Printf("command assessment: effect=%s dirs=%v dynamic=%v reason=%q", assessment.Effect, assessment.KnownDirs, assessment.DynamicTargets, assessment.Reason)
 	}
 	if intent.HasAccess() && RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
 		debug.Printf("requestApproval: matched affected dirs against saved approval rule")
@@ -417,13 +360,12 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if intent.HasAccess() {
 		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode), shellExecution)
 	}
-	presentationAnalysis := analysis
 	item := toolReviewItem{
 		name:           name,
 		args:           data,
 		candidateRules: candidateRules,
-		summary:        formatReviewSummaryWithIntent(name, data, presentationAnalysis, r.scope, intent),
-		presentation:   formatReviewPresentationWithIntent(name, data, presentationAnalysis, r.scope, intent),
+		summary:        formatReviewSummaryWithIntent(name, data, assessment, r.scope, intent),
+		presentation:   formatReviewPresentationWithIntent(name, data, assessment, r.scope, intent),
 		resp:           respCh,
 	}
 	ch, done := r.snapshotSession()

@@ -40,8 +40,10 @@ type psBridgeIR struct {
 	AssignmentTargets            []string              `json:"assignment_targets"`
 	ScriptBlockAssignmentTargets []string              `json:"script_block_assignment_targets"`
 	MethodInvocations            []string              `json:"method_invocations"`
+	MemberExpressions            []string              `json:"member_expressions"`
 	StaticMembers                []string              `json:"static_members"`
 	Invocations                  []psCommandInvocation `json:"command_invocations"`
+	TopLevelValueExpressions     []string              `json:"top_level_value_expressions"`
 	TopLevelStatementCount       int                   `json:"top_level_statement_count"`
 	PipelineCount                int                   `json:"pipeline_count"`
 }

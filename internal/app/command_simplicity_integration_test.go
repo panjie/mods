@@ -51,15 +51,15 @@ func TestDeepSeekCommandSimplicityIntegration(t *testing.T) {
 	preflight := newCommandPreflightGate(m.Config)
 	fakeState := &commandSimplicityFakeState{}
 	caller := func(name string, data []byte) (string, error) {
-		analysis := shellCommandAnalysis{}
+		analysis := approval.CommandAssessment{}
 		lower := strings.ToLower(string(data))
 		if name == "process_run" {
-			analysis = m.analyzeShellCommand(name, string(data))
+			analysis = m.assessCommand(name, string(data))
 		}
 		if name == "powershell_run" && strings.Contains(lower, "$profile") && (strings.Contains(lower, ";") || strings.Contains(lower, "if (")) {
 			analysis = complexReviewabilityAnalysis()
-			analysis.Effect = shellEffectRead
-			analysis.Reviewability.DynamicTargets = []string{"$PROFILE"}
+			analysis.Effect = approval.EffectRead
+			analysis.DynamicTargets = []string{"$PROFILE"}
 		}
 		if correctionErr := preflight.check(name, analysis); correctionErr != nil {
 			mu.Lock()

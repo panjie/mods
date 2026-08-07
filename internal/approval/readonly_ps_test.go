@@ -28,6 +28,10 @@ func TestIsReadOnlyPowerShellReadOnly(t *testing.T) {
 		{"get-content params", "Get-Content -Path file.txt -TotalCount 10"},
 		{"get-content user profile", `Get-Content $env:USERPROFILE\.config\mods\mods.yml`},
 		{"get-content home", `Get-Content $HOME\.config\mods\mods.yml`},
+		{"profile member", `$PROFILE.CurrentUserCurrentHost`},
+		{"profile member path", `Test-Path -LiteralPath $PROFILE.CurrentUserCurrentHost`},
+		{"environment value", `$env:STARSHIP_CONFIG`},
+		{"environment path", `Test-Path $env:STARSHIP_CONFIG`},
 
 		// Pipelines (all read-only)
 		{"pipe sort", "Get-ChildItem | Sort-Object Name"},
@@ -94,8 +98,9 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 		{"static member delete in expandable string", `Write-Output "$([IO.File]::Delete('owned.txt'))"`},
 
 		// Variable args
-		{"variable arg", "Get-Content $env:SECRET"},
 		{"variable arg 2", "Get-Process $var"},
+		{"unknown profile member", `Write-Output $PROFILE.PSObject.Properties`},
+		{"environment member", `Write-Output $env:SECRET.Length`},
 
 		// Redirections
 		{"redirect out", "Get-Process > out.txt"},

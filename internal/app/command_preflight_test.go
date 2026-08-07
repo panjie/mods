@@ -14,13 +14,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func complexReviewabilityAnalysis() shellCommandAnalysis {
-	return shellCommandAnalysis{Reviewability: approval.CommandReviewability{
-		Level:              approval.ReviewabilityCompound,
-		Reasons:            []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
-		TopLevelStatements: 4,
-		ShouldCorrect:      true,
-	}}
+func complexReviewabilityAnalysis() approval.CommandAssessment {
+	return approval.CommandAssessment{
+		Shape: approval.CommandShape{TopLevelActions: 4},
+		Reviewability: approval.CommandReviewability{
+			Level:         approval.ReviewabilityCompound,
+			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
+			ShouldCorrect: true,
+		},
+	}
 }
 
 func TestCommandPreflightGateCorrectsAtMostOnce(t *testing.T) {
@@ -72,13 +74,15 @@ func TestCommandPreflightGateConcurrentBudget(t *testing.T) {
 }
 
 func TestCommandSimplificationMessageDoesNotEchoTargets(t *testing.T) {
-	reviewability := approval.CommandReviewability{
-		Level:          approval.ReviewabilityCompound,
-		Reasons:        []approval.ReviewabilityReason{approval.ReviewabilityDynamicWriteTarget},
+	assessment := approval.CommandAssessment{
 		DynamicTargets: []string{"$SECRET_PROFILE"},
-		ShouldCorrect:  true,
+		Reviewability: approval.CommandReviewability{
+			Level:         approval.ReviewabilityCompound,
+			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityDynamicWriteTarget},
+			ShouldCorrect: true,
+		},
 	}
-	message := commandSimplificationMessage(reviewability)
+	message := commandSimplificationMessage(assessment)
 	require.Contains(t, message, "runtime-resolved path")
 	require.NotContains(t, message, "$SECRET_PROFILE")
 }
@@ -119,7 +123,7 @@ func TestToolCallerCorrectionDoesNotExecuteCommand(t *testing.T) {
 func TestReadOnlyProcessRecommendationDoesNotConsumeCorrection(t *testing.T) {
 	cfg := defaultConfig()
 	m := &Mods{Config: &cfg}
-	analysis := m.withCommandReviewability("shell_run", "git status", shellCommandAnalysis{Effect: shellEffectRead})
+	analysis := m.assessCommand("shell_run", "git status")
 	require.Equal(t, "process_run", analysis.Reviewability.RecommendedTool)
 	require.False(t, analysis.Reviewability.ShouldCorrect)
 
@@ -131,7 +135,7 @@ func TestReadOnlyProcessRecommendationDoesNotConsumeCorrection(t *testing.T) {
 func TestNestedShellProcessRequestsCorrection(t *testing.T) {
 	cfg := defaultConfig()
 	gate := newCommandPreflightGate(&cfg)
-	analysis := shellCommandAnalysis{Reviewability: approval.AnalyzeProcessReviewability("pwsh", []string{"-Command", "Get-Date"}, false)}
+	analysis := approval.CommandAssessment{Reviewability: approval.AnalyzeProcessReviewability("pwsh", []string{"-Command", "Get-Date"}, false)}
 	err := gate.check("process_run", analysis)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "powershell_run")

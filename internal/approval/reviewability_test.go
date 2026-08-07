@@ -28,7 +28,8 @@ func TestAnalyzePOSIXCommandReviewability(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := AnalyzeCommandReviewability(tt.command, true, ReadOnlyCommandPolicy{})
+			assessment := AssessShellStaticWithPolicy(tt.command, true, ReadOnlyCommandPolicy{})
+			got := assessment.Reviewability
 			require.Equal(t, tt.level, got.Level)
 			require.Equal(t, tt.correct, got.ShouldCorrect)
 			require.Equal(t, tt.recommended, got.RecommendedTool)
@@ -36,9 +37,9 @@ func TestAnalyzePOSIXCommandReviewability(t *testing.T) {
 				require.Contains(t, got.Reasons, tt.reason)
 			}
 			if tt.statements > 0 {
-				require.Equal(t, tt.statements, got.TopLevelStatements)
+				require.Equal(t, tt.statements, assessment.Shape.TopLevelActions)
 			}
-			require.Equal(t, tt.pipelineCount, got.PipelineCount)
+			require.Equal(t, tt.pipelineCount, assessment.Shape.Pipelines)
 		})
 	}
 }
@@ -59,11 +60,12 @@ func TestAnalyzePowerShellCommandReviewability(t *testing.T) {
 
 	t.Run("profile inspection example", func(t *testing.T) {
 		cmd := `Write-Output "=== All profile paths ==="; $PROFILE | Format-List *; Write-Output "=== Which exist? ==="; $PROFILE.PSObject.Properties | ForEach-Object { $v = $_.Value; "{0,-45} exists={1}" -f $v, (Test-Path $v) }; Get-ChildItem "C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links"`
-		got := AnalyzeCommandReviewability(cmd, false, ReadOnlyCommandPolicy{})
+		assessment := AssessShellStaticWithPolicy(cmd, false, ReadOnlyCommandPolicy{})
+		got := assessment.Reviewability
 		require.Equal(t, ReviewabilityCompound, got.Level)
 		require.True(t, got.ShouldCorrect)
-		require.GreaterOrEqual(t, got.TopLevelStatements, 4)
-		require.Contains(t, got.DynamicTargets, `$v`)
+		require.GreaterOrEqual(t, assessment.Shape.TopLevelActions, 4)
+		require.Contains(t, assessment.DynamicTargets, `$v`)
 		require.Contains(t, got.Reasons, ReviewabilityDecorativeOutput)
 	})
 }

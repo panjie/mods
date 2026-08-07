@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/anthropic"
@@ -29,25 +28,6 @@ type requestSession struct {
 	runner  *streamRunner
 	cleanup *toolregistry.Registry
 	errh    func(error) tea.Msg
-}
-
-func memoizedShellAnalyzer(analyze func(string, string) shellCommandAnalysis) func(string, string) shellCommandAnalysis {
-	if analyze == nil {
-		return nil
-	}
-	var mu sync.Mutex
-	cache := make(map[string]shellCommandAnalysis)
-	return func(tool, command string) shellCommandAnalysis {
-		key := tool + "\x00" + command
-		mu.Lock()
-		defer mu.Unlock()
-		if result, ok := cache[key]; ok {
-			return result
-		}
-		result := analyze(tool, command)
-		cache[key] = result
-		return result
-	}
 }
 
 func (m *Mods) buildRequestSession(content string) (requestSession, error) {
@@ -363,34 +343,19 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 			return registry.Call(ctx, name, data)
 		}
-		if name == "process_run" {
-			var invocation struct {
-				Program string   `json:"program"`
-				Args    []string `json:"args"`
-			}
-			if err := json.Unmarshal(data, &invocation); err == nil {
-				quick := shellCommandAnalysis{Reviewability: approval.AnalyzeProcessReviewability(
-					invocation.Program,
-					invocation.Args,
-					!shellToolUsesPowerShell("process_run"),
-				)}
-				if err := preflight.check(name, quick); err != nil {
-					return "", err
-				}
-			}
-		}
-
-		analyzeShell := memoizedShellAnalyzer(m.analyzeShellCommand)
-		intent := buildAccessIntent(name, data, registry, analyzeShell)
+		var assessment *approval.CommandAssessment
 		if registry.ShellExecution(name) {
 			command := ExtractShellCommand(data)
 			if name == "process_run" {
 				command = string(data)
 			}
-			if err := preflight.check(name, analyzeShell(name, command)); err != nil {
+			assessed := m.assessCommand(name, command)
+			assessment = &assessed
+			if err := preflight.check(name, assessed); err != nil {
 				return "", err
 			}
 		}
+		intent := buildAccessIntent(name, data, registry, assessment)
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 		scope := m.reviewer.scope
 		safeDirs := m.safeDirs()
@@ -408,11 +373,11 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		// performs saved-rule and access-matrix evaluation and returns
 		// immediately for calls that do not need an interactive prompt.
 		if err := m.reviewer.requestApproval(reviewerDeps{
-			ctx:              m.ctx,
-			isShellExecution: registry.ShellExecution,
-			analyzeShell:     analyzeShell,
-			accessIntent:     intent,
-			safeDirs:         safeDirs,
+			ctx:            m.ctx,
+			shellExecution: registry.ShellExecution(name),
+			assessment:     assessment,
+			accessIntent:   intent,
+			safeDirs:       safeDirs,
 		}, name, data); err != nil {
 			return "", err
 		}

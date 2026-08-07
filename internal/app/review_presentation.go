@@ -16,7 +16,7 @@ type reviewPresentation struct {
 	rows     []interactionRow
 }
 
-func formatReviewPresentationWithIntent(name string, args []byte, analysis shellCommandAnalysis, scope Scope, intent AccessIntent) reviewPresentation {
+func formatReviewPresentationWithIntent(name string, args []byte, assessment approval.CommandAssessment, scope Scope, intent AccessIntent) reviewPresentation {
 	parsed := ToolOperationArgs(args)
 	result := reviewPresentation{tone: interactionToneWarning, toneText: "Warning"}
 	switch name {
@@ -49,22 +49,22 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 		result.rows = []interactionRow{{Label: "Target", Value: readReviewTarget(parsed, scope, intent)}}
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
-		risk := shellRiskLevel(analysis, scope)
+		risk := shellRiskLevel(assessment, scope)
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
 		result.rows = append(result.rows, interactionRow{Label: "Command", Value: command})
-		if dirs := summarizeAffectedDirs(analysis.AffectedDirs); dirs != "" {
+		if dirs := summarizeAffectedDirs(assessment.KnownDirs); dirs != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
 		}
-		if dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths); dynamic != "" {
-			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(analysis), Value: dynamic})
+		if dynamic := summarizeAffectedDirs(assessment.DynamicTargets); dynamic != "" {
+			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(assessment), Value: dynamic})
 		}
-		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
+		if reason := strings.TrimSpace(assessment.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
-		result.rows = appendReviewabilityRows(result.rows, analysis)
+		result.rows = appendReviewabilityRows(result.rows, assessment)
 	case "process_run":
-		risk := shellRiskLevel(analysis, scope)
+		risk := shellRiskLevel(assessment, scope)
 		result.tone, result.toneText = toneForShellRisk(risk, ProcessCommandPreview(parsed))
 		result.headline = shellRiskHeadline(risk)
 		result.rows = []interactionRow{
@@ -72,16 +72,16 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 			{Label: "Arguments", Value: processArgsForReview(parsed)},
 			{Label: "Working dir", Value: processCwdForReview(parsed, scope)},
 		}
-		if dirs := summarizeAffectedDirs(analysis.AffectedDirs); dirs != "" {
+		if dirs := summarizeAffectedDirs(assessment.KnownDirs); dirs != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
 		}
-		if dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths); dynamic != "" {
-			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(analysis), Value: dynamic})
+		if dynamic := summarizeAffectedDirs(assessment.DynamicTargets); dynamic != "" {
+			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(assessment), Value: dynamic})
 		}
-		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
+		if reason := strings.TrimSpace(assessment.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
-		result.rows = appendReviewabilityRows(result.rows, analysis)
+		result.rows = appendReviewabilityRows(result.rows, assessment)
 	default:
 		result.headline = formatReviewLabel(name, args)
 		if summary := ToolArgsSummary(parsed); summary != "" {
@@ -97,18 +97,18 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 	return result
 }
 
-func appendReviewabilityRows(rows []interactionRow, analysis shellCommandAnalysis) []interactionRow {
-	reviewability := analysis.Reviewability
+func appendReviewabilityRows(rows []interactionRow, assessment approval.CommandAssessment) []interactionRow {
+	reviewability := assessment.Reviewability
 	if reviewability.Level == "" || reviewability.Level == approval.ReviewabilitySimple && !reviewability.ShouldCorrect && reviewability.RecommendedTool == "" {
 		return rows
 	}
 	rows = append(rows, interactionRow{Label: "Reviewability", Value: string(reviewability.Level)})
 	var shape []string
-	if reviewability.TopLevelStatements > 1 {
-		shape = append(shape, fmt.Sprintf("%d top-level actions", reviewability.TopLevelStatements))
+	if assessment.Shape.TopLevelActions > 1 {
+		shape = append(shape, fmt.Sprintf("%d top-level actions", assessment.Shape.TopLevelActions))
 	}
-	if reviewability.PipelineCount > 0 {
-		shape = append(shape, fmt.Sprintf("%d pipelines", reviewability.PipelineCount))
+	if assessment.Shape.Pipelines > 0 {
+		shape = append(shape, fmt.Sprintf("%d pipelines", assessment.Shape.Pipelines))
 	}
 	if len(shape) > 0 {
 		rows = append(rows, interactionRow{Label: "Composition", Value: strings.Join(shape, ", ")})
@@ -161,11 +161,11 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 	return interactionToneInfo, "Info"
 }
 
-func dynamicTargetLabel(analysis shellCommandAnalysis) string {
-	switch normalizeShellEffect(analysis).Effect {
-	case shellEffectRead:
+func dynamicTargetLabel(assessment approval.CommandAssessment) string {
+	switch assessment.Effect {
+	case approval.EffectRead:
 		return "Dynamic read target"
-	case shellEffectWrite:
+	case approval.EffectWrite:
 		return "Dynamic write target"
 	default:
 		return "Dynamic target"

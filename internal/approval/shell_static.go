@@ -31,30 +31,28 @@ func AnalyzeShellStatic(command string, posix bool) ShellStaticAnalysis {
 // AnalyzeShellStaticWithPolicy performs deterministic shell access
 // classification with user-configured read-only command names.
 func AnalyzeShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCommandPolicy) ShellStaticAnalysis {
-	if posix {
-		if ro, reason := IsReadOnlyPOSIXWithPolicy(command, policy); ro {
-			return ShellStaticAnalysis{Class: ShellStaticRead, Reason: reason}
-		}
-		result := analyzeShellStaticWrite(command, posix, policy)
-		result.UnresolvedPaths = append(result.UnresolvedPaths, unresolvedPOSIXRuntimeExpressions(command)...)
-		result.UnresolvedPaths = dedupeSorted(result.UnresolvedPaths)
-		return result
+	assessment := AssessShellStaticWithPolicy(command, posix, policy)
+	result := ShellStaticAnalysis{
+		AffectedDirs:    append([]string(nil), assessment.KnownDirs...),
+		UnresolvedPaths: append([]string(nil), assessment.DynamicTargets...),
+		Reason:          assessment.Reason,
 	}
-
-	if ro, reason, paths := IsReadOnlyPowerShellWithPolicy(command, policy); ro {
-		return ShellStaticAnalysis{
-			Class:        ShellStaticRead,
-			AffectedDirs: paths,
-			Reason:       reason,
-		}
+	switch assessment.Effect {
+	case EffectRead:
+		result.Class = ShellStaticRead
+		// The legacy static result historically exposed only write targets.
+		result.AffectedDirs = nil
+	case EffectWrite:
+		result.Class = ShellStaticWrite
+	default:
+		result.Class = ShellStaticUnknown
+		result.Reason = ""
 	}
-	return analyzeShellStaticWrite(command, posix, policy)
+	return result
 }
 
-func unresolvedPOSIXRuntimeExpressions(command string) []string {
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
+func unresolvedPOSIXRuntimeExpressionsFromFile(file *syntax.File) []string {
+	if file == nil {
 		return nil
 	}
 	var unresolved []string
@@ -84,67 +82,61 @@ func unresolvedPOSIXRuntimeExpressions(command string) []string {
 // intentionally not trusted by basename: a workspace binary named like a
 // read-only system command may have arbitrary behavior.
 func AnalyzeArgvStaticWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) ShellStaticAnalysis {
+	assessment := AssessArgvStaticWithPolicy(program, args, posix, policy)
+	result := ShellStaticAnalysis{
+		AffectedDirs: append([]string(nil), assessment.KnownDirs...),
+		Reason:       assessment.Reason,
+	}
+	switch assessment.Effect {
+	case EffectRead:
+		result.Class = ShellStaticRead
+	case EffectWrite:
+		result.Class = ShellStaticWrite
+	default:
+		result.Class = ShellStaticUnknown
+		result.Reason = ""
+	}
+	return result
+}
+
+// AssessArgvStaticWithPolicy assesses a direct executable invocation. Every
+// argument is treated as a literal value; no shell expansion is available.
+func AssessArgvStaticWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) CommandAssessment {
 	program = strings.TrimSpace(program)
+	result := UnknownCommandAssessment()
+	result.Shape = CommandShape{TopLevelActions: 1, Pipelines: 1}
+	result.Reviewability = AnalyzeProcessReviewability(program, args, posix)
+	result.Shape.Opaque = result.Reviewability.Level == ReviewabilityOpaque
 	if program == "" || strings.ContainsAny(program, `/\`) {
-		return ShellStaticAnalysis{Class: ShellStaticUnknown}
+		return result
 	}
 	tokens := append([]string{program}, args...)
 	if !posix {
 		if policy.matchesPowerShell(program) {
-			return ShellStaticAnalysis{Class: ShellStaticRead, Reason: policy.reason(program)}
+			result.Effect = EffectRead
+			result.Reason = policy.reason(program)
+			return result
 		}
 		tokens[0] = normalizePowerShellCommandName(program)
 		policy = ReadOnlyCommandPolicy{}
 	}
 	if ro, reason := invocationTokensReadOnly(tokens, policy); ro {
-		return ShellStaticAnalysis{Class: ShellStaticRead, Reason: reason}
+		result.Effect = EffectRead
+		result.Reason = reason
+		return result
 	}
 	dirs := analyzeLiteralWritableTargetsFromTokens(tokens, posix).Dirs
 	if len(dirs) == 0 && !hasKnownRiskyInvocation(tokens, posix) {
-		return ShellStaticAnalysis{Class: ShellStaticUnknown}
+		return result
 	}
-	return ShellStaticAnalysis{
-		Class:        ShellStaticWrite,
-		AffectedDirs: dirs,
-		Reason:       "write command (static argv analysis)",
-	}
+	result.Effect = EffectWrite
+	result.KnownDirs = dirs
+	result.Reason = "write command (static argv analysis)"
+	return result
 }
 
-func analyzeShellStaticWrite(command string, posix bool, policy ReadOnlyCommandPolicy) ShellStaticAnalysis {
-	if !posix {
-		if dirs, unresolved, known := analyzePowerShellWritablePaths(command, policy); known {
-			return ShellStaticAnalysis{
-				Class:           ShellStaticWrite,
-				AffectedDirs:    dirs,
-				UnresolvedPaths: unresolved,
-				Reason:          "write command (PowerShell AST analysis)",
-			}
-		} else if len(unresolved) > 0 {
-			return ShellStaticAnalysis{
-				Class:           ShellStaticUnknown,
-				UnresolvedPaths: unresolved,
-			}
-		}
-	}
-	dirs := ExtractWritableDirs(command, posix)
-	if len(dirs) == 0 && !hasKnownRiskyShellCommand(command, posix) {
-		return ShellStaticAnalysis{Class: ShellStaticUnknown}
-	}
-	return ShellStaticAnalysis{
-		Class:        ShellStaticWrite,
-		AffectedDirs: dirs,
-		Reason:       "write command (static analysis)",
-	}
-}
-
-// analyzePowerShellWritablePaths uses the same parser IR as the read-only
-// classifier to inspect every invocation, including commands nested in if
-// blocks and semicolon-separated statements. This avoids the lossy fallback
-// tokenizer treating a runtime expression such as $PROFILE or $target as a
-// workspace-relative directory.
-func analyzePowerShellWritablePaths(command string, policy ReadOnlyCommandPolicy) (dirs, unresolved []string, known bool) {
-	ir, err := parseWithBridge(command)
-	if err != nil || len(ir.ParseErrors) > 0 {
+func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy) (dirs, unresolved []string, known bool) {
+	if ir == nil || len(ir.ParseErrors) > 0 {
 		return nil, nil, false
 	}
 	for _, inv := range ir.Invocations {
@@ -167,7 +159,37 @@ func analyzePowerShellWritablePaths(command string, policy ReadOnlyCommandPolicy
 		dirs = append(dirs, analysis.Dirs...)
 		unresolved = append(unresolved, analysis.Unresolved...)
 	}
+	unresolved = append(unresolved, safePowerShellDynamicTargets(ir)...)
 	return dedupeSorted(dirs), dedupeSorted(unresolved), known
+}
+
+func safePowerShellDynamicTargets(ir *psBridgeIR) []string {
+	if ir == nil {
+		return nil
+	}
+	var targets []string
+	profileMember := false
+	for _, expression := range ir.MemberExpressions {
+		if profileValueExpression.MatchString(strings.TrimSpace(expression)) {
+			profileMember = true
+			targets = append(targets, strings.TrimSpace(expression))
+		}
+	}
+	for _, variable := range ir.Variables {
+		name := normalizePowerShellVariableName(variable)
+		switch {
+		case name == "profile" && !profileMember:
+			targets = append(targets, "$PROFILE")
+		case strings.HasPrefix(name, "env:") && simplePowerShellLocalVar.MatchString(strings.TrimPrefix(name, "env:")):
+			targets = append(targets, "$"+variable)
+		}
+	}
+	for _, expression := range ir.TopLevelValueExpressions {
+		if safePowerShellDynamicValueExpression(expression) {
+			targets = append(targets, strings.TrimSpace(expression))
+		}
+	}
+	return dedupeSorted(targets)
 }
 
 func powerShellReadPathArguments(inv psCommandInvocation) []string {

@@ -1,0 +1,221 @@
+package approval
+
+import (
+	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
+)
+
+// CommandEffect is the persistent-state effect proven for a command. Unknown
+// is distinct from write for presentation, but maps to write access so policy
+// decisions remain fail-closed.
+type CommandEffect string
+
+const (
+	EffectRead    CommandEffect = "read"
+	EffectWrite   CommandEffect = "write"
+	EffectUnknown CommandEffect = "unknown"
+)
+
+// CommandShape contains parser-derived structure used only for reviewability.
+type CommandShape struct {
+	TopLevelActions int
+	Pipelines       int
+	Opaque          bool
+}
+
+// CommandAssessment is the single fact bundle produced for a shell or direct
+// process invocation. Approval policy is derived from it and never stored in
+// the assessment itself.
+type CommandAssessment struct {
+	Effect         CommandEffect
+	KnownDirs      []string
+	DynamicTargets []string
+	Reason         string
+	Shape          CommandShape
+	Reviewability  CommandReviewability
+}
+
+func UnknownCommandAssessment() CommandAssessment {
+	return CommandAssessment{
+		Effect: EffectUnknown,
+		Reason: "effects could not be proven",
+	}
+}
+
+// AccessIntent converts command facts into the existing tool-neutral policy
+// boundary. Unknown effects intentionally map to write.
+func (assessment CommandAssessment) AccessIntent() AccessIntent {
+	class := AccessWrite
+	if assessment.Effect == EffectRead {
+		class = AccessRead
+	}
+	return AccessIntent{
+		Class:           class,
+		Dirs:            append([]string(nil), assessment.KnownDirs...),
+		UnresolvedPaths: append([]string(nil), assessment.DynamicTargets...),
+		Reason:          assessment.Reason,
+	}
+}
+
+// AssessShellStaticWithPolicy parses command exactly once and derives every
+// deterministic fact available from that syntax tree. Unknown effects are
+// intentionally left for the app-layer LLM completion step.
+func AssessShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCommandPolicy) CommandAssessment {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return UnknownCommandAssessment()
+	}
+	if posix {
+		return assessPOSIXStatic(command, policy)
+	}
+	return assessPowerShellStatic(command, policy)
+}
+
+func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy) CommandAssessment {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
+	file, err := parser.Parse(strings.NewReader(command), "")
+	if err != nil || len(file.Stmts) == 0 {
+		result := UnknownCommandAssessment()
+		result.Shape.Opaque = true
+		result.Reviewability = opaqueReviewability()
+		return result
+	}
+
+	dynamic := unresolvedPOSIXRuntimeExpressionsFromFile(file)
+	shape, reviewability := analyzePOSIXReviewabilityFile(file, policy, dynamic)
+	result := CommandAssessment{
+		Effect:         EffectUnknown,
+		DynamicTargets: dynamic,
+		Reason:         "effects could not be proven",
+		Shape:          shape,
+		Reviewability:  reviewability,
+	}
+
+	readOnly := true
+	for _, stmt := range file.Stmts {
+		if ro, _ := stmtIsReadOnly(stmt, policy); !ro {
+			readOnly = false
+			break
+		}
+	}
+	if readOnly {
+		result.Effect = EffectRead
+		result.KnownDirs = posixAccessArguments(file)
+		result.Reason = "read-only command (AST analysis)"
+		return result
+	}
+
+	dirs, knownWrite := collectPOSIXWriteFacts(file)
+	if knownWrite {
+		result.Effect = EffectWrite
+		result.KnownDirs = dedupeSorted(dirs)
+		result.Reason = "write command (static analysis from POSIX AST)"
+	}
+	return result
+}
+
+func posixAccessArguments(file *syntax.File) []string {
+	if file == nil {
+		return nil
+	}
+	var args []string
+	syntax.Walk(file, func(node syntax.Node) bool {
+		call, ok := node.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		for _, word := range call.Args[1:] {
+			if value, ok := accessShellWord(word); ok && value != "" {
+				args = append(args, value)
+			}
+		}
+		return true
+	})
+	return dedupeSorted(args)
+}
+
+func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
+	if file == nil {
+		return nil, false
+	}
+	syntax.Walk(file, func(node syntax.Node) bool {
+		switch node := node.(type) {
+		case *syntax.Redirect:
+			if node.Word == nil || !redirectionWritesPersistent(node) {
+				return true
+			}
+			known = true
+			if target, ok := accessShellWord(node.Word); ok && target != "" {
+				dirs = append(dirs, parentDir(target))
+			}
+		case *syntax.CallExpr:
+			if len(node.Args) == 0 {
+				return true
+			}
+			if name, ok := staticShellWord(node.Args[0]); ok && hasKnownRiskyInvocation([]string{name}, true) {
+				known = true
+			}
+			tokens := shellWordsForAccess(node.Args)
+			if len(tokens) == 0 {
+				return true
+			}
+			analysis := analyzeWritableTargetsFromTokens(tokens, true)
+			if analysis.Known || hasKnownRiskyInvocation(tokens, true) {
+				known = true
+				dirs = append(dirs, analysis.Dirs...)
+			}
+		}
+		return true
+	})
+	return dedupeSorted(dirs), known
+}
+
+func posixStatementKnownWriter(stmt *syntax.Stmt) bool {
+	if stmt == nil || stmt.Cmd == nil {
+		return false
+	}
+	for _, redir := range stmt.Redirs {
+		if redir != nil && redirectionWritesPersistent(redir) {
+			return true
+		}
+	}
+	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
+		return posixStatementKnownWriter(binary.X) || posixStatementKnownWriter(binary.Y)
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	return ok && posixCallKnownWriter(call)
+}
+
+func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy) CommandAssessment {
+	ir, err := parseWithBridge(command)
+	if err != nil || len(ir.ParseErrors) > 0 {
+		result := UnknownCommandAssessment()
+		result.Shape.Opaque = true
+		result.Reviewability = opaqueReviewability()
+		return result
+	}
+	return assessPowerShellIR(command, ir, policy)
+}
+
+func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy) CommandAssessment {
+	dirs, dynamic, knownWrite := analyzePowerShellWritablePathsIR(ir, policy)
+	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
+	result := CommandAssessment{
+		Effect:         EffectUnknown,
+		DynamicTargets: dynamic,
+		Reason:         "effects could not be proven",
+		Shape:          shape,
+		Reviewability:  reviewability,
+	}
+	if readOnlyPowerShellIR(command, ir, policy) {
+		result.Effect = EffectRead
+		result.KnownDirs = append([]string(nil), ir.Paths...)
+		result.Reason = "read-only PowerShell command (AST analysis)"
+	} else if knownWrite {
+		result.Effect = EffectWrite
+		result.KnownDirs = dirs
+		result.Reason = "write command (PowerShell AST analysis)"
+	}
+	return result
+}

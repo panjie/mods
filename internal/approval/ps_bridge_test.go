@@ -80,6 +80,17 @@ func TestParseWithBridgeVariableFlagged(t *testing.T) {
 	require.Contains(t, ir.Expansions, "var")
 }
 
+func TestParseWithBridgeRuntimeValueFacts(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	ir, err := parseWithBridge(`$PROFILE.CurrentUserCurrentHost; Test-Path $env:STARSHIP_CONFIG`)
+	require.NoError(t, err)
+	require.Contains(t, ir.TopLevelValueExpressions, `$PROFILE.CurrentUserCurrentHost`)
+	require.Contains(t, ir.MemberExpressions, `$PROFILE.CurrentUserCurrentHost`)
+	require.Contains(t, ir.Variables, "PROFILE")
+	require.Contains(t, ir.Variables, "env:STARSHIP_CONFIG")
+}
+
 func TestParseWithBridgeAssignment(t *testing.T) {
 	t.Cleanup(func() { CloseBridge() })
 

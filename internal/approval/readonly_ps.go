@@ -19,68 +19,78 @@ func IsReadOnlyPowerShell(command string) (bool, string, []string) {
 // IsReadOnlyPowerShellWithPolicy is IsReadOnlyPowerShell with additional
 // command names the user explicitly trusts as read-only.
 func IsReadOnlyPowerShellWithPolicy(command string, policy ReadOnlyCommandPolicy) (bool, string, []string) {
-	command = strings.TrimSpace(command)
-	if command == "" {
+	assessment := AssessShellStaticWithPolicy(command, false, policy)
+	if assessment.Effect != EffectRead {
 		return false, "", nil
 	}
+	return true, assessment.Reason, append([]string(nil), assessment.KnownDirs...)
+}
 
-	ir, err := parseWithBridge(command)
-	if err != nil {
-		return false, "", nil
+func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy) bool {
+	if ir == nil {
+		return false
 	}
 
 	// Parse errors → fail-closed
 	if len(ir.ParseErrors) > 0 {
-		return false, "", nil
+		return false
 	}
 
 	// Security flags — any hit means not read-only
 	if ir.HasControlFlow {
-		return false, "", nil
+		return false
 	}
 	if ir.HasBackground {
-		return false, "", nil
+		return false
 	}
 	if ir.HasStopParsing {
-		return false, "", nil
+		return false
 	}
 
 	// File redirection → writes to filesystem
 	for _, r := range ir.Redirects {
 		if r == "FileRedirection" {
-			return false, "", nil
+			return false
 		}
 	}
 
 	if hasPowerShellExpansion(ir, "subshell") {
-		return false, "", nil
+		return false
 	}
 	if !safePowerShellAssignments(ir) {
-		return false, "", nil
+		return false
 	}
 	if !safePowerShellVariables(ir, command) {
-		return false, "", nil
+		return false
 	}
 	if !safePowerShellMethods(ir) {
-		return false, "", nil
+		return false
+	}
+	if !safePowerShellRuntimeMembers(ir.MemberExpressions) {
+		return false
 	}
 	if len(ir.ForEachMemberNames) > 0 {
-		return false, "", nil
+		return false
 	}
 	if powerShellCommandArgsContainUnsafeVariable(ir) {
-		return false, "", nil
+		return false
 	}
 
 	// Encoded command → hides intent
 	for _, rf := range ir.RiskFlags {
 		if rf == "invoke_expression" {
-			return false, "", nil
+			return false
 		}
 	}
 
-	// No commands → fail-closed (empty or expression-only)
-	if len(ir.Commands) == 0 {
-		return false, "", nil
+	if !safeTopLevelPowerShellValueExpressions(ir.TopLevelValueExpressions) {
+		return false
+	}
+
+	// A standalone, explicitly recognized runtime value is a read. It remains
+	// a dynamic target in CommandAssessment, so approval is still per-use.
+	if len(ir.Commands) == 0 && len(ir.TopLevelValueExpressions) == 0 {
+		return false
 	}
 
 	// All command invocations must be in the read-only allowlist. Prefer the
@@ -94,11 +104,11 @@ func IsReadOnlyPowerShellWithPolicy(command string, policy ReadOnlyCommandPolicy
 	}
 	for _, inv := range invocations {
 		if !readOnlyPowerShellInvocation(inv, policy) {
-			return false, "", nil
+			return false
 		}
 	}
 
-	return true, "read-only PowerShell command (AST analysis)", ir.Paths
+	return true
 }
 
 func readOnlyPowerShellInvocation(inv psCommandInvocation, policy ReadOnlyCommandPolicy) bool {
@@ -210,6 +220,9 @@ func safePowerShellVariables(ir *psBridgeIR, command string) bool {
 		if safePipelinePowerShellVariables[name] || assigned[name] {
 			continue
 		}
+		if name == "profile" || strings.HasPrefix(name, "env:") && simplePowerShellLocalVar.MatchString(strings.TrimPrefix(name, "env:")) {
+			continue
+		}
 		// Built-in home variables are safe only when every occurrence is the
 		// explicit root of a path. That exact form is resolved by the caller's
 		// external-path extractor, preserving the approval boundary. A bare use
@@ -219,6 +232,39 @@ func safePowerShellVariables(ir *psBridgeIR, command string) bool {
 			continue
 		}
 		return false
+	}
+	return true
+}
+
+var (
+	profileValueExpression = regexp.MustCompile(`(?i)^\$PROFILE(?:\.(?:CurrentUserCurrentHost|CurrentUserAllHosts|AllUsersCurrentHost|AllUsersAllHosts))?$`)
+	envValueExpression     = regexp.MustCompile(`(?i)^\$env:[A-Za-z_][A-Za-z0-9_]*$`)
+)
+
+func safeTopLevelPowerShellValueExpressions(expressions []string) bool {
+	for _, expression := range expressions {
+		expression = strings.TrimSpace(expression)
+		if !profileValueExpression.MatchString(expression) && !envValueExpression.MatchString(expression) {
+			return false
+		}
+	}
+	return true
+}
+
+func safePowerShellDynamicValueExpression(expression string) bool {
+	expression = strings.TrimSpace(expression)
+	return profileValueExpression.MatchString(expression) || envValueExpression.MatchString(expression)
+}
+
+func safePowerShellRuntimeMembers(expressions []string) bool {
+	for _, expression := range expressions {
+		lower := strings.ToLower(strings.TrimSpace(expression))
+		if strings.HasPrefix(lower, "$profile.") && !profileValueExpression.MatchString(expression) {
+			return false
+		}
+		if strings.HasPrefix(lower, "$env:") {
+			return false
+		}
 	}
 	return true
 }

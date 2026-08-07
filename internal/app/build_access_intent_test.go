@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -18,38 +19,29 @@ func TestBuildAccessIntent(t *testing.T) {
 	reg := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterShell(reg, toolregistry.ShellConfig{Root: root}))
 
-	// shell read-only -> AccessRead + AffectedDirs propagated.
-	analyze := func(tool, cmd string) shellCommandAnalysis {
-		return shellCommandAnalysis{NeedsReview: false, AffectedDirs: []string{"/ws"}}
-	}
-	intent := buildAccessIntent("shell_run", []byte(`{"command":"ls"}`), reg, analyze)
+	// shell read-only -> AccessRead + KnownDirs propagated.
+	readAssessment := approval.CommandAssessment{Effect: approval.EffectRead, KnownDirs: []string{"/ws"}}
+	intent := buildAccessIntent("shell_run", []byte(`{"command":"ls"}`), reg, &readAssessment)
 	require.Equal(t, AccessRead, intent.Class)
 	require.Equal(t, []string{"/ws"}, intent.Dirs)
 
 	// shell mutable -> AccessWrite.
-	analyzeMut := func(tool, cmd string) shellCommandAnalysis {
-		return shellCommandAnalysis{NeedsReview: true, AffectedDirs: []string{"/ws/x"}}
-	}
-	intentMut := buildAccessIntent("shell_run", []byte(`{"command":"rm x"}`), reg, analyzeMut)
+	writeAssessment := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/ws/x"}}
+	intentMut := buildAccessIntent("shell_run", []byte(`{"command":"rm x"}`), reg, &writeAssessment)
 	require.Equal(t, AccessWrite, intentMut.Class)
 	require.Equal(t, []string{"/ws/x"}, intentMut.Dirs)
 
-	analyzeDynamic := func(tool, cmd string) shellCommandAnalysis {
-		return shellCommandAnalysis{
-			NeedsReview:     true,
-			Effect:          shellEffectWrite,
-			UnresolvedPaths: []string{"$target"},
-		}
+	dynamicAssessment := approval.CommandAssessment{
+		Effect:         approval.EffectWrite,
+		DynamicTargets: []string{"$target"},
 	}
-	intentDynamic := buildAccessIntent("shell_run", []byte(`{"command":"writer $target"}`), reg, analyzeDynamic)
+	intentDynamic := buildAccessIntent("shell_run", []byte(`{"command":"writer $target"}`), reg, &dynamicAssessment)
 	require.Equal(t, []string{"$target"}, intentDynamic.UnresolvedPaths)
 	require.Equal(t, DecisionAsk, ClassifyAccess(intentDynamic, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// Unknown effect remains write-like even when analyzer output is inconsistent.
-	analyzeUnknown := func(tool, cmd string) shellCommandAnalysis {
-		return shellCommandAnalysis{NeedsReview: false, Effect: shellEffectUnknown, AffectedDirs: []string{"/ws/opaque"}}
-	}
-	intentUnknown := buildAccessIntent("shell_run", []byte(`{"command":"opaque"}`), reg, analyzeUnknown)
+	unknownAssessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{"/ws/opaque"}}
+	intentUnknown := buildAccessIntent("shell_run", []byte(`{"command":"opaque"}`), reg, &unknownAssessment)
 	require.Equal(t, AccessWrite, intentUnknown.Class)
 	require.Equal(t, []string{"/ws/opaque"}, intentUnknown.Dirs)
 
@@ -97,52 +89,35 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	m := &Mods{Config: &cfg}
 	canonicalRoot := cfg.ResolveWorkspace().Canonical
 
-	read := buildAccessIntent("process_run", []byte(`{"program":"git","args":["status"]}`), reg, m.analyzeShellCommand)
+	readAssessment := m.assessCommand("process_run", `{"program":"git","args":["status"]}`)
+	read := buildAccessIntent("process_run", nil, reg, &readAssessment)
 	require.Equal(t, AccessRead, read.Class)
 	require.Contains(t, read.Dirs, canonicalRoot)
 
-	write := buildAccessIntent("process_run", []byte(`{"program":"rm","args":["out.txt"]}`), reg, m.analyzeShellCommand)
+	writeAssessment := m.assessCommand("process_run", `{"program":"rm","args":["out.txt"]}`)
+	write := buildAccessIntent("process_run", nil, reg, &writeAssessment)
 	require.Equal(t, AccessWrite, write.Class)
 	require.Contains(t, write.Dirs, canonicalRoot)
 
-	m.shellAnalyzer = func(tool, input string) shellCommandAnalysis {
+	m.shellAnalyzer = func(tool, input string) approval.CommandAssessment {
 		require.Equal(t, "process_run", tool)
 		require.Contains(t, input, "direct_process_invocation")
 		require.Contains(t, input, "no shell expansion")
-		return shellCommandAnalysis{NeedsReview: false, Effect: shellEffectRead, Reason: "test classifier"}
+		return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "test classifier"}
 	}
-	unknown := buildAccessIntent("process_run", []byte(`{"program":"custom-tool","args":["$HOME",";rm"]}`), reg, m.analyzeShellCommand)
+	unknownAssessment := m.assessCommand("process_run", `{"program":"custom-tool","args":["$HOME",";rm"]}`)
+	unknown := buildAccessIntent("process_run", nil, reg, &unknownAssessment)
 	require.Equal(t, AccessRead, unknown.Class)
 	require.Contains(t, unknown.Dirs, canonicalRoot)
 	for _, dir := range unknown.Dirs {
 		require.NotEqual(t, filepath.Join(os.Getenv("HOME")), dir, "process argv must not expand $HOME")
 	}
 
-	literalHome := buildAccessIntent("process_run", []byte(`{"program":"rm","args":["$HOME/out.txt"]}`), reg, m.analyzeShellCommand)
+	literalHomeAssessment := m.assessCommand("process_run", `{"program":"rm","args":["$HOME/out.txt"]}`)
+	literalHome := buildAccessIntent("process_run", nil, reg, &literalHomeAssessment)
 	require.Equal(t, AccessWrite, literalHome.Class)
 	require.Contains(t, literalHome.Dirs, canonicalRoot)
 	for _, dir := range literalHome.Dirs {
 		require.NotContains(t, dir, filepath.Join(os.Getenv("HOME"), "out.txt"))
 	}
-}
-
-func TestMemoizedShellAnalyzerClassifiesEachCommandOnce(t *testing.T) {
-	calls := 0
-	analyze := memoizedShellAnalyzer(func(tool, command string) shellCommandAnalysis {
-		calls++
-		return shellCommandAnalysis{
-			NeedsReview:  true,
-			AffectedDirs: []string{"/tmp"},
-			Reason:       tool + ": " + command,
-			Effect:       shellEffectUnknown,
-		}
-	})
-
-	first := analyze("shell_run", "opaque-command")
-	second := analyze("shell_run", "opaque-command")
-	require.Equal(t, first, second)
-	require.Equal(t, 1, calls)
-
-	analyze("shell_run", "different-command")
-	require.Equal(t, 2, calls)
 }

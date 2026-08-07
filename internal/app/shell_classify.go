@@ -22,27 +22,6 @@ import (
 
 const defaultShellClassifyPrompt = prompts.ShellClassifier
 
-type shellEffect string
-
-const (
-	shellEffectUnknown shellEffect = "unknown"
-	shellEffectRead    shellEffect = "read"
-	shellEffectWrite   shellEffect = "write"
-)
-
-type shellCommandAnalysis struct {
-	NeedsReview     bool
-	AffectedDirs    []string
-	UnresolvedPaths []string
-	Reason          string
-	Effect          shellEffect
-	Reviewability   approval.CommandReviewability
-}
-
-func defaultShellCommandAnalysis() shellCommandAnalysis {
-	return shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown, Reason: "unknown shell effects"}
-}
-
 func shellPathFlavor(tool string) pathutil.Flavor {
 	if shellToolUsesPowerShell(tool) {
 		return pathutil.FlavorPowerShell
@@ -54,10 +33,9 @@ func shellToolUsesPowerShell(tool string) bool {
 	return tool == "powershell_run" || ((tool == "shell_run" || tool == "process_run") && runtime.GOOS == "windows")
 }
 
-func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
+func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 	if tool == "process_run" {
-		result := m.analyzeProcessInvocation(command)
-		return result
+		return m.assessProcessInvocation(command)
 	}
 	ws := ""
 	if m.Config != nil {
@@ -66,81 +44,64 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	policy := m.readOnlyCommandPolicy()
 
 	flavor := shellPathFlavor(tool)
-	externalPaths := extractExternalPathsWithPolicy(command, ws, flavor, policy)
-
-	// Tier 1: static shell classifier. POSIX uses the mvdan shell AST for
-	// read-only classification and write-target extraction. PowerShell uses
-	// its parser bridge for read-only commands and the local tokenizer for
-	// common write targets. Unknown commands fall through to the LLM.
-	static := approval.AnalyzeShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
-	switch static.Class {
-	case approval.ShellStaticRead:
-		affected := externalPaths
-		if shellToolUsesPowerShell(tool) {
-			affected = appendMissingShellDirs(affected, filterArgPaths(static.AffectedDirs, ws, flavor))
+	result := approval.AssessShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
+	externalPaths := filterArgPaths(result.KnownDirs, ws, flavor)
+	if shellToolUsesPowerShell(tool) {
+		externalPaths = appendMissingShellDirs(externalPaths, extractExternalPathsWithPolicy(command, ws, flavor, policy))
+	}
+	if result.Effect == approval.EffectWrite {
+		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, externalPaths)
+	} else {
+		result.KnownDirs = externalPaths
+	}
+	if result.Effect == approval.EffectUnknown {
+		completion := approval.UnknownCommandAssessment()
+		if m.shellAnalyzer != nil {
+			completion = m.shellAnalyzer(tool, command)
+		} else {
+			completion = m.classifyShellWithLLM(tool, command)
 		}
-		debug.Printf("analyzeShellCommand: cmd=%q -> static: read-only", debug.Truncate(command, 80))
-		return m.withCommandReviewability(tool, command, finalizeShellAnalysis(
-			shellCommandAnalysis{
-				NeedsReview:  false,
-				AffectedDirs: affected,
-				Reason:       static.Reason,
-				Effect:       shellEffectRead,
-			},
-			nil,
-			nil,
-			nil,
-			static.UnresolvedPaths,
-			ws,
-			flavor,
-		))
-	case approval.ShellStaticWrite:
-		debug.Printf("analyzeShellCommand: cmd=%q -> static: write dirs=%v", debug.Truncate(command, 80), static.AffectedDirs)
-		return m.withCommandReviewability(tool, command, finalizeShellAnalysis(
-			shellCommandAnalysis{
-				NeedsReview:     true,
-				AffectedDirs:    static.AffectedDirs,
-				UnresolvedPaths: static.UnresolvedPaths,
-				Reason:          static.Reason,
-				Effect:          shellEffectWrite,
-			},
-			nil,
-			externalPaths,
-			nil,
-			static.UnresolvedPaths,
-			ws,
-			flavor,
-		))
+		result = mergeCommandAssessment(result, completion)
 	}
-
-	// Test seam: short-circuits the LLM classifier. The static classifier runs
-	// first so known read/write commands never reach this path; everything else
-	// delegates to the seam or the LLM.
-	if m.shellAnalyzer != nil {
-		result := m.shellAnalyzer(tool, command)
-		return m.withCommandReviewability(tool, command, finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor))
-	}
-
-	// LLM classifier
-	result := m.classifyShellWithLLM(tool, command)
-	return m.withCommandReviewability(tool, command, finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor))
+	return finalizeCommandAssessment(result, ws, flavor)
 }
 
-func (m *Mods) withCommandReviewability(tool, command string, result shellCommandAnalysis) shellCommandAnalysis {
-	posix := !shellToolUsesPowerShell(tool)
-	reviewability := approval.AnalyzeCommandReviewability(command, posix, m.readOnlyCommandPolicy())
-	reviewability.DynamicTargets = mergeReviewabilityTargets(reviewability.DynamicTargets, result.UnresolvedPaths)
-	if result.Effect == shellEffectWrite && len(reviewability.DynamicTargets) > 0 {
+func mergeCommandAssessment(static, completion approval.CommandAssessment) approval.CommandAssessment {
+	if static.Effect != approval.EffectUnknown {
+		return static
+	}
+	if completion.Effect != approval.EffectRead && completion.Effect != approval.EffectWrite {
+		return static
+	}
+	static.Effect = completion.Effect
+	static.KnownDirs = appendMissingShellDirs(static.KnownDirs, completion.KnownDirs)
+	if strings.TrimSpace(completion.Reason) != "" {
+		static.Reason = completion.Reason
+	}
+	return static
+}
+
+func finalizeCommandAssessment(result approval.CommandAssessment, workspace string, flavor pathutil.Flavor) approval.CommandAssessment {
+	result.KnownDirs, result.DynamicTargets = partitionShellAnalysisPaths(
+		result.KnownDirs,
+		result.DynamicTargets,
+		flavor,
+	)
+	if len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(workspace) != "" {
+		result.KnownDirs = []string{workspace}
+	}
+	reviewability := result.Reviewability
+	if result.Effect == approval.EffectWrite && len(result.DynamicTargets) > 0 {
 		reviewability.Level = approval.ReviewabilityCompound
 		reviewability.Reasons = appendReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget)
 		reviewability.ShouldCorrect = true
 	}
-	if result.Effect == shellEffectRead && reviewabilityOnlyRecommendsProcess(reviewability) {
+	if result.Effect == approval.EffectRead && reviewabilityOnlyRecommendsProcess(reviewability) {
 		// Keep the process_run recommendation in presentation metadata, but do
 		// not spend the request's single corrective round on a harmless read.
 		reviewability.ShouldCorrect = false
 	}
-	if len(reviewability.DynamicTargets) > 1 {
+	if len(result.DynamicTargets) > 1 {
 		reviewability.Reasons = appendReviewabilityReason(reviewability.Reasons, approval.ReviewabilityMultipleDynamicTargets)
 	}
 	result.Reviewability = reviewability
@@ -149,26 +110,6 @@ func (m *Mods) withCommandReviewability(tool, command string, result shellComman
 
 func reviewabilityOnlyRecommendsProcess(reviewability approval.CommandReviewability) bool {
 	return len(reviewability.Reasons) == 1 && reviewability.Reasons[0] == approval.ReviewabilitySingleProgramInShell
-}
-
-func mergeReviewabilityTargets(targets, extra []string) []string {
-	result := append([]string(nil), targets...)
-	seen := make(map[string]struct{}, len(result))
-	for _, target := range result {
-		seen[strings.ToLower(strings.TrimSpace(target))] = struct{}{}
-	}
-	for _, target := range extra {
-		key := strings.ToLower(strings.TrimSpace(target))
-		if key == "" {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		result = append(result, target)
-	}
-	return result
 }
 
 func appendReviewabilityReason(reasons []approval.ReviewabilityReason, reason approval.ReviewabilityReason) []approval.ReviewabilityReason {
@@ -180,14 +121,14 @@ func appendReviewabilityReason(reasons []approval.ReviewabilityReason, reason ap
 	return append(reasons, reason)
 }
 
-func (m *Mods) analyzeProcessInvocation(raw string) shellCommandAnalysis {
+func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	var invocation struct {
 		Program string   `json:"program"`
 		Args    []string `json:"args"`
 		Cwd     string   `json:"cwd"`
 	}
 	if err := json.Unmarshal([]byte(raw), &invocation); err != nil || strings.TrimSpace(invocation.Program) == "" {
-		return defaultShellCommandAnalysis()
+		return approval.UnknownCommandAssessment()
 	}
 	workspace := ""
 	if m.Config != nil {
@@ -205,15 +146,14 @@ func (m *Mods) analyzeProcessInvocation(raw string) shellCommandAnalysis {
 	pathArgs := append([]string{invocation.Program}, invocation.Args...)
 	affected := []string{cwd}
 	affected = appendMissingShellDirs(affected, filterLiteralArgPaths(pathArgs, cwd, flavor))
-	static := approval.AnalyzeArgvStaticWithPolicy(invocation.Program, invocation.Args, posix, policy)
-
-	var result shellCommandAnalysis
-	switch static.Class {
-	case approval.ShellStaticRead:
-		result = shellCommandAnalysis{NeedsReview: false, AffectedDirs: affected, Reason: static.Reason, Effect: shellEffectRead}
-	case approval.ShellStaticWrite:
-		writeDirs := normalizeLiteralProcessDirs(static.AffectedDirs, cwd, flavor)
-		result = shellCommandAnalysis{NeedsReview: true, AffectedDirs: appendMissingShellDirs(writeDirs, affected), Reason: static.Reason, Effect: shellEffectWrite}
+	result := approval.AssessArgvStaticWithPolicy(invocation.Program, invocation.Args, posix, policy)
+	staticDirs := append([]string(nil), result.KnownDirs...)
+	result.KnownDirs = affected
+	switch result.Effect {
+	case approval.EffectRead:
+	case approval.EffectWrite:
+		writeDirs := normalizeLiteralProcessDirs(staticDirs, cwd, flavor)
+		result.KnownDirs = appendMissingShellDirs(writeDirs, affected)
 	default:
 		classifierInput, _ := json.Marshal(map[string]any{
 			"kind":    "direct_process_invocation",
@@ -223,19 +163,17 @@ func (m *Mods) analyzeProcessInvocation(raw string) shellCommandAnalysis {
 			"note":    "Arguments are literal; no shell expansion, pipeline, redirection, globbing, or variable interpolation occurs.",
 		})
 		if m.shellAnalyzer != nil {
-			result = m.shellAnalyzer("process_run", string(classifierInput))
+			result = mergeCommandAssessment(result, m.shellAnalyzer("process_run", string(classifierInput)))
 		} else {
-			result = m.classifyShellWithLLM("process_run", string(classifierInput))
+			result = mergeCommandAssessment(result, m.classifyShellWithLLM("process_run", string(classifierInput)))
 		}
-		result.AffectedDirs = normalizeLiteralProcessDirs(result.AffectedDirs, cwd, flavor)
-		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, affected)
+		result.KnownDirs = normalizeLiteralProcessDirs(result.KnownDirs, cwd, flavor)
+		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, affected)
 	}
-	if len(result.AffectedDirs) == 0 && cwd != "" {
-		result.AffectedDirs = []string{cwd}
+	if len(result.KnownDirs) == 0 && cwd != "" {
+		result.KnownDirs = []string{cwd}
 	}
-	result = normalizeShellEffect(result)
-	result.Reviewability = approval.AnalyzeProcessReviewability(invocation.Program, invocation.Args, posix)
-	return result
+	return finalizeCommandAssessment(result, cwd, flavor)
 }
 
 func normalizeLiteralProcessDirs(dirs []string, cwd string, flavor pathutil.Flavor) []string {
@@ -255,6 +193,9 @@ func filterLiteralArgPaths(args []string, cwd string, flavor pathutil.Flavor) []
 	var result []string
 	for _, arg := range args {
 		arg = strings.Trim(strings.TrimSpace(arg), `"'`)
+		if _, value, ok := strings.Cut(arg, "="); ok && isExplicitShellPathArg(value) {
+			arg = value
+		}
 		if !literalArgLooksPathLike(arg, flavor) {
 			continue
 		}
@@ -305,37 +246,6 @@ func (m *Mods) readOnlyCommandPolicy() approval.ReadOnlyCommandPolicy {
 	}
 }
 
-func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths, unresolvedPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {
-	result = normalizeShellEffect(result)
-	mergedUnresolved := append([]string(nil), result.UnresolvedPaths...)
-	mergedUnresolved = append(mergedUnresolved, unresolvedPaths...)
-	result.AffectedDirs, result.UnresolvedPaths = partitionShellAnalysisPaths(
-		result.AffectedDirs,
-		mergedUnresolved,
-		flavor,
-	)
-	if len(result.UnresolvedPaths) > 0 {
-		result.NeedsReview = true
-	}
-
-	if len(result.AffectedDirs) == 0 {
-		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
-	}
-
-	// Post-process: merge regex-detected external paths into AffectedDirs
-	// so external access is never silently dropped when the LLM omits dirs
-	// (read-only commands) or fails entirely.
-	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, externalPaths)
-	// Also merge AST-extracted PowerShell argument paths for write commands
-	// that fell through to the LLM — the LLM may miss path arguments.
-	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, workspaceDir, flavor))
-	if len(result.AffectedDirs) == 0 && len(result.UnresolvedPaths) == 0 && strings.TrimSpace(workspaceDir) != "" {
-		result.AffectedDirs = []string{workspaceDir}
-	}
-
-	return result
-}
-
 func partitionShellAnalysisPaths(dirs, unresolved []string, flavor pathutil.Flavor) ([]string, []string) {
 	posix := flavor != pathutil.FlavorPowerShell
 	var concrete []string
@@ -370,51 +280,6 @@ func partitionShellAnalysisPaths(dirs, unresolved []string, flavor pathutil.Flav
 	return concrete, dynamic
 }
 
-func normalizeShellEffect(a shellCommandAnalysis) shellCommandAnalysis {
-	switch a.Effect {
-	case "":
-		a.Effect = defaultShellEffect(a.NeedsReview)
-	case shellEffectRead:
-		// A read can still require approval when its target is resolved only at
-		// runtime. Keep the proven effect separate from the approval decision.
-	case shellEffectWrite, shellEffectUnknown:
-		a.NeedsReview = true
-	default:
-		a.NeedsReview = true
-		a.Effect = shellEffectUnknown
-	}
-	return a
-}
-
-func shellEffectConsistent(needsReview bool, effect shellEffect) bool {
-	switch effect {
-	case "":
-		return true
-	case shellEffectRead:
-		return !needsReview
-	case shellEffectWrite, shellEffectUnknown:
-		return needsReview
-	default:
-		return false
-	}
-}
-
-func shellEffectValid(effect shellEffect) bool {
-	switch effect {
-	case "", shellEffectRead, shellEffectWrite, shellEffectUnknown:
-		return true
-	default:
-		return false
-	}
-}
-
-func defaultShellEffect(needsReview bool) shellEffect {
-	if needsReview {
-		return shellEffectWrite
-	}
-	return shellEffectRead
-}
-
 func appendMissingShellDirs(dirs []string, extra []string) []string {
 	for _, p := range extra {
 		found := false
@@ -434,11 +299,11 @@ func appendMissingShellDirs(dirs []string, extra []string) []string {
 // classifyShellWithLLM sends the tool+command to the configured LLM for
 // classification and caches the result. On any failure (timeout, stream
 // error, parse error) it returns the fail-closed default.
-func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
+func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssessment {
 	system, structured, err := m.resolveShellClassifierPrompt()
 	if err != nil {
-		debug.Printf("analyzeShellCommand: prompt override failed: %v", err)
-		return defaultShellCommandAnalysis()
+		debug.Printf("assessCommand: prompt override failed: %v", err)
+		return approval.UnknownCommandAssessment()
 	}
 	parseMode := "json"
 	if !structured {
@@ -446,19 +311,19 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 	}
 	cacheKey := shellClassifyCacheKey(tool, command, parseMode, system)
 	if cached, ok := shellClassifyCache.Load(cacheKey); ok {
-		debug.Printf("analyzeShellCommand: cmd=%q cached -> needsReview=%v dirs=%v", debug.Truncate(command, 80), cached.NeedsReview, cached.AffectedDirs)
+		debug.Printf("assessCommand: cmd=%q cached -> effect=%s dirs=%v", debug.Truncate(command, 80), cached.Effect, cached.KnownDirs)
 		return cached
 	}
 
 	cfg := m.Config
 	api, mod, err := m.resolveModel(cfg)
 	if err != nil {
-		return defaultShellCommandAnalysis()
+		return approval.UnknownCommandAssessment()
 	}
 
 	cfgs, err := m.buildProviderConfigs(mod, api)
 	if err != nil {
-		return defaultShellCommandAnalysis()
+		return approval.UnknownCommandAssessment()
 	}
 	accfg := cfgs.Anthropic
 	gccfg := cfgs.Google
@@ -469,7 +334,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 	classifyCtx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
 
-	debug.Printf("analyzeShellCommand: using model=%s api=%s, structured=%v, system=%q", mod.Name, mod.API, structured, system)
+	debug.Printf("assessCommand: using model=%s api=%s, structured=%v, system=%q", mod.Name, mod.API, structured, system)
 	maxTokens := int64(256)
 	request := proto.Request{
 		Messages: []proto.Message{
@@ -484,7 +349,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 
 	client, err := newStreamClient(modelProtocol(mod), accfg, gccfg, occfg, ccfg)
 	if err != nil {
-		return defaultShellCommandAnalysis()
+		return approval.UnknownCommandAssessment()
 	}
 
 	st := client.Request(classifyCtx, request)
@@ -494,31 +359,38 @@ func (m *Mods) classifyShellWithLLM(tool, command string) shellCommandAnalysis {
 	for st.Next() {
 		chunk, err := st.Current()
 		if err != nil && !errors.Is(err, stream.ErrNoContent) {
-			return defaultShellCommandAnalysis()
+			return approval.UnknownCommandAssessment()
 		}
 		sb.WriteString(chunk.Content)
 	}
 	if st.Err() != nil {
-		return defaultShellCommandAnalysis()
+		return approval.UnknownCommandAssessment()
 	}
 	rawResponse := strings.TrimSpace(sb.String())
-	var analysis shellCommandAnalysis
+	var assessment approval.CommandAssessment
 	if structured {
 		var ok bool
-		analysis, ok = parseShellAnalysisResponse(rawResponse)
+		assessment, ok = parseShellAssessmentResponse(rawResponse)
 		if !ok {
-			defaultResult := defaultShellCommandAnalysis()
+			defaultResult := approval.UnknownCommandAssessment()
 			shellClassifyCache.Store(cacheKey, defaultResult)
 			return defaultResult
 		}
 	} else {
-		analysis = shellCommandAnalysis{NeedsReview: classifyResponse(rawResponse)}
+		effect, ok := parseLegacyShellEffect(rawResponse)
+		if !ok {
+			assessment = approval.UnknownCommandAssessment()
+		} else if effect == approval.EffectWrite {
+			assessment = approval.CommandAssessment{Effect: effect, Reason: "legacy classifier requested review"}
+		} else {
+			assessment = approval.CommandAssessment{Effect: effect, Reason: "legacy classifier reported read-only"}
+		}
 	}
-	debug.Printf("analyzeShellCommand: cmd=%q resp=%s -> needsReview=%v dirs=%v reason=%q",
-		command, debug.Truncate(rawResponse, 80), analysis.NeedsReview, analysis.AffectedDirs, analysis.Reason)
+	debug.Printf("assessCommand: cmd=%q resp=%s -> effect=%s dirs=%v reason=%q",
+		command, debug.Truncate(rawResponse, 80), assessment.Effect, assessment.KnownDirs, assessment.Reason)
 
-	shellClassifyCache.Store(cacheKey, analysis)
-	return analysis
+	shellClassifyCache.Store(cacheKey, assessment)
+	return assessment
 }
 
 func shellClassifyCacheKey(tool, command, parseMode, system string) string {
@@ -536,46 +408,73 @@ func (m *Mods) resolveShellClassifierPrompt() (string, bool, error) {
 	return defaultShellClassifyPrompt, true, nil
 }
 
-func parseShellAnalysisResponse(raw string) (shellCommandAnalysis, bool) {
-	if analysis, ok := parseShellAnalysisJSON(strings.TrimSpace(raw)); ok {
-		return analysis, true
+func parseShellAssessmentResponse(raw string) (approval.CommandAssessment, bool) {
+	if assessment, ok := parseShellAssessmentJSON(strings.TrimSpace(raw)); ok {
+		return assessment, true
 	}
 	for _, fenced := range extractFencedJSON(raw) {
-		if analysis, ok := parseShellAnalysisJSON(fenced); ok {
-			return analysis, true
+		if assessment, ok := parseShellAssessmentJSON(fenced); ok {
+			return assessment, true
 		}
 	}
 	for _, candidate := range extractJSONObjectCandidates(raw) {
-		if analysis, ok := parseShellAnalysisJSON(candidate); ok {
-			return analysis, true
+		if assessment, ok := parseShellAssessmentJSON(candidate); ok {
+			return assessment, true
 		}
 	}
-	return shellCommandAnalysis{}, false
+	return approval.CommandAssessment{}, false
 }
 
-func parseShellAnalysisJSON(raw string) (shellCommandAnalysis, bool) {
+func parseShellAssessmentJSON(raw string) (approval.CommandAssessment, bool) {
 	var parsed struct {
-		NeedsReview  *bool    `json:"needs_review"`
-		AffectedDirs []string `json:"affected_dirs"`
-		Reason       string   `json:"reason"`
-		Effect       string   `json:"effect"`
+		LegacyReviewFlag *bool    `json:"needs_review"`
+		AffectedDirs     []string `json:"affected_dirs"`
+		Reason           string   `json:"reason"`
+		Effect           string   `json:"effect"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed); err != nil {
-		return shellCommandAnalysis{}, false
+		return approval.CommandAssessment{}, false
 	}
-	if parsed.NeedsReview == nil {
-		return shellCommandAnalysis{}, false
+	effect := approval.CommandEffect(strings.ToLower(strings.TrimSpace(parsed.Effect)))
+	if effect == "" && parsed.LegacyReviewFlag != nil {
+		if *parsed.LegacyReviewFlag {
+			effect = approval.EffectWrite
+		} else {
+			effect = approval.EffectRead
+		}
 	}
-	effect := shellEffect(parsed.Effect)
-	if !shellEffectValid(effect) || !shellEffectConsistent(*parsed.NeedsReview, effect) {
-		return shellCommandAnalysis{}, false
+	if effect != approval.EffectRead && effect != approval.EffectWrite && effect != approval.EffectUnknown {
+		return approval.CommandAssessment{}, false
 	}
-	return shellCommandAnalysis{
-		NeedsReview:  *parsed.NeedsReview,
-		AffectedDirs: parsed.AffectedDirs,
-		Reason:       parsed.Reason,
-		Effect:       effect,
+	if parsed.LegacyReviewFlag != nil {
+		consistent := !*parsed.LegacyReviewFlag && effect == approval.EffectRead || *parsed.LegacyReviewFlag && effect != approval.EffectRead
+		if !consistent {
+			return approval.CommandAssessment{}, false
+		}
+	}
+	knownDirs := make([]string, 0, len(parsed.AffectedDirs))
+	for _, dir := range parsed.AffectedDirs {
+		if validClassifierDir(dir) {
+			knownDirs = append(knownDirs, strings.TrimSpace(dir))
+		}
+	}
+	return approval.CommandAssessment{
+		Effect:    effect,
+		KnownDirs: knownDirs,
+		Reason:    parsed.Reason,
 	}, true
+}
+
+func validClassifierDir(dir string) bool {
+	dir = strings.TrimSpace(dir)
+	if dir == "" || strings.ContainsAny(dir, "\r\n<>") {
+		return false
+	}
+	if approval.IsUnresolvedShellPathExpression(dir, true) || approval.IsUnresolvedShellPathExpression(dir, false) {
+		return false
+	}
+	lower := strings.ToLower(dir)
+	return lower != "unknown" && lower != "n/a" && lower != "none"
 }
 
 func extractFencedJSON(raw string) []string {
@@ -635,10 +534,21 @@ func extractJSONObjectCandidates(raw string) []string {
 }
 
 func classifyResponse(raw string) bool {
+	effect, ok := parseLegacyShellEffect(raw)
+	return !ok || effect == approval.EffectWrite
+}
+
+func parseLegacyShellEffect(raw string) (approval.CommandEffect, bool) {
 	upper := strings.ToUpper(raw)
 	hasYes := reYes.MatchString(upper)
 	hasNo := reNo.MatchString(upper)
-	return !hasNo || hasYes
+	if hasYes == hasNo {
+		return approval.EffectUnknown, false
+	}
+	if hasYes {
+		return approval.EffectWrite, true
+	}
+	return approval.EffectRead, true
 }
 
 var reYes = regexp.MustCompile(`\bYES\b`)
@@ -646,7 +556,7 @@ var reNo = regexp.MustCompile(`\bNO\b`)
 var reJSONFence = regexp.MustCompile("(?is)```(?:json)?\\s*(.*?)\\s*```")
 
 // Path-extraction patterns for extractExternalPaths. The *Path variants
-// capture the full token so it can be populated into AffectedDirs.
+// capture the full token so it can be populated into KnownDirs.
 var (
 	reParentPath        = regexp.MustCompile(`\.\.[\\/][^\s'"<>|;,&(){}]*`)
 	reHomePath          = regexp.MustCompile(`~[\\/a-zA-Z][^\s'"<>|;,&(){}]*`)
@@ -662,7 +572,7 @@ var (
 // extractExternalPaths returns path tokens from the command that reference
 // locations outside the workspace: absolute paths not under workspaceDir,
 // home-expanded paths (~/ and ~user), and parent-traversal paths (../).
-// The results populate AffectedDirs so ClassifyAccess and risk labels can
+// The results populate KnownDirs so ClassifyAccess and risk labels can
 // correctly identify external access even when the LLM omits them.
 func extractExternalPaths(command, workspaceDir string) []string {
 	return extractExternalPathsWithFlavor(command, workspaceDir, pathutil.FlavorPOSIX)
@@ -944,14 +854,12 @@ func mentionsExternalPath(command, workspaceDir string) bool {
 // shellClassifyCacheCapacity bounds the in-memory cache of shell classifier
 // results so a long chat session that issues many distinct mutable commands
 // cannot grow the cache without limit. The cache stores facts about the
-// command (NeedsReview / AffectedDirs / Reason / Effect); the approval decision is
-// recomputed every call by the review layer based on workspace + saved
-// rules + review-mode, so changing those at runtime never observes stale
-// decisions through the cache.
+// LLM completion only (Effect / KnownDirs / Reason); parser-derived shape,
+// dynamic targets, and reviewability are recomputed for every call.
 const shellClassifyCacheCapacity = 256
 
 // shellClassifyLRU is a small bounded LRU that maps the classifier cache key
-// to its shellCommandAnalysis. It uses container/list for O(1) move-to-front
+// to its LLM-only CommandAssessment completion. It uses container/list for O(1) move-to-front
 // and a map for O(1) lookup, guarded by mu so concurrent classify calls from
 // background tea.Cmd goroutines are safe.
 type shellClassifyLRU struct {
@@ -963,7 +871,7 @@ type shellClassifyLRU struct {
 
 type shellClassifyEntry struct {
 	key   string
-	value shellCommandAnalysis
+	value approval.CommandAssessment
 }
 
 func newShellClassifyLRU(capacity int) *shellClassifyLRU {
@@ -977,18 +885,18 @@ func newShellClassifyLRU(capacity int) *shellClassifyLRU {
 	}
 }
 
-func (c *shellClassifyLRU) Load(key string) (shellCommandAnalysis, bool) {
+func (c *shellClassifyLRU) Load(key string) (approval.CommandAssessment, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	elem, ok := c.items[key]
 	if !ok {
-		return shellCommandAnalysis{}, false
+		return approval.CommandAssessment{}, false
 	}
 	c.order.MoveToFront(elem)
 	return elem.Value.(*shellClassifyEntry).value, true
 }
 
-func (c *shellClassifyLRU) Store(key string, value shellCommandAnalysis) {
+func (c *shellClassifyLRU) Store(key string, value approval.CommandAssessment) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if elem, ok := c.items[key]; ok {
@@ -1016,11 +924,9 @@ func (c *shellClassifyLRU) Len() int {
 
 var shellClassifyCache = newShellClassifyLRU(shellClassifyCacheCapacity)
 
-// filterArgPaths filters a list of argument values to only those that
-// reference paths external to the workspace. It reuses extractExternalPaths
-// on each argument individually, which is more precise than scanning the
-// full command text because it only considers actual AST-extracted argument
-// values, not arbitrary substrings.
+// filterArgPaths filters parser-extracted argument values to explicit paths
+// outside the workspace. It deliberately performs no shell parsing: the
+// caller already derived these literals from the invocation's single AST/IR.
 func filterArgPaths(args []string, workspaceDir string, flavor pathutil.Flavor) []string {
 	if len(args) == 0 {
 		return nil
@@ -1037,19 +943,16 @@ func filterArgPaths(args []string, workspaceDir string, flavor pathutil.Flavor) 
 		result = append(result, p)
 	}
 	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if _, value, ok := strings.Cut(arg, "="); ok {
+			arg = value
+		}
 		isExplicit := isExplicitShellPathArg(arg)
 		if flavor == pathutil.FlavorPowerShell {
 			isExplicit = isExplicitPowerShellPathArg(arg)
 		}
 		if isExplicit {
 			add(arg)
-			continue
-		}
-		for _, p := range extractExternalPathsWithFlavor(arg, workspaceDir, flavor) {
-			if !seen[p] {
-				seen[p] = true
-				result = append(result, p)
-			}
 		}
 	}
 	return result

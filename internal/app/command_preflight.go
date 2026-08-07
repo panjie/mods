@@ -21,8 +21,8 @@ func newCommandPreflightGate(cfg *Config) *commandPreflightGate {
 	return &commandPreflightGate{enabled: enabled}
 }
 
-func (g *commandPreflightGate) check(tool string, analysis shellCommandAnalysis) error {
-	if g == nil || !analysis.Reviewability.ShouldCorrect {
+func (g *commandPreflightGate) check(tool string, assessment approval.CommandAssessment) error {
+	if g == nil || !assessment.Reviewability.ShouldCorrect {
 		return nil
 	}
 	g.mu.Lock()
@@ -31,7 +31,7 @@ func (g *commandPreflightGate) check(tool string, analysis shellCommandAnalysis)
 		return nil
 	}
 	g.used = true
-	return commandSimplificationError{message: commandSimplificationMessage(analysis.Reviewability)}
+	return commandSimplificationError{message: commandSimplificationMessage(assessment)}
 }
 
 type commandSimplificationError struct {
@@ -41,14 +41,15 @@ type commandSimplificationError struct {
 func (e commandSimplificationError) Error() string             { return e.message }
 func (e commandSimplificationError) CorrectionSuggested() bool { return true }
 
-func commandSimplificationMessage(reviewability approval.CommandReviewability) string {
+func commandSimplificationMessage(assessment approval.CommandAssessment) string {
+	reviewability := assessment.Reviewability
 	var reasons []string
 	for _, reason := range reviewability.Reasons {
 		switch reason {
 		case approval.ReviewabilitySingleProgramInShell:
 			reasons = append(reasons, "runs one executable through a shell")
 		case approval.ReviewabilityMultipleIndependent:
-			reasons = append(reasons, fmt.Sprintf("combines %d top-level actions", reviewability.TopLevelStatements))
+			reasons = append(reasons, fmt.Sprintf("combines %d top-level actions", assessment.Shape.TopLevelActions))
 		case approval.ReviewabilityMixedReadWrite:
 			reasons = append(reasons, "mixes inspection and mutation")
 		case approval.ReviewabilityDynamicWriteTarget:
@@ -72,7 +73,7 @@ func commandSimplificationMessage(reviewability approval.CommandReviewability) s
 	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget) {
 		return message + "Resolve the target in a separate read-only call, then mutate the returned literal absolute path."
 	}
-	if len(reviewability.DynamicTargets) > 0 {
+	if len(assessment.DynamicTargets) > 0 {
 		return message + "Resolve runtime paths in one short read-only call, then use the returned literal absolute paths in later calls."
 	}
 	return message + "Retry as separate single-purpose calls for capability discovery, path inspection, mutation, and verification. Keep necessary pipelines intact."

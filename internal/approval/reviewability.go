@@ -36,21 +36,15 @@ const (
 // source. ShouldCorrect is deliberately narrow: false does not mean the
 // command is safe, only that the preflight should not ask the model to retry.
 type CommandReviewability struct {
-	Level              ReviewabilityLevel
-	Reasons            []ReviewabilityReason
-	TopLevelStatements int
-	PipelineCount      int
-	DynamicTargets     []string
-	RecommendedTool    string
-	ShouldCorrect      bool
+	Level           ReviewabilityLevel
+	Reasons         []ReviewabilityReason
+	RecommendedTool string
+	ShouldCorrect   bool
 }
 
 // AnalyzeCommandReviewability parses shell source without executing it.
 func AnalyzeCommandReviewability(command string, posix bool, policy ReadOnlyCommandPolicy) CommandReviewability {
-	if posix {
-		return analyzePOSIXReviewability(command, policy)
-	}
-	return analyzePowerShellReviewability(command, policy)
+	return AssessShellStaticWithPolicy(command, posix, policy).Reviewability
 }
 
 // AnalyzeProcessReviewability detects direct-process calls that merely wrap
@@ -91,22 +85,23 @@ func processArgsContainShellSourceFlag(program string, args []string) bool {
 	return false
 }
 
-func analyzePOSIXReviewability(command string, policy ReadOnlyCommandPolicy) CommandReviewability {
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(strings.TrimSpace(command)), "")
-	if err != nil || len(file.Stmts) == 0 {
-		return opaqueReviewability()
-	}
-
+func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPolicy, dynamic []string) (CommandShape, CommandReviewability) {
+	shape := CommandShape{}
 	result := CommandReviewability{Level: ReviewabilitySimple}
 	for _, stmt := range file.Stmts {
 		actions, pipelines := posixStatementShape(stmt)
-		result.TopLevelStatements += actions
-		result.PipelineCount += pipelines
+		shape.TopLevelActions += actions
+		shape.Pipelines += pipelines
 	}
-	result.DynamicTargets = unresolvedPOSIXRuntimeExpressions(command)
 
-	leaves, leavesOK := parseShellLeaves(command)
+	var leaves []shellLeaf
+	leavesOK := true
+	for _, stmt := range file.Stmts {
+		if !collectShellLeaves(stmt, &leaves) {
+			leavesOK = false
+			break
+		}
+	}
 	readCount, writeCount, decorative := 0, 0, 0
 	if leavesOK {
 		for _, leaf := range leaves {
@@ -124,7 +119,7 @@ func analyzePOSIXReviewability(command string, policy ReadOnlyCommandPolicy) Com
 		}
 	}
 
-	if result.TopLevelStatements > 1 {
+	if shape.TopLevelActions > 1 {
 		result.Level = ReviewabilityCompound
 		result.Reasons = appendReason(result.Reasons, ReviewabilityMultipleIndependent)
 	}
@@ -136,7 +131,7 @@ func analyzePOSIXReviewability(command string, policy ReadOnlyCommandPolicy) Com
 	if decorative >= 2 {
 		result.Reasons = appendReason(result.Reasons, ReviewabilityDecorativeOutput)
 	}
-	if len(result.DynamicTargets) > 1 {
+	if len(dynamic) > 1 {
 		result.Reasons = appendReason(result.Reasons, ReviewabilityMultipleDynamicTargets)
 	}
 	if posixDirectProgram(file) {
@@ -144,10 +139,22 @@ func analyzePOSIXReviewability(command string, policy ReadOnlyCommandPolicy) Com
 		result.RecommendedTool = "process_run"
 		result.ShouldCorrect = true
 	}
-	if result.TopLevelStatements >= 3 || result.TopLevelStatements > 1 && len(result.DynamicTargets) > 0 {
+	if shape.TopLevelActions >= 3 || shape.TopLevelActions > 1 && len(dynamic) > 0 {
 		result.ShouldCorrect = true
 	}
-	return result
+	for _, leaf := range leaves {
+		if leaf.call == nil || len(leaf.call.Args) == 0 {
+			continue
+		}
+		name, ok := staticShellWord(leaf.call.Args[0])
+		if ok && (name == "eval" || name == "exec" || shellHostPrograms[name]) {
+			shape.Opaque = true
+			result = opaqueReviewability()
+			result.ShouldCorrect = true
+			break
+		}
+	}
+	return shape, result
 }
 
 func posixStatementShape(stmt *syntax.Stmt) (actions, pipelines int) {
@@ -209,21 +216,23 @@ func posixDirectProgram(file *syntax.File) bool {
 	return true
 }
 
-func analyzePowerShellReviewability(command string, policy ReadOnlyCommandPolicy) CommandReviewability {
-	ir, err := parseWithBridge(strings.TrimSpace(command))
-	if err != nil || len(ir.ParseErrors) > 0 {
-		return opaqueReviewability()
+func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy, dynamic []string) (CommandShape, CommandReviewability) {
+	shape := CommandShape{
+		TopLevelActions: ir.TopLevelStatementCount,
+		Pipelines:       ir.PipelineCount,
 	}
 	result := CommandReviewability{
-		Level:              ReviewabilitySimple,
-		TopLevelStatements: ir.TopLevelStatementCount,
-		PipelineCount:      ir.PipelineCount,
+		Level: ReviewabilitySimple,
 	}
-	if result.TopLevelStatements == 0 && len(ir.Invocations) > 0 {
-		result.TopLevelStatements = 1
+	if powerShellIROpaque(ir) {
+		shape.Opaque = true
+		result = opaqueReviewability()
+		result.ShouldCorrect = true
+		return shape, result
 	}
-	_, unresolved, _ := analyzePowerShellWritablePaths(command, policy)
-	result.DynamicTargets = unresolved
+	if shape.TopLevelActions == 0 && len(ir.Invocations) > 0 {
+		shape.TopLevelActions = 1
+	}
 
 	readCount, writeCount, decorative := 0, 0, 0
 	for _, inv := range ir.Invocations {
@@ -240,7 +249,7 @@ func analyzePowerShellReviewability(command string, policy ReadOnlyCommandPolicy
 		}
 	}
 
-	if result.TopLevelStatements > 1 {
+	if shape.TopLevelActions > 1 {
 		result.Level = ReviewabilityCompound
 		result.Reasons = appendReason(result.Reasons, ReviewabilityMultipleIndependent)
 	}
@@ -252,7 +261,7 @@ func analyzePowerShellReviewability(command string, policy ReadOnlyCommandPolicy
 	if decorative >= 2 {
 		result.Reasons = appendReason(result.Reasons, ReviewabilityDecorativeOutput)
 	}
-	if len(result.DynamicTargets) > 1 {
+	if len(dynamic) > 1 {
 		result.Reasons = appendReason(result.Reasons, ReviewabilityMultipleDynamicTargets)
 	}
 	if powerShellDirectProgram(ir) {
@@ -260,10 +269,28 @@ func analyzePowerShellReviewability(command string, policy ReadOnlyCommandPolicy
 		result.RecommendedTool = "process_run"
 		result.ShouldCorrect = true
 	}
-	if result.TopLevelStatements >= 3 || result.TopLevelStatements > 1 && len(result.DynamicTargets) > 0 {
+	if shape.TopLevelActions >= 3 || shape.TopLevelActions > 1 && len(dynamic) > 0 {
 		result.ShouldCorrect = true
 	}
-	return result
+	return shape, result
+}
+
+func powerShellIROpaque(ir *psBridgeIR) bool {
+	if ir == nil || ir.HasStopParsing {
+		return true
+	}
+	for _, flag := range ir.RiskFlags {
+		if flag == "invoke_expression" || flag == "syntax_error" {
+			return true
+		}
+	}
+	for _, inv := range ir.Invocations {
+		name := normalizePowerShellCommandName(inv.Name)
+		if shellHostPrograms[name] && processArgsContainShellSourceFlag(name, inv.Args) {
+			return true
+		}
+	}
+	return false
 }
 
 func powerShellDirectProgram(ir *psBridgeIR) bool {

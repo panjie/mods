@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/selfhelp"
@@ -124,7 +125,7 @@ type Mods struct {
 	userInput *userInputManager
 	secrets   *secrets.Store
 
-	shellAnalyzer func(tool, command string) shellCommandAnalysis
+	shellAnalyzer func(tool, command string) approval.CommandAssessment
 
 	planContent  string
 	planRetries  int

@@ -33,6 +33,7 @@ type AccessIntent struct {
 	ReadDirs        []string
 	WriteDirs       []string
 	UnresolvedPaths []string
+	DynamicProbe    bool
 	Reason          string
 }
 
@@ -135,15 +136,15 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 //	  temp dir:  read=allow, write=allow
 //	  external:  read=ask,   write=ask
 //
-// ReviewNever forces allow. A proven read with unresolved paths but no
-// concrete directory is capability discovery and is allowed in ReviewAuto;
-// other unresolved paths ask. Empty Dirs degrades to read=allow / write=ask.
+// ReviewNever forces allow. A proven dynamic-path capability probe with no
+// concrete directory is allowed in ReviewAuto; ordinary dynamic reads and all
+// dynamic writes ask. Empty Dirs degrades to read=allow / write=ask.
 func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode ReviewMode) Decision {
 	if mode == ReviewNever {
 		return DecisionAllow
 	}
 	if intent.HasUnresolvedPaths() {
-		if intent.DominantClass() != AccessRead || len(intent.AllDirs()) > 0 {
+		if !intent.DynamicProbe || intent.DominantClass() != AccessRead || len(intent.AllDirs()) > 0 {
 			return DecisionAsk
 		}
 	}

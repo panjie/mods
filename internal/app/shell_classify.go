@@ -17,6 +17,7 @@ import (
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -46,9 +47,11 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 	flavor := shellPathFlavor(tool)
 	result := approval.AssessShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
 	externalPaths := filterArgPaths(result.KnownDirs, ws, flavor)
-	if shellToolUsesPowerShell(tool) {
-		externalPaths = appendMissingShellDirs(externalPaths, extractExternalPathsWithPolicy(command, ws, flavor, policy))
-	}
+	// Keep a syntax-independent external-path fallback for both shell dialects.
+	// Command-specific target extraction is intentionally conservative and can
+	// miss valid option forms; an omitted external literal must never silently
+	// collapse to the workspace approval scope.
+	externalPaths = appendMissingShellDirs(externalPaths, extractExternalPathsWithPolicy(command, ws, flavor, policy))
 	if result.Effect == approval.EffectWrite {
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, externalPaths)
 	} else {
@@ -174,6 +177,20 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		result.KnownDirs = []string{cwd}
 	}
 	return finalizeCommandAssessment(result, cwd, flavor)
+}
+
+func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessment, binding toolregistry.ProcessProgramBinding) approval.CommandAssessment {
+	if binding.Resolved == "" || m == nil || m.Config == nil {
+		return result
+	}
+	workspace := m.Config.ResolveWorkspace().Canonical
+	location := pathutil.Location(binding.Resolved, workspace, m.safeDirs())
+	if location != pathutil.LocationWorkspace && location != pathutil.LocationSafe {
+		return result
+	}
+	result.Effect = approval.EffectUnknown
+	result.Reason = "executable resolves from a workspace or temporary directory"
+	return result
 }
 
 func normalizeLiteralProcessDirs(dirs []string, cwd string, flavor pathutil.Flavor) []string {

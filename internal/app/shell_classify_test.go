@@ -834,6 +834,26 @@ func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T
 	require.Contains(t, result.KnownDirs, "~/dev/myconfigs/nvim")
 }
 
+func TestAssessCommandPOSIXTargetDirectoryKeepsExternalWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	external := canonicalTestPath(t, t.TempDir())
+	m := &Mods{Config: testConfigForWorkspace(workspace)}
+
+	assessment := m.assessCommand("shell_run", `cp -t "`+external+`" src.txt`)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Contains(t, assessment.KnownDirs, external)
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
 func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
 	cases := []struct {
 		name string

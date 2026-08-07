@@ -27,7 +27,7 @@ const (
 
 	ToolSelectionFilesystem = `- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
 
-	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers, and installers, with literal args/cwd. Never run sh/cmd/powershell/pwsh with -c or -Command; use a shell tool. Inspect the result. Use runtime_info only when availability is unknown.`
+	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers, and installers, with literal args/cwd; Windows .bat/.cmd require powershell_run. Never use it for shell -c/-Command. Inspect results; use runtime_info for unknown availability.`
 
 	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax, including pipelines, redirection, variable expansion, globbing, or shell builtins. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
 

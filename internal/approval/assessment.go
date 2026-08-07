@@ -31,6 +31,7 @@ type CommandAssessment struct {
 	Effect         CommandEffect
 	KnownDirs      []string
 	DynamicTargets []string
+	DynamicProbe   bool
 	Reason         string
 	Shape          CommandShape
 	Reviewability  CommandReviewability
@@ -54,6 +55,7 @@ func (assessment CommandAssessment) AccessIntent() AccessIntent {
 		Class:           class,
 		Dirs:            append([]string(nil), assessment.KnownDirs...),
 		UnresolvedPaths: append([]string(nil), assessment.DynamicTargets...),
+		DynamicProbe:    assessment.DynamicProbe,
 		Reason:          assessment.Reason,
 	}
 }
@@ -211,6 +213,7 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 	if readOnlyPowerShellIR(command, ir, policy) {
 		result.Effect = EffectRead
 		result.KnownDirs = append([]string(nil), ir.Paths...)
+		result.DynamicProbe = len(dynamic) > 0 && powerShellDynamicTargetProbe(ir)
 		result.Reason = "read-only PowerShell command (AST analysis)"
 	} else if knownWrite {
 		result.Effect = EffectWrite
@@ -218,4 +221,27 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 		result.Reason = "write command (PowerShell AST analysis)"
 	}
 	return result
+}
+
+func powerShellDynamicTargetProbe(ir *psBridgeIR) bool {
+	if ir == nil {
+		return false
+	}
+	for _, inv := range ir.Invocations {
+		if !powerShellProbeCommands[normalizePowerShellCommandName(inv.Name)] {
+			return false
+		}
+	}
+	return len(ir.Invocations) > 0 || len(ir.TopLevelValueExpressions) > 0
+}
+
+var powerShellProbeCommands = map[string]bool{
+	"test-path": true, "resolve-path": true, "convert-path": true,
+	"join-path": true, "split-path": true,
+	"write-output": true, "write": true, "echo": true,
+	"select-object": true, "select": true,
+	"format-table": true, "ft": true, "format-list": true, "fl": true,
+	"format-wide": true, "fw": true, "format-custom": true, "fc": true,
+	"out-string": true, "out-host": true, "out-null": true,
+	"convertto-json": true,
 }

@@ -121,3 +121,23 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 		require.NotContains(t, dir, filepath.Join(os.Getenv("HOME"), "out.txt"))
 	}
 }
+
+func TestConstrainResolvedProcessAssessmentForWorkspaceExecutable(t *testing.T) {
+	root := t.TempDir()
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	m := &Mods{Config: &cfg}
+	assessment := approval.CommandAssessment{
+		Effect:    approval.EffectRead,
+		KnownDirs: []string{root},
+		Reason:    "allowlisted command",
+	}
+
+	got := m.constrainResolvedProcessAssessment(assessment, toolregistry.ProcessProgramBinding{
+		Requested: "git",
+		Resolved:  filepath.Join(root, "git"),
+	})
+	require.Equal(t, approval.EffectUnknown, got.Effect)
+	require.Equal(t, assessment.KnownDirs, got.KnownDirs)
+	require.Contains(t, got.Reason, "workspace or temporary directory")
+}

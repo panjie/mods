@@ -223,6 +223,11 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 	case "mkdir":
 		return parentTargets(commandOperands(args[1:])), true
 	case "cp", "mv":
+		if target := targetDirectoryOption(args[1:]); target != "" {
+			// -t names an existing target directory. The command writes inside
+			// that directory, rather than replacing the directory entry itself.
+			return dirTargets([]string{target}), true
+		}
 		operands := commandOperands(args[1:])
 		if len(operands) == 0 {
 			return nil, true
@@ -289,6 +294,22 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 	default:
 		return nil, false
 	}
+}
+
+func targetDirectoryOption(args []string) string {
+	for i, arg := range args {
+		switch {
+		case arg == "-t" || arg == "--target-directory":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(arg, "--target-directory="):
+			return strings.TrimPrefix(arg, "--target-directory=")
+		case strings.HasPrefix(arg, "-t") && len(arg) > 2:
+			return strings.TrimPrefix(arg, "-t")
+		}
+	}
+	return ""
 }
 
 func shellPathExpressionUnresolved(value string, posix bool) bool {

@@ -152,6 +152,7 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 		require.Contains(t, assessment.DynamicTargets, tc.target)
 		require.Equal(t, AccessRead, assessment.AccessIntent().Class)
 		require.Equal(t, []string{tc.target}, assessment.AccessIntent().UnresolvedPaths)
+		require.True(t, assessment.AccessIntent().DynamicProbe)
 		require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(m.Config.ResolveWorkspace().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
 		require.Equal(t, approval.ReviewabilityCompound, assessment.Reviewability.Level)
 		require.True(t, assessment.Reviewability.ShouldCorrect)
@@ -177,5 +178,30 @@ func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
 	require.Contains(t, assessment.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
 	require.Equal(t, approval.ReviewabilitySimple, assessment.Reviewability.Level)
 	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, assessment.AccessIntent().UnresolvedPaths)
+	require.True(t, assessment.AccessIntent().DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+}
+
+func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Get-Content -LiteralPath $env:AWS_SHARED_CREDENTIALS_FILE`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$env:AWS_SHARED_CREDENTIALS_FILE`)
+	require.False(t, assessment.DynamicProbe)
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
 }

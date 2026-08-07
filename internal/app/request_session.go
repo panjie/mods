@@ -343,6 +343,15 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 			return registry.Call(ctx, name, data)
 		}
+		var processBinding toolregistry.ProcessProgramBinding
+		if name == "process_run" {
+			var prepareErr error
+			processBinding, prepareErr = toolregistry.PrepareProcessProgram(data)
+			if prepareErr != nil {
+				return "", prepareErr
+			}
+			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
+		}
 		var assessment *approval.CommandAssessment
 		if registry.ShellExecution(name) {
 			command := ExtractShellCommand(data)
@@ -350,6 +359,9 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 				command = string(data)
 			}
 			assessed := m.assessCommand(name, command)
+			if name == "process_run" {
+				assessed = m.constrainResolvedProcessAssessment(assessed, processBinding)
+			}
 			assessment = &assessed
 			if err := preflight.check(name, assessed); err != nil {
 				return "", err

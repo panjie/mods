@@ -383,6 +383,39 @@ func TestProcessRunValidationAndRuntimeInfo(t *testing.T) {
 	require.ErrorContains(t, err, "invalid command name")
 }
 
+func TestPrepareProcessProgramBindsPATHResolution(t *testing.T) {
+	executable, err := filepath.Abs(os.Args[0])
+	require.NoError(t, err)
+	t.Setenv("PATH", filepath.Dir(executable))
+
+	data, err := json.Marshal(map[string]any{"program": filepath.Base(executable)})
+	require.NoError(t, err)
+	binding, err := PrepareProcessProgram(data)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Base(executable), binding.Requested)
+	require.Equal(t, executable, binding.Resolved)
+
+	ctx := WithProcessProgramBinding(context.Background(), binding)
+	resolved, err := resolveProcessProgram(ctx, t.TempDir(), t.TempDir(), binding.Requested, nil)
+	require.NoError(t, err)
+	require.Equal(t, executable, resolved)
+}
+
+func TestUnsupportedProcessProgramForGOOS(t *testing.T) {
+	require.True(t, unsupportedProcessProgramForGOOS(`C:\\tools\\npm.cmd`, "windows"))
+	require.True(t, unsupportedProcessProgramForGOOS(`C:\\tools\\build.BAT`, "windows"))
+	require.False(t, unsupportedProcessProgramForGOOS(`C:\\tools\\native.exe`, "windows"))
+	require.False(t, unsupportedProcessProgramForGOOS(`/tools/npm.cmd`, "linux"))
+}
+
+func TestPrepareProcessProgramRejectsWindowsBatchFiles(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows batch launchers are only special on Windows")
+	}
+	_, err := PrepareProcessProgram([]byte(`{"program":"C:\\\\tools\\\\npm.cmd"}`))
+	require.ErrorContains(t, err, "cannot preserve literal argv")
+}
+
 func TestSearchSkipsSymlinks(t *testing.T) {
 	// Regression: fs_search must not follow in-workspace symlinks. Before the
 	// fix, os.Open followed the link and read its (possibly out-of-workspace)

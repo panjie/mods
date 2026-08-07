@@ -12,10 +12,11 @@ func TestCommandAssessmentAccessIntent(t *testing.T) {
 	require.Equal(t, []string{"/etc"}, readWithDir.AccessIntent().Dirs)
 	require.Equal(t, []string{"$PROFILE"}, readWithDir.AccessIntent().UnresolvedPaths)
 
-	dynamicRead := CommandAssessment{Effect: EffectRead, DynamicTargets: []string{"$PROFILE"}}
+	dynamicRead := CommandAssessment{Effect: EffectRead, DynamicTargets: []string{"$PROFILE"}, DynamicProbe: true}
 	require.Equal(t, AccessRead, dynamicRead.AccessIntent().Class)
 	require.Empty(t, dynamicRead.AccessIntent().Dirs)
 	require.Equal(t, []string{"$PROFILE"}, dynamicRead.AccessIntent().UnresolvedPaths)
+	require.True(t, dynamicRead.AccessIntent().DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(dynamicRead.AccessIntent(), Scope{Value: "/workspace"}, nil, ReviewAuto))
 
 	dynamicWrite := CommandAssessment{Effect: EffectWrite, DynamicTargets: []string{"$PROFILE"}}

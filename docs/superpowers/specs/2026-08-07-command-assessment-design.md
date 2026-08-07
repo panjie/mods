@@ -17,10 +17,12 @@ not independently reconstruct command state.
   targets.
 - `DynamicTargets` contains runtime expressions and maps to
   `AccessIntent.UnresolvedPaths`; it never creates a `DirAllow` rule or
-  authorizes a directory for tool execution. The approval matrix treats a
-  proven read with no concrete directory as capability discovery, so this
-  intent does not block `ReviewAuto`. Writes, unknown effects, and reads that
-  also identify concrete directories still require per-use approval.
+  authorizes a directory for tool execution. `DynamicProbe` is set only for a
+  narrow allowlist of capability and path-resolution probes that do not read
+  target contents. Those probes may proceed in `ReviewAuto` when no concrete
+  directory is identified. Ordinary dynamic content reads, writes, unknown
+  effects, and reads that also identify concrete directories require per-use
+  approval.
 - `Shape` and `Reviewability` describe composition and correction guidance.
   They do not decide whether execution is safe.
 
@@ -45,6 +47,12 @@ members, encoded commands, and `Invoke-Expression` remain fail-closed.
 Direct processes are assessed from literal `program`, `args`, and `cwd`.
 Arguments are never interpreted as shell syntax, and an executable containing
 a path is never trusted because its basename resembles an allowlisted command.
+Bare program names are resolved once before approval and the resulting absolute
+path is pinned to execution, so a later PATH lookup cannot select a different
+program. Workspace and temporary-directory resolutions remain unknown-effect
+and therefore reviewable. On Windows, `.bat` and `.cmd` launchers are rejected
+because the operating system necessarily inserts shell parsing and cannot
+preserve the literal argument-vector contract.
 
 ## Restricted LLM completion
 
@@ -80,9 +88,9 @@ between security effect and human reviewability.
 
 - Unknown effects are write-like for policy but remain visibly unknown.
 - LLM output cannot erase static dynamic targets or AST structure.
-- Dynamic reads with no concrete directory are auto-allowed in `ReviewAuto`;
-  `ReviewAlways` retains its explicit always-review semantics.
-- Other dynamic reads and all dynamic writes never match or produce reusable
+- Dynamic capability probes with no concrete directory are auto-allowed in
+  `ReviewAuto`; `ReviewAlways` retains its explicit always-review semantics.
+- Dynamic content reads and all dynamic writes never match or produce reusable
   directory rules.
 - At most one command-simplification correction occurs per user request; later
   compound calls enter normal approval.

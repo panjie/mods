@@ -37,7 +37,8 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"copy workspace source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
 		{"copy workspace source to workspace", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
 		{"missing access intent fails closed", AccessIntent{}, DecisionAsk},
-		{"dynamic read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
+		{"dynamic probe without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}, DynamicProbe: true}, DecisionAllow},
+		{"dynamic content read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
 		{"dynamic read with concrete dir", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
 		{"dynamic write target fails closed", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
 	}

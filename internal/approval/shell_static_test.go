@@ -169,3 +169,15 @@ func TestAnalyzeArgvStatic(t *testing.T) {
 	require.Equal(t, ShellStaticRead, AnalyzeArgvStaticWithPolicy("Git.EXE", []string{"status"}, false, policy).Class)
 	require.Equal(t, []string{"."}, AnalyzeArgvStaticWithPolicy("rm", []string{"$HOME"}, true, policy).AffectedDirs)
 }
+
+func TestAnalyzeShellStaticTargetDirectoryOptions(t *testing.T) {
+	for _, command := range []string{
+		`cp -t /outside src.txt`,
+		`cp --target-directory=/outside src.txt`,
+		`mv -t/outside src.txt`,
+	} {
+		got := AnalyzeShellStatic(command, true)
+		require.Equal(t, ShellStaticWrite, got.Class, command)
+		require.Equal(t, []string{"/outside"}, got.AffectedDirs, command)
+	}
+}

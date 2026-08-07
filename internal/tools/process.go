@@ -49,6 +49,83 @@ type processRunResult struct {
 	StderrOmitted   int64  `json:"stderr_omitted_bytes"`
 }
 
+// ProcessProgramBinding pins the PATH resolution used during approval to the
+// executable used by the eventual tool call.
+type ProcessProgramBinding struct {
+	Requested string
+	Resolved  string
+}
+
+type processProgramBindingKey struct{}
+
+// PrepareProcessProgram validates the process program before review and, for a
+// bare name, resolves it exactly once so approval and execution cannot observe
+// different PATH entries.
+func PrepareProcessProgram(data []byte) (ProcessProgramBinding, error) {
+	var args processRunArgs
+	if err := decodeArgs(data, &args); err != nil {
+		return ProcessProgramBinding{}, err
+	}
+	program := strings.TrimSpace(args.Program)
+	if program == "" {
+		return ProcessProgramBinding{}, fmt.Errorf("program is required")
+	}
+	if strings.IndexByte(program, 0) >= 0 {
+		return ProcessProgramBinding{}, fmt.Errorf("program contains null byte")
+	}
+	binding := ProcessProgramBinding{Requested: program}
+	if filepath.IsAbs(program) || strings.ContainsAny(program, `/\`) {
+		if unsupportedProcessProgramForGOOS(program, runtime.GOOS) {
+			return ProcessProgramBinding{}, unsupportedProcessProgramError(program)
+		}
+		return binding, nil
+	}
+	resolved, err := exec.LookPath(program)
+	if err != nil {
+		return ProcessProgramBinding{}, fmt.Errorf("program %q not found on PATH: %w", program, err)
+	}
+	resolved, err = filepath.Abs(resolved)
+	if err != nil {
+		return ProcessProgramBinding{}, fmt.Errorf("resolve program %q: %w", program, err)
+	}
+	if unsupportedProcessProgramForGOOS(resolved, runtime.GOOS) {
+		return ProcessProgramBinding{}, unsupportedProcessProgramError(resolved)
+	}
+	binding.Resolved = resolved
+	return binding, nil
+}
+
+// WithProcessProgramBinding attaches a prepared process binding to one tool
+// call. An empty resolved path means the caller supplied an explicit path that
+// still needs ordinary workspace/authorization resolution in runProcess.
+func WithProcessProgramBinding(ctx context.Context, binding ProcessProgramBinding) context.Context {
+	if binding.Resolved == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, processProgramBindingKey{}, binding)
+}
+
+func processProgramBinding(ctx context.Context, requested string) (ProcessProgramBinding, bool) {
+	binding, ok := ctx.Value(processProgramBindingKey{}).(ProcessProgramBinding)
+	return binding, ok && binding.Requested == requested && binding.Resolved != ""
+}
+
+func unsupportedProcessProgramForGOOS(program, goos string) bool {
+	if goos != "windows" {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(program)) {
+	case ".bat", ".cmd":
+		return true
+	default:
+		return false
+	}
+}
+
+func unsupportedProcessProgramError(program string) error {
+	return fmt.Errorf("program %q is a Windows batch file; process_run cannot preserve literal argv for .bat or .cmd files, so use powershell_run with an explicitly reviewed command", program)
+}
+
 func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 	root, err := filepath.Abs(cfg.Root)
 	if err != nil {
@@ -191,6 +268,19 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 }
 
 func resolveProcessProgram(ctx context.Context, root, cwd, program string, safeDirs []string) (string, error) {
+	if binding, ok := processProgramBinding(ctx, program); ok {
+		if unsupportedProcessProgramForGOOS(binding.Resolved, runtime.GOOS) {
+			return "", unsupportedProcessProgramError(binding.Resolved)
+		}
+		info, err := os.Stat(binding.Resolved)
+		if err != nil {
+			return "", fmt.Errorf("could not execute %q: %w", program, err)
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("program %q is a directory", program)
+		}
+		return binding.Resolved, nil
+	}
 	if filepath.IsAbs(program) || strings.ContainsAny(program, `/\`) {
 		input := program
 		if !filepath.IsAbs(input) {
@@ -207,11 +297,17 @@ func resolveProcessProgram(ctx context.Context, root, cwd, program string, safeD
 		if info.IsDir() {
 			return "", fmt.Errorf("program %q is a directory", program)
 		}
+		if unsupportedProcessProgramForGOOS(resolved, runtime.GOOS) {
+			return "", unsupportedProcessProgramError(resolved)
+		}
 		return resolved, nil
 	}
 	resolved, err := exec.LookPath(program)
 	if err != nil {
 		return "", fmt.Errorf("program %q not found on PATH: %w", program, err)
+	}
+	if unsupportedProcessProgramForGOOS(resolved, runtime.GOOS) {
+		return "", unsupportedProcessProgramError(resolved)
 	}
 	return resolved, nil
 }

@@ -100,15 +100,17 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	require.NoError(t, <-errCh)
 }
 
-func TestDynamicReadWithoutConcreteDirectorySkipsAutoReview(t *testing.T) {
+func TestDynamicProbeWithoutConcreteDirectorySkipsAutoReview(t *testing.T) {
 	assessment := approval.CommandAssessment{
 		Effect:         approval.EffectRead,
 		DynamicTargets: []string{`$PROFILE.CurrentUserCurrentHost`},
+		DynamicProbe:   true,
 		Reason:         "read-only PowerShell command (AST analysis)",
 	}
 	intent := assessment.AccessIntent()
 	require.Equal(t, AccessRead, intent.Class)
 	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, intent.UnresolvedPaths)
+	require.True(t, intent.DynamicProbe)
 
 	reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
 	err := reviewer.requestApproval(reviewerDeps{

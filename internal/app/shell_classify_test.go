@@ -418,10 +418,28 @@ func TestShellStaticAnalysisSetsEffect(t *testing.T) {
 
 func TestShellAccessMode(t *testing.T) {
 	require.Equal(t, AccessRead, shellAccessMode(shellCommandAnalysis{NeedsReview: false, Effect: shellEffectRead}))
+	require.Equal(t, AccessRead, shellAccessMode(shellCommandAnalysis{NeedsReview: true, Effect: shellEffectRead}))
 	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: true, Effect: shellEffectWrite}))
 	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: false, Effect: shellEffectWrite}))
 	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: false, Effect: shellEffectUnknown}))
 	require.Equal(t, AccessWrite, shellAccessMode(shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown}))
+}
+
+func TestFinalizeShellAnalysisPreservesDynamicReadEffect(t *testing.T) {
+	got := finalizeShellAnalysis(
+		shellCommandAnalysis{NeedsReview: false, Effect: shellEffectRead, Reason: "inspects runtime path"},
+		nil,
+		nil,
+		nil,
+		[]string{"$target"},
+		"/workspace",
+		pathutil.FlavorPOSIX,
+	)
+
+	require.True(t, got.NeedsReview)
+	require.Equal(t, shellEffectRead, got.Effect)
+	require.Equal(t, AccessRead, shellAccessMode(got))
+	require.Equal(t, []string{"$target"}, got.UnresolvedPaths)
 }
 
 func TestParseShellAnalysisResponseCanReturnUnknownEffect(t *testing.T) {

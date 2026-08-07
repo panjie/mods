@@ -128,10 +128,14 @@ func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope
 func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {
 	analysis = normalizeShellEffect(analysis)
 	if len(analysis.UnresolvedPaths) > 0 {
-		if analysis.Effect == shellEffectWrite {
+		switch analysis.Effect {
+		case shellEffectRead:
+			return "dynamic read"
+		case shellEffectWrite:
 			return "dynamic mutation"
+		default:
+			return "unknown"
 		}
-		return "unknown"
 	}
 	if analysis.Effect == shellEffectUnknown {
 		return "unknown"

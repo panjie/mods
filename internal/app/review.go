@@ -273,11 +273,14 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 	return AccessIntent{Class: AccessWrite}
 }
 
-// shellAccessMode derives the read/write access class from a shell
-// analysis: a command the LLM flags as not needing review is a read;
-// anything else (mutable, unknown, or unparsed) is treated as a write.
+// shellAccessMode derives the read/write access class from the classified
+// effect. NeedsReview is independent: a proven read may still require approval
+// when its target is resolved only at runtime.
 func shellAccessMode(a shellCommandAnalysis) AccessClass {
-	if a.Effect == shellEffectUnknown || a.Effect == shellEffectWrite {
+	switch a.Effect {
+	case shellEffectRead:
+		return AccessRead
+	case shellEffectUnknown, shellEffectWrite:
 		return AccessWrite
 	}
 	if a.NeedsReview {

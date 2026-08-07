@@ -55,7 +55,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
 		}
 		if dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths); dynamic != "" {
-			result.rows = append(result.rows, interactionRow{Label: "Dynamic target", Value: dynamic})
+			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(analysis), Value: dynamic})
 		}
 		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
@@ -73,7 +73,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
 		}
 		if dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths); dynamic != "" {
-			result.rows = append(result.rows, interactionRow{Label: "Dynamic target", Value: dynamic})
+			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(analysis), Value: dynamic})
 		}
 		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
@@ -122,12 +122,25 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 	return interactionToneInfo, "Info"
 }
 
+func dynamicTargetLabel(analysis shellCommandAnalysis) string {
+	switch normalizeShellEffect(analysis).Effect {
+	case shellEffectRead:
+		return "Dynamic read target"
+	case shellEffectWrite:
+		return "Dynamic write target"
+	default:
+		return "Dynamic target"
+	}
+}
+
 func shellRiskHeadline(risk string) string {
 	switch risk {
 	case "external mutation":
 		return "Modify state outside the workspace"
 	case "dynamic mutation":
 		return "Modify a runtime-resolved target"
+	case "dynamic read":
+		return "Read from runtime-resolved paths"
 	case "workspace mutation":
 		return "Modify files in the workspace"
 	case "external read":

@@ -258,9 +258,6 @@ func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPa
 	)
 	if len(result.UnresolvedPaths) > 0 {
 		result.NeedsReview = true
-		if result.Effect == shellEffectRead {
-			result.Effect = shellEffectUnknown
-		}
 	}
 
 	if len(result.AffectedDirs) == 0 {
@@ -320,9 +317,8 @@ func normalizeShellEffect(a shellCommandAnalysis) shellCommandAnalysis {
 	case "":
 		a.Effect = defaultShellEffect(a.NeedsReview)
 	case shellEffectRead:
-		if a.NeedsReview {
-			a.Effect = shellEffectUnknown
-		}
+		// A read can still require approval when its target is resolved only at
+		// runtime. Keep the proven effect separate from the approval decision.
 	case shellEffectWrite, shellEffectUnknown:
 		a.NeedsReview = true
 	default:

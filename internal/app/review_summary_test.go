@@ -124,7 +124,7 @@ func TestDynamicShellTargetPresentation(t *testing.T) {
 	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
 	require.Equal(t, "Modify a runtime-resolved target", presentation.headline)
 	require.Equal(t, interactionToneDanger, presentation.tone)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Dynamic target", Value: `$PROFILE.CurrentUserCurrentHost, $prof`})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Dynamic write target", Value: `$PROFILE.CurrentUserCurrentHost, $prof`})
 
 	summary := formatReviewSummaryWithIntent("powershell_run", args, analysis, scope, intent)
 	require.Contains(t, summary, "dynamic mutation")
@@ -132,6 +132,32 @@ func TestDynamicShellTargetPresentation(t *testing.T) {
 
 	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
 	require.Empty(t, rules, "runtime-resolved targets must never offer a persistent directory rule")
+}
+
+func TestDynamicReadShellTargetPresentation(t *testing.T) {
+	scope := WorkspaceScope(`C:\Users\panjie\dev\mods`)
+	analysis := shellCommandAnalysis{
+		NeedsReview:     true,
+		Effect:          shellEffectRead,
+		AffectedDirs:    []string{`C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links`},
+		UnresolvedPaths: []string{`$v`},
+		Reason:          "inspects PowerShell profile paths",
+	}
+	args := []byte(`{"command":"Test-Path $v"}`)
+	intent := AccessIntent{Class: AccessRead, Dirs: analysis.AffectedDirs, UnresolvedPaths: analysis.UnresolvedPaths}
+
+	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Equal(t, "Read from runtime-resolved paths", presentation.headline)
+	require.Equal(t, interactionToneInfo, presentation.tone)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Dynamic read target", Value: `$v`})
+
+	summary := formatReviewSummaryWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Contains(t, summary, "dynamic read")
+	require.Contains(t, summary, `$v`)
+
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
+	require.Empty(t, rules, "runtime-resolved reads must never offer a persistent directory rule")
 }
 
 func TestFormatReviewSummaryExternalRead(t *testing.T) {

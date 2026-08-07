@@ -94,3 +94,27 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 		require.NotContains(t, dir, `$prof`)
 	}
 }
+
+func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) shellCommandAnalysis {
+			return shellCommandAnalysis{
+				NeedsReview: false,
+				Effect:      shellEffectRead,
+				Reason:      "inspects PowerShell profile paths and WinGet links",
+			}
+		},
+	}
+	cmd := `Write-Output "=== All profile paths ==="; $PROFILE | Format-List *; Write-Output "=== Which exist? ==="; $PROFILE.PSObject.Properties | ForEach-Object { $v = $_.Value; "{0,-45} exists={1}" -f $v, (Test-Path $v) }; Write-Output "=== WinGet links dir (shim check) ==="; Get-ChildItem "C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links" -ErrorAction SilentlyContinue | Select-Object Name`
+
+	got := m.analyzeShellCommand("powershell_run", cmd)
+
+	require.True(t, got.NeedsReview, "runtime-resolved paths still require per-use approval")
+	require.Equal(t, shellEffectRead, got.Effect)
+	require.Equal(t, AccessRead, shellAccessMode(got))
+	require.Contains(t, got.UnresolvedPaths, `$v`)
+}

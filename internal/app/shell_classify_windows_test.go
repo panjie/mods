@@ -118,3 +118,19 @@ func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *t
 	require.Equal(t, AccessRead, shellAccessMode(got))
 	require.Contains(t, got.UnresolvedPaths, `$v`)
 }
+
+func TestAnalyzeShellCommandPowerShellProfileProbeIsCompound(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	m := &Mods{Config: testConfigForWorkspace(t.TempDir())}
+	cmd := `"USERPROFILE=$env:USERPROFILE"; "Profile: $PROFILE"; "ProfileExists: $(Test-Path $PROFILE)"; Get-ChildItem $env:USERPROFILE\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName`
+
+	got := m.analyzeShellCommand("powershell_run", cmd)
+
+	require.Equal(t, shellEffectRead, got.Effect)
+	require.Equal(t, approval.ReviewabilityCompound, got.Reviewability.Level)
+	require.True(t, got.Reviewability.ShouldCorrect)
+	require.Equal(t, 4, got.Reviewability.TopLevelStatements)
+	require.Contains(t, got.Reviewability.Reasons, approval.ReviewabilityMultipleIndependent)
+	require.Error(t, newCommandPreflightGate(m.Config).check("powershell_run", got))
+}

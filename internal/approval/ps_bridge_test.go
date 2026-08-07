@@ -174,6 +174,17 @@ func TestParseWithBridgeSemicolon(t *testing.T) {
 	require.Equal(t, 2, ir.TopLevelStatementCount)
 }
 
+func TestParseWithBridgeProfileInspectionShape(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	cmd := `"USERPROFILE=$env:USERPROFILE"; "Profile: $PROFILE"; "ProfileExists: $(Test-Path $PROFILE)"; Get-ChildItem $env:USERPROFILE\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName`
+	ir, err := parseWithBridge(cmd)
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.Equal(t, 4, ir.TopLevelStatementCount)
+	require.GreaterOrEqual(t, ir.PipelineCount, 4)
+}
+
 func TestParseWithBridgeCloseBridgeCleanup(t *testing.T) {
 	_, err := parseWithBridge("Get-Date")
 	require.NoError(t, err)

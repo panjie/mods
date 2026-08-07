@@ -329,6 +329,8 @@ function Write-IR {
         method_invocations = @($ir.method_invocations)
         static_members     = @($ir.static_members)
         command_invocations = @($ir.command_invocations)
+        top_level_statement_count = $ir.top_level_statement_count
+        pipeline_count      = $ir.pipeline_count
     }
     [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 3))
     [Console]::Out.Flush()

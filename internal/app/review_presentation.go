@@ -54,6 +54,27 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 		if dirs := summarizeAffectedDirs(analysis.AffectedDirs); dirs != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
 		}
+		if dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths); dynamic != "" {
+			result.rows = append(result.rows, interactionRow{Label: "Dynamic target", Value: dynamic})
+		}
+		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
+			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
+		}
+	case "process_run":
+		risk := shellRiskLevel(analysis, scope)
+		result.tone, result.toneText = toneForShellRisk(risk, ProcessCommandPreview(parsed))
+		result.headline = shellRiskHeadline(risk)
+		result.rows = []interactionRow{
+			{Label: "Program", Value: ArgString(parsed, "program")},
+			{Label: "Arguments", Value: processArgsForReview(parsed)},
+			{Label: "Working dir", Value: processCwdForReview(parsed, scope)},
+		}
+		if dirs := summarizeAffectedDirs(analysis.AffectedDirs); dirs != "" {
+			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
+		}
+		if dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths); dynamic != "" {
+			result.rows = append(result.rows, interactionRow{Label: "Dynamic target", Value: dynamic})
+		}
 		if reason := strings.TrimSpace(analysis.Reason); reason != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
@@ -72,8 +93,27 @@ func formatReviewPresentationWithIntent(name string, args []byte, analysis shell
 	return result
 }
 
+func processArgsForReview(parsed map[string]any) string {
+	values, _ := parsed["args"].([]any)
+	if len(values) == 0 {
+		return "(none)"
+	}
+	data, err := json.Marshal(values)
+	if err != nil {
+		return "(invalid)"
+	}
+	return string(data)
+}
+
+func processCwdForReview(parsed map[string]any, scope Scope) string {
+	if cwd := ArgString(parsed, "cwd"); cwd != "" {
+		return cwd
+	}
+	return scope.Value
+}
+
 func toneForShellRisk(risk, command string) (interactionTone, string) {
-	if strings.Contains(command, "sudo") || risk == "external mutation" {
+	if strings.Contains(command, "sudo") || risk == "external mutation" || risk == "dynamic mutation" {
 		return interactionToneDanger, "Danger"
 	}
 	if risk == "workspace mutation" || risk == "unknown" {
@@ -86,6 +126,8 @@ func shellRiskHeadline(risk string) string {
 	switch risk {
 	case "external mutation":
 		return "Modify state outside the workspace"
+	case "dynamic mutation":
+		return "Modify a runtime-resolved target"
 	case "workspace mutation":
 		return "Modify files in the workspace"
 	case "external read":

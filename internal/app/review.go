@@ -240,17 +240,27 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 
 // buildAccessIntent derives the unified AccessIntent for a tool call. Shell
 // tools use the dynamic analyzer (class from NeedsReview, dirs from
-// AffectedDirs); tools with a registered IntentExtractor use that; read-only
-// tools without directory semantics become read intents; anything else
-// degrades fail-closed to a write with no known dirs.
+// AffectedDirs); runtime-resolved shell targets remain separate so they cannot
+// become directory rules. Tools with a registered IntentExtractor use that;
+// read-only tools without directory semantics become read intents; anything
+// else degrades fail-closed to a write with no known dirs.
 func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, analyze func(string, string) shellCommandAnalysis) AccessIntent {
 	if registry != nil && registry.ShellExecution(name) {
 		if analyze == nil {
 			a := defaultShellCommandAnalysis()
 			return AccessIntent{Class: shellAccessMode(a)}
 		}
-		a := analyze(name, ExtractShellCommand(data))
-		return AccessIntent{Class: shellAccessMode(a), Dirs: normalizeShellAffectedDirsForTool(a.AffectedDirs, "", name), Reason: a.Reason}
+		command := ExtractShellCommand(data)
+		if name == "process_run" {
+			command = string(data)
+		}
+		a := analyze(name, command)
+		return AccessIntent{
+			Class:           shellAccessMode(a),
+			Dirs:            normalizeShellAffectedDirsForTool(a.AffectedDirs, "", name),
+			UnresolvedPaths: append([]string(nil), a.UnresolvedPaths...),
+			Reason:          a.Reason,
+		}
 	}
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
@@ -351,23 +361,30 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		if intent.HasAccess() {
 			class := intent.DominantClass()
 			dirs := normalizeShellAffectedDirsForTool(intent.AllDirs(), r.scope.Value, name)
+			unresolved := append([]string(nil), intent.UnresolvedPaths...)
+			if len(analysis.UnresolvedPaths) > 0 {
+				unresolved = append(unresolved, analysis.UnresolvedPaths...)
+			}
+			_, unresolved = partitionShellAnalysisPaths(nil, unresolved, shellPathFlavor(name))
 			if analysis.Effect == "" {
 				reason := intent.Reason
 				if reason == "" {
 					reason = analysis.Reason
 				}
 				analysis = shellCommandAnalysis{
-					NeedsReview:  class == AccessWrite,
-					AffectedDirs: dirs,
-					Reason:       reason,
+					NeedsReview:     class == AccessWrite || len(unresolved) > 0,
+					AffectedDirs:    dirs,
+					UnresolvedPaths: unresolved,
+					Reason:          reason,
 				}
 				analysis = normalizeShellEffect(analysis)
 			} else if intent.Reason != "" && (analysis.Reason == "" || analysis.Reason == defaultShellCommandAnalysis().Reason) {
 				analysis.Reason = intent.Reason
 			}
-			intent = AccessIntent{Class: class, Dirs: dirs, Reason: intent.Reason}
+			analysis.UnresolvedPaths = unresolved
+			intent = AccessIntent{Class: class, Dirs: dirs, UnresolvedPaths: unresolved, Reason: intent.Reason}
 		} else if analyzed || analysis.Effect != "" {
-			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs, Reason: analysis.Reason}
+			intent = AccessIntent{Class: shellAccessMode(analysis), Dirs: analysis.AffectedDirs, UnresolvedPaths: analysis.UnresolvedPaths, Reason: analysis.Reason}
 		} else {
 			analysis = defaultShellCommandAnalysis()
 			intent = AccessIntent{Class: shellAccessMode(analysis), Reason: analysis.Reason}
@@ -483,6 +500,9 @@ func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, d
 }
 
 func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode, shell bool) []Rule {
+	if intent.HasUnresolvedPaths() {
+		return nil
+	}
 	var rules []Rule
 	for _, group := range intent.Groups() {
 		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
@@ -580,6 +600,8 @@ func formatReviewLabel(name string, args []byte) string {
 	case "powershell_run":
 		cmd := ShellCommandPreview(ArgString(parsed, "command"))
 		return fmt.Sprintf("Run PowerShell: %s", cmd)
+	case "process_run":
+		return fmt.Sprintf("Run process: %s", ProcessCommandPreview(parsed))
 	default:
 		summary := ToolArgsSummary(parsed)
 		if summary != "" {

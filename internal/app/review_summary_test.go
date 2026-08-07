@@ -72,6 +72,20 @@ func TestFormatReviewSummary(t *testing.T) {
 		)
 	})
 
+	t.Run("process risk uses argv preview", func(t *testing.T) {
+		scope := WorkspaceScope("/workspace")
+		analysis := shellCommandAnalysis{NeedsReview: true, Effect: shellEffectWrite, AffectedDirs: []string{"/workspace"}}
+		args := []byte(`{"program":"rm","args":["path with space"]}`)
+		summary := formatReviewSummary("process_run", args, analysis, scope)
+		require.Contains(t, summary, "workspace mutation")
+		require.Contains(t, formatReviewLabel("process_run", args), `rm "path with space"`)
+		presentation := formatReviewPresentationWithIntent("process_run", args, analysis, scope, AccessIntent{Class: AccessWrite, Dirs: []string{"/workspace"}})
+		require.Equal(t, "Modify files in the workspace", presentation.headline)
+		require.Equal(t, "Program", presentation.rows[0].Label)
+		require.Equal(t, "rm", presentation.rows[0].Value)
+		require.Equal(t, "Arguments", presentation.rows[1].Label)
+	})
+
 	t.Run("shell risk surfaces LLM reason when dirs empty", func(t *testing.T) {
 		scope := WorkspaceScope("/workspace")
 		got := formatReviewSummary("shell_run", []byte(`{"command":"scoop install nodejs"}`),
@@ -94,6 +108,30 @@ func TestFormatReviewSummary(t *testing.T) {
 			shellCommandAnalysis{NeedsReview: true}, scope)
 		require.NotContains(t, got, "(")
 	})
+}
+
+func TestDynamicShellTargetPresentation(t *testing.T) {
+	scope := WorkspaceScope(`C:\Users\panjie\dev\mods`)
+	analysis := shellCommandAnalysis{
+		NeedsReview:     true,
+		Effect:          shellEffectWrite,
+		UnresolvedPaths: []string{`$PROFILE.CurrentUserCurrentHost`, `$prof`},
+		Reason:          "writes PowerShell profile",
+	}
+	args := []byte(`{"command":"Set-Content -Path $prof -Value x"}`)
+	intent := AccessIntent{Class: AccessWrite, UnresolvedPaths: analysis.UnresolvedPaths}
+
+	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Equal(t, "Modify a runtime-resolved target", presentation.headline)
+	require.Equal(t, interactionToneDanger, presentation.tone)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Dynamic target", Value: `$PROFILE.CurrentUserCurrentHost, $prof`})
+
+	summary := formatReviewSummaryWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Contains(t, summary, "dynamic mutation")
+	require.Contains(t, summary, "$PROFILE.CurrentUserCurrentHost")
+
+	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
+	require.Empty(t, rules, "runtime-resolved targets must never offer a persistent directory rule")
 }
 
 func TestFormatReviewSummaryExternalRead(t *testing.T) {

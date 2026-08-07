@@ -37,6 +37,8 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"copy workspace source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
 		{"copy workspace source to workspace", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
 		{"missing access intent fails closed", AccessIntent{}, DecisionAsk},
+		{"dynamic read target fails closed", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
+		{"dynamic write target fails closed", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -45,11 +47,19 @@ func TestClassifyAccessMatrix(t *testing.T) {
 	}
 }
 
+func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
+	ws := WorkspaceScope(t.TempDir())
+	rules := RulesForDirs([]string{ws.Value}, ws, AccessWrite)
+	intent := AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$PROFILE.CurrentUserCurrentHost"}}
+	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto))
+}
+
 func TestClassifyAccessModeOverride(t *testing.T) {
 	ws := wsScope(t)
 	external := filepath.Clean(t.TempDir())
 	read := AccessIntent{Class: AccessRead, Dirs: []string{external}}
 	require.Equal(t, DecisionAllow, ClassifyAccess(read, ws, nil, ReviewNever))
+	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{Class: AccessWrite, UnresolvedPaths: []string{"$target"}}, ws, nil, ReviewNever))
 }
 
 func TestLocateDir(t *testing.T) {

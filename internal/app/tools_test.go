@@ -178,13 +178,16 @@ func TestToolCapabilities(t *testing.T) {
 			t.Fatalf("expected %s to be read-only", name)
 		}
 	}
-	for _, name := range []string{"fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir", "shell_run"} {
+	for _, name := range []string{"fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir", "shell_run", "process_run"} {
 		if !registry.Mutable(name) {
 			t.Fatalf("expected %s to be mutable", name)
 		}
 	}
 	if !registry.ShellExecution("shell_run") {
 		t.Fatal("expected shell_run to be shell execution")
+	}
+	if !registry.ShellExecution("process_run") {
+		t.Fatal("expected process_run to be shell execution")
 	}
 }
 
@@ -205,6 +208,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 		"fs_search":    []byte(`{"path":".","query":"mods"}`),
 		"fs_largest":   []byte(`{"path":".","kind":"file"}`),
 		"mods_help":    []byte(`{"topic":"overview"}`),
+		"runtime_info": []byte(`{"commands":["go"]}`),
 		"web_search":   []byte(`{"query":"mods v2.5.0"}`),
 	}
 	seen := map[string]bool{}
@@ -219,7 +223,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 		require.Equalf(t, AccessRead, intent.Class, "%s", spec.Name)
 		seen[spec.Name] = true
 	}
-	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "mods_help", "web_search"} {
+	for _, name := range []string{"fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "mods_help", "runtime_info", "web_search"} {
 		require.Truef(t, seen[name], "expected read-only tool %s to be audited", name)
 	}
 }

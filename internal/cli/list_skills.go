@@ -10,9 +10,10 @@ import (
 )
 
 var scanSkills = skills.ScanDirs
+var listBuiltinSkills = skills.Builtin
 
-// listSkills prints the installed skills discovered in dirs. Missing or
-// empty directories are a valid empty catalog; actual scan failures are errors.
+// listSkills prints embedded and installed skills. Missing or empty user
+// directories are valid; actual scan failures are errors.
 func listSkills(dirs []string) error {
 	catalog, err := scanSkills(dirs)
 	if err != nil {
@@ -21,6 +22,7 @@ func listSkills(dirs []string) error {
 			ReasonText: "Could not scan skills directories.",
 		}
 	}
+	catalog = skills.MergeCatalog(listBuiltinSkills(), catalog)
 	slices.SortFunc(catalog, func(a, b skills.Skill) int {
 		return strings.Compare(a.Name, b.Name)
 	})

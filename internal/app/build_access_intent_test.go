@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/panjie/mods/internal/proto"
@@ -31,6 +33,17 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentMut := buildAccessIntent("shell_run", []byte(`{"command":"rm x"}`), reg, analyzeMut)
 	require.Equal(t, AccessWrite, intentMut.Class)
 	require.Equal(t, []string{"/ws/x"}, intentMut.Dirs)
+
+	analyzeDynamic := func(tool, cmd string) shellCommandAnalysis {
+		return shellCommandAnalysis{
+			NeedsReview:     true,
+			Effect:          shellEffectWrite,
+			UnresolvedPaths: []string{"$target"},
+		}
+	}
+	intentDynamic := buildAccessIntent("shell_run", []byte(`{"command":"writer $target"}`), reg, analyzeDynamic)
+	require.Equal(t, []string{"$target"}, intentDynamic.UnresolvedPaths)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intentDynamic, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// Unknown effect remains write-like even when analyzer output is inconsistent.
 	analyzeUnknown := func(tool, cmd string) shellCommandAnalysis {
@@ -73,6 +86,44 @@ func TestBuildAccessIntent(t *testing.T) {
 	// nil registry -> write fallback.
 	intentNil := buildAccessIntent("anything", []byte(`{}`), nil, nil)
 	require.Equal(t, AccessWrite, intentNil.Class)
+}
+
+func TestBuildAccessIntentForProcessRun(t *testing.T) {
+	root := t.TempDir()
+	reg := toolregistry.NewRegistry()
+	require.NoError(t, toolregistry.RegisterProcess(reg, toolregistry.ProcessConfig{Root: root}))
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	m := &Mods{Config: &cfg}
+	canonicalRoot := cfg.ResolveWorkspace().Canonical
+
+	read := buildAccessIntent("process_run", []byte(`{"program":"git","args":["status"]}`), reg, m.analyzeShellCommand)
+	require.Equal(t, AccessRead, read.Class)
+	require.Contains(t, read.Dirs, canonicalRoot)
+
+	write := buildAccessIntent("process_run", []byte(`{"program":"rm","args":["out.txt"]}`), reg, m.analyzeShellCommand)
+	require.Equal(t, AccessWrite, write.Class)
+	require.Contains(t, write.Dirs, canonicalRoot)
+
+	m.shellAnalyzer = func(tool, input string) shellCommandAnalysis {
+		require.Equal(t, "process_run", tool)
+		require.Contains(t, input, "direct_process_invocation")
+		require.Contains(t, input, "no shell expansion")
+		return shellCommandAnalysis{NeedsReview: false, Effect: shellEffectRead, Reason: "test classifier"}
+	}
+	unknown := buildAccessIntent("process_run", []byte(`{"program":"custom-tool","args":["$HOME",";rm"]}`), reg, m.analyzeShellCommand)
+	require.Equal(t, AccessRead, unknown.Class)
+	require.Contains(t, unknown.Dirs, canonicalRoot)
+	for _, dir := range unknown.Dirs {
+		require.NotEqual(t, filepath.Join(os.Getenv("HOME")), dir, "process argv must not expand $HOME")
+	}
+
+	literalHome := buildAccessIntent("process_run", []byte(`{"program":"rm","args":["$HOME/out.txt"]}`), reg, m.analyzeShellCommand)
+	require.Equal(t, AccessWrite, literalHome.Class)
+	require.Contains(t, literalHome.Dirs, canonicalRoot)
+	for _, dir := range literalHome.Dirs {
+		require.NotContains(t, dir, filepath.Join(os.Getenv("HOME"), "out.txt"))
+	}
 }
 
 func TestMemoizedShellAnalyzerClassifiesEachCommandOnce(t *testing.T) {

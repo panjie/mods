@@ -15,6 +15,7 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 	}
 	hasFilesystem := false
 	hasShell := false
+	hasProcess := false
 	for _, spec := range registry.Specs() {
 		tool, _ := registry.Tool(spec.Name)
 		if tool.Kind == toolregistry.ToolKindBuiltin && strings.HasPrefix(spec.Name, "fs_") {
@@ -22,6 +23,9 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 		}
 		if registry.ShellExecution(spec.Name) {
 			hasShell = true
+		}
+		if spec.Name == "process_run" {
+			hasProcess = true
 		}
 	}
 	if !hasFilesystem && !hasShell {
@@ -34,6 +38,9 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 		if hasFilesystem {
 			parts = append(parts, prompts.ToolSelectionPlanFilesystem)
 		}
+		if hasProcess {
+			parts = append(parts, prompts.ToolSelectionPlanProcess)
+		}
 		if hasShell {
 			if goos == "windows" {
 				parts = append(parts, prompts.ToolSelectionPlanShellWindows)
@@ -45,6 +52,9 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 		parts = append(parts, prompts.ToolSelectionGeneral)
 		if hasFilesystem {
 			parts = append(parts, prompts.ToolSelectionFilesystem)
+		}
+		if hasProcess {
+			parts = append(parts, prompts.ToolSelectionProcess)
 		}
 		if hasShell {
 			if goos == "windows" {

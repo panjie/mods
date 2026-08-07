@@ -40,6 +40,11 @@ func TestToolResultLine(t *testing.T) {
 		require.Equal(t, "> \u2713 powershell_run: Get-ChildItem \u00b7 exit 0", got)
 	})
 
+	t.Run("process", func(t *testing.T) {
+		got := ToolResultLine("process_run", []byte(`{"program":"go","args":["test","./..."]}`), nil)
+		require.Equal(t, "> ✓ process_run: go test ./...", got)
+	})
+
 	t.Run("non shell tool", func(t *testing.T) {
 		got := ToolResultLine("fs_read_file", []byte(`{"path":"/a"}`), nil)
 		require.Equal(t, "> \u2713 fs_read_file: path=/a", got)

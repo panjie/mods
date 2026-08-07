@@ -171,6 +171,19 @@ func TestCatalogPromptEmptyReturnsEmpty(t *testing.T) {
 	require.Equal(t, "", CatalogPrompt([]Skill{}))
 }
 
+func TestBuiltinSkillAndUserOverride(t *testing.T) {
+	builtin := Builtin()
+	require.Len(t, builtin, 1)
+	require.Equal(t, "cross-platform-command-execution", builtin[0].Name)
+	require.Contains(t, builtin[0].Body, "process_run")
+	require.Contains(t, builtin[0].Body, "runtime_info")
+
+	user := Skill{Name: builtin[0].Name, Description: "User override", Body: "custom", Dir: "/user/skill"}
+	merged := MergeCatalog(builtin, []Skill{user})
+	require.Len(t, merged, 1)
+	require.Equal(t, user, merged[0])
+}
+
 func TestCatalogPromptFormat(t *testing.T) {
 	skills := []Skill{
 		{Name: "bravo", Description: "Bravo skill."},

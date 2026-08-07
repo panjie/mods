@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -30,6 +31,10 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 	case "powershell_run":
 		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
 			return TruncateOperationStatus("PS: "+command, width)
+		}
+	case "process_run":
+		if command := ProcessCommandPreview(args); command != "" {
+			return TruncateOperationStatus("Process: "+command, width)
 		}
 	case "fs_read_file":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
@@ -213,6 +218,33 @@ func ShellCommandPreview(s string) string {
 		return OneLinePreview(line)
 	}
 	return OneLinePreview(s)
+}
+
+// ProcessCommandPreview renders a direct process invocation without implying
+// that the displayed quoting is interpreted by a shell.
+func ProcessCommandPreview(args map[string]any) string {
+	program := ArgString(args, "program")
+	if program == "" {
+		return ""
+	}
+	parts := []string{quoteProcessPreviewArg(program)}
+	if values, ok := args["args"].([]any); ok {
+		for _, value := range values {
+			arg, ok := value.(string)
+			if !ok {
+				continue
+			}
+			parts = append(parts, quoteProcessPreviewArg(arg))
+		}
+	}
+	return OneLinePreview(strings.Join(parts, " "))
+}
+
+func quoteProcessPreviewArg(arg string) string {
+	if arg != "" && !strings.ContainsAny(arg, " \t\r\n\"'") {
+		return arg
+	}
+	return strconv.Quote(arg)
 }
 
 func TruncateOperationStatus(s string, width int) string {

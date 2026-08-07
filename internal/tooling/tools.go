@@ -61,6 +61,17 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 	}
 
 	if cfg.BuiltinTools.Shell {
+		if err := toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{
+			Root:     root,
+			SafeDirs: safeDirs,
+			Timeout:  cfg.BuiltinTools.ShellTimeout,
+			Progress: handlers.ShellProgress,
+		}); err != nil {
+			return nil, err
+		}
+		if err := toolregistry.RegisterRuntimeInfo(registry, root); err != nil {
+			return nil, err
+		}
 		if err := toolregistry.RegisterShell(registry, toolregistry.ShellConfig{
 			Root:       root,
 			Timeout:    cfg.BuiltinTools.ShellTimeout,
@@ -181,6 +192,8 @@ func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 	// Best-effort registration; listing must not fail if one tool errors.
 	_ = toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: root})
 	_ = toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: root})
+	_ = toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{Root: root})
+	_ = toolregistry.RegisterRuntimeInfo(registry, root)
 	if runtime.GOOS == "windows" {
 		_ = toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{Root: root})
 	}

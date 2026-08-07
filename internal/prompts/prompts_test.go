@@ -40,6 +40,8 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, Identity, "fs_replace")
 	require.Contains(t, ToolSelection, "call the appropriate tool")
 	require.Contains(t, ToolSelection, "fs_replace")
+	require.Contains(t, ToolSelection, "process_run")
+	require.Contains(t, ToolSelection, "runtime_info")
 	require.Contains(t, ToolSelection, "PowerShell 5.1")
 	require.Contains(t, ToolSelection, "Get-ChildItem")
 	require.Contains(t, ToolSelection, "Select-String")
@@ -64,7 +66,7 @@ func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	// Budget includes the form input kind; bump if a new tool capability
 	// legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+256,
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+512,
 		"default identity and tool-selection prompts must stay within ~5 KiB")
 }
 

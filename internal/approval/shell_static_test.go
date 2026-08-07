@@ -92,6 +92,13 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 		got := AnalyzeShellStatic(`find . -print0 | xargs -0 touch`, true)
 		require.Equal(t, ShellStaticWrite, got.Class)
 	})
+
+	t.Run("dynamic target stays unresolved", func(t *testing.T) {
+		got := AnalyzeShellStatic(`rm "$TARGET"`, true)
+		require.Equal(t, ShellStaticWrite, got.Class)
+		require.Contains(t, got.UnresolvedPaths, "$TARGET")
+		require.Empty(t, got.AffectedDirs)
+	})
 }
 
 func TestAnalyzeShellStaticPowerShell(t *testing.T) {
@@ -111,4 +118,49 @@ func TestAnalyzeShellStaticPowerShell(t *testing.T) {
 		require.NotContains(t, got.AffectedDirs, `C:\O`)
 		require.NotContains(t, got.AffectedDirs, `Reilly\App`)
 	})
+}
+
+func TestUnresolvedShellPathExpression(t *testing.T) {
+	for _, value := range []string{`$PROFILE.CurrentUserCurrentHost`, `$prof`, `$(Join-Path $HOME x)`, `@args`} {
+		require.True(t, IsUnresolvedShellPathExpression(value, false), value)
+	}
+	for _, value := range []string{`$HOME\Downloads\x`, `$env:USERPROFILE\Downloads\x`, `C:\Users\Test\x`, `relative\x`} {
+		require.False(t, IsUnresolvedShellPathExpression(value, false), value)
+	}
+}
+
+func TestPowerShellWritableTargetAnalysisSeparatesPathFromContent(t *testing.T) {
+	dynamic := analyzeWritableTargetsFromTokens([]string{"Set-Content", "-Path", "$prof", "-Value", "$content"}, false)
+	require.True(t, dynamic.Known)
+	require.Empty(t, dynamic.Dirs)
+	require.Equal(t, []string{"$prof"}, dynamic.Unresolved)
+
+	concrete := analyzeWritableTargetsFromTokens([]string{"Set-Content", "-Path", `C:\Users\Test\profile.ps1`, "-Value", "$content"}, false)
+	require.True(t, concrete.Known)
+	require.Equal(t, []string{`C:\Users\Test`}, concrete.Dirs)
+	require.Empty(t, concrete.Unresolved, "content variables are not path targets")
+}
+
+func TestAnalyzeArgvStatic(t *testing.T) {
+	policy := ReadOnlyCommandPolicy{}
+	for _, tc := range []struct {
+		name    string
+		program string
+		args    []string
+		class   ShellStaticClass
+	}{
+		{name: "read only", program: "git", args: []string{"status"}, class: ShellStaticRead},
+		{name: "literal shell syntax", program: "ls", args: []string{"; rm -rf out"}, class: ShellStaticRead},
+		{name: "known write", program: "rm", args: []string{"out.txt"}, class: ShellStaticWrite},
+		{name: "literal variable-looking write path", program: "rm", args: []string{"$HOME"}, class: ShellStaticWrite},
+		{name: "executable path not trusted", program: "./git", args: []string{"status"}, class: ShellStaticUnknown},
+		{name: "unknown command", program: "custom-tool", class: ShellStaticUnknown},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AnalyzeArgvStaticWithPolicy(tc.program, tc.args, true, policy)
+			require.Equal(t, tc.class, got.Class)
+		})
+	}
+	require.Equal(t, ShellStaticRead, AnalyzeArgvStaticWithPolicy("Git.EXE", []string{"status"}, false, policy).Class)
+	require.Equal(t, []string{"."}, AnalyzeArgvStaticWithPolicy("rm", []string{"$HOME"}, true, policy).AffectedDirs)
 }

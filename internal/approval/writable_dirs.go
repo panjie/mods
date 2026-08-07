@@ -105,98 +105,223 @@ func extractWritableDirsSimple(command string) []string {
 // name) to the directories it could write. The dispatch is a hardcoded
 // table of common POSIX utilities and PowerShell cmdlets; anything not
 // recognized returns nil (fail-closed at the caller level).
+type writableTargetMode uint8
+
+const (
+	writableTargetParent writableTargetMode = iota
+	writableTargetDirectory
+	writableTargetDestination
+)
+
+type writableTarget struct {
+	path string
+	mode writableTargetMode
+}
+
+type writableTargetAnalysis struct {
+	Known      bool
+	Dirs       []string
+	Unresolved []string
+}
+
+func analyzeWritableTargetsFromTokens(args []string, posix bool) writableTargetAnalysis {
+	targets, known := writableTargetsFromTokens(args, posix)
+	return analyzeWritableTargets(targets, known, posix, true)
+}
+
+func analyzeLiteralWritableTargetsFromTokens(args []string, posix bool) writableTargetAnalysis {
+	targets, known := writableTargetsFromTokens(args, posix)
+	return analyzeWritableTargets(targets, known, posix, false)
+}
+
+func analyzeWritableTargets(targets []writableTarget, known, posix, expandShell bool) writableTargetAnalysis {
+	result := writableTargetAnalysis{Known: known}
+	for _, target := range targets {
+		value := trimPowerShellLiteral(strings.TrimSpace(target.path))
+		if value == "" {
+			continue
+		}
+		if expandShell && shellPathExpressionUnresolved(value, posix) {
+			result.Unresolved = append(result.Unresolved, value)
+			continue
+		}
+		switch target.mode {
+		case writableTargetDirectory:
+			result.Dirs = append(result.Dirs, targetDirs([]string{value})...)
+		case writableTargetDestination:
+			result.Dirs = append(result.Dirs, destinationDir(value))
+		default:
+			result.Dirs = append(result.Dirs, parentDir(value))
+		}
+	}
+	result.Dirs = dedupeSorted(result.Dirs)
+	result.Unresolved = dedupeSorted(result.Unresolved)
+	return result
+}
+
 func writableDirsFromTokens(args []string, posix bool) []string {
+	return analyzeWritableTargetsFromTokens(args, posix).Dirs
+}
+
+// writableTargetsFromTokens identifies path-bearing operands before reducing
+// them to directories. Keeping this intermediate form lets callers distinguish
+// a concrete relative path from a runtime expression instead of turning both
+// into ".".
+func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, bool) {
 	if len(args) == 0 {
-		return nil
+		return nil, false
 	}
 	command := path.Base(args[0])
 	if !posix {
-		command = strings.ToLower(command)
+		command = normalizePowerShellCommandName(command)
+	}
+	parentTargets := func(paths []string) []writableTarget {
+		result := make([]writableTarget, 0, len(paths))
+		for _, p := range paths {
+			result = append(result, writableTarget{path: p, mode: writableTargetParent})
+		}
+		return result
+	}
+	dirTargets := func(paths []string) []writableTarget {
+		result := make([]writableTarget, 0, len(paths))
+		for _, p := range paths {
+			result = append(result, writableTarget{path: p, mode: writableTargetDirectory})
+		}
+		return result
+	}
+	destinationTargets := func(paths []string) []writableTarget {
+		result := make([]writableTarget, 0, len(paths))
+		for _, p := range paths {
+			result = append(result, writableTarget{path: p, mode: writableTargetDestination})
+		}
+		return result
+	}
+	firstOperand := func(values []string) []string {
+		operands := commandOperands(values)
+		if len(operands) == 0 {
+			return nil
+		}
+		return operands[:1]
 	}
 	switch command {
 	case "env":
 		nested, ok := envCommandArgs(args[1:])
 		if !ok || len(nested) == 0 {
-			return nil
+			return nil, false
 		}
-		return writableDirsFromTokens(nested, posix)
+		return writableTargetsFromTokens(nested, posix)
 	case "rm":
 		operands := commandOperands(args[1:])
 		if removeTargetsAreDirs(args[1:]) {
-			return targetDirs(operands)
+			return dirTargets(operands), true
 		}
-		return parentDirs(operands)
+		return parentTargets(operands), true
 	case "rmdir":
-		return targetDirs(commandOperands(args[1:]))
+		return dirTargets(commandOperands(args[1:])), true
 	case "unlink", "touch", "chmod", "chown":
-		return parentDirs(commandOperands(args[1:]))
+		return parentTargets(commandOperands(args[1:])), true
 	case "mkdir":
-		return parentDirs(commandOperands(args[1:]))
+		return parentTargets(commandOperands(args[1:])), true
 	case "cp", "mv":
 		operands := commandOperands(args[1:])
 		if len(operands) == 0 {
-			return nil
+			return nil, true
 		}
-		return []string{destinationDir(operands[len(operands)-1])}
+		return destinationTargets(operands[len(operands)-1:]), true
 	case "tee":
-		return parentDirs(commandOperands(args[1:]))
+		return parentTargets(commandOperands(args[1:])), true
 	case "find":
 		if !findHasWriteAction(args[1:]) {
-			return nil
+			return nil, false
 		}
-		return targetDirs(findRootOperands(args[1:]))
+		return dirTargets(findRootOperands(args[1:])), true
 	case "sort":
 		if output := sortOutputPath(args[1:]); output != "" {
-			return []string{parentDir(output)}
+			return parentTargets([]string{output}), true
 		}
-		return nil
+		return nil, sortUsesWritableScratch(args[1:])
 	case "git":
 		if output := flagValue(args[1:], "--output"); output != "" {
-			return []string{parentDir(output)}
+			return parentTargets([]string{output}), true
 		}
-		return nil
+		return nil, hasAnyArg(args[1:], "--ext-diff", "--textconv")
 	case "xxd":
 		if !hasAnyArg(args[1:], "-r", "--revert") {
-			return nil
+			return nil, false
 		}
 		operands := commandOperands(args[1:])
 		if len(operands) < 2 {
-			return nil
+			return nil, true
 		}
-		return []string{parentDir(operands[len(operands)-1])}
+		return parentTargets(operands[len(operands)-1:]), true
 	case "remove-item", "del", "erase", "rd":
 		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
-			return parentDirs(paths)
+			return parentTargets(paths), true
 		}
-		return parentDirs(commandOperands(args[1:]))
+		return parentTargets(commandOperands(args[1:])), true
 	case "copy-item", "move-item":
 		if destinations := powerShellParamValues(args, "destination"); len(destinations) > 0 {
-			return destinationDirs(destinations)
+			return destinationTargets(destinations), true
 		}
 		operands := commandOperands(args[1:])
 		if len(operands) == 0 {
-			return nil
+			return nil, true
 		}
-		return []string{destinationDir(operands[len(operands)-1])}
+		return destinationTargets(operands[len(operands)-1:]), true
 	case "copy", "move":
 		operands := commandOperands(args[1:])
 		if len(operands) == 0 {
-			return nil
+			return nil, true
 		}
-		return []string{destinationDir(operands[len(operands)-1])}
-	case "new-item", "set-content", "add-content":
+		return destinationTargets(operands[len(operands)-1:]), true
+	case "new-item", "set-content", "add-content", "clear-content",
+		"set-item", "clear-item", "set-itemproperty", "new-itemproperty",
+		"remove-itemproperty", "clear-itemproperty", "rename-item":
 		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
-			return parentDirs(paths)
+			return parentTargets(paths), true
 		}
-		return parentDirs(commandOperands(args[1:]))
+		return parentTargets(firstOperand(args[1:])), true
 	case "out-file":
 		if paths := powerShellParamValues(args, "filepath", "literalpath", "path"); len(paths) > 0 {
-			return parentDirs(paths)
+			return parentTargets(paths), true
 		}
-		return parentDirs(commandOperands(args[1:]))
+		return parentTargets(firstOperand(args[1:])), true
 	default:
-		return nil
+		return nil, false
 	}
+}
+
+func shellPathExpressionUnresolved(value string, posix bool) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	lower := strings.ToLower(value)
+	if posix {
+		if strings.HasPrefix(value, "$HOME/") || strings.HasPrefix(value, "${HOME}/") {
+			return false
+		}
+		return strings.ContainsAny(value, "$`")
+	}
+	for _, prefix := range []string{"$home\\", "$home/", "${home}\\", "${home}/", "$env:userprofile\\", "$env:userprofile/", "${env:userprofile}\\", "${env:userprofile}/"} {
+		if strings.HasPrefix(lower, prefix) {
+			return false
+		}
+	}
+	if strings.Contains(value, "$(") || strings.Contains(value, "@(") || strings.HasPrefix(value, "(") {
+		return true
+	}
+	if strings.Contains(value, "$") || strings.HasPrefix(value, "@") {
+		return true
+	}
+	return strings.Contains(value, "%") && !strings.HasPrefix(lower, "%userprofile%") && !strings.HasPrefix(lower, "%homedrive%%homepath%")
+}
+
+// IsUnresolvedShellPathExpression reports whether a path-like value still
+// depends on shell runtime evaluation. Approval code must never normalize such
+// a value relative to the workspace or persist it in a directory rule.
+func IsUnresolvedShellPathExpression(value string, posix bool) bool {
+	return shellPathExpressionUnresolved(value, posix)
 }
 
 func flagValue(args []string, name string) string {
@@ -418,22 +543,6 @@ func targetDirs(paths []string) []string {
 			trimmed = path
 		}
 		dirs = append(dirs, trimmed)
-	}
-	return dirs
-}
-
-func parentDirs(paths []string) []string {
-	dirs := make([]string, 0, len(paths))
-	for _, path := range paths {
-		dirs = append(dirs, parentDir(path))
-	}
-	return dirs
-}
-
-func destinationDirs(paths []string) []string {
-	dirs := make([]string, 0, len(paths))
-	for _, path := range paths {
-		dirs = append(dirs, destinationDir(path))
 	}
 	return dirs
 }

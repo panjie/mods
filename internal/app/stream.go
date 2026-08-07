@@ -16,6 +16,7 @@ import (
 	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
+	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
 func (m *Mods) setupStreamContext(content string) error {
@@ -30,9 +31,10 @@ func (m *Mods) setupStreamContext(content string) error {
 	if user == "" {
 		user = os.Getenv("USERNAME")
 	}
-	shell := "sh"
-	if runtime.GOOS == "windows" {
-		shell = "powershell.exe"
+	shellInfo := toolregistry.SelectedShellInfo()
+	shell := shellInfo.Executable
+	if shell == "" {
+		shell = "sh"
 	}
 	sysParts := []string{
 		fmt.Sprintf("workspace=%s", root),
@@ -41,6 +43,10 @@ func (m *Mods) setupStreamContext(content string) error {
 		fmt.Sprintf("host=%s", hostname),
 		fmt.Sprintf("os=%s/%s", runtime.GOOS, runtime.GOARCH),
 		fmt.Sprintf("shell=%s", shell),
+		fmt.Sprintf("shell-dialect=%s", shellInfo.Dialect),
+	}
+	if shellInfo.Version != nil {
+		sysParts = append(sysParts, fmt.Sprintf("shell-version=%s", *shellInfo.Version))
 	}
 	if runtime.GOOS == "windows" {
 		sysParts = append(sysParts, windowsPowerShellCapabilities())

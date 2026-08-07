@@ -68,3 +68,29 @@ func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkspaceRead(t *testing.T)
 	require.Equal(t, shellEffectRead, got.Effect)
 	require.Equal(t, []string{workspace}, got.AffectedDirs)
 }
+
+func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) shellCommandAnalysis {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return defaultShellCommandAnalysis()
+		},
+	}
+	cmd := `$prof = $PROFILE.CurrentUserCurrentHost; $dir = Split-Path $prof; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }; Set-Content -Path $prof -Value "Invoke-Expression (&starship init powershell)" -Encoding UTF8`
+
+	got := m.analyzeShellCommand("powershell_run", cmd)
+
+	require.True(t, got.NeedsReview)
+	require.Equal(t, shellEffectWrite, got.Effect)
+	require.Empty(t, got.AffectedDirs)
+	require.Contains(t, got.UnresolvedPaths, `$dir`)
+	require.Contains(t, got.UnresolvedPaths, `$prof`)
+	for _, dir := range got.AffectedDirs {
+		require.NotContains(t, dir, `$PROFILE`)
+		require.NotContains(t, dir, `$prof`)
+	}
+}

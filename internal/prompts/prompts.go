@@ -27,9 +27,11 @@ const (
 
 	ToolSelectionFilesystem = `- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
 
+	ToolSelectionProcess = `- Prefer process_run for one executable: pass each argument separately, use cwd instead of prepending cd, and inspect its structured exit/stdout/stderr result. Use runtime_info only when OS, selected shell, or executable availability is relevant and unknown.`
+
 	ToolSelectionShellPOSIX = `- Use shell tools for repository-wide searches, tests, builds, git, package managers, and pipelines. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
 
-	PowerShellIntentGuidance = `Prefer short, single-purpose commands with explicit filesystem paths. When an equivalent exists, avoid variable assignments, dynamic or nested invocation, and encoded commands; keep necessary pipelines intact.`
+	PowerShellIntentGuidance = `Prefer short, single-purpose commands with explicit paths. For writes to a runtime path such as $PROFILE, resolve it read-only, then use the literal absolute result. Avoid dynamic or encoded commands; keep necessary pipelines intact.`
 
 	ToolSelectionShellWindows = `- Use shell tools for repo-wide searches, tests, builds, git, package managers, and pipelines. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use Windows PowerShell 5.1 syntax and pass only the command without powershell/pwsh -Command. Prefer native cmdlets (Get-ChildItem, Select-String, Where-Object, Test-Path, Get-Content, Measure-Object) over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not use Out-File, Set-Content, redirection, or temp .ps1 scripts to see results.`
 
@@ -37,6 +39,8 @@ const (
 - Use only read-only tools for targeted investigation. Do not create, modify, delete, install, or persist anything.`
 
 	ToolSelectionPlanFilesystem = `- For filesystem investigation, use only fs_read_file, fs_list_dir, fs_stat, fs_search, or fs_largest. Do not call filesystem mutation tools.`
+
+	ToolSelectionPlanProcess = `- Prefer process_run for a necessary read-only single-program inspection. Pass literal arguments separately and do not run programs that build, install, generate, or persist output.`
 
 	ToolSelectionPlanShellPOSIX = `- Use shell only for necessary read-only repository inspection. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
 
@@ -47,6 +51,7 @@ const (
 	// tools that are actually registered.
 	ToolSelection = ToolSelectionGeneral + "\n" +
 		ToolSelectionFilesystem + "\n" +
+		ToolSelectionProcess + "\n" +
 		ToolSelectionShellPOSIX + "\n" +
 		ToolSelectionShellWindows
 
@@ -94,12 +99,14 @@ Include every field; write None when no files or commands apply. Each proposal m
 The user will approve, revise, or reject the plan before execution.`
 
 	ShellClassifier = `Analyze this shell command for review.
+For process_run, the command is a JSON description of a direct process invocation; program and args are literal and have no shell expansion.
 Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
 Use exactly this shape:
 {"needs_review":true,"affected_dirs":["/path/or/relative/dir"],"reason":"short reason","effect":"read|write|unknown"}
 
 Set needs_review to true if the command creates, deletes, modifies, or may modify files, directories, system settings, or persistent state. If unsure, set needs_review to true.
 Set affected_dirs to the directories that may be read, written, deleted, modified, or used as the command's working context. If none are affected or unknown, use an empty array.
+Every affected_dirs entry must be a concrete literal directory. Never return shell variables, PowerShell automatic variables, command substitutions, placeholders, or prose as a directory; use an empty array when the target is resolved only at runtime.
 Set effect to "read" only when the command is read-only, "write" when it writes or may write persistent state, and "unknown" when unsure.
 Example: ls -la /path/to/project => {"needs_review":false,"affected_dirs":["/path/to/project"],"reason":"lists directory contents only","effect":"read"}.`
 )

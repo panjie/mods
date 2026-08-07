@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -29,6 +30,52 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func TestProcessHelperProcess(t *testing.T) {
+	separator := slices.Index(os.Args, "--")
+	if separator < 0 || separator+1 >= len(os.Args) {
+		return
+	}
+	action := os.Args[separator+1]
+	values := os.Args[separator+2:]
+	switch action {
+	case "argv":
+		_ = json.NewEncoder(os.Stdout).Encode(values)
+		os.Exit(0)
+	case "result":
+		fmt.Fprint(os.Stdout, "standard output")
+		fmt.Fprint(os.Stderr, "standard error")
+		os.Exit(7)
+	case "cwd":
+		cwd, err := os.Getwd()
+		if err != nil {
+			os.Exit(2)
+		}
+		fmt.Fprint(os.Stdout, cwd)
+		os.Exit(0)
+	case "timeout":
+		time.Sleep(5 * time.Second)
+	case "tree":
+		if len(values) != 1 {
+			os.Exit(2)
+		}
+		child := exec.Command(os.Args[0], "-test.run=^TestProcessHelperProcess$", "--", "grandchild")
+		if err := child.Start(); err != nil {
+			os.Exit(3)
+		}
+		if err := os.WriteFile(values[0], []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+			os.Exit(4)
+		}
+		time.Sleep(5 * time.Second)
+	case "grandchild":
+		time.Sleep(5 * time.Second)
+	case "large":
+		fmt.Fprint(os.Stdout, strings.Repeat("A", 20<<10))
+		fmt.Fprint(os.Stdout, strings.Repeat("B", 20<<10))
+		fmt.Fprint(os.Stdout, strings.Repeat("C", 20<<10))
+		os.Exit(0)
+	}
 }
 
 func TestRegistry(t *testing.T) {
@@ -217,9 +264,123 @@ func TestShellOutputPreservesContentAndTracksTail(t *testing.T) {
 	if got := out.LastLine(); got != "new line" {
 		t.Fatalf("LastLine() = %q, want new line", got)
 	}
-	if text := out.String(); !strings.HasPrefix(text, "old line\n") || !strings.HasSuffix(text, "\nnew line\n") {
-		t.Fatalf("expected complete output, got %q", text)
+	if text := out.String(); !strings.HasPrefix(text, "old line\n") || !strings.HasSuffix(text, "\nnew line\n") || !strings.Contains(text, "...[truncated ") {
+		t.Fatalf("expected bounded head and tail output, got %q", text)
 	}
+}
+
+func TestProcessRunLiteralArgvAndStructuredResults(t *testing.T) {
+	root := t.TempDir()
+	executable, err := filepath.Abs(os.Args[0])
+	require.NoError(t, err)
+	ctx := WithAuthorizedDirs(context.Background(), []string{filepath.Dir(executable)})
+	cfg := ProcessConfig{Root: root, Timeout: 2 * time.Second}
+	helperArgs := func(action string, values ...string) processRunArgs {
+		args := []string{"-test.run=^TestProcessHelperProcess$", "--", action}
+		args = append(args, values...)
+		return processRunArgs{Program: executable, Args: args}
+	}
+
+	t.Run("literal argv", func(t *testing.T) {
+		want := []string{"space value", "Unicode-路径", `$HOME`, `semi;colon`, `*.go`, `quote\"value`}
+		out, err := runProcess(ctx, cfg, root, helperArgs("argv", want...))
+		require.NoError(t, err)
+		var result processRunResult
+		require.NoError(t, json.Unmarshal([]byte(out), &result))
+		require.NotNil(t, result.ExitCode)
+		require.Zero(t, *result.ExitCode)
+		var got []string
+		require.NoError(t, json.Unmarshal([]byte(result.Stdout), &got))
+		require.Equal(t, want, got)
+	})
+
+	t.Run("nonzero exit is a result", func(t *testing.T) {
+		out, err := runProcess(ctx, cfg, root, helperArgs("result"))
+		require.NoError(t, err)
+		var result processRunResult
+		require.NoError(t, json.Unmarshal([]byte(out), &result))
+		require.Equal(t, 7, *result.ExitCode)
+		require.Equal(t, "standard output", result.Stdout)
+		require.Equal(t, "standard error", result.Stderr)
+		require.False(t, result.TimedOut)
+	})
+
+	t.Run("cwd", func(t *testing.T) {
+		subdir := filepath.Join(root, "sub dir")
+		require.NoError(t, os.Mkdir(subdir, 0o700))
+		args := helperArgs("cwd")
+		args.Cwd = "sub dir"
+		out, err := runProcess(ctx, cfg, root, args)
+		require.NoError(t, err)
+		var result processRunResult
+		require.NoError(t, json.Unmarshal([]byte(out), &result))
+		expected, err := filepath.EvalSymlinks(subdir)
+		require.NoError(t, err)
+		require.Equal(t, expected, result.Stdout)
+	})
+
+	t.Run("timeout is a result", func(t *testing.T) {
+		ms := int64(25)
+		args := helperArgs("timeout")
+		args.TimeoutMS = &ms
+		out, err := runProcess(ctx, cfg, root, args)
+		require.NoError(t, err)
+		var result processRunResult
+		require.NoError(t, json.Unmarshal([]byte(out), &result))
+		require.True(t, result.TimedOut)
+		require.Nil(t, result.ExitCode)
+	})
+
+	t.Run("timeout terminates descendants", func(t *testing.T) {
+		pidFile := filepath.Join(root, "grandchild.pid")
+		ms := int64(250)
+		args := helperArgs("tree", pidFile)
+		args.TimeoutMS = &ms
+		out, err := runProcess(ctx, cfg, root, args)
+		require.NoError(t, err)
+		var result processRunResult
+		require.NoError(t, json.Unmarshal([]byte(out), &result))
+		require.True(t, result.TimedOut)
+		pidData, err := os.ReadFile(pidFile)
+		require.NoError(t, err)
+		pid, err := strconv.Atoi(string(pidData))
+		require.NoError(t, err)
+		require.Eventually(t, func() bool { return !testProcessExists(pid) }, 2*time.Second, 20*time.Millisecond)
+	})
+
+	t.Run("bounded output", func(t *testing.T) {
+		out, err := runProcess(ctx, cfg, root, helperArgs("large"))
+		require.NoError(t, err)
+		var result processRunResult
+		require.NoError(t, json.Unmarshal([]byte(out), &result))
+		require.True(t, result.StdoutTruncated)
+		require.Positive(t, result.StdoutOmitted)
+		require.Contains(t, result.Stdout, "...[truncated ")
+		require.True(t, strings.HasPrefix(result.Stdout, strings.Repeat("A", 1024)))
+		require.True(t, strings.HasSuffix(result.Stdout, strings.Repeat("C", 1024)))
+	})
+}
+
+func TestProcessRunValidationAndRuntimeInfo(t *testing.T) {
+	root := t.TempDir()
+	cfg := ProcessConfig{Root: root, Timeout: 50 * time.Millisecond}
+	tooLong := int64(51)
+	_, err := runProcess(context.Background(), cfg, root, processRunArgs{Program: "go", TimeoutMS: &tooLong})
+	require.ErrorContains(t, err, "exceeds configured shell-timeout")
+
+	registry := NewRegistry()
+	require.NoError(t, RegisterRuntimeInfo(registry, root))
+	out, err := registry.Call(context.Background(), "runtime_info", []byte(`{"commands":["go","go","definitely-not-a-mods-command"]}`))
+	require.NoError(t, err)
+	var info runtimeInfoResult
+	require.NoError(t, json.Unmarshal([]byte(out), &info))
+	require.Equal(t, runtime.GOOS, info.OS)
+	require.Equal(t, root, info.Workspace)
+	require.NotEmpty(t, info.Shell.Executable)
+	require.True(t, info.Commands["go"].Found)
+	require.False(t, info.Commands["definitely-not-a-mods-command"].Found)
+	_, err = registry.Call(context.Background(), "runtime_info", []byte(`{"commands":["../go"]}`))
+	require.ErrorContains(t, err, "invalid command name")
 }
 
 func TestSearchSkipsSymlinks(t *testing.T) {

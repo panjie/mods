@@ -31,10 +31,11 @@ const (
 )
 
 type shellCommandAnalysis struct {
-	NeedsReview  bool
-	AffectedDirs []string
-	Reason       string
-	Effect       shellEffect
+	NeedsReview     bool
+	AffectedDirs    []string
+	UnresolvedPaths []string
+	Reason          string
+	Effect          shellEffect
 }
 
 func defaultShellCommandAnalysis() shellCommandAnalysis {
@@ -49,10 +50,13 @@ func shellPathFlavor(tool string) pathutil.Flavor {
 }
 
 func shellToolUsesPowerShell(tool string) bool {
-	return tool == "powershell_run" || (tool == "shell_run" && runtime.GOOS == "windows")
+	return tool == "powershell_run" || ((tool == "shell_run" || tool == "process_run") && runtime.GOOS == "windows")
 }
 
 func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
+	if tool == "process_run" {
+		return m.analyzeProcessInvocation(command)
+	}
 	ws := ""
 	if m.Config != nil {
 		ws = m.Config.ResolveWorkspace().Canonical
@@ -84,6 +88,7 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 			nil,
 			nil,
 			nil,
+			static.UnresolvedPaths,
 			ws,
 			flavor,
 		)
@@ -91,14 +96,16 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 		debug.Printf("analyzeShellCommand: cmd=%q -> static: write dirs=%v", debug.Truncate(command, 80), static.AffectedDirs)
 		return finalizeShellAnalysis(
 			shellCommandAnalysis{
-				NeedsReview:  true,
-				AffectedDirs: static.AffectedDirs,
-				Reason:       static.Reason,
-				Effect:       shellEffectWrite,
+				NeedsReview:     true,
+				AffectedDirs:    static.AffectedDirs,
+				UnresolvedPaths: static.UnresolvedPaths,
+				Reason:          static.Reason,
+				Effect:          shellEffectWrite,
 			},
 			nil,
 			externalPaths,
 			nil,
+			static.UnresolvedPaths,
 			ws,
 			flavor,
 		)
@@ -109,12 +116,126 @@ func (m *Mods) analyzeShellCommand(tool, command string) shellCommandAnalysis {
 	// delegates to the seam or the LLM.
 	if m.shellAnalyzer != nil {
 		result := m.shellAnalyzer(tool, command)
-		return finalizeShellAnalysis(result, nil, externalPaths, nil, ws, flavor)
+		return finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor)
 	}
 
 	// LLM classifier
 	result := m.classifyShellWithLLM(tool, command)
-	return finalizeShellAnalysis(result, nil, externalPaths, nil, ws, flavor)
+	return finalizeShellAnalysis(result, nil, externalPaths, nil, static.UnresolvedPaths, ws, flavor)
+}
+
+func (m *Mods) analyzeProcessInvocation(raw string) shellCommandAnalysis {
+	var invocation struct {
+		Program string   `json:"program"`
+		Args    []string `json:"args"`
+		Cwd     string   `json:"cwd"`
+	}
+	if err := json.Unmarshal([]byte(raw), &invocation); err != nil || strings.TrimSpace(invocation.Program) == "" {
+		return defaultShellCommandAnalysis()
+	}
+	workspace := ""
+	if m.Config != nil {
+		workspace = m.Config.ResolveWorkspace().Canonical
+	}
+	cwd := strings.TrimSpace(invocation.Cwd)
+	if cwd == "" {
+		cwd = workspace
+	} else if !pathutil.IsAbs(cwd) {
+		cwd = pathutil.NormalizeShellPath(cwd, pathutil.DefaultOptions(workspace, shellPathFlavor("process_run")))
+	}
+	flavor := shellPathFlavor("process_run")
+	posix := !shellToolUsesPowerShell("process_run")
+	policy := m.readOnlyCommandPolicy()
+	pathArgs := append([]string{invocation.Program}, invocation.Args...)
+	affected := []string{cwd}
+	affected = appendMissingShellDirs(affected, filterLiteralArgPaths(pathArgs, cwd, flavor))
+	static := approval.AnalyzeArgvStaticWithPolicy(invocation.Program, invocation.Args, posix, policy)
+
+	var result shellCommandAnalysis
+	switch static.Class {
+	case approval.ShellStaticRead:
+		result = shellCommandAnalysis{NeedsReview: false, AffectedDirs: affected, Reason: static.Reason, Effect: shellEffectRead}
+	case approval.ShellStaticWrite:
+		writeDirs := normalizeLiteralProcessDirs(static.AffectedDirs, cwd, flavor)
+		result = shellCommandAnalysis{NeedsReview: true, AffectedDirs: appendMissingShellDirs(writeDirs, affected), Reason: static.Reason, Effect: shellEffectWrite}
+	default:
+		classifierInput, _ := json.Marshal(map[string]any{
+			"kind":    "direct_process_invocation",
+			"program": invocation.Program,
+			"args":    invocation.Args,
+			"cwd":     cwd,
+			"note":    "Arguments are literal; no shell expansion, pipeline, redirection, globbing, or variable interpolation occurs.",
+		})
+		if m.shellAnalyzer != nil {
+			result = m.shellAnalyzer("process_run", string(classifierInput))
+		} else {
+			result = m.classifyShellWithLLM("process_run", string(classifierInput))
+		}
+		result.AffectedDirs = normalizeLiteralProcessDirs(result.AffectedDirs, cwd, flavor)
+		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, affected)
+	}
+	if len(result.AffectedDirs) == 0 && cwd != "" {
+		result.AffectedDirs = []string{cwd}
+	}
+	return normalizeShellEffect(result)
+}
+
+func normalizeLiteralProcessDirs(dirs []string, cwd string, flavor pathutil.Flavor) []string {
+	if len(dirs) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		if normalized := normalizeLiteralProcessPath(dir, cwd, flavor); normalized != "" {
+			result = appendMissingShellDirs(result, []string{normalized})
+		}
+	}
+	return result
+}
+
+func filterLiteralArgPaths(args []string, cwd string, flavor pathutil.Flavor) []string {
+	var result []string
+	for _, arg := range args {
+		arg = strings.Trim(strings.TrimSpace(arg), `"'`)
+		if !literalArgLooksPathLike(arg, flavor) {
+			continue
+		}
+		normalized := normalizeLiteralProcessPath(arg, cwd, flavor)
+		if pathutil.Location(normalized, cwd, nil) == pathutil.LocationExternal {
+			result = appendMissingShellDirs(result, []string{normalized})
+		}
+	}
+	return result
+}
+
+func literalArgLooksPathLike(arg string, flavor pathutil.Flavor) bool {
+	if arg == "" {
+		return false
+	}
+	if pathutil.IsAbs(arg) || strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, `.\`) || strings.HasPrefix(arg, `..\`) {
+		return true
+	}
+	if flavor == pathutil.FlavorPowerShell {
+		return strings.ContainsAny(arg, `/\`)
+	}
+	return strings.Contains(arg, "/")
+}
+
+func normalizeLiteralProcessPath(value, cwd string, flavor pathutil.Flavor) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if !pathutil.IsAbs(value) {
+		// Prefixing with an explicit current-directory segment prevents pathutil
+		// from interpreting shell-looking literals such as $HOME/x or ~/x.
+		if flavor == pathutil.FlavorPowerShell {
+			value = `.\` + value
+		} else {
+			value = "./" + value
+		}
+	}
+	return pathutil.NormalizePath(value, pathutil.Options{Workspace: cwd, Flavor: flavor})
 }
 
 func (m *Mods) readOnlyCommandPolicy() approval.ReadOnlyCommandPolicy {
@@ -126,8 +247,21 @@ func (m *Mods) readOnlyCommandPolicy() approval.ReadOnlyCommandPolicy {
 	}
 }
 
-func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {
+func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPaths, psArgPaths, unresolvedPaths []string, workspaceDir string, flavor pathutil.Flavor) shellCommandAnalysis {
 	result = normalizeShellEffect(result)
+	mergedUnresolved := append([]string(nil), result.UnresolvedPaths...)
+	mergedUnresolved = append(mergedUnresolved, unresolvedPaths...)
+	result.AffectedDirs, result.UnresolvedPaths = partitionShellAnalysisPaths(
+		result.AffectedDirs,
+		mergedUnresolved,
+		flavor,
+	)
+	if len(result.UnresolvedPaths) > 0 {
+		result.NeedsReview = true
+		if result.Effect == shellEffectRead {
+			result.Effect = shellEffectUnknown
+		}
+	}
 
 	if len(result.AffectedDirs) == 0 {
 		result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, writableDirs)
@@ -140,11 +274,45 @@ func finalizeShellAnalysis(result shellCommandAnalysis, writableDirs, externalPa
 	// Also merge AST-extracted PowerShell argument paths for write commands
 	// that fell through to the LLM — the LLM may miss path arguments.
 	result.AffectedDirs = appendMissingShellDirs(result.AffectedDirs, filterArgPaths(psArgPaths, workspaceDir, flavor))
-	if len(result.AffectedDirs) == 0 && strings.TrimSpace(workspaceDir) != "" {
+	if len(result.AffectedDirs) == 0 && len(result.UnresolvedPaths) == 0 && strings.TrimSpace(workspaceDir) != "" {
 		result.AffectedDirs = []string{workspaceDir}
 	}
 
 	return result
+}
+
+func partitionShellAnalysisPaths(dirs, unresolved []string, flavor pathutil.Flavor) ([]string, []string) {
+	posix := flavor != pathutil.FlavorPowerShell
+	var concrete []string
+	for _, dir := range dirs {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		if approval.IsUnresolvedShellPathExpression(dir, posix) {
+			unresolved = append(unresolved, dir)
+			continue
+		}
+		concrete = appendMissingShellDirs(concrete, []string{dir})
+	}
+	var dynamic []string
+	seen := map[string]struct{}{}
+	for _, expr := range unresolved {
+		expr = strings.TrimSpace(expr)
+		if expr == "" {
+			continue
+		}
+		key := expr
+		if flavor == pathutil.FlavorPowerShell {
+			key = strings.ToLower(key)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		dynamic = append(dynamic, expr)
+	}
+	return concrete, dynamic
 }
 
 func normalizeShellEffect(a shellCommandAnalysis) shellCommandAnalysis {

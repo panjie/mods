@@ -43,6 +43,8 @@ func shellStatusPrefix(tool string) string {
 		return "Shell"
 	case "powershell_run":
 		return "PS"
+	case "process_run":
+		return "Process"
 	default:
 		return ""
 	}

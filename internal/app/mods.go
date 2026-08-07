@@ -137,10 +137,9 @@ type Mods struct {
 	feedbackInput textinput.Model
 	feedbackMode  bool
 
-	// skillCatalog is the result of skills.ScanDirs(cfg.ResolveSkillsDirs()) at New()
-	// time. Empty when the skills directories are absent or have no skills;
-	// in that case no catalog is injected and load_skill is not
-	// registered. See docs/superpowers/specs/2026-07-06-skills-system-design.md.
+	// skillCatalog merges binary-embedded skills with the result of
+	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time. User skills have
+	// precedence over same-name built-ins.
 	skillCatalog []skills.Skill
 }
 
@@ -168,10 +167,11 @@ func New(
 	vp := viewport.New()
 	vp.GotoBottom()
 	skillDirs := cfg.ResolveSkillsDirs()
-	skillCatalog, scanErr := skills.ScanDirs(skillDirs)
+	userSkillCatalog, scanErr := skills.ScanDirs(skillDirs)
 	if scanErr != nil {
-		debug.Printf("skills: scan %v failed: %v (proceeding with empty catalog)", skillDirs, scanErr)
+		debug.Printf("skills: scan %v failed: %v (proceeding with built-in catalog)", skillDirs, scanErr)
 	}
+	skillCatalog := skills.MergeCatalog(skills.Builtin(), userSkillCatalog)
 	debug.Printf("Skills: loaded %d skill(s) from %v", len(skillCatalog), skillDirs)
 	selfHelpReference, err := buildSelfHelpReference(newOptions.selfHelpFlags)
 	if err != nil {

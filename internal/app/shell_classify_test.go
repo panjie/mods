@@ -431,6 +431,47 @@ func TestParseShellAnalysisResponseCanReturnUnknownEffect(t *testing.T) {
 	require.Equal(t, shellEffectUnknown, analysis.Effect)
 }
 
+func TestAnalyzeShellCommandDoesNotConcreteDynamicClassifierPaths(t *testing.T) {
+	workspace := canonicalTestPath(t, t.TempDir())
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(tool, command string) shellCommandAnalysis {
+			require.Equal(t, "powershell_run", tool)
+			return shellCommandAnalysis{
+				NeedsReview:  true,
+				AffectedDirs: []string{`$PROFILE.CurrentUserCurrentHost`},
+				Reason:       "writes PowerShell profile",
+				Effect:       shellEffectWrite,
+			}
+		},
+	}
+
+	got := m.analyzeShellCommand("powershell_run", `$prof = $PROFILE.CurrentUserCurrentHost; custom-writer -Path $prof`)
+	require.True(t, got.NeedsReview)
+	require.Equal(t, shellEffectWrite, got.Effect)
+	require.Empty(t, got.AffectedDirs)
+	require.Contains(t, got.UnresolvedPaths, `$PROFILE.CurrentUserCurrentHost`)
+	for _, dir := range got.AffectedDirs {
+		require.NotContains(t, dir, `$PROFILE`)
+	}
+}
+
+func TestPartitionShellAnalysisPathsSeparatesRuntimeExpressions(t *testing.T) {
+	concrete, unresolved := partitionShellAnalysisPaths(
+		[]string{`C:\Users\Test\Documents`, `$PROFILE.CurrentUserCurrentHost`, `$target`},
+		nil,
+		pathutil.FlavorPowerShell,
+	)
+	require.Equal(t, []string{`C:\Users\Test\Documents`}, concrete)
+	require.ElementsMatch(t, []string{`$PROFILE.CurrentUserCurrentHost`, `$target`}, unresolved)
+}
+
+func TestNormalizeLiteralProcessPathDoesNotExpandShellSyntax(t *testing.T) {
+	workspace := canonicalTestPath(t, t.TempDir())
+	require.Equal(t, filepath.Join(workspace, "$HOME", "out.txt"), normalizeLiteralProcessPath("$HOME/out.txt", workspace, pathutil.FlavorPOSIX))
+	require.Equal(t, filepath.Join(workspace, "~", "out.txt"), normalizeLiteralProcessPath("~/out.txt", workspace, pathutil.FlavorPOSIX))
+}
+
 func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")

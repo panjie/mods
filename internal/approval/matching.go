@@ -116,6 +116,9 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 // still requires approval under the current policy. Groups already allowed by
 // the matrix (for example a temp-directory write in auto mode) need no rule.
 func RulesAllowIntent(rules []Rule, intent AccessIntent, scope Scope, safeDirs []string, reviewMode ReviewMode) bool {
+	if intent.HasUnresolvedPaths() {
+		return false
+	}
 	covered := false
 	for _, group := range intent.Groups() {
 		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}

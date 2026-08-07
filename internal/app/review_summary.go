@@ -49,6 +49,8 @@ func formatReviewSummaryWithIntent(name string, args []byte, analysis shellComma
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
 		return shellRiskSummary(command, analysis, scope)
+	case "process_run":
+		return shellRiskSummary(ProcessCommandPreview(parsed), analysis, scope)
 	default:
 		return ""
 	}
@@ -97,7 +99,18 @@ func writeTargetMode(path string, scope Scope) string {
 func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope) string {
 	risk := shellRiskLevel(analysis, scope)
 	dirs := summarizeAffectedDirs(analysis.AffectedDirs)
+	dynamic := summarizeAffectedDirs(analysis.UnresolvedPaths)
 	reason := strings.TrimSpace(analysis.Reason)
+	if dynamic != "" {
+		s := fmt.Sprintf("Risk: %s - runtime target %s", risk, dynamic)
+		if dirs != "" {
+			s += "; known scope " + dirs
+		}
+		if reason != "" {
+			s += " (" + OneLinePreview(reason) + ")"
+		}
+		return s
+	}
 	if dirs == "" {
 		s := fmt.Sprintf("Risk: %s - %s", risk, ShellCommandPreview(command))
 		if reason != "" {
@@ -114,6 +127,12 @@ func shellRiskSummary(command string, analysis shellCommandAnalysis, scope Scope
 
 func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {
 	analysis = normalizeShellEffect(analysis)
+	if len(analysis.UnresolvedPaths) > 0 {
+		if analysis.Effect == shellEffectWrite {
+			return "dynamic mutation"
+		}
+		return "unknown"
+	}
 	if analysis.Effect == shellEffectUnknown {
 		return "unknown"
 	}

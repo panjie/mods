@@ -86,6 +86,9 @@ const minToolSummaryWidth = 12
 
 func toolResultSummary(name string, data []byte) string {
 	args := ToolOperationArgs(data)
+	if name == "process_run" {
+		return ProcessCommandPreview(args)
+	}
 	if isShellTool(name) {
 		return ShellCommandPreview(ArgString(args, "command"))
 	}

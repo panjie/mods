@@ -764,6 +764,21 @@ func TestSetupStreamContextWindowsPowerShellInfo(t *testing.T) {
 	require.Contains(t, m.messages[0].Content, "pwsh=")
 }
 
+func TestSetupStreamContextReportsSelectedShell(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.NoInstructions = true
+	m := &Mods{
+		Config: &cfg,
+		Styles: makeStyles(true),
+		ctx:    context.Background(),
+	}
+	require.NoError(t, m.setupStreamContext("hello"))
+	require.NotEmpty(t, m.messages)
+	shell := toolregistry.SelectedShellInfo()
+	require.Contains(t, m.messages[0].Content, "shell="+shell.Executable)
+	require.Contains(t, m.messages[0].Content, "shell-dialect="+shell.Dialect)
+}
+
 func newAnimatingMods() *Mods {
 	return &Mods{
 		Config:              &Config{},

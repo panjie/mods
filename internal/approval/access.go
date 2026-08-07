@@ -25,12 +25,15 @@ const (
 // single-mode operation. ReadDirs/WriteDirs represent mixed operations such
 // as copying from an external source into a writable destination. A non-nil
 // split slice declares that mode even when its directory set is unknown.
+// UnresolvedPaths records runtime expressions that cannot safely become
+// concrete directory rules (for example $PROFILE or $target).
 type AccessIntent struct {
-	Class     AccessClass
-	Dirs      []string
-	ReadDirs  []string
-	WriteDirs []string
-	Reason    string
+	Class           AccessClass
+	Dirs            []string
+	ReadDirs        []string
+	WriteDirs       []string
+	UnresolvedPaths []string
+	Reason          string
 }
 
 type AccessGroup struct {
@@ -57,6 +60,10 @@ func (intent AccessIntent) Groups() []AccessGroup {
 
 func (intent AccessIntent) HasAccess() bool {
 	return len(intent.Groups()) > 0
+}
+
+func (intent AccessIntent) HasUnresolvedPaths() bool {
+	return len(intent.UnresolvedPaths) > 0
 }
 
 func (intent AccessIntent) DominantClass() AccessClass {
@@ -128,10 +135,14 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 //	  temp dir:  read=allow, write=allow
 //	  external:  read=ask,   write=ask
 //
-// ReviewNever forces allow. Empty Dirs degrades to read=allow / write=ask.
+// ReviewNever forces allow. Unresolved paths always ask otherwise. Empty Dirs
+// degrades to read=allow / write=ask.
 func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode ReviewMode) Decision {
 	if mode == ReviewNever {
 		return DecisionAllow
+	}
+	if intent.HasUnresolvedPaths() {
+		return DecisionAsk
 	}
 	groups := intent.Groups()
 	if len(groups) == 0 {

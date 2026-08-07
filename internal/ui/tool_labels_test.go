@@ -72,6 +72,7 @@ func TestToolOperationLabel(t *testing.T) {
 		"web search":               {"web_search", `{"query":"GUI wrapper for command line tools"}`, "Searching web: GUI wrapper for command line tools"},
 		"shell preview":            {"shell_run", `{"command":"go   test   ./...\necho done"}`, "Shell: go test ./..."},
 		"shell leading comment":    {"shell_run", `{"command":"# check workspace config\nls .opencode*"}`, "Shell: ls .opencode*"},
+		"process argv":             {"process_run", `{"program":"go","args":["test","./path with space","$HOME"]}`, `Process: go test "./path with space" $HOME`},
 		"file read":                {"fs_read_file", `{"path":"mods.go"}`, "Reading file: mods.go"},
 		"file write":               {"fs_write_file", `{"path":"mods.go","content":"package main"}`, "Writing file: mods.go"},
 		"file replace":             {"fs_replace", `{"path":"mods.go","old_text":"old","new_text":"new"}`, "Replacing text in: mods.go"},

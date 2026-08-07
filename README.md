@@ -309,7 +309,9 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `fs_replace`         | Replace exact text in an existing file.                   |
 | `fs_search`          | Search file contents across the workspace.                |
 | `fs_apply_patch`     | Atomically apply unified or Codex-format multi-file edits. |
+| `process_run`        | Execute one program with literal argv and structured output. |
 | `shell_run`          | Execute shell commands (prefix-allowable through review). |
+| `runtime_info`       | Inspect the selected shell and resolve command availability. |
 
 Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
 `mods.yml`:
@@ -328,6 +330,11 @@ status line at the bottom shows what Mods is doing between tool calls
 with `--hide-tool-status`, which also suppresses the compact one-line record
 each completed tool call leaves in normal output (for example
 `> ✓ shell_run: ls -la · exit 0`).
+Shell paths that still depend on runtime expansion (for example PowerShell's
+`$PROFILE` or another variable) are shown as dynamic targets and can only be
+approved once; they are never saved as directory rules. For a reusable scoped
+approval, resolve the path first and use its literal absolute value in the
+mutation command.
 Use `--show-token-usage` (or `-s`) to print the input, output, and total token count for
 an interaction to stderr without mixing it into the model response on stdout.
 

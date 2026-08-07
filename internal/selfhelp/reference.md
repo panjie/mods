@@ -45,6 +45,10 @@ roles:
 tools when the current or recent request concerns files or a mods config
 mutation. Trusted shell command names apply to every argument and subcommand;
 unsafe shell structures such as redirection are still reviewed.
+Runtime-resolved shell paths such as PowerShell `$PROFILE` remain dynamic
+approval targets: they require per-use review and never create a saved
+directory rule. Resolve them in a read-only call and use the literal absolute
+result when a reusable scoped approval is needed.
 
 ## Providers
 
@@ -75,9 +79,12 @@ Prefer native `fs_*` tools for direct file operations because paths and
 approval intent are structured. Use exact replacement for a small edit after
 reading the target, and patching for coordinated or multi-file edits.
 
-Shell tools are appropriate for repository-wide inspection, builds, tests,
-git, package managers, and pipelines. On Windows, native shell tools execute
-PowerShell and commands should remain compatible with Windows PowerShell 5.1.
+Prefer `process_run` for repository-wide inspection, builds, tests, git, and
+package managers that invoke one executable: its literal argv avoids shell
+quoting differences and its result separates stdout, stderr, exit status, and
+timeout state. Use shell tools for pipelines and other shell syntax. On
+Windows, native shell tools execute the reported PowerShell host. Use
+`runtime_info` only when platform or executable availability is uncertain.
 
 `review-mode: auto` allows recognized reads and reviews mutations;
 `review-mode: always` reviews all external access; `review-mode: never`

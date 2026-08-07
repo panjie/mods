@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,13 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
-
-	localereader "github.com/mattn/go-localereader"
 
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/textutil"
 )
 
 const (
@@ -33,7 +28,6 @@ const (
 	defaultShellTimeout = DefaultShellTimeout
 
 	defaultShellProgressInterval = 2 * time.Second
-	shellProgressTailLimit       = 4096
 )
 
 // ShellProgress describes a still-running shell command for UI status updates.
@@ -167,69 +161,54 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	if r.BuildCommand == nil {
 		return "", fmt.Errorf("shell runner command builder is required")
 	}
-	runCtx, cancel := context.WithTimeout(ctx, r.Timeout)
-	defer cancel()
-	cmd := r.BuildCommand(runCtx, command)
-	cmd.Dir = r.Root
-	if len(r.Env) > 0 {
-		cmd.Env = os.Environ()
-		for key, value := range r.Env {
-			cmd.Env = append(cmd.Env, key+"="+value)
-		}
-	}
 	out := newShellOutput()
-	cmd.Stdout = out
-	cmd.Stderr = out
-	if err := cmd.Start(); err != nil {
-		return out.String(), err
-	}
-	started := time.Now()
-	r.reportProgress(runCtx, command, started, out)
-
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- cmd.Wait()
-	}()
-
-	var tick <-chan time.Time
-	var ticker *time.Ticker
-	if r.Progress != nil {
-		interval := r.ProgressInterval
-		if interval <= 0 {
-			interval = defaultShellProgressInterval
-		}
-		ticker = time.NewTicker(interval)
-		tick = ticker.C
-		defer ticker.Stop()
-	}
-
-	for {
-		select {
-		case err := <-waitCh:
-			text := out.String()
-			if err != nil {
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					text = appendExitStatus(text, exitErr.ExitCode())
-					return text, ShellExitError{Code: exitErr.ExitCode()}
+	result, err := (commandRunner{
+		Parent:  ctx,
+		Timeout: r.Timeout,
+		BuildCommand: func(runCtx context.Context) *exec.Cmd {
+			cmd := r.BuildCommand(runCtx, command)
+			cmd.Dir = r.Root
+			if len(r.Env) > 0 {
+				cmd.Env = os.Environ()
+				for key, value := range r.Env {
+					cmd.Env = append(cmd.Env, key+"="+value)
 				}
-				return text, err
 			}
-			return text, nil
-		case <-tick:
-			r.reportProgress(runCtx, command, started, out)
-		}
+			return cmd
+		},
+		Stdout: out,
+		Stderr: out,
+		Progress: func(elapsed time.Duration) {
+			r.reportProgress(ctx, command, elapsed, out)
+		},
+		Interval: r.ProgressInterval,
+	}).Run()
+	text := out.String()
+	if err != nil {
+		return text, err
 	}
+	if result.TimedOut {
+		return text, fmt.Errorf("command timed out after %s", r.Timeout)
+	}
+	if result.WaitError != nil {
+		var exitErr *exec.ExitError
+		if errors.As(result.WaitError, &exitErr) {
+			text = appendExitStatus(text, exitErr.ExitCode())
+			return text, ShellExitError{Code: exitErr.ExitCode()}
+		}
+		return text, result.WaitError
+	}
+	return text, nil
 }
 
-func (r ShellRunner) reportProgress(ctx context.Context, command string, started time.Time, out *shellOutput) {
+func (r ShellRunner) reportProgress(ctx context.Context, command string, elapsed time.Duration, out *shellOutput) {
 	if r.Progress == nil {
 		return
 	}
 	r.Progress(ctx, ShellProgress{
 		Tool:       r.Tool,
 		Command:    command,
-		Elapsed:    time.Since(started),
+		Elapsed:    elapsed,
 		LastOutput: out.LastLine(),
 	})
 }
@@ -267,60 +246,15 @@ func validateSecretEnv(env map[string]string) error {
 	return nil
 }
 
-type shellOutput struct {
-	mu   sync.Mutex
-	buf  bytes.Buffer
-	tail []byte
+type shellOutput struct{ *boundedOutput }
+
+func newShellOutput() *shellOutput {
+	return &shellOutput{boundedOutput: newBoundedOutput(commandOutputLimit)}
 }
 
-func newShellOutput() *shellOutput { return &shellOutput{} }
+func (w *shellOutput) String() string { return w.Snapshot().Text }
 
-func (w *shellOutput) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if len(p) >= shellProgressTailLimit {
-		w.tail = append(w.tail[:0], p[len(p)-shellProgressTailLimit:]...)
-	} else {
-		w.tail = append(w.tail, p...)
-	}
-	if len(w.tail) > shellProgressTailLimit {
-		w.tail = append([]byte(nil), w.tail[len(w.tail)-shellProgressTailLimit:]...)
-	}
-	_, _ = w.buf.Write(p)
-	return len(p), nil
-}
-
-func (w *shellOutput) String() string {
-	w.mu.Lock()
-	out := append([]byte(nil), w.buf.Bytes()...)
-	w.mu.Unlock()
-	text := decodeOutput(out)
-	return textutil.ValidUTF8Prefix(text)
-}
-
-func (w *shellOutput) LastLine() string {
-	w.mu.Lock()
-	out := append([]byte(nil), w.tail...)
-	w.mu.Unlock()
-	text := strings.ReplaceAll(decodeOutput(out), "\r", "\n")
-	lines := strings.Split(text, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.TrimSpace(lines[i]) != "" {
-			return lines[i]
-		}
-	}
-	return ""
-}
-
-func decodeOutput(out []byte) string {
-	if utf8.Valid(out) {
-		return string(out)
-	}
-	if decoded, decErr := localereader.UTF8(out); decErr == nil {
-		out = decoded
-	}
-	return string(out)
-}
+func decodeOutput(out []byte) string { return decodeCommandOutput(out) }
 
 func appendExitStatus(text string, code int) string {
 	if text != "" {

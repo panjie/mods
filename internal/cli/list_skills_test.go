@@ -28,6 +28,19 @@ func TestListSkillsOutputsSortedCatalogAndSummary(t *testing.T) {
 	)
 }
 
+func TestListSkillsIncludesBuiltins(t *testing.T) {
+	withListOutputTest(t, false, false, 120)
+	listBuiltinSkills = skills.Builtin
+	dir := t.TempDir()
+
+	output := captureStdout(t, func() {
+		require.NoError(t, listSkills([]string{dir}))
+	})
+
+	require.Contains(t, output, "cross-platform-command-execution")
+	require.Contains(t, output, "1 skill")
+}
+
 func TestFirstSentenceHandlesExtensionsAbbreviationsAndChinese(t *testing.T) {
 	require.Equal(t,
 		"Use this skill for Word documents (.docx files).",
@@ -114,13 +127,16 @@ func withListOutputTest(t *testing.T, tty, raw bool, width int) {
 	savedTTY := IsOutputTTY
 	savedConfig := config
 	savedWidth := listOutputWidth
+	savedBuiltins := listBuiltinSkills
 	IsOutputTTY = func() bool { return tty }
 	config.Raw = raw
 	listOutputWidth = func() int { return width }
+	listBuiltinSkills = func() []skills.Skill { return nil }
 	t.Cleanup(func() {
 		IsOutputTTY = savedTTY
 		config = savedConfig
 		listOutputWidth = savedWidth
+		listBuiltinSkills = savedBuiltins
 	})
 }
 

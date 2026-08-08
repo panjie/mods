@@ -312,37 +312,25 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 	})
 }
 
-func TestResolveWebSearchBackend(t *testing.T) {
+func TestResolveWebSearch(t *testing.T) {
 	native := stream.Capabilities{NativeWebSearch: true}
 	nonNative := stream.Capabilities{}
 	tests := []struct {
 		name     string
 		enabled  bool
-		backend  string
 		caps     stream.Capabilities
 		local    bool
 		provider bool
-		wantErr  string
 	}{
-		{name: "disabled", backend: "provider", caps: nonNative},
-		{name: "auto native", enabled: true, backend: "auto", caps: native, provider: true},
-		{name: "auto local fallback", enabled: true, backend: "auto", caps: nonNative, local: true},
-		{name: "explicit local", enabled: true, backend: "local", caps: native, local: true},
-		{name: "explicit provider", enabled: true, backend: "provider", caps: native, provider: true},
-		{name: "provider unsupported", enabled: true, backend: "provider", caps: nonNative, wantErr: "not supported"},
-		{name: "invalid", enabled: true, backend: "magic", caps: native, wantErr: "expected auto, local, or provider"},
+		{name: "disabled", caps: native},
+		{name: "provider hosted", enabled: true, caps: native, provider: true},
+		{name: "local fallback", enabled: true, caps: nonNative, local: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := defaultConfig()
 			cfg.WebSearch = tt.enabled
-			cfg.WebSearchBackend = tt.backend
-			local, provider, err := resolveWebSearchBackend(&cfg, tt.caps)
-			if tt.wantErr != "" {
-				require.ErrorContains(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
+			local, provider := resolveWebSearch(&cfg, tt.caps)
 			require.Equal(t, tt.local, local)
 			require.Equal(t, tt.provider, provider)
 		})

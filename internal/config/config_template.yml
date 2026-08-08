@@ -124,9 +124,6 @@ builtin-tools:
   workspace: ""
 # {{ index .Help "web-search" }}
 web-search: {{ .Config.WebSearch }}
-# {{ index .Help "web-search-backend" }}
-# auto uses provider-hosted search when the selected endpoint supports it.
-web-search-backend: {{ .Config.WebSearchBackend }}
 # {{ index .Help "web-search-provider" }}
 # Supported: tavily (default), custom
 web-search-provider: {{ .Config.WebSearchProvider }}

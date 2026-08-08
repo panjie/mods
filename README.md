@@ -234,9 +234,6 @@ find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important
 export TAVILY_API_KEY="tvly-..."
 mods --web-search "what changed in the latest Go release? update go.mod if relevant"
 
-# Force local Tavily/custom search even when the model offers hosted search
-mods --web-search --web-search-backend local "find the latest Go release"
-
 # Ask a vision-capable model about an image
 mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
@@ -433,10 +430,9 @@ Unknown enum values are rejected instead of silently falling back. Custom
 providers must configure `base-url`; only built-in providers with a known
 official endpoint may omit it.
 
-`web-search-backend` accepts `auto` (default), `local`, or `provider`. In auto
-mode DeepSeek Responses uses hosted search without a Tavily key; other endpoints
-keep the existing local search behavior. `provider` fails before the request if
-the selected endpoint has no hosted search capability.
+When web search is enabled, an endpoint with hosted search capability uses that
+capability automatically. DeepSeek Responses therefore searches without a
+Tavily key; other endpoints keep the existing local search behavior.
 
 Anthropic requests continue to use the Messages API. With `-t`, mods chooses
 adaptive or manual extended thinking for recognized Claude models. During tool

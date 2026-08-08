@@ -87,10 +87,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 			ReasonText: "The selected provider endpoint does not support image input",
 		}
 	}
-	localWebSearch, providerWebSearch, err := resolveWebSearchBackend(cfg, client.Capabilities())
-	if err != nil {
-		return requestSession{}, modsError{Err: err, ReasonText: "Could not configure web search"}
-	}
+	localWebSearch, providerWebSearch := resolveWebSearch(cfg, client.Capabilities())
 	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
 
 	err = m.setupStreamContext(content)

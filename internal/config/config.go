@@ -27,9 +27,6 @@ const (
 	// DefaultWebSearchProvider is the provider selected when web search is
 	// enabled without an explicit provider.
 	DefaultWebSearchProvider = "tavily"
-	// DefaultWebSearchBackend lets a capable Responses provider host search,
-	// while preserving the existing local search behavior elsewhere.
-	DefaultWebSearchBackend = "auto"
 	// DefaultWebSearchAPIKeyEnv is the canonical environment-variable name
 	// consulted when WebSearchAPIKeyEnv is unset. It is referenced from
 	// Ensure / applyDefaults and the configuration wizard so the literal
@@ -100,7 +97,6 @@ var Help = map[string]string{
 	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
 	"builtin-tools":          "Native tool configuration for filesystem and shell tools",
 	"web-search":             "Enable or disable the web_search tool (disabled by default)",
-	"web-search-backend":     "Web search execution backend: auto, local, or provider",
 	"web-search-provider":    "Web search provider: tavily (default) or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
@@ -271,7 +267,6 @@ type PersistentConfig struct {
 	MCPTimeout          time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 	BuiltinTools        BuiltinToolsConfig         `yaml:"builtin-tools"`
 	WebSearch           bool                       `yaml:"web-search" env:"WEB_SEARCH"`
-	WebSearchBackend    string                     `yaml:"web-search-backend" env:"WEB_SEARCH_BACKEND"`
 	WebSearchProvider   string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
 	WebSearchAPIKey     string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
 	WebSearchAPIKeyEnv  string                     `yaml:"web-search-api-key-env"`
@@ -633,9 +628,6 @@ func (c *Config) applyDefaults() {
 	if c.WebSearchAPIKeyEnv == "" {
 		c.WebSearchAPIKeyEnv = DefaultWebSearchAPIKeyEnv
 	}
-	if c.WebSearchBackend == "" {
-		c.WebSearchBackend = DefaultWebSearchBackend
-	}
 	if c.WebSearchAPIKey == "" {
 		c.WebSearchAPIKey = os.Getenv(c.WebSearchAPIKeyEnv)
 	}
@@ -869,7 +861,6 @@ func Default() Config {
 			WordWrap:           80,
 			MCPTimeout:         15 * time.Second,
 			WebSearch:          false,
-			WebSearchBackend:   DefaultWebSearchBackend,
 			WebSearchProvider:  DefaultWebSearchProvider,
 			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{

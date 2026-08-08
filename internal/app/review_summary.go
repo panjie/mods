@@ -102,6 +102,13 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 	dirs := summarizeAffectedDirs(assessment.KnownDirs)
 	dynamic := summarizeAffectedDirs(assessment.DynamicTargets)
 	reason := strings.TrimSpace(assessment.Reason)
+	if shellRiskLocationUnknown(risk) {
+		// Classifier reasons for unbounded commands commonly restate the
+		// headline and may speculate about locations that were not verified.
+		// Keep the reason in the assessment/debug log, but do not present it as
+		// evidence in the approval UI or fallback summary.
+		reason = ""
+	}
 	if dynamic != "" {
 		s := fmt.Sprintf("Risk: %s - runtime target %s", risk, dynamic)
 		if dirs != "" {
@@ -138,6 +145,9 @@ func shellRiskLevel(assessment approval.CommandAssessment, scope Scope) string {
 		}
 	}
 	if assessment.Effect == approval.EffectUnknown {
+		if len(assessment.KnownDirs) == 0 {
+			return "unknown effect and location"
+		}
 		return "unknown"
 	}
 	if assessment.Effect == approval.EffectRead {
@@ -149,7 +159,7 @@ func shellRiskLevel(assessment approval.CommandAssessment, scope Scope) string {
 		return "read-only"
 	}
 	if len(assessment.KnownDirs) == 0 {
-		return "unknown"
+		return "unknown-location mutation"
 	}
 	for _, dir := range assessment.KnownDirs {
 		if !pathWithinScope(dir, scope) {
@@ -157,6 +167,10 @@ func shellRiskLevel(assessment approval.CommandAssessment, scope Scope) string {
 		}
 	}
 	return "workspace mutation"
+}
+
+func shellRiskLocationUnknown(risk string) bool {
+	return risk == "unknown effect and location" || risk == "unknown-location mutation"
 }
 
 func pathWithinScope(path string, scope Scope) bool {

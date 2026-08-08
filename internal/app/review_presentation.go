@@ -55,11 +55,13 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.rows = append(result.rows, interactionRow{Label: "Command", Value: command})
 		if dirs := summarizeAffectedDirs(assessment.KnownDirs); dirs != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
+		} else if shellRiskLocationUnknown(risk) {
+			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: "Unknown"})
 		}
 		if dynamic := summarizeAffectedDirs(assessment.DynamicTargets); dynamic != "" {
 			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(assessment), Value: dynamic})
 		}
-		if reason := strings.TrimSpace(assessment.Reason); reason != "" {
+		if reason := strings.TrimSpace(assessment.Reason); reason != "" && !shellRiskLocationUnknown(risk) {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
 		result.rows = appendReviewabilityRows(result.rows, assessment)
@@ -74,11 +76,13 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		}
 		if dirs := summarizeAffectedDirs(assessment.KnownDirs); dirs != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
+		} else if shellRiskLocationUnknown(risk) {
+			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: "Unknown"})
 		}
 		if dynamic := summarizeAffectedDirs(assessment.DynamicTargets); dynamic != "" {
 			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(assessment), Value: dynamic})
 		}
-		if reason := strings.TrimSpace(assessment.Reason); reason != "" {
+		if reason := strings.TrimSpace(assessment.Reason); reason != "" && !shellRiskLocationUnknown(risk) {
 			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
 		}
 		result.rows = appendReviewabilityRows(result.rows, assessment)
@@ -155,7 +159,7 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 	if strings.Contains(command, "sudo") || risk == "external mutation" || risk == "dynamic mutation" {
 		return interactionToneDanger, "Danger"
 	}
-	if risk == "workspace mutation" || risk == "unknown" {
+	if risk == "workspace mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
 		return interactionToneWarning, "Warning"
 	}
 	return interactionToneInfo, "Info"
@@ -182,6 +186,10 @@ func shellRiskHeadline(risk string) string {
 		return "Read from runtime-resolved paths"
 	case "workspace mutation":
 		return "Modify files in the workspace"
+	case "unknown-location mutation":
+		return "Modify state at unknown locations"
+	case "unknown effect and location":
+		return "Effects and affected locations are unknown"
 	case "external read":
 		return "Read data outside the workspace"
 	case "read-only":

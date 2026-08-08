@@ -13,8 +13,10 @@ not independently reconstruct command state.
 
 - `Effect` is `read`, `write`, or `unknown`. Unknown maps to write access so
   policy remains fail-closed.
-- `KnownDirs` contains concrete parser- or classifier-derived filesystem
-  targets.
+- `KnownDirs` contains only concrete parser- or classifier-derived filesystem
+  targets. A command's working directory is execution context, not by itself
+  evidence that the command reads or writes that directory; unknown commands
+  therefore keep `KnownDirs` empty unless analysis identifies a target.
 - `DynamicTargets` contains runtime expressions and maps to
   `AccessIntent.UnresolvedPaths`; it never creates a `DirAllow` rule or
   authorizes a directory for tool execution. `DynamicProbe` is set only for a
@@ -62,12 +64,16 @@ Legacy `needs_review` JSON and YES/NO custom prompts remain parse-compatible.
 Contradictory or ambiguous output, timeouts, and invalid JSON leave the effect
 unknown.
 
-The completion cache stores only these LLM facts. Merge may fill an unknown
-effect and add concrete directories; it cannot replace parser-derived shape,
-dynamic targets, opacity, or reviewability. Variables, substitutions,
-placeholders, and non-literal directory markers are discarded. User-visible
-fallback reason text is always `effects could not be proven`; diagnostic
-details are debug-only.
+The completion cache stores only these LLM facts. For shell source, merge may
+fill an unknown effect and add concrete directories. For `process_run`, LLM
+completion contributes only effect and reason: arbitrary executable effects
+cannot be safely bounded from program identity, and classifier-suggested
+directories therefore never become authorization scope. Process directories
+come only from deterministic argv analysis. Completion cannot replace
+parser-derived shape, dynamic targets, opacity, or reviewability. Variables,
+substitutions, placeholders, and non-literal directory markers are discarded.
+User-visible fallback reason text is always `effects could not be proven`;
+diagnostic details are debug-only.
 
 ## Approval flow
 
@@ -82,11 +88,16 @@ and passes it forward to:
 `requestApproval` consumes the completed assessment and intent. It never calls
 a command analyzer. The UI derives risk tone from effect, dynamic labels from
 `DynamicTargets`, and composition rows from `Shape`, preserving the separation
-between security effect and human reviewability.
+between security effect and human reviewability. When affected locations are
+unknown, classifier-generated reason text remains available to debug logging
+but is hidden from approval presentation and summaries because it cannot serve
+as verified scope evidence.
 
 ## Invariants
 
 - Unknown effects are write-like for policy but remain visibly unknown.
+- Unknown locations never fall back to the workspace and never produce a
+  reusable directory-approval rule.
 - LLM output cannot erase static dynamic targets or AST structure.
 - Dynamic capability probes with no concrete directory are auto-allowed in
   `ReviewAuto`; `ReviewAlways` retains its explicit always-review semantics.

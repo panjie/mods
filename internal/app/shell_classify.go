@@ -46,6 +46,7 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 
 	flavor := shellPathFlavor(tool)
 	result := approval.AssessShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
+	staticEffect := result.Effect
 	externalPaths := filterArgPaths(result.KnownDirs, ws, flavor)
 	// Keep a syntax-independent external-path fallback for both shell dialects.
 	// Command-specific target extraction is intentionally conservative and can
@@ -66,7 +67,13 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 		}
 		result = mergeCommandAssessment(result, completion)
 	}
-	return finalizeCommandAssessment(result, ws, flavor)
+	// A statically proven read with no explicit external target operates in the
+	// configured workspace context. Classifier-completed commands do not get
+	// this fallback: cwd is execution context, not evidence of an affected dir.
+	if staticEffect == approval.EffectRead && len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(ws) != "" {
+		result.KnownDirs = []string{ws}
+	}
+	return finalizeCommandAssessment(result, flavor)
 }
 
 func mergeCommandAssessment(static, completion approval.CommandAssessment) approval.CommandAssessment {
@@ -84,15 +91,23 @@ func mergeCommandAssessment(static, completion approval.CommandAssessment) appro
 	return static
 }
 
-func finalizeCommandAssessment(result approval.CommandAssessment, workspace string, flavor pathutil.Flavor) approval.CommandAssessment {
+func finalizeCommandAssessment(result approval.CommandAssessment, flavor pathutil.Flavor) approval.CommandAssessment {
 	result.KnownDirs, result.DynamicTargets = partitionShellAnalysisPaths(
 		result.KnownDirs,
 		result.DynamicTargets,
 		flavor,
 	)
-	if len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(workspace) != "" {
-		result.KnownDirs = []string{workspace}
-	}
+	return finalizeAssessmentReviewability(result)
+}
+
+// finalizeProcessAssessment deliberately skips shell-expression partitioning:
+// process_run arguments are literal, so values such as $HOME/out.txt remain
+// concrete cwd-relative paths rather than becoming runtime shell targets.
+func finalizeProcessAssessment(result approval.CommandAssessment) approval.CommandAssessment {
+	return finalizeAssessmentReviewability(result)
+}
+
+func finalizeAssessmentReviewability(result approval.CommandAssessment) approval.CommandAssessment {
 	reviewability := result.Reviewability
 	if result.Effect == approval.EffectWrite && len(result.DynamicTargets) > 0 {
 		reviewability.Level = approval.ReviewabilityCompound
@@ -147,16 +162,18 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	posix := !shellToolUsesPowerShell("process_run")
 	policy := m.readOnlyCommandPolicy()
 	pathArgs := append([]string{invocation.Program}, invocation.Args...)
-	affected := []string{cwd}
-	affected = appendMissingShellDirs(affected, filterLiteralArgPaths(pathArgs, cwd, flavor))
+	explicitDirs := filterLiteralArgPaths(pathArgs, cwd, flavor)
 	result := approval.AssessArgvStaticWithPolicy(invocation.Program, invocation.Args, posix, policy)
 	staticDirs := append([]string(nil), result.KnownDirs...)
-	result.KnownDirs = affected
 	switch result.Effect {
 	case approval.EffectRead:
+		// A statically proven direct read may use cwd as its implicit target
+		// (for example git status), so retain the existing execution-context
+		// scope for this proven case.
+		result.KnownDirs = appendMissingShellDirs([]string{cwd}, explicitDirs)
 	case approval.EffectWrite:
 		writeDirs := normalizeLiteralProcessDirs(staticDirs, cwd, flavor)
-		result.KnownDirs = appendMissingShellDirs(writeDirs, affected)
+		result.KnownDirs = appendMissingShellDirs(writeDirs, explicitDirs)
 	default:
 		classifierInput, _ := json.Marshal(map[string]any{
 			"kind":    "direct_process_invocation",
@@ -165,13 +182,21 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 			"cwd":     cwd,
 			"note":    "Arguments are literal; no shell expansion, pipeline, redirection, globbing, or variable interpolation occurs.",
 		})
+		completion := approval.UnknownCommandAssessment()
 		if m.shellAnalyzer != nil {
-			result = mergeCommandAssessment(result, m.shellAnalyzer("process_run", string(classifierInput)))
+			completion = m.shellAnalyzer("process_run", string(classifierInput))
 		} else {
-			result = mergeCommandAssessment(result, m.classifyShellWithLLM("process_run", string(classifierInput)))
+			completion = m.classifyShellWithLLM("process_run", string(classifierInput))
 		}
-		result.KnownDirs = normalizeLiteralProcessDirs(result.KnownDirs, cwd, flavor)
-		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, affected)
+		// An LLM may recognize that a program mutates state, but it cannot
+		// safely bound an arbitrary executable's filesystem effects. In
+		// particular, cwd in the classifier input is execution context rather
+		// than evidence that the workspace is the mutation target. Preserve
+		// effect/reason completion while deriving process directories only from
+		// deterministic argv analysis.
+		completion.KnownDirs = nil
+		result = mergeCommandAssessment(result, completion)
+		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, explicitDirs)
 	}
 	// An executable given by an explicit relative or absolute path that lives
 	// inside the workspace or a safe directory stays reviewable even when the
@@ -190,10 +215,7 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 			result.Reason = "executable resolves from a workspace or temporary directory"
 		}
 	}
-	if len(result.KnownDirs) == 0 && cwd != "" {
-		result.KnownDirs = []string{cwd}
-	}
-	return finalizeCommandAssessment(result, cwd, flavor)
+	return finalizeProcessAssessment(result)
 }
 
 func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessment, binding toolregistry.ProcessProgramBinding) approval.CommandAssessment {

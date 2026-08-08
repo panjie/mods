@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
@@ -109,7 +110,7 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	unknownAssessment := m.assessCommand("process_run", `{"program":"custom-tool","args":["$HOME",";rm"]}`)
 	unknown := buildAccessIntent("process_run", nil, reg, &unknownAssessment)
 	require.Equal(t, AccessRead, unknown.Class)
-	require.Contains(t, unknown.Dirs, canonicalRoot)
+	require.Empty(t, unknown.Dirs)
 	for _, dir := range unknown.Dirs {
 		require.NotEqual(t, filepath.Join(os.Getenv("HOME")), dir, "process argv must not expand $HOME")
 	}
@@ -117,10 +118,47 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	literalHomeAssessment := m.assessCommand("process_run", `{"program":"rm","args":["$HOME/out.txt"]}`)
 	literalHome := buildAccessIntent("process_run", nil, reg, &literalHomeAssessment)
 	require.Equal(t, AccessWrite, literalHome.Class)
-	require.Contains(t, literalHome.Dirs, canonicalRoot)
+	require.Contains(t, literalHome.Dirs, filepath.Join(canonicalRoot, "$HOME"))
 	for _, dir := range literalHome.Dirs {
 		require.NotContains(t, dir, filepath.Join(os.Getenv("HOME"), "out.txt"))
 	}
+}
+
+func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
+	root := canonicalTestPath(t, t.TempDir())
+	reg := toolregistry.NewRegistry()
+	require.NoError(t, toolregistry.RegisterProcess(reg, toolregistry.ProcessConfig{Root: root}))
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	m := &Mods{
+		Config: &cfg,
+		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
+			require.Equal(t, "process_run", tool)
+			require.Contains(t, input, `"program":"go"`)
+			return approval.CommandAssessment{
+				Effect:    approval.EffectWrite,
+				KnownDirs: []string{root, filepath.Join(root, "go.mod")},
+				Reason:    "installer may update the workspace and module cache",
+			}
+		},
+	}
+	data := []byte(`{"program":"go","args":["install","github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"],"cwd":` + strconv.Quote(root) + `}`)
+
+	assessment := m.assessCommand("process_run", string(data))
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+
+	intent := buildAccessIntent("process_run", data, reg, &assessment)
+	require.Equal(t, AccessWrite, intent.Class)
+	require.Empty(t, intent.Dirs)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto), true))
+
+	presentation := formatReviewPresentationWithIntent("process_run", data, assessment, WorkspaceScope(root), intent)
+	require.Equal(t, "Modify state at unknown locations", presentation.headline)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Working dir", Value: root})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Scope", Value: "Unknown"})
+	require.NotContains(t, presentation.rows, interactionRow{Label: "Reason", Value: assessment.Reason})
 }
 
 func TestConstrainResolvedProcessAssessmentForWorkspaceExecutable(t *testing.T) {

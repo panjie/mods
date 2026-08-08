@@ -69,7 +69,7 @@ func TestFormatReviewSummary(t *testing.T) {
 		)
 		require.Contains(t,
 			formatReviewSummary("shell_run", []byte(`{"command":"unknown"}`), approval.CommandAssessment{Effect: approval.EffectWrite}, scope),
-			"unknown",
+			"unknown-location mutation",
 		)
 	})
 
@@ -87,12 +87,12 @@ func TestFormatReviewSummary(t *testing.T) {
 		require.Equal(t, "Arguments", presentation.rows[1].Label)
 	})
 
-	t.Run("shell risk surfaces LLM reason when dirs empty", func(t *testing.T) {
+	t.Run("shell risk hides speculative LLM reason when dirs unknown", func(t *testing.T) {
 		scope := WorkspaceScope("/workspace")
 		got := formatReviewSummary("shell_run", []byte(`{"command":"scoop install nodejs"}`),
 			approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "installs nodejs via scoop"}, scope)
-		require.Contains(t, got, "unknown")
-		require.Contains(t, got, "installs nodejs via scoop")
+		require.Contains(t, got, "unknown-location mutation")
+		require.NotContains(t, got, "installs nodejs via scoop")
 	})
 
 	t.Run("shell risk surfaces LLM reason when dirs present", func(t *testing.T) {

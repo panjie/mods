@@ -431,12 +431,12 @@ func TestFinalizeShellAnalysisPreservesDynamicReadEffect(t *testing.T) {
 			Reason:         "inspects runtime path",
 			DynamicTargets: []string{"$target"},
 		},
-		"/workspace",
 		pathutil.FlavorPOSIX,
 	)
 
 	require.Equal(t, approval.EffectRead, got.Effect)
 	require.Equal(t, AccessRead, got.AccessIntent().Class)
+	require.Empty(t, got.KnownDirs)
 	require.Equal(t, []string{"$target"}, got.DynamicTargets)
 }
 
@@ -768,7 +768,7 @@ func TestAnalyzeShellCommandReadOnlyWorkspaceAffectedDirs(t *testing.T) {
 		require.Equal(t, []string{workspace}, result.KnownDirs)
 	})
 
-	t.Run("cd workspace command falls back to cwd", func(t *testing.T) {
+	t.Run("classifier-completed workspace command has no inferred target", func(t *testing.T) {
 		mods := &Mods{
 			Config: testConfigForWorkspace(workspace),
 			shellAnalyzer: func(tool, command string) approval.CommandAssessment {
@@ -779,7 +779,7 @@ func TestAnalyzeShellCommandReadOnlyWorkspaceAffectedDirs(t *testing.T) {
 
 		cmd := "cd " + workspace + " && git tag --list 'v*' --sort=-v:refname | head -20"
 		result := mods.assessCommand("shell_run", cmd)
-		require.Equal(t, []string{workspace}, result.KnownDirs)
+		require.Empty(t, result.KnownDirs)
 	})
 
 	t.Run("external read does not add workspace", func(t *testing.T) {

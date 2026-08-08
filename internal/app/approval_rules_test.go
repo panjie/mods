@@ -60,9 +60,8 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 		currentToolRegistry: registry,
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
 			return approval.CommandAssessment{
-				KnownDirs: []string{workspaceScope.Value},
-				Reason:    "classifier could not prove read-only",
-				Effect:    approval.EffectUnknown,
+				Reason: "classifier could not prove read-only",
+				Effect: approval.EffectUnknown,
 			}
 		},
 	}
@@ -86,16 +85,15 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	}()
 
 	item := receiveReviewItem(t, reviewer.reviewChan)
-	require.Contains(t, item.summary, workspaceScope.Value)
-	require.Contains(t, item.summary, "Risk: unknown")
-	require.Contains(t, item.summary, "effects could not be proven")
+	require.NotContains(t, item.summary, workspaceScope.Value)
+	require.Contains(t, item.summary, "Risk: unknown effect and location")
+	require.NotContains(t, item.summary, "effects could not be proven")
 	require.Equal(t, interactionToneWarning, item.presentation.tone)
 	require.Equal(t, "Warning", item.presentation.toneText)
-	require.Equal(t, "Run a command with unknown effects", item.presentation.headline)
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Scope", Value: workspaceScope.Value})
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Reason", Value: "effects could not be proven"})
-	require.Len(t, item.candidateRules, 1)
-	require.Equal(t, AccessWrite, item.candidateRules[0].Mode)
+	require.Equal(t, "Effects and affected locations are unknown", item.presentation.headline)
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Scope", Value: "Unknown"})
+	require.NotContains(t, item.presentation.rows, interactionRow{Label: "Reason", Value: "effects could not be proven"})
+	require.Empty(t, item.candidateRules)
 	item.resp <- reviewResponse{approved: true}
 	require.NoError(t, <-errCh)
 }
@@ -692,12 +690,9 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.NoError(t, <-errCh)
 	})
 
-	t.Run("review summary surfaces LLM reason via accessIntent", func(t *testing.T) {
-		// Regression for P7: when requestApproval receives an accessIntent
-		// with a non-empty Class (the common path via buildAccessIntent),
-		// the Reason field must propagate into the review summary so the
-		// user sees *why* the command needs review instead of a bare
-		// "Risk: unknown".
+	t.Run("review summary surfaces LLM reason for known scope via accessIntent", func(t *testing.T) {
+		// Reasons remain visible when the assessment carries a verified scope;
+		// only unknown-location reasons are hidden as speculative.
 		mods := &Mods{
 			ctx:                 context.Background(),
 			Config:              &Config{},
@@ -705,9 +700,10 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}
 		intent := AccessIntent{
 			Class:  AccessWrite,
+			Dirs:   []string{"/opt/scoop"},
 			Reason: "installs nodejs via scoop",
 		}
-		assessment := approval.CommandAssessment{Effect: approval.EffectWrite, Reason: intent.Reason}
+		assessment := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: intent.Dirs, Reason: intent.Reason}
 		reviewer := &toolReviewer{
 			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
@@ -724,8 +720,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}()
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Contains(t, item.summary, "installs nodejs via scoop",
-			"review summary must surface the LLM reason carried by accessIntent")
+		require.Contains(t, item.summary, "installs nodejs via scoop")
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})

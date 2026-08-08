@@ -78,6 +78,21 @@ type Mods struct {
 	Thought                 string
 	thoughtFlushed          bool
 	tokenUsage              proto.TokenUsage
+	debugTurn               int
+	debugRound              int
+	debugTurnStarted        time.Time
+	debugTurnActive         bool
+	debugRoundStarted       time.Time
+	debugThoughtStart       int
+	debugActivities         []string
+	debugToolTotal          int
+	debugToolRounds         int
+	debugToolSucceeded      int
+	debugToolExited         int
+	debugToolFailed         int
+	debugToolDenied         int
+	debugToolCorrected      int
+	debugToolCancelled      int
 
 	db     *DB
 	Config *Config
@@ -323,12 +338,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case streamEventChunk:
 			if msg.chunk.Activity != "" {
 				m.setActiveOperation(msg.chunk.Activity)
+				if len(m.debugActivities) == 0 || m.debugActivities[len(m.debugActivities)-1] != msg.chunk.Activity {
+					m.debugActivities = append(m.debugActivities, msg.chunk.Activity)
+				}
 			}
 			if msg.chunk.Thought != "" {
 				m.Thought += msg.chunk.Thought
-				if m.thinkActive {
-					debug.Printf("Thought: %s", msg.chunk.Thought)
-				}
 			}
 			if msg.chunk.Content != "" {
 				cmds = append(cmds, m.handleStreamChunk(msg))
@@ -343,12 +358,14 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			usage := msg.runner.takeUsage()
 			m.tokenUsage.Add(usage)
 			if usage.Available() {
-				debug.Printf("Token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",
+				debug.Printf("token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",
 					usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.ReasoningOutputTokens, usage.TotalTokens)
 			}
+			m.debugEndTurn("complete", nil)
 			m.state = doneState
 			return m, m.quit
 		case streamEventError:
+			m.debugEndModelRound("error", 0, msg.err)
 			return m, msgCmd(msg.runner.errh(msg.err))
 		}
 	case toolOperationStatusMsg:
@@ -367,10 +384,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.userInput.handleStartMsg(msg)
 		m.setActiveOperation("")
 	case modsError:
+		m.debugEndTurn("failed", msg.Err)
 		m.Error = &msg
 		m.state = errorState
 		return m, m.quit
 	case error:
+		m.debugEndTurn("failed", msg)
 		m.Error = &modsError{Err: msg, ReasonText: msg.Error()}
 		m.state = errorState
 		return m, m.quit
@@ -385,6 +404,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.debugEndTurn("cancelled", context.Canceled)
 			m.state = doneState
 			return m, m.quit
 		}
@@ -536,7 +556,6 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 	if m.thinkActive && !m.thoughtFlushed {
 		m.flushThought()
 	} else if !m.thinkActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-		debug.Printf("Think: model emitted %d chars of thinking without -t (discarded; pass -t to display)", len(strings.TrimSpace(m.Thought)))
 		m.thoughtFlushed = true
 	}
 	m.appendToOutput(content)
@@ -547,12 +566,12 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 }
 
 func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
+	m.debugEndModelRound("response received", 0, nil)
 	// The model may reason and then immediately call a tool without emitting any
 	// answer text; flush the thought so it is still shown.
 	if m.thinkActive && !m.thoughtFlushed {
 		m.flushThought()
 	} else if !m.thinkActive && !m.thoughtFlushed && strings.TrimSpace(m.Thought) != "" {
-		debug.Printf("Think: model emitted %d chars of thinking without -t (discarded; pass -t to display)", len(strings.TrimSpace(m.Thought)))
 		m.thoughtFlushed = true
 	}
 	ch := make(chan toolOperationStatusMsg, 8)
@@ -604,15 +623,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		if call.Err != nil {
 			var correction correctionSuggester
 			if errors.As(call.Err, &correction) && correction.CorrectionSuggested() {
-				debug.Printf("Tool correction suggested: %s -> %v", call.Name, call.Err)
 				continue
-			}
-			var exitErr shellExitCoder
-			if errors.As(call.Err, &exitErr) {
-				debug.Printf("Tool non-zero exit: %s -> status %d, output: %s",
-					call.Name, exitErr.ExitCode(), debug.Truncate(call.Output, 500))
-			} else {
-				debug.Printf("Tool call FAILED: %s -> %v", call.Name, call.Err)
 			}
 			if errors.Is(call.Err, errReviewUnavailable) {
 				msg.runner.close()
@@ -623,21 +634,6 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 				}))...)
 			}
 			continue
-		}
-		argPreview := debug.Truncate(string(call.Arguments), 120)
-		outputPreview := debug.Truncate(call.Output, 200)
-		if argPreview != "" {
-			if outputPreview != "" {
-				debug.Printf("Tool call: %s(%s) -> output: %s", call.Name, argPreview, outputPreview)
-			} else {
-				debug.Printf("Tool call: %s(%s)", call.Name, argPreview)
-			}
-		} else {
-			if outputPreview != "" {
-				debug.Printf("Tool call: %s -> output: %s", call.Name, outputPreview)
-			} else {
-				debug.Printf("Tool call: %s", call.Name)
-			}
 		}
 	}
 	if len(msg.results) == 0 {
@@ -653,6 +649,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	}
 	m.setActiveOperation(completionStatus)
 	m.totalRounds++
+	m.debugToolRounds++
 	hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
 		return toolCallFailed(c.Err)
 	})
@@ -667,7 +664,12 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		msg.runner.close()
 		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 	}
-	debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
+	debug.Print(DebugSection{Title: fmt.Sprintf("tool · turn %d · round %d · complete", m.debugTurn, m.debugRound), Fields: []DebugField{
+		{Label: "calls", Value: fmt.Sprintf("%d", len(msg.results))},
+		{Label: "budget", Value: fmt.Sprintf("total=%d/%d · failed=%d/%d", m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)},
+	}})
+	m.debugRound++
+	m.debugStartModelRound()
 	m.responseBoundaryPending = true
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
 }

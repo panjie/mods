@@ -55,6 +55,25 @@ func TestNewChatRequestIncludesThinkValue(t *testing.T) {
 	require.Contains(t, string(wire), `"think":false`)
 }
 
+func TestCallToolsPreservesCallMetadata(t *testing.T) {
+	s := &Stream{
+		message: api.Message{ToolCalls: []api.ToolCall{{Function: api.ToolCallFunction{
+			Index: 7, Name: "lookup", Arguments: api.ToolCallFunctionArguments{"q": "mods"},
+		}}}},
+		toolCall: func(call proto.ToolCallRequest) (string, error) {
+			require.Equal(t, "7", call.ID)
+			return "found", nil
+		},
+		factory: func() {},
+	}
+
+	statuses := s.CallTools()
+	require.Len(t, statuses, 1)
+	require.Equal(t, "7", statuses[0].ID)
+	require.Equal(t, 1, statuses[0].Index)
+	require.Equal(t, 1, statuses[0].Total)
+}
+
 func TestCurrentBlocksUntilResponse(t *testing.T) {
 	s := &Stream{respCh: make(chan api.ChatResponse, 1)}
 	done := make(chan proto.Chunk, 1)

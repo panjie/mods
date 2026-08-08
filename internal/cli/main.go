@@ -79,6 +79,7 @@ var (
 		Example:       randomExample(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			debug.SetEnabled(config.Debug)
+			debugStartup()
 			config.Prefix = RemoveWhitespace(strings.Join(args, " "))
 
 			if config.ShowHelp {
@@ -283,14 +284,6 @@ func execute() (exitCode int) {
 		}
 	}
 
-	debug.Printf("Config loaded from: %s", config.SettingsPath)
-	debug.Printf("API: %s, Model: %s", config.API, config.Model)
-	debug.Printf("Role: %s, Format: %s, Raw: %v", config.Role, config.Format, config.Raw)
-	debug.Printf("Session dir: %s", config.SessionDir)
-	if config.PortableDir != "" {
-		debug.Printf("Portable mode: %s", config.PortableDir)
-	}
-
 	// XXX: this must come after creating the config.
 	initFlags()
 
@@ -333,6 +326,22 @@ func execute() (exitCode int) {
 		return 1
 	}
 	return 0
+}
+
+func debugStartup() {
+	if !debug.Enabled() {
+		return
+	}
+	fields := []DebugField{
+		{Label: "config", Value: config.SettingsPath},
+		{Label: "provider", Value: config.API + "/" + config.Model},
+		{Label: "output", Value: fmt.Sprintf("role=%s · format=%s · raw=%v", config.Role, config.Format, config.Raw)},
+		{Label: "sessions", Value: config.SessionDir},
+	}
+	if config.PortableDir != "" {
+		fields = append(fields, DebugField{Label: "portable", Value: config.PortableDir})
+	}
+	debug.Print(DebugSection{Title: "startup", Fields: fields})
 }
 
 func maybeWriteMemProfile() error {

@@ -305,9 +305,9 @@ func TestDeepSeekResponsesCustomApplyPatchRound(t *testing.T) {
 		Model:    "deepseek-v4-flash",
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "edit"}},
 		Tools:    []proto.ToolSpec{{Name: "fs_apply_patch", WireName: "apply_patch", WireType: "custom"}},
-		ToolCaller: func(name string, data []byte) (string, error) {
-			require.Equal(t, "fs_apply_patch", name)
-			require.JSONEq(t, `{"patch":"*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"}`, string(data))
+		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
+			require.Equal(t, "fs_apply_patch", call.Name)
+			require.JSONEq(t, `{"patch":"*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"}`, string(call.Arguments))
 			return "Patch applied", nil
 		},
 	})
@@ -316,6 +316,9 @@ func TestDeepSeekResponsesCustomApplyPatchRound(t *testing.T) {
 	statuses := st.CallTools()
 	require.Len(t, statuses, 1)
 	require.Equal(t, "fs_apply_patch", statuses[0].Name)
+	require.Equal(t, "call_1", statuses[0].ID)
+	require.Equal(t, 1, statuses[0].Index)
+	require.Equal(t, 1, statuses[0].Total)
 	content, _ = drainStream(t, st)
 	require.Equal(t, "done", content)
 	require.Equal(t, 2, requestCount)
@@ -393,13 +396,13 @@ func TestResponsesToolRoundReplaysEncryptedReasoning(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 		}},
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
-		ToolCaller: func(name string, data []byte) (string, error) {
-			switch name {
+		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
+			switch call.Name {
 			case "lookup":
-				require.JSONEq(t, `{"query":"mods"}`, string(data))
+				require.JSONEq(t, `{"query":"mods"}`, string(call.Arguments))
 				return "tool output", nil
 			case "lookup_more":
-				require.JSONEq(t, `{"query":"responses"}`, string(data))
+				require.JSONEq(t, `{"query":"responses"}`, string(call.Arguments))
 				return "more output", nil
 			default:
 				return "", errors.New("unexpected tool")

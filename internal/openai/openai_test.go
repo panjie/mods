@@ -401,12 +401,16 @@ func TestDeepSeekChatReplaysReasoningContentAfterToolCall(t *testing.T) {
 		Model:      "deepseek-v4-flash",
 		Messages:   []proto.Message{{Role: proto.RoleUser, Content: "inspect"}},
 		Tools:      []proto.ToolSpec{{Name: "read_file", InputSchema: map[string]any{"type": "object"}}},
-		ToolCaller: func(string, []byte) (string, error) { return "contents", nil },
+		ToolCaller: func(proto.ToolCallRequest) (string, error) { return "contents", nil },
 	})
 	for st.Next() {
 		_, _ = st.Current()
 	}
-	require.Len(t, st.CallTools(), 1)
+	statuses := st.CallTools()
+	require.Len(t, statuses, 1)
+	require.Equal(t, "call_1", statuses[0].ID)
+	require.Equal(t, 1, statuses[0].Index)
+	require.Equal(t, 1, statuses[0].Total)
 	for st.Next() {
 		_, _ = st.Current()
 	}

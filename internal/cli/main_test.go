@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -13,10 +14,33 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	debugpkg "github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDebugStartupUsesParsedDebugSetting(t *testing.T) {
+	var output bytes.Buffer
+	restoreOutput := debugpkg.SetOutputForTest(&output)
+	previousConfig := config
+	config = Default()
+	config.Debug = true
+	config.SettingsPath = "/tmp/mods.yml"
+	config.API = "openai"
+	config.Model = "gpt-test"
+	debug.SetEnabled(config.Debug)
+	t.Cleanup(func() {
+		debug.SetEnabled(false)
+		config = previousConfig
+		restoreOutput()
+	})
+
+	debugStartup()
+	require.Contains(t, output.String(), "DEBUG startup")
+	require.Contains(t, output.String(), "/tmp/mods.yml")
+	require.Contains(t, output.String(), "openai/gpt-test")
+}
 
 func TestIsCompletionCmd(t *testing.T) {
 	for args, is := range map[string]bool{

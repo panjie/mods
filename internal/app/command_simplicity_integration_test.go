@@ -50,7 +50,8 @@ func TestDeepSeekCommandSimplicityIntegration(t *testing.T) {
 	var calls []recordedToolCall
 	preflight := newCommandPreflightGate(m.Config)
 	fakeState := &commandSimplicityFakeState{}
-	caller := func(name string, data []byte) (string, error) {
+	caller := func(call proto.ToolCallRequest) (string, error) {
+		name, data := call.Name, call.Arguments
 		analysis := approval.CommandAssessment{}
 		lower := strings.ToLower(string(data))
 		if name == "process_run" {

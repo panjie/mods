@@ -123,7 +123,7 @@ type Stream struct {
 	message    api.Message
 	content    strings.Builder
 	thinking   strings.Builder
-	toolCall   func(name string, data []byte) (string, error)
+	toolCall   proto.ToolCaller
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
@@ -160,11 +160,9 @@ func (s *Stream) finish(run uint64, ch chan api.ChatResponse, err error) {
 // CallTools implements stream.Stream.
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	statuses := make([]proto.ToolCallStatus, 0, len(s.message.ToolCalls))
-	for _, call := range s.message.ToolCalls {
+	for i, call := range s.message.ToolCalls {
 		msg, status := stream.CallTool(
-			strconv.Itoa(call.Function.Index),
-			call.Function.Name,
-			[]byte(call.Function.Arguments.String()),
+			proto.ToolCallRequest{ID: strconv.Itoa(call.Function.Index), Index: i + 1, Total: len(s.message.ToolCalls), Name: call.Function.Name, Arguments: []byte(call.Function.Arguments.String())},
 			s.toolCall,
 		)
 		s.request.Messages = append(s.request.Messages, fromProtoMessage(msg))

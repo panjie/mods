@@ -173,7 +173,7 @@ type Stream struct {
 	request    anthropic.MessageNewParams
 	factory    func() *ssestream.Stream[anthropic.MessageStreamEventUnion]
 	message    anthropic.Message
-	toolCall   func(name string, data []byte) (string, error)
+	toolCall   proto.ToolCaller
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
@@ -184,13 +184,17 @@ type Stream struct {
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	var statuses []proto.ToolCallStatus
 	var results []anthropic.ContentBlockParamUnion
+	total := 0
+	for _, block := range s.message.Content {
+		if _, ok := block.AsAny().(anthropic.ToolUseBlock); ok {
+			total++
+		}
+	}
 	for _, block := range s.message.Content {
 		switch call := block.AsAny().(type) {
 		case anthropic.ToolUseBlock:
 			msg, status := stream.CallTool(
-				call.ID,
-				call.Name,
-				[]byte(call.JSON.Input.Raw()),
+				proto.ToolCallRequest{ID: call.ID, Index: len(statuses) + 1, Total: total, Name: call.Name, Arguments: []byte(call.JSON.Input.Raw())},
 				s.toolCall,
 			)
 			results = append(

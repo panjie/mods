@@ -127,13 +127,11 @@ func (m *Mods) setupStreamContext(content string) error {
 		content = strings.TrimSpace(prefix + "\n\n" + content)
 	}
 
-	debug.Printf("Context: %d system message(s), %d existing message(s)", len(m.messages), 0)
-	for i, msg := range m.messages {
-		debug.Printf("  System message #%d (%d chars): %s", i+1, len(msg.Content), debug.Truncate(msg.Content, 200))
-	}
+	contextFields := []DebugField{{Label: "system", Value: fmt.Sprintf("%d message(s)", len(m.messages))}}
 	if len(content) > 0 {
-		debug.Printf("  User message (%d chars): %s", len(content), debug.Truncate(strings.ReplaceAll(content, "\n", "\\n"), 300))
+		contextFields = append(contextFields, DebugField{Label: "user", Value: fmt.Sprintf("%d chars · %s", len(content), debug.Truncate(strings.ReplaceAll(content, "\n", "\\n"), 300))})
 	}
+	debug.Print(DebugSection{Title: "turn context", Fields: contextFields})
 
 	if !cfg.NoSave && cfg.SessionReadFromID != "" {
 		var saved []proto.Message

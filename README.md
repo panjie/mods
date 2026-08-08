@@ -332,6 +332,23 @@ before anything runs. This correction happens at most once per request and does
 not replace the normal safety review; a legitimate complex command can still
 proceed to review on the next attempt. Pipelines that represent one operation
 are not split automatically.
+### Debug output
+
+Use `-D` or `--debug` to write a human-readable execution trace to stderr.
+The trace groups startup settings, each user turn, model rounds, tool calls,
+approval decisions, results, timing, token usage, and the final turn summary.
+Provider call IDs and `call N/total` labels connect every tool request to its
+result, including validation failures, denied reviews, cancellations, and
+non-zero command exits.
+
+Tool arguments are pretty-printed as JSON up to 4 KiB. Tool results are shown
+up to 16 KiB. Larger payloads retain both the beginning and end and report the
+number of omitted bytes. Empty results are shown explicitly as `<empty>`.
+Known protected credentials are redacted before formatting or truncation, and
+resolved credential values are never sent to the debug renderer. Terminal
+output uses color; redirected debug output contains the same labels without
+ANSI styling.
+
 Use `--show-token-usage` (or `-s`) to print the input, output, and total token count for
 an interaction to stderr without mixing it into the model response on stdout.
 

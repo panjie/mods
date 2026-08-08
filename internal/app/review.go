@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/approval"
@@ -134,7 +136,6 @@ func (r *toolReviewer) startSession() tea.Cmd {
 	ch := r.reviewChan
 	done := r.reviewSessionDone
 	r.mu.Unlock()
-	debug.Printf("toolReviewer: session started, reviewChan created")
 	return func() tea.Msg {
 		select {
 		case item := <-ch:
@@ -318,10 +319,24 @@ type reviewerDeps struct {
 	assessment     *approval.CommandAssessment
 	accessIntent   AccessIntent
 	safeDirs       []string
+	onDecision     func(approvalTrace)
 }
 
-func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []byte) error {
-	debug.Printf("requestApproval called: name=%s", name)
+type approvalTrace struct {
+	Source   string
+	Detail   string
+	Duration time.Duration
+}
+
+func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []byte) (returnErr error) {
+	started := time.Now()
+	trace := approvalTrace{Source: "not reached"}
+	defer func() {
+		trace.Duration = time.Since(started)
+		if deps.onDecision != nil {
+			deps.onDecision(trace)
+		}
+	}()
 	safeDirSet := deps.safeDirs
 	if len(safeDirSet) == 0 {
 		safeDirSet = safeDirs()
@@ -338,17 +353,20 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		debug.Printf("command assessment: effect=%s dirs=%v dynamic=%v reason=%q", assessment.Effect, assessment.KnownDirs, assessment.DynamicTargets, assessment.Reason)
 	}
 	if intent.HasAccess() && RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
-		debug.Printf("requestApproval: matched affected dirs against saved approval rule")
+		trace.Source = "saved rule"
+		trace.Detail = accessIntentSummary(intent)
 		return nil
 	}
 	if r.reviewMode != ReviewAlways && intent.HasAccess() {
 		if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
-			debug.Printf("requestApproval: approval matrix allowed access")
+			trace.Source = "auto"
+			trace.Detail = accessIntentSummary(intent)
 			return nil
 		}
 	}
 	if !r.canReviewInteractively() {
-		debug.Printf("Review denied: no interactive approval channel (tool=%s)", name)
+		trace.Source = "unavailable"
+		trace.Detail = "no interactive approval channel"
 		return fmt.Errorf(
 			"%w: %s requires approval, but no interactive approval channel is available; run interactively or use --review-mode never if non-interactive execution is intentional",
 			errReviewUnavailable,
@@ -370,31 +388,53 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	}
 	ch, done := r.snapshotSession()
 	if ch == nil {
-		debug.Printf("requestApproval: no review channel registered (session ended)")
+		trace.Source = "unavailable"
+		trace.Detail = "review session ended"
 		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	}
 	select {
 	case ch <- item:
-		debug.Printf("requestApproval: review item sent to channel, waiting for user...")
+		trace.Source = "user"
+		trace.Detail = "waiting"
 	case <-done:
+		trace.Source = "unavailable"
+		trace.Detail = "review session ended"
 		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	case <-deps.ctx.Done():
-		debug.Printf("requestApproval: context cancelled while sending review item")
+		trace.Source = "cancelled"
+		trace.Detail = "before prompt"
 		return fmt.Errorf("execution denied by user for: %s", name)
 	}
 	select {
 	case response := <-respCh:
-		debug.Printf("requestApproval: user response received, approved=%v", response.approved)
 		if response.approved {
+			trace.Detail = "approved"
 			return nil
 		}
+		trace.Detail = "denied"
 		return fmt.Errorf("execution denied by user for: %s", name)
 	case <-done:
+		trace.Source = "unavailable"
+		trace.Detail = "review session ended"
 		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
 	case <-deps.ctx.Done():
-		debug.Printf("requestApproval: context cancelled while waiting for user response")
+		trace.Source = "cancelled"
+		trace.Detail = "while waiting for user"
 		return fmt.Errorf("execution denied by user for: %s", name)
 	}
+}
+
+func accessIntentSummary(intent AccessIntent) string {
+	groups := intent.Groups()
+	parts := make([]string, 0, len(groups))
+	for _, group := range groups {
+		part := string(group.Class)
+		if len(group.Dirs) > 0 {
+			part += " · " + strings.Join(group.Dirs, ", ")
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // requestSecretApproval is an unpersistable, per-use confirmation. Secret

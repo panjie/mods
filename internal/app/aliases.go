@@ -29,6 +29,9 @@ type ApprovalReviewMode = approval.ReviewMode
 type Styles = ui.Styles
 type Anim = ui.Anim
 type SpinnerPhase = ui.SpinnerPhase
+type DebugSection = debugpkg.Section
+type DebugField = debugpkg.Field
+type DebugBlock = debugpkg.Block
 
 var newUserErrorf = apperr.NewUserErrorf
 var NewID = session.NewID

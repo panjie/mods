@@ -150,7 +150,7 @@ type responseStream struct {
 	factory    func() *ssestream.Stream[responses.ResponseStreamEventUnion]
 	request    responses.ResponseNewParams
 	messages   []proto.Message
-	toolCall   func(name string, data []byte) (string, error)
+	toolCall   proto.ToolCaller
 	trackUsage bool
 	profile    ResponsesProfile
 
@@ -203,11 +203,9 @@ func (s *responseStream) pendingToolCalls() []pendingResponseToolCall {
 func (s *responseStream) CallTools() []proto.ToolCallStatus {
 	calls := s.pendingToolCalls()
 	statuses := make([]proto.ToolCallStatus, 0, len(calls))
-	for _, call := range calls {
+	for i, call := range calls {
 		msg, status := stream.CallTool(
-			call.id,
-			call.name,
-			call.arguments,
+			proto.ToolCallRequest{ID: call.id, Index: i + 1, Total: len(calls), Name: call.name, Arguments: call.arguments},
 			s.toolCall,
 		)
 		if call.custom && len(msg.ToolCalls) > 0 {

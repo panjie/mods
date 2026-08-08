@@ -4,6 +4,7 @@ package stream
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/panjie/mods/internal/proto"
 )
@@ -88,12 +89,10 @@ type Stream interface {
 
 // CallTool calls a tool using the provided data and caller, and returns the
 // resulting [proto.Message] and [proto.ToolCallStatus].
-func CallTool(
-	id, name string,
-	data []byte,
-	caller func(name string, data []byte) (string, error),
-) (proto.Message, proto.ToolCallStatus) {
-	content, err := caller(name, data)
+func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller) (proto.Message, proto.ToolCallStatus) {
+	started := time.Now()
+	content, err := caller(call)
+	duration := time.Since(started)
 	if content == "" && err != nil {
 		content = err.Error()
 	}
@@ -102,19 +101,23 @@ func CallTool(
 			Content: content,
 			ToolCalls: []proto.ToolCall{
 				{
-					ID:      id,
+					ID:      call.ID,
 					IsError: err != nil,
 					Function: proto.Function{
-						Name:      name,
-						Arguments: data,
+						Name:      call.Name,
+						Arguments: call.Arguments,
 					},
 				},
 			},
 		},
 		proto.ToolCallStatus{
-			Name:      name,
-			Arguments: data,
+			ID:        call.ID,
+			Index:     call.Index,
+			Total:     call.Total,
+			Name:      call.Name,
+			Arguments: call.Arguments,
 			Output:    content,
 			Err:       err,
+			Duration:  duration,
 		}
 }

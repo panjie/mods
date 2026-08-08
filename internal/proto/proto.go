@@ -4,6 +4,7 @@ package proto
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // StripSchema removes descriptive keys (description, title, examples, default)
@@ -107,11 +108,28 @@ func (u TokenUsage) Available() bool {
 
 // ToolCallStatus is the status of a tool call.
 type ToolCallStatus struct {
+	ID        string
+	Index     int
+	Total     int
 	Name      string
 	Arguments []byte
 	Output    string
 	Err       error
+	Duration  time.Duration
 }
+
+// ToolCallRequest identifies one provider-requested tool invocation. Index is
+// one-based and Total is the number of calls in the current tool round.
+type ToolCallRequest struct {
+	ID        string
+	Index     int
+	Total     int
+	Name      string
+	Arguments []byte
+}
+
+// ToolCaller executes one provider-requested tool invocation.
+type ToolCaller func(ToolCallRequest) (string, error)
 
 // Message is a message in the session.
 type Message struct {
@@ -184,7 +202,7 @@ type Request struct {
 	MaxTokens      *int64
 	ResponseFormat *string
 	TrackUsage     bool
-	ToolCaller     func(name string, data []byte) (string, error)
+	ToolCaller     ToolCaller
 }
 
 // Session is a session.

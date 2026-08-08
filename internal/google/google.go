@@ -324,7 +324,7 @@ type Stream struct {
 	request     MessageCompletionRequest
 	client      *Client
 	ctx         context.Context
-	toolCall    func(name string, data []byte) (string, error)
+	toolCall    proto.ToolCaller
 	callSeq     int
 	trackUsage  bool
 	roundUsage  proto.TokenUsage
@@ -339,11 +339,9 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 		s.request.Contents = append(s.request.Contents, fromProtoMessage(s.message))
 		s.messages = append(s.messages, s.message)
 	}
-	for _, call := range calls {
+	for i, call := range calls {
 		msg, status := stream.CallTool(
-			call.ID,
-			call.Function.Name,
-			call.Function.Arguments,
+			proto.ToolCallRequest{ID: call.ID, Index: i + 1, Total: len(calls), Name: call.Function.Name, Arguments: call.Function.Arguments},
 			s.toolCall,
 		)
 		s.request.Contents = append(s.request.Contents, fromProtoMessage(msg))

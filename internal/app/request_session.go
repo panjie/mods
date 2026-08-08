@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/anthropic"
@@ -139,7 +140,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		request.ResponseFormat = &cfg.Format
 	}
 
-	debugRequest(cfg, &mod, &m.messages, tools, &request)
+	m.debugRequest(cfg, &mod, &m.messages, tools, &request)
 	m.thinkActive = thinkActive
 	// Derive a cancellable context for the stream so quit() / a subsequent
 	// start*Cmd can tear down the in-flight HTTP/SSE request rather than
@@ -283,7 +284,7 @@ func debugTools(tools []proto.ToolSpec, total int) {
 	if !debug.Enabled() {
 		return
 	}
-	debug.Printf("Tools: %d advertised tool(s), %d local executable(s)", len(tools), total)
+	lines := make([]string, 0, len(tools))
 	for _, t := range tools {
 		wireType := t.WireType
 		if wireType == "" {
@@ -293,13 +294,70 @@ func debugTools(tools []proto.ToolSpec, total int) {
 		if wireName == "" {
 			wireName = t.Name
 		}
-		debug.Printf("  Tool: %s (wire=%s/%s)", t.Name, wireType, wireName)
+		lines = append(lines, fmt.Sprintf("%s · wire=%s/%s", t.Name, wireType, wireName))
 	}
+	debug.Print(DebugSection{
+		Title:  "startup · tools",
+		Fields: []DebugField{{Label: "available", Value: fmt.Sprintf("%d advertised · %d local executable", len(tools), total)}},
+		Blocks: []DebugBlock{{Label: "registry", Value: strings.Join(lines, "\n")}},
+	})
 }
 
-func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(name string, data []byte) (string, error) {
+func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolCaller {
 	preflight := newCommandPreflightGate(cfg)
-	return func(name string, data []byte) (string, error) {
+	return func(call proto.ToolCallRequest) (output string, returnErr error) {
+		name, data := call.Name, call.Arguments
+		started := time.Now()
+		approvalRecord := approvalTrace{Source: "not reached"}
+		redactedArgs := string(data)
+		if m.secrets != nil {
+			redactedArgs = m.secrets.Redact(redactedArgs)
+		}
+		title := fmt.Sprintf("tool · turn %d · round %d · call %d/%d", m.debugTurn, m.debugRound, call.Index, call.Total)
+		debug.Print(DebugSection{
+			Title: title + " · start",
+			Fields: []DebugField{
+				{Label: "call", Value: fmt.Sprintf("→ %s [%s]", name, call.ID)},
+			},
+			Blocks: []DebugBlock{debug.Arguments([]byte(redactedArgs))},
+		})
+		defer func() {
+			duration := time.Since(started)
+			redactedOutput := output
+			if m.secrets != nil {
+				redactedOutput = m.secrets.Redact(redactedOutput)
+			}
+			status, symbol := toolDebugStatus(returnErr)
+			fields := []DebugField{
+				{Label: "call", Value: fmt.Sprintf("%s %s [%s]", symbol, name, call.ID)},
+				{Label: "approval", Value: approvalDebugValue(approvalRecord)},
+				{Label: "status", Value: fmt.Sprintf("%s · %s", status, formatDebugDuration(duration))},
+			}
+			if returnErr != nil {
+				fields = append(fields, DebugField{Label: "error", Value: returnErr.Error()})
+			}
+			debug.Print(DebugSection{
+				Title:  title + " · " + status,
+				Fields: fields,
+				Blocks: []DebugBlock{debug.Result(redactedOutput)},
+			})
+			m.debugToolTotal++
+			switch {
+			case status == "success":
+				m.debugToolSucceeded++
+			case strings.HasPrefix(status, "exit "):
+				m.debugToolExited++
+			case status == "denied":
+				m.debugToolDenied++
+			case status == "correction":
+				m.debugToolCorrected++
+			case status == "cancelled":
+				m.debugToolCancelled++
+			default:
+				m.debugToolFailed++
+			}
+		}()
+
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
 		m.addCancel(cancel)
 		defer cancel()
@@ -311,6 +369,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			return "", err
 		}
 		if registry.Interactive(name) {
+			approvalRecord = approvalTrace{Source: "interactive", Detail: "tool-managed"}
 			m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
 			return registry.Call(ctx, name, data)
 		}
@@ -361,13 +420,22 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 			assessment:     assessment,
 			accessIntent:   intent,
 			safeDirs:       safeDirs,
+			onDecision: func(trace approvalTrace) {
+				approvalRecord = trace
+			},
 		}, name, data); err != nil {
 			return "", err
 		}
 		if secrets.ContainsRef(data) {
+			secretStarted := time.Now()
 			if err := m.reviewer.requestSecretApproval(m.ctx, name, data); err != nil {
+				approvalRecord.Source = "secret " + toolDebugStatusLabel(err)
+				approvalRecord.Detail = "protected credential"
+				approvalRecord.Duration += time.Since(secretStarted)
 				return "", err
 			}
+			approvalRecord.Detail += " · secret approved"
+			approvalRecord.Duration += time.Since(secretStarted)
 		}
 
 		callData := data
@@ -390,4 +458,48 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(nam
 		}
 		return output, err
 	}
+}
+
+func approvalDebugValue(trace approvalTrace) string {
+	value := trace.Source
+	if trace.Detail != "" {
+		value += " · " + trace.Detail
+	}
+	if trace.Duration > 0 {
+		value += " · " + formatDebugDuration(trace.Duration)
+	}
+	return value
+}
+
+func toolDebugStatus(err error) (status, symbol string) {
+	if err == nil {
+		return "success", "✓"
+	}
+	var correction correctionSuggester
+	if errors.As(err, &correction) && correction.CorrectionSuggested() {
+		return "correction", "!"
+	}
+	var exitErr shellExitCoder
+	if errors.As(err, &exitErr) {
+		return fmt.Sprintf("exit %d", exitErr.ExitCode()), "!"
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "cancelled", "!"
+	}
+	if errors.Is(err, errReviewUnavailable) || strings.Contains(err.Error(), "execution denied by user") {
+		return "denied", "✗"
+	}
+	return "failed", "✗"
+}
+
+func toolDebugStatusLabel(err error) string {
+	status, _ := toolDebugStatus(err)
+	return status
+}
+
+func formatDebugDuration(duration time.Duration) string {
+	if duration < time.Millisecond {
+		return "<1 ms"
+	}
+	return duration.Round(time.Millisecond).String()
 }

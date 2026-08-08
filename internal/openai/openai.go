@@ -216,7 +216,7 @@ type Stream struct {
 	factory        func() *ssestream.Stream[openai.ChatCompletionChunk]
 	message        openai.ChatCompletionAccumulator
 	messages       []proto.Message
-	toolCall       func(name string, data []byte) (string, error)
+	toolCall       proto.ToolCaller
 	parseThink     bool
 	think          thinkParser
 	thoughtFields  []string
@@ -241,11 +241,9 @@ func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	calls := s.pendingToolCalls()
 	statuses := make([]proto.ToolCallStatus, 0, len(calls))
-	for _, call := range calls {
+	for i, call := range calls {
 		msg, status := stream.CallTool(
-			call.ID,
-			call.Function.Name,
-			[]byte(call.Function.Arguments),
+			proto.ToolCallRequest{ID: call.ID, Index: i + 1, Total: len(calls), Name: call.Function.Name, Arguments: []byte(call.Function.Arguments)},
 			s.toolCall,
 		)
 		resp := openai.ToolMessage(

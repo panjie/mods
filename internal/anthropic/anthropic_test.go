@@ -168,14 +168,18 @@ func TestCallToolsGroupsParallelResults(t *testing.T) {
 		request: SDK.MessageNewParams{
 			Messages: []SDK.MessageParam{SDK.NewUserMessage(SDK.NewTextBlock("start"))},
 		},
-		toolCall: func(name string, _ []byte) (string, error) {
-			return name + " result", nil
+		toolCall: func(call proto.ToolCallRequest) (string, error) {
+			return call.Name + " result", nil
 		},
 	}
 
 	statuses := st.CallTools()
 
 	require.Len(t, statuses, 2)
+	require.Equal(t, "tool_1", statuses[0].ID)
+	require.Equal(t, 1, statuses[0].Index)
+	require.Equal(t, 2, statuses[0].Total)
+	require.Equal(t, "tool_2", statuses[1].ID)
 	require.Len(t, st.request.Messages, 2)
 	results := st.request.Messages[1]
 	require.Equal(t, SDK.MessageParamRoleUser, results.Role)
@@ -253,9 +257,9 @@ func TestThinkingToolRoundReplaysOpaqueBlocksAfterBudgeting(t *testing.T) {
 			Description: "look something up",
 			InputSchema: map[string]any{"type": "object"},
 		}},
-		ToolCaller: func(name string, data []byte) (string, error) {
-			require.Equal(t, "lookup", name)
-			require.JSONEq(t, `{"q":"mods"}`, string(data))
+		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
+			require.Equal(t, "lookup", call.Name)
+			require.JSONEq(t, `{"q":"mods"}`, string(call.Arguments))
 			return "found", nil
 		},
 	})

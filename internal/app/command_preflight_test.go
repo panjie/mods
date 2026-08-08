@@ -112,7 +112,7 @@ func TestToolCallerCorrectionDoesNotExecuteCommand(t *testing.T) {
 		},
 	}))
 
-	_, err := m.toolCaller(registry, &cfg)("shell_run", []byte(`{"command":"rm out.txt"}`))
+	_, err := m.toolCaller(registry, &cfg)(proto.ToolCallRequest{ID: "call-1", Index: 1, Total: 1, Name: "shell_run", Arguments: []byte(`{"command":"rm out.txt"}`)})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "process_run")
 	require.Zero(t, executed.Load(), "preflight correction must happen before tool execution")

@@ -493,9 +493,9 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 			{Role: proto.RoleUser, Content: "read README"},
 			identity,
 		},
-		ToolCaller: func(name string, data []byte) (string, error) {
-			require.Equal(t, "read_file", name)
-			require.JSONEq(t, `{"path":"README.md"}`, string(data))
+		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
+			require.Equal(t, "read_file", call.Name)
+			require.JSONEq(t, `{"path":"README.md"}`, string(call.Arguments))
 			return "README contents", nil
 		},
 	})
@@ -510,6 +510,9 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	statuses := st.CallTools()
 	require.Len(t, statuses, 1)
 	require.NoError(t, statuses[0].Err)
+	require.Equal(t, "call_1", statuses[0].ID)
+	require.Equal(t, 1, statuses[0].Index)
+	require.Equal(t, 1, statuses[0].Total)
 	require.Len(t, *captured, 2)
 	for _, body := range *captured {
 		var request map[string]any
@@ -551,7 +554,7 @@ func TestCallToolsSerializesFailureAsError(t *testing.T) {
 
 	st := client.Request(context.Background(), proto.Request{
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "read missing"}},
-		ToolCaller: func(name string, data []byte) (string, error) {
+		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
 			return "", errors.New("not found")
 		},
 	})

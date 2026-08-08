@@ -4,12 +4,20 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/panjie/mods/internal/proto"
 )
+
+func callToolForTest(id, name string, data []byte, caller func(string, []byte) (string, error)) (proto.Message, proto.ToolCallStatus) {
+	return CallTool(proto.ToolCallRequest{ID: id, Index: 1, Total: 1, Name: name, Arguments: data}, func(call proto.ToolCallRequest) (string, error) {
+		return caller(call.Name, call.Arguments)
+	})
+}
 
 func TestCallToolPreservesResults(t *testing.T) {
 	t.Run("short result unchanged", func(t *testing.T) {
 		short := "hello world"
-		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
+		msg, status := callToolForTest("tid", "tool", nil, func(name string, data []byte) (string, error) {
 			return short, nil
 		})
 		if msg.Content != short {
@@ -22,7 +30,7 @@ func TestCallToolPreservesResults(t *testing.T) {
 
 	t.Run("large result unchanged", func(t *testing.T) {
 		long := strings.Repeat("x", 100000)
-		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
+		msg, status := callToolForTest("tid", "tool", nil, func(name string, data []byte) (string, error) {
 			return long, nil
 		})
 		if msg.Content != long {
@@ -35,7 +43,7 @@ func TestCallToolPreservesResults(t *testing.T) {
 
 	t.Run("large unicode result unchanged", func(t *testing.T) {
 		long := strings.Repeat("你", 40000)
-		msg, _ := CallTool("tid", "tool", nil, func(string, []byte) (string, error) {
+		msg, _ := callToolForTest("tid", "tool", nil, func(string, []byte) (string, error) {
 			return long, nil
 		})
 		if msg.Content != long {
@@ -44,7 +52,7 @@ func TestCallToolPreservesResults(t *testing.T) {
 	})
 
 	t.Run("error result has error in content", func(t *testing.T) {
-		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
+		msg, status := callToolForTest("tid", "tool", nil, func(name string, data []byte) (string, error) {
 			return "", errors.New("test failure")
 		})
 		if msg.Content != "test failure" {
@@ -56,7 +64,7 @@ func TestCallToolPreservesResults(t *testing.T) {
 	})
 
 	t.Run("error result preserves returned content", func(t *testing.T) {
-		msg, status := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
+		msg, status := callToolForTest("tid", "tool", nil, func(name string, data []byte) (string, error) {
 			return "stdout\nstderr\n[exit status 7]", errors.New("command exited with status 7")
 		})
 		if msg.Content != "stdout\nstderr\n[exit status 7]" {
@@ -75,17 +83,23 @@ func TestCallToolPreservesResults(t *testing.T) {
 
 	t.Run("arguments are stored in status", func(t *testing.T) {
 		args := []byte(`{"query":"test"}`)
-		_, status := CallTool("tid", "tool", args, func(name string, data []byte) (string, error) {
+		_, status := callToolForTest("tid", "tool", args, func(name string, data []byte) (string, error) {
 			return "result", nil
 		})
 		if string(status.Arguments) != string(args) {
 			t.Errorf("expected args %q, got %q", args, status.Arguments)
 		}
+		if status.ID != "tid" || status.Index != 1 || status.Total != 1 {
+			t.Errorf("expected call metadata to be preserved, got %#v", status)
+		}
+		if status.Duration <= 0 {
+			t.Error("expected call duration to be recorded")
+		}
 	})
 
 	t.Run("large error result is unchanged", func(t *testing.T) {
 		longErr := strings.Repeat("e", 100000)
-		msg, _ := CallTool("tid", "tool", nil, func(name string, data []byte) (string, error) {
+		msg, _ := callToolForTest("tid", "tool", nil, func(name string, data []byte) (string, error) {
 			return longErr, errors.New("failed")
 		})
 		if msg.Content != longErr {

@@ -58,6 +58,23 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.responseBoundaryPending = false
 	m.Thought = ""
 	m.thoughtFlushed = false
+	if !m.debugTurnActive {
+		m.debugTurn++
+		m.debugRound = 1
+		m.debugTurnStarted = time.Now()
+		m.debugTurnActive = true
+		m.debugToolTotal = 0
+		m.debugToolRounds = 0
+		m.debugToolSucceeded = 0
+		m.debugToolExited = 0
+		m.debugToolFailed = 0
+		m.debugToolDenied = 0
+		m.debugToolCorrected = 0
+		m.debugToolCancelled = 0
+		debug.Print(DebugSection{Title: fmt.Sprintf("turn %d · start", m.debugTurn), Fields: []DebugField{
+			{Label: "input", Value: fmt.Sprintf("%d chars", len(m.Input)+len(content))},
+		}})
+	}
 
 	return func() tea.Msg {
 		session, err := m.buildRequestSession(content)
@@ -272,18 +289,11 @@ func isOSeries(model string) bool {
 	return oSeriesRe.MatchString(model)
 }
 
-func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []proto.ToolSpec, request *proto.Request) {
+func (m *Mods) debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []proto.ToolSpec, request *proto.Request) {
 	if !debug.Enabled() {
 		return
 	}
 	providerMessages := proto.NormalizeSystemMessages(*messages)
-	debug.Printf("API request -> model=%s, api=%s", mod.Name, mod.API)
-	debug.Printf(
-		"Request: %d provider message(s) from %d internal message fragment(s), %d tool definition(s)",
-		len(providerMessages),
-		len(*messages),
-		len(tools),
-	)
 	tempStr := "unset"
 	if request.Temperature != nil {
 		tempStr = fmt.Sprintf("%.2f", *request.Temperature)
@@ -292,15 +302,27 @@ func debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, tools []pr
 	if request.MaxTokens != nil {
 		maxTokStr = fmt.Sprintf("%d", *request.MaxTokens)
 	}
-	debug.Printf("Request: temp=%s, max_tokens=%s", tempStr, maxTokStr)
-	if cfg.HTTPProxy != "" {
-		debug.Printf("HTTP proxy: %s", cfg.HTTPProxy)
-	}
+	messageBytes, toolBytes := 0, 0
 	if b, err := json.Marshal(providerMessages); err == nil {
 		toolBody, _ := json.Marshal(request.Tools)
-		debug.Printf("Request: ~%dKB body (%dKB messages + %dKB tools)",
-			(len(b)+len(toolBody))/1024, len(b)/1024, len(toolBody)/1024)
+		messageBytes, toolBytes = len(b), len(toolBody)
 	}
+	fields := []DebugField{
+		{Label: "provider", Value: mod.API + "/" + mod.Name},
+		{Label: "context", Value: fmt.Sprintf("%d provider messages · %d internal fragments", len(providerMessages), len(*messages))},
+		{Label: "tools", Value: fmt.Sprintf("%d definitions", len(tools))},
+		{Label: "request", Value: fmt.Sprintf("%d bytes · messages %d · tools %d", messageBytes+toolBytes, messageBytes, toolBytes)},
+		{Label: "parameters", Value: fmt.Sprintf("temperature=%s · max_tokens=%s", tempStr, maxTokStr)},
+	}
+	if cfg.HTTPProxy != "" {
+		fields = append(fields, DebugField{Label: "proxy", Value: cfg.HTTPProxy})
+	}
+	title := fmt.Sprintf("turn %d · request", m.debugTurn)
+	if m.retries > 0 {
+		title = fmt.Sprintf("turn %d · retry %d", m.debugTurn, m.retries)
+	}
+	debug.Print(DebugSection{Title: title, Fields: fields})
+	m.debugStartModelRound()
 }
 
 func ptrOrNil[T number](t T) *T {

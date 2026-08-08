@@ -266,7 +266,7 @@ func powerShellSubshellsOnlyInTopLevelValues(command string, expressions []strin
 	remainder := command
 	for _, expression := range expressions {
 		if strings.Contains(expression, "$(") {
-			remainder = strings.Replace(remainder, expression, "", 1)
+			remainder = strings.ReplaceAll(remainder, expression, "")
 		}
 	}
 	return !strings.Contains(remainder, "$(")

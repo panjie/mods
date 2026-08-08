@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -140,4 +141,50 @@ func TestConstrainResolvedProcessAssessmentForWorkspaceExecutable(t *testing.T) 
 	require.Equal(t, approval.EffectUnknown, got.Effect)
 	require.Equal(t, assessment.KnownDirs, got.KnownDirs)
 	require.Contains(t, got.Reason, "workspace or temporary directory")
+}
+
+func TestAssessProcessInvocationExplicitWorkspaceProgramStaysReviewable(t *testing.T) {
+	root := t.TempDir()
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	m := &Mods{
+		Config: &cfg,
+		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
+			require.Equal(t, "process_run", tool)
+			require.Contains(t, input, "direct_process_invocation")
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "test classifier"}
+		},
+	}
+
+	tests := []struct {
+		name   string
+		invoke string
+		expect approval.CommandEffect
+	}{
+		{
+			name:   "relative workspace program stays reviewable",
+			invoke: `{"program":"./tool.sh","args":["--run"]}`,
+			expect: approval.EffectUnknown,
+		},
+		{
+			name:   "absolute workspace program stays reviewable",
+			invoke: fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(root, "tool.sh")),
+			expect: approval.EffectUnknown,
+		},
+		{
+			name:   "external absolute program keeps classifier effect",
+			invoke: `{"program":"/usr/bin/python3","args":["-c","pass"]}`,
+			expect: approval.EffectRead,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assessment := m.assessCommand("process_run", tc.invoke)
+			require.Equal(t, tc.expect, assessment.Effect)
+			if tc.expect == approval.EffectUnknown {
+				require.Contains(t, assessment.Reason, "workspace or temporary directory")
+			}
+		})
+	}
 }

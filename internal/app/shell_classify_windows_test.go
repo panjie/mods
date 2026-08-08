@@ -205,3 +205,85 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 		ApprovalReviewMode(ReviewAuto),
 	))
 }
+
+func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"bare env output", `Write-Output $env:GITHUB_TOKEN`},
+		{"formatted env output", `ConvertTo-Json $env:STARSHIP_CONFIG`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assessment := m.assessCommand("powershell_run", tc.command)
+
+			require.Equal(t, approval.EffectRead, assessment.Effect)
+			require.False(t, assessment.DynamicProbe)
+			require.Equal(t, DecisionAsk, ClassifyAccess(
+				assessment.AccessIntent(),
+				WorkspaceScope(workspace),
+				nil,
+				ApprovalReviewMode(ReviewAuto),
+			))
+		})
+	}
+}
+
+func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Test-Path $env:STARSHIP_CONFIG`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$env:STARSHIP_CONFIG`)
+	require.True(t, assessment.DynamicProbe)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Write-Output $PROFILE.CurrentUserCurrentHost`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
+	require.True(t, assessment.DynamicProbe)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}

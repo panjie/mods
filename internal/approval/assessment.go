@@ -173,22 +173,6 @@ func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
 	return dedupeSorted(dirs), known
 }
 
-func posixStatementKnownWriter(stmt *syntax.Stmt) bool {
-	if stmt == nil || stmt.Cmd == nil {
-		return false
-	}
-	for _, redir := range stmt.Redirs {
-		if redir != nil && redirectionWritesPersistent(redir) {
-			return true
-		}
-	}
-	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
-		return posixStatementKnownWriter(binary.X) || posixStatementKnownWriter(binary.Y)
-	}
-	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	return ok && posixCallKnownWriter(call)
-}
-
 func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy) CommandAssessment {
 	ir, err := parseWithBridge(command)
 	if err != nil || len(ir.ParseErrors) > 0 {
@@ -213,7 +197,7 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 	if readOnlyPowerShellIR(command, ir, policy) {
 		result.Effect = EffectRead
 		result.KnownDirs = append([]string(nil), ir.Paths...)
-		result.DynamicProbe = len(dynamic) > 0 && powerShellDynamicTargetProbe(ir)
+		result.DynamicProbe = len(dynamic) > 0 && powerShellDynamicTargetProbe(ir, dynamic)
 		result.Reason = "read-only PowerShell command (PowerShell AST static analysis)"
 	} else if knownWrite {
 		result.Effect = EffectWrite
@@ -223,12 +207,26 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 	return result
 }
 
-func powerShellDynamicTargetProbe(ir *psBridgeIR) bool {
+func powerShellDynamicTargetProbe(ir *psBridgeIR, dynamic []string) bool {
 	if ir == nil {
 		return false
 	}
+	envVarTarget := false
+	for _, target := range dynamic {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(target)), "$env:") {
+			envVarTarget = true
+			break
+		}
+	}
 	for _, inv := range ir.Invocations {
-		if !powerShellProbeCommands[normalizePowerShellCommandName(inv.Name)] {
+		name := normalizePowerShellCommandName(inv.Name)
+		if !powerShellProbeCommands[name] {
+			return false
+		}
+		if envVarTarget && powerShellOutputProbeCommands[name] {
+			// Output-emitting probes echo the environment variable's value
+			// into the model context, so they are content reads rather than
+			// path-resolution probes and must not auto-allow.
 			return false
 		}
 	}
@@ -243,5 +241,18 @@ var powerShellProbeCommands = map[string]bool{
 	"format-table": true, "ft": true, "format-list": true, "fl": true,
 	"format-wide": true, "fw": true, "format-custom": true, "fc": true,
 	"out-string": true, "out-host": true, "out-null": true,
+	"convertto-json": true,
+}
+
+// powerShellOutputProbeCommands is the subset of powerShellProbeCommands that
+// puts argument values into the output stream. Combined with a bare $env:NAME
+// target such a probe would echo the variable's value into the model context,
+// so it never qualifies for the auto-allow DynamicProbe treatment.
+var powerShellOutputProbeCommands = map[string]bool{
+	"write-output": true, "write": true, "echo": true,
+	"select-object": true, "select": true,
+	"format-table": true, "ft": true, "format-list": true, "fl": true,
+	"format-wide": true, "fw": true, "format-custom": true, "fc": true,
+	"out-string": true, "out-host": true,
 	"convertto-json": true,
 }

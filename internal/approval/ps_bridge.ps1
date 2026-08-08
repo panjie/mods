@@ -177,9 +177,6 @@ function Invoke-Parse {
                     }
                 }
             }
-            if ($node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand) {
-                $ir.has_background = $true
-            }
             continue
         }
 
@@ -290,7 +287,8 @@ function Invoke-Parse {
         }
     } catch {}
 
-    foreach ($tok in $tokens) {
+    for ($i = 0; $i -lt $tokens.Count; $i++) {
+        $tok = $tokens[$i]
         $tv = $tok.Text.ToLower()
         switch ($tv) {
             '-encodedcommand' { Add-Unique $ir.risk_flags "invoke_expression" }
@@ -300,11 +298,23 @@ function Invoke-Parse {
             '&&'              { Add-Unique $ir.operators "&&" }
             '||'              { Add-Unique $ir.operators "||" }
             '&'               {
-                # Background operator suffix (e.g. "Get-Process &").
-                # The call-operator prefix ("& 'cmd'") is already handled via
-                # CommandAst.InvocationOperator above; this catches the trailing
-                # background form, which the parser does not surface on CommandAst.
-                $ir.has_background = $true
+                # Only a trailing "&" at the end of a statement is the
+                # background operator (e.g. "Get-Process &"). A "&" followed by
+                # a command expression is the call operator ("& 'cmd' arg"),
+                # which is ordinary invocation syntax, not a background launch.
+                $next = ''
+                for ($j = $i + 1; $j -lt $tokens.Count; $j++) {
+                    $kind = $tokens[$j].Kind
+                    if ($kind -eq [System.Management.Automation.Language.TokenKind]::Comment -or
+                        $kind -eq [System.Management.Automation.Language.TokenKind]::NewLine) {
+                        continue
+                    }
+                    $next = $tokens[$j].Text
+                    break
+                }
+                if ($next -in @('', ';', '}', ')')) {
+                    $ir.has_background = $true
+                }
             }
         }
     }

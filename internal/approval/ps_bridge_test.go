@@ -339,3 +339,32 @@ func TestIsReadOnlyPowerShellPipelineChainSemantics(t *testing.T) {
 		})
 	}
 }
+
+// TestParseWithBridgeBackgroundOperatorSemantics guards the bridge's
+// distinction between the "&" call operator and the trailing background
+// operator. The call operator ("& 'cmd' arg") is ordinary invocation syntax
+// and must not be reported as background; a trailing "&" at statement end
+// ("Get-Process &") is a background launch and must be flagged.
+func TestParseWithBridgeBackgroundOperatorSemantics(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	tests := []struct {
+		name           string
+		command        string
+		expectBackward bool
+	}{
+		{"call operator with cmdlet", `& Get-Date`, false},
+		{"call operator with path script", `& 'C:\Tools\script.ps1'`, false},
+		{"call operator with variable", `& $script`, false},
+		{"trailing background", `Get-Content a.txt &`, true},
+		{"background before semicolon", `Get-Content a.txt &; Write-Output done`, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ir, err := parseWithBridge(tc.command)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectBackward, ir.HasBackground,
+				"command %q background classification", tc.command)
+		})
+	}
+}

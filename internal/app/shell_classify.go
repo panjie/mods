@@ -173,6 +173,23 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		result.KnownDirs = normalizeLiteralProcessDirs(result.KnownDirs, cwd, flavor)
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, affected)
 	}
+	// An executable given by an explicit relative or absolute path that lives
+	// inside the workspace or a safe directory stays reviewable even when the
+	// classifier calls it read-only: the script itself may do anything once it
+	// runs. Bare names resolved into those directories are handled separately
+	// via the pinned PATH binding in constrainResolvedProcessAssessment.
+	if (result.Effect == approval.EffectRead || result.Effect == approval.EffectWrite) &&
+		(strings.ContainsAny(invocation.Program, `/\`) || pathutil.IsAbs(invocation.Program)) {
+		resolved := strings.TrimSpace(invocation.Program)
+		if !pathutil.IsAbs(resolved) {
+			resolved = pathutil.NormalizeShellPath(resolved, pathutil.DefaultOptions(cwd, flavor))
+		}
+		switch pathutil.Location(resolved, workspace, m.safeDirs()) {
+		case pathutil.LocationWorkspace, pathutil.LocationSafe:
+			result.Effect = approval.EffectUnknown
+			result.Reason = "executable resolves from a workspace or temporary directory"
+		}
+	}
 	if len(result.KnownDirs) == 0 && cwd != "" {
 		result.KnownDirs = []string{cwd}
 	}

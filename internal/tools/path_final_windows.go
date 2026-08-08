@@ -36,19 +36,26 @@ func evalPlatformFinalPath(path string) (string, error) {
 	for {
 		n, finalErr := windows.GetFinalPathNameByHandle(handle, &buffer[0], uint32(len(buffer)), 0)
 		if finalErr != nil {
+			if n > uint32(len(buffer)) {
+				buffer = make([]uint16, n+1)
+				continue
+			}
 			return "", fmt.Errorf("resolve final path name: %w", finalErr)
 		}
-		if n < uint32(len(buffer)) {
-			resolved := string(utf16.Decode(buffer[:n]))
-			switch {
-			case strings.HasPrefix(resolved, `\\?\UNC\`):
-				return `\\` + strings.TrimPrefix(resolved, `\\?\UNC\`), nil
-			case strings.HasPrefix(resolved, `\\?\`):
-				return strings.TrimPrefix(resolved, `\\?\`), nil
-			default:
-				return resolved, nil
-			}
+		resolved := string(utf16.Decode(buffer[:n]))
+		switch {
+		case strings.HasPrefix(resolved, `\\?\UNC\`):
+			return `\\` + strings.TrimPrefix(resolved, `\\?\UNC\`), nil
+		case strings.HasPrefix(resolved, `\\?\Volume{`):
+			// Mounted-volume device paths have no drive-letter form to shorten
+			// to. Keep the verbatim form; comparisons against drive-letter
+			// approvals will not match, which fails closed rather than
+			// authorizing a different path.
+			return resolved, nil
+		case strings.HasPrefix(resolved, `\\?\`):
+			return strings.TrimPrefix(resolved, `\\?\`), nil
+		default:
+			return resolved, nil
 		}
-		buffer = make([]uint16, n+1)
 	}
 }

@@ -214,11 +214,11 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 		result.Effect = EffectRead
 		result.KnownDirs = append([]string(nil), ir.Paths...)
 		result.DynamicProbe = len(dynamic) > 0 && powerShellDynamicTargetProbe(ir)
-		result.Reason = "read-only PowerShell command (AST analysis)"
+		result.Reason = "read-only PowerShell command (PowerShell AST static analysis)"
 	} else if knownWrite {
 		result.Effect = EffectWrite
 		result.KnownDirs = dirs
-		result.Reason = "write command (PowerShell AST analysis)"
+		result.Reason = "write command (PowerShell AST static analysis)"
 	}
 	return result
 }

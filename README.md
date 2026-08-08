@@ -535,6 +535,10 @@ prompts:
 Issues and pull requests are welcome on this fork. Use `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` to verify
 the project compiles and `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` to run the test suite before opening a PR.
 
+Windows contributors can also run the layered [real-machine reliability suite](docs/windows-reliability.md),
+which validates PowerShell 5.1/7, Job Object process-tree cleanup, Windows path
+boundaries, command shims, and output encodings while producing an auditable report.
+
 Real-AI CLI black-box tests are kept behind the `integration` build tag and
 are not part of the default CI suite. They build and execute the `mods` binary
 with isolated config, data, cache, home, and workspace directories. To run the

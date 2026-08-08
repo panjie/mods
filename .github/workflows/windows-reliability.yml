@@ -1,0 +1,88 @@
+name: windows-reliability
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 3 * * 2,5'
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    name: Windows reliability (${{ matrix.host }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ps51, ps7]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+          check-latest: true
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+
+      - name: Install Scoop for shim coverage
+        shell: powershell
+        continue-on-error: true
+        run: |
+          if (-not (Get-Command scoop.cmd -ErrorAction SilentlyContinue)) {
+            Invoke-RestMethod -Uri https://get.scoop.sh -OutFile "$env:RUNNER_TEMP\install-scoop.ps1"
+            & "$env:RUNNER_TEMP\install-scoop.ps1" -RunAsAdmin
+          }
+          Get-Command node.exe,npm.cmd,winget.exe,scoop.cmd -ErrorAction SilentlyContinue | Format-Table Name,Source
+
+      - name: Run stress matrix
+        shell: powershell
+        run: ./scripts/windows-reliability.ps1 -Mode stress -PowerShellHost '${{ matrix.host }}'
+
+      - name: Capture residual processes
+        if: always()
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force artifacts/windows-reliability | Out-Null
+          Get-CimInstance Win32_Process |
+            Where-Object { $_.Name -in @('mods.exe', 'node.exe', 'npm.exe', 'powershell.exe', 'pwsh.exe') } |
+            Select-Object ProcessId,ParentProcessId,Name,CommandLine |
+            ConvertTo-Json -Depth 3 |
+            Set-Content -Encoding UTF8 artifacts/windows-reliability/residual-processes.json
+
+      - name: Upload reliability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 30
+          name: windows-reliability-${{ matrix.host }}
+          path: artifacts/windows-reliability
+
+  self-hosted-required:
+    if: ${{ vars.WINDOWS_RELIABILITY_SELF_HOSTED == 'true' }}
+    runs-on: [self-hosted, Windows, windows-reliability]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Run UNC and restricted-host matrix
+        shell: powershell
+        env:
+          TEST_UNC_ROOT: ${{ vars.WINDOWS_RELIABILITY_UNC_ROOT }}
+        run: ./scripts/windows-reliability.ps1 -Mode stress -PowerShellHost auto
+
+      - name: Upload self-hosted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 30
+          name: windows-reliability-self-hosted
+          path: artifacts/windows-reliability

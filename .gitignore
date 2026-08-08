@@ -5,6 +5,7 @@ completions/
 manpages/
 /bin/
 /dist/
+/artifacts/
 
 # macOS
 .DS_Store

@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	localereader "github.com/mattn/go-localereader"
@@ -198,6 +200,29 @@ func (w *boundedOutput) LastLine() string {
 }
 
 func decodeCommandOutput(out []byte) string {
+	if len(out) >= 2 {
+		var order binary.ByteOrder
+		switch {
+		case out[0] == 0xff && out[1] == 0xfe:
+			order = binary.LittleEndian
+		case out[0] == 0xfe && out[1] == 0xff:
+			order = binary.BigEndian
+		}
+		if order != nil {
+			payload := out[2:]
+			if len(payload)%2 != 0 {
+				payload = payload[:len(payload)-1]
+			}
+			units := make([]uint16, len(payload)/2)
+			for i := range units {
+				units[i] = order.Uint16(payload[i*2:])
+			}
+			return string(utf16.Decode(units))
+		}
+	}
+	if bytes.HasPrefix(out, []byte{0xef, 0xbb, 0xbf}) {
+		out = out[3:]
+	}
 	if !utf8.Valid(out) {
 		if decoded, err := localereader.UTF8(out); err == nil {
 			out = decoded

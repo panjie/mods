@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
@@ -1299,6 +1301,35 @@ func TestDecodeOutputPrefersUTF8(t *testing.T) {
 	want := `[{"creator":"潘捷","receiveTime":"7-14","title":"差旅费报销申请"}]`
 	if got := decodeOutput([]byte(want)); got != want {
 		t.Fatalf("decodeOutput() = %q, want %q", got, want)
+	}
+}
+
+func TestDecodeOutputRecognizesUnicodeBOMs(t *testing.T) {
+	want := "Windows 路径 🚀"
+	encodeUTF16 := func(littleEndian bool) []byte {
+		units := utf16.Encode([]rune(want))
+		out := []byte{0xfe, 0xff}
+		var order binary.ByteOrder = binary.BigEndian
+		if littleEndian {
+			out = []byte{0xff, 0xfe}
+			order = binary.LittleEndian
+		}
+		for _, unit := range units {
+			var pair [2]byte
+			order.PutUint16(pair[:], unit)
+			out = append(out, pair[:]...)
+		}
+		return out
+	}
+
+	for name, data := range map[string][]byte{
+		"utf8-bom":     append([]byte{0xef, 0xbb, 0xbf}, []byte(want)...),
+		"utf16-le-bom": encodeUTF16(true),
+		"utf16-be-bom": encodeUTF16(false),
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, want, decodeOutput(data))
+		})
 	}
 }
 

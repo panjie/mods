@@ -132,6 +132,10 @@ func evalPathThroughExistingParent(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	existingEval, err = evalPlatformFinalPath(existingEval)
+	if err != nil {
+		return "", err
+	}
 	parts := append([]string{existingEval}, missing...)
 	return filepath.Join(parts...), nil
 }

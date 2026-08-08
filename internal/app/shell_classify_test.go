@@ -410,7 +410,11 @@ func TestShellStaticAnalysisSetsEffect(t *testing.T) {
 	read := m.assessCommand("shell_run", "git status")
 	require.Equal(t, approval.EffectRead, read.Effect)
 
-	write := m.assessCommand("shell_run", "cat > out.txt <<'EOF'\nhello\nEOF")
+	writeCommand := "cat > out.txt <<'EOF'\nhello\nEOF"
+	if runtime.GOOS == "windows" {
+		writeCommand = `Set-Content out.txt hello`
+	}
+	write := m.assessCommand("shell_run", writeCommand)
 	require.Equal(t, approval.EffectWrite, write.Effect)
 }
 
@@ -822,6 +826,9 @@ func TestExtractExternalPathsIgnoresHeredocBody(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test exercises POSIX shell heredoc analysis")
+	}
 	mods := &Mods{
 		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
@@ -855,6 +862,9 @@ func TestAssessCommandPOSIXTargetDirectoryKeepsExternalWrite(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test exercises POSIX shell command analysis")
+	}
 	cases := []struct {
 		name string
 		cmd  string

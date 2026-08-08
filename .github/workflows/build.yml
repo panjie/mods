@@ -26,6 +26,21 @@ jobs:
       - name: Build and test
         run: go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci
 
+      - name: Windows reliability quick checks
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          ./scripts/windows-reliability.ps1 -Mode quick -PowerShellHost ps51
+          ./scripts/windows-reliability.ps1 -Mode quick -PowerShellHost ps7
+
+      - name: Upload Windows reliability report
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 14
+          name: windows-reliability-quick
+          path: artifacts/windows-reliability
+
   snapshot:
     runs-on: ubuntu-latest
     permissions:

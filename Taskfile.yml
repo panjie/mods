@@ -46,9 +46,23 @@ tasks:
     cmds:
       - go test -tags integration -v -count=1 -timeout=10m ./tests/blackbox
 
+  test-windows-reliability-quick:
+    desc: Run the short Windows real-machine reliability suite and write a report.
+    platforms: [windows]
+    cmds:
+      - powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-reliability.ps1 -Mode quick -PowerShellHost auto
+
+  test-windows-reliability-stress:
+    desc: Run 100 iterations of the Windows real-machine reliability suite and write a report.
+    platforms: [windows]
+    cmds:
+      - powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-reliability.ps1 -Mode stress -PowerShellHost auto
+
   ci:
     desc: Run the CI build and test baseline.
     cmds:
       - go build -v ./...
-      - go test -v -cover -timeout=30s ./...
+      # Windows PowerShell 5.1 bridge integration tests are intentionally real
+      # process tests and can exceed 30s on ARM64 hardware.
+      - go test -v -cover -timeout=90s ./...
       - go -C internal/huh test -v -cover -timeout=30s ./...

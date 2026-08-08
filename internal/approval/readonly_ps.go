@@ -53,10 +53,10 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 			return false
 		}
 	}
-
-	if hasPowerShellExpansion(ir, "subshell") {
+	if hasPowerShellExpansion(ir, "subshell") && !powerShellSubshellsOnlyInTopLevelValues(command, ir.TopLevelValueExpressions) {
 		return false
 	}
+
 	if !safePowerShellAssignments(ir) {
 		return false
 	}
@@ -156,7 +156,16 @@ func normalizePowerShellCommandName(name string) string {
 }
 
 func trimPowerShellLiteral(s string) string {
-	return strings.Trim(strings.TrimSpace(s), `"'`)
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
+		return strings.ReplaceAll(s[1:len(s)-1], "''", "'")
+	}
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		inner := s[1 : len(s)-1]
+		inner = strings.ReplaceAll(inner, "`\"", "\"")
+		return strings.ReplaceAll(inner, "``", "`")
+	}
+	return s
 }
 
 var simplePowerShellLocalVar = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -245,11 +254,22 @@ var (
 func safeTopLevelPowerShellValueExpressions(expressions []string) bool {
 	for _, expression := range expressions {
 		expression = strings.TrimSpace(expression)
-		if !profileValueExpression.MatchString(expression) && !envValueExpression.MatchString(expression) {
+		quotedLiteral := len(expression) >= 2 && ((expression[0] == '\'' && expression[len(expression)-1] == '\'') || (expression[0] == '"' && expression[len(expression)-1] == '"'))
+		if !quotedLiteral && !profileValueExpression.MatchString(expression) && !envValueExpression.MatchString(expression) {
 			return false
 		}
 	}
 	return true
+}
+
+func powerShellSubshellsOnlyInTopLevelValues(command string, expressions []string) bool {
+	remainder := command
+	for _, expression := range expressions {
+		if strings.Contains(expression, "$(") {
+			remainder = strings.Replace(remainder, expression, "", 1)
+		}
+	}
+	return !strings.Contains(remainder, "$(")
 }
 
 func safePowerShellDynamicValueExpression(expression string) bool {

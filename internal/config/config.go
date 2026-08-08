@@ -61,7 +61,6 @@ var Help = map[string]string{
 	"api-type":         "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, or azure. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
 	"http-proxy":       "HTTP proxy to use for API requests",
 	"model":            "Default model name configured under the selected API provider",
-	"ask-model":        "Ask which model to use via interactive prompt",
 	"format":           "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
 	"format-text":      "Text to append when using the -f flag",
 	"minimal":          "Output only the final result, optimized for pipelines",
@@ -288,7 +287,6 @@ type Config struct {
 	PersistentConfig `yaml:",inline"`
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
-	AskModel       bool
 	Chat           bool
 	ShowHelp       bool
 	ResetSettings  bool

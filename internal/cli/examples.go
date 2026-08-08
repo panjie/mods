@@ -9,7 +9,6 @@ var examples = map[string]string{
 	"Summarize piped JSON":             `printf '%s\n' '[{"name":"bubbletea"},{"name":"lipgloss"},{"name":"gum"}]' | mods -f "summarize these projects"`,
 	"Return pipeline-friendly output":  `find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important files"`,
 	"Format as JSON":                   `git log --oneline -5 | mods --format json "convert these commits to objects with sha and title"`,
-	"Choose a configured model":        `mods --ask-model "Explain this project in one paragraph"`,
 	"Use a specific API and model":     `mods --api openai --model gpt-5.4 "Draft a concise release note"`,
 	"Search the web":                   `mods --web-search "What changed in the latest Go release?"`,
 	"Describe an image":                `mods --image assets/mods-product.png "Describe this image and suggest alt text"`,

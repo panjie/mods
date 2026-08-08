@@ -118,7 +118,7 @@ func TestMaybeRunAutoConfigRunsBeforeInteractivePrompts(t *testing.T) {
 	defer func() { runConfigWizard = saveRunConfigWizard }()
 	runConfigWizard = func() error { return nil }
 
-	withFirstRunTest(t, Config{SettingsExisted: false, OpenEditor: true, AskModel: true}, func() {
+	withFirstRunTest(t, Config{SettingsExisted: false, OpenEditor: true}, func() {
 		autoConfig, err := maybeRunAutoConfig([]string{"mods"})
 
 		require.True(t, autoConfig)

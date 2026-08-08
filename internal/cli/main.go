@@ -138,7 +138,6 @@ func Run(version, commit string) int {
 func initFlags() {
 	flags := rootCmd.Flags()
 	regStr(flags, &config.Model, "model", "m", config.Model)
-	regBool(flags, &config.AskModel, "ask-model", "M", config.AskModel)
 	regStr(flags, &config.API, "api", "a", config.API)
 	regStr(flags, &config.HTTPProxy, "http-proxy", "x", config.HTTPProxy)
 	fF := flags.VarPF(newFormatFlag(config.Format, &config.Format), "format", "f", flagDesc("format"))
@@ -163,7 +162,7 @@ func initFlags() {
 	regSettingsFlag(flags, &config)
 	regBool(flags, &config.ConfigSetup, "config", "", false)
 	regBool(flags, &config.Dirs, "dirs", "", false)
-	regStr(flags, &config.Role, "role", "R", config.Role)
+	regStr(flags, &config.Role, "role", "r", config.Role)
 	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
 	regBool(flags, &config.ListPrompts, flagListPrompts, "", config.ListPrompts)
 	regBool(flags, &config.ListSkills, flagListSkills, "", config.ListSkills)
@@ -625,7 +624,7 @@ func askInfo() error {
 		}
 	}
 
-	if !config.AskModel && foundModel {
+	if foundModel {
 		return nil
 	}
 	if len(apis) == 0 {
@@ -666,10 +665,9 @@ func askInfoOptions(cfg *Config) ([]huh.Option[string], map[string][]huh.Option[
 		for name, model := range api.Models {
 			opts[api.Name] = append(opts[api.Name], huh.NewOption(name, name))
 
-			// checks if this is the model we intend to use if not using
-			// `--ask-model`:
-			if !cfg.AskModel &&
-				(cfg.API == "" || cfg.API == api.Name) &&
+			// Checks whether this is the configured model and normalizes aliases
+			// so later lookups can use the canonical API and model names.
+			if (cfg.API == "" || cfg.API == api.Name) &&
 				(cfg.Model == name || slices.Contains(model.Aliases, cfg.Model)) {
 				// if it is, adjusts api and model so its cheaper later on.
 				cfg.API = api.Name

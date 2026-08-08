@@ -159,23 +159,6 @@ func TestGatherInteractivePromptUsesChatComposerForOneShotPrompt(t *testing.T) {
 	})
 }
 
-func TestGatherInteractivePromptAskModelWithArgsSkipsChatComposer(t *testing.T) {
-	withInteractivePromptTest(t, func(calls *[]string) {
-		config = Config{AskModel: true, Prefix: "existing prompt", PersistentConfig: PersistentConfig{
-			API:   "openai",
-			Model: "gpt-4o",
-			APIs:  APIs{{Name: "openai", Models: map[string]Model{"gpt-4o": {}}}},
-		}}
-		askInfoPrompt = func() error { return nil }
-
-		err := gatherInteractivePrompt()
-
-		require.NoError(t, err)
-		require.Empty(t, *calls)
-		require.Equal(t, "existing prompt", config.Prefix)
-	})
-}
-
 func TestGatherInteractivePromptComposerCancelReturnsUserCanceled(t *testing.T) {
 	withInteractivePromptTest(t, func(calls *[]string) {
 		config = Config{PersistentConfig: PersistentConfig{

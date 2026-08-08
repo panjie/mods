@@ -37,7 +37,7 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModelProvider,
 		Flags: []string{
-			"api", "model", "ask-model", "max-retries", "http-proxy",
+			"api", "model", "max-retries", "http-proxy",
 		},
 	},
 	{

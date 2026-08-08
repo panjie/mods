@@ -160,6 +160,21 @@ func TestMinimalFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
 
+func TestRoleShortFlagUsesLowercaseR(t *testing.T) {
+	flag := rootCmd.Flags().Lookup("role")
+	require.NotNil(t, flag)
+	require.Equal(t, "r", flag.Shorthand)
+
+	withTestConfig(t, Config{}, func() {
+		require.NoError(t, rootCmd.Flags().Parse([]string{"-r", "shell"}))
+		require.Equal(t, "shell", config.Role)
+	})
+
+	withTestConfig(t, Config{}, func() {
+		require.Error(t, rootCmd.Flags().Parse([]string{"-R", "shell"}))
+	})
+}
+
 func TestReasoningShortFlagUsesLowercaseR(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		rawFlag := rootCmd.Flags().Lookup("raw")

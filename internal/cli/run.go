@@ -76,7 +76,7 @@ func gatherInteractivePrompt() error {
 		config.Prefix = prompt
 	}
 
-	if (isNoArgs() || config.AskModel) && IsInputTTY() {
+	if isNoArgs() && IsInputTTY() {
 		if err := askInfoPrompt(); err != nil && err == huh.ErrUserAborted {
 			return modsError{
 				Err:        err,

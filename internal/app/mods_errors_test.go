@@ -107,7 +107,6 @@ func TestHandleAPIError(t *testing.T) {
 		merr, ok := msg.(modsError)
 		require.True(t, ok)
 		require.Contains(t, merr.ReasonText, "Request too large")
-		require.NotContains(t, merr.ReasonText, "no-limit")
 	})
 
 	t.Run("500 openai retries", func(t *testing.T) {

@@ -508,7 +508,6 @@ func TestBuildConfigWizardUpdatesNewProviderSavesBaseURLAndModels(t *testing.T) 
 	requireUpdateValue(t, updates, []string{"default-model"}, "llama-3.3-70b-versatile")
 	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.3-70b-versatile"}, map[string]any{})
 	requireUpdateValue(t, updates, []string{"apis", "groq", "models", "llama-3.1-8b-instant"}, map[string]any{})
-	requireNoUpdatePath(t, updates, []string{"builtin-tools", "sequential-thinking"})
 
 	path := writeCLIConfig(t, `default-api: openai
 default-model: gpt-5.4

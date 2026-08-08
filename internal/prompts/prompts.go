@@ -3,7 +3,6 @@ package prompts
 const (
 	KeyIdentity        = "identity"
 	KeyToolSelection   = "tool-selection"
-	KeyPlan            = "plan"
 	KeyShellClassifier = "shell-classifier"
 )
 
@@ -12,7 +11,6 @@ const (
 	KeyFormatMarkdown        = "format.markdown"
 	KeyFormatJSON            = "format.json"
 	KeySafeWorkspaceTemplate = "safe-workspace-template"
-	KeyApprovedPlanTemplate  = "approved-plan-template"
 )
 
 const (
@@ -39,21 +37,6 @@ const (
 
 	ToolSelectionShellWindowsFallback = `- Use powershell_run for executable invocations and commands that require PowerShell cmdlets, object pipelines, runtime variables, or other PowerShell syntax. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use syntax compatible with the reported PowerShell host and pass only the command without powershell/pwsh -Command. Prefer native cmdlets such as Get-ChildItem and Select-String over POSIX-only utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not write temporary files merely to see results.`
 
-	ToolSelectionPlanGeneral = `Tool selection (PLAN mode):
-- Use only read-only tools for targeted investigation. Do not create, modify, delete, install, or persist anything.`
-
-	ToolSelectionPlanFilesystem = `- For filesystem investigation, use only fs_read_file, fs_list_dir, fs_stat, fs_search, or fs_largest. Do not call filesystem mutation tools.`
-
-	ToolSelectionPlanProcess = `- Prefer process_run for a necessary read-only single-program inspection. Pass literal arguments separately and do not run programs that build, install, generate, or persist output.`
-
-	ToolSelectionPlanShellPOSIX = `- Use shell_run only for necessary read-only inspection that requires POSIX shell syntax. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
-
-	ToolSelectionPlanShellPOSIXFallback = `- Use shell_run only for necessary read-only executable or shell inspection. Keep each call single-purpose. Commands already run in the cwd from system info; do not prefix them with cd, redirect output, create temporary files, install packages, or run generated scripts.`
-
-	ToolSelectionPlanShellWindows = `- Use powershell_run only for necessary read-only inspection that requires PowerShell cmdlets, object pipelines, or runtime variables. Do not prefix commands with Set-Location, cd, or Push-Location. Prefer native cmdlets such as Get-ChildItem, Select-String, Where-Object, ForEach-Object, Test-Path, Get-Content, and Measure-Object over POSIX utilities. ` + PowerShellIntentGuidance + ` Return inspection output directly; do not redirect output, create temporary files, write temporary .ps1 scripts, install packages, or run generated scripts.`
-
-	ToolSelectionPlanShellWindowsFallback = `- Use powershell_run only for necessary read-only executable or PowerShell inspection. Keep each call single-purpose. Do not prefix commands with Set-Location, cd, or Push-Location. ` + PowerShellIntentGuidance + ` Do not redirect output, create temporary files, install packages, or run generated scripts.`
-
 	// ToolSelection is the complete normal-mode reference shown by
 	// --list-prompts. Runtime requests select only the capability blocks for
 	// tools that are actually registered.
@@ -64,47 +47,6 @@ const (
 		ToolSelectionShellWindows
 
 	SafeWorkspaceTemplate = "Safe temporary workspace: {safe_workspace}. File write and shell operations within this directory and its subdirectories are auto-approved without user review. Prefer this directory for temporary scripts, intermediate files, and experimental writes."
-
-	ApprovedPlanTemplate = "The user has approved the following plan for execution:\n\n{approved_plan}\n\nFollow this approved plan during execution. If new information requires changing it, explain the reason before deviating."
-
-	Plan = `You are in PLAN mode. Create a detailed, implementation-ready plan for the user to review before any execution.
-
-Planning is read-only. Do not create, modify, move, or delete files; install dependencies; write or run generated/self-written code; redirect output to files; or execute commands that produce the task's final result. Use only available read-only tools for targeted investigation. Any implementation action belongs in the plan, not in current tool calls.
-
-Inspect only facts directly relevant to making the plan accurate. Prefer a few targeted reads (about 3 to 5). Do not probe hardware, OS or shell details, installed tool versions, or unrelated environment state unless the task depends on them. If uncertainty remains after reasonable inspection, state the assumption in the plan instead of continuing to probe.
-
-Once enough context is available, output the plan immediately. Return only the plan: no investigation notes, tool results, or running commentary.
-
-## Output Format
-
-For one approach, use exactly:
-
-## Plan
-- **Approach**: one-line summary of the strategy
-- **Steps**: numbered list of actions in execution order
-- **Files**: files that will be created or modified, one per line with a brief note
-- **Commands**: shell commands that will be run, one per line
-- **Risks**: potential issues, edge cases, or limitations
-
-For materially different alternatives, use:
-
-## Proposal 1: Brief Title
-- **Approach**: ...
-- **Steps**: ...
-- **Files**: ...
-- **Commands**: ...
-- **Risks**: ...
-
-## Proposal 2: Brief Title
-- **Approach**: ...
-- **Steps**: ...
-- **Files**: ...
-- **Commands**: ...
-- **Risks**: ...
-
-Include every field; write None when no files or commands apply. Each proposal must be self-contained and independently actionable. Proposal headings must start with exactly "## Proposal N: " at heading level 2; do not nest them under another heading.
-
-The user will approve, revise, or reject the plan before execution.`
 
 	ShellClassifier = `Analyze this shell command for review.
 For process_run, the command is a JSON description of a direct process invocation; program and args are literal and have no shell expansion.
@@ -129,12 +71,10 @@ func Builtin() []Definition {
 	return []Definition{
 		{Name: KeyIdentity, Description: "Base Mods identity and behavior instructions.", Default: Identity, Configurable: true},
 		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
-		{Name: KeyPlan, Description: "System prompt used while drafting an approval plan.", Default: Plan, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},
 		{Name: KeyFormatJSON, Description: "Formatting prompt used by --format --format-as json.", Default: JSONFormat},
 		{Name: KeySafeWorkspaceTemplate, Description: "Template for the safe temporary workspace system prompt.", Default: SafeWorkspaceTemplate},
-		{Name: KeyApprovedPlanTemplate, Description: "Template inserted after the user approves a plan.", Default: ApprovedPlanTemplate},
 	}
 }

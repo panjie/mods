@@ -18,21 +18,17 @@ func TestBuiltinPrompts(t *testing.T) {
 	for _, name := range []string{
 		KeyIdentity,
 		KeyToolSelection,
-		KeyPlan,
 		KeyShellClassifier,
 		KeyMinimal,
 		KeyFormatMarkdown,
 		KeyFormatJSON,
 		KeySafeWorkspaceTemplate,
-		KeyApprovedPlanTemplate,
 	} {
 		require.Contains(t, byName, name)
 	}
-
 	require.True(t, byName[KeyIdentity].Configurable)
 	require.True(t, byName[KeyShellClassifier].Configurable)
 	require.False(t, byName[KeyMinimal].Configurable)
-	require.Equal(t, Plan, byName[KeyPlan].Default)
 	require.Equal(t, ShellClassifier, byName[KeyShellClassifier].Default)
 
 	require.Contains(t, Identity, "execute it directly and rely on mods' review step")
@@ -48,7 +44,6 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "Where-Object")
 	require.Contains(t, ToolSelection, "Measure-Object")
 	require.Contains(t, ToolSelectionShellWindows, "short, single-purpose commands")
-	require.Contains(t, ToolSelectionPlanShellWindows, "short, single-purpose commands")
 	require.Contains(t, ToolSelectionShellWindows, "keep necessary pipelines intact")
 	require.Contains(t, ToolSelection, "Return inspection output directly")
 	require.Contains(t, ToolSelection, "Do not retry blindly")
@@ -68,23 +63,4 @@ func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	// legitimately grows the runtime prompts.
 	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+512,
 		"default identity and tool-selection prompts must stay within ~5 KiB")
-}
-
-func TestDefaultPlanPromptStaysCompactAndComplete(t *testing.T) {
-	require.GreaterOrEqual(t, len(Plan), 1600)
-	require.LessOrEqual(t, len(Plan), 2000)
-	for _, required := range []string{
-		"Planning is read-only",
-		"about 3 to 5",
-		"## Plan",
-		"## Proposal 1:",
-		"**Approach**",
-		"**Steps**",
-		"**Files**",
-		"**Commands**",
-		"**Risks**",
-		"write None",
-	} {
-		require.Contains(t, Plan, required)
-	}
 }

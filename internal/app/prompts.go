@@ -36,7 +36,3 @@ func (m *Mods) resolvePrompt(key, fallback string) (string, error) {
 func formatSafeWorkspacePrompt(path string) string {
 	return strings.ReplaceAll(prompts.SafeWorkspaceTemplate, "{safe_workspace}", path)
 }
-
-func formatApprovedPlanPrompt(plan string) string {
-	return strings.ReplaceAll(prompts.ApprovedPlanTemplate, "{approved_plan}", plan)
-}

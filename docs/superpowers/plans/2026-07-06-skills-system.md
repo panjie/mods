@@ -1172,7 +1172,7 @@ Expected: FAIL — `m.skillCatalog` undefined.
 
 - [ ] **Step 3: Add the `skillCatalog` field to `Mods`**
 
-In `internal/app/mods.go`, find the `Mods` struct fields (~line 120, after `feedbackMode`). Add:
+In `internal/app/mods.go`, find the `Mods` struct fields near the request state. Add:
 
 ```go
 	// skillCatalog is the result of skills.Scan(cfg.SkillsDir) at New()

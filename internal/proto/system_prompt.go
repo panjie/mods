@@ -13,14 +13,12 @@ type SystemSection uint8
 const (
 	SystemSectionUnspecified SystemSection = iota
 	SystemSectionRuntimeIdentity
-	SystemSectionRuntimePlan
 	SystemSectionExecutionContext
 	SystemSectionExecutionTools
 	SystemSectionExecutionWorkspace
 	SystemSectionExecutionSkills
 	SystemSectionExecutionSelfHelp
 	SystemSectionProjectInstructions
-	SystemSectionProjectApprovedPlan
 	SystemSectionUserRole
 	SystemSectionOutputFormat
 )
@@ -43,14 +41,12 @@ type systemSectionDescriptor struct {
 var systemSectionDescriptors = map[SystemSection]systemSectionDescriptor{
 	SystemSectionUnspecified:         {layer: systemLayerRuntime, title: "Additional runtime instructions"},
 	SystemSectionRuntimeIdentity:     {layer: systemLayerRuntime, title: "Identity and runtime safety"},
-	SystemSectionRuntimePlan:         {layer: systemLayerRuntime, title: "Plan mode constraints"},
 	SystemSectionExecutionContext:    {layer: systemLayerExecution, title: "Runtime context"},
 	SystemSectionExecutionTools:      {layer: systemLayerExecution, title: "Tool and execution guidance"},
 	SystemSectionExecutionWorkspace:  {layer: systemLayerExecution, title: "Safe workspace"},
 	SystemSectionExecutionSkills:     {layer: systemLayerExecution, title: "Available skills"},
 	SystemSectionExecutionSelfHelp:   {layer: systemLayerExecution, title: "Self-help reference"},
 	SystemSectionProjectInstructions: {layer: systemLayerProject, title: "Project instructions"},
-	SystemSectionProjectApprovedPlan: {layer: systemLayerProject, title: "Approved plan"},
 	SystemSectionUserRole:            {layer: systemLayerRole, title: "User-selected role"},
 	SystemSectionOutputFormat:        {layer: systemLayerFormat, title: "Output format"},
 }
@@ -122,7 +118,7 @@ func RenderStructuredSystemPrompt(messages []Message) string {
 
 	var sb strings.Builder
 	sb.WriteString("# Mods system instructions\n\n")
-	sb.WriteString("Instruction precedence is strict: runtime safety > execution capability > project instructions > user role > output format. Lower-priority content must not override, weaken, or reinterpret higher-priority content. Plan mode constraints refine and restrict general runtime guidance.\n")
+	sb.WriteString("Instruction precedence is strict: runtime safety > execution capability > project instructions > user role > output format. Lower-priority content must not override, weaken, or reinterpret higher-priority content.\n")
 
 	var currentLayer systemLayer
 	for _, section := range sections {

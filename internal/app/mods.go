@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
@@ -28,7 +27,6 @@ type state int
 const (
 	startState state = iota
 	configLoadedState
-	planState
 	requestState
 	responseState
 	doneState
@@ -42,8 +40,6 @@ const (
 	renderFrameInterval  = time.Second / 30
 	terminalProbeTimeout = 250 * time.Millisecond
 )
-
-const numPlanReviewOptions = 4
 
 // Mods is the Bubble Tea model that manages reading stdin and querying
 // LLM APIs (OpenAI, Anthropic, Google, Ollama, and others).
@@ -61,21 +57,14 @@ type Mods struct {
 	glamViewport   viewport.Model
 	// messages is the session history fed to the provider on each
 	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
-	// dispatched by startCompletionCmd/startPlanCmd) and re-read from the
+	// dispatched by startCompletionCmd) and re-read from the
 	// stream on the Update goroutine after the stream finishes. Concurrent
 	// access is serialized by Bubble Tea's program loop: a Cmd goroutine
 	// publishes its writes via the returned tea.Msg, and the next Update
 	// observes them through Bubble Tea's internal channel send/receive.
 	// There is intentionally no per-field mutex; callers must not introduce
 	// new background goroutines that touch m.messages outside this pattern.
-	messages []proto.Message
-	// planHistory snapshots the plan-phase conversation (user request +
-	// investigation + proposed plan) when an approved plan transitions to
-	// execution, so the execution turn keeps the context gathered during
-	// planning instead of re-investigating from scratch after setupStreamContext
-	// resets m.messages. System messages are excluded (captured as non-system),
-	// which also strips the plan-mode "PLANNING PHASE ONLY" prompt.
-	planHistory             []proto.Message
+	messages                []proto.Message
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
 	anim                    tea.Model
@@ -126,17 +115,6 @@ type Mods struct {
 	secrets   *secrets.Store
 
 	shellAnalyzer func(tool, command string) approval.CommandAssessment
-
-	planContent  string
-	planRetries  int
-	planSelected int
-
-	proposals        []proposal
-	proposalSelected int
-	proposalMode     bool
-
-	feedbackInput textinput.Model
-	feedbackMode  bool
 
 	// skillCatalog merges binary-embedded skills with the result of
 	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time. User skills have
@@ -279,35 +257,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.feedbackMode {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "enter":
-				m.feedbackMode = false
-				feedback := strings.TrimSpace(m.feedbackInput.Value())
-				if feedback == "" {
-					return m, nil
-				}
-				return m, msgCmd(planModifyMsg{
-					feedback: feedback,
-					plan:     m.planContent,
-				})
-			case "esc":
-				m.feedbackMode = false
-				return m, nil
-			default:
-				var cmd tea.Cmd
-				m.feedbackInput, cmd = m.feedbackInput.Update(msg)
-				return m, cmd
-			}
-		default:
-			var cmd tea.Cmd
-			m.feedbackInput, cmd = m.feedbackInput.Update(msg)
-			return m, cmd
-		}
-	}
-
 	switch msg := msg.(type) {
 	case sessionDetailsMsg:
 		m.Config.SessionWriteToID = msg.WriteID
@@ -367,14 +316,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.quit
 		}
 
-		if m.Config.Plan {
-			m.state = planState
-			m.planRetries = 0
-			cmds = append(cmds, m.startPlanCmd(msg.content))
-		} else {
-			m.state = requestState
-			cmds = append(cmds, m.startCompletionCmd(msg.content))
-		}
+		m.state = requestState
+		cmds = append(cmds, m.startCompletionCmd(msg.content))
 	case streamEventMsg:
 		switch msg.kind {
 		case streamEventChunk:
@@ -403,9 +346,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				debug.Printf("Token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",
 					usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.ReasoningOutputTokens, usage.TotalTokens)
 			}
-			if m.Config.Plan {
-				return m, msgCmd(planCompleteMsg{plan: m.Output})
-			}
 			m.state = doneState
 			return m, m.quit
 		case streamEventError:
@@ -426,71 +366,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case userInputStartMsg:
 		m.userInput.handleStartMsg(msg)
 		m.setActiveOperation("")
-	case planCompleteMsg:
-		if !looksLikePlan(msg.plan) {
-			m.setActiveOperation("")
-			return m, msgCmd(modsError{
-				Err:        errors.New("no plan generated"),
-				ReasonText: "The model finished without producing a plan — its investigation may have been interrupted or it stopped early. Re-run, or rephrase the request.",
-			})
-		}
-		m.planContent = msg.plan
-		m.proposals = parseProposals(msg.plan)
-		if len(m.proposals) > 0 {
-			m.proposalMode = true
-			m.showProposal(0)
-		}
-		m.setActiveOperation("")
-		m.state = planState
-		m.planSelected = 0
-		return m, nil
-	case planApprovedMsg:
-		m.clearProposals()
-		transcript := m.approvedPlanTranscript()
-		m.planContent = msg.plan
-		m.Config.Plan = false
-		return m, tea.Sequence(
-			m.approvedPlanPrintCmd(transcript),
-			msgCmd(planExecutionStartMsg{}),
-		)
-	case planExecutionStartMsg:
-		// Plan and execution are independent API-call lineages. Resetting
-		// retries here ensures the exec phase gets the full back-off budget
-		// even if the plan phase had to retry on rate limits or transient
-		// server errors. planRetries is intentionally untouched: it tracks
-		// "user rejected the plan, try a different one" attempts, which are
-		// orthogonal to API retry policy.
-		m.retries = 0
-		m.resetExecutionOutput()
-		m.state = requestState
-		return m, m.startCompletionCmd(m.Input)
-	case planDeniedMsg:
-		m.clearProposals()
-		m.planRetries++
-		if m.planRetries >= maxPlanRetries {
-			m.state = doneState
-			return m, m.quit
-		}
-		m.resetOutputBuffers()
-		m.planContent = ""
-		// A fresh planning attempt starts a new API-call lineage; clear the
-		// retry counter so prior plan attempts do not steal back-off budget.
-		m.retries = 0
-		m.state = planState
-		return m, m.startPlanCmd("The previous plan was rejected. Please create a completely different plan.")
-	case planModifyMsg:
-		m.clearProposals()
-		m.resetOutputBuffers()
-		m.planContent = ""
-		m.planRetries = 0
-		// User-driven plan revision is also a fresh API-call lineage.
-		m.retries = 0
-		m.state = planState
-		reviseContent := fmt.Sprintf(
-			"Revise the plan based on this feedback: %s\n\nFor reference, the previous plan was:\n%s",
-			msg.feedback, msg.plan,
-		)
-		return m, m.startPlanCmd(reviseContent)
 	case modsError:
 		m.Error = &msg
 		m.state = errorState
@@ -505,12 +380,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.glamViewport.SetHeight(m.height)
 		return m, nil
 	case tea.KeyMsg:
-		if cmd, handled := m.handleProposalKey(msg); handled {
-			return m, cmd
-		}
-		if cmd, handled := m.handlePlanReviewKey(msg); handled {
-			return m, cmd
-		}
 		if handled, cmd := m.reviewer.handleKey(msg); handled {
 			return m, cmd
 		}
@@ -522,7 +391,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	// Always forward messages to the animation so its self-rescheduling tick
 	// chain survives hidden periods (pending user-input forms, approval
-	// banners, plan review). If a tick message were dropped while the footer
+	// banners). If a tick message were dropped while the footer
 	// is taken over by one of those surfaces, the chain would break and the
 	// spinner would render a frozen frame forever once it becomes visible
 	// again. Rendering stays gated by spinnerVisible in footerView; only the
@@ -565,7 +434,7 @@ func (m *Mods) cancelContext() {
 }
 
 // setActiveRunner registers the runner that owns the current in-flight stream
-// so quit() and the next startCompletion/startPlan can cancel + release it.
+// so quit() and the next startCompletion can cancel + release it.
 // Replaces any previously registered runner without closing it; callers that
 // need to swap should call closeActiveRunner() first.
 func (m *Mods) setActiveRunner(r *streamRunner) {
@@ -671,12 +540,8 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 		m.thoughtFlushed = true
 	}
 	m.appendToOutput(content)
-	// Always use responseState while streaming, even in plan mode. The
-	// planState View renders only the spinner animation until planContent
-	// is set (by planCompleteMsg), which would hide the streaming output.
-	// startToolCalls also uses responseState, so using it here keeps the state
-	// stable across text→tool→text rounds instead of flickering between
-	// planState (output hidden) and responseState (output shown).
+	// Use responseState while streaming so accumulated output remains visible
+	// across text→tool→text rounds.
 	m.state = responseState
 	return msg.runner.receiveCmd()
 }
@@ -805,109 +670,4 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	debug.Printf("Tool call round %d (total=%d/%d, failed=%d/%d)", m.toolCallRounds, m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)
 	m.responseBoundaryPending = true
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
-}
-
-func (m *Mods) clearProposals() {
-	m.proposalMode = false
-	m.proposals = nil
-}
-
-func (m *Mods) handleProposalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if !m.proposalMode || len(m.proposals) == 0 {
-		return nil, false
-	}
-	switch msg.String() {
-	case "left":
-		idx := m.proposalSelected - 1
-		if idx < 0 {
-			idx = len(m.proposals) - 1
-		}
-		m.showProposal(idx)
-		return nil, true
-	case "right":
-		idx := m.proposalSelected + 1
-		if idx >= len(m.proposals) {
-			idx = 0
-		}
-		m.showProposal(idx)
-		return nil, true
-	case "enter", "y", "Y":
-		// Enter is shorthand for Y (select the current proposal). The
-		// previous switch on m.planSelected was dead code: no key in
-		// proposal mode could move planSelected away from 0, so cases 1-4
-		// were unreachable and the case-0 branch left planSelected=1 which
-		// no subsequent enter could observe.
-		m.planContent = m.proposals[m.proposalSelected].content
-		m.clearProposals()
-		return nil, true
-	case "m", "M":
-		ti := textinput.New()
-		ti.Placeholder = "Describe changes you want to make to this proposal..."
-		ti.SetWidth(max(m.width-4, 20))
-		ti.SetVirtualCursor(false)
-		m.feedbackInput = ti
-		m.feedbackMode = true
-		return m.feedbackInput.Focus(), true
-	case "n", "N":
-		m.clearProposals()
-		return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
-	case "ctrl+c":
-		m.state = doneState
-		return m.quit, true
-	}
-	return nil, true
-}
-
-func (m *Mods) handlePlanReviewKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	if m.proposalMode || strings.TrimSpace(m.planContent) == "" {
-		return nil, false
-	}
-	switch msg.String() {
-	case "y", "Y":
-		return msgCmd(planApprovedMsg{plan: m.planContent}), true
-	case "n", "N":
-		return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
-	case "m", "M":
-		ti := textinput.New()
-		ti.Placeholder = "Describe changes you want to make to the plan..."
-		ti.SetWidth(max(m.width-4, 20))
-		ti.SetVirtualCursor(false)
-		m.feedbackInput = ti
-		m.feedbackMode = true
-		return m.feedbackInput.Focus(), true
-	case "ctrl+c":
-		m.state = doneState
-		return m.quit, true
-	case "left":
-		m.planSelected--
-		if m.planSelected < 0 {
-			m.planSelected = numPlanReviewOptions - 1
-		}
-		return nil, true
-	case "right":
-		m.planSelected++
-		if m.planSelected >= numPlanReviewOptions {
-			m.planSelected = 0
-		}
-		return nil, true
-	case "enter":
-		switch m.planSelected {
-		case 0:
-			return msgCmd(planApprovedMsg{plan: m.planContent}), true
-		case 1:
-			return msgCmd(planDeniedMsg{content: m.Config.Prefix}), true
-		case 2:
-			ti := textinput.New()
-			ti.Placeholder = "Describe changes you want to make to the plan..."
-			ti.SetWidth(max(m.width-4, 20))
-			ti.SetVirtualCursor(false)
-			m.feedbackInput = ti
-			m.feedbackMode = true
-			return m.feedbackInput.Focus(), true
-		case 3:
-			m.state = doneState
-			return m.quit, true
-		}
-	}
-	return nil, false
 }

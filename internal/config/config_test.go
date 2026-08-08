@@ -77,7 +77,6 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 		require.Contains(t, documented, path)
 		require.NotEmpty(t, documented[path].Description, path)
 	}
-
 	require.Equal(t, "80", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
 	require.Equal(t, "false", documented["web-search"].Default)
@@ -103,13 +102,11 @@ func TestPromptConfig(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal([]byte(`prompts:
   identity: custom identity
   tool-selection: custom tools
-  plan: custom plan
   shell-classifier: custom shell
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
-	require.Equal(t, "custom plan", cfg.Prompts.Plan)
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
@@ -214,39 +211,6 @@ func TestWebSearchDefaultsPreserveExplicitCustomProvider(t *testing.T) {
 		require.True(t, cfg.WebSearch)
 		require.Equal(t, "https://search.example.com", cfg.WebSearchProvider)
 	})
-}
-
-func TestRemovedSequentialThinkingConfigIsIgnored(t *testing.T) {
-	cfg := Default()
-	require.NoError(t, yaml.Unmarshal([]byte("builtin-tools:\n  sequential-thinking: false\n"), &cfg))
-	require.True(t, cfg.BuiltinTools.Shell)
-}
-
-func TestRemovedLimitConfigIsIgnored(t *testing.T) {
-	t.Setenv("MODS_MAX_INPUT_CHARS", "1000")
-	t.Setenv("MODS_MAX_TOKENS", "100")
-	t.Setenv("MODS_NO_LIMIT", "true")
-
-	cfg := Default()
-	require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
-	require.NoError(t, yaml.Unmarshal([]byte(`
-max-input-chars: 1000
-max-tokens: 100
-no-limit: true
-builtin-tools:
-  shell-max-output: 2000
-apis:
-  openai:
-    models:
-      gpt-test:
-        max-input-chars: 3000
-`), &cfg))
-
-	encoded, err := yaml.Marshal(cfg)
-	require.NoError(t, err)
-	for _, removed := range []string{"max-input-chars", "max-tokens", "no-limit", "shell-max-output"} {
-		require.NotContains(t, string(encoded), removed)
-	}
 }
 
 func TestMinimalConfig(t *testing.T) {
@@ -384,7 +348,6 @@ func TestConfigTemplateIncludesDefaultToolSettings(t *testing.T) {
 
 	require.Contains(t, text, "filesystem: auto")
 	require.Contains(t, text, "shell: true")
-	require.NotContains(t, text, "sequential-thinking")
 	require.Contains(t, text, "web-search: false")
 	require.Contains(t, text, "web-search-backend: auto")
 	require.Contains(t, text, "web-search-provider: tavily")
@@ -754,13 +717,6 @@ func TestResolveSkillsDirsIgnoresEmptyAndKeepsLastDuplicate(t *testing.T) {
 	require.Equal(t, []string{"/skills/project", "/skills/global"}, cfg.ResolveSkillsDirs())
 }
 
-func TestSkillsDirLegacyKeyIsIgnored(t *testing.T) {
-	var cfg Config
-	require.NoError(t, yaml.Unmarshal([]byte("skills-dir: /legacy\n"), &cfg))
-	applySkillsDirsDefault(&cfg)
-	require.Equal(t, []string{filepath.Join(xdg.Home, ".agents", "skills")}, cfg.ResolveSkillsDirs())
-}
-
 func TestNormalizeSkillsDirExpandsHome(t *testing.T) {
 	require.Equal(t, xdg.Home, NormalizeSkillsDir("~"))
 	require.Equal(t, filepath.Join(xdg.Home, ".agents", "skills"), NormalizeSkillsDir("~/.agents/skills"))
@@ -768,11 +724,4 @@ func TestNormalizeSkillsDirExpandsHome(t *testing.T) {
 
 func TestNormalizeSkillsDirLeavesRelativePathUnchanged(t *testing.T) {
 	require.Equal(t, filepath.Join("relative", "skills"), NormalizeSkillsDir(filepath.Join("relative", "skills")))
-}
-
-func TestRemovedSkillSourcesYAMLIsIgnored(t *testing.T) {
-	var cfg Config
-	require.NoError(t, yaml.Unmarshal([]byte("skill-sources:\n  - url: https://example.com/skills.git\n"), &cfg))
-	applySkillsDirsDefault(&cfg)
-	require.Equal(t, []string{filepath.Join(xdg.Home, ".agents", "skills")}, cfg.ResolveSkillsDirs())
 }

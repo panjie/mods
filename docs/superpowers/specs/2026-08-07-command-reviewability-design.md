@@ -50,8 +50,8 @@ Read-only single-program shell calls retain a `process_run` recommendation but
 do not spend this budget; it is reserved for compound, mixed-effect, dynamic,
 or mutating calls. Later calls proceed to normal review so a model cannot enter
 an unbounded correction loop. Correction errors do not consume the consecutive
-failed-tool budget. Minimal mode, plan mode, and review-never preserve their
-prior semantics and bypass the gate.
+failed-tool budget. Minimal mode and review-never preserve their prior semantics
+and bypass the gate.
 
 Correction messages describe structural facts but do not echo commands,
 dynamic target expressions, secret references, or argument values.

@@ -93,24 +93,9 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
 
-	if cfg.Plan {
-		err = m.setupPlanContext(content)
-	} else {
-		// Plan -> execution transition: snapshot the plan-phase conversation
-		// before setupStreamContext resets m.messages, so the investigation
-		// can be re-injected into the execution turn. Gated on planContent so
-		// ordinary (non-plan) turns are unaffected.
-		if m.planContent != "" {
-			m.capturePlanHistory()
-		}
-		err = m.setupStreamContext(content)
-	}
+	err = m.setupStreamContext(content)
 	if err != nil {
 		return requestSession{}, err
-	}
-	if !cfg.Plan {
-		m.injectPlanHistory()
-		m.injectApprovedPlan()
 	}
 	m.sanitizeProviderContinuation(mod, ccfg.UseResponses)
 
@@ -313,17 +298,6 @@ func debugTools(tools []proto.ToolSpec, total int) {
 		}
 		debug.Printf("  Tool: %s (wire=%s/%s)", t.Name, wireType, wireName)
 	}
-}
-
-func (m *Mods) injectApprovedPlan() {
-	if m.planContent == "" {
-		return
-	}
-	m.messages = append(m.messages, structuredSystemMessage(
-		formatApprovedPlanPrompt(m.planContent),
-		proto.SystemSectionProjectApprovedPlan,
-	))
-	m.planContent = ""
 }
 
 func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) func(name string, data []byte) (string, error) {

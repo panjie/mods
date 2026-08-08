@@ -580,29 +580,6 @@ func TestFormRealCursorPropagatesToModsView(t *testing.T) {
 	require.Nil(t, m.View().Cursor)
 }
 
-func TestHandleFormInputRejectsSecretsInPlanMode(t *testing.T) {
-	registry := toolregistry.NewRegistry()
-	require.NoError(t, registry.Register(toolregistry.Tool{
-		Kind:         toolregistry.ToolKindShell,
-		Spec:         proto.ToolSpec{Name: "shell_run"},
-		Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true},
-		Call:         noopToolCall,
-	}))
-	m := &Mods{
-		Config:              &Config{Plan: true},
-		currentToolRegistry: registry,
-		secrets:             secrets.New(),
-	}
-	_, err := m.handleFormInput(context.Background(), toolregistry.UserInputRequest{
-		Question: "Sign in", Kind: "form",
-		Fields: []toolregistry.UserInputField{
-			{Key: "username", Label: "Username", Kind: "text"},
-			{Key: "password", Label: "Password", Kind: "secret", Target: toolregistry.UserInputTarget{Tool: "shell_run", Path: "/secret_env/PASSWORD"}},
-		},
-	})
-	require.ErrorContains(t, err, "plan mode")
-}
-
 func TestHandleFormInputRejectsUnknownSecretTarget(t *testing.T) {
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, registry.Register(toolregistry.Tool{

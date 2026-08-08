@@ -115,11 +115,9 @@ var Help = map[string]string{
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Pass the CLI flag without a directory to print the effective directories. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
-	"plan":                   "Plan mode: generates a detailed plan for user approval before executing any changes",
 
 	"prompts.identity":         "Override the built-in identity prompt; empty uses the built-in default",
 	"prompts.tool-selection":   "Override tool-selection guidance; empty uses capability-filtered defaults",
-	"prompts.plan":             "Override the plan-mode prompt; empty uses the built-in default",
 	"prompts.shell-classifier": "Override the shell safety classifier prompt; empty uses the built-in default",
 
 	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
@@ -297,7 +295,6 @@ type Config struct {
 	// CLI-flag-only fields (one-shot operations, never persisted).
 	AskModel       bool
 	Chat           bool
-	Plan           bool
 	ShowHelp       bool
 	ResetSettings  bool
 	Version        bool
@@ -336,7 +333,6 @@ type Config struct {
 type PromptConfig struct {
 	Identity        string `yaml:"identity"`
 	ToolSelection   string `yaml:"tool-selection"`
-	Plan            string `yaml:"plan"`
 	ShellClassifier string `yaml:"shell-classifier"`
 }
 
@@ -346,8 +342,6 @@ func (p PromptConfig) Value(key string) string {
 		return p.Identity
 	case prompts.KeyToolSelection:
 		return p.ToolSelection
-	case prompts.KeyPlan:
-		return p.Plan
 	case prompts.KeyShellClassifier:
 		return p.ShellClassifier
 	default:

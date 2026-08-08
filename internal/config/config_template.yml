@@ -42,8 +42,6 @@ prompts:
   identity: ""
   # {{ index .Help "prompts.tool-selection" }}
   tool-selection: ""
-  # {{ index .Help "prompts.plan" }}
-  plan: ""
   # {{ index .Help "prompts.shell-classifier" }}
   shell-classifier: ""
 

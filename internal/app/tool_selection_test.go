@@ -18,15 +18,15 @@ import (
 
 func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	empty := toolregistry.NewRegistry()
-	require.Empty(t, renderToolSelectionPrompt(empty, false, "linux"))
+	require.Empty(t, renderToolSelectionPrompt(empty, "linux"))
 
 	helpOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterModsHelp(helpOnly, toolregistry.ModsHelpConfig{}))
-	require.Empty(t, renderToolSelectionPrompt(helpOnly, false, "linux"))
+	require.Empty(t, renderToolSelectionPrompt(helpOnly, "linux"))
 
 	webOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterWebSearch(webOnly, websearch.Config{}))
-	require.Empty(t, renderToolSelectionPrompt(webOnly, false, "linux"))
+	require.Empty(t, renderToolSelectionPrompt(webOnly, "linux"))
 
 	mcpOnly := toolregistry.NewRegistry()
 	require.NoError(t, mcpOnly.Register(toolregistry.Tool{
@@ -36,7 +36,7 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 			return "", nil
 		},
 	}))
-	require.Empty(t, renderToolSelectionPrompt(mcpOnly, false, "linux"))
+	require.Empty(t, renderToolSelectionPrompt(mcpOnly, "linux"))
 
 	mcpNamedLikeFilesystem := toolregistry.NewRegistry()
 	require.NoError(t, mcpNamedLikeFilesystem.Register(toolregistry.Tool{
@@ -46,21 +46,21 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 			return "", nil
 		},
 	}))
-	require.Empty(t, renderToolSelectionPrompt(mcpNamedLikeFilesystem, false, "linux"))
+	require.Empty(t, renderToolSelectionPrompt(mcpNamedLikeFilesystem, "linux"))
 
 	fsOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(fsOnly, toolregistry.FilesystemConfig{Root: t.TempDir()}))
-	fsPrompt := renderToolSelectionPrompt(fsOnly, false, "linux")
+	fsPrompt := renderToolSelectionPrompt(fsOnly, "linux")
 	require.Contains(t, fsPrompt, prompts.ToolSelectionFilesystem)
 	require.NotContains(t, fsPrompt, "Use shell tools")
 
 	shellOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterShell(shellOnly, toolregistry.ShellConfig{Root: t.TempDir()}))
-	posixPrompt := renderToolSelectionPrompt(shellOnly, false, "linux")
+	posixPrompt := renderToolSelectionPrompt(shellOnly, "linux")
 	require.Contains(t, posixPrompt, prompts.ToolSelectionShellPOSIXFallback)
 	require.NotContains(t, posixPrompt, "fs_*")
 
-	windowsPrompt := renderToolSelectionPrompt(shellOnly, false, "windows")
+	windowsPrompt := renderToolSelectionPrompt(shellOnly, "windows")
 	require.Contains(t, windowsPrompt, prompts.ToolSelectionShellWindowsFallback)
 	require.NotContains(t, windowsPrompt, prompts.ToolSelectionShellPOSIX)
 	require.Contains(t, windowsPrompt, "Get-ChildItem")
@@ -69,7 +69,7 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 
 	processOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterProcess(processOnly, toolregistry.ProcessConfig{Root: t.TempDir()}))
-	processPrompt := renderToolSelectionPrompt(processOnly, false, "linux")
+	processPrompt := renderToolSelectionPrompt(processOnly, "linux")
 	require.Contains(t, processPrompt, prompts.ToolSelectionProcess)
 	require.Contains(t, processPrompt, prompts.ToolSelectionShellPOSIX)
 	require.NotContains(t, processPrompt, "Use shell tools for repository-wide searches, tests, builds, git, package managers")
@@ -78,23 +78,9 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	both := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(both, toolregistry.FilesystemConfig{Root: t.TempDir()}))
 	require.NoError(t, toolregistry.RegisterShell(both, toolregistry.ShellConfig{Root: t.TempDir()}))
-	bothPrompt := renderToolSelectionPrompt(both, false, "linux")
+	bothPrompt := renderToolSelectionPrompt(both, "linux")
 	require.Contains(t, bothPrompt, prompts.ToolSelectionFilesystem)
 	require.Contains(t, bothPrompt, prompts.ToolSelectionShellPOSIXFallback)
-}
-
-func TestRenderToolSelectionPromptPlanModeIsReadOnly(t *testing.T) {
-	registry := toolregistry.NewRegistry()
-	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: t.TempDir()}))
-	require.NoError(t, toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: t.TempDir()}))
-
-	got := renderToolSelectionPrompt(registry, true, "linux")
-	require.Contains(t, got, "PLAN mode")
-	require.Contains(t, got, "fs_read_file")
-	require.Contains(t, got, "read-only executable or shell inspection")
-	require.NotContains(t, got, "fs_replace")
-	require.NotContains(t, got, "tests, builds")
-	require.NotContains(t, got, "call the appropriate tool")
 }
 
 func TestInjectToolSelectionPromptOrdering(t *testing.T) {
@@ -165,26 +151,9 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	}
 }
 
-func TestInjectToolSelectionPromptPlanAndMinimal(t *testing.T) {
+func TestInjectToolSelectionPromptMinimal(t *testing.T) {
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: t.TempDir()}))
-
-	planCfg := defaultConfig()
-	planCfg.Plan = true
-	planMods := &Mods{Config: &planCfg, Styles: makeStyles(true), ctx: context.Background()}
-	require.NoError(t, planMods.setupPlanContext("hello"))
-	require.NoError(t, planMods.injectToolSelectionPrompt(registry))
-	planContents := systemContents(planMods.messages)
-	require.NotEqual(t, -1, indexContaining(planContents, planSystemPrompt))
-	require.NotEqual(t, -1, indexContaining(planContents, modsIdentityPrompt))
-	require.NotEqual(t, -1, indexContaining(planContents, "Tool selection (PLAN mode):"))
-	require.Less(t, indexContaining(planContents, planSystemPrompt), indexContaining(planContents, modsIdentityPrompt))
-	require.Less(t, indexContaining(planContents, modsIdentityPrompt), indexContaining(planContents, "Tool selection (PLAN mode):"))
-	require.NotContains(t, strings.Join(planContents, "\n"), prompts.ToolSelectionFilesystem)
-	normalizedPlan := proto.NormalizeSystemMessages(planMods.messages)
-	require.Len(t, normalizedPlan, 2)
-	require.Less(t, strings.Index(normalizedPlan[0].Content, modsIdentityPrompt), strings.Index(normalizedPlan[0].Content, planSystemPrompt))
-	require.Less(t, strings.Index(normalizedPlan[0].Content, planSystemPrompt), strings.Index(normalizedPlan[0].Content, "Tool selection (PLAN mode):"))
 
 	minimalCfg := defaultConfig()
 	minimalCfg.Minimal = true

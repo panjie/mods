@@ -37,10 +37,7 @@ func (m *Mods) View() tea.View {
 	content := m.viewContent()
 	view := tea.NewView(content)
 	var panel ui.CursorView
-	switch {
-	case m.feedbackMode:
-		panel = m.planFeedbackPanelView()
-	case m.userInput.isPending():
+	if m.userInput.isPending() {
 		panel = m.userInput.renderView(m.width, m.Styles.Interaction)
 	}
 	if panel.Cursor != nil {
@@ -56,38 +53,6 @@ func (m *Mods) viewContent() string {
 	switch m.state {
 	case errorState:
 		return ""
-	case planState:
-		m.flushRender()
-		if m.feedbackMode {
-			content := m.glamOutput
-			if content == "" {
-				content = m.Output
-			}
-			return m.renderPlanFeedbackInput(content)
-		}
-		if m.proposalMode && len(m.proposals) > 0 {
-			content := m.glamOutput
-			if content == "" {
-				content = m.Output
-			}
-			if m.viewportNeeded() {
-				return m.renderProposalSelectionBar(m.glamViewport.View())
-			}
-			return m.renderProposalSelectionBar(content)
-		}
-		if strings.TrimSpace(m.planContent) != "" {
-			content := m.glamOutput
-			if content == "" {
-				content = m.Output
-			}
-			if m.viewportNeeded() {
-				return m.renderPlanReviewBanner(m.glamViewport.View())
-			}
-			return m.renderPlanReviewBanner(content)
-		}
-		if !debug.Enabled() {
-			return m.renderWithOperation("")
-		}
 	case requestState:
 		if !debug.Enabled() {
 			return m.renderWithOperation("")
@@ -213,10 +178,6 @@ func (m *Mods) spinnerVisible() bool {
 	switch m.state {
 	case doneState, errorState:
 		return false
-	case planState:
-		// Plan review shows its own banner; the spinner only shows while the
-		// plan is still being generated (no planContent yet).
-		return strings.TrimSpace(m.planContent) == ""
 	default:
 		return true
 	}

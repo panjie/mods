@@ -65,13 +65,11 @@ func (m *Mods) setupStreamContext(content string) error {
 		}
 		m.messages = append(m.messages, structuredSystemMessage(identityPrompt, proto.SystemSectionRuntimeIdentity))
 		m.toolSelectionInsertAt = len(m.messages)
-		if !cfg.Plan {
-			safeDir := os.TempDir()
-			m.messages = append(m.messages, structuredSystemMessage(
-				formatSafeWorkspacePrompt(safeDir),
-				proto.SystemSectionExecutionWorkspace,
-			))
-		}
+		safeDir := os.TempDir()
+		m.messages = append(m.messages, structuredSystemMessage(
+			formatSafeWorkspacePrompt(safeDir),
+			proto.SystemSectionExecutionWorkspace,
+		))
 		if instructions := loadProjectInstructions(cfg); instructions != "" {
 			msg := structuredSystemMessage(
 				"Project instructions (AGENTS.md):\n\n"+instructions,

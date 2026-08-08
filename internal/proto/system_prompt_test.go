@@ -18,23 +18,20 @@ func TestNormalizeSystemMessagesUsesStablePrecedenceAndOneBlock(t *testing.T) {
 	tools.SetSystemSection(SystemSectionExecutionTools)
 	identity := Message{Role: RoleSystem, Content: "IDENTITY_TOKEN"}
 	identity.SetSystemSection(SystemSectionRuntimeIdentity)
-	plan := Message{Role: RoleSystem, Content: "PLAN_TOKEN"}
-	plan.SetSystemSection(SystemSectionRuntimePlan)
 	role2 := Message{Role: RoleSystem, Content: "ROLE_TWO_TOKEN"}
 	role2.SetSystemSection(SystemSectionUserRole)
 
 	got := NormalizeSystemMessages([]Message{
 		format, role1, project,
 		{Role: RoleUser, Content: "hello"},
-		tools, identity, plan, role2,
+		tools, identity, role2,
 	})
 	require.Len(t, got, 2)
 	require.Equal(t, RoleSystem, got[0].Role)
 	require.Equal(t, RoleUser, got[1].Role)
 	require.Contains(t, got[0].Content, "runtime safety > execution capability > project instructions > user role > output format")
 	for _, pair := range [][2]string{
-		{"IDENTITY_TOKEN", "PLAN_TOKEN"},
-		{"PLAN_TOKEN", "TOOLS_TOKEN"},
+		{"IDENTITY_TOKEN", "TOOLS_TOKEN"},
 		{"TOOLS_TOKEN", "PROJECT_TOKEN"},
 		{"PROJECT_TOKEN", "ROLE_ONE_TOKEN"},
 		{"ROLE_ONE_TOKEN", "ROLE_TWO_TOKEN"},

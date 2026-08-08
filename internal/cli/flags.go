@@ -43,7 +43,7 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModesSessions,
 		Flags: []string{
-			flagChat, "plan", "think", flagContinue, flagContinueLast,
+			flagChat, "think", flagContinue, flagContinueLast,
 			flagListSessions, "no-save",
 		},
 	},

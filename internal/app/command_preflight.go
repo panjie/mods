@@ -17,7 +17,7 @@ type commandPreflightGate struct {
 }
 
 func newCommandPreflightGate(cfg *Config) *commandPreflightGate {
-	enabled := cfg != nil && !cfg.Minimal && !cfg.Plan && cfg.ReviewMode != ReviewNever
+	enabled := cfg != nil && !cfg.Minimal && cfg.ReviewMode != ReviewNever
 	return &commandPreflightGate{enabled: enabled}
 }
 

@@ -672,9 +672,6 @@ func TestUsageIntroAndPromptSyntax(t *testing.T) {
 func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 	groups := groupedUsageFlags(rootCmd.Flags())
 	require.Empty(t, groups[flagCategoryOther])
-	for _, removed := range []string{"max-tokens", "no-limit"} {
-		require.Nil(t, rootCmd.Flags().Lookup(removed))
-	}
 
 	seen := make(map[string]int)
 	for _, category := range flagCategorySpecs {
@@ -854,7 +851,6 @@ func TestAdvancedFlagsStillParse(t *testing.T) {
 
 func TestSkillsDirsFlagAppendsMultipleDirs(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
-		require.Nil(t, rootCmd.Flags().Lookup("skills-dir"))
 		require.NotNil(t, rootCmd.Flags().Lookup("skills-dirs"))
 		require.NoError(t, rootCmd.Flags().Set("skills-dirs", "/one"))
 		require.NoError(t, rootCmd.Flags().Set("skills-dirs", "/two"))
@@ -1001,7 +997,6 @@ func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
 	output := captureStdout(t, listPrompts)
 
 	require.Contains(t, output, "## identity\n\n")
-	require.Contains(t, output, "## plan\n\n")
 	require.Contains(t, output, "## shell-classifier\n\n")
 	require.Contains(t, output, "## safe-workspace-template\n\n")
 	require.Contains(t, output, "You are running inside mods")

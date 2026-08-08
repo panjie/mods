@@ -35,7 +35,7 @@ func TestDeepSeekCommandSimplicityIntegration(t *testing.T) {
 	prompt := "On a Windows machine, install Starship with winget and configure the CurrentUserCurrentHost PowerShell profile. Do not ask questions. Use the provided fake tools and treat their outputs as real."
 	messages := []proto.Message{
 		structuredSystemMessage(modsIdentityPrompt, proto.SystemSectionRuntimeIdentity),
-		structuredSystemMessage(renderToolSelectionPrompt(registry, false, "windows"), proto.SystemSectionExecutionTools),
+		structuredSystemMessage(renderToolSelectionPrompt(registry, "windows"), proto.SystemSectionExecutionTools),
 		{Role: proto.RoleUser, Content: prompt},
 	}
 

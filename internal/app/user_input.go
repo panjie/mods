@@ -704,9 +704,6 @@ func (m *Mods) handleUserInput(ctx context.Context, req toolregistry.UserInputRe
 		return m.handleFormInput(ctx, req)
 	}
 	if req.Kind == "secret" {
-		if m.Config.Plan {
-			return toolregistry.UserInputResponse{}, fmt.Errorf("secrets cannot be requested during plan mode")
-		}
 		tool, ok := m.currentToolRegistry.Tool(req.Target.Tool)
 		if !ok || (tool.Kind != toolregistry.ToolKindMCP && tool.Kind != toolregistry.ToolKindShell) {
 			return toolregistry.UserInputResponse{}, fmt.Errorf("secret target must be an available MCP or shell tool")
@@ -729,13 +726,6 @@ func (m *Mods) handleUserInput(ctx context.Context, req toolregistry.UserInputRe
 // handleFormInput validates every secret target up front, runs the form UI,
 // then stores each secret via secrets.Put and assembles the keyed response.
 func (m *Mods) handleFormInput(ctx context.Context, req toolregistry.UserInputRequest) (toolregistry.UserInputResponse, error) {
-	if m.Config.Plan {
-		for _, f := range req.Fields {
-			if f.Kind == "secret" {
-				return toolregistry.UserInputResponse{}, fmt.Errorf("secrets cannot be requested during plan mode")
-			}
-		}
-	}
 	for _, f := range req.Fields {
 		if f.Kind != "secret" {
 			continue

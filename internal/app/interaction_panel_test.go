@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
 	styles := makeStyles(true).Interaction
 	command := "sudo rm /usr/local/bin/mods && printf 'the complete command remains visible'"
 	for _, width := range []int{30, 60, 80, 120} {
-		t.Run(name("width=", width), func(t *testing.T) {
+		t.Run("width="+strconv.Itoa(width), func(t *testing.T) {
 			rendered := renderInteractionPanel(styles, width, interactionPanel{
 				Title: "Review required", Meta: "shell_run", Tone: interactionToneDanger,
 				ToneText: "Danger", Headline: "Delete a file outside the workspace",

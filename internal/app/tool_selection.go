@@ -9,7 +9,7 @@ import (
 	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
-func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos string) string {
+func renderToolSelectionPrompt(registry *toolregistry.Registry, goos string) string {
 	if registry == nil || registry.Len() == 0 {
 		return ""
 	}
@@ -32,52 +32,24 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, plan bool, goos 
 		return ""
 	}
 
-	parts := make([]string, 0, 3)
-	if plan {
-		parts = append(parts, prompts.ToolSelectionPlanGeneral)
-		if hasFilesystem {
-			parts = append(parts, prompts.ToolSelectionPlanFilesystem)
-		}
-		if hasProcess {
-			parts = append(parts, prompts.ToolSelectionPlanProcess)
-		}
-		if hasShell {
-			if goos == "windows" {
-				if hasProcess {
-					parts = append(parts, prompts.ToolSelectionPlanShellWindows)
-				} else {
-					parts = append(parts, prompts.ToolSelectionPlanShellWindowsFallback)
-				}
+	parts := []string{prompts.ToolSelectionGeneral}
+	if hasFilesystem {
+		parts = append(parts, prompts.ToolSelectionFilesystem)
+	}
+	if hasProcess {
+		parts = append(parts, prompts.ToolSelectionProcess)
+	}
+	if hasShell {
+		if goos == "windows" {
+			if hasProcess {
+				parts = append(parts, prompts.ToolSelectionShellWindows)
 			} else {
-				if hasProcess {
-					parts = append(parts, prompts.ToolSelectionPlanShellPOSIX)
-				} else {
-					parts = append(parts, prompts.ToolSelectionPlanShellPOSIXFallback)
-				}
+				parts = append(parts, prompts.ToolSelectionShellWindowsFallback)
 			}
-		}
-	} else {
-		parts = append(parts, prompts.ToolSelectionGeneral)
-		if hasFilesystem {
-			parts = append(parts, prompts.ToolSelectionFilesystem)
-		}
-		if hasProcess {
-			parts = append(parts, prompts.ToolSelectionProcess)
-		}
-		if hasShell {
-			if goos == "windows" {
-				if hasProcess {
-					parts = append(parts, prompts.ToolSelectionShellWindows)
-				} else {
-					parts = append(parts, prompts.ToolSelectionShellWindowsFallback)
-				}
-			} else {
-				if hasProcess {
-					parts = append(parts, prompts.ToolSelectionShellPOSIX)
-				} else {
-					parts = append(parts, prompts.ToolSelectionShellPOSIXFallback)
-				}
-			}
+		} else if hasProcess {
+			parts = append(parts, prompts.ToolSelectionShellPOSIX)
+		} else {
+			parts = append(parts, prompts.ToolSelectionShellPOSIXFallback)
 		}
 	}
 	return strings.Join(parts, "\n")
@@ -91,7 +63,7 @@ func (m *Mods) injectToolSelectionPrompt(registry *toolregistry.Registry) error 
 	}
 
 	configured := strings.TrimSpace(m.Config.Prompts.ToolSelection) != ""
-	fallback := renderToolSelectionPrompt(registry, m.Config.Plan, runtime.GOOS)
+	fallback := renderToolSelectionPrompt(registry, runtime.GOOS)
 	if !configured && fallback == "" {
 		return nil
 	}

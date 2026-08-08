@@ -134,7 +134,7 @@ func (r *Registry) Capabilities(name string) ToolCapabilities {
 	return tool.Capabilities
 }
 
-// ReadOnly reports whether a tool is safe for read-only contexts like plan mode.
+// ReadOnly reports whether a tool declares itself safe for read-only access.
 func (r *Registry) ReadOnly(name string) bool {
 	return r.Capabilities(name).ReadOnly
 }

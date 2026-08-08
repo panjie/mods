@@ -168,7 +168,6 @@ func initFlags() {
 	regBool(flags, &config.ListPrompts, flagListPrompts, "", config.ListPrompts)
 	regBool(flags, &config.ListSkills, flagListSkills, "", config.ListSkills)
 	regBool(flags, &config.OpenEditor, "editor", "e", false)
-	regBool(flags, &config.Plan, "plan", "p", config.Plan)
 	regBool(flags, &config.MCPList, "list-mcps", "", false)
 	regBool(flags, &config.MCPListTools, "list-tools", "", false)
 

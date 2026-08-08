@@ -138,7 +138,7 @@ func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(target) })
 
 	cfg := cfgpkg.Default()
-	cfg.Plan = true // plan mode always registers filesystem tools
+	cfg.BuiltinTools.Filesystem = cfgpkg.FilesystemAlways
 	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil)
 	require.NoError(t, err)
 
@@ -167,7 +167,7 @@ func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
 	require.Len(t, catalog, 1)
 
 	cfg := cfgpkg.Default()
-	cfg.Plan = true
+	cfg.BuiltinTools.Filesystem = cfgpkg.FilesystemAlways
 	cfg.BuiltinTools.Workspace = workspace
 	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", catalog)
 	require.NoError(t, err)

@@ -477,14 +477,6 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		require.NotContains(t, systemContents(m.messages), modsIdentityPrompt)
 	})
 
-	t.Run("plan mode injects identity and plan prompt", func(t *testing.T) {
-		m := newTestMods(Config{})
-		require.NoError(t, m.setupPlanContext("hello"))
-		contents := systemContents(m.messages)
-		require.Contains(t, contents, modsIdentityPrompt)
-		require.Contains(t, contents, planSystemPrompt)
-	})
-
 	t.Run("identity prompt override", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{
 			Prompts: PromptConfig{Identity: "custom identity"},
@@ -578,49 +570,6 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 	})
 }
 
-func TestSetupPlanContextPromptPolicy(t *testing.T) {
-	cfg := Config{}
-	cfg.Roles = map[string][]string{}
-	cfg.FormatText = defaultConfig().FormatText
-	cfg.Format = "markdown"
-	m := &Mods{
-		Config: &cfg,
-		Styles: makeStyles(true),
-		ctx:    context.Background(),
-	}
-
-	require.NoError(t, m.setupPlanContext("hello"))
-
-	systemMessages := systemContents(m.messages)
-	require.Contains(t, systemMessages, planSystemPrompt)
-	require.Contains(t, planSystemPrompt, "Planning is read-only")
-	require.Contains(t, planSystemPrompt, "Use only available read-only tools")
-	for _, msg := range systemMessages {
-		require.NotContains(t, msg, "Safe temporary workspace:")
-		require.NotContains(t, msg, "Skill safe directories:")
-	}
-}
-
-func TestSetupPlanContextPromptOverride(t *testing.T) {
-	cfg := Config{PersistentConfig: PersistentConfig{
-		Prompts: PromptConfig{Plan: "custom plan prompt"},
-	}}
-	cfg.Roles = map[string][]string{}
-	cfg.FormatText = defaultConfig().FormatText
-	cfg.Format = "markdown"
-	m := &Mods{
-		Config: &cfg,
-		Styles: makeStyles(true),
-		ctx:    context.Background(),
-	}
-
-	require.NoError(t, m.setupPlanContext("hello"))
-
-	systemMessages := systemContents(m.messages)
-	require.Contains(t, systemMessages, "custom plan prompt")
-	require.NotContains(t, systemMessages, planSystemPrompt)
-}
-
 func TestShellClassifierPromptResolution(t *testing.T) {
 	m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{
 		ShellClassifyPrompt: "legacy yes no",
@@ -647,76 +596,6 @@ func TestShellClassifyCacheKeyIncludesPromptAndMode(t *testing.T) {
 
 	require.NotEqual(t, keyA, keyB)
 	require.NotEqual(t, keyA, keyC)
-}
-
-func TestInjectApprovedPlanGuidance(t *testing.T) {
-	m := &Mods{
-		planContent: "1. Do the approved thing",
-		messages: []proto.Message{
-			{Role: proto.RoleSystem, Content: "system"},
-			{Role: proto.RoleUser, Content: "execute"},
-		},
-	}
-
-	m.injectApprovedPlan()
-
-	require.Len(t, m.messages, 3)
-	require.Equal(t, proto.RoleUser, m.messages[1].Role)
-	require.Equal(t, proto.RoleSystem, m.messages[2].Role)
-	require.Contains(t, m.messages[2].Content, "The user has approved the following plan for execution:")
-	require.Contains(t, m.messages[2].Content, "Follow this approved plan during execution.")
-	require.Contains(t, m.messages[2].Content, "If new information requires changing it")
-	require.Empty(t, m.planContent)
-}
-
-func TestPlanHistoryCarriedIntoExecution(t *testing.T) {
-	// Plan-phase conversation: system block (including the plan-mode prompt
-	// that forbids execution) + user request + investigation + proposed plan.
-	m := &Mods{
-		Config:      &Config{},
-		planContent: "1. Do the approved thing",
-		messages: []proto.Message{
-			{Role: proto.RoleSystem, Content: "CRITICAL - PLANNING PHASE ONLY, do not execute"},
-			{Role: proto.RoleUser, Content: "refactor the foo function"},
-			{Role: proto.RoleAssistant, Content: "Investigation: foo.go defines bar() at line 12."},
-			{Role: proto.RoleTool, Content: "<file contents of foo.go>"},
-			{Role: proto.RoleAssistant, Content: "# Plan\n1. Do the approved thing"},
-		},
-	}
-
-	// Approval transitions to execution: snapshot before the rebuild resets.
-	m.capturePlanHistory()
-	// System messages (incl. the plan-mode prompt) must be excluded.
-	require.Len(t, m.planHistory, 4) // user + assistant + tool + plan
-	for _, msg := range m.planHistory {
-		require.NotContains(t, msg.Content, "PLANNING PHASE ONLY")
-	}
-
-	// Execution rebuilds the system block fresh and re-appends the request.
-	m.messages = []proto.Message{
-		{Role: proto.RoleSystem, Content: "sysInfo"},
-		{Role: proto.RoleSystem, Content: "identity"},
-		{Role: proto.RoleUser, Content: "refactor the foo function"},
-	}
-	m.injectPlanHistory()
-	m.injectApprovedPlan()
-
-	// The investigation must be carried; the plan-mode prompt must not leak.
-	found := false
-	for _, msg := range m.messages {
-		require.NotContains(t, msg.Content, "PLANNING PHASE ONLY",
-			"execution must not carry the plan-mode prompt")
-		if msg.Content == "Investigation: foo.go defines bar() at line 12." {
-			found = true
-		}
-	}
-	require.True(t, found, "execution must carry the plan-phase investigation")
-	// The approved-plan instruction lands last (after the proposed plan).
-	last := m.messages[len(m.messages)-1]
-	require.Equal(t, proto.RoleSystem, last.Role)
-	require.Equal(t, proto.SystemSectionProjectApprovedPlan, last.SystemSection())
-	require.Contains(t, last.Content, "approved")
-	require.Empty(t, m.planHistory)
 }
 
 func TestProbeWindowsPowerShellCapabilities(t *testing.T) {
@@ -833,74 +712,6 @@ func TestOperationStatusView(t *testing.T) {
 	})
 }
 
-func TestApprovedPlanTranscript(t *testing.T) {
-	t.Run("uses full rendered output", func(t *testing.T) {
-		m := &Mods{
-			outputRenderer: outputRenderer{Output: "raw plan", glamOutput: "rendered plan\n\n"},
-		}
-
-		require.Equal(t, "rendered plan\n", m.approvedPlanTranscript())
-	})
-
-	t.Run("falls back to raw output", func(t *testing.T) {
-		m := &Mods{outputRenderer: outputRenderer{Output: "raw plan\n\n"}}
-
-		require.Equal(t, "raw plan\n", m.approvedPlanTranscript())
-	})
-
-	t.Run("empty plan stays empty", func(t *testing.T) {
-		m := &Mods{outputRenderer: outputRenderer{glamOutput: "\n\n"}}
-
-		require.Empty(t, m.approvedPlanTranscript())
-	})
-}
-
-func TestPlanApprovalPreservesTranscriptBeforeExecution(t *testing.T) {
-	oldIsOutputTTY := isOutputTTY
-	isOutputTTY = func() bool { return true }
-	defer func() { isOutputTTY = oldIsOutputTTY }()
-
-	m := &Mods{
-		Config:         &Config{Plan: true},
-		Styles:         makeStyles(true),
-		state:          planState,
-		outputRenderer: outputRenderer{Output: "raw plan", glamOutput: "rendered plan\n"},
-		reviewer:       &toolReviewer{},
-		width:          80,
-	}
-
-	model, cmd := m.Update(planApprovedMsg{plan: "approved plan"})
-
-	require.Same(t, m, model)
-	require.False(t, m.Config.Plan)
-	require.Equal(t, planState, m.state)
-	require.Equal(t, "rendered plan\n", m.glamOutput)
-	require.NotNil(t, cmd)
-	require.Contains(t, fmt.Sprintf("%T", cmd()), "sequenceMsg")
-}
-
-func TestPlanExecutionStartResetsOutput(t *testing.T) {
-	m := &Mods{
-		Config:                &Config{},
-		Styles:                makeStyles(true),
-		state:                 planState,
-		outputRenderer:        outputRenderer{Output: "approved plan", displayOutput: "approved plan display", glamOutput: "rendered approved plan", glamHeight: 3},
-		responseOutputStarted: true,
-		reviewer:              &toolReviewer{},
-		contentMutex:          &sync.Mutex{},
-	}
-
-	_, cmd := m.Update(planExecutionStartMsg{})
-
-	require.Equal(t, requestState, m.state)
-	require.Empty(t, m.Output)
-	require.Empty(t, m.displayOutput)
-	require.Empty(t, m.glamOutput)
-	require.Zero(t, m.glamHeight)
-	require.False(t, m.responseOutputStarted)
-	require.NotNil(t, cmd)
-}
-
 func TestGeneratingViewBeforeOutput(t *testing.T) {
 	oldTTY := IsOutputTTY
 	IsOutputTTY = func() bool { return true }
@@ -911,14 +722,14 @@ func TestGeneratingViewBeforeOutput(t *testing.T) {
 		require.Contains(t, m.View().Content, "animating")
 	})
 
-	t.Run("request state does not show approved plan", func(t *testing.T) {
+	t.Run("request state does not show stale output", func(t *testing.T) {
 		m := newAnimatingMods()
-		m.Output = "approved plan"
-		m.glamOutput = "rendered approved plan"
+		m.Output = "stale output"
+		m.glamOutput = "rendered stale output"
 		view := m.View().Content
 		require.Contains(t, view, "animating")
-		require.NotContains(t, view, "approved plan")
-		require.NotContains(t, view, "rendered approved plan")
+		require.NotContains(t, view, "stale output")
+		require.NotContains(t, view, "rendered stale output")
 	})
 
 	t.Run("response state before output shows spinner", func(t *testing.T) {
@@ -1051,13 +862,9 @@ func TestAnimationTickChainSurvivesHiddenPeriod(t *testing.T) {
 	require.Contains(t, m.View().Content, "Approve?", "footer still shows the form, not the spinner")
 }
 
-// TestPlanStreamingStaysInResponseState locks in the fix for the plan-mode
-// flicker: while the model streams text (with or without interleaved tool
-// calls), the state must stay in responseState so the streaming output stays
-// visible. Switching to planState mid-stream hid the accumulated output behind
-// the spinner, then startToolCalls switched back to responseState
-// (revealing it), producing a visible flicker on every text→tool→text round.
-func TestPlanStreamingStaysInResponseState(t *testing.T) {
+// TestStreamingMovesToResponseState verifies that streamed text remains visible
+// while the spinner and later tool rounds continue updating the view.
+func TestStreamingMovesToResponseState(t *testing.T) {
 	oldIsOutputTTY := isOutputTTY
 	oldExportedIsOutputTTY := IsOutputTTY
 	isOutputTTY = func() bool { return true }
@@ -1071,10 +878,10 @@ func TestPlanStreamingStaysInResponseState(t *testing.T) {
 	require.NoError(t, err)
 
 	m := &Mods{
-		Config:              &Config{Plan: true},
+		Config:              &Config{},
 		Styles:              makeStyles(true),
 		anim:                staticModel("animating"),
-		state:               planState,
+		state:               requestState,
 		showOperationStatus: true,
 		width:               80,
 		reviewer:            &toolReviewer{},
@@ -1090,8 +897,7 @@ func TestPlanStreamingStaysInResponseState(t *testing.T) {
 		runner: runner,
 	})
 
-	require.Equal(t, responseState, m.state,
-		"plan-mode streaming must stay in responseState so the output stays visible")
+	require.Equal(t, responseState, m.state)
 	require.True(t, m.responseOutputStarted)
 	require.Contains(t, m.Output, "Investigating the codebase...")
 	// The streamed text must be visible in the View, not hidden. With the
@@ -1537,87 +1343,7 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 	})
 }
 
-func TestPlanCompleteRejectsNonPlanOutput(t *testing.T) {
-	m := &Mods{
-		Config:         &Config{Plan: true},
-		Styles:         makeStyles(true),
-		reviewer:       &toolReviewer{},
-		width:          80,
-		operationMutex: sync.Mutex{},
-	}
-	model, cmd := m.Update(planCompleteMsg{plan: "好的，我先调查一下你当前的 opencode 配置和相关环境。"})
-	m = model.(*Mods)
-	require.NotNil(t, cmd, "non-plan output must not silently enter plan review")
-	msg := cmd()
-	mErr, ok := msg.(modsError)
-	require.True(t, ok, "expected a modsError when no plan was produced, got %T", msg)
-	require.Contains(t, mErr.ReasonText, "without producing a plan")
-	require.NotEqual(t, planState, m.state, "must not enter plan review without a real plan")
-}
-
-func TestPlanCompleteAcceptsStructuredPlan(t *testing.T) {
-	m := &Mods{
-		Config:         &Config{Plan: true},
-		Styles:         makeStyles(true),
-		reviewer:       &toolReviewer{},
-		width:          80,
-		operationMutex: sync.Mutex{},
-	}
-	plan := "## Plan\n- **Approach**: do it\n- **Steps**: 1. thing\n- **Files**: internal/app/mods.go\n- **Risks**: low"
-	model, cmd := m.Update(planCompleteMsg{plan: plan})
-	m = model.(*Mods)
-	require.Nil(t, cmd)
-	require.Equal(t, planState, m.state)
-	require.Equal(t, plan, m.planContent)
-}
-
-// retryResetMods builds a minimal Mods for testing the retries=0 reset on
-// plan/exec lineage transitions. It avoids the full New() constructor so the
-// test stays focused on Update state machine semantics.
-func retryResetMods(t *testing.T) *Mods {
-	t.Helper()
-	return &Mods{
-		Config:         &Config{},
-		Styles:         makeStyles(true),
-		reviewer:       &toolReviewer{},
-		contentMutex:   &sync.Mutex{},
-		operationMutex: sync.Mutex{},
-		ctx:            context.Background(),
-	}
-}
-
-// TestPlanExecutionStartResetsRetries asserts that transitioning from a
-// planning phase into execution clears the API retry counter, so plan-phase
-// retries do not steal back-off budget from execution.
-func TestPlanExecutionStartResetsRetries(t *testing.T) {
-	m := retryResetMods(t)
-	m.retries = 4
-	m.Input = "do thing"
-	_, _ = m.Update(planExecutionStartMsg{})
-	require.Equal(t, 0, m.retries, "planExecutionStartMsg must reset m.retries")
-}
-
-// TestPlanDeniedResetsRetries asserts that abandoning a plan and starting a
-// fresh planning attempt clears the API retry counter.
-func TestPlanDeniedResetsRetries(t *testing.T) {
-	m := retryResetMods(t)
-	m.Config.Prefix = "ignored"
-	m.retries = 3
-	m.planRetries = 0
-	_, _ = m.Update(planDeniedMsg{content: "ignored"})
-	require.Equal(t, 0, m.retries, "planDeniedMsg must reset m.retries before the next plan")
-}
-
-// TestPlanModifyResetsRetries asserts that user-driven plan revision clears
-// the API retry counter.
-func TestPlanModifyResetsRetries(t *testing.T) {
-	m := retryResetMods(t)
-	m.retries = 2
-	_, _ = m.Update(planModifyMsg{feedback: "redo", plan: "old plan"})
-	require.Equal(t, 0, m.retries, "planModifyMsg must reset m.retries before the revised plan")
-}
-
-func TestStreamDoneAccumulatesUsageAcrossLineagesOnce(t *testing.T) {
+func TestStreamDoneAccumulatesUsageAcrossStreamsOnce(t *testing.T) {
 	m := testMods(t)
 	first := newStreamRunner(staticStream{usage: proto.TokenUsage{
 		InputTokens: 10, OutputTokens: 4, TotalTokens: 14,
@@ -1626,10 +1352,8 @@ func TestStreamDoneAccumulatesUsageAcrossLineagesOnce(t *testing.T) {
 		InputTokens: 20, OutputTokens: 6, TotalTokens: 26,
 	}}, nil, nil, func(error) tea.Msg { return nil })
 
-	m.Config.Plan = true
 	_, _ = m.Update(first.doneMsg())
 	_, _ = m.Update(first.doneMsg()) // duplicate delivery must not double count
-	m.Config.Plan = false
 	_, _ = m.Update(second.doneMsg())
 
 	require.Equal(t, proto.TokenUsage{

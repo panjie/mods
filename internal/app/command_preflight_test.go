@@ -44,11 +44,9 @@ func TestCommandPreflightGateCorrectsAtMostOnce(t *testing.T) {
 func TestCommandPreflightGateModes(t *testing.T) {
 	minimal := defaultConfig()
 	minimal.Minimal = true
-	plan := defaultConfig()
-	plan.Plan = true
 	never := defaultConfig()
 	never.ReviewMode = ReviewNever
-	for _, cfg := range []*Config{&minimal, &plan, &never} {
+	for _, cfg := range []*Config{&minimal, &never} {
 		gate := newCommandPreflightGate(cfg)
 		require.NoError(t, gate.check("shell_run", complexReviewabilityAnalysis()))
 	}

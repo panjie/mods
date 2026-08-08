@@ -41,8 +41,7 @@ It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
   files, runs shell commands, and chains multiple tool calls together to complete
   a task end-to-end.
 - **Safety first.** Every file write and shell command passes through a review
-  prompt. Approve once, deny, or save a per-session rule. Prefer to see a
-  plan before anything runs? Use `--plan`.
+  prompt. Approve once, deny, or save a per-session rule.
 - **Stays in your pipeline.** Pipe command output in, get structured answers out.
   `--minimal` prints one item per line — perfect for `| gum choose` and friends.
 - **Knows the live web.** Web search is opt-in; `--web-search` uses a supported
@@ -175,9 +174,6 @@ git log --oneline -20 | mods -f "group these commits by theme"
 
 # Let Mods read and edit files in the current directory
 mods --workspace . "read README.md and suggest three improvements"
-
-# See a plan before any change is applied
-mods --plan --workspace . "extract the CLI examples into a separate doc"
 ```
 
 ## See It In Action
@@ -193,7 +189,7 @@ git diff | mods -f "review this diff — flag bugs, security issues, and naming 
 
 ```sh
 # Bring your vim config in line with current community best practices
-mods --workspace "$HOME" --plan "modernize my .vimrc to the most popular 2026 setup, but preserve my keybindings"
+mods --workspace "$HOME" "modernize my .vimrc to the most popular 2026 setup, but preserve my keybindings"
 
 # Migrate a codebase from one library to another
 mods "replace all requests usage with httpx, keep behavior identical"
@@ -290,12 +286,8 @@ shortcut for `--review-mode=never`:
 | `always`   | Reviews **every** tool call, including reads and searches.        |
 | `never`    | Disables review entirely. Use only for trusted, automated runs.   |
 
-Want a heads-up before any tool fires at all? `--plan` makes Mods draft a
-step-by-step plan for your approval first, then executes once you accept.
-
 ```sh
 mods --review-mode always "rename the fn to calculateTotal across the repo"
-mods --plan "refactor the examples to cover more features"
 ```
 
 ## Built-in Tools & MCP
@@ -523,8 +515,6 @@ copy the one you want to customize:
 
 ```yaml
 prompts:
-  plan: |
-    Create a concise plan for approval before making changes.
   shell-classifier: |
     Analyze this shell command for review.
     Return only strict JSON.

@@ -132,7 +132,7 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 		return err
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = defaultShellTimeout
+		cfg.Timeout = DefaultShellTimeout
 	}
 	return registry.Register(Tool{
 		Kind:          ToolKindShell,
@@ -145,7 +145,7 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 				"program":    stringProp("Executable name or path. Shell builtins, pipelines, redirection, globbing, and variable expansion are not supported."),
 				"args":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Literal argument vector. Each item is passed as one argument without shell parsing."},
 				"cwd":        stringProp("Optional working directory. Defaults to the configured workspace; relative paths resolve from that workspace."),
-				"timeout_ms": integerProp("Optional positive timeout in milliseconds, no greater than the configured shell-timeout."),
+				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 			}, "program"),
 		},
@@ -176,16 +176,9 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 		return "", err
 	}
 
-	timeout := cfg.Timeout
-	if args.TimeoutMS != nil {
-		if *args.TimeoutMS <= 0 {
-			return "", fmt.Errorf("timeout_ms must be positive")
-		}
-		if *args.TimeoutMS > cfg.Timeout.Milliseconds() {
-			return "", fmt.Errorf("timeout_ms exceeds configured shell-timeout of %s", cfg.Timeout)
-		}
-		requested := time.Duration(*args.TimeoutMS) * time.Millisecond
-		timeout = requested
+	timeout, err := resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
+	if err != nil {
+		return "", err
 	}
 
 	cwd := root

@@ -44,7 +44,7 @@ func (r commandRunner) Run() (commandRunResult, error) {
 		r.Parent = context.Background()
 	}
 	if r.Timeout <= 0 {
-		r.Timeout = defaultShellTimeout
+		r.Timeout = DefaultShellTimeout
 	}
 	if r.BuildCommand == nil {
 		return commandRunResult{}, fmt.Errorf("command builder is required")

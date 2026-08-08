@@ -20,12 +20,11 @@ import (
 
 const (
 	// DefaultShellTimeout is the canonical default timeout for the native
-	// shell tool when BuiltinToolsConfig.ShellTimeout is unset. The config
-	// layer references this constant so there is a single source of truth.
-	DefaultShellTimeout = 30 * time.Second
-	// defaultShellTimeout is an alias kept so in-file references read
-	// naturally while external callers share the same canonical value.
-	defaultShellTimeout = DefaultShellTimeout
+	// shell and process tools when BuiltinToolsConfig.ShellTimeout is unset.
+	// The config layer references this constant so there is a single source
+	// of truth. It is a default, not a ceiling: per-call timeout_ms values
+	// may be larger or smaller.
+	DefaultShellTimeout = 60 * time.Second
 
 	defaultShellProgressInterval = 2 * time.Second
 )
@@ -50,6 +49,19 @@ type ShellConfig struct {
 	Progress   ShellProgressHandler
 }
 
+// resolveCallTimeout applies an optional per-call timeout_ms override to the
+// configured default. A nil value leaves the default in place; a non-positive
+// value is rejected. The override may be larger or smaller than the default.
+func resolveCallTimeout(defaultTimeout time.Duration, timeoutMS *int64) (time.Duration, error) {
+	if timeoutMS == nil {
+		return defaultTimeout, nil
+	}
+	if *timeoutMS <= 0 {
+		return 0, fmt.Errorf("timeout_ms must be positive")
+	}
+	return time.Duration(*timeoutMS) * time.Millisecond, nil
+}
+
 // RegisterShell registers the native shell tool.
 func RegisterShell(registry *Registry, cfg ShellConfig) error {
 	root, err := filepath.Abs(cfg.Root)
@@ -57,7 +69,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 		return err
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = defaultShellTimeout
+		cfg.Timeout = DefaultShellTimeout
 	}
 	desc := PosixShellRunDescription
 	if runtime.GOOS == "windows" {
@@ -73,12 +85,14 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			InputSchema: objectSchema(map[string]any{
 				"command":    stringProp("Shell command to run."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
+				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
 			}, "command"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Command   string            `json:"command"`
 				SecretEnv map[string]string `json:"secret_env"`
+				TimeoutMS *int64            `json:"timeout_ms"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
@@ -86,7 +100,12 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			if err := validateSecretEnv(args.SecretEnv); err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, cfg, root, "shell_run", args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
+			callCfg := cfg
+			callCfg.Timeout, err = resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
+			if err != nil {
+				return "", err
+			}
+			return runShellCommand(ctx, callCfg, root, "shell_run", args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
 		},
 	})
 }
@@ -98,7 +117,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 		return err
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = defaultShellTimeout
+		cfg.Timeout = DefaultShellTimeout
 	}
 	return registry.Register(Tool{
 		Kind:          ToolKindShell,
@@ -110,12 +129,14 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			InputSchema: objectSchema(map[string]any{
 				"command":    stringProp("PowerShell command to run directly."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
+				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
 			}, "command"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Command   string            `json:"command"`
 				SecretEnv map[string]string `json:"secret_env"`
+				TimeoutMS *int64            `json:"timeout_ms"`
 			}
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
@@ -123,7 +144,12 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			if err := validateSecretEnv(args.SecretEnv); err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, cfg, root, "powershell_run", args.Command, args.SecretEnv, nil, powerShellCommand)
+			callCfg := cfg
+			callCfg.Timeout, err = resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
+			if err != nil {
+				return "", err
+			}
+			return runShellCommand(ctx, callCfg, root, "powershell_run", args.Command, args.SecretEnv, nil, powerShellCommand)
 		},
 	})
 }
@@ -156,7 +182,7 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 		return "", fmt.Errorf("command is required")
 	}
 	if r.Timeout <= 0 {
-		r.Timeout = defaultShellTimeout
+		r.Timeout = DefaultShellTimeout
 	}
 	if r.BuildCommand == nil {
 		return "", fmt.Errorf("shell runner command builder is required")

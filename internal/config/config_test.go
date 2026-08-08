@@ -84,7 +84,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	require.Equal(t, DefaultWebSearchBackend, documented["web-search-backend"].Default)
 	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
 	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
-	require.Equal(t, "30s", documented["builtin-tools.shell-timeout"].Default)
+	require.Equal(t, "1m0s", documented["builtin-tools.shell-timeout"].Default)
 	for _, path := range []string{
 		"web-search-api-key",
 		"prompts.identity",

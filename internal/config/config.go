@@ -125,7 +125,7 @@ var Help = map[string]string{
 	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
 	"builtin-tools.shell":                    "Enable the native shell execution tool",
 	"builtin-tools.shell-read-only-commands": "Additional executable names to trust as read-only; a match trusts all arguments, subcommands, and internal side effects, while unsafe shell structures are still reviewed",
-	"builtin-tools.shell-timeout":            "Maximum duration of a native shell command",
+	"builtin-tools.shell-timeout":            "Default timeout for shell and process_run commands; per-call timeout_ms may override it in either direction",
 	"builtin-tools.workspace":                "Root directory for filesystem and shell tools; empty uses the current working directory",
 
 	"mcp-servers.<server>.type":         "MCP transport type: stdio, sse, or http",

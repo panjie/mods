@@ -58,6 +58,12 @@ func TestProcessHelperProcess(t *testing.T) {
 		os.Exit(0)
 	case "timeout":
 		time.Sleep(5 * time.Second)
+	case "delay":
+		d, err := time.ParseDuration(values[0])
+		if err != nil {
+			os.Exit(2)
+		}
+		time.Sleep(d)
 	case "tree":
 		if len(values) != 1 {
 			os.Exit(2)
@@ -363,12 +369,67 @@ func TestProcessRunLiteralArgvAndStructuredResults(t *testing.T) {
 	})
 }
 
+func TestProcessRunTimeoutMSMayExceedDefault(t *testing.T) {
+	root := t.TempDir()
+	executable, err := filepath.Abs(os.Args[0])
+	require.NoError(t, err)
+	ctx := WithAuthorizedDirs(context.Background(), []string{filepath.Dir(executable)})
+	cfg := ProcessConfig{Root: root, Timeout: 100 * time.Millisecond}
+	delay := int64(2000)
+	args := processRunArgs{
+		Program:   executable,
+		Args:      []string{"-test.run=^TestProcessHelperProcess$", "--", "delay", "500ms"},
+		TimeoutMS: &delay,
+	}
+	out, err := runProcess(ctx, cfg, root, args)
+	require.NoError(t, err)
+	var result processRunResult
+	require.NoError(t, json.Unmarshal([]byte(out), &result))
+	require.False(t, result.TimedOut)
+	require.NotNil(t, result.ExitCode)
+	require.Zero(t, *result.ExitCode)
+}
+
+func TestShellTimeoutMSOverride(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterShell(registry, ShellConfig{Root: root, Timeout: 2 * time.Second}))
+
+	t.Run("shorter than default times out", func(t *testing.T) {
+		_, err := registry.Call(context.Background(), "shell_run", []byte(`{"command":"sleep 1","timeout_ms":50}`))
+		require.ErrorContains(t, err, "timed out after")
+	})
+
+	t.Run("longer than default is honored", func(t *testing.T) {
+		registry := NewRegistry()
+		require.NoError(t, RegisterShell(registry, ShellConfig{Root: root, Timeout: 100 * time.Millisecond}))
+		_, err := registry.Call(context.Background(), "shell_run", []byte(`{"command":"sleep 0.5","timeout_ms":2000}`))
+		require.NoError(t, err)
+	})
+
+	t.Run("non-positive rejected", func(t *testing.T) {
+		_, err := registry.Call(context.Background(), "shell_run", []byte(`{"command":"echo hi","timeout_ms":0}`))
+		require.ErrorContains(t, err, "timeout_ms must be positive")
+	})
+}
+
 func TestProcessRunValidationAndRuntimeInfo(t *testing.T) {
 	root := t.TempDir()
 	cfg := ProcessConfig{Root: root, Timeout: 50 * time.Millisecond}
-	tooLong := int64(51)
-	_, err := runProcess(context.Background(), cfg, root, processRunArgs{Program: "go", TimeoutMS: &tooLong})
-	require.ErrorContains(t, err, "exceeds configured shell-timeout")
+	executable, err := filepath.Abs(os.Args[0])
+	require.NoError(t, err)
+	ctx := WithAuthorizedDirs(context.Background(), []string{filepath.Dir(executable)})
+	over := int64(51)
+	_, err = runProcess(ctx, cfg, root, processRunArgs{
+		Program:   executable,
+		Args:      []string{"-test.run=^TestProcessHelperProcess$", "--", "result"},
+		TimeoutMS: &over,
+	})
+	require.NoError(t, err)
+
+	zero := int64(0)
+	_, err = runProcess(ctx, cfg, root, processRunArgs{Program: executable, TimeoutMS: &zero})
+	require.ErrorContains(t, err, "timeout_ms must be positive")
 
 	registry := NewRegistry()
 	require.NoError(t, RegisterRuntimeInfo(registry, root))

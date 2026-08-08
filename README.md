@@ -320,7 +320,7 @@ Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
 builtin-tools:
   filesystem: auto          # auto, true, or false
   shell: true
-  shell-timeout: 30s
+  shell-timeout: 60s        # default timeout; per-call timeout_ms may override
   workspace: ""             # defaults to the current working directory
 ```
 

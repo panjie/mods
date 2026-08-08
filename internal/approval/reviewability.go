@@ -82,6 +82,11 @@ func processArgsContainShellSourceFlag(program string, args []string) bool {
 			return program == "cmd" || program == "cmd.exe"
 		}
 	}
+	// PowerShell hosts bind the first positional argument as -Command, so
+	// `powershell.exe Get-Content file` is shell source even without a flag.
+	if powerShellHosts[program] && len(args) > 0 && !strings.HasPrefix(strings.TrimSpace(args[0]), "-") {
+		return true
+	}
 	return false
 }
 

@@ -82,6 +82,19 @@ func TestAnalyzeProcessReviewability(t *testing.T) {
 	require.True(t, powershell.ShouldCorrect)
 	require.Equal(t, "powershell_run", powershell.RecommendedTool)
 	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("pwsh", []string{"-Command", "Get-Date"}, true).Level)
+
+	implicit := AnalyzeProcessReviewability("powershell.exe", []string{"Get-Content", "internal/tools/windows_reliability_test.go", "-TotalCount", "25"}, false)
+	require.True(t, implicit.ShouldCorrect)
+	require.Equal(t, "powershell_run", implicit.RecommendedTool)
+	require.Contains(t, implicit.Reasons, ReviewabilityOpaqueExecution)
+
+	implicitPwsh := AnalyzeProcessReviewability(`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, []string{"head", "-1", "file.txt"}, false)
+	require.True(t, implicitPwsh.ShouldCorrect)
+	require.Equal(t, "powershell_run", implicitPwsh.RecommendedTool)
+
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("powershell.exe", nil, false).Level)
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("powershell.exe", []string{"-File", "script.ps1"}, false).Level)
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("powershell.exe", []string{"-NoProfile"}, false).Level)
 }
 
 func TestLooksLikePowerShellCmdlet(t *testing.T) {

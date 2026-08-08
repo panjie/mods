@@ -29,6 +29,11 @@ type preparedSudoCommand struct {
 	Env     map[string]string
 }
 
+type preparedSudoProcess struct {
+	Args []string
+	Env  map[string]string
+}
+
 type askpassRequest struct {
 	Token  string `json:"token"`
 	Prompt string `json:"prompt"`
@@ -64,36 +69,23 @@ func prepareSudoCommand(ctx context.Context, command string, prompt SecretPrompt
 			return true
 		}
 		found = true
-		hasMode := false
+		args := make([]string, 0, len(call.Args)-1)
 		for _, word := range call.Args[1:] {
 			arg, ok := staticWord(word)
 			if !ok {
-				continue
+				// Preserve the argument position so an option such as -u still
+				// consumes its dynamic value before authentication flags are read.
+				arg = ""
 			}
-			switch arg {
-			case "-S", "--stdin":
-				rewriteErr = fmt.Errorf("sudo -S is not supported; remove -S so mods can request the password securely")
-				return false
-			case "-n", "--non-interactive":
-				hasMode = true
-			case "-A", "--askpass":
-				hasMode = true
-				needsAskpass = true
-			}
-			if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") {
-				flags := strings.TrimPrefix(arg, "-")
-				if strings.Contains(flags, "S") {
-					rewriteErr = fmt.Errorf("sudo -S is not supported; remove -S so mods can request the password securely")
-					return false
-				}
-				if strings.Contains(flags, "n") {
-					hasMode = true
-				}
-				if strings.Contains(flags, "A") {
-					hasMode = true
-					needsAskpass = true
-				}
-			}
+			args = append(args, arg)
+		}
+		hasMode, callNeedsAskpass, err := sudoAuthMode(args)
+		if err != nil {
+			rewriteErr = err
+			return false
+		}
+		if callNeedsAskpass {
+			needsAskpass = true
 		}
 		if hasMode {
 			return true
@@ -132,6 +124,103 @@ func prepareSudoCommand(ctx context.Context, command string, prompt SecretPrompt
 	}
 	prepared.Env = map[string]string{"SUDO_ASKPASS": helper}
 	return prepared, cleanup, nil
+}
+
+// prepareSudoProcess applies the same non-blocking sudo policy as
+// prepareSudoCommand to a literal process invocation. Without this, a direct
+// process_run of sudo can wait on the terminal behind the TUI and never reach
+// mods' secret-input flow.
+func prepareSudoProcess(ctx context.Context, program string, args []string, prompt SecretPromptHandler, display string) (preparedSudoProcess, func(), error) {
+	prepared := preparedSudoProcess{Args: args}
+	if filepath.Base(program) != "sudo" {
+		return prepared, func() {}, nil
+	}
+
+	hasMode, needsAskpass, err := sudoAuthMode(args)
+	if err != nil {
+		return preparedSudoProcess{}, func() {}, err
+	}
+	if !hasMode {
+		flag := "-n"
+		if prompt != nil {
+			flag = "-A"
+			needsAskpass = true
+		}
+		prepared.Args = append([]string{flag}, args...)
+	}
+	if !needsAskpass {
+		return prepared, func() {}, nil
+	}
+	if prompt == nil {
+		return preparedSudoProcess{}, func() {}, fmt.Errorf("sudo password input requires an interactive terminal")
+	}
+	helper, cleanup, err := startAskpassBroker(ctx, display, prompt)
+	if err != nil {
+		return preparedSudoProcess{}, func() {}, err
+	}
+	prepared.Env = map[string]string{"SUDO_ASKPASS": helper}
+	return prepared, cleanup, nil
+}
+
+func sudoAuthMode(args []string) (hasMode, needsAskpass bool, err error) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" || arg == "-" || !strings.HasPrefix(arg, "-") {
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			name := arg
+			if before, _, ok := strings.Cut(arg, "="); ok {
+				name = before
+			}
+			switch name {
+			case "--stdin":
+				return false, false, fmt.Errorf("sudo -S is not supported; remove -S so mods can request the password securely")
+			case "--non-interactive":
+				hasMode = true
+			case "--askpass":
+				hasMode = true
+				needsAskpass = true
+			}
+			if !strings.Contains(arg, "=") && sudoLongOptionTakesValue(name) {
+				i++
+			}
+			continue
+		}
+
+		flags := strings.TrimPrefix(arg, "-")
+		for j := 0; j < len(flags); j++ {
+			switch flags[j] {
+			case 'S':
+				return false, false, fmt.Errorf("sudo -S is not supported; remove -S so mods can request the password securely")
+			case 'n':
+				hasMode = true
+			case 'A':
+				hasMode = true
+				needsAskpass = true
+			}
+			if sudoShortOptionTakesValue(flags[j]) {
+				if j == len(flags)-1 {
+					i++
+				}
+				break
+			}
+		}
+	}
+	return hasMode, needsAskpass, nil
+}
+
+func sudoShortOptionTakesValue(flag byte) bool {
+	return strings.ContainsRune("CDghpRTUu", rune(flag))
+}
+
+func sudoLongOptionTakesValue(option string) bool {
+	switch option {
+	case "--chdir", "--chroot", "--close-from", "--command-timeout", "--group", "--host", "--other-user", "--prompt", "--user":
+		return true
+	default:
+		return false
+	}
 }
 
 func staticWord(word *syntax.Word) (string, bool) {

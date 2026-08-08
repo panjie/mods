@@ -14,8 +14,17 @@ type preparedSudoCommand struct {
 	Env     map[string]string
 }
 
+type preparedSudoProcess struct {
+	Args []string
+	Env  map[string]string
+}
+
 func prepareSudoCommand(_ context.Context, command string, _ SecretPromptHandler) (preparedSudoCommand, func(), error) {
 	return preparedSudoCommand{Command: command}, func() {}, nil
+}
+
+func prepareSudoProcess(_ context.Context, _ string, args []string, _ SecretPromptHandler, _ string) (preparedSudoProcess, func(), error) {
+	return preparedSudoProcess{Args: args}, func() {}, nil
 }
 
 func RunSudoAskpassHelper([]string) error {

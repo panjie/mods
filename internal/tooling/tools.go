@@ -62,10 +62,11 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 
 	if cfg.BuiltinTools.Shell {
 		if err := toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{
-			Root:     root,
-			SafeDirs: safeDirs,
-			Timeout:  cfg.BuiltinTools.ShellTimeout,
-			Progress: handlers.ShellProgress,
+			Root:       root,
+			SafeDirs:   safeDirs,
+			Timeout:    cfg.BuiltinTools.ShellTimeout,
+			SudoPrompt: handlers.SudoPrompt,
+			Progress:   handlers.ShellProgress,
 		}); err != nil {
 			return nil, err
 		}

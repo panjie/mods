@@ -23,10 +23,11 @@ const maxRuntimeInfoCommands = 20
 var runtimeCommandNamePattern = regexp.MustCompile(`^[A-Za-z0-9._+@%-]+$`)
 
 type ProcessConfig struct {
-	Root     string
-	SafeDirs []string
-	Timeout  time.Duration
-	Progress ShellProgressHandler
+	Root       string
+	SafeDirs   []string
+	Timeout    time.Duration
+	SudoPrompt SecretPromptHandler
+	Progress   ShellProgressHandler
 }
 
 type processRunArgs struct {
@@ -201,14 +202,25 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 	if err != nil {
 		return "", err
 	}
+	display := FormatProcessInvocation(args.Program, args.Args)
+	prepared, cleanup, err := prepareSudoProcess(ctx, program, args.Args, cfg.SudoPrompt, display)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+	for key, value := range prepared.Env {
+		if args.SecretEnv == nil {
+			args.SecretEnv = map[string]string{}
+		}
+		args.SecretEnv[key] = value
+	}
 	stdout := newBoundedOutput(commandOutputLimit)
 	stderr := newBoundedOutput(commandOutputLimit)
-	display := FormatProcessInvocation(args.Program, args.Args)
 	runResult, err := (commandRunner{
 		Parent:  ctx,
 		Timeout: timeout,
 		BuildCommand: func(runCtx context.Context) *exec.Cmd {
-			cmd := exec.CommandContext(runCtx, program, args.Args...) //nolint:gosec
+			cmd := exec.CommandContext(runCtx, program, prepared.Args...) //nolint:gosec
 			cmd.Dir = cwd
 			if len(args.SecretEnv) > 0 {
 				cmd.Env = os.Environ()

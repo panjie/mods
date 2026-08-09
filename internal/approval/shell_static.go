@@ -2,8 +2,6 @@ package approval
 
 import (
 	"strings"
-
-	"mvdan.cc/sh/v3/syntax"
 )
 
 type ShellStaticClass string
@@ -49,32 +47,6 @@ func AnalyzeShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCom
 		result.Reason = ""
 	}
 	return result
-}
-
-func unresolvedPOSIXRuntimeExpressionsFromFile(file *syntax.File) []string {
-	if file == nil {
-		return nil
-	}
-	var unresolved []string
-	syntax.Walk(file, func(node syntax.Node) bool {
-		switch node := node.(type) {
-		case *syntax.ParamExp:
-			if _, known := simpleHomeExpansion(node); known {
-				return true
-			}
-			if node.Param != nil && node.Param.Value != "" {
-				unresolved = append(unresolved, "$"+node.Param.Value)
-			} else {
-				unresolved = append(unresolved, "parameter expansion")
-			}
-		case *syntax.CmdSubst:
-			unresolved = append(unresolved, "command substitution")
-		case *syntax.ProcSubst:
-			unresolved = append(unresolved, "process substitution")
-		}
-		return true
-	})
-	return dedupeSorted(unresolved)
 }
 
 // AnalyzeArgvStaticWithPolicy classifies a direct executable invocation whose

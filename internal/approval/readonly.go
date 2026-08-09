@@ -182,11 +182,37 @@ paths:
 				return false
 			}
 			i += 2
+		case "-exec", "-execdir":
+			nested, next, ok := findExecCommand(args, i+1)
+			if !ok {
+				return false
+			}
+			if readOnly, _ := invocationTokensReadOnly(nested, ReadOnlyCommandPolicy{}); !readOnly {
+				return false
+			}
+			i = next
 		default:
 			return false
 		}
 	}
 	return true
+}
+
+// findExecCommand returns the literal argv between -exec/-execdir and its
+// required terminator. The nested command is classified independently so a
+// reader such as `-exec cat {} +` does not inherit the risk of arbitrary
+// `find -exec` calls.
+func findExecCommand(args []string, start int) (nested []string, next int, ok bool) {
+	for i := start; i < len(args); i++ {
+		if args[i] != ";" && args[i] != "+" {
+			continue
+		}
+		if i == start {
+			return nil, 0, false
+		}
+		return args[start:i], i + 1, true
+	}
+	return nil, 0, false
 }
 
 func findExpressionToken(arg string) bool {

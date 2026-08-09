@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -597,6 +598,10 @@ func TestAnalyzeShellCommandComplexPOSIXReadOnly(t *testing.T) {
 			name: "null-delimited multi-stage pipeline",
 			cmd:  `find . -type f -name '*.txt' -print0 | xargs -0 wc -l | sort -n`,
 		},
+		{
+			name: "find exec reader pipeline",
+			cmd:  `find . -name '*.go' -not -path './.git/*' -exec cat {} + | wc -l`,
+		},
 	}
 
 	for _, c := range cases {
@@ -615,6 +620,111 @@ func TestAnalyzeShellCommandComplexPOSIXReadOnly(t *testing.T) {
 			require.NotEmpty(t, result.Reason)
 		})
 	}
+}
+
+func TestAnalyzeShellCommandPOSIXScalarVariablesDoNotRequireDynamicReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only statistics"}
+		},
+	}
+	command := `echo "=== 各语言代码量 ===" && for ext in go md yml yaml json sh ts tsx css html; do count=$(find . -name "*.$ext" -not -path "./vendor/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'); files=$(find . -name "*.$ext" -not -path "./vendor/*" | wc -l | tr -d ' '); [ "$count" -gt 0 ] 2>/dev/null && echo "$ext: $count 行, $files 文件"; done 2>/dev/null`
+
+	assessment := mods.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets)
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto),
+	))
+	presentation := formatReviewPresentationWithIntent(
+		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
+		WorkspaceScope(workspace), assessment.AccessIntent(),
+	)
+	require.Equal(t, "Run a read-only command", presentation.headline)
+	for _, row := range presentation.rows {
+		if row.Label != "Target" {
+			continue
+		}
+		require.NotContains(t, row.Value, "$count")
+		require.NotContains(t, row.Value, "$ext")
+		require.NotContains(t, row.Value, "$files")
+	}
+}
+
+func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only dynamic path"}
+		},
+	}
+	tests := []struct {
+		name    string
+		command string
+		target  string
+	}{
+		{name: "reader operand", command: `cat "$FILE"`, target: "$FILE"},
+		{name: "find root", command: `find "$ROOT" -name "*.$ext" -print`, target: "$ROOT"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assessment := mods.assessCommand("shell_run", tt.command)
+			require.Equal(t, approval.EffectRead, assessment.Effect)
+			require.Equal(t, []string{tt.target}, assessment.DynamicTargets)
+			require.Equal(t, DecisionAsk, ClassifyAccess(
+				assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto),
+			))
+			presentation := formatReviewPresentationWithIntent(
+				"shell_run", []byte(`{"command":`+strconv.Quote(tt.command)+`}`), assessment,
+				WorkspaceScope(workspace), assessment.AccessIntent(),
+			)
+			require.Equal(t, "Read a dynamic target", presentation.headline)
+			require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: tt.target})
+		})
+	}
+}
+
+func TestAnalyzeShellCommandWorkspaceFileEnumerationSubstitutionRequiresReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{Config: testConfigForWorkspace(workspace)}
+	command := `echo "=== 非测试 Go 文件（剔除 _test.go）==="; git ls-files '*.go' | grep -v '\_test.go' | wc -l; echo "---"; wc -l $(git ls-files '*.go' | grep -v '_test.go') | tail -1`
+
+	assessment := mods.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, []string{"command substitution"}, assessment.DynamicTargets)
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAnalyzeShellCommandNullDelimitedFilePipelineDoesNotRequireReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{Config: testConfigForWorkspace(workspace)}
+	command := `git ls-files -z '*.go' | xargs -0 wc -l | tail -1`
+
+	assessment := mods.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets)
+	require.Equal(t, []string{workspace}, assessment.KnownDirs)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto),
+	))
 }
 
 func TestAnalyzeShellCommandComplexPOSIXWrites(t *testing.T) {

@@ -17,7 +17,8 @@ not independently reconstruct command state.
   targets. A command's working directory is execution context, not by itself
   evidence that the command reads or writes that directory; unknown commands
   therefore keep `KnownDirs` empty unless analysis identifies a target.
-- `DynamicTargets` contains runtime expressions and maps to
+- `DynamicTargets` conservatively contains runtime expressions that may resolve
+  to filesystem targets and maps to
   `AccessIntent.UnresolvedPaths`; it never creates a `DirAllow` rule or
   authorizes a directory for tool execution. `DynamicProbe` is set only for a
   narrow allowlist of capability and path-resolution probes that do not read
@@ -25,6 +26,13 @@ not independently reconstruct command state.
   directory is identified. Ordinary dynamic content reads, writes, unknown
   effects, and reads that also identify concrete directories require per-use
   approval.
+  POSIX runtime expressions fail closed by default. A small AST-local pass
+  excludes only expressions consumed in clearly scalar positions such as
+  assignment results, output arguments, scalar comparisons, and `find`
+  patterns. It does not infer command or pipeline output provenance. File lists
+  should stay in null-delimited pipelines (for example,
+  `git ls-files -z | xargs -0 ...`); a command substitution used as a file
+  operand remains an unresolved target.
 - `Shape` and `Reviewability` describe composition and correction guidance.
   They do not decide whether execution is safe.
 
@@ -36,8 +44,9 @@ and public tool contracts are unchanged.
 
 POSIX source is parsed once with mvdan. Effect, concrete path arguments,
 runtime expansions, top-level actions, pipelines, opaque syntax, and
-reviewability are derived from that AST. The application does not run a
-second POSIX parser during path extraction.
+reviewability are derived from that AST. Dynamic target collection defaults to
+unresolved and uses only the small scalar-position exclusions described above.
+The application does not run a second POSIX parser during path extraction.
 
 PowerShell source is sent to the persistent parser bridge once. Pure Go
 functions derive every assessment dimension from the returned IR. The IR
@@ -86,12 +95,12 @@ and passes it forward to:
 4. review summary and presentation rendering.
 
 `requestApproval` consumes the completed assessment and intent. It never calls
-a command analyzer. The UI derives risk tone from effect, dynamic labels from
-`DynamicTargets`, and composition rows from `Shape`, preserving the separation
-between security effect and human reviewability. When affected locations are
-unknown, classifier-generated reason text remains available to debug logging
-but is hidden from approval presentation and summaries because it cannot serve
-as verified scope evidence.
+a command analyzer. The UI derives its risk tone and concise target row from
+the completed assessment; shape, classifier reasons, and reviewability remain
+internal preflight/debug facts. When affected locations are unknown,
+classifier-generated reason text remains available to debug logging but is
+hidden from approval presentation and summaries because it cannot serve as
+verified scope evidence.
 
 ## Invariants
 

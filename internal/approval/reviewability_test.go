@@ -20,6 +20,7 @@ func TestAnalyzePOSIXCommandReviewability(t *testing.T) {
 	}{
 		{name: "single executable", command: "git status", level: ReviewabilitySimple, correct: true, recommended: "process_run", reason: ReviewabilitySingleProgramInShell, statements: 1},
 		{name: "pipeline remains one purpose", command: "find . -name '*.go' | wc -l", level: ReviewabilitySimple, correct: false, statements: 1, pipelineCount: 1},
+		{name: "find exec reader pipeline", command: "find . -name '*.go' -exec cat {} + | wc -l", level: ReviewabilitySimple, correct: false, statements: 1, pipelineCount: 1},
 		{name: "shell builtin stays shell", command: "printf '%s\\n' hello", level: ReviewabilitySimple, correct: false, statements: 1},
 		{name: "quoted semicolon", command: "printf '%s\\n' 'a;b'", level: ReviewabilitySimple, correct: false, statements: 1},
 		{name: "three inspections", command: "echo first; git status; git diff", level: ReviewabilityCompound, correct: true, reason: ReviewabilityMultipleIndependent, statements: 3},

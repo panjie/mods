@@ -429,11 +429,19 @@ func hasKnownRiskyShellCommand(command string, posix bool) bool {
 }
 
 func findHasWriteAction(args []string) bool {
-	for _, arg := range args {
-		switch arg {
-		case "-delete", "-exec", "-execdir", "-ok", "-okdir",
-			"-fprint", "-fprint0", "-fprintf", "-fls":
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-delete", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls":
 			return true
+		case "-exec", "-execdir":
+			nested, next, ok := findExecCommand(args, i+1)
+			if !ok {
+				return true
+			}
+			if readOnly, _ := invocationTokensReadOnly(nested, ReadOnlyCommandPolicy{}); !readOnly {
+				return true
+			}
+			i = next - 1
 		}
 	}
 	return false

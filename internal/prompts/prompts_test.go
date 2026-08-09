@@ -43,6 +43,7 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "Select-String")
 	require.Contains(t, ToolSelection, "Where-Object")
 	require.Contains(t, ToolSelection, "Measure-Object")
+	require.Contains(t, ToolSelection, "git ls-files -z | xargs -0")
 	require.Contains(t, ToolSelectionShellWindows, "short, single-purpose commands")
 	require.Contains(t, ToolSelectionShellWindows, "keep necessary pipelines intact")
 	require.Contains(t, ToolSelection, "Return inspection output directly")

@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
@@ -45,49 +44,25 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.headline = "Apply changes to workspace files"
 		result.rows = []interactionRow{{Label: "Patch", Value: patchSummary(ArgString(parsed, "patch"))}}
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
-		result.tone, result.toneText, result.headline = interactionToneInfo, "Info", "Read data outside the workspace"
+		result.tone, result.toneText, result.headline = interactionToneInfo, "Info", "Read outside the workspace"
 		result.rows = []interactionRow{{Label: "Target", Value: readReviewTarget(parsed, scope, intent)}}
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
 		risk := shellRiskLevel(assessment, scope)
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
-		result.rows = append(result.rows, interactionRow{Label: "Command", Value: command})
-		if dirs := summarizeAffectedDirs(assessment.KnownDirs); dirs != "" {
-			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
-		} else if shellRiskLocationUnknown(risk) {
-			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: "Unknown"})
-		}
-		if dynamic := summarizeAffectedDirs(assessment.DynamicTargets); dynamic != "" {
-			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(assessment), Value: dynamic})
-		}
-		if reason := strings.TrimSpace(assessment.Reason); reason != "" && !shellRiskLocationUnknown(risk) {
-			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
-		}
-		result.rows = appendReviewabilityRows(result.rows, assessment)
+		result.rows = commandReviewRows(command, assessment, risk)
 	case "process_run":
 		risk := shellRiskLevel(assessment, scope)
-		result.tone, result.toneText = toneForShellRisk(risk, ProcessCommandPreview(parsed))
+		command := ProcessCommandPreview(parsed)
+		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
-		result.rows = []interactionRow{
-			{Label: "Program", Value: ArgString(parsed, "program")},
-			{Label: "Arguments", Value: processArgsForReview(parsed)},
-			{Label: "Working dir", Value: processCwdForReview(parsed, scope)},
+		result.rows = commandReviewRows(command, assessment, risk)
+		if cwd := ArgString(parsed, "cwd"); cwd != "" && cwd != scope.Value {
+			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
 		}
-		if dirs := summarizeAffectedDirs(assessment.KnownDirs); dirs != "" {
-			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: dirs})
-		} else if shellRiskLocationUnknown(risk) {
-			result.rows = append(result.rows, interactionRow{Label: "Scope", Value: "Unknown"})
-		}
-		if dynamic := summarizeAffectedDirs(assessment.DynamicTargets); dynamic != "" {
-			result.rows = append(result.rows, interactionRow{Label: dynamicTargetLabel(assessment), Value: dynamic})
-		}
-		if reason := strings.TrimSpace(assessment.Reason); reason != "" && !shellRiskLocationUnknown(risk) {
-			result.rows = append(result.rows, interactionRow{Label: "Reason", Value: reason})
-		}
-		result.rows = appendReviewabilityRows(result.rows, assessment)
 	default:
-		result.headline = formatReviewLabel(name, args)
+		result.headline = "Run " + name
 		if summary := ToolArgsSummary(parsed); summary != "" {
 			result.rows = []interactionRow{{Label: "Details", Value: summary}}
 		}
@@ -101,58 +76,29 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 	return result
 }
 
-func appendReviewabilityRows(rows []interactionRow, assessment approval.CommandAssessment) []interactionRow {
-	reviewability := assessment.Reviewability
-	if reviewability.Level == "" || reviewability.Level == approval.ReviewabilitySimple && !reviewability.ShouldCorrect && reviewability.RecommendedTool == "" {
-		return rows
-	}
-	rows = append(rows, interactionRow{Label: "Reviewability", Value: string(reviewability.Level)})
-	var shape []string
-	if assessment.Shape.TopLevelActions > 1 {
-		shape = append(shape, fmt.Sprintf("%d top-level actions", assessment.Shape.TopLevelActions))
-	}
-	if assessment.Shape.Pipelines > 0 {
-		shape = append(shape, fmt.Sprintf("%d pipelines", assessment.Shape.Pipelines))
-	}
-	if len(shape) > 0 {
-		rows = append(rows, interactionRow{Label: "Composition", Value: strings.Join(shape, ", ")})
-	}
-	if suggestion := reviewabilitySuggestion(reviewability); suggestion != "" {
-		rows = append(rows, interactionRow{Label: "Suggestion", Value: suggestion})
+func commandReviewRows(command string, assessment approval.CommandAssessment, risk string) []interactionRow {
+	rows := []interactionRow{{Label: "Command", Value: command}}
+	if target := commandReviewTarget(assessment, risk); target != "" {
+		rows = append(rows, interactionRow{Label: "Target", Value: target})
 	}
 	return rows
 }
 
-func reviewabilitySuggestion(reviewability approval.CommandReviewability) string {
-	if reviewability.RecommendedTool == "process_run" {
-		return "Use process_run with literal arguments"
+func commandReviewTarget(assessment approval.CommandAssessment, risk string) string {
+	dynamic := summarizeAffectedDirs(assessment.DynamicTargets)
+	known := summarizeAffectedDirs(assessment.KnownDirs)
+	switch {
+	case dynamic != "" && known != "":
+		return dynamic + " · known: " + known
+	case dynamic != "":
+		return dynamic
+	case known != "":
+		return known
+	case shellRiskLocationUnknown(risk):
+		return "Unknown"
+	default:
+		return ""
 	}
-	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget) {
-		return "Resolve the path read-only, then write the literal absolute path"
-	}
-	if reviewability.ShouldCorrect {
-		return "Split independent discovery, inspection, mutation, and verification steps"
-	}
-	return ""
-}
-
-func processArgsForReview(parsed map[string]any) string {
-	values, _ := parsed["args"].([]any)
-	if len(values) == 0 {
-		return "(none)"
-	}
-	data, err := json.Marshal(values)
-	if err != nil {
-		return "(invalid)"
-	}
-	return string(data)
-}
-
-func processCwdForReview(parsed map[string]any, scope Scope) string {
-	if cwd := ArgString(parsed, "cwd"); cwd != "" {
-		return cwd
-	}
-	return scope.Value
 }
 
 func toneForShellRisk(risk, command string) (interactionTone, string) {
@@ -165,37 +111,26 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 	return interactionToneInfo, "Info"
 }
 
-func dynamicTargetLabel(assessment approval.CommandAssessment) string {
-	switch assessment.Effect {
-	case approval.EffectRead:
-		return "Dynamic read target"
-	case approval.EffectWrite:
-		return "Dynamic write target"
-	default:
-		return "Dynamic target"
-	}
-}
-
 func shellRiskHeadline(risk string) string {
 	switch risk {
 	case "external mutation":
-		return "Modify state outside the workspace"
+		return "Modify outside the workspace"
 	case "dynamic mutation":
-		return "Modify a runtime-resolved target"
+		return "Modify a dynamic target"
 	case "dynamic read":
-		return "Read from runtime-resolved paths"
+		return "Read a dynamic target"
 	case "workspace mutation":
-		return "Modify files in the workspace"
+		return "Modify workspace files"
 	case "unknown-location mutation":
-		return "Modify state at unknown locations"
+		return "Modify an unknown target"
 	case "unknown effect and location":
-		return "Effects and affected locations are unknown"
+		return "Run with unknown effects"
 	case "external read":
-		return "Read data outside the workspace"
+		return "Read outside the workspace"
 	case "read-only":
 		return "Run a read-only command"
 	default:
-		return "Run a command with unknown effects"
+		return "Run with unknown effects"
 	}
 }
 

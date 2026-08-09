@@ -27,9 +27,9 @@ const (
 
 	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers, and installers, with literal args/cwd; Windows .bat/.cmd require powershell_run. Never use it for shell -c/-Command. Inspect results; use runtime_info for unknown availability.`
 
-	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax, including pipelines, redirection, variable expansion, globbing, or shell builtins. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
+	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax: pipelines, redirection, expansion, globs, and builtins. It runs in reported cwd; do not prefix cd. Prefer portable sh, print inspections directly, and pass file lists through NUL pipelines rather than command substitution (git ls-files -z | xargs -0 ...).`
 
-	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and commands that require POSIX shell syntax. Keep each call single-purpose. Commands already run in the cwd from system info; do not prefix them with cd. Prefer portable sh syntax and return inspection output directly instead of writing temporary files or redirecting output.`
+	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and POSIX shell features. Keep each call single-purpose. It runs in the reported cwd; do not prefix cd. Prefer portable sh, print inspection results instead of writing temporary files, and pass file lists through NUL-delimited pipelines rather than command substitution (git ls-files -z | xargs -0 ...).`
 
 	PowerShellIntentGuidance = `Prefer short, single-purpose commands. Separate discovery, path inspection, mutation, and verification. Resolve runtime writes such as $PROFILE read-only, then use the literal absolute path. Do not change execution policy or unrelated settings unless requested. Avoid decorative formatting and dynamic or encoded commands; keep necessary pipelines intact.`
 

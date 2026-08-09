@@ -538,7 +538,6 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles) stri
 	}
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title:    "Review required",
-		Meta:     r.reviewItem.name,
 		Tone:     presentation.tone,
 		ToneText: presentation.toneText,
 		Headline: presentation.headline,

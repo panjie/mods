@@ -155,10 +155,9 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto), true))
 
 	presentation := formatReviewPresentationWithIntent("process_run", data, assessment, WorkspaceScope(root), intent)
-	require.Equal(t, "Modify state at unknown locations", presentation.headline)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Working dir", Value: root})
-	require.Contains(t, presentation.rows, interactionRow{Label: "Scope", Value: "Unknown"})
-	require.NotContains(t, presentation.rows, interactionRow{Label: "Reason", Value: assessment.Reason})
+	require.Equal(t, "Modify an unknown target", presentation.headline)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
+	require.Len(t, presentation.rows, 2)
 }
 
 func TestConstrainResolvedProcessAssessmentForWorkspaceExecutable(t *testing.T) {

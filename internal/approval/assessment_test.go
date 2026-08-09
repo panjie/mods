@@ -25,6 +25,75 @@ func TestCommandAssessmentAccessIntent(t *testing.T) {
 	require.Equal(t, AccessWrite, CommandAssessment{Effect: EffectUnknown}.AccessIntent().Class)
 }
 
+func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
+	tests := []struct {
+		name        string
+		command     string
+		wantTargets []string
+		wantEffect  CommandEffect
+	}{
+		{
+			name: "loop scalars and assignment substitutions are not paths",
+			command: `echo "=== lines ===" && for ext in go md; do count=$(find . -name "*.$ext" | wc -l); files=$(find . -name "*.$ext" | wc -l); ` +
+				`[ "$count" -gt 0 ] 2>/dev/null && echo "$ext: $count lines, $files files"; done 2>/dev/null`,
+			wantEffect: EffectUnknown,
+		},
+		{name: "plain scalar", command: `printf '%s\n' "$value"`, wantEffect: EffectUnknown},
+		{name: "numeric test", command: `[ "$count" -gt 0 ]`, wantEffect: EffectUnknown},
+		{name: "reader operand", command: `cat "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "find root but not pattern", command: `find "$ROOT" -name "*.$ext" -print`, wantTargets: []string{"$ROOT"}, wantEffect: EffectUnknown},
+		{name: "input redirect", command: `wc -l < "$INPUT"`, wantTargets: []string{"$INPUT"}, wantEffect: EffectRead},
+		{name: "path command substitution", command: `cat "$(resolve_path)"`, wantTargets: []string{"command substitution"}, wantEffect: EffectUnknown},
+		{
+			name:        "workspace file enumeration substitution remains unresolved",
+			command:     `wc -l $(git ls-files '*.go' | grep -v '_test.go') | tail -1`,
+			wantTargets: []string{"command substitution"},
+			wantEffect:  EffectRead,
+		},
+		{
+			name:        "formatted git output is not a bounded path stream",
+			command:     `wc -l $(git ls-files '--format=/etc/passwd')`,
+			wantTargets: []string{"command substitution"},
+			wantEffect:  EffectRead,
+		},
+		{
+			name:        "transforming filter is not a bounded path stream",
+			command:     `wc -l $(git ls-files '*.go' | sed 's|.*|/etc/passwd|')`,
+			wantTargets: []string{"command substitution"},
+			wantEffect:  EffectUnknown,
+		},
+		{
+			name:        "truncating filter can synthesize an absolute path",
+			command:     `wc -l $(git ls-files | tail -c 12)`,
+			wantTargets: []string{"command substitution"},
+			wantEffect:  EffectRead,
+		},
+		{
+			name:        "external git working directory is not bounded to workspace",
+			command:     `wc -l $(git -C /etc ls-files '*.go')`,
+			wantTargets: []string{"command substitution"},
+			wantEffect:  EffectUnknown,
+		},
+		{name: "write redirect", command: `printf x > "$OUT"`, wantTargets: []string{"$OUT"}, wantEffect: EffectWrite},
+		{name: "writer operand", command: `rm "$TARGET"`, wantTargets: []string{"$TARGET"}, wantEffect: EffectWrite},
+		{name: "unknown command argument fails closed", command: `custom-tool "$value"`, wantTargets: []string{"$value"}, wantEffect: EffectUnknown},
+		{name: "env option does not hide nested path", command: `env -u FOO cat "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "find path predicate stays dynamic", command: `find . -newer "$REFERENCE"`, wantTargets: []string{"$REFERENCE"}, wantEffect: EffectUnknown},
+		{name: "xargs input file stays dynamic", command: `xargs -a "$LIST" wc -l`, wantTargets: []string{"$LIST"}, wantEffect: EffectUnknown},
+		{name: "file test operand stays dynamic", command: `test -f "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "assignment result does not hide nested path", command: `count=$(cat "$FILE")`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "output argument does not hide nested path", command: `printf '%s' "$(cat "$FILE")"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assessment := AssessShellStaticWithPolicy(tt.command, true, ReadOnlyCommandPolicy{})
+			require.Equal(t, tt.wantTargets, assessment.DynamicTargets)
+			require.Equal(t, tt.wantEffect, assessment.Effect)
+		})
+	}
+}
+
 func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 	tests := []struct {
 		name       string

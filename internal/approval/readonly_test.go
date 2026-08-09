@@ -85,6 +85,8 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 
 		// --- Option-sensitive read-only commands ---
 		{"find print0", `find "$HOME/Downloads" -type f -print0`, true},
+		{"find exec reader", `find . -name '*.go' -exec cat {} +`, true},
+		{"find exec reader pipeline", `find . -name '*.go' -exec cat {} + | wc -l`, true},
 		{"sort numeric", "sort -n", true},
 		{"sort combined flags", "sort -rn", true},
 		{"xargs stat", `xargs -0 stat -f '%m %N'`, true},
@@ -104,6 +106,7 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"rm", "rm file", false},
 		{"find delete", "find . -delete", false},
 		{"find exec", "find . -exec rm {} +", false},
+		{"find exec shell", `find . -exec sh -c 'touch "$1"' sh {} +`, false},
 		{"find unknown primary", "find . -unknown", false},
 		{"sort output", "sort -o output file", false},
 		{"sort temp dir", "sort -T /tmp file", false},

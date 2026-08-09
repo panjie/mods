@@ -81,10 +81,11 @@ func TestFormatReviewSummary(t *testing.T) {
 		require.Contains(t, summary, "workspace mutation")
 		require.Contains(t, formatReviewLabel("process_run", args), `rm "path with space"`)
 		presentation := formatReviewPresentationWithIntent("process_run", args, analysis, scope, AccessIntent{Class: AccessWrite, Dirs: []string{"/workspace"}})
-		require.Equal(t, "Modify files in the workspace", presentation.headline)
-		require.Equal(t, "Program", presentation.rows[0].Label)
-		require.Equal(t, "rm", presentation.rows[0].Value)
-		require.Equal(t, "Arguments", presentation.rows[1].Label)
+		require.Equal(t, "Modify workspace files", presentation.headline)
+		require.Equal(t, []interactionRow{
+			{Label: "Command", Value: `rm "path with space"`},
+			{Label: "Target", Value: "/workspace"},
+		}, presentation.rows)
 	})
 
 	t.Run("shell risk hides speculative LLM reason when dirs unknown", func(t *testing.T) {
@@ -122,9 +123,9 @@ func TestDynamicShellTargetPresentation(t *testing.T) {
 	intent := AccessIntent{Class: AccessWrite, UnresolvedPaths: analysis.DynamicTargets}
 
 	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
-	require.Equal(t, "Modify a runtime-resolved target", presentation.headline)
+	require.Equal(t, "Modify a dynamic target", presentation.headline)
 	require.Equal(t, interactionToneDanger, presentation.tone)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Dynamic write target", Value: `$PROFILE.CurrentUserCurrentHost, $prof`})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: `$PROFILE.CurrentUserCurrentHost, $prof`})
 
 	summary := formatReviewSummaryWithIntent("powershell_run", args, analysis, scope, intent)
 	require.Contains(t, summary, "dynamic mutation")
@@ -146,9 +147,12 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	intent := AccessIntent{Class: AccessRead, Dirs: analysis.KnownDirs, UnresolvedPaths: analysis.DynamicTargets}
 
 	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
-	require.Equal(t, "Read from runtime-resolved paths", presentation.headline)
+	require.Equal(t, "Read a dynamic target", presentation.headline)
 	require.Equal(t, interactionToneInfo, presentation.tone)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Dynamic read target", Value: `$v`})
+	require.Contains(t, presentation.rows, interactionRow{
+		Label: "Target",
+		Value: `$v · known: C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links`,
+	})
 
 	summary := formatReviewSummaryWithIntent("powershell_run", args, analysis, scope, intent)
 	require.Contains(t, summary, "dynamic read")
@@ -159,7 +163,7 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	require.Empty(t, rules, "runtime-resolved reads must never offer a persistent directory rule")
 }
 
-func TestCompoundShellReviewabilityPresentation(t *testing.T) {
+func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 	analysis := approval.CommandAssessment{
 		Shape: approval.CommandShape{TopLevelActions: 4, Pipelines: 2},
 		Reviewability: approval.CommandReviewability{
@@ -175,9 +179,10 @@ func TestCompoundShellReviewabilityPresentation(t *testing.T) {
 		WorkspaceScope(`C:\workspace`),
 		AccessIntent{Class: AccessWrite},
 	)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Reviewability", Value: "compound"})
-	require.Contains(t, presentation.rows, interactionRow{Label: "Composition", Value: "4 top-level actions, 2 pipelines"})
-	require.Contains(t, presentation.rows, interactionRow{Label: "Suggestion", Value: "Split independent discovery, inspection, mutation, and verification steps"})
+	require.Equal(t, []interactionRow{
+		{Label: "Command", Value: "Write-Output a; Write-Output b"},
+		{Label: "Target", Value: "Unknown"},
+	}, presentation.rows)
 }
 
 func TestFormatReviewSummaryExternalRead(t *testing.T) {

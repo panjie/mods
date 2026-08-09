@@ -90,9 +90,9 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	require.NotContains(t, item.summary, "effects could not be proven")
 	require.Equal(t, interactionToneWarning, item.presentation.tone)
 	require.Equal(t, "Warning", item.presentation.toneText)
-	require.Equal(t, "Effects and affected locations are unknown", item.presentation.headline)
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Scope", Value: "Unknown"})
-	require.NotContains(t, item.presentation.rows, interactionRow{Label: "Reason", Value: "effects could not be proven"})
+	require.Equal(t, "Run with unknown effects", item.presentation.headline)
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
+	require.Len(t, item.presentation.rows, 2)
 	require.Empty(t, item.candidateRules)
 	item.resp <- reviewResponse{approved: true}
 	require.NoError(t, <-errCh)
@@ -165,7 +165,7 @@ func TestOldestDownloadsPipelineOffersReadOnlyDirectoryRule(t *testing.T) {
 	item := receiveReviewItem(t, reviewer.reviewChan)
 	require.Equal(t, interactionToneInfo, item.presentation.tone)
 	require.Equal(t, "Info", item.presentation.toneText)
-	require.Equal(t, "Read data outside the workspace", item.presentation.headline)
+	require.Equal(t, "Read outside the workspace", item.presentation.headline)
 	require.Len(t, item.candidateRules, 1)
 	require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
 	require.Equal(t, AccessRead, item.candidateRules[0].Mode)
@@ -386,6 +386,7 @@ func TestReviewBannerWrapsLongCommandWithoutHidingTail(t *testing.T) {
 	for _, line := range lines {
 		require.LessOrEqual(t, lipgloss.Width(line), width, line)
 	}
+	require.NotContains(t, rendered, "shell_run", "the technical tool name should not clutter the review header")
 	require.Contains(t, rendered, "{} +", "security-sensitive command tail must remain visible")
 }
 

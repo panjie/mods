@@ -18,7 +18,8 @@ authority for execution approval.
    reviewability facts without a second parse or an LLM call.
 3. One bounded preflight correction per request gives the model an opportunity
    to split a needlessly compound call before approval.
-4. Commands that still reach review display reviewability separately from risk.
+4. Commands that still reach review show only the operation and affected target;
+   reviewability remains internal preflight guidance rather than approval UI.
 
 ## Assessment dimension
 
@@ -26,8 +27,9 @@ authority for execution approval.
 stable reason codes, an optional recommended tool, and a narrow
 `ShouldCorrect` decision. It is only one dimension of `CommandAssessment`.
 Parser-derived action and pipeline counts live in `CommandShape`; runtime path
-expressions live in `CommandAssessment.DynamicTargets`. Those fields are the
-single facts used by correction messages and the review UI.
+expressions live in `CommandAssessment.DynamicTargets`. Those fields drive
+correction messages, while the review UI stays focused on the operation and
+affected target.
 
 POSIX analysis uses the same mvdan AST as effect and path analysis. PowerShell
 analysis uses the same bridge IR as effect and dynamic-target analysis. Parse

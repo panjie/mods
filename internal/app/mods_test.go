@@ -105,6 +105,62 @@ func TestInteractiveStartupContinuesOnceAfterBackgroundReply(t *testing.T) {
 	require.Nil(t, duplicate)
 }
 
+func TestBackgroundColorUpdatesMarkdownRenderer(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "")
+	const markdown = "A paragraph with **bold text** and `inline code`."
+
+	for name, test := range map[string]struct {
+		background color.Color
+		style      string
+	}{
+		"light background": {background: color.White, style: "light"},
+		"dark background":  {background: color.Black, style: "dark"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := testMods(t)
+			m.Config.InteractiveTTYAvailable = true
+			m.Config.WordWrap = 72
+			var err error
+			m.glam, err = newMarkdownRenderer(m.Config.WordWrap, test.style == "light")
+			require.NoError(t, err)
+
+			_ = m.Init()
+			_, cmd := m.Update(tea.BackgroundColorMsg{Color: test.background})
+			require.NotNil(t, cmd)
+
+			got, err := m.RenderMarkdown(markdown)
+			require.NoError(t, err)
+			wantRenderer, err := glamour.NewTermRenderer(
+				glamour.WithStandardStyle(test.style),
+				glamour.WithWordWrap(m.Config.WordWrap),
+			)
+			require.NoError(t, err)
+			want, err := wantRenderer.Render(markdown)
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+		})
+	}
+}
+
+func TestMarkdownRendererHonorsExplicitGlamourStyle(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "dracula")
+	const markdown = "A paragraph with **bold text**."
+
+	gotRenderer, err := newMarkdownRenderer(80, false)
+	require.NoError(t, err)
+	got, err := gotRenderer.Render(markdown)
+	require.NoError(t, err)
+
+	wantRenderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dracula"),
+		glamour.WithWordWrap(80),
+	)
+	require.NoError(t, err)
+	want, err := wantRenderer.Render(markdown)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
 func TestInteractiveStartupFallsBackAfterTerminalProbeTimeout(t *testing.T) {
 	m := testMods(t)
 	m.Config.InteractiveTTYAvailable = true

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
+	glamourstyles "charm.land/glamour/v2/styles"
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
@@ -147,14 +149,8 @@ func New(
 	for _, option := range options {
 		option(&newOptions)
 	}
-	wordWrap := cfg.WordWrap
-	opts := []glamour.TermRendererOption{
-		glamour.WithEnvironmentConfig(),
-	}
-	if wordWrap > 0 {
-		opts = append(opts, glamour.WithWordWrap(wordWrap))
-	}
-	gr, err := glamour.NewTermRenderer(opts...)
+	isDark := ui.StderrIsDark()
+	gr, err := newMarkdownRenderer(cfg.WordWrap, isDark)
 	if err != nil {
 		return nil, fmt.Errorf("could not create glamour renderer: %w", err)
 	}
@@ -177,7 +173,7 @@ func New(
 	// parent ctx is untouched, so cancelling m.ctx does not affect any caller.
 	requestCtx, requestCancel := context.WithCancel(ctx)
 	return &Mods{
-		Styles:              ui.MakeStylesWithTheme(cfg.Theme, true),
+		Styles:              ui.MakeStylesWithTheme(cfg.Theme, isDark),
 		glam:                gr,
 		state:               startState,
 		glamViewport:        vp,
@@ -193,6 +189,23 @@ func New(
 		skillCatalog:        skillCatalog,
 		selfHelpReference:   selfHelpReference,
 	}, nil
+}
+
+func newMarkdownRenderer(wordWrap int, isDark bool) (*glamour.TermRenderer, error) {
+	styleOption := glamour.WithEnvironmentConfig()
+	if os.Getenv("GLAMOUR_STYLE") == "" {
+		style := glamourstyles.LightStyle
+		if isDark {
+			style = glamourstyles.DarkStyle
+		}
+		styleOption = glamour.WithStandardStyle(style)
+	}
+
+	opts := []glamour.TermRendererOption{styleOption}
+	if wordWrap > 0 {
+		opts = append(opts, glamour.WithWordWrap(wordWrap))
+	}
+	return glamour.NewTermRenderer(opts...)
 }
 
 func (m *Mods) Err() *modsError {
@@ -255,7 +268,16 @@ func (m *Mods) continueAfterTerminalProbe() tea.Cmd {
 func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	if msg, ok := msg.(tea.BackgroundColorMsg); ok {
-		m.Styles = ui.MakeStylesWithTheme(m.Config.Theme, msg.IsDark())
+		isDark := msg.IsDark()
+		m.Styles = ui.MakeStylesWithTheme(m.Config.Theme, isDark)
+		gr, err := newMarkdownRenderer(m.Config.WordWrap, isDark)
+		if err != nil {
+			return m, msgCmd(modsError{
+				Err:        err,
+				ReasonText: "Could not update Markdown renderer for the terminal background.",
+			})
+		}
+		m.glam = gr
 		if cmd := m.continueAfterTerminalProbe(); cmd != nil {
 			return m, cmd
 		}

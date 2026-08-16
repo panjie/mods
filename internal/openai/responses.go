@@ -200,6 +200,9 @@ func (s *responseStream) pendingToolCalls() []pendingResponseToolCall {
 	return calls
 }
 
+// PendingToolCalls implements stream.Stream.
+func (s *responseStream) PendingToolCalls() int { return len(s.pendingToolCalls()) }
+
 func (s *responseStream) CallTools() []proto.ToolCallStatus {
 	calls := s.pendingToolCalls()
 	statuses := make([]proto.ToolCallStatus, 0, len(calls))

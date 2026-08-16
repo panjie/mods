@@ -68,6 +68,8 @@ no-instructions: false
 # http-proxy: ""  # HTTP proxy for API requests
 # {{ index .Help "max-retries" }}
 max-retries: 5
+# {{ index .Help "model-idle-timeout" }}
+model-idle-timeout: 5m
 # {{ index .Help "max-tool-rounds" }}
 max-tool-rounds: 30
 # {{ index .Help "think" }}

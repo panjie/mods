@@ -180,16 +180,22 @@ type Stream struct {
 	requestErr error
 }
 
-// CallTools implements stream.Stream.
-func (s *Stream) CallTools() []proto.ToolCallStatus {
-	var statuses []proto.ToolCallStatus
-	var results []anthropic.ContentBlockParamUnion
+// PendingToolCalls implements stream.Stream.
+func (s *Stream) PendingToolCalls() int {
 	total := 0
 	for _, block := range s.message.Content {
 		if _, ok := block.AsAny().(anthropic.ToolUseBlock); ok {
 			total++
 		}
 	}
+	return total
+}
+
+// CallTools implements stream.Stream.
+func (s *Stream) CallTools() []proto.ToolCallStatus {
+	var statuses []proto.ToolCallStatus
+	var results []anthropic.ContentBlockParamUnion
+	total := s.PendingToolCalls()
 	for _, block := range s.message.Content {
 		switch call := block.AsAny().(type) {
 		case anthropic.ToolUseBlock:

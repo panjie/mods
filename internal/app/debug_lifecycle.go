@@ -53,11 +53,12 @@ func (m *Mods) debugEndTurn(status string, err error) {
 	if !debug.Enabled() || !m.debugTurnActive {
 		return
 	}
+	result := m.Result()
 	fields := []DebugField{
 		{Label: "status", Value: status},
 		{Label: "duration", Value: formatDebugDuration(time.Since(m.debugTurnStarted))},
-		{Label: "rounds", Value: fmt.Sprintf("model %d · tool %d", m.debugRound, m.debugToolRounds)},
-		{Label: "tools", Value: fmt.Sprintf("%d total · %d success · %d non-zero · %d failed · %d denied · %d corrected · %d cancelled", m.debugToolTotal, m.debugToolSucceeded, m.debugToolExited, m.debugToolFailed, m.debugToolDenied, m.debugToolCorrected, m.debugToolCancelled)},
+		{Label: "rounds", Value: fmt.Sprintf("model %d · tool %d", result.Stats.ModelRounds, result.Stats.ToolRounds)},
+		{Label: "tools", Value: fmt.Sprintf("%d total · %d success · %d non-zero · %d failed · %d denied · %d corrected · %d cancelled", result.Stats.ToolTotal, result.Stats.ToolSucceeded, result.Stats.ToolExited, result.Stats.ToolFailed, result.Stats.ToolDenied, result.Stats.ToolCorrected, result.Stats.ToolCancelled)},
 	}
 	if m.tokenUsage.Available() {
 		fields = append(fields, DebugField{Label: "tokens", Value: fmt.Sprintf("input=%d · cached=%d · output=%d · reasoning=%d · total=%d", m.tokenUsage.InputTokens, m.tokenUsage.CachedInputTokens, m.tokenUsage.OutputTokens, m.tokenUsage.ReasoningOutputTokens, m.tokenUsage.TotalTokens)})

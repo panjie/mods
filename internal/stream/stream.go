@@ -83,6 +83,9 @@ type Stream interface {
 	// cumulative token usage across all model calls in this stream
 	Usage() proto.TokenUsage
 
+	// number of tool calls waiting to be executed after the current model round
+	PendingToolCalls() int
+
 	// handles any pending tool calls
 	CallTools() []proto.ToolCallStatus
 }

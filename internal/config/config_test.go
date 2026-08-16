@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/adrg/xdg"
@@ -314,6 +315,23 @@ func TestShowTokenUsageConfig(t *testing.T) {
 	var envCfg Config
 	require.NoError(t, env.ParseWithOptions(&envCfg, env.Options{Prefix: "MODS_"}))
 	require.True(t, envCfg.ShowTokenUsage)
+}
+
+func TestModelIdleTimeoutConfig(t *testing.T) {
+	require.Equal(t, 5*time.Minute, Default().ModelIdleTimeout)
+
+	cfg := Default()
+	require.NoError(t, yaml.Unmarshal([]byte("model-idle-timeout: 45s"), &cfg))
+	require.Equal(t, 45*time.Second, cfg.ModelIdleTimeout)
+
+	cfg = Default()
+	require.NoError(t, yaml.Unmarshal([]byte("model-idle-timeout: 0s"), &cfg))
+	require.Zero(t, cfg.ModelIdleTimeout)
+
+	t.Setenv("MODS_MODEL_IDLE_TIMEOUT", "90s")
+	var envCfg Config
+	require.NoError(t, env.ParseWithOptions(&envCfg, env.Options{Prefix: "MODS_"}))
+	require.Equal(t, 90*time.Second, envCfg.ModelIdleTimeout)
 }
 
 func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {

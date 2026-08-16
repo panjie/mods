@@ -80,6 +80,8 @@ type Mods struct {
 	Thought                 string
 	thoughtFlushed          bool
 	tokenUsage              proto.TokenUsage
+	turnResult              TurnResult
+	resultMu                sync.Mutex
 	debugTurn               int
 	debugRound              int
 	debugTurnStarted        time.Time
@@ -87,14 +89,6 @@ type Mods struct {
 	debugRoundStarted       time.Time
 	debugThoughtStart       int
 	debugActivities         []string
-	debugToolTotal          int
-	debugToolRounds         int
-	debugToolSucceeded      int
-	debugToolExited         int
-	debugToolFailed         int
-	debugToolDenied         int
-	debugToolCorrected      int
-	debugToolCancelled      int
 
 	db     *DB
 	Config *Config
@@ -383,6 +377,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				debug.Printf("token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",
 					usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.ReasoningOutputTokens, usage.TotalTokens)
 			}
+			m.finishTurnResult(TurnStatusCompleted, StopReasonModelComplete, "", "")
 			m.debugEndTurn("complete", nil)
 			m.state = doneState
 			return m, m.quit
@@ -406,11 +401,19 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.userInput.handleStartMsg(msg)
 		m.setActiveOperation("")
 	case modsError:
+		if errors.Is(msg.Err, context.Canceled) {
+			m.finishTurnResult(TurnStatusCancelled, StopReasonCancelled, "cancelled", "User canceled.")
+		} else if errors.Is(msg.Err, ErrModelIdleTimeout) {
+			m.finishTurnResult(TurnStatusFailed, StopReasonProviderIdleTimeout, "timeout", msg.ReasonText)
+		} else {
+			m.finishTurnResult(TurnStatusFailed, StopReasonProviderError, "request", msg.ReasonText)
+		}
 		m.debugEndTurn("failed", msg.Err)
 		m.Error = &msg
 		m.state = errorState
 		return m, m.quit
 	case error:
+		m.finishTurnResult(TurnStatusFailed, StopReasonProviderError, "internal", "The request failed.")
 		m.debugEndTurn("failed", msg)
 		m.Error = &modsError{Err: msg, ReasonText: msg.Error()}
 		m.state = errorState
@@ -426,6 +429,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.finishTurnResult(TurnStatusCancelled, StopReasonCancelled, "cancelled", "User canceled.")
 			m.debugEndTurn("cancelled", context.Canceled)
 			m.state = doneState
 			return m, m.quit
@@ -533,20 +537,6 @@ func (m *Mods) quit() tea.Msg {
 	return tea.Quit()
 }
 
-func (m *Mods) toolRoundLimitExceeded(maxTotal int, st stream.Stream) bool {
-	if m.toolCallRounds > maxToolFailedRounds {
-		debug.Printf("Tool call failed rounds exceeded limit (%d), stopping", maxToolFailedRounds)
-		m.resetAndOutput(st)
-		return true
-	}
-	if m.totalRounds > maxTotal {
-		debug.Printf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
-		m.resetAndOutput(st)
-		return true
-	}
-	return false
-}
-
 func (m *Mods) resetAndOutput(st stream.Stream) {
 	m.messages = st.Messages()
 	content := lastAssistantContent(m.messages)
@@ -589,6 +579,17 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 
 func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 	m.debugEndModelRound("response received", 0, nil)
+	maxTotal := m.Config.MaxToolRounds
+	if maxTotal <= 0 {
+		maxTotal = defaultMaxToolRounds
+	}
+	if runner.stream.PendingToolCalls() > 0 && m.totalRounds >= maxTotal {
+		debug.Printf("Tool call total rounds reached limit (%d), stopping before another round", maxTotal)
+		m.resetAndOutput(runner.stream)
+		m.finishTurnResult(TurnStatusIncomplete, StopReasonToolRoundLimit, "limit", fmt.Sprintf("maximum tool-call rounds reached (%d)", maxTotal))
+		runner.close()
+		return []tea.Cmd{msgCmd(runner.doneMsg())}
+	}
 	// The model may reason and then immediately call a tool without emitting any
 	// answer text; flush the thought so it is still shown.
 	if m.thinkActive && !m.thoughtFlushed {
@@ -671,7 +672,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	}
 	m.setActiveOperation(completionStatus)
 	m.totalRounds++
-	m.debugToolRounds++
+	m.incrementToolRounds()
 	hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
 		return toolCallFailed(c.Err)
 	})
@@ -682,7 +683,10 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	if maxTotal <= 0 {
 		maxTotal = defaultMaxToolRounds
 	}
-	if m.toolRoundLimitExceeded(maxTotal, msg.runner.stream) {
+	if m.toolCallRounds >= maxToolFailedRounds {
+		debug.Printf("Tool call failed rounds reached limit (%d), stopping", maxToolFailedRounds)
+		m.resetAndOutput(msg.runner.stream)
+		m.finishTurnResult(TurnStatusIncomplete, StopReasonFailedToolLimit, "limit", fmt.Sprintf("maximum failed tool-call rounds reached (%d)", maxToolFailedRounds))
 		msg.runner.close()
 		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 	}
@@ -691,6 +695,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		{Label: "budget", Value: fmt.Sprintf("total=%d/%d · failed=%d/%d", m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)},
 	}})
 	m.debugRound++
+	m.incrementModelRounds()
 	m.debugStartModelRound()
 	m.responseBoundaryPending = true
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)

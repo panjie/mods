@@ -119,6 +119,9 @@ var (
 			opts := buildTeaProgramOptions()
 			mods, err := runOneTurnProgram(cmd.Context(), opts)
 			if err != nil {
+				if reportErr := writeResultJSON(mods, err); reportErr != nil {
+					return reportErr
+				}
 				return err
 			}
 
@@ -154,6 +157,7 @@ func initFlags() {
 	regBool(flags, &config.ShowHelp, "help", "h", false)
 	regBool(flags, &config.Version, "version", "v", false)
 	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)
+	regDuration(flags, &config.ModelIdleTimeout, "model-idle-timeout", config.ModelIdleTimeout)
 	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
 	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
 	regStrArr(flags, &config.SkillsDirs, "skills-dirs", "", config.SkillsDirs)
@@ -176,6 +180,7 @@ func initFlags() {
 	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
 	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
 	regBool(flags, &config.Debug, "debug", "D", config.Debug)
+	regStr(flags, &config.ResultJSON, "result-json", "", config.ResultJSON)
 	regInt(flags, &config.MaxToolRounds, "max-tool-rounds", config.MaxToolRounds)
 	regBool(flags, &config.Think, "think", "t", config.Think)
 	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
@@ -188,9 +193,11 @@ func initFlags() {
 		flags,
 		"http-proxy",
 		"max-retries",
+		"model-idle-timeout",
 		"word-wrap",
 		"hide-tool-status",
 		"show-token-usage",
+		"result-json",
 		"max-tool-rounds",
 		"list-mcps",
 		"list-tools",

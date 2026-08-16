@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
@@ -883,8 +884,12 @@ func TestReadOnlyOneShotActionsBypassBubbleTea(t *testing.T) {
 func TestAdvancedFlagsStillParse(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
 		require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
+		require.NoError(t, rootCmd.Flags().Set("model-idle-timeout", "45s"))
+		require.NoError(t, rootCmd.Flags().Set("result-json", "result.json"))
 
 		require.Equal(t, 12, config.MaxToolRounds)
+		require.Equal(t, 45*time.Second, config.ModelIdleTimeout)
+		require.Equal(t, "result.json", config.ResultJSON)
 	})
 }
 

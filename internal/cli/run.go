@@ -13,6 +13,7 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/editor"
+	"github.com/panjie/mods/internal/app"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -208,9 +209,23 @@ func dispatchTurnResult(mods *Mods) error {
 	printTokenUsage(mods)
 
 	if config.SessionWriteToID != "" {
-		return saveSession(mods)
+		if err := saveSession(mods); err != nil {
+			if reportErr := writeResultJSON(mods, err); reportErr != nil {
+				return reportErr
+			}
+			return err
+		}
 	}
-
+	if err := writeResultJSON(mods, nil); err != nil {
+		return err
+	}
+	result := mods.Result()
+	if result.Status == app.TurnStatusIncomplete {
+		return modsError{
+			Err:        newUserErrorf(result.ErrorReason),
+			ReasonText: "The model turn stopped before completing.",
+		}
+	}
 	return nil
 }
 

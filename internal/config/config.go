@@ -54,42 +54,43 @@ const (
 )
 
 var Help = map[string]string{
-	"api":              "OpenAI compatible REST API (openai, localai, anthropic, ...)",
-	"apis":             "Aliases and endpoints for OpenAI compatible REST API",
-	"default-api":      "Active provider name configured under apis",
-	"default-model":    "Default model name or alias configured under the active provider",
-	"api-type":         "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, or azure. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
-	"http-proxy":       "HTTP proxy to use for API requests",
-	"model":            "Default model name configured under the selected API provider",
-	"format":           "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
-	"format-text":      "Text to append when using the -f flag",
-	"minimal":          "Output only the final result, optimized for pipelines",
-	"role":             "System role to use",
-	"roles":            "List of predefined system messages that can be used as roles",
-	"list-roles":       "List the roles defined in your configuration file",
-	"list-prompts":     "List built-in prompts and prompt templates",
-	"list-skills":      "List installed skills from the configured skills directories",
-	"prompts":          "Override built-in runtime prompts; empty values use the built-in defaults",
-	"raw":              "Render output as raw text when connected to a TTY",
-	"hide-tool-status": "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
-	"show-token-usage": "Show input, output, and total token usage after each interaction",
-	"help":             "Show Help and exit",
-	"version":          "Show version and exit",
-	"max-retries":      "Maximum number of times to retry API calls",
-	"no-instructions":  "Disable auto-loading AGENTS.md from the workspace root as project context",
-	"word-wrap":        "Wrap formatted output at specific width (default is 80)",
-	"settings":         "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
-	"config":           "Interactive setup wizard for provider, model, API key, and tools",
-	"dirs":             "Print the directories in which mods store its data",
-	"reset-settings":   "Backup your old settings file and reset everything to the defaults",
-	"continue":         "Continue from the last response or a given save title",
-	"continue-last":    "Continue from the last response",
-	"no-save":          "Disable saving and resuming sessions",
-	"chat":             "Start a continuous session; press Ctrl+C to quit",
-	"list-sessions":    "Interactively browse, view, and delete saved sessions",
-	"theme":            "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
-	"editor":           "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
-	"mcp-servers":      "MCP Servers configurations",
+	"api":                "OpenAI compatible REST API (openai, localai, anthropic, ...)",
+	"apis":               "Aliases and endpoints for OpenAI compatible REST API",
+	"default-api":        "Active provider name configured under apis",
+	"default-model":      "Default model name or alias configured under the active provider",
+	"api-type":           "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, or azure. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
+	"http-proxy":         "HTTP proxy to use for API requests",
+	"model":              "Default model name configured under the selected API provider",
+	"format":             "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
+	"format-text":        "Text to append when using the -f flag",
+	"minimal":            "Output only the final result, optimized for pipelines",
+	"role":               "System role to use",
+	"roles":              "List of predefined system messages that can be used as roles",
+	"list-roles":         "List the roles defined in your configuration file",
+	"list-prompts":       "List built-in prompts and prompt templates",
+	"list-skills":        "List installed skills from the configured skills directories",
+	"prompts":            "Override built-in runtime prompts; empty values use the built-in defaults",
+	"raw":                "Render output as raw text when connected to a TTY",
+	"hide-tool-status":   "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
+	"show-token-usage":   "Show input, output, and total token usage after each interaction",
+	"help":               "Show Help and exit",
+	"version":            "Show version and exit",
+	"max-retries":        "Maximum number of times to retry API calls",
+	"model-idle-timeout": "Maximum time to wait between model stream events before retrying; 0 disables the timeout",
+	"no-instructions":    "Disable auto-loading AGENTS.md from the workspace root as project context",
+	"word-wrap":          "Wrap formatted output at specific width (default is 80)",
+	"settings":           "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
+	"config":             "Interactive setup wizard for provider, model, API key, and tools",
+	"dirs":               "Print the directories in which mods store its data",
+	"reset-settings":     "Backup your old settings file and reset everything to the defaults",
+	"continue":           "Continue from the last response or a given save title",
+	"continue-last":      "Continue from the last response",
+	"no-save":            "Disable saving and resuming sessions",
+	"chat":               "Start a continuous session; press Ctrl+C to quit",
+	"list-sessions":      "Interactively browse, view, and delete saved sessions",
+	"theme":              "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
+	"editor":             "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
+	"mcp-servers":        "MCP Servers configurations",
 
 	"list-mcps":              "List all available MCP servers",
 	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
@@ -104,6 +105,7 @@ var Help = map[string]string{
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
+	"result-json":            "Write a machine-readable one-shot run report to this file",
 	"think":                  "Enable extended thinking for supported models; thinking-type can override provider defaults",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"no-review":              "Disable tool review; shorthand for --review-mode=never",
@@ -245,20 +247,21 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 // file and loaded from environment variables. It is embedded in Config so all
 // fields are promoted and accessible directly on Config.
 type PersistentConfig struct {
-	API                 string     `yaml:"default-api" env:"API"`
-	Model               string     `yaml:"default-model" env:"MODEL"`
-	Format              string     `yaml:"format" env:"FORMAT"`
-	FormatText          FormatText `yaml:"format-text"`
-	Minimal             bool       `yaml:"minimal" env:"MINIMAL"`
-	Raw                 bool       `yaml:"raw" env:"RAW"`
-	HideToolStatus      bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
-	ShowTokenUsage      bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
-	NoInstructions      bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
-	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
-	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
-	HTTPProxy           string     `yaml:"http-proxy" env:"HTTP_PROXY"`
-	APIs                APIs       `yaml:"apis"`
-	Role                string     `yaml:"role" env:"ROLE"`
+	API                 string        `yaml:"default-api" env:"API"`
+	Model               string        `yaml:"default-model" env:"MODEL"`
+	Format              string        `yaml:"format" env:"FORMAT"`
+	FormatText          FormatText    `yaml:"format-text"`
+	Minimal             bool          `yaml:"minimal" env:"MINIMAL"`
+	Raw                 bool          `yaml:"raw" env:"RAW"`
+	HideToolStatus      bool          `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
+	ShowTokenUsage      bool          `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
+	NoInstructions      bool          `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
+	MaxRetries          int           `yaml:"max-retries" env:"MAX_RETRIES"`
+	ModelIdleTimeout    time.Duration `yaml:"model-idle-timeout" env:"MODEL_IDLE_TIMEOUT"`
+	WordWrap            int           `yaml:"word-wrap" env:"WORD_WRAP"`
+	HTTPProxy           string        `yaml:"http-proxy" env:"HTTP_PROXY"`
+	APIs                APIs          `yaml:"apis"`
+	Role                string        `yaml:"role" env:"ROLE"`
 	Roles               map[string][]string
 	Prompts             PromptConfig `yaml:"prompts"`
 	Theme               string
@@ -307,6 +310,7 @@ type Config struct {
 	Images         []string `yaml:"-" env:"-"`
 	StdinImage     bool     `yaml:"-" env:"-"`
 	ClipboardImage bool     `yaml:"-" env:"-"`
+	ResultJSON     string   `yaml:"-" env:"-"`
 
 	NoSave bool
 
@@ -856,6 +860,7 @@ func Default() Config {
 				"json":     defaultJSONFormatText,
 			},
 			ReviewMode:         ReviewAuto,
+			ModelIdleTimeout:   5 * time.Minute,
 			WordWrap:           80,
 			MCPTimeout:         15 * time.Second,
 			WebSearch:          false,

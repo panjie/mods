@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,16 @@ import (
 )
 
 func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg {
+	if errors.Is(err, context.Canceled) {
+		return modsError{Err: err, ReasonText: "User canceled."}
+	}
+	if errors.Is(err, ErrModelIdleTimeout) {
+		debug.Printf("API stream idle timeout: %v", err)
+		return m.retry(content, modsError{
+			Err:        err,
+			ReasonText: fmt.Sprintf("The %s API stream was idle for too long.", mod.API),
+		})
+	}
 	ae := &openai.Error{}
 	if errors.As(err, &ae) {
 		debug.Printf("API error: HTTP %d, code=%q, message=%q", ae.StatusCode, ae.Code, ae.Message)

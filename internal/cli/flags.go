@@ -3,6 +3,7 @@ package cli
 
 import (
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 )
@@ -37,7 +38,7 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModelProvider,
 		Flags: []string{
-			"api", "model", "max-retries", "http-proxy",
+			"api", "model", "max-retries", "model-idle-timeout", "http-proxy",
 		},
 	},
 	{
@@ -69,7 +70,7 @@ var flagCategorySpecs = []flagCategorySpec{
 		Name: flagCategoryOutputDisplay,
 		Flags: []string{
 			"format", "minimal", "raw", "word-wrap", "hide-tool-status",
-			"show-token-usage",
+			"show-token-usage", "result-json",
 		},
 	},
 	{
@@ -158,6 +159,10 @@ func regBool(flags *pflag.FlagSet, p *bool, name, short string, def bool) {
 // regInt registers an int flag with auto-rendered help.
 func regInt(flags *pflag.FlagSet, p *int, name string, def int) {
 	flags.IntVar(p, name, def, flagDesc(name))
+}
+
+func regDuration(flags *pflag.FlagSet, p *time.Duration, name string, def time.Duration) {
+	flags.DurationVar(p, name, def, flagDesc(name))
 }
 
 type settingsFlagValue struct {

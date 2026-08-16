@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/panjie/mods/internal/app"
 )
 
 var (
@@ -119,6 +120,12 @@ func validateChatMode() error {
 			ReasonText: "Chat mode requires session saving.",
 		}
 	}
+	if config.ResultJSON != "" {
+		return modsError{
+			Err:        newUserErrorf("--result-json is only available for one-shot runs"),
+			ReasonText: "Result JSON cannot be used with chat mode.",
+		}
+	}
 	if hasChatSessionAction() {
 		return modsError{
 			Err:        newUserErrorf("--chat cannot be combined with list, show, delete, settings, config, dirs, or MCP listing actions"),
@@ -149,6 +156,9 @@ func runChatTurn(ctx context.Context, prompt string, opts []tea.ProgramOption) (
 	}
 	printChatTurnOutput(mods)
 	printTokenUsage(mods)
+	if result := mods.Result(); result.Status == app.TurnStatusIncomplete {
+		fmt.Fprintf(chatOutput, "Warning: turn stopped before completion (%s): %s\n", result.StopReason, result.ErrorReason)
+	}
 	if config.SessionWriteToID != "" {
 		if _, _, err := persistSession(mods); err != nil {
 			return mods, err

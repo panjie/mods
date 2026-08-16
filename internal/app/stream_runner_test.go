@@ -6,11 +6,80 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 )
+
+type contextStream struct {
+	ctx     context.Context
+	chunks  chan proto.Chunk
+	current proto.Chunk
+}
+
+func (s *contextStream) Next() bool {
+	select {
+	case chunk := <-s.chunks:
+		s.current = chunk
+		return true
+	case <-s.ctx.Done():
+		return false
+	}
+}
+
+func (s *contextStream) Current() (proto.Chunk, error)     { return s.current, nil }
+func (s *contextStream) Close() error                      { return nil }
+func (s *contextStream) Err() error                        { return s.ctx.Err() }
+func (s *contextStream) Messages() []proto.Message         { return nil }
+func (s *contextStream) Usage() proto.TokenUsage           { return proto.TokenUsage{} }
+func (s *contextStream) PendingToolCalls() int             { return 0 }
+func (s *contextStream) CallTools() []proto.ToolCallStatus { return nil }
+
+func TestStreamRunnerIdleTimeout(t *testing.T) {
+	ctx, cancelCause := context.WithCancelCause(context.Background())
+	st := &contextStream{ctx: ctx, chunks: make(chan proto.Chunk, 1)}
+	runner := newStreamRunner(st, nil, func() { cancelCause(context.Canceled) }, func(error) tea.Msg { return nil }).
+		withIdleTimeout(ctx, cancelCause, 25*time.Millisecond)
+
+	started := time.Now()
+	msg := runner.receiveCmd()().(streamEventMsg)
+	require.Equal(t, streamEventError, msg.kind)
+	require.ErrorIs(t, msg.err, ErrModelIdleTimeout)
+	require.GreaterOrEqual(t, time.Since(started), 20*time.Millisecond)
+}
+
+func TestStreamRunnerIdleTimeoutRestartsAfterActivity(t *testing.T) {
+	ctx, cancelCause := context.WithCancelCause(context.Background())
+	st := &contextStream{ctx: ctx, chunks: make(chan proto.Chunk, 1)}
+	st.chunks <- proto.Chunk{Content: "first"}
+	runner := newStreamRunner(st, nil, func() { cancelCause(context.Canceled) }, func(error) tea.Msg { return nil }).
+		withIdleTimeout(ctx, cancelCause, 30*time.Millisecond)
+
+	first := runner.receiveCmd()().(streamEventMsg)
+	require.Equal(t, streamEventChunk, first.kind)
+	started := time.Now()
+	second := runner.receiveCmd()().(streamEventMsg)
+	require.Equal(t, streamEventError, second.kind)
+	require.ErrorIs(t, second.err, ErrModelIdleTimeout)
+	require.GreaterOrEqual(t, time.Since(started), 25*time.Millisecond)
+}
+
+func TestStreamRunnerUserCancelIsNotIdleTimeout(t *testing.T) {
+	ctx, cancelCause := context.WithCancelCause(context.Background())
+	st := &contextStream{ctx: ctx, chunks: make(chan proto.Chunk)}
+	runner := newStreamRunner(st, nil, func() { cancelCause(context.Canceled) }, func(error) tea.Msg { return nil }).
+		withIdleTimeout(ctx, cancelCause, time.Second)
+
+	result := make(chan streamEventMsg, 1)
+	go func() { result <- runner.receiveCmd()().(streamEventMsg) }()
+	time.Sleep(10 * time.Millisecond)
+	runner.close()
+	msg := <-result
+	require.Equal(t, streamEventError, msg.kind)
+	require.NotErrorIs(t, msg.err, ErrModelIdleTimeout)
+}
 
 type scriptedStream struct {
 	chunks   []proto.Chunk
@@ -40,6 +109,7 @@ func (s *scriptedStream) Err() error { return s.err }
 
 func (s *scriptedStream) Messages() []proto.Message { return s.msgs }
 func (s *scriptedStream) Usage() proto.TokenUsage   { return s.usage }
+func (s *scriptedStream) PendingToolCalls() int     { return len(s.tools) }
 
 func (s *scriptedStream) CallTools() []proto.ToolCallStatus {
 	s.toolRuns++
@@ -202,6 +272,7 @@ func (s *countingStream) Current() (proto.Chunk, error)     { return s.inner.Cur
 func (s *countingStream) Err() error                        { return s.inner.Err() }
 func (s *countingStream) Messages() []proto.Message         { return s.inner.Messages() }
 func (s *countingStream) Usage() proto.TokenUsage           { return s.inner.Usage() }
+func (s *countingStream) PendingToolCalls() int             { return s.inner.PendingToolCalls() }
 func (s *countingStream) CallTools() []proto.ToolCallStatus { return s.inner.CallTools() }
 func (s *countingStream) Close() error {
 	s.closes.Add(1)

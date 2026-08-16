@@ -178,6 +178,9 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 	return statuses
 }
 
+// PendingToolCalls implements stream.Stream.
+func (s *Stream) PendingToolCalls() int { return len(s.message.ToolCalls) }
+
 // Close implements stream.Stream.
 func (s *Stream) Close() error {
 	s.mu.Lock()

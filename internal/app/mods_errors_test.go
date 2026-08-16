@@ -163,6 +163,19 @@ func TestHandleAPIError(t *testing.T) {
 	})
 }
 
+func TestHandleRequestErrorRetriesIdleTimeout(t *testing.T) {
+	m := testMods(t)
+	m.Config.MaxRetries = 2
+	mod := Model{Name: "gpt-4", API: "openai"}
+
+	msg := m.handleRequestError(fmt.Errorf("%w after 1s", ErrModelIdleTimeout), mod, "prompt")
+	require.IsType(t, retryMsg{}, msg)
+	msg = m.handleRequestError(fmt.Errorf("%w after 1s", ErrModelIdleTimeout), mod, "prompt")
+	errMsg, ok := msg.(modsError)
+	require.True(t, ok)
+	require.ErrorIs(t, errMsg.Err, ErrModelIdleTimeout)
+}
+
 func TestHandleRequestError(t *testing.T) {
 	t.Run("openai error delegates to handleAPIError", func(t *testing.T) {
 		m := testMods(t)

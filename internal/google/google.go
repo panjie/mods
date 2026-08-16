@@ -373,6 +373,9 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 	return statuses
 }
 
+// PendingToolCalls implements stream.Stream.
+func (s *Stream) PendingToolCalls() int { return len(s.message.ToolCalls) }
+
 // Err implements stream.Stream.
 func (s *Stream) Err() error { return s.err }
 

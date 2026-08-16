@@ -352,6 +352,25 @@ ANSI styling.
 Use `--show-token-usage` (or `-s`) to print the input, output, and total token count for
 an interaction to stderr without mixing it into the model response on stdout.
 
+For unattended runs, `model-idle-timeout` limits how long Mods waits between
+provider stream events. It defaults to `5m`, is retried according to
+`max-retries`, and can be disabled with `model-idle-timeout: 0s` or
+`--model-idle-timeout=0s`.
+
+Use `--result-json PATH` to write a versioned, machine-readable report for a
+one-shot run. The report records completion status, stop reason, timings,
+model/tool rounds, tool outcome counts, retries, and token usage without
+including prompts, tool arguments, tool output, or credentials. It is written
+atomically with private file permissions. This flag is intentionally
+incompatible with `--chat`, and `-` is not accepted as a path so JSON metadata
+cannot mix with the model response on stdout.
+
+Reaching `max-tool-rounds` no longer counts as a successful completion. Mods
+allows the model to produce a final response after the last permitted tool
+round, but if it requests another tool round the one-shot command exits non-zero
+and reports `status: incomplete` with `stop_reason: tool_round_limit`. Three
+failed tool rounds similarly stop with `failed_tool_round_limit`.
+
 ### MCP
 
 Connect external tools and data sources through Model Context Protocol servers

@@ -58,19 +58,17 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.responseBoundaryPending = false
 	m.Thought = ""
 	m.thoughtFlushed = false
+	if m.Result().Status != TurnStatusRunning {
+		m.startTurnResult()
+	} else {
+		// A retry starts another provider request without beginning a new turn.
+		m.incrementModelRounds()
+	}
 	if !m.debugTurnActive {
 		m.debugTurn++
 		m.debugRound = 1
 		m.debugTurnStarted = time.Now()
 		m.debugTurnActive = true
-		m.debugToolTotal = 0
-		m.debugToolRounds = 0
-		m.debugToolSucceeded = 0
-		m.debugToolExited = 0
-		m.debugToolFailed = 0
-		m.debugToolDenied = 0
-		m.debugToolCorrected = 0
-		m.debugToolCancelled = 0
 		debug.Print(DebugSection{Title: fmt.Sprintf("turn %d · start", m.debugTurn), Fields: []DebugField{
 			{Label: "input", Value: fmt.Sprintf("%d chars", len(m.Input)+len(content))},
 		}})

@@ -133,7 +133,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		Model:      mod.Name,
 		User:       requestUser,
 		Tools:      tools,
-		TrackUsage: cfg.ShowTokenUsage,
+		TrackUsage: cfg.ShowTokenUsage || cfg.ResultJSON != "",
 		ToolCaller: m.toolCaller(registry, cfg),
 	}
 	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
@@ -141,17 +141,20 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 
 	m.debugRequest(cfg, &mod, &m.messages, tools, &request)
+	m.setResultModel(mod.API, mod.Name)
 	m.thinkActive = thinkActive
 	// Derive a cancellable context for the stream so quit() / a subsequent
 	// start*Cmd can tear down the in-flight HTTP/SSE request rather than
 	// waiting for it to finish on its own. The cancel is owned by the
 	// streamRunner and released by close().
-	streamCtx, streamCancel := context.WithCancel(m.ctx)
+	streamCtx, streamCancelCause := context.WithCancelCause(m.ctx)
+	streamCancel := func() { streamCancelCause(context.Canceled) }
 	st := client.Request(streamCtx, request)
 	errh := func(err error) tea.Msg {
 		return m.handleRequestError(err, mod, m.Input)
 	}
-	runner := newStreamRunner(st, registry, streamCancel, errh)
+	runner := newStreamRunner(st, registry, streamCancel, errh).
+		withIdleTimeout(streamCtx, streamCancelCause, cfg.ModelIdleTimeout)
 	m.setActiveRunner(runner)
 	return requestSession{
 		stream:  st,
@@ -341,21 +344,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 				Fields: fields,
 				Blocks: []DebugBlock{debug.Result(redactedOutput)},
 			})
-			m.debugToolTotal++
-			switch {
-			case status == "success":
-				m.debugToolSucceeded++
-			case strings.HasPrefix(status, "exit "):
-				m.debugToolExited++
-			case status == "denied":
-				m.debugToolDenied++
-			case status == "correction":
-				m.debugToolCorrected++
-			case status == "cancelled":
-				m.debugToolCancelled++
-			default:
-				m.debugToolFailed++
-			}
+			m.recordToolResult(status)
 		}()
 
 		ctx, cancel := m.toolCallContext(registry, name, cfg)

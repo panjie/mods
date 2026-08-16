@@ -237,6 +237,9 @@ func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
 	return s.message.Choices[0].Message.ToolCalls
 }
 
+// PendingToolCalls implements stream.Stream.
+func (s *Stream) PendingToolCalls() int { return len(s.pendingToolCalls()) }
+
 // CallTools implements stream.Stream.
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	calls := s.pendingToolCalls()

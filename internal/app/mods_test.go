@@ -70,6 +70,8 @@ func (staticStream) Messages() []proto.Message { return nil }
 
 func (s staticStream) Usage() proto.TokenUsage { return s.usage }
 
+func (staticStream) PendingToolCalls() int { return 0 }
+
 func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 
 func TestInitQueriesBackgroundColorOnlyWithInteractiveTerminal(t *testing.T) {
@@ -1326,6 +1328,59 @@ func TestToolCallFailed(t *testing.T) {
 	t.Run("wrapped non-zero shell exit is not a failure", func(t *testing.T) {
 		require.False(t, toolCallFailed(fmt.Errorf("wrapped: %w", toolregistry.ShellExitError{Code: 2})))
 	})
+}
+
+func TestToolRoundLimitStopsBeforeExecutingAnotherRound(t *testing.T) {
+	m := newAnimatingMods()
+	m.Config.MaxToolRounds = 1
+	m.totalRounds = 1
+	m.turnResult = TurnResult{Status: TurnStatusRunning, StartedAt: time.Now()}
+	st := &scriptedStream{
+		msgs:  []proto.Message{{Role: proto.RoleAssistant, Content: "partial answer"}},
+		tools: []proto.ToolCallStatus{{Name: "fs_read_file"}},
+	}
+	runner := newStreamRunner(st, nil, nil, func(error) tea.Msg { return nil })
+
+	cmds := m.startToolCalls(runner)
+	require.Len(t, cmds, 1)
+	require.Zero(t, st.toolRuns, "the over-budget tool round must not execute")
+	require.Equal(t, TurnStatusIncomplete, m.Result().Status)
+	require.Equal(t, StopReasonToolRoundLimit, m.Result().StopReason)
+	require.Contains(t, m.Output, "partial answer")
+}
+
+func TestToolRoundLimitAllowsFinalAnswerAfterLastPermittedRound(t *testing.T) {
+	m := newAnimatingMods()
+	m.Config.MaxToolRounds = 1
+	m.totalRounds = 1
+	m.turnResult = TurnResult{Status: TurnStatusRunning, StartedAt: time.Now()}
+	runner := newStreamRunner(&scriptedStream{}, nil, nil, func(error) tea.Msg { return nil })
+
+	cmds := m.startToolCalls(runner)
+	require.Greater(t, len(cmds), 1, "an empty pending-tool list must continue to normal completion")
+	require.Equal(t, TurnStatusRunning, m.Result().Status)
+}
+
+func TestFailedToolRoundLimitStopsOnThirdFailedRound(t *testing.T) {
+	m := newAnimatingMods()
+	m.Config.MaxToolRounds = 30
+	m.turnResult = TurnResult{Status: TurnStatusRunning, StartedAt: time.Now()}
+
+	for round := 1; round <= maxToolFailedRounds; round++ {
+		runner := newStreamRunner(&scriptedStream{}, nil, nil, func(error) tea.Msg { return nil })
+		cmd := m.handleToolCallsDone(streamEventMsg{
+			results: []proto.ToolCallStatus{{Name: "fs_read_file", Err: errors.New("boom")}},
+			runner:  runner,
+		})
+		require.NotNil(t, cmd)
+		if round < maxToolFailedRounds {
+			require.Equal(t, TurnStatusRunning, m.Result().Status)
+		}
+	}
+
+	require.Equal(t, TurnStatusIncomplete, m.Result().Status)
+	require.Equal(t, StopReasonFailedToolLimit, m.Result().StopReason)
+	require.Equal(t, maxToolFailedRounds, m.Result().Stats.ToolRounds)
 }
 
 func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {

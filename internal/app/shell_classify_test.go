@@ -59,6 +59,20 @@ func TestExtractExternalPaths(t *testing.T) {
 		require.Equal(t, []string{filepath.Join(home, "Downloads", "secret")}, got)
 	})
 
+	t.Run("unquoted bare tilde uses current home", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+		require.NotEmpty(t, home)
+
+		got := extractExternalPaths(`cd ~; sed -n '98,104p' .spacemacs`, ws)
+		require.Equal(t, []string{home}, got)
+	})
+
+	t.Run("quoted bare tilde stays literal", func(t *testing.T) {
+		require.Empty(t, extractExternalPaths(`cd "~"; sed -n '98,104p' .spacemacs`, ws))
+		require.Empty(t, extractExternalPaths(`cd '~'; sed -n '98,104p' .spacemacs`, ws))
+	})
+
 	t.Run("tilde downloads directory normalizes for read commands", func(t *testing.T) {
 		home, err := os.UserHomeDir()
 		require.NoError(t, err)
@@ -906,6 +920,68 @@ func TestAnalyzeShellCommandReadOnlyWorkspaceAffectedDirs(t *testing.T) {
 		require.True(t, hasPathUnder(result.KnownDirs, externalDir), "affected dirs should include external path under %s: %v", externalDir, result.KnownDirs)
 		require.NotContains(t, result.KnownDirs, workspace)
 	})
+}
+
+func TestAnalyzeShellCommandBareHomeRejectsClassifierGuess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows")
+	}
+	home := canonicalTestPath(t, t.TempDir())
+	workspace := canonicalTestPath(t, t.TempDir())
+	t.Setenv("HOME", home)
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
+			require.Equal(t, "shell_run", tool)
+			require.Equal(t, `cd ~; sed -n '98,104p' .spacemacs`, command)
+			return approval.CommandAssessment{
+				Effect:    approval.EffectRead,
+				KnownDirs: []string{"/home/user"},
+				Reason:    "reads a file",
+			}
+		},
+	}
+
+	command := `cd ~; sed -n '98,104p' .spacemacs`
+	assessment := mods.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, []string{home}, assessment.KnownDirs)
+	require.NotContains(t, assessment.KnownDirs, "/home/user")
+
+	intent := assessment.AccessIntent()
+	presentation := formatReviewPresentationWithIntent(
+		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
+		WorkspaceScope(workspace), intent,
+	)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: home})
+
+	rules := candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto), true)
+	require.Len(t, rules, 1)
+	require.Equal(t, approval.DirAllow, rules[0].Type)
+	require.Equal(t, approval.AccessRead, rules[0].Mode)
+	require.Equal(t, []string{home}, rules[0].Paths)
+}
+
+func TestAnalyzeShellCommandWithoutBareHomeKeepsClassifierDirs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	classifierDir := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{
+				Effect:    approval.EffectRead,
+				KnownDirs: []string{classifierDir},
+				Reason:    "reads external state",
+			}
+		},
+	}
+
+	assessment := mods.assessCommand("shell_run", "sed -n '1p' settings.ini")
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, []string{classifierDir}, assessment.KnownDirs)
 }
 
 func hasPathUnder(paths []string, dir string) bool {

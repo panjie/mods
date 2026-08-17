@@ -273,6 +273,41 @@ func StaticPOSIXLiteralArgs(command string) []string {
 	return args
 }
 
+// POSIXHasUnquotedBareHomeArg reports whether a simple command contains an
+// unquoted, standalone "~" argument. POSIX shells expand that form using the
+// child process's HOME, while quoted tildes and tildes embedded in another
+// word remain literal. Keeping this distinction in the AST layer prevents the
+// approval classifier from guessing a concrete home directory.
+func POSIXHasUnquotedBareHomeArg(command string) bool {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
+	file, err := parser.Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(file, func(node syntax.Node) bool {
+		if found {
+			return false
+		}
+		call, ok := node.(*syntax.CallExpr)
+		if !ok || len(call.Args) < 2 {
+			return true
+		}
+		for _, word := range call.Args[1:] {
+			if len(word.Parts) != 1 {
+				continue
+			}
+			lit, ok := word.Parts[0].(*syntax.Lit)
+			if ok && lit.Value == "~" {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
 func redirectionWrites(op syntax.RedirOperator) bool {
 	switch op {
 	case syntax.RdrOut, syntax.AppOut, syntax.RdrClob, syntax.RdrAll, syntax.AppAll, syntax.RdrInOut:

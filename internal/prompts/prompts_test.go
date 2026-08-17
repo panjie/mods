@@ -48,6 +48,8 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelectionShellWindows, "keep necessary pipelines intact")
 	require.Contains(t, ToolSelection, "Return inspection output directly")
 	require.Contains(t, ToolSelection, "Do not retry blindly")
+	require.Contains(t, ShellClassifier, "authoritative Workspace and Home")
+	require.Contains(t, ShellClassifier, "Never guess a home directory")
 }
 
 func TestIdentityHasSelfHelpPolicy(t *testing.T) {

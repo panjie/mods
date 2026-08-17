@@ -646,12 +646,32 @@ func TestShellClassifierPromptResolution(t *testing.T) {
 }
 
 func TestShellClassifyCacheKeyIncludesPromptAndMode(t *testing.T) {
-	keyA := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt a")
-	keyB := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt b")
-	keyC := shellClassifyCacheKey("shell_run", "rm out", "yesno", "prompt a")
+	keyA := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt a", "/workspace\x00/home/a")
+	keyB := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt b", "/workspace\x00/home/a")
+	keyC := shellClassifyCacheKey("shell_run", "rm out", "yesno", "prompt a", "")
+	keyD := shellClassifyCacheKey("shell_run", "rm out", "json", "prompt a", "/workspace\x00/home/b")
 
 	require.NotEqual(t, keyA, keyB)
 	require.NotEqual(t, keyA, keyC)
+	require.NotEqual(t, keyA, keyD)
+}
+
+func TestShellClassifierUserMessageIncludesStructuredPathContext(t *testing.T) {
+	message, contextKey := shellClassifierUserMessage(
+		"shell_run", "cd ~; pwd", true, "/workspace/a", "/Users/tester",
+	)
+
+	require.Contains(t, message, "Execution context (authoritative):")
+	require.Contains(t, message, "Workspace: /workspace/a")
+	require.Contains(t, message, "Home: /Users/tester")
+	require.Contains(t, message, "Command:\ncd ~; pwd")
+	require.Equal(t, "/workspace/a\x00/Users/tester", contextKey)
+
+	legacy, legacyContext := shellClassifierUserMessage(
+		"shell_run", "cd ~; pwd", false, "/workspace/a", "/Users/tester",
+	)
+	require.Equal(t, "Tool: shell_run\nCommand:\ncd ~; pwd", legacy)
+	require.Empty(t, legacyContext)
 }
 
 func TestProbeWindowsPowerShellCapabilities(t *testing.T) {

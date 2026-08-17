@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -52,7 +53,8 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 	// Command-specific target extraction is intentionally conservative and can
 	// miss valid option forms; an omitted external literal must never silently
 	// collapse to the workspace approval scope.
-	externalPaths = appendMissingShellDirs(externalPaths, extractExternalPathsWithPolicy(command, ws, flavor, policy))
+	extractedPaths, hasBareHome := extractExternalPathFactsWithPolicy(command, ws, flavor, policy)
+	externalPaths = appendMissingShellDirs(externalPaths, extractedPaths)
 	if result.Effect == approval.EffectWrite {
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, externalPaths)
 	} else {
@@ -64,6 +66,12 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 			completion = m.shellAnalyzer(tool, command)
 		} else {
 			completion = m.classifyShellWithLLM(tool, command)
+		}
+		if hasBareHome {
+			// The child shell and path normalizer share HOME. Once an unquoted
+			// bare tilde has been resolved locally, classifier-supplied paths are
+			// guesses and must not replace or broaden that deterministic scope.
+			completion.KnownDirs = nil
 		}
 		result = mergeCommandAssessment(result, completion)
 	}
@@ -365,7 +373,9 @@ func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssess
 	if !structured {
 		parseMode = "yesno"
 	}
-	cacheKey := shellClassifyCacheKey(tool, command, parseMode, system)
+	workspace, home := m.shellClassifierPathContext()
+	userMessage, pathContext := shellClassifierUserMessage(tool, command, structured, workspace, home)
+	cacheKey := shellClassifyCacheKey(tool, command, parseMode, system, pathContext)
 	if cached, ok := shellClassifyCache.Load(cacheKey); ok {
 		debug.Printf("assessCommand: cmd=%q cached -> effect=%s dirs=%v", debug.Truncate(command, 80), cached.Effect, cached.KnownDirs)
 		return cached
@@ -395,7 +405,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssess
 	request := proto.Request{
 		Messages: []proto.Message{
 			{Role: proto.RoleSystem, Content: system},
-			{Role: proto.RoleUser, Content: fmt.Sprintf("Tool: %s\nCommand:\n%s", tool, command)},
+			{Role: proto.RoleUser, Content: userMessage},
 		},
 		API:         mod.API,
 		Model:       mod.Name,
@@ -449,8 +459,34 @@ func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssess
 	return assessment
 }
 
-func shellClassifyCacheKey(tool, command, parseMode, system string) string {
-	return strings.Join([]string{tool, command, parseMode, system}, "\x00")
+func (m *Mods) shellClassifierPathContext() (workspace, home string) {
+	if m != nil && m.Config != nil {
+		workspace = m.Config.ResolveWorkspace().Canonical
+	}
+	home, _ = os.UserHomeDir()
+	return strings.TrimSpace(workspace), strings.TrimSpace(home)
+}
+
+func shellClassifierUserMessage(tool, command string, structured bool, workspace, home string) (message, pathContext string) {
+	if !structured {
+		return fmt.Sprintf("Tool: %s\nCommand:\n%s", tool, command), ""
+	}
+	pathContext = strings.Join([]string{workspace, home}, "\x00")
+	return fmt.Sprintf(
+		"Tool: %s\nExecution context (authoritative):\nWorkspace: %s\nHome: %s\nCommand:\n%s",
+		tool, classifierContextValue(workspace), classifierContextValue(home), command,
+	), pathContext
+}
+
+func classifierContextValue(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "unknown"
+	}
+	return value
+}
+
+func shellClassifyCacheKey(tool, command, parseMode, system, pathContext string) string {
+	return strings.Join([]string{tool, command, parseMode, system, pathContext}, "\x00")
 }
 
 func (m *Mods) resolveShellClassifierPrompt() (string, bool, error) {
@@ -639,6 +675,11 @@ func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathuti
 }
 
 func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathutil.Flavor, policy approval.ReadOnlyCommandPolicy) []string {
+	paths, _ := extractExternalPathFactsWithPolicy(command, workspaceDir, flavor, policy)
+	return paths
+}
+
+func extractExternalPathFactsWithPolicy(command, workspaceDir string, flavor pathutil.Flavor, policy approval.ReadOnlyCommandPolicy) ([]string, bool) {
 	originalCommand := command
 	opts := pathutil.DefaultOptions(workspaceDir, flavor)
 	seen := map[string]bool{}
@@ -685,7 +726,7 @@ func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathuti
 		for _, m := range reParentPath.FindAllString(command, -1) {
 			add(m)
 		}
-		return paths
+		return paths, false
 	}
 
 	// POSIX branch: Unix absolute paths (including single-segment like
@@ -712,6 +753,10 @@ func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathuti
 	for _, m := range reParentPath.FindAllString(command, -1) {
 		add(m)
 	}
+	hasBareHome := approval.POSIXHasUnquotedBareHomeArg(originalCommand)
+	if hasBareHome {
+		add("~")
+	}
 	// The raw-text scan strips single-quoted programs to avoid interpreting
 	// awk/sed regex syntax as paths. Recover genuine quoted path arguments
 	// from the shell AST: only values that begin with explicit external-path
@@ -723,7 +768,7 @@ func extractExternalPathsWithPolicy(command, workspaceDir string, flavor pathuti
 			}
 		}
 	}
-	return paths
+	return paths, hasBareHome
 }
 
 func addPowerShellQuotedPathArgs(command string, add func(string)) {

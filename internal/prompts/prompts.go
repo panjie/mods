@@ -56,6 +56,7 @@ Use exactly this shape:
 
 Set affected_dirs to the directories that may be read, written, deleted, modified, or used as the command's working context. If none are affected or unknown, use an empty array.
 Every affected_dirs entry must be a concrete literal directory. Never return shell variables, PowerShell automatic variables, command substitutions, placeholders, or prose as a directory; use an empty array when the target is resolved only at runtime.
+The user message supplies authoritative Workspace and Home values. Use them exactly when resolving paths; an unquoted current-user ~ resolves to Home. Never guess a home directory such as /home/user.
 Set effect to "read" only when the command is read-only, "write" when it writes or may write persistent state, and "unknown" when unsure.
 Example: ls -la /path/to/project => {"effect":"read","affected_dirs":["/path/to/project"],"reason":"lists directory contents only"}.`
 )

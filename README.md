@@ -401,7 +401,8 @@ for stateless reasoning and tool continuation in its local session data. Azure
 OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
 Chat Completions.
 
-Official `deepseek-v4-flash` requests to `api.deepseek.com` also use the
+Official `deepseek-v4-flash` and `deepseek-v4-pro` requests to
+`api.deepseek.com` also use the
 [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
 automatically. Mods uses its plaintext reasoning events, hosted web search, and
 Codex-compatible free-form `apply_patch` tool. DeepSeek Responses is stateless,

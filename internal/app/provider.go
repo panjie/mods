@@ -290,8 +290,16 @@ func useResponsesEndpoint(mod Model, baseURL string) bool {
 }
 
 func useOfficialDeepSeekResponses(mod Model, baseURL string) bool {
-	return strings.EqualFold(strings.TrimSpace(mod.Name), "deepseek-v4-flash") &&
+	return isOfficialDeepSeekResponsesModel(mod.Name) &&
 		useOfficialDeepSeekEndpoint(mod.API, baseURL)
+}
+
+func isOfficialDeepSeekResponsesModel(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "deepseek-v4-flash", "deepseek-v4-pro":
+		return true
+	}
+	return false
 }
 
 func useOfficialDeepSeekEndpoint(api, baseURL string) bool {

@@ -560,6 +560,36 @@ apis:
 	require.Equal(t, "responses", model["endpoint"])
 }
 
+func TestBuildConfigWizardUpdatesDeepSeekProUsesResponses(t *testing.T) {
+	updates := buildConfigWizardUpdates(configWizardSaveData{
+		apiName:                "deepseek",
+		modelName:              "deepseek-v4-pro",
+		reviewMode:             "auto",
+		fsMode:                 "auto",
+		webSearchProvider:      "tavily",
+		webSearchProviderValue: "tavily",
+		keyStorage:             "env",
+		envVarName:             "DEEPSEEK_API_KEY",
+		baseURLInput:           "https://api.deepseek.com/",
+		addedModelNames:        []string{"deepseek-v4-pro"},
+	})
+
+	requireUpdateValue(t, updates, []string{"apis", "deepseek", "models", "deepseek-v4-pro"}, map[string]any{
+		"endpoint": "responses",
+	})
+
+	path := writeCLIConfig(t, `default-api: openai
+apis:
+  deepseek:
+    base-url: https://api.deepseek.com/
+`)
+	require.NoError(t, SaveFieldPaths(path, updates))
+	saved := loadCLIConfig(t, path)
+	deepseek := saved["apis"].(map[string]any)["deepseek"].(map[string]any)
+	model := deepseek["models"].(map[string]any)["deepseek-v4-pro"].(map[string]any)
+	require.Equal(t, "responses", model["endpoint"])
+}
+
 func TestBuildConfigWizardUpdatesDeepSeekCustomGatewayKeepsDefaultEndpoint(t *testing.T) {
 	updates := buildConfigWizardUpdates(configWizardSaveData{
 		apiName:         "deepseek",

@@ -214,8 +214,9 @@ apis:
     base-url: https://api.deepseek.com/
     api-key:
     api-key-env: DEEPSEEK_API_KEY
-    # deepseek-v4-flash automatically uses the Responses API on this official
-    # endpoint. Set endpoint: chat-completions on the model to opt out.
+    # deepseek-v4-flash and deepseek-v4-pro automatically use the Responses
+    # API on this official endpoint. Set endpoint: chat-completions on the
+    # model to opt out.
     # Reasoning returned by DeepSeek Responses is plaintext and is persisted
     # in the local conversation database for stateless continuation.
 

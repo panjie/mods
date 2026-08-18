@@ -160,7 +160,9 @@ func TestBuildProviderConfigsDeepSeekResponsesRouting(t *testing.T) {
 		profile   openai.ResponsesProfile
 	}{
 		{name: "official flash", model: Model{Name: "deepseek-v4-flash", API: "deepseek"}, baseURL: "https://api.deepseek.com/", responses: true, profile: openai.ResponsesProfileDeepSeek},
-		{name: "official pro stays chat", model: Model{Name: "deepseek-v4-pro", API: "deepseek"}, baseURL: "https://api.deepseek.com/", profile: openai.ResponsesProfileDeepSeek},
+		{name: "official pro", model: Model{Name: "deepseek-v4-pro", API: "deepseek"}, baseURL: "https://api.deepseek.com/", responses: true, profile: openai.ResponsesProfileDeepSeek},
+		{name: "official pro explicit chat wins", model: Model{Name: "deepseek-v4-pro", API: "deepseek", Endpoint: "chat-completions"}, baseURL: "https://api.deepseek.com/", profile: openai.ResponsesProfileDeepSeek},
+		{name: "custom gateway pro defaults chat", model: Model{Name: "deepseek-v4-pro", API: "deepseek"}, baseURL: "https://proxy.example.com/v1", profile: openai.ResponsesProfileDeepSeek},
 		{name: "explicit chat wins", model: Model{Name: "deepseek-v4-flash", API: "deepseek", Endpoint: "chat-completions"}, baseURL: "https://api.deepseek.com/", profile: openai.ResponsesProfileDeepSeek},
 		{name: "custom gateway defaults chat", model: Model{Name: "deepseek-v4-flash", API: "deepseek"}, baseURL: "https://proxy.example.com/v1", profile: openai.ResponsesProfileDeepSeek},
 		{name: "custom gateway explicit responses", model: Model{Name: "deepseek-v4-flash", API: "deepseek", Endpoint: "responses"}, baseURL: "https://proxy.example.com/v1", responses: true, profile: openai.ResponsesProfileDeepSeek},

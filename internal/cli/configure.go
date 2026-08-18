@@ -1736,11 +1736,19 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 func configWizardNewModelSettings(apiName, modelName, baseURL string) map[string]any {
 	settings := map[string]any{}
 	if strings.EqualFold(strings.TrimSpace(apiName), "deepseek") &&
-		strings.EqualFold(strings.TrimSpace(modelName), "deepseek-v4-flash") &&
+		configWizardIsOfficialDeepSeekResponsesModel(modelName) &&
 		configWizardIsOfficialDeepSeekURL(baseURL) {
 		settings["endpoint"] = "responses"
 	}
 	return settings
+}
+
+func configWizardIsOfficialDeepSeekResponsesModel(modelName string) bool {
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case "deepseek-v4-flash", "deepseek-v4-pro":
+		return true
+	}
+	return false
 }
 
 func configWizardIsOfficialDeepSeekURL(baseURL string) bool {

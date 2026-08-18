@@ -225,6 +225,28 @@ func Location(target, workspace string, safeDirs []string) LocationKind {
 			return LocationSafe
 		}
 	}
+	// Lexical comparison missed. Resolve symlinks on both the target and
+	// the boundaries before concluding the path is external: a workspace
+	// (or safe directory) reached through a symlink alias still counts as
+	// inside the boundary. Any resolution failure falls back to the
+	// lexical verdict, which fails closed (external -> review).
+	resolved, err := ResolveThroughExistingParent(target)
+	if err == nil {
+		if ws := strings.TrimSpace(workspace); ws != "" && IsAbs(ws) {
+			if wsResolved, wsErr := ResolveThroughExistingParent(cleanPath(ws)); wsErr == nil && Contains(wsResolved, resolved) {
+				return LocationWorkspace
+			}
+		}
+		for _, safe := range safeDirs {
+			safe = strings.TrimSpace(safe)
+			if safe == "" || !IsAbs(safe) {
+				continue
+			}
+			if safeResolved, safeErr := ResolveThroughExistingParent(cleanPath(safe)); safeErr == nil && Contains(safeResolved, resolved) {
+				return LocationSafe
+			}
+		}
+	}
 	return LocationExternal
 }
 

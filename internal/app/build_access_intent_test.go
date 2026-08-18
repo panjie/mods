@@ -82,6 +82,76 @@ func TestBuildAccessIntent(t *testing.T) {
 	require.Equal(t, AccessWrite, intentNil.Class)
 }
 
+// TestSymlinkAliasWorkspacePathsClassifyAsWorkspace pins the fix for
+// workspaces reached through a symlink (e.g. ~/.emacs.d -> real dir):
+// fs and shell reads spelled through the alias must classify as workspace
+// reads (auto-allow) while genuinely external paths still ask.
+func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
+	realRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "lisp"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(realRoot, "lisp", "init.el"), []byte("x"), 0o600))
+	aliasRoot := filepath.Join(t.TempDir(), "alias-root")
+	if err := os.Symlink(realRoot, aliasRoot); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+	scope := WorkspaceScope(canonicalTestPath(t, realRoot))
+	aliasTarget := filepath.Join(aliasRoot, "lisp", "init.el")
+
+	regFs := toolregistry.NewRegistry()
+	require.NoError(t, toolregistry.RegisterFilesystem(regFs, toolregistry.FilesystemConfig{Root: realRoot}))
+
+	intentFs := buildAccessIntent("fs_read_file", []byte(`{"path":`+strconv.Quote(aliasTarget)+`}`), regFs, nil)
+	require.Equal(t, AccessRead, intentFs.Class)
+	require.Equal(t, DecisionAllow, ClassifyAccess(intentFs, scope, nil, ApprovalReviewMode(ReviewAuto)))
+
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = realRoot
+	cfg.BuiltinTools.ShellReadOnlyCommands = []string{"cat"}
+	m := &Mods{
+		Config: &cfg,
+		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for configured read-only command %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	t.Cleanup(func() { m.shellAnalyzer = nil })
+	reg := toolregistry.NewRegistry()
+	require.NoError(t, toolregistry.RegisterShell(reg, toolregistry.ShellConfig{Root: realRoot}))
+
+	assessment := m.assessCommand("shell_run", "cat "+aliasTarget)
+	intentShell := buildAccessIntent("shell_run", nil, reg, &assessment)
+	require.Equal(t, DecisionAllow, ClassifyAccess(intentShell, scope, nil, ApprovalReviewMode(ReviewAuto)))
+
+	intentExt := buildAccessIntent("fs_read_file", []byte(`{"path":"/etc/passwd"}`), regFs, nil)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intentExt, scope, nil, ApprovalReviewMode(ReviewAuto)))
+}
+
+// TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable
+// checks that the security rule forcing review for executables living inside
+// the workspace also fires when the program is spelled through a symlink
+// alias of the workspace.
+func TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tool.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	aliasRoot := filepath.Join(t.TempDir(), "alias-root")
+	if err := os.Symlink(root, aliasRoot); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	m := &Mods{
+		Config: &cfg,
+		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "test classifier"}
+		},
+	}
+
+	invoke := fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(aliasRoot, "tool.sh"))
+	assessment := m.assessCommand("process_run", invoke)
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Contains(t, assessment.Reason, "workspace or temporary directory")
+}
+
 func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	root := t.TempDir()
 	reg := toolregistry.NewRegistry()

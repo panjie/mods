@@ -1711,3 +1711,67 @@ func TestResolveWorkspacePathRejectsUnsupportedOtherUserHome(t *testing.T) {
 		t.Fatal("unsupported other-user home path must not resolve into the workspace")
 	}
 }
+
+// TestFilesystemToolsAcceptWorkspaceSymlinkAlias pins the fix for workspaces
+// reached through a symlink (e.g. ~/.emacs.d -> real dir): absolute paths
+// spelled through the alias resolve inside the canonical workspace without
+// approval, and writes land in the real directory.
+func TestFilesystemToolsAcceptWorkspaceSymlinkAlias(t *testing.T) {
+	realRoot := t.TempDir()
+	aliasRoot := filepath.Join(t.TempDir(), "alias-root")
+	if err := os.Symlink(realRoot, aliasRoot); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(realRoot, "lisp"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(realRoot, "lisp", "init.el"), []byte("seed"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: realRoot}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	target := filepath.Join(aliasRoot, "lisp", "init.el")
+	got, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`))
+	if err != nil {
+		t.Fatalf("read via workspace symlink alias must succeed: %v", err)
+	}
+	if !strings.Contains(got, "seed") {
+		t.Fatalf("read via alias returned %q", got)
+	}
+
+	writeTarget := filepath.Join(aliasRoot, "lisp", "new.el")
+	if _, err := registry.Call(context.Background(), "fs_write_file", []byte(`{"path":`+strconv.Quote(writeTarget)+`,"content":"new"}`)); err != nil {
+		t.Fatalf("write via workspace symlink alias must succeed: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(realRoot, "lisp", "new.el")); err != nil || string(data) != "new" {
+		t.Fatalf("write via alias did not land in workspace: %v %q", err, data)
+	}
+}
+
+// TestResolveWorkspacePathStillRejectsExternalViaSymlinkAlias checks the
+// fail-closed companion case: a symlink alias of a directory outside the
+// workspace must keep resolving outside and be rejected.
+func TestResolveWorkspacePathStillRejectsExternalViaSymlinkAlias(t *testing.T) {
+	root := t.TempDir()
+	external := t.TempDir()
+	if err := os.WriteFile(filepath.Join(external, "secret.txt"), []byte("secret"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	aliasExternal := filepath.Join(t.TempDir(), "alias-external")
+	if err := os.Symlink(external, aliasExternal); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+
+	registry := NewRegistry()
+	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	target := filepath.Join(aliasExternal, "secret.txt")
+	if _, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`)); err == nil {
+		t.Fatal("read through symlink alias of external dir must fail without approval")
+	}
+}

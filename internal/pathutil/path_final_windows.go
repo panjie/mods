@@ -1,6 +1,6 @@
 //go:build windows
 
-package tools
+package pathutil
 
 import (
 	"fmt"
@@ -10,10 +10,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// evalPlatformFinalPath resolves Windows reparse points, including directory
+// resolvePlatformFinalPath resolves Windows reparse points, including directory
 // junctions. filepath.EvalSymlinks does not reliably expose the junction target
 // on every supported Windows build, while the kernel's final handle path does.
-func evalPlatformFinalPath(path string) (string, error) {
+func resolvePlatformFinalPath(path string) (string, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return "", err

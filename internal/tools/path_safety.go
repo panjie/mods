@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/panjie/mods/internal/pathutil"
@@ -38,18 +37,19 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	// that safe directory becomes the boundary so a symlink inside it
 	// cannot escape to arbitrary paths like /etc/passwd. An approval-
 	// authorized external directory (carried via ctx) behaves the same.
+	// The lexical pre-check only selects the boundary; the authoritative
+	// decision is the symlink-aware comparison below, so a path spelled
+	// through a symlink alias of the workspace still resolves inside it.
 	boundary := root
 	if err := ensureInsideRoot(root, path); err != nil {
 		if safe, ok := matchSafeDir(path, safeDirs); ok {
 			boundary = safe
 		} else if approved, ok := matchAuthorizedDir(ctx, path); ok {
 			boundary = approved
-		} else {
-			return "", err
 		}
 	}
 
-	resolved, err := evalPathThroughExistingParent(path)
+	resolved, err := pathutil.ResolveThroughExistingParent(path)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	if absBoundary, absErr := filepath.Abs(boundary); absErr == nil {
 		boundaryEval = absBoundary
 	}
-	if eval, evalErr := evalPathThroughExistingParent(boundaryEval); evalErr == nil {
+	if eval, evalErr := pathutil.ResolveThroughExistingParent(boundaryEval); evalErr == nil {
 		boundaryEval = eval
 	}
 	if err := ensureInsideRoot(boundaryEval, resolved); err != nil {
@@ -86,13 +86,11 @@ func resolveWorkspacePathNoFollowLeaf(ctx context.Context, root, input string, s
 			boundary = safe
 		} else if approved, ok := matchAuthorizedDir(ctx, path); ok {
 			boundary = approved
-		} else {
-			return "", err
 		}
 	}
 
 	parent := filepath.Dir(path)
-	parentEval, err := evalPathThroughExistingParent(parent)
+	parentEval, err := pathutil.ResolveThroughExistingParent(parent)
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +99,7 @@ func resolveWorkspacePathNoFollowLeaf(ctx context.Context, root, input string, s
 	if absBoundary, absErr := filepath.Abs(boundary); absErr == nil {
 		boundaryEval = absBoundary
 	}
-	if eval, evalErr := evalPathThroughExistingParent(boundaryEval); evalErr == nil {
+	if eval, evalErr := pathutil.ResolveThroughExistingParent(boundaryEval); evalErr == nil {
 		boundaryEval = eval
 	}
 	resolved := filepath.Join(parentEval, filepath.Base(path))
@@ -109,35 +107,6 @@ func resolveWorkspacePathNoFollowLeaf(ctx context.Context, root, input string, s
 		return "", err
 	}
 	return resolved, nil
-}
-
-func evalPathThroughExistingParent(path string) (string, error) {
-	existing := path
-	var missing []string
-	for {
-		if _, err := os.Lstat(existing); err == nil {
-			break
-		} else if err != nil && !os.IsNotExist(err) {
-			return "", err
-		}
-		parent := filepath.Dir(existing)
-		if parent == existing {
-			return "", fmt.Errorf("could not find existing parent for %q", path)
-		}
-		missing = append([]string{filepath.Base(existing)}, missing...)
-		existing = parent
-	}
-
-	existingEval, err := filepath.EvalSymlinks(existing)
-	if err != nil {
-		return "", err
-	}
-	existingEval, err = evalPlatformFinalPath(existingEval)
-	if err != nil {
-		return "", err
-	}
-	parts := append([]string{existingEval}, missing...)
-	return filepath.Join(parts...), nil
 }
 
 // matchSafeDir returns the first safe directory that lexically contains

@@ -45,6 +45,10 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		return nil, err
 	}
 
+	if err := toolregistry.RegisterTodoWrite(registry); err != nil {
+		return nil, err
+	}
+
 	if ShouldEnableFilesystemTools(cfg, prompt) {
 		if err := toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{
 			Root:     root,
@@ -197,6 +201,7 @@ func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 	}
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{})
+	_ = toolregistry.RegisterTodoWrite(registry)
 	_ = toolregistry.RegisterSkill(registry, nil)
 	_ = toolregistry.RegisterUserInput(registry, nil)
 

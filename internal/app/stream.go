@@ -23,6 +23,9 @@ func (m *Mods) setupStreamContext(content string) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
 	m.toolSelectionInsertAt = -1
+	if todoItemsAllCompleted(m.todoItems) {
+		m.todoItems = nil
+	}
 
 	workspace := m.Config.ResolveWorkspace()
 	root := workspace.Display
@@ -148,6 +151,9 @@ func (m *Mods) setupStreamContext(content string) error {
 			if msg.Role != proto.RoleSystem {
 				m.messages = append(m.messages, msg)
 			}
+		}
+		if items := todoItemsFromMessages(saved); len(items) > 0 {
+			m.todoItems = items
 		}
 		debug.Printf("Session: read %d messages from %s", len(saved), cfg.SessionReadFromID[:min(ShortIDLength, len(cfg.SessionReadFromID))])
 	}

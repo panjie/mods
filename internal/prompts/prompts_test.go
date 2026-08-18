@@ -61,9 +61,16 @@ func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Identity, "continue to use Chat Completions")
 }
 
+func TestIdentityHasPlanningPolicy(t *testing.T) {
+	require.Contains(t, Identity, "`todo_write`")
+	require.Contains(t, Identity, "three or more steps")
+	require.Contains(t, Identity, "exactly one")
+	require.Contains(t, Identity, "full list of steps")
+}
+
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
-	// Budget includes the form input kind; bump if a new tool capability
-	// legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 5*1024+512,
-		"default identity and tool-selection prompts must stay within ~5 KiB")
+	// Budget includes the form input kind and the todo planning policy;
+	// bump if a new tool capability legitimately grows the runtime prompts.
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 6*1024,
+		"default identity and tool-selection prompts must stay within ~6 KiB")
 }

@@ -179,6 +179,27 @@ func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
 	require.ErrorContains(t, err, "outside workspace")
 }
 
+func TestBuildRegistryRegistersTodoWrite(t *testing.T) {
+	cfg := cfgpkg.Default()
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil)
+	require.NoError(t, err)
+	_, ok := reg.Tool("todo_write")
+	require.True(t, ok, "todo_write must be registered unconditionally")
+}
+
+func TestBuiltinSpecsIncludesTodoWrite(t *testing.T) {
+	specs, err := BuiltinSpecs()
+	require.NoError(t, err)
+	found := false
+	for _, s := range specs {
+		if s.Name == "todo_write" {
+			found = true
+			require.True(t, s.ReadOnly, "todo_write must be ReadOnly")
+		}
+	}
+	require.True(t, found, "todo_write must appear in --list-tools output")
+}
+
 func TestBuiltinSpecsIncludesLoadSkill(t *testing.T) {
 	specs, err := BuiltinSpecs()
 	require.NoError(t, err)

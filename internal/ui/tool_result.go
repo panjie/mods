@@ -98,6 +98,11 @@ func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
 const minToolSummaryWidth = 12
 
 func toolResultSummary(name string, data []byte) string {
+	if name == "todo_write" {
+		if summary := TodoSummary(data); summary != "" {
+			return summary
+		}
+	}
 	args := ToolOperationArgs(data)
 	if name == "process_run" {
 		return ProcessCommandPreview(args)

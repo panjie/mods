@@ -103,6 +103,8 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 		}
 	case "fs_apply_patch":
 		return TruncateOperationStatus("Applying patch", width)
+	case "todo_write":
+		return TruncateOperationStatus("Updating plan", width)
 	case "load_skill":
 		skillName := OneLinePreview(ArgString(args, "name"))
 		file := OneLinePreview(ArgString(args, "file"))

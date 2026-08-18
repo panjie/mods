@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -136,17 +137,34 @@ func (m *Mods) footerView() string {
 		}
 	}
 
+	footer := opLine
 	if m.spinnerVisible() {
-		spin := m.spinnerLine()
-		if spin == "" {
-			return opLine
+		if spin := m.spinnerLine(); spin != "" {
+			if opLine != "" {
+				footer = spin + " " + opLine
+			} else {
+				footer = spin
+			}
 		}
-		if opLine != "" {
-			return spin + " " + opLine
-		}
-		return spin
 	}
-	return opLine
+	if plan := m.todoPlanLine(); plan != "" {
+		if footer == "" {
+			return plan
+		}
+		return plan + "\n" + footer
+	}
+	return footer
+}
+
+// todoPlanLine renders the persistent plan progress line shown above the
+// operation status while a todo_write plan is active. It follows the same
+// gating as the operation line and yields to the user-input and review
+// banners (which take over the footer earlier in footerView).
+func (m *Mods) todoPlanLine() string {
+	if m.Config == nil || !m.showOperationStatus || m.Config.HideToolStatus || len(m.todoItems) == 0 {
+		return ""
+	}
+	return ui.TodoFooterLine(m.Styles, m.todoItems, m.width)
 }
 
 // spinnerPhase derives the animation palette from the current runtime state.
@@ -272,6 +290,9 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd 
 	if m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus {
 		return nil
 	}
+	if name == toolregistry.TodoWriteToolName && err == nil && IsOutputTTY() && m.appendTodoPanel(data) {
+		return nil
+	}
 	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())
 	if status == "" {
 		return nil
@@ -346,6 +367,14 @@ func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 }
 
 func (m *Mods) appendToOutputWithDisplayBlock(raw, block string) {
+	// The marker is replaced by its block via an exact whole-line match after
+	// glamour rendering, so it must start on its own line. When the display
+	// stream does not end in a newline (e.g. a block appended mid-stream
+	// right after streamed text), word wrap would glue the marker to that
+	// text and defeat the replacement — insert a paragraph boundary first.
+	if s := m.displayOutputBuilder.String(); s != "" && !strings.HasSuffix(s, "\n") {
+		m.appendToOutputWithDisplay("\n\n", "\n\n")
+	}
 	marker := m.nextDisplayBlockMarker(block)
 	m.appendToOutputWithDisplay(raw, marker+"\n\n")
 }

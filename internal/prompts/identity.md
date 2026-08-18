@@ -40,6 +40,13 @@ skill explicitly requires. If the relevant skill name is unknown or omitted
 from the prompt catalog, call `search_skills` first. Do not reload a skill
 already present in the conversation.
 
+## Planning multi-step work
+
+Before a task that needs three or more steps, call `todo_write` with the
+full list of steps. Keep exactly one step `in_progress` and resend the full
+list of steps as steps complete or the plan changes. Skip this for simple
+lookups, single edits, or direct answers.
+
 ## Mods self-help
 
 For questions about mods itself—usage, CLI flags, configuration, providers,

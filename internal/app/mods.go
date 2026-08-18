@@ -79,22 +79,28 @@ type Mods struct {
 	showOperationStatus     bool
 	Thought                 string
 	thoughtFlushed          bool
-	tokenUsage              proto.TokenUsage
-	debugTurn               int
-	debugRound              int
-	debugTurnStarted        time.Time
-	debugTurnActive         bool
-	debugRoundStarted       time.Time
-	debugThoughtStart       int
-	debugActivities         []string
-	debugToolTotal          int
-	debugToolRounds         int
-	debugToolSucceeded      int
-	debugToolExited         int
-	debugToolFailed         int
-	debugToolDenied         int
-	debugToolCorrected      int
-	debugToolCancelled      int
+	// todoItems mirrors the most recent todo_write plan so the footer can
+	// render persistent progress. Updated on the Update goroutine from
+	// handleToolCallsDone; reset per turn by setupStreamContext when the
+	// previous plan completed, and restored from session history on
+	// --continue while still in progress.
+	todoItems          []ui.TodoItem
+	tokenUsage         proto.TokenUsage
+	debugTurn          int
+	debugRound         int
+	debugTurnStarted   time.Time
+	debugTurnActive    bool
+	debugRoundStarted  time.Time
+	debugThoughtStart  int
+	debugActivities    []string
+	debugToolTotal     int
+	debugToolRounds    int
+	debugToolSucceeded int
+	debugToolExited    int
+	debugToolFailed    int
+	debugToolDenied    int
+	debugToolCorrected int
+	debugToolCancelled int
 
 	db     *DB
 	Config *Config
@@ -636,6 +642,11 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	completionStatus := ""
 	var outputCmds []tea.Cmd
 	for _, call := range msg.results {
+		if call.Name == toolregistry.TodoWriteToolName && call.Err == nil {
+			if items := ui.TodoItemsFromArgs(call.Arguments); len(items) > 0 {
+				m.todoItems = items
+			}
+		}
 		if !errors.Is(call.Err, errReviewUnavailable) {
 			outputCmds = append(outputCmds, m.toolResultOutputCmd(call.Name, call.Arguments, call.Err))
 			if status := toolCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {

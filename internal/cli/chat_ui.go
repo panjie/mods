@@ -112,7 +112,11 @@ func renderChatSaved(id string) {
 		return
 	}
 	styles := makeChatStyles()
-	_, _ = lipgloss.Fprintln(chatOutput, styles.interaction.Success.Render("✓ SAVED")+"  "+styles.interaction.Meta.Render(id[:ShortIDLength]))
+	marker := "✓"
+	if config.NerdFontGlyphs {
+		marker = ui.NerdMark
+	}
+	_, _ = lipgloss.Fprintln(chatOutput, styles.interaction.Success.Render(marker+" SAVED")+"  "+styles.interaction.Meta.Render(id[:ShortIDLength]))
 }
 
 type chatPromptModel struct {

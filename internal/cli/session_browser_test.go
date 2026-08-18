@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +17,7 @@ func TestSessionBrowserFilterUsesRealCursor(t *testing.T) {
 		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
 		Title:     "中文会话",
 		UpdatedAt: time.Now(),
-	}})
+	}}, false)
 	_, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	_, _ = model.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	require.Equal(t, list.Filtering, model.list.FilterState())
@@ -48,7 +49,7 @@ func TestSessionBrowserDoesNotQueryTerminalOutsideBubbleTea(t *testing.T) {
 		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
 		Title:     "terminal probe regression",
 		UpdatedAt: time.Now(),
-	}})
+	}}, false)
 	_, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	require.NotEmpty(t, model.View().Content)
 	require.NotEmpty(t, model.buildViewerHeader(convItem{conv: Session{
@@ -80,7 +81,7 @@ func TestSessionBrowserRowTruncatesWideTitlesToOneLine(t *testing.T) {
 		UpdatedAt: time.Now(),
 		API:       &api,
 		Model:     &modelName,
-	}})
+	}}, false)
 	_, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 
 	var row strings.Builder
@@ -92,7 +93,7 @@ func TestSessionBrowserRowTruncatesWideTitlesToOneLine(t *testing.T) {
 }
 
 func TestSessionBrowserConfirmPanelTruncatesWideTitles(t *testing.T) {
-	model := newBrowserModel(nil)
+	model := newBrowserModel(nil, false)
 	_, _ = model.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
 	model.confirmTargets = []convItem{{conv: Session{
 		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
@@ -112,10 +113,30 @@ func TestSessionBrowserListFooterLabelsCopyID(t *testing.T) {
 		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
 		Title:     "copy label",
 		UpdatedAt: time.Now(),
-	}})
+	}}, false)
 	_, _ = model.Update(tea.WindowSizeMsg{Width: 160, Height: 24})
 
 	footer := ansi.Strip(model.viewFooter())
 
 	require.Contains(t, footer, "copy id")
+}
+
+func TestSessionBrowserNerdGlyphs(t *testing.T) {
+	session := Session{
+		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
+		Title:     "nerd glyphs",
+		UpdatedAt: time.Now(),
+	}
+	model := newBrowserModel([]Session{session}, true)
+	_, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := ansi.Strip(model.View().Content)
+	require.Contains(t, view, ui.NerdChevron, "selected row must use the nerd cursor glyph")
+	require.NotContains(t, view, "❯")
+
+	model.toggleMark()
+	model.statusMsg = ""
+	view = ansi.Strip(model.View().Content)
+	require.Contains(t, view, ui.NerdBookmark+" 1 marked", "footer badge must use the nerd bookmark glyph")
+	require.NotContains(t, view, "◉")
 }

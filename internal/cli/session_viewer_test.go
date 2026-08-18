@@ -18,7 +18,7 @@ import (
 
 func newLoadedViewer(t *testing.T, width, height int, messages []proto.Message) *browserModel {
 	t.Helper()
-	m := newBrowserModel(nil)
+	m := newBrowserModel(nil, false)
 	m.width = width
 	m.height = height
 	m.state = stateViewing
@@ -359,7 +359,7 @@ func TestViewerHighlightLimitSummary(t *testing.T) {
 }
 
 func TestViewerLoadingErrorEmptyAndCloseReset(t *testing.T) {
-	m := newBrowserModel(nil)
+	m := newBrowserModel(nil, false)
 	m.width, m.height = 40, 10
 	m.state = stateViewing
 	m.viewerHeader = "session\nmetadata\nrule"

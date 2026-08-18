@@ -88,6 +88,7 @@ var Help = map[string]string{
 	"chat":             "Start a continuous session; press Ctrl+C to quit",
 	"list-sessions":    "Interactively browse, view, and delete saved sessions",
 	"theme":            "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
+	"nerd-font-glyphs": "Use Nerd Font icons for radio/checkbox markers and status glyphs; requires a Nerd Font terminal font",
 	"editor":           "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":      "MCP Servers configurations",
 
@@ -262,6 +263,7 @@ type PersistentConfig struct {
 	Roles               map[string][]string
 	Prompts             PromptConfig `yaml:"prompts"`
 	Theme               string
+	NerdFontGlyphs      bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
 	MCPServers          map[string]MCPServerConfig `yaml:"mcp-servers"`
 	MCPTimeout          time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
 	BuiltinTools        BuiltinToolsConfig         `yaml:"builtin-tools"`

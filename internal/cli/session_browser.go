@@ -185,11 +185,19 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 	// Cursor / mark column.
 	cursor := " "
 	if selected {
-		cursor = d.b.styles.cursor.Render("❯")
+		if d.b.nerdGlyphs {
+			cursor = d.b.styles.cursor.Render(ui.NerdChevron)
+		} else {
+			cursor = d.b.styles.cursor.Render("❯")
+		}
 	}
 	glyph := " "
 	if marked {
-		glyph = d.b.styles.markGlyph.Render("◉")
+		if d.b.nerdGlyphs {
+			glyph = d.b.styles.markGlyph.Render(ui.NerdBookmark)
+		} else {
+			glyph = d.b.styles.markGlyph.Render("◉")
+		}
 	}
 
 	id := styles.ShaHash.Render(ci.conv.ID[:ShortIDLength])
@@ -281,6 +289,8 @@ type browserModel struct {
 
 	marks map[string]bool
 
+	nerdGlyphs bool
+
 	state          browserState
 	confirmTargets []convItem
 
@@ -289,17 +299,18 @@ type browserModel struct {
 	textStyles ui.Styles
 }
 
-func newBrowserModel(sessions []Session) *browserModel {
+func newBrowserModel(sessions []Session, nerdGlyphs bool) *browserModel {
 	items := make([]list.Item, 0, len(sessions))
 	for _, c := range sessions {
 		items = append(items, convItem{conv: c})
 	}
 
 	m := &browserModel{
-		db:    db,
-		marks: map[string]bool{},
-		state: stateBrowsing,
-		width: 80, height: 24,
+		db:         db,
+		marks:      map[string]bool{},
+		nerdGlyphs: nerdGlyphs,
+		state:      stateBrowsing,
+		width:      80, height: 24,
 		styles:     makeBrowserStyles(true),
 		textStyles: ui.MakeStyles(true),
 	}
@@ -842,7 +853,11 @@ func (m *browserModel) viewTitle() string {
 	case m.statusMsg != "":
 		right = m.styles.status.Render(m.statusMsg)
 	case len(m.marks) > 0:
-		right = m.styles.markedBadge.Render(fmt.Sprintf("◉ %d marked", len(m.marks)))
+		markGlyph := "◉"
+		if m.nerdGlyphs {
+			markGlyph = ui.NerdBookmark
+		}
+		right = m.styles.markedBadge.Render(fmt.Sprintf("%s %d marked", markGlyph, len(m.marks)))
 	}
 
 	bar := left
@@ -987,9 +1002,9 @@ func plural(n int) string {
 
 // runSessionBrowser starts the interactive browser over the supplied
 // sessions. It is only invoked on a fully interactive TTY.
-func runSessionBrowser(sessions []Session) error {
+func runSessionBrowser(sessions []Session, nerdGlyphs bool) error {
 	program := tea.NewProgram(
-		newBrowserModel(sessions),
+		newBrowserModel(sessions, nerdGlyphs),
 		tea.WithOutput(os.Stderr),
 	)
 	if _, err := program.Run(); err != nil {

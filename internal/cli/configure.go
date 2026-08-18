@@ -653,7 +653,11 @@ func confirmConfigWizardConnection(apiName, apiType, modelName, baseURL, apiKey 
 
 	fmt.Fprintf(os.Stderr, "\nTesting connection to %s... ", apiName)
 	if err := testConnection(modelName, baseURL, apiKey); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠ %s\n", err)
+		alertMark := "⚠"
+		if config.NerdFontGlyphs {
+			alertMark = ui.NerdAlert
+		}
+		fmt.Fprintf(os.Stderr, "%s %s\n", alertMark, err)
 		var saveAnyway bool
 		if confirmErr := huh.NewConfirm().
 			Title("Connection test failed. Save configuration anyway?").
@@ -671,7 +675,11 @@ func confirmConfigWizardConnection(apiName, apiType, modelName, baseURL, apiKey 
 		}
 		return true, nil
 	}
-	fmt.Fprintln(os.Stderr, "✓ OK")
+	if config.NerdFontGlyphs {
+		fmt.Fprintln(os.Stderr, ui.NerdMark+" OK")
+	} else {
+		fmt.Fprintln(os.Stderr, "✓ OK")
+	}
 	return true, nil
 }
 
@@ -803,7 +811,11 @@ func buildProviderOptions() []huh.Option[string] {
 }
 
 func configuredProviderLabel(api API) string {
-	return fmt.Sprintf("✓ %-12s  %s", api.Name, configuredProviderModelsSummary(api))
+	checkMark := "✓"
+	if config.NerdFontGlyphs {
+		checkMark = ui.NerdMark
+	}
+	return fmt.Sprintf("%s %-12s  %s", checkMark, api.Name, configuredProviderModelsSummary(api))
 }
 
 func incompleteProviderLabel(api API) string {
@@ -1101,6 +1113,7 @@ func configWizardTheme(theme string) huh.Theme {
 }
 
 func configWizardStyles(theme string, isDark bool) *huh.Styles {
+	huh.NerdGlyphs = config.NerdFontGlyphs
 	t := themeFrom(theme).Theme(isDark)
 	palette := ui.MakeStylesWithTheme(theme, isDark).Interaction.Palette
 	accent := palette.Accent
@@ -1148,6 +1161,12 @@ func configWizardStyles(theme string, isDark bool) *huh.Styles {
 	t.Focused.UnselectedPrefix = lipgloss.NewStyle().
 		Foreground(muted).
 		SetString("[ ] ")
+	if config.NerdFontGlyphs {
+		t.Focused.SelectedPrefix = lipgloss.NewStyle().Foreground(success).SetString(ui.NerdCheckOn + " ")
+		t.Focused.UnselectedPrefix = lipgloss.NewStyle().Foreground(muted).SetString(ui.NerdCheckOff + " ")
+		t.Blurred.SelectedPrefix = t.Focused.SelectedPrefix
+		t.Blurred.UnselectedPrefix = t.Focused.UnselectedPrefix
+	}
 	t.Focused.FocusedButton = lipgloss.NewStyle().
 		Foreground(accentSoft).
 		Background(accent).

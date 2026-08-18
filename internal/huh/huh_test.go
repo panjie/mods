@@ -1691,3 +1691,21 @@ func requireContains(tb testing.TB, s, subtr string) {
 }
 
 func viewModel(m Model) string { return ansi.Strip(m.View()) }
+
+func TestMultiSelectPrintOptionsNerdGlyphs(t *testing.T) {
+	opts := NewOptions("one", "two")
+	opts[0] = opts[0].Selected(true)
+	m := NewMultiSelect[string]().Options(opts...)
+
+	var sb bytes.Buffer
+	m.printOptions(&sb)
+	requireContains(t, sb.String(), "1. ✓ one")
+	requireContains(t, sb.String(), "2.   two")
+
+	t.Cleanup(func() { NerdGlyphs = false })
+	NerdGlyphs = true
+	sb.Reset()
+	m.printOptions(&sb)
+	requireContains(t, sb.String(), "1. \U000f0132 one")
+	requireContains(t, sb.String(), "2.   two")
+}

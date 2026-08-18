@@ -324,6 +324,27 @@ func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {
 	require.Contains(t, string(content), "show-token-usage: false")
 }
 
+func TestNerdFontGlyphsConfig(t *testing.T) {
+	require.False(t, Default().NerdFontGlyphs)
+
+	var yamlCfg Config
+	require.NoError(t, yaml.Unmarshal([]byte("nerd-font-glyphs: true"), &yamlCfg))
+	require.True(t, yamlCfg.NerdFontGlyphs)
+
+	t.Setenv("MODS_NERD_FONT_GLYPHS", "true")
+	var envCfg Config
+	require.NoError(t, env.ParseWithOptions(&envCfg, env.Options{Prefix: "MODS_"}))
+	require.True(t, envCfg.NerdFontGlyphs)
+}
+
+func TestConfigTemplateIncludesNerdFontGlyphs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mods.yml")
+	require.NoError(t, createConfigFile(path))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "nerd-font-glyphs: false")
+}
+
 func TestConfigTemplateOmitsCLIOnlyImageInputs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))

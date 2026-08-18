@@ -311,11 +311,19 @@ func (m *Mods) toolResultDisplayLine(status string) string {
 	if marker == "" {
 		return m.Styles.Comment.Render(rail + status)
 	}
+	rest := strings.TrimPrefix(status, marker)
 	markerStyle := m.Styles.Interaction.Success
 	if marker == "✗" {
 		markerStyle = m.Styles.Interaction.Danger
 	}
-	return m.Styles.Comment.Render(rail) + markerStyle.Render(marker) + m.Styles.Comment.Render(status[len(marker):])
+	if m.Config != nil && m.Config.NerdFontGlyphs {
+		if marker == "✓" {
+			marker = ui.NerdMark
+		} else {
+			marker = ui.NerdCross
+		}
+	}
+	return m.Styles.Comment.Render(rail) + markerStyle.Render(marker) + m.Styles.Comment.Render(rest)
 }
 
 func (m *Mods) appendToOutputWithDisplay(raw, display string) {

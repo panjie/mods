@@ -13,6 +13,7 @@ import (
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
 	toolregistry "github.com/panjie/mods/internal/tools"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,6 +171,158 @@ func TestUserInputMultiselectRenderAndCancel(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("esc did not cancel multiselect")
 	}
+}
+
+func TestUserInputManagerSelectRoundTrip(t *testing.T) {
+	oldTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldTTY })
+	cfg := defaultConfig()
+	manager := newUserInputManager(&cfg)
+	start := manager.startSession()
+
+	type result struct {
+		resp toolregistry.UserInputResponse
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp, err := manager.request(context.Background(), toolregistry.UserInputRequest{
+			Question: "How should the remote changes be integrated?",
+			Kind:     "select",
+			Options:  []string{"merge", "rebase", "stash"},
+		})
+		done <- result{resp: resp, err: err}
+	}()
+	manager.handleStartMsg(start().(userInputStartMsg))
+
+	// The first option is checked by default.
+	require.Equal(t, []bool{true, false, false}, manager.checked)
+
+	// Space selects the highlighted option and unchecks the previous one.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	require.Equal(t, 1, manager.selected)
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	require.Equal(t, []bool{false, true, false}, manager.checked)
+
+	// Space on the already-checked option keeps it selected.
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	require.Equal(t, []bool{false, true, false}, manager.checked)
+
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	select {
+	case got := <-done:
+		require.NoError(t, got.err)
+		require.Equal(t, "rebase", got.resp.Answer)
+	case <-time.After(time.Second):
+		t.Fatal("select request did not complete")
+	}
+}
+
+func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "How should the remote changes be integrated?",
+			Kind:     "select",
+			Options: []string{
+				"git pull (merge) - create a merge commit",
+				"git rebase - replay my commit on top of remote",
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+	for _, width := range []int{40, 60, 100} {
+		lines := strings.Split(manager.render(width, styles), "\n")
+		for _, line := range lines {
+			require.LessOrEqual(t, lipgloss.Width(line), width, "width %d: line %q overflows", width, line)
+		}
+	}
+	plain := ansi.Strip(manager.render(100, styles))
+	require.Contains(t, plain, "(•) git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "( ) git rebase - replay my commit on top of remote")
+	require.Contains(t, plain, "Space")
+	require.Contains(t, plain, "Confirm")
+	lines := strings.Split(plain, "\n")
+	mergeLine := lineIndexContaining(lines, "git pull")
+	rebaseLine := lineIndexContaining(lines, "git rebase")
+	require.Greater(t, mergeLine, -1)
+	require.Less(t, mergeLine, rebaseLine, "select choices must be stacked vertically")
+
+	// Narrow widths wrap long labels onto indented continuation lines.
+	narrow := strings.Split(ansi.Strip(manager.render(40, styles)), "\n")
+	narrowMergeLine := lineIndexContaining(narrow, "git pull")
+	require.Greater(t, narrowMergeLine, -1)
+	require.Less(t, narrowMergeLine+1, len(narrow))
+	continuation := narrow[narrowMergeLine+1]
+	require.Contains(t, continuation, "commit", "long labels must wrap onto a continuation line")
+	require.True(t, strings.HasPrefix(continuation, "┃      "),
+		"continuation must align under the label start: %q", continuation)
+}
+
+func TestUserInputSelectRendersNerdGlyphs(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.NerdFontGlyphs = true
+	manager := newUserInputManager(&cfg)
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "How should the remote changes be integrated?",
+			Kind:     "select",
+			Options: []string{
+				"git pull (merge) - create a merge commit",
+				"git rebase - replay my commit on top of remote for linear history",
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+	for _, width := range []int{40, 60, 100} {
+		for _, line := range strings.Split(manager.render(width, styles), "\n") {
+			require.LessOrEqual(t, lipgloss.Width(line), width, "width %d: line %q overflows", width, line)
+		}
+	}
+	plain := ansi.Strip(manager.render(100, styles))
+	require.Contains(t, plain, ui.NerdRadioOn+" git pull (merge) - create a merge commit")
+	require.Contains(t, plain, ui.NerdRadioOff+" git rebase - replay my commit on top of remote")
+	require.NotContains(t, plain, "(•)")
+	require.NotContains(t, plain, "[x]")
+}
+
+func TestUserInputMultiselectRendersNerdGlyphs(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.NerdFontGlyphs = true
+	manager := newUserInputManager(&cfg)
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Choose checks",
+			Kind:     "multiselect",
+			Options:  []string{"tests", "lint"},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+
+	plain := ansi.Strip(manager.render(80, styles))
+	require.Contains(t, plain, ui.NerdCheckOff+" Select all")
+	require.Contains(t, plain, ui.NerdCheckOff+" tests")
+	require.Contains(t, plain, ui.NerdCheckOff+" lint")
+
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	plain = ansi.Strip(manager.render(80, styles))
+	require.Contains(t, plain, ui.NerdCheckOn+" Select all")
+	require.Contains(t, plain, ui.NerdCheckOn+" tests")
+	require.Contains(t, plain, ui.NerdCheckOn+" lint")
+
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	manager.handleKey(tea.KeyPressMsg{Code: ' ', Text: " "})
+	plain = ansi.Strip(manager.render(80, styles))
+	require.Contains(t, plain, ui.NerdCheckMid+" Select all")
+	require.Contains(t, plain, ui.NerdCheckOn+" tests")
+	require.Contains(t, plain, ui.NerdCheckOff+" lint")
+	require.NotContains(t, plain, "[x]")
+	require.NotContains(t, plain, "[ ]")
 }
 
 func TestUserInputUnavailableInRawMode(t *testing.T) {

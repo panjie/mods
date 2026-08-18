@@ -495,6 +495,26 @@ func TestToolResultDisplayLineUsesSharedThemeStyles(t *testing.T) {
 	require.NotEqual(t, themedSuccess[0], themedSuccess[1], "semantic marker must follow the configured theme")
 }
 
+func TestToolResultDisplayLineNerdGlyphs(t *testing.T) {
+	styles := ui.MakeStylesWithTheme("dracula", true)
+	cfg := &Config{}
+	cfg.NerdFontGlyphs = true
+	m := &Mods{Styles: styles, Config: cfg}
+
+	success := m.toolResultDisplayLine("✓ fs_read_file: path=mods.go")
+	require.Equal(t,
+		styles.Comment.Render("  │ ")+styles.Interaction.Success.Render(ui.NerdMark)+styles.Comment.Render(" fs_read_file: path=mods.go"),
+		success,
+	)
+	require.Equal(t, "  │ "+ui.NerdMark+" fs_read_file: path=mods.go", ansi.Strip(success))
+
+	failure := m.toolResultDisplayLine("✗ fs_delete_file: path=mods.go · failed")
+	require.Equal(t,
+		styles.Comment.Render("  │ ")+styles.Interaction.Danger.Render(ui.NerdCross)+styles.Comment.Render(" fs_delete_file: path=mods.go · failed"),
+		failure,
+	)
+}
+
 func TestToolResultTTYUsesRendererWithoutMutatingResponse(t *testing.T) {
 	oldErrorTTY := IsErrorTTY
 	IsErrorTTY = func() bool { return true }

@@ -58,6 +58,8 @@ show-token-usage: false
 word-wrap: 80
 # {{ index .Help "theme" }}
 theme: charm
+# {{ index .Help "nerd-font-glyphs" }}
+nerd-font-glyphs: false
 
 # -----------------------------------------------------------------------------
 # Model Parameters

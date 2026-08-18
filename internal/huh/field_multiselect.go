@@ -18,6 +18,10 @@ import (
 	"github.com/charmbracelet/x/exp/ordered"
 )
 
+// NerdGlyphs switches accessible-mode option lists to Nerd Font checkbox
+// glyphs. It is set by the mods CLI when the nerd-font-glyphs setting is on.
+var NerdGlyphs bool
+
 // MultiSelect is a form multi-select field.
 type MultiSelect[T comparable] struct {
 	accessor Accessor[[]T]
@@ -697,7 +701,11 @@ func (m *MultiSelect[T]) printOptions(w io.Writer) {
 	var sb strings.Builder
 	for i, option := range m.options.val {
 		if option.selected {
-			sb.WriteString(styles.SelectedOption.Render(fmt.Sprintf("%d. %s %s", i+1, "✓", option.Key)))
+			check := "✓"
+			if NerdGlyphs {
+				check = "\U000f0132"
+			}
+			sb.WriteString(styles.SelectedOption.Render(fmt.Sprintf("%d. %s %s", i+1, check, option.Key)))
 		} else {
 			sb.WriteString(fmt.Sprintf("%d.   %s", i+1, option.Key))
 		}

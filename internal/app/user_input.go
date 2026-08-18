@@ -236,6 +236,13 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 		u.checked = make([]bool, len(item.req.Options))
 		return
 	}
+	if item.req.Kind == "select" {
+		u.checked = make([]bool, len(item.req.Options))
+		if len(u.checked) > 0 {
+			u.checked[0] = true
+		}
+		return
+	}
 	if item.req.Kind == "secret" {
 		u.secret = textinput.New()
 		u.secret.EchoMode = textinput.EchoPassword
@@ -321,13 +328,24 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return u.handleFormKey(msg)
 	}
 	if req.Kind == "select" {
+		n := len(req.Options)
 		switch msg.String() {
-		case "left", "up":
-			u.selected = (u.selected - 1 + len(req.Options)) % len(req.Options)
-		case "right", "down", "tab":
-			u.selected = (u.selected + 1) % len(req.Options)
+		case "up":
+			u.selected = (u.selected - 1 + n) % n
+		case "down", "tab":
+			u.selected = (u.selected + 1) % n
+		case " ", "space":
+			if len(u.checked) == n {
+				for i := range u.checked {
+					u.checked[i] = i == u.selected
+				}
+			}
 		case "enter":
-			return true, u.finish(userInputResult{value: req.Options[u.selected]})
+			for i, checked := range u.checked {
+				if checked {
+					return true, u.finish(userInputResult{value: req.Options[i]})
+				}
+			}
 		}
 		return true, nil
 	}
@@ -411,6 +429,59 @@ func (u *userInputManager) selectedValues(options []string) []string {
 		}
 	}
 	return values
+}
+
+// choiceRows renders the option list as one row per line. Radio rows use
+// "(•)"/"( )" markers (single choice); checkbox rows use "[x]"/"[ ]". When
+// includeSelectAll is set, a virtual "Select all" row is prepended and
+// u.selected is offset accordingly (multiselect only). With the
+// nerd-font-glyphs setting enabled, radio and checkbox rows use single-cell
+// Nerd Font glyphs instead.
+func (u *userInputManager) choiceRows(includeSelectAll, radio bool) []interactionAction {
+	nerd := u.cfg != nil && u.cfg.NerdFontGlyphs
+	offset := 0
+	capacity := len(u.item.req.Options)
+	if includeSelectAll {
+		offset = 1
+		capacity++
+	}
+	options := make([]interactionAction, 0, capacity)
+	if includeSelectAll {
+		selectAllCheckbox := "[ ]"
+		if u.allChecked() {
+			selectAllCheckbox = "[x]"
+		} else if u.anyChecked() {
+			selectAllCheckbox = "[-]"
+		}
+		if nerd {
+			selectAllCheckbox = ui.NerdCheckOff
+			if u.allChecked() {
+				selectAllCheckbox = ui.NerdCheckOn
+			} else if u.anyChecked() {
+				selectAllCheckbox = ui.NerdCheckMid
+			}
+		}
+		options = append(options, interactionAction{Key: selectAllCheckbox, Label: "Select all", Selected: u.selected == 0})
+	}
+	for i, option := range u.item.req.Options {
+		on, off := "(•)", "( )"
+		if !radio {
+			on, off = "[x]", "[ ]"
+		}
+		if nerd {
+			if radio {
+				on, off = ui.NerdRadioOn, ui.NerdRadioOff
+			} else {
+				on, off = ui.NerdCheckOn, ui.NerdCheckOff
+			}
+		}
+		marker := off
+		if i < len(u.checked) && u.checked[i] {
+			marker = on
+		}
+		options = append(options, interactionAction{Key: marker, Label: option, Selected: i+offset == u.selected})
+	}
+	return options
 }
 
 // handleFormKey dispatches keys for a kind=form prompt. Tab/Shift+Tab cycles
@@ -519,29 +590,11 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 	}
 	switch req.Kind {
 	case "select":
-		options := make([]interactionAction, len(req.Options))
-		for i, option := range req.Options {
-			options[i] = interactionAction{Key: "›", Label: option, Selected: i == u.selected}
-		}
-		panel.Choices = options
-		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Enter", Label: "Select"}, {Key: "Esc", Label: "Cancel"}}
+		panel.Choices = u.choiceRows(false, true)
+		panel.StackChoices = true
+		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Space", Label: "Select"}, {Key: "Enter", Label: "Confirm"}, {Key: "Esc", Label: "Cancel"}}
 	case "multiselect":
-		options := make([]interactionAction, len(req.Options)+1)
-		selectAllCheckbox := "[ ]"
-		if u.allChecked() {
-			selectAllCheckbox = "[x]"
-		} else if u.anyChecked() {
-			selectAllCheckbox = "[-]"
-		}
-		options[0] = interactionAction{Key: selectAllCheckbox, Label: "Select all", Selected: u.selected == 0}
-		for i, option := range req.Options {
-			checkbox := "[ ]"
-			if i < len(u.checked) && u.checked[i] {
-				checkbox = "[x]"
-			}
-			options[i+1] = interactionAction{Key: checkbox, Label: option, Selected: i+1 == u.selected}
-		}
-		panel.Choices = options
+		panel.Choices = u.choiceRows(true, false)
 		panel.StackChoices = true
 		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Space", Label: "Toggle"}, {Key: "A", Label: "Toggle all"}, {Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}}
 	case "secret":

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
 
@@ -648,4 +649,26 @@ func withInteractivePromptTest(t *testing.T, fn func(calls *[]string)) {
 	}
 
 	fn(&calls)
+}
+
+func TestRenderChatSavedNerdGlyphs(t *testing.T) {
+	saveConfig := config
+	saveIsErrorTTY := IsErrorTTY
+	saveChatOutput := chatOutput
+	t.Cleanup(func() {
+		config = saveConfig
+		IsErrorTTY = saveIsErrorTTY
+		chatOutput = saveChatOutput
+	})
+
+	config = Config{}
+	config.NerdFontGlyphs = true
+	IsErrorTTY = func() bool { return true }
+	chatOutput = &bytes.Buffer{}
+
+	renderChatSaved("df31ae23ab8b75b5643c2f846c570997edc71333")
+
+	got := ansi.Strip(chatOutput.(*bytes.Buffer).String())
+	require.Contains(t, got, ui.NerdMark+" SAVED")
+	require.NotContains(t, got, "✓")
 }

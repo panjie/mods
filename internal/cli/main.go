@@ -508,7 +508,7 @@ func listSessions(raw bool) error {
 	}
 
 	if IsInputTTY() && IsOutputTTY() && !raw {
-		return runSessionBrowser(sessions)
+		return runSessionBrowser(sessions, config.NerdFontGlyphs)
 	}
 	printList(sessions)
 	return nil

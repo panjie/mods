@@ -80,7 +80,7 @@ func RenderInteractionPanelView(styles InteractionStyles, width int, panel Inter
 		lines = append(lines, "")
 		if panel.StackChoices {
 			for _, choice := range panel.Choices {
-				lines = append(lines, renderInteractionAction(styles, choice))
+				lines = append(lines, renderStackedInteractionAction(styles, innerWidth, choice)...)
 			}
 		} else {
 			lines = append(lines, packInteractionActions(styles, innerWidth, panel.Choices)...)
@@ -179,6 +179,36 @@ func renderInteractionAction(styles InteractionStyles, action InteractionAction)
 		return key
 	}
 	return key + styles.Action.Render(action.Label)
+}
+
+// renderStackedInteractionAction renders one stacked choice at the given width,
+// hardwrapping the label so long option text never overflows the panel.
+// Continuation lines are indented to align under the label start, matching the
+// first-line offset produced by the styled key (or the selected highlight).
+func renderStackedInteractionAction(styles InteractionStyles, width int, action InteractionAction) []string {
+	keyWidth := lipgloss.Width(styles.Key.Render(action.Key))
+	labelWidth := max(1, width-keyWidth-1)
+	labelLines := strings.Split(ansi.Hardwrap(action.Label, labelWidth, false), "\n")
+	lines := make([]string, 0, len(labelLines))
+	if action.Selected {
+		for i, label := range labelLines {
+			if i == 0 {
+				lines = append(lines, styles.Selected.Render(strings.TrimSpace(action.Key+" "+label)))
+			} else {
+				lines = append(lines, styles.Selected.Render(strings.Repeat(" ", max(0, keyWidth-1))+label))
+			}
+		}
+		return lines
+	}
+	indent := strings.Repeat(" ", keyWidth)
+	for i, label := range labelLines {
+		if i == 0 {
+			lines = append(lines, styles.Key.Render(action.Key)+styles.Action.Render(label))
+		} else {
+			lines = append(lines, indent+styles.Action.Render(label))
+		}
+	}
+	return lines
 }
 
 func interactionToneStyle(styles InteractionStyles, tone InteractionTone) lipgloss.Style {

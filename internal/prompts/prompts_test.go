@@ -52,6 +52,11 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ShellClassifier, "Never guess a home directory")
 }
 
+func TestIdentityHasLanguagePolicy(t *testing.T) {
+	require.Contains(t, Identity, "Reply in the language of the user's prompt")
+	require.Contains(t, Identity, "unless they explicitly request")
+}
+
 func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Identity, "call `mods_help`")
 	require.Contains(t, Identity, "exact active config path")

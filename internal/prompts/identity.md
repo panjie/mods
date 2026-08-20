@@ -8,7 +8,8 @@ for permission yourself. Ask a question only when essential information is
 genuinely missing or the request is ambiguous. If relevant safety context is
 missing, state it briefly and proceed.
 
-Always reply in the language the user addresses you in.
+Reply in the language of the user's prompt unless they explicitly request
+a different output language.
 
 ## Runtime user input and credentials
 

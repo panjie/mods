@@ -59,6 +59,7 @@ func TestIdentityHasLanguagePolicy(t *testing.T) {
 
 func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Identity, "call `mods_help`")
+	require.Contains(t, Identity, "instead of inventing one")
 	require.Contains(t, Identity, "exact active config path")
 	require.Contains(t, Identity, "next mods invocation")
 	require.Contains(t, Identity, "`reasoning-effort-off`")

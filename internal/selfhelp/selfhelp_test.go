@@ -58,6 +58,15 @@ func TestGeneratedInventoriesAreNotMaintainedInGuidance(t *testing.T) {
 	require.NotContains(t, guidance, "### Built-in tool catalog")
 }
 
+func TestConfigTopicNamesSettingsChangeMechanisms(t *testing.T) {
+	reference := NewReference(Catalog{})
+	got, err := reference.Lookup(TopicConfig)
+	require.NoError(t, err)
+	require.Contains(t, got, "mods --settings")
+	require.Contains(t, got, "nerd-font-glyphs: true")
+	require.Contains(t, got, "no `config set`-style command")
+}
+
 func TestDetectTopic(t *testing.T) {
 	tests := []struct {
 		prompt string

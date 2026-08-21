@@ -27,6 +27,13 @@ and unrelated values. Reads and writes outside the workspace use mods' normal
 directory approval flow. Do not read or echo API keys. Prefer `api-key-env`
 instead of putting a secret directly in YAML.
 
+For a manual command instead, `mods --settings 'nerd-font-glyphs: true'`
+recursively merges a YAML mapping into the settings file, bare
+`mods --settings` opens the file in `$EDITOR`, and `mods --config` starts the
+interactive setup wizard. Mods has no `config set`-style command; recommend only
+commands and flags that appear in this reference, and say no such option exists
+when it does not.
+
 The settings below are generated from the persisted config types and the safe
 defaults returned by mods itself. Dynamic mapping names use placeholders such
 as `<provider>`, `<model>`, and `<server>`. Secret-bearing and opaque fields
@@ -142,5 +149,5 @@ available, with the executable skill directory added as another source.
   does not hot-reload `mods.yml`.
 - Wrong config path: use `mods_help` or the directory-reporting command;
   portable mode and XDG environment settings change the location.
-- For terminal reference, run `mods --help`; for guided setup, run the config
-  wizard; to edit manually, use the settings editor command.
+- For terminal reference, run `mods --help`; for guided setup, run
+  `mods --config`; to edit manually, run `mods --settings`.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/panjie/mods/internal/proto"
 )
@@ -84,6 +85,9 @@ func TestCallToolPreservesResults(t *testing.T) {
 	t.Run("arguments are stored in status", func(t *testing.T) {
 		args := []byte(`{"query":"test"}`)
 		_, status := callToolForTest("tid", "tool", args, func(name string, data []byte) (string, error) {
+			// Take measurable time: on Windows the monotonic clock is too
+			// coarse for an instant call to register a positive duration.
+			time.Sleep(2 * time.Millisecond)
 			return "result", nil
 		})
 		if string(status.Arguments) != string(args) {

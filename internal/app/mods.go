@@ -421,6 +421,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Error = &modsError{Err: msg, ReasonText: msg.Error()}
 		m.state = errorState
 		return m, m.quit
+	case quitMsg:
+		m.userInput.reset()
+		return m, tea.Quit
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.glamViewport.SetWidth(m.width)
@@ -525,7 +528,6 @@ func (m *Mods) quit() tea.Msg {
 	// calls. close() is idempotent so racing with receiveCmd's error path
 	// is harmless.
 	m.closeActiveRunner()
-	m.userInput.reset()
 	if m.secrets != nil {
 		m.secrets.Clear()
 	}
@@ -536,7 +538,10 @@ func (m *Mods) quit() tea.Msg {
 	for _, cancel := range cancels {
 		cancel()
 	}
-	return tea.Quit()
+	// Model state is not touched here: Cmds run on their own goroutines
+	// concurrently with Update/View. userInput.reset() happens in Update when
+	// quitMsg arrives so it can never race renderFormBody mid-render.
+	return quitMsg{}
 }
 
 func (m *Mods) toolRoundLimitExceeded(maxTotal int, st stream.Stream) bool {

@@ -1437,6 +1437,34 @@ func TestStreamDoneAccumulatesUsageAcrossStreamsOnce(t *testing.T) {
 	}, m.TokenUsage())
 }
 
+// TestQuitResetsUserInputViaUpdateOnly guards against the Ctrl+C-during-form
+// panic: Bubble Tea runs Cmds on their own goroutines while the event loop
+// renders, so quit() must not mutate userInput state (reset() nil'ing
+// formFields mid-render crashed renderFormBody). Only the quitMsg handler
+// inside Update may reset it.
+func TestQuitResetsUserInputViaUpdateOnly(t *testing.T) {
+	m := testMods(t)
+	m.userInput = newUserInputManager(&Config{})
+	m.userInput.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Form?",
+			Kind:     "form",
+			Fields:   []toolregistry.UserInputField{{Key: "a", Label: "A"}},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	require.True(t, m.userInput.isPending())
+
+	msg := m.quit()
+	require.True(t, m.userInput.isPending(), "quit Cmd must not reset user input off the Update loop")
+	require.IsType(t, quitMsg{}, msg)
+
+	model, cmd := m.Update(msg)
+	require.Same(t, m, model)
+	require.False(t, m.userInput.isPending(), "quitMsg must reset user input in Update")
+	require.Equal(t, tea.QuitMsg{}, cmd())
+}
+
 // TestQuitCancelsRequestContext guards the C1 fix: quitting must cancel the
 // request context (m.ctx) so every in-flight provider HTTP request, tool call,
 // shell-classifier call, and approval/user-input select derived from it aborts

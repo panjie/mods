@@ -73,6 +73,11 @@ type userInputStartMsg struct {
 	item userInputItem
 }
 
+// quitMsg is returned by quit() after its goroutine-safe teardown so the
+// model-mutating parts (user input reset) happen in Update, never on a
+// command goroutine that races View.
+type quitMsg struct{}
+
 type sessionDetailsMsg struct {
 	WriteID, Title, ReadID string
 	Rules                  []Rule

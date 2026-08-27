@@ -25,16 +25,20 @@ func TestBuiltinSpecs(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("BuiltinSpecs returned no tools")
 	}
-	// Cross-platform builtins that must always be present (powershell_run is
-	// Windows-only and intentionally not asserted here).
+	// Cross-platform builtins that must always be present (the shell tool is
+	// platform-specific: powershell_run on Windows, shell_run elsewhere).
 	want := map[string]bool{
 		"fs_read_file":  false,
 		"fs_write_file": false,
 		"fs_replace":    false,
 		"mods_help":     false,
 		"search_skills": false,
-		"shell_run":     false,
 		"web_search":    false,
+	}
+	if runtime.GOOS == "windows" {
+		want["powershell_run"] = false
+	} else {
+		want["shell_run"] = false
 	}
 	seen := map[string]bool{}
 	for _, info := range got {

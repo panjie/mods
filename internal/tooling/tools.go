@@ -77,19 +77,23 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		if err := toolregistry.RegisterRuntimeInfo(registry, root); err != nil {
 			return nil, err
 		}
-		if err := toolregistry.RegisterShell(registry, toolregistry.ShellConfig{
-			Root:       root,
-			Timeout:    cfg.BuiltinTools.ShellTimeout,
-			SudoPrompt: handlers.SudoPrompt,
-			Progress:   handlers.ShellProgress,
-		}); err != nil {
-			return nil, err
-		}
+		// Windows exposes only powershell_run: both names share the same
+		// PowerShell host, so registering shell_run there would offer the
+		// model a second label for the identical executor.
 		if runtime.GOOS == "windows" {
 			if err := toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{
 				Root:     root,
 				Timeout:  cfg.BuiltinTools.ShellTimeout,
 				Progress: handlers.ShellProgress,
+			}); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := toolregistry.RegisterShell(registry, toolregistry.ShellConfig{
+				Root:       root,
+				Timeout:    cfg.BuiltinTools.ShellTimeout,
+				SudoPrompt: handlers.SudoPrompt,
+				Progress:   handlers.ShellProgress,
 			}); err != nil {
 				return nil, err
 			}
@@ -193,12 +197,13 @@ func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 	registry := toolregistry.NewRegistry()
 	// Best-effort registration; listing must not fail if one tool errors.
 	_ = toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: root})
-	_ = toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: root})
-	_ = toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{Root: root})
-	_ = toolregistry.RegisterRuntimeInfo(registry, root)
 	if runtime.GOOS == "windows" {
 		_ = toolregistry.RegisterPowerShell(registry, toolregistry.ShellConfig{Root: root})
+	} else {
+		_ = toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: root})
 	}
+	_ = toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{Root: root})
+	_ = toolregistry.RegisterRuntimeInfo(registry, root)
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{})
 	_ = toolregistry.RegisterTodoWrite(registry)

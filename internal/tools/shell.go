@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 )
@@ -267,6 +268,9 @@ func validateSecretEnv(env map[string]string) error {
 	for name := range env {
 		if !envNamePattern.MatchString(name) {
 			return fmt.Errorf("invalid environment variable name %q", name)
+		}
+		if pathutil.IsStableEnvName(name) {
+			return fmt.Errorf("environment variable name %q is reserved for path classification", name)
 		}
 	}
 	return nil

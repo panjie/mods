@@ -299,7 +299,7 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `fs_search`          | Search file contents across the workspace.                |
 | `fs_apply_patch`     | Atomically apply unified or Codex-format multi-file edits. |
 | `process_run`        | Execute one program with literal argv and structured output. |
-| `shell_run`          | Execute shell commands (prefix-allowable through review). |
+| `shell_run`          | Execute shell commands (POSIX; Windows uses `powershell_run` only). |
 | `runtime_info`       | Inspect the selected shell and resolve command availability. |
 
 Filesystem tools default to `auto`; shell is enabled by default. Toggle them in

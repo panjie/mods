@@ -51,6 +51,56 @@ func TestExpandTokenCMD(t *testing.T) {
 	require.Equal(t, `C:\Users\Test\Downloads`, NormalizePath(`%HOMEDRIVE%%HOMEPATH%\Downloads`, opts))
 }
 
+func TestIsStableEnvName(t *testing.T) {
+	require.True(t, IsStableEnvName("SystemRoot"))
+	require.True(t, IsStableEnvName(" programfiles(x86) "))
+	require.False(t, IsStableEnvName("USERPROFILE"))
+	require.False(t, IsStableEnvName("AWS_SHARED_CREDENTIALS_FILE"))
+}
+
+func TestExpandStableEnvPath(t *testing.T) {
+	opts := Options{
+		Workspace: `C:\work\project`,
+		Env: map[string]string{
+			"SYSTEMROOT":        `C:\Windows`,
+			"PROGRAMFILES(X86)": `C:\Program Files (x86)`,
+			"TEMP":              `C:\Users\Test\AppData\Local\Temp`,
+		},
+		Flavor: FlavorPowerShell,
+	}
+
+	expanded, ok := ExpandStableEnvPath(`$env:SystemRoot\WinSxS`, opts)
+	require.True(t, ok)
+	require.Equal(t, `C:\Windows\WinSxS`, expanded)
+
+	expanded, ok = ExpandStableEnvPath(`$ENV:SYSTEMROOT/WinSxS`, opts)
+	require.True(t, ok)
+	require.Equal(t, `C:\Windows\WinSxS`, expanded)
+
+	expanded, ok = ExpandStableEnvPath(`${env:ProgramFiles(x86)}\Vendor`, opts)
+	require.True(t, ok)
+	require.Equal(t, `C:\Program Files (x86)\Vendor`, expanded)
+
+	expanded, ok = ExpandStableEnvPath(`$env:TEMP\build`, opts)
+	require.True(t, ok)
+	require.Equal(t, `C:\Users\Test\AppData\Local\Temp\build`, expanded)
+
+	expanded, ok = ExpandStableEnvPath(`$env:TEMP\..\..\Documents`, opts)
+	require.True(t, ok)
+	require.Equal(t, `C:\Users\Test\AppData\Documents`, expanded)
+
+	_, ok = ExpandStableEnvPath(`$env:SystemRoot`, opts)
+	require.False(t, ok, "bare value reference must stay dynamic")
+	_, ok = ExpandStableEnvPath(`${env:SystemRoot}`, opts)
+	require.False(t, ok, "braced bare reference must stay dynamic")
+	_, ok = ExpandStableEnvPath(`$env:AWS_SHARED_CREDENTIALS_FILE\creds`, opts)
+	require.False(t, ok, "non-stable variable must stay dynamic")
+	_, ok = ExpandStableEnvPath(`$env:ProgramData\`, opts)
+	require.False(t, ok, "unset variable must stay dynamic")
+	_, ok = ExpandStableEnvPath(`$env:SystemRoot\WinSxS`, Options{Flavor: FlavorPOSIX, Env: opts.Env})
+	require.False(t, ok, "POSIX flavor must not expand PowerShell env references")
+}
+
 func TestContains(t *testing.T) {
 	require.True(t, Contains("/tmp/cache", "/tmp/cache/file"))
 	require.True(t, Contains("/tmp/cache", "/tmp/cache"))

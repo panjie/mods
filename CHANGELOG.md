@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
+- Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.
 
 ### Removed
 - Removed the DuckDuckGo web search provider.

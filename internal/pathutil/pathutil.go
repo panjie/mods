@@ -378,6 +378,71 @@ func envValue(opts Options, key string) string {
 	return os.Getenv(key)
 }
 
+// stableEnvPathVars lists machine-level Windows location variables whose
+// values are fixed for the lifetime of the mods process, so a PowerShell
+// path reference to one of them resolves identically at classification time
+// and inside the child shell.
+var stableEnvPathVars = map[string]bool{
+	"APPDATA": true, "COMSPEC": true, "LOCALAPPDATA": true, "PROGRAMDATA": true,
+	"PROGRAMFILES": true, "PROGRAMFILES(X86)": true, "SYSTEMDRIVE": true,
+	"SYSTEMROOT": true, "TEMP": true, "TMP": true, "WINDIR": true,
+}
+
+// IsStableEnvName reports whether name is one of the machine-level location
+// variables ExpandStableEnvPath may resolve. Secret environment injection
+// reserves these names so classification and the child shell cannot disagree.
+func IsStableEnvName(name string) bool {
+	return stableEnvPathVars[strings.ToUpper(strings.TrimSpace(name))]
+}
+
+// ExpandStableEnvPath resolves a PowerShell $env:NAME or ${env:NAME} token
+// whose variable holds a machine-level location (SystemRoot, ProgramFiles,
+// ...) into a concrete absolute path. Only path-shaped references (a path
+// separator follows the variable name) resolve; bare value references stay
+// dynamic. Resolution fails unless the value is present and absolute.
+func ExpandStableEnvPath(token string, opts Options) (string, bool) {
+	if opts.Flavor != FlavorPowerShell {
+		return "", false
+	}
+	token = strings.TrimSpace(token)
+	for _, form := range [...]string{"${env:", "$env:"} {
+		if !hasCaseInsensitivePrefix(token, form) {
+			continue
+		}
+		rest := token[len(form):]
+		name, tail, ok := stableEnvNameAndTail(rest, strings.HasPrefix(form, "${"))
+		if !ok {
+			continue
+		}
+		value := envValue(opts, name)
+		if value == "" || !IsAbs(value) {
+			continue
+		}
+		return joinHome(value, tail), true
+	}
+	return "", false
+}
+
+func stableEnvNameAndTail(rest string, braced bool) (name, tail string, ok bool) {
+	if braced {
+		end := strings.IndexByte(rest, '}')
+		if end <= 0 {
+			return "", "", false
+		}
+		name, tail = rest[:end], rest[end+1:]
+	} else {
+		sep := strings.IndexAny(rest, `/\`)
+		if sep <= 0 {
+			return "", "", false
+		}
+		name, tail = rest[:sep], rest[sep:]
+	}
+	if tail == "" || tail[0] != '/' && tail[0] != '\\' {
+		return "", "", false
+	}
+	return name, tail, stableEnvPathVars[strings.ToUpper(name)]
+}
+
 func expandHomeVariable(token string, opts Options) (string, bool) {
 	home := userHome(opts)
 	if home == "" {

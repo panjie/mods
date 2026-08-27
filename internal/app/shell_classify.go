@@ -75,6 +75,16 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 		}
 		result = mergeCommandAssessment(result, completion)
 	}
+	// Path-shaped references to machine-level location variables ($env:SystemRoot,
+	// $env:ProgramFiles, ...) resolve deterministically for the child shell, so a
+	// proven read can carry them as concrete directories. This makes the approval
+	// scope rule-saveable instead of an unresolvable dynamic target. Probes keep
+	// their dynamic-target auto-allow semantics, and commands that reassign the
+	// environment never expand: the child would observe a different value.
+	if flavor == pathutil.FlavorPowerShell && result.Effect == approval.EffectRead && !result.DynamicProbe &&
+		!commandMutatesPowerShellEnvironment(command) {
+		result.KnownDirs, result.DynamicTargets = resolveStableEnvTargets(result.KnownDirs, result.DynamicTargets, ws)
+	}
 	// A statically proven read with no explicit external target operates in the
 	// configured workspace context. Classifier-completed commands do not get
 	// this fallback: cwd is execution context, not evidence of an affected dir.

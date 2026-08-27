@@ -99,7 +99,7 @@ func TestToolIntentContextCarriesRecentConfigIntent(t *testing.T) {
 	require.True(t, shouldEnableFilesystemTools(&cfg, context))
 }
 
-func TestBuildToolRegistryPowerShellRun(t *testing.T) {
+func TestBuildToolRegistryShellToolsByPlatform(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.BuiltinTools.Shell = true
 	cfg.WebSearch = false
@@ -108,18 +108,22 @@ func TestBuildToolRegistryPowerShellRun(t *testing.T) {
 		t.Fatalf("build registry: %v", err)
 	}
 
-	found := false
-	for _, spec := range registry.Specs() {
-		if spec.Name == "powershell_run" {
-			found = true
-			break
+	_, hasPowerShell := registry.Tool("powershell_run")
+	_, hasShell := registry.Tool("shell_run")
+	if runtime.GOOS == "windows" {
+		if !hasPowerShell {
+			t.Fatal("expected powershell_run on Windows")
 		}
-	}
-	if runtime.GOOS == "windows" && !found {
-		t.Fatal("expected powershell_run on Windows")
-	}
-	if runtime.GOOS != "windows" && found {
-		t.Fatal("did not expect powershell_run outside Windows")
+		if hasShell {
+			t.Fatal("did not expect shell_run on Windows; powershell_run is the only shell tool")
+		}
+	} else {
+		if hasPowerShell {
+			t.Fatal("did not expect powershell_run outside Windows")
+		}
+		if !hasShell {
+			t.Fatal("expected shell_run outside Windows")
+		}
 	}
 }
 
@@ -136,24 +140,17 @@ func TestToolCallContextTimeoutPolicy(t *testing.T) {
 
 	mods := &Mods{ctx: context.Background()}
 
-	if got := registry.TimeoutPolicy("shell_run"); got != toolregistry.TimeoutPolicySelf {
-		t.Fatalf("unexpected shell timeout policy: %q", got)
+	shellTool := "powershell_run"
+	if runtime.GOOS != "windows" {
+		shellTool = "shell_run"
 	}
-	ctx, cancel := mods.toolCallContext(registry, "shell_run", &cfg)
+	if got := registry.TimeoutPolicy(shellTool); got != toolregistry.TimeoutPolicySelf {
+		t.Fatalf("unexpected %s timeout policy: %q", shellTool, got)
+	}
+	ctx, cancel := mods.toolCallContext(registry, shellTool, &cfg)
 	defer cancel()
 	if _, ok := ctx.Deadline(); ok {
-		t.Fatal("shell_run context should not inherit mcp-timeout deadline")
-	}
-
-	if runtime.GOOS == "windows" {
-		if got := registry.TimeoutPolicy("powershell_run"); got != toolregistry.TimeoutPolicySelf {
-			t.Fatalf("unexpected powershell timeout policy: %q", got)
-		}
-		ctx, cancel := mods.toolCallContext(registry, "powershell_run", &cfg)
-		defer cancel()
-		if _, ok := ctx.Deadline(); ok {
-			t.Fatal("powershell_run context should not inherit mcp-timeout deadline")
-		}
+		t.Fatalf("%s context should not inherit mcp-timeout deadline", shellTool)
 	}
 
 	ctx, cancel = mods.toolCallContext(registry, "web_search", &cfg)
@@ -178,13 +175,17 @@ func TestToolCapabilities(t *testing.T) {
 			t.Fatalf("expected %s to be read-only", name)
 		}
 	}
-	for _, name := range []string{"fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir", "shell_run", "process_run"} {
+	shellTool := "powershell_run"
+	if runtime.GOOS != "windows" {
+		shellTool = "shell_run"
+	}
+	for _, name := range []string{"fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir", shellTool, "process_run"} {
 		if !registry.Mutable(name) {
 			t.Fatalf("expected %s to be mutable", name)
 		}
 	}
-	if !registry.ShellExecution("shell_run") {
-		t.Fatal("expected shell_run to be shell execution")
+	if !registry.ShellExecution(shellTool) {
+		t.Fatalf("expected %s to be shell execution", shellTool)
 	}
 	if !registry.ShellExecution("process_run") {
 		t.Fatal("expected process_run to be shell execution")

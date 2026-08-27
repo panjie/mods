@@ -175,3 +175,9 @@ func TestShellSecretEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "resolved-secret", out)
 }
+
+func TestValidateSecretEnvReservesStableLocationNames(t *testing.T) {
+	require.NoError(t, validateSecretEnv(map[string]string{"DB_PASSWORD": "ref"}))
+	require.Error(t, validateSecretEnv(map[string]string{"SystemRoot": "ref"}), "stable location names must stay reserved so classification matches the child shell")
+	require.Error(t, validateSecretEnv(map[string]string{"temp": "ref"}))
+}

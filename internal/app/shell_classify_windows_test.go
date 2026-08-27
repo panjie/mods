@@ -287,3 +287,131 @@ func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
 		ApprovalReviewMode(ReviewAuto),
 	))
 }
+
+func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	systemRoot := os.Getenv("SystemRoot")
+	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Get-ChildItem -Path "$env:SystemRoot\WinSxS" -Filter "*.dll" | Select-Object -First 3`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Len(t, assessment.KnownDirs, 1)
+	require.True(t, strings.EqualFold(assessment.KnownDirs[0], systemRoot+`\WinSxS`), assessment.KnownDirs)
+	require.Empty(t, assessment.DynamicTargets)
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	), "an external read still asks once, but the concrete dir makes the approval rule-saveable")
+}
+
+func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads notes"}
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `$env:TEMP = "C:\Users\Test\Documents"; Get-Content "$env:TEMP\notes.txt"`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\notes.txt`, "an env reassignment must keep the target runtime-resolved")
+	require.Equal(t, []string{`C:\Users\Test\Documents`}, assessment.KnownDirs,
+		"the assigned literal is still extracted; the process TEMP location must not be substituted")
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Resolve-Path $env:SystemRoot\WinSxS`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.True(t, assessment.DynamicProbe)
+	require.NotEmpty(t, assessment.DynamicTargets)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	), "path-resolution probes keep their dynamic-target auto-allow semantics")
+}
+
+func TestResolveStableEnvTargets(t *testing.T) {
+	systemRoot := os.Getenv("SystemRoot")
+	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
+
+	known, dynamic := resolveStableEnvTargets(nil, []string{`$env:SystemRoot`, `$env:SystemRoot\WinSxS`}, `C:\ws`)
+	require.Len(t, known, 1)
+	require.True(t, strings.EqualFold(known[0], systemRoot+`\WinSxS`), known)
+	require.Empty(t, dynamic, "the bare variable reference is subsumed by its expanded path form")
+
+	known, dynamic = resolveStableEnvTargets(nil, []string{`$env:STARSHIP_CONFIG`, `$env:SystemRoot\WinSxS`}, `C:\ws`)
+	require.Len(t, known, 1)
+	require.Equal(t, []string{`$env:STARSHIP_CONFIG`}, dynamic, "non-stable targets stay dynamic")
+
+	known, dynamic = resolveStableEnvTargets([]string{known[0]}, []string{`$env:SystemRoot\WinSxS`}, `C:\ws`)
+	require.Len(t, known, 1, "already-known concrete dirs are not duplicated")
+	require.Empty(t, dynamic)
+
+	known, dynamic = resolveStableEnvTargets(nil, []string{`$env:SECRET\x`}, `C:\ws`)
+	require.Empty(t, known)
+	require.Equal(t, []string{`$env:SECRET\x`}, dynamic)
+
+	known, dynamic = resolveStableEnvTargets([]string{`C:\ws`}, nil, `C:\ws`)
+	require.Equal(t, []string{`C:\ws`}, known)
+	require.Nil(t, dynamic)
+}
+
+func TestCommandMutatesPowerShellEnvironment(t *testing.T) {
+	mutations := []string{
+		`$env:TEMP = "C:\elsewhere"`,
+		`$env:TEMP += "suffix"`,
+		`${env:TEMP} = "C:\elsewhere"`,
+		`Set-Item -Path Env:TEMP -Value "C:\elsewhere"`,
+		`Remove-Item Env:\TEMP`,
+		`New-Item -Path Env:TRACKER -Value 1`,
+		`[Environment]::SetEnvironmentVariable('TEMP', 'C:\elsewhere', 'Process')`,
+	}
+	for _, command := range mutations {
+		require.True(t, commandMutatesPowerShellEnvironment(command), command)
+	}
+	reads := []string{
+		`Get-Content $env:TEMP\notes.txt`,
+		`Test-Path $env:SystemRoot\WinSxS`,
+		`Write-Output ($env:TEMP -eq 'x')`,
+	}
+	for _, command := range reads {
+		require.False(t, commandMutatesPowerShellEnvironment(command), command)
+	}
+	require.True(t, commandMutatesPowerShellEnvironment(`Write-Output "$env:USERNAME=$env:TEMP"`),
+		"an equals sign right after an env name is treated as a mutation (conservative)")
+}

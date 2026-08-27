@@ -104,17 +104,18 @@ var Help = map[string]string{
 	"stdin-image":            "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
-	"max-tool-rounds":        "Maximum total tool call rounds before stopping; 0 = default (30); failed rounds are capped at 3",
 	"think":                  "Enable extended thinking for supported models; thinking-type can override provider defaults",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"no-review":              "Disable tool review; shorthand for --review-mode=never",
+	"prompt-intent":          "Skip review for tool calls the user's message already requested (git commit/push, workspace edits), classified per turn into a fixed intent allowlist; off by default",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Pass the CLI flag without a directory to print the effective directories. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 
-	"prompts.identity":         "Override the built-in identity prompt; empty uses the built-in default",
-	"prompts.tool-selection":   "Override tool-selection guidance; empty uses capability-filtered defaults",
-	"prompts.shell-classifier": "Override the shell safety classifier prompt; empty uses the built-in default",
+	"prompts.identity":                 "Override the built-in identity prompt; empty uses the built-in default",
+	"prompts.tool-selection":           "Override tool-selection guidance; empty uses capability-filtered defaults",
+	"prompts.shell-classifier":         "Override the shell safety classifier prompt; empty uses the built-in default",
+	"prompts.prompt-intent-classifier": "Override the prompt-intent classifier prompt; empty uses the built-in default",
 
 	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
 	"builtin-tools.shell":                    "Enable the native shell execution tool",
@@ -273,9 +274,9 @@ type PersistentConfig struct {
 	WebSearchAPIKeyEnv  string                     `yaml:"web-search-api-key-env"`
 	Think               bool                       `yaml:"think" env:"THINK"`
 	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	PromptIntent        bool                       `yaml:"prompt-intent" env:"PROMPT_INTENT"`
 	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
 	SkillsDirs          []string                   `yaml:"skills-dirs"`
-	MaxToolRounds       int                        `yaml:"max-tool-rounds" env:"MAX_TOOL_ROUNDS"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
@@ -326,9 +327,10 @@ type Config struct {
 
 // PromptConfig holds user overrides for built-in runtime prompts.
 type PromptConfig struct {
-	Identity        string `yaml:"identity"`
-	ToolSelection   string `yaml:"tool-selection"`
-	ShellClassifier string `yaml:"shell-classifier"`
+	Identity               string `yaml:"identity"`
+	ToolSelection          string `yaml:"tool-selection"`
+	ShellClassifier        string `yaml:"shell-classifier"`
+	PromptIntentClassifier string `yaml:"prompt-intent-classifier"`
 }
 
 func (p PromptConfig) Value(key string) string {
@@ -339,6 +341,8 @@ func (p PromptConfig) Value(key string) string {
 		return p.ToolSelection
 	case prompts.KeyShellClassifier:
 		return p.ShellClassifier
+	case prompts.KeyPromptIntentClassifier:
+		return p.PromptIntentClassifier
 	default:
 		return ""
 	}

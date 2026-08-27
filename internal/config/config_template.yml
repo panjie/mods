@@ -44,6 +44,8 @@ prompts:
   tool-selection: ""
   # {{ index .Help "prompts.shell-classifier" }}
   shell-classifier: ""
+  # {{ index .Help "prompts.prompt-intent-classifier" }}
+  prompt-intent-classifier: ""
 
 # -----------------------------------------------------------------------------
 # Display and Output
@@ -70,12 +72,12 @@ no-instructions: false
 # http-proxy: ""  # HTTP proxy for API requests
 # {{ index .Help "max-retries" }}
 max-retries: 5
-# {{ index .Help "max-tool-rounds" }}
-max-tool-rounds: 30
 # {{ index .Help "think" }}
 think: false
 # {{ index .Help "review-mode" }}
 review-mode: auto
+# {{ index .Help "prompt-intent" }}
+prompt-intent: false
 # {{ index .Help "shell-classify-prompt" }}
 # shell-classify-prompt: "Classify this shell command. Does it create, delete, or modify any files, directories, system settings, or persistent state? Answer only YES or NO. If unsure, answer YES."
 

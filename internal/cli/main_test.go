@@ -882,9 +882,9 @@ func TestReadOnlyOneShotActionsBypassBubbleTea(t *testing.T) {
 
 func TestAdvancedFlagsStillParse(t *testing.T) {
 	withTestConfig(t, Config{}, func() {
-		require.NoError(t, rootCmd.Flags().Set("max-tool-rounds", "12"))
+		require.NoError(t, rootCmd.Flags().Set("max-retries", "12"))
 
-		require.Equal(t, 12, config.MaxToolRounds)
+		require.Equal(t, 12, config.MaxRetries)
 	})
 }
 

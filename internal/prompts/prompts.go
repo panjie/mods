@@ -1,9 +1,10 @@
 package prompts
 
 const (
-	KeyIdentity        = "identity"
-	KeyToolSelection   = "tool-selection"
-	KeyShellClassifier = "shell-classifier"
+	KeyIdentity               = "identity"
+	KeyToolSelection          = "tool-selection"
+	KeyShellClassifier        = "shell-classifier"
+	KeyPromptIntentClassifier = "prompt-intent-classifier"
 )
 
 const (
@@ -59,6 +60,23 @@ Every affected_dirs entry must be a concrete literal directory. Never return she
 The user message supplies authoritative Workspace and Home values. Use them exactly when resolving paths; an unquoted current-user ~ resolves to Home. Never guess a home directory such as /home/user.
 Set effect to "read" only when the command is read-only, "write" when it writes or may write persistent state, and "unknown" when unsure.
 Example: ls -la /path/to/project => {"effect":"read","affected_dirs":["/path/to/project"],"reason":"lists directory contents only"}.`
+
+	PromptIntentClassifier = `Classify which capabilities the user's message explicitly requests the assistant to exercise.
+Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
+Use exactly this shape:
+{"intents":["workspace-edit","global-read"]}
+
+Choose intents only from this closed list:
+- "workspace-edit": the user asks to change files in the workspace — create, edit, delete, rename, refactor, commit, build, install, or format (for example "fix this bug", "commit the changes", "install the dependencies", "refactor the parser").
+- "global-read": the user asks to read or inspect the filesystem beyond the workspace — system files, configuration outside the workspace, or anything requiring global read access (for example "show me /etc/hosts", "check my global npm config").
+Rules:
+- Include an intent only when the user's own words request that capability now; do not infer it from general discussion, questions, or read-only exploration.
+- Multiple intents are allowed in one reply.
+- When nothing matches or you are unsure, return an empty array.
+- Never invent labels outside the closed list.
+Example: "commit the local changes" => {"intents":["workspace-edit"]}
+Example: "what does my global .gitconfig contain" => {"intents":["global-read"]}
+Example: "explain what this Makefile does" => {"intents":[]}`
 )
 
 type Definition struct {
@@ -73,6 +91,7 @@ func Builtin() []Definition {
 		{Name: KeyIdentity, Description: "Base Mods identity and behavior instructions.", Default: Identity, Configurable: true},
 		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
+		{Name: KeyPromptIntentClassifier, Description: "Classifier prompt that maps the user's message onto closed prompt-intent labels for pre-authorization.", Default: PromptIntentClassifier, Configurable: true},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},
 		{Name: KeyFormatJSON, Description: "Formatting prompt used by --format --format-as json.", Default: JSONFormat},

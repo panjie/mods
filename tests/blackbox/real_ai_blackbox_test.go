@@ -475,7 +475,6 @@ raw: true
 minimal: true
 hide-tool-status: true
 max-retries: 2
-max-tool-rounds: 8
 review-mode: %s
 mcp-servers: {}
 builtin-tools:

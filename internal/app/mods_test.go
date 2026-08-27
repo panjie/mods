@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"image/color"
 	"os"
 	"os/exec"
@@ -1330,21 +1329,6 @@ func TestToolResultOutput(t *testing.T) {
 		})
 		require.Empty(t, stderr)
 		require.Empty(t, m.Output)
-	})
-}
-
-func TestToolCallFailed(t *testing.T) {
-	t.Run("nil is not a failure", func(t *testing.T) {
-		require.False(t, toolCallFailed(nil))
-	})
-	t.Run("plain error is a failure", func(t *testing.T) {
-		require.True(t, toolCallFailed(errors.New("boom")))
-	})
-	t.Run("non-zero shell exit is not a failure", func(t *testing.T) {
-		require.False(t, toolCallFailed(toolregistry.ShellExitError{Code: 1}))
-	})
-	t.Run("wrapped non-zero shell exit is not a failure", func(t *testing.T) {
-		require.False(t, toolCallFailed(fmt.Errorf("wrapped: %w", toolregistry.ShellExitError{Code: 2})))
 	})
 }
 

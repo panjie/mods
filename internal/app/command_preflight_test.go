@@ -38,7 +38,6 @@ func TestCommandPreflightGateCorrectsAtMostOnce(t *testing.T) {
 
 	require.NoError(t, gate.check("powershell_run", complexReviewabilityAnalysis()))
 	require.NoError(t, gate.check("process_run", complexReviewabilityAnalysis()))
-	require.False(t, toolCallFailed(first), "a requested model correction must not consume the failed-tool budget")
 }
 
 func TestCommandPreflightGateModes(t *testing.T) {
@@ -112,7 +111,7 @@ func TestToolCallerCorrectionDoesNotExecuteCommand(t *testing.T) {
 		},
 	}))
 
-	_, err := m.toolCaller(registry, &cfg)(proto.ToolCallRequest{ID: "call-1", Index: 1, Total: 1, Name: "shell_run", Arguments: []byte(`{"command":"rm out.txt"}`)})
+	_, err := m.toolCaller(registry, &cfg, "")(proto.ToolCallRequest{ID: "call-1", Index: 1, Total: 1, Name: "shell_run", Arguments: []byte(`{"command":"rm out.txt"}`)})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "process_run")
 	require.Zero(t, executed.Load(), "preflight correction must happen before tool execution")

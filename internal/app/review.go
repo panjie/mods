@@ -319,7 +319,11 @@ type reviewerDeps struct {
 	assessment     *approval.CommandAssessment
 	accessIntent   AccessIntent
 	safeDirs       []string
-	onDecision     func(approvalTrace)
+	// promptIntents carries the closed-enumeration labels classified from
+	// the current user message. Empty (feature off or classification
+	// failed) leaves the approval flow untouched.
+	promptIntents []approval.PromptIntent
+	onDecision    func(approvalTrace)
 }
 
 type approvalTrace struct {
@@ -361,6 +365,18 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
 			trace.Source = "auto"
 			trace.Detail = accessIntentSummary(intent)
+			return nil
+		}
+	}
+	// Prompt-intent gate: when the user's message already requested a
+	// capability (workspace edits / global reads) and this call falls inside
+	// it, review is skipped. ReviewAlways deliberately bypasses the gate so
+	// "always ask" keeps its meaning; ReviewNever already returned at the
+	// auto step above.
+	if r.reviewMode == ReviewAuto && len(deps.promptIntents) > 0 {
+		if label := promptIntentGrants(deps, intent, assessment, r.scope, safeDirSet); label != "" {
+			trace.Source = "prompt intent"
+			trace.Detail = label
 			return nil
 		}
 	}

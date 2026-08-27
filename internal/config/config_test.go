@@ -79,6 +79,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	}
 	require.Equal(t, "80", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
+	require.Equal(t, "false", documented["prompt-intent"].Default)
 	require.Equal(t, "false", documented["web-search"].Default)
 	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
 	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
@@ -102,13 +103,16 @@ func TestPromptConfig(t *testing.T) {
   identity: custom identity
   tool-selection: custom tools
   shell-classifier: custom shell
+  prompt-intent-classifier: custom intent
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
+	require.Equal(t, "custom intent", cfg.Prompts.PromptIntentClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
+	require.Equal(t, "custom intent", cfg.Prompts.Value(prompts.KeyPromptIntentClassifier))
 }
 
 func TestReasoningEffortOffYAML(t *testing.T) {
@@ -223,6 +227,25 @@ func TestMinimalConfig(t *testing.T) {
 		var cfg Config
 		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
 		require.True(t, cfg.Minimal)
+	})
+}
+
+func TestPromptIntentConfig(t *testing.T) {
+	t.Run("default is off", func(t *testing.T) {
+		require.False(t, Default().PromptIntent)
+	})
+
+	t.Run("yaml", func(t *testing.T) {
+		var cfg Config
+		require.NoError(t, yaml.Unmarshal([]byte("prompt-intent: true"), &cfg))
+		require.True(t, cfg.PromptIntent)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("MODS_PROMPT_INTENT", "true")
+		var cfg Config
+		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+		require.True(t, cfg.PromptIntent)
 	})
 }
 

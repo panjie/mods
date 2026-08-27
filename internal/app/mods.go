@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
-	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
 )
@@ -36,9 +34,7 @@ const (
 )
 
 const (
-	defaultMaxToolRounds = 30
 	defaultFanciness     = 10
-	maxToolFailedRounds  = 3
 	renderFrameInterval  = time.Second / 30
 	terminalProbeTimeout = 250 * time.Millisecond
 )
@@ -47,16 +43,14 @@ const (
 // LLM APIs (OpenAI, Anthropic, Google, Ollama, and others).
 type Mods struct {
 	outputRenderer
-	Input          string
-	Styles         Styles
-	Error          *modsError
-	state          state
-	terminalReady  bool
-	retries        int
-	toolCallRounds int
-	totalRounds    int
-	glam           *glamour.TermRenderer
-	glamViewport   viewport.Model
+	Input         string
+	Styles        Styles
+	Error         *modsError
+	state         state
+	terminalReady bool
+	retries       int
+	glam          *glamour.TermRenderer
+	glamViewport  viewport.Model
 	// messages is the session history fed to the provider on each
 	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
 	// dispatched by startCompletionCmd) and re-read from the
@@ -138,6 +132,13 @@ type Mods struct {
 	secrets   *secrets.Store
 
 	shellAnalyzer func(tool, command string) approval.CommandAssessment
+	// promptIntentAnalyzer is a test seam overriding the LLM prompt-intent
+	// classifier, mirroring shellAnalyzer.
+	promptIntentAnalyzer func(content string) []approval.PromptIntent
+
+	// workspaceWriteConfirmer is a test seam overriding the workspace-write
+	// scope confirmation used for write commands with no static target.
+	workspaceWriteConfirmer func(tool, command string) bool
 
 	// skillCatalog merges binary-embedded skills with the result of
 	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time. User skills have
@@ -544,28 +545,6 @@ func (m *Mods) quit() tea.Msg {
 	return quitMsg{}
 }
 
-func (m *Mods) toolRoundLimitExceeded(maxTotal int, st stream.Stream) bool {
-	if m.toolCallRounds > maxToolFailedRounds {
-		debug.Printf("Tool call failed rounds exceeded limit (%d), stopping", maxToolFailedRounds)
-		m.resetAndOutput(st)
-		return true
-	}
-	if m.totalRounds > maxTotal {
-		debug.Printf("Tool call total rounds exceeded limit (%d), stopping", maxTotal)
-		m.resetAndOutput(st)
-		return true
-	}
-	return false
-}
-
-func (m *Mods) resetAndOutput(st stream.Stream) {
-	m.messages = st.Messages()
-	content := lastAssistantContent(m.messages)
-	if content != "" {
-		m.appendToOutput(content)
-	}
-}
-
 func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 	content := msg.chunk.Content
 	// Trim leading whitespace from the very first answer chunk so a newline left
@@ -619,26 +598,10 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 // shellExitCoder is satisfied by errors that merely carry a non-zero process
 // exit code (e.g. tools.ShellExitError). A non-zero shell exit is a normal
 // command outcome (no match, file not found, etc.), not a tool-execution
-// failure, so it must not consume the failed-round budget used to break out
-// of genuine error loops.
+// failure.
 type shellExitCoder interface{ ExitCode() int }
 
 type correctionSuggester interface{ CorrectionSuggested() bool }
-
-// toolCallFailed reports whether a tool result error is a genuine execution
-// failure. A normal non-zero shell exit is treated as a successful execution
-// that happened to return a non-zero status, so it does not count as a failure.
-func toolCallFailed(err error) bool {
-	if err == nil {
-		return false
-	}
-	var correction correctionSuggester
-	if errors.As(err, &correction) && correction.CorrectionSuggested() {
-		return false
-	}
-	var exitErr shellExitCoder
-	return !errors.As(err, &exitErr)
-}
 
 func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
@@ -677,8 +640,6 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	if len(msg.results) == 0 {
 		msg.runner.close()
 		m.messages = msg.runner.messages()
-		m.toolCallRounds = 0
-		m.totalRounds = 0
 		// The next generation round renders the spinner animation on its
 		// own; mirroring a status line here would produce a duplicate row
 		// while waiting for the model to respond.
@@ -686,25 +647,9 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 	}
 	m.setActiveOperation(completionStatus)
-	m.totalRounds++
 	m.debugToolRounds++
-	hasFailed := slices.ContainsFunc(msg.results, func(c proto.ToolCallStatus) bool {
-		return toolCallFailed(c.Err)
-	})
-	if hasFailed {
-		m.toolCallRounds++
-	}
-	maxTotal := m.Config.MaxToolRounds
-	if maxTotal <= 0 {
-		maxTotal = defaultMaxToolRounds
-	}
-	if m.toolRoundLimitExceeded(maxTotal, msg.runner.stream) {
-		msg.runner.close()
-		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
-	}
 	debug.Print(DebugSection{Title: fmt.Sprintf("tool · turn %d · round %d · complete", m.debugTurn, m.debugRound), Fields: []DebugField{
 		{Label: "calls", Value: fmt.Sprintf("%d", len(msg.results))},
-		{Label: "budget", Value: fmt.Sprintf("total=%d/%d · failed=%d/%d", m.totalRounds, maxTotal, m.toolCallRounds, maxToolFailedRounds)},
 	}})
 	m.debugRound++
 	m.debugStartModelRound()

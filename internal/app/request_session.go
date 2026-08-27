@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -134,7 +136,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		User:       requestUser,
 		Tools:      tools,
 		TrackUsage: cfg.ShowTokenUsage,
-		ToolCaller: m.toolCaller(registry, cfg),
+		ToolCaller: m.toolCaller(registry, cfg, content),
 	}
 	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
 		request.ResponseFormat = &cfg.Format
@@ -303,8 +305,22 @@ func debugTools(tools []proto.ToolSpec, total int) {
 	})
 }
 
-func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolCaller {
+func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content string) proto.ToolCaller {
 	preflight := newCommandPreflightGate(cfg)
+	// promptIntents is resolved lazily on the first tool call of the turn:
+	// requests that never execute tools (the common case) pay no extra
+	// classifier round-trip.
+	var promptIntents []approval.PromptIntent
+	var promptIntentsOnce sync.Once
+	resolvePromptIntents := func() []approval.PromptIntent {
+		promptIntentsOnce.Do(func() {
+			if !cfg.PromptIntent || cfg.ReviewMode != ReviewAuto {
+				return
+			}
+			promptIntents = m.classifyPromptIntent(content)
+		})
+		return promptIntents
+	}
 	return func(call proto.ToolCallRequest) (output string, returnErr error) {
 		name, data := call.Name, call.Arguments
 		started := time.Now()
@@ -396,6 +412,15 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			if err := preflight.check(name, assessed); err != nil {
 				return "", err
 			}
+			// A write whose target could not be derived statically is only
+			// authorized by the workspace-edit intent when the classifier
+			// confirms the workspace scope; otherwise it fails closed.
+			if assessed.Effect == approval.EffectWrite && len(assessed.KnownDirs) == 0 {
+				if slices.Contains(resolvePromptIntents(), approval.IntentWorkspaceEdit) &&
+					m.confirmWorkspaceWrite(name, command) {
+					assessed.KnownDirs = []string{cfg.ResolveWorkspace().Canonical}
+				}
+			}
 		}
 		intent := buildAccessIntent(name, data, registry, assessment)
 		m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width))
@@ -414,17 +439,28 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		// Every call goes through one policy entry point. requestApproval
 		// performs saved-rule and access-matrix evaluation and returns
 		// immediately for calls that do not need an interactive prompt.
+		// Prompt-intent classification runs lazily and only when the access
+		// matrix would otherwise ask, so read-only turns pay no classifier
+		// call.
+		var promptIntents []approval.PromptIntent
+		if ClassifyAccess(intent, scope, safeDirs, ApprovalReviewMode(ReviewAuto)) == DecisionAsk {
+			promptIntents = resolvePromptIntents()
+		}
 		if err := m.reviewer.requestApproval(reviewerDeps{
 			ctx:            m.ctx,
 			shellExecution: registry.ShellExecution(name),
 			assessment:     assessment,
 			accessIntent:   intent,
 			safeDirs:       safeDirs,
+			promptIntents:  promptIntents,
 			onDecision: func(trace approvalTrace) {
 				approvalRecord = trace
 			},
 		}, name, data); err != nil {
 			return "", err
+		}
+		if approvalRecord.Source == "prompt intent" && approvalRecord.Detail != "" {
+			m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width) + " · intent-allowed (" + approvalRecord.Detail + ")")
 		}
 		if secrets.ContainsRef(data) {
 			secretStarted := time.Now()

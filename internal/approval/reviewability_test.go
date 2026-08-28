@@ -74,6 +74,17 @@ func TestAnalyzePowerShellCommandReviewability(t *testing.T) {
 func TestAnalyzeProcessReviewability(t *testing.T) {
 	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("git", []string{"status"}, true).Level)
 
+	miswrapped := AnalyzeProcessReviewability("sh", []string{"head", "-80", "internal/app/status_flags.go"}, true)
+	require.True(t, miswrapped.ShouldCorrect)
+	require.Equal(t, ReviewabilityOpaque, miswrapped.Level)
+	require.Equal(t, "process_run", miswrapped.RecommendedTool)
+	require.Contains(t, miswrapped.Reasons, ReviewabilityCommandPassedAsScript)
+
+	configured := AnalyzeProcessReviewabilityWithPolicy("/bin/bash", []string{"rg", "needle", "."}, true, ReadOnlyCommandPolicy{Commands: []string{"rg"}})
+	require.True(t, configured.ShouldCorrect)
+	require.Equal(t, "process_run", configured.RecommendedTool)
+	require.Contains(t, configured.Reasons, ReviewabilityCommandPassedAsScript)
+
 	posix := AnalyzeProcessReviewability("/bin/sh", []string{"-c", "git status"}, true)
 	require.True(t, posix.ShouldCorrect)
 	require.Equal(t, "shell_run", posix.RecommendedTool)
@@ -96,6 +107,10 @@ func TestAnalyzeProcessReviewability(t *testing.T) {
 	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("powershell.exe", nil, false).Level)
 	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("powershell.exe", []string{"-File", "script.ps1"}, false).Level)
 	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("powershell.exe", []string{"-NoProfile"}, false).Level)
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("sh", []string{"script"}, true).Level)
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("sh", []string{"script.sh"}, true).Level)
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("sh", []string{"./head", "-80", "file"}, true).Level)
+	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("sh", []string{"head", "-80", "file"}, false).Level)
 }
 
 func TestLooksLikePowerShellCmdlet(t *testing.T) {

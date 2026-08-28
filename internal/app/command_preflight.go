@@ -58,6 +58,8 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 			reasons = append(reasons, "uses multiple runtime-resolved paths")
 		case approval.ReviewabilityDecorativeOutput:
 			reasons = append(reasons, "adds presentation-only output")
+		case approval.ReviewabilityCommandPassedAsScript:
+			reasons = append(reasons, "passes a known executable name where the shell expects a script path")
 		}
 	}
 	if len(reasons) == 0 {

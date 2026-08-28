@@ -77,7 +77,7 @@ func AssessArgvStaticWithPolicy(program string, args []string, posix bool, polic
 	program = strings.TrimSpace(program)
 	result := UnknownCommandAssessment()
 	result.Shape = CommandShape{TopLevelActions: 1, Pipelines: 1}
-	result.Reviewability = AnalyzeProcessReviewability(program, args, posix)
+	result.Reviewability = AnalyzeProcessReviewabilityWithPolicy(program, args, posix, policy)
 	result.Shape.Opaque = result.Reviewability.Level == ReviewabilityOpaque
 	if program == "" || strings.ContainsAny(program, `/\`) {
 		return result

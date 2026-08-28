@@ -30,6 +30,7 @@ const (
 	ReviewabilityMultipleDynamicTargets ReviewabilityReason = "multiple_dynamic_targets"
 	ReviewabilityDecorativeOutput       ReviewabilityReason = "decorative_output"
 	ReviewabilityOpaqueExecution        ReviewabilityReason = "opaque_execution"
+	ReviewabilityCommandPassedAsScript  ReviewabilityReason = "command_passed_as_script"
 )
 
 // CommandReviewability contains deterministic structural facts about shell
@@ -50,8 +51,26 @@ func AnalyzeCommandReviewability(command string, posix bool, policy ReadOnlyComm
 // AnalyzeProcessReviewability detects direct-process calls that merely wrap
 // shell source in a shell host. Ordinary literal argv invocations are simple.
 func AnalyzeProcessReviewability(program string, args []string, posix bool) CommandReviewability {
+	return AnalyzeProcessReviewabilityWithPolicy(program, args, posix, ReadOnlyCommandPolicy{})
+}
+
+// AnalyzeProcessReviewabilityWithPolicy detects direct-process calls that
+// either wrap shell source or accidentally pass a known executable name where
+// a POSIX shell expects a script path.
+func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) CommandReviewability {
 	name := strings.ToLower(path.Base(strings.ReplaceAll(strings.TrimSpace(program), `\`, "/")))
-	if !shellHostPrograms[name] || !processArgsContainShellSourceFlag(name, args) {
+	if !shellHostPrograms[name] {
+		return CommandReviewability{Level: ReviewabilitySimple}
+	}
+	if posix && posixShellHosts[name] && processArgsPassKnownCommandAsScript(args, policy) {
+		return CommandReviewability{
+			Level:           ReviewabilityOpaque,
+			Reasons:         []ReviewabilityReason{ReviewabilityCommandPassedAsScript},
+			RecommendedTool: "process_run",
+			ShouldCorrect:   true,
+		}
+	}
+	if !processArgsContainShellSourceFlag(name, args) {
 		return CommandReviewability{Level: ReviewabilitySimple}
 	}
 	recommended := ""
@@ -71,6 +90,19 @@ func AnalyzeProcessReviewability(program string, args []string, posix bool) Comm
 		RecommendedTool: recommended,
 		ShouldCorrect:   true,
 	}
+}
+
+func processArgsPassKnownCommandAsScript(args []string, policy ReadOnlyCommandPolicy) bool {
+	if len(args) == 0 {
+		return false
+	}
+	operand := strings.TrimSpace(args[0])
+	if !isBarePOSIXCommand(operand) {
+		return false
+	}
+	return policy.matchesPOSIX(operand) || readOnlyCommands[operand] ||
+		subcommandReadOnly[operand] != nil || subcommandShellCommands[operand] ||
+		flagPrefixShellCommands[operand] || exactShellCommands[operand]
 }
 
 func processArgsContainShellSourceFlag(program string, args []string) bool {

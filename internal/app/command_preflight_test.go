@@ -137,3 +137,15 @@ func TestNestedShellProcessRequestsCorrection(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "powershell_run")
 }
+
+func TestKnownCommandPassedAsShellScriptRequestsDirectProcess(t *testing.T) {
+	cfg := defaultConfig()
+	gate := newCommandPreflightGate(&cfg)
+	analysis := approval.CommandAssessment{Reviewability: approval.AnalyzeProcessReviewability(
+		"sh", []string{"head", "-80", "internal/app/status_flags.go"}, true,
+	)}
+	err := gate.check("process_run", analysis)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "known executable name")
+	require.Contains(t, err.Error(), "Retry with process_run and literal argv")
+}

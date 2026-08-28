@@ -1,7 +1,7 @@
 # 提示词意图授权（Prompt-Intent Approval）— 设计
 
 **日期：** 2026-08-27
-**状态：** Approved（默认关闭；两意图标签 + 写范围分类器）
+**状态：** Approved（默认开启；两意图标签 + 写范围分类器）
 **范围：** `internal/approval`（意图/写范围枚举）、`internal/app`（两个分类器 + 审批门）、`internal/prompts`（两个分类器提示词）、`internal/config`（开关 + 提示词覆盖）
 
 ## 1 背景与问题
@@ -36,7 +36,7 @@
 
 | 目标 | 决策 |
 |---|---|
-| 默认状态 | 关闭（`prompt-intent: false`，opt-in；关闭时零行为变化、零额外 LLM 调用） |
+| 默认状态 | 开启（`prompt-intent: true`；可显式关闭，关闭时零额外 LLM 调用） |
 | 意图标签 | `workspace-edit`、`global-read`（封闭枚举，未知标签丢弃） |
 | 远程读写 | 不设审批（无 `remote` 标签、无 `remote` 范围；空 scopes = 无本地写 = 放行） |
 | 空目录写 | 写范围分类器判定 workspace/external/unknown/无本地写，fail-closed |
@@ -80,6 +80,6 @@ toolCaller（request_session.go）                              │
 
 1. 语义授权被限制在两个固定能力内，标签无法表达"任意操作"。
 2. 每个能力的放行仍须通过目录矩阵约束（写 ⊆ workspace）、效应证明（非 unknown）、动态目标拒绝；语义只是把"ask"降级为"allow"的**前置条件之一**。
-3. 默认关闭，opt-in。
+3. 默认开启，但可通过配置或环境变量显式关闭。
 
 `2026-08-07-command-reviewability-design`（"LLM 语义推断"列为 non-goal）与 todo 工具设计（"计划式审批门"列为 non-goal）的结论在本设计中保持：本设计不做自由语义推断，也不做一次性计划审批，仅做封闭枚举下的确定性放行。

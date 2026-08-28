@@ -79,7 +79,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	}
 	require.Equal(t, "80", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
-	require.Equal(t, "false", documented["prompt-intent"].Default)
+	require.Equal(t, "true", documented["prompt-intent"].Default)
 	require.Equal(t, "false", documented["web-search"].Default)
 	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
 	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
@@ -234,21 +234,21 @@ func TestMinimalConfig(t *testing.T) {
 }
 
 func TestPromptIntentConfig(t *testing.T) {
-	t.Run("default is off", func(t *testing.T) {
-		require.False(t, Default().PromptIntent)
+	t.Run("default is on", func(t *testing.T) {
+		require.True(t, Default().PromptIntent)
 	})
 
 	t.Run("yaml", func(t *testing.T) {
-		var cfg Config
-		require.NoError(t, yaml.Unmarshal([]byte("prompt-intent: true"), &cfg))
-		require.True(t, cfg.PromptIntent)
+		cfg := Default()
+		require.NoError(t, yaml.Unmarshal([]byte("prompt-intent: false"), &cfg))
+		require.False(t, cfg.PromptIntent)
 	})
 
 	t.Run("env", func(t *testing.T) {
-		t.Setenv("MODS_PROMPT_INTENT", "true")
-		var cfg Config
+		t.Setenv("MODS_PROMPT_INTENT", "false")
+		cfg := Default()
 		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
-		require.True(t, cfg.PromptIntent)
+		require.False(t, cfg.PromptIntent)
 	})
 }
 

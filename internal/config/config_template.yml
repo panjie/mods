@@ -79,7 +79,7 @@ think: false
 # {{ index .Help "review-mode" }}
 review-mode: auto
 # {{ index .Help "prompt-intent" }}
-prompt-intent: false
+prompt-intent: true
 # {{ index .Help "shell-classify-prompt" }}
 # shell-classify-prompt: "Classify this shell command. Does it create, delete, or modify any files, directories, system settings, or persistent state? Answer only YES or NO. If unsure, answer YES."
 

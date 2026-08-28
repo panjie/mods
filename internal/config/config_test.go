@@ -104,15 +104,18 @@ func TestPromptConfig(t *testing.T) {
   tool-selection: custom tools
   shell-classifier: custom shell
   prompt-intent-classifier: custom intent
+  write-scope-classifier: custom scope
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom intent", cfg.Prompts.PromptIntentClassifier)
+	require.Equal(t, "custom scope", cfg.Prompts.WriteScopeClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
 	require.Equal(t, "custom intent", cfg.Prompts.Value(prompts.KeyPromptIntentClassifier))
+	require.Equal(t, "custom scope", cfg.Prompts.Value(prompts.KeyWriteScopeClassifier))
 }
 
 func TestReasoningEffortOffYAML(t *testing.T) {

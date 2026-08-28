@@ -136,9 +136,9 @@ type Mods struct {
 	// classifier, mirroring shellAnalyzer.
 	promptIntentAnalyzer func(content string) []approval.PromptIntent
 
-	// workspaceWriteConfirmer is a test seam overriding the workspace-write
-	// scope confirmation used for write commands with no static target.
-	workspaceWriteConfirmer func(tool, command string) bool
+	// writeScopeClassifier is a test seam overriding the write-scope
+	// classifier used for write commands with no static target.
+	writeScopeClassifier func(tool, command string) []approval.WriteScope
 
 	// skillCatalog merges binary-embedded skills with the result of
 	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time. User skills have

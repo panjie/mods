@@ -34,3 +34,34 @@ func TestParsePromptIntentResponse(t *testing.T) {
 	require.Empty(t, ParsePromptIntentResponse(`{"intens":["workspace-edit"]}`))
 	require.Empty(t, ParsePromptIntentResponse(`not json`))
 }
+
+func TestParseWriteScope(t *testing.T) {
+	for label, expected := range map[string]WriteScope{
+		"workspace":   WriteScopeWorkspace,
+		" Workspace ": WriteScopeWorkspace,
+		"external":    WriteScopeExternal,
+		"unknown":     WriteScopeUnknown,
+		"UNKNOWN":     WriteScopeUnknown,
+	} {
+		scope, ok := ParseWriteScope(label)
+		require.True(t, ok, label)
+		require.Equal(t, expected, scope)
+	}
+	for _, label := range []string{"", "remote", "workspace,external", "bogus"} {
+		_, ok := ParseWriteScope(label)
+		require.False(t, ok, label)
+	}
+}
+
+func TestParseWriteScopeResponse(t *testing.T) {
+	require.Equal(t, []WriteScope{WriteScopeWorkspace}, ParseWriteScopeResponse(`{"scopes":["workspace"]}`))
+	require.Equal(t, []WriteScope{}, ParseWriteScopeResponse(`{"scopes":[]}`))
+	require.Equal(t, []WriteScope{WriteScopeWorkspace, WriteScopeExternal},
+		ParseWriteScopeResponse(`{"scopes":["workspace","external"]}`))
+
+	require.Nil(t, ParseWriteScopeResponse(`{"scopes":["bogus"]}`))
+	require.Nil(t, ParseWriteScopeResponse(`{"scopes":["workspace","bogus"]}`))
+	require.Nil(t, ParseWriteScopeResponse(`{"scopes":["workspace","workspace"]}`))
+	require.Nil(t, ParseWriteScopeResponse(`not json`))
+	require.Nil(t, ParseWriteScopeResponse(`{"intens":["workspace"]}`))
+}

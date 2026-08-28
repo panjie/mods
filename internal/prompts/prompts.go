@@ -5,6 +5,7 @@ const (
 	KeyToolSelection          = "tool-selection"
 	KeyShellClassifier        = "shell-classifier"
 	KeyPromptIntentClassifier = "prompt-intent-classifier"
+	KeyWriteScopeClassifier   = "write-scope-classifier"
 )
 
 const (
@@ -77,6 +78,28 @@ Rules:
 Example: "commit the local changes" => {"intents":["workspace-edit"]}
 Example: "what does my global .gitconfig contain" => {"intents":["global-read"]}
 Example: "explain what this Makefile does" => {"intents":[]}`
+
+	WriteScopeClassifier = `Classify where a command's local filesystem write effect lands.
+For process_run, the command is a JSON description of a direct process invocation; program and args are literal and have no shell expansion.
+Return only strict JSON. Do not include <think> tags, Markdown fences, prose, or explanations.
+Use exactly this shape:
+{"scopes":["workspace","external","unknown"]}
+
+Choose scopes only from this closed list (any subset, possibly empty):
+- "workspace": the command writes local files only within the Workspace directory (including the repository's .git, node_modules, build artifacts, and cwd-relative outputs).
+- "external": the command writes local files outside the Workspace (for example system config under /etc, a global config, or an absolute path outside the Workspace).
+- "unknown": the local write target cannot be determined.
+Rules:
+- Report only the LOCAL filesystem write effect. Remote/network effects (pushing, publishing, uploading, deploying) are not local writes and must not add any scope.
+- Return an empty array only when you are confident the command performs no local filesystem write at all (a purely remote or network operation).
+- When unsure whether a local write occurs or where it lands, include "unknown"; never return an empty array merely because you cannot tell.
+- Include every applicable scope; a command may touch several at once.
+- Never invent labels outside the closed list.
+The user message supplies authoritative Workspace and Home values.
+Example: git add -A => {"scopes":["workspace"]}
+Example: git push origin main => {"scopes":["workspace"]}
+Example: curl -X POST https://api.example.com => {"scopes":[]}
+Example: write a file to /etc/config => {"scopes":["external"]}`
 )
 
 type Definition struct {
@@ -92,6 +115,7 @@ func Builtin() []Definition {
 		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
 		{Name: KeyPromptIntentClassifier, Description: "Classifier prompt that maps the user's message onto closed prompt-intent labels for pre-authorization.", Default: PromptIntentClassifier, Configurable: true},
+		{Name: KeyWriteScopeClassifier, Description: "Classifier prompt that scopes a write command's local filesystem effect for prompt-intent approval.", Default: WriteScopeClassifier, Configurable: true},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},
 		{Name: KeyFormatJSON, Description: "Formatting prompt used by --format --format-as json.", Default: JSONFormat},

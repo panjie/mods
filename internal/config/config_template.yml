@@ -46,6 +46,8 @@ prompts:
   shell-classifier: ""
   # {{ index .Help "prompts.prompt-intent-classifier" }}
   prompt-intent-classifier: ""
+  # {{ index .Help "prompts.write-scope-classifier" }}
+  write-scope-classifier: ""
 
 # -----------------------------------------------------------------------------
 # Display and Output

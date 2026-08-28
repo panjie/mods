@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -317,7 +316,11 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content 
 			if !cfg.PromptIntent || cfg.ReviewMode != ReviewAuto {
 				return
 			}
-			promptIntents = m.classifyPromptIntent(content)
+			// The prompt may arrive as CLI args (stored in cfg.Prefix) or as
+			// stdin (content); classify the same text the model sees as the
+			// current user message.
+			prompt := strings.TrimSpace(cfg.Prefix + "\n\n" + content)
+			promptIntents = m.classifyPromptIntent(prompt)
 		})
 		return promptIntents
 	}
@@ -399,6 +402,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content 
 			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
 		}
 		var assessment *approval.CommandAssessment
+		var writeScopes []approval.WriteScope
 		if registry.ShellExecution(name) {
 			command := ExtractShellCommand(data)
 			if name == "process_run" {
@@ -412,14 +416,14 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content 
 			if err := preflight.check(name, assessed); err != nil {
 				return "", err
 			}
-			// A write whose target could not be derived statically is only
-			// authorized by the workspace-edit intent when the classifier
-			// confirms the workspace scope; otherwise it fails closed.
-			if assessed.Effect == approval.EffectWrite && len(assessed.KnownDirs) == 0 {
-				if slices.Contains(resolvePromptIntents(), approval.IntentWorkspaceEdit) &&
-					m.confirmWorkspaceWrite(name, command) {
-					assessed.KnownDirs = []string{cfg.ResolveWorkspace().Canonical}
-				}
+			// A write whose target could not be derived statically is scoped
+			// by the write-scope classifier into workspace / remote (no local
+			// write) / external / unknown. It only runs when the prompt-intent
+			// gate is active: a remote write is not gated, and a workspace
+			// write needs the workspace-edit intent.
+			if assessed.Effect == approval.EffectWrite && len(assessed.KnownDirs) == 0 &&
+				cfg.PromptIntent && cfg.ReviewMode == ReviewAuto && len(resolvePromptIntents()) > 0 {
+				writeScopes = m.classifyWriteScope(name, command)
 			}
 		}
 		intent := buildAccessIntent(name, data, registry, assessment)
@@ -453,6 +457,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content 
 			accessIntent:   intent,
 			safeDirs:       safeDirs,
 			promptIntents:  promptIntents,
+			writeScopes:    writeScopes,
 			onDecision: func(trace approvalTrace) {
 				approvalRecord = trace
 			},

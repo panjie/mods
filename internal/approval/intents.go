@@ -59,3 +59,65 @@ func ParsePromptIntentResponse(raw string) []PromptIntent {
 	}
 	return intents
 }
+
+// WriteScope is a closed-enumeration label describing where a write
+// command's local filesystem effect lands. Remote/network effects are
+// deliberately absent: the approval matrix only guards local directories, so
+// a command with no local write (purely remote) is out of scope.
+type WriteScope string
+
+const (
+	// WriteScopeWorkspace means the command writes local files only within
+	// the workspace (including .git, node_modules, build artifacts, and
+	// cwd-relative outputs).
+	WriteScopeWorkspace WriteScope = "workspace"
+	// WriteScopeExternal means the command writes local files outside the
+	// workspace (system config, global config, absolute paths elsewhere).
+	WriteScopeExternal WriteScope = "external"
+	// WriteScopeUnknown means the local write target cannot be determined.
+	WriteScopeUnknown WriteScope = "unknown"
+)
+
+// ParseWriteScope validates a write-scope classifier label.
+func ParseWriteScope(label string) (WriteScope, bool) {
+	switch WriteScope(strings.TrimSpace(strings.ToLower(label))) {
+	case WriteScopeWorkspace:
+		return WriteScopeWorkspace, true
+	case WriteScopeExternal:
+		return WriteScopeExternal, true
+	case WriteScopeUnknown:
+		return WriteScopeUnknown, true
+	default:
+		return "", false
+	}
+}
+
+// ParseWriteScopeResponse decodes the classifier's JSON reply into write
+// scopes. Unlike prompt-intent parsing, any unrecognized label fails the
+// whole response (nil): dropping a hallucinated "blocking" scope (for
+// example a mistyped "external") could otherwise downgrade an ask into an
+// allow. A missing "scopes" field also fails closed; an explicit empty array
+// is valid and means "no local filesystem write" (a purely remote/network
+// operation).
+func ParseWriteScopeResponse(raw string) []WriteScope {
+	var parsed struct {
+		Scopes *[]string `json:"scopes"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed); err != nil {
+		return nil
+	}
+	if parsed.Scopes == nil {
+		return nil
+	}
+	var scopes []WriteScope = []WriteScope{}
+	seen := map[string]bool{}
+	for _, label := range *parsed.Scopes {
+		scope, ok := ParseWriteScope(label)
+		if !ok || seen[string(scope)] {
+			return nil
+		}
+		seen[string(scope)] = true
+		scopes = append(scopes, scope)
+	}
+	return scopes
+}

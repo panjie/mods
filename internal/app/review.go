@@ -323,7 +323,11 @@ type reviewerDeps struct {
 	// the current user message. Empty (feature off or classification
 	// failed) leaves the approval flow untouched.
 	promptIntents []approval.PromptIntent
-	onDecision    func(approvalTrace)
+	// writeScopes carries the write-scope classifier result for a shell
+	// write with no statically-determined target. nil means the classifier
+	// never ran; an empty slice means "no local filesystem write".
+	writeScopes []approval.WriteScope
+	onDecision  func(approvalTrace)
 }
 
 type approvalTrace struct {

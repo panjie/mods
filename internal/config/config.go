@@ -116,6 +116,7 @@ var Help = map[string]string{
 	"prompts.tool-selection":           "Override tool-selection guidance; empty uses capability-filtered defaults",
 	"prompts.shell-classifier":         "Override the shell safety classifier prompt; empty uses the built-in default",
 	"prompts.prompt-intent-classifier": "Override the prompt-intent classifier prompt; empty uses the built-in default",
+	"prompts.write-scope-classifier":   "Override the write-scope classifier prompt; empty uses the built-in default",
 
 	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
 	"builtin-tools.shell":                    "Enable the native shell execution tool",
@@ -331,6 +332,7 @@ type PromptConfig struct {
 	ToolSelection          string `yaml:"tool-selection"`
 	ShellClassifier        string `yaml:"shell-classifier"`
 	PromptIntentClassifier string `yaml:"prompt-intent-classifier"`
+	WriteScopeClassifier   string `yaml:"write-scope-classifier"`
 }
 
 func (p PromptConfig) Value(key string) string {
@@ -343,6 +345,8 @@ func (p PromptConfig) Value(key string) string {
 		return p.ShellClassifier
 	case prompts.KeyPromptIntentClassifier:
 		return p.PromptIntentClassifier
+	case prompts.KeyWriteScopeClassifier:
+		return p.WriteScopeClassifier
 	default:
 		return ""
 	}

@@ -79,3 +79,24 @@ func TestDisabledDebugWritesNothing(t *testing.T) {
 	Print(Section{Title: "hidden"})
 	require.Empty(t, buf.String())
 }
+
+func TestManagedSinkReceivesOneCursorFreeSection(t *testing.T) {
+	buf := captureDebug(t)
+	var sections []string
+	restoreSink := SetManagedSink(func(section string) {
+		sections = append(sections, section)
+	})
+	t.Cleanup(restoreSink)
+
+	Print(Section{
+		Title:  "tool · call",
+		Fields: []Field{{Label: "status", Value: "success"}},
+		Blocks: []Block{{Label: "result", Value: "line one\nline two"}},
+	})
+
+	require.Empty(t, buf.String())
+	require.Equal(t, []string{
+		"DEBUG tool · call\n  status  success\n  result\n    line one\n    line two",
+	}, sections)
+	require.NotContains(t, sections[0], "\r")
+}

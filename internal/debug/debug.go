@@ -27,6 +27,7 @@ var (
 	outputMu     sync.Mutex
 	output       io.Writer = os.Stderr
 	plainOutput  bool
+	managedSink  func(string)
 )
 
 // Field is one aligned key/value row in a debug section.
@@ -68,22 +69,34 @@ func Print(section Section) {
 	outputMu.Lock()
 	defer outputMu.Unlock()
 
-	styles := ui.StderrStyles()
-	header := styles.DebugHeader.String()
-	title := section.Title
 	styled := ui.IsErrorTTY() && !plainOutput
+	managed := managedSink != nil
+	lines := formatSection(section, styled, managed)
+	if managed {
+		managedSink(strings.Join(lines, "\n"))
+		return
+	}
+	_, _ = fmt.Fprintln(output, strings.Join(lines, "\n"))
+}
+
+func formatSection(section Section, styled, managed bool) []string {
+	styles := ui.StderrStyles()
+	header := "DEBUG"
+	title := section.Title
 	if styled {
 		header = styles.DebugHeader.String()
 		title = styles.DebugDetails.Render(title)
-	} else {
-		header = "DEBUG"
 	}
-	prefix := ""
+	headerPrefix := ""
+	detailPrefix := ""
 	if styled {
-		prefix = "\r "
+		headerPrefix = " "
+		if !managed {
+			headerPrefix = "\r "
+			detailPrefix = "\r"
+		}
 	}
-	_, _ = fmt.Fprintf(output, "%s%s %s\n", prefix, header, title)
-
+	lines := []string{fmt.Sprintf("%s%s %s", headerPrefix, header, title)}
 	width := 0
 	for _, field := range section.Fields {
 		if len(field.Label) > width {
@@ -91,31 +104,30 @@ func Print(section Section) {
 		}
 	}
 	for _, field := range section.Fields {
-		writeDetail(fmt.Sprintf("  %-*s  %s", width, field.Label, field.Value), styled)
+		lines = append(lines, formatDetail(fmt.Sprintf("  %-*s  %s", width, field.Label, field.Value), styled, detailPrefix))
 	}
 	for _, block := range section.Blocks {
 		label := block.Label
 		if block.Meta != "" {
 			label += " · " + block.Meta
 		}
-		writeDetail("  "+label, styled)
+		lines = append(lines, formatDetail("  "+label, styled, detailPrefix))
 		value := block.Value
 		if value == "" {
 			value = "<empty>"
 		}
 		for _, line := range strings.Split(value, "\n") {
-			writeDetail("    "+line, styled)
+			lines = append(lines, formatDetail("    "+line, styled, detailPrefix))
 		}
 	}
+	return lines
 }
 
-func writeDetail(value string, styled bool) {
-	prefix := ""
+func formatDetail(value string, styled bool, prefix string) string {
 	if styled {
 		value = ui.StderrStyles().DebugDetails.Render(value)
-		prefix = "\r"
 	}
-	_, _ = fmt.Fprintf(output, "%s%s\n", prefix, value)
+	return prefix + value
 }
 
 // Arguments formats a tool argument payload. Small JSON documents are
@@ -245,6 +257,25 @@ func SetOutputForTest(w io.Writer) func() {
 	}
 }
 
+// SetManagedSink routes each complete debug section through a terminal owner
+// such as Bubble Tea. The sink receives one newline-delimited string per
+// section without carriage-return cursor control. Call the returned function
+// after the terminal owner stops to restore direct stderr output.
+func SetManagedSink(sink func(string)) func() {
+	outputMu.Lock()
+	previous := managedSink
+	managedSink = sink
+	outputMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			outputMu.Lock()
+			managedSink = previous
+			outputMu.Unlock()
+		})
+	}
+}
+
 type Facade struct{}
 
 var FacadeInstance Facade
@@ -256,3 +287,6 @@ func (Facade) Arguments(data []byte) Block       { return Arguments(data) }
 func (Facade) Result(value string) Block         { return Result(value) }
 func (Facade) Enabled() bool                     { return Enabled() }
 func (Facade) Truncate(s string, max int) string { return Truncate(s, max) }
+func (Facade) SetManagedSink(sink func(string)) func() {
+	return SetManagedSink(sink)
+}

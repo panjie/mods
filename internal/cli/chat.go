@@ -209,7 +209,19 @@ func runOneTurn(ctx context.Context, opts []tea.ProgramOption) (*Mods, error) {
 	}
 
 	p := tea.NewProgram(mods, opts...)
+	var relay *debugRelay
+	restoreDebugSink := func() {}
+	if debug.Enabled() && config.InteractiveTTYAvailable && IsErrorTTY() && !config.Raw {
+		relay = newDebugRelay(func(section string) {
+			p.Send(tea.Println(section)())
+		})
+		restoreDebugSink = debug.SetManagedSink(relay.enqueue)
+	}
 	m, err := p.Run()
+	restoreDebugSink()
+	if relay != nil {
+		relay.wait()
+	}
 	if err != nil {
 		return nil, modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 	}

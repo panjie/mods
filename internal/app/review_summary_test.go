@@ -163,6 +163,22 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	require.Empty(t, rules, "runtime-resolved reads must never offer a persistent directory rule")
 }
 
+func TestNonPathShapedDynamicTargetHiddenFromReviewPanel(t *testing.T) {
+	scope := WorkspaceScope(`C:\Users\panjie\dev\mods`)
+	analysis := approval.CommandAssessment{
+		Effect:         approval.EffectRead,
+		DynamicTargets: []string{`(json-insert (emacs-startup-usage))`},
+		Reason:         "measures emacs startup",
+	}
+	args := []byte(`{"command":"& emacs --batch --eval \"(json-insert (emacs-startup-usage))\""}`)
+	intent := AccessIntent{Class: AccessRead, UnresolvedPaths: analysis.DynamicTargets}
+
+	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Equal(t, "Read a dynamic target", presentation.headline)
+	require.NotContains(t, presentation.rows, interactionRow{Label: "Target", Value: `(json-insert (emacs-startup-usage))`},
+		"non-path-shaped dynamic targets must not be shown as a review target")
+}
+
 func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 	analysis := approval.CommandAssessment{
 		Shape: approval.CommandShape{TopLevelActions: 4, Pipelines: 2},

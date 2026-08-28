@@ -92,6 +92,10 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 		// unresolvable dynamic target into a concrete, rule-saveable directory.
 		resolved := approval.ResolveEngineAutomaticTargets(result.DynamicTargets, probeAssignedSet(result.AssignedVariables))
 		result.KnownDirs, result.DynamicTargets = materializeProbeTargets(result.KnownDirs, result.DynamicTargets, resolved)
+		// Variables assigned a literal value in the same command resolve to a
+		// concrete path as well, so a target such as $p in `$p="C:\x"; Set-Content $p`
+		// becomes a reviewable, rule-saveable directory instead of a dynamic target.
+		result.KnownDirs, result.DynamicTargets = propagateLiteralTargets(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws)
 	}
 	// A statically proven read with no explicit external target operates in the
 	// configured workspace context. Classifier-completed commands do not get

@@ -85,7 +85,7 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 }
 
 func commandReviewTarget(assessment approval.CommandAssessment, risk string) string {
-	dynamic := summarizeAffectedDirs(assessment.DynamicTargets)
+	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
 	known := summarizeAffectedDirs(assessment.KnownDirs)
 	switch {
 	case dynamic != "" && known != "":
@@ -99,6 +99,23 @@ func commandReviewTarget(assessment approval.CommandAssessment, risk string) str
 	default:
 		return ""
 	}
+}
+
+// pathShapedDynamicTargets drops dynamic targets that cannot be a filesystem
+// path (no path separators, variable, or cmd-var syntax). Non-path fragments —
+// for example elisp passed to an external program's --eval — must not be
+// presented to the user as a review "Target".
+func pathShapedDynamicTargets(targets []string) []string {
+	if len(targets) == 0 {
+		return nil
+	}
+	kept := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if strings.ContainsAny(target, `/\$%`) {
+			kept = append(kept, target)
+		}
+	}
+	return kept
 }
 
 func toneForShellRisk(risk, command string) (interactionTone, string) {

@@ -95,6 +95,105 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 	}
 }
 
+func TestAssessCommandPowerShellLiteralVariableReadResolvesConcreteDir(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads emacs init content"}
+		},
+	}
+	cmd := `$p="C:\Users\Test\AppData\Roaming\.emacs.d\init.el"; $c=Get-Content $p -Raw; "=== ensure line present: $($c.Contains('use-package-always-ensure t')) ==="; $c | Select-String -Pattern 'always-ensure' -AllMatches`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "a literal-assigned variable resolves to a concrete target")
+	require.Contains(t, assessment.KnownDirs, `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`)
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+}
+
+func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	cmd := "$p=\"C:\\Users\\Test\\AppData\\Roaming\\.emacs.d\\init.el\"\n$c=Get-Content $p -Raw\n$new_block=@'\n(require 'package)\n(setq package-archives '((\"gnu\" . \"https://mirrors.tuna.tsinghua.edu.cn/elpa/gnu/\")))\n(package-initialize)\n'@\n$c=$c.Replace(\"old\", $new_block)\nSet-Content -Path $p -Value $c -Encoding UTF8\n\"written\""
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "a literal-assigned write target resolves to a concrete directory")
+	require.Contains(t, assessment.KnownDirs, `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`)
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		approval.SafeDirs(),
+		ApprovalReviewMode(ReviewAuto),
+	), "an external write still asks once, but the concrete dir makes the approval rule-saveable")
+}
+
+func TestAssessCommandPowerShellLiteralVariableWorkspaceReadAutoAllows(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for a statically-proven read: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	cmd := `$p = "` + workspace + `\init.el"; Get-Content $p | Select-Object -Skip 83 -First 5`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect,
+		"a pure-literal top-level assignment must not block the static read-only proof")
+	require.Empty(t, assessment.DynamicTargets)
+	require.Contains(t, assessment.KnownDirs, workspace+`\init.el`)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		approval.SafeDirs(),
+		ApprovalReviewMode(ReviewAuto),
+	), "a workspace read via a literal-assigned variable auto-allows")
+}
+
+func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for a statically-proven read: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	external := `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`
+	cmd := `$p = "` + external + `"; Get-Content $p | Select-Object -Skip 83 -First 5`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets)
+	require.Contains(t, assessment.KnownDirs, external)
+	intent := assessment.AccessIntent()
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.NotEmpty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto), true),
+		"an external read via a literal-assigned variable offers a rule-saveable directory")
+}
+
 func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 

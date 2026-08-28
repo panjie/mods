@@ -120,9 +120,11 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 				args = powerShellReadPathArguments(inv)
 			}
 			for _, arg := range args {
-				arg = trimPowerShellLiteral(strings.TrimSpace(arg))
-				if shellPathExpressionUnresolved(arg, false) {
-					unresolved = append(unresolved, arg)
+				trimmed := strings.TrimSpace(arg)
+				single, double := powerShellArgQuoting(trimmed)
+				value := trimPowerShellLiteral(trimmed)
+				if shellPathExpressionUnresolvedQuoted(value, single, double) {
+					unresolved = append(unresolved, value)
 				}
 			}
 			continue

@@ -360,6 +360,60 @@ func IsUnresolvedShellPathExpression(value string, posix bool) bool {
 	return shellPathExpressionUnresolved(value, posix)
 }
 
+// powerShellArgQuoting reports whether an argument token from the PowerShell
+// IR is a single- or double-quoted string literal in the command source. The
+// IR preserves the quotes; trimPowerShellLiteral strips them later.
+func powerShellArgQuoting(arg string) (single, double bool) {
+	if len(arg) < 2 {
+		return false, false
+	}
+	switch arg[0] {
+	case '\'':
+		return arg[len(arg)-1] == '\'', false
+	case '"':
+		return false, arg[len(arg)-1] == '"'
+	default:
+		return false, false
+	}
+}
+
+// shellPathExpressionUnresolvedQuoted applies the PowerShell unresolved-path
+// heuristics with knowledge of the argument's quoting in the command source.
+// A single-quoted string never interpolates, and inside a double-quoted string
+// only $-prefixed expansions are runtime-evaluated: a leading "(" without a
+// preceding "$" is literal data (for example elisp passed to emacs --eval),
+// not a subexpression. Unquoted arguments keep the full heuristics so a real
+// subexpression such as (Get-Location).Path stays dynamic.
+func shellPathExpressionUnresolvedQuoted(value string, single, double bool) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	lower := strings.ToLower(value)
+	for _, prefix := range []string{"$home\\", "$home/", "${home}\\", "${home}/", "$env:userprofile\\", "$env:userprofile/", "${env:userprofile}\\", "${env:userprofile}/"} {
+		if strings.HasPrefix(lower, prefix) {
+			return false
+		}
+	}
+	if single {
+		return isCMDLocalVarTarget(value, lower)
+	}
+	if double {
+		if strings.Contains(value, "$") {
+			return true
+		}
+		return isCMDLocalVarTarget(value, lower)
+	}
+	return shellPathExpressionUnresolved(value, false)
+}
+
+// isCMDLocalVarTarget reports whether value references cmd.exe variable syntax
+// (%NAME%). A lone "%" (a printf format such as %s, or a literal percent) is
+// not a runtime target.
+func isCMDLocalVarTarget(value, lower string) bool {
+	return reCMDLocalVar.MatchString(value) && !strings.HasPrefix(lower, "%userprofile%") && !strings.HasPrefix(lower, "%homedrive%%homepath%")
+}
+
 func flagValue(args []string, name string) string {
 	for i, arg := range args {
 		if value, ok := strings.CutPrefix(arg, name+"="); ok {

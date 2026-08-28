@@ -57,7 +57,7 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 		return false
 	}
 
-	if !safePowerShellAssignments(ir) {
+	if !safePowerShellAssignments(command, ir) {
 		return false
 	}
 	if !safePowerShellVariables(ir, command) {
@@ -198,22 +198,28 @@ func assignedPowerShellLocals(ir *psBridgeIR) map[string]bool {
 	return assigned
 }
 
-func safePowerShellAssignments(ir *psBridgeIR) bool {
+func safePowerShellAssignments(command string, ir *psBridgeIR) bool {
 	if !ir.HasAssignment {
 		return true
 	}
+	literals := powerShellLiteralAssigned(command, ir)
 	if !ir.HasScriptBlock || len(ir.AssignmentTargets) == 0 || len(ir.ScriptBlockAssignmentTargets) == 0 {
-		return false
+		// Without a script block to host accumulator assignments, only
+		// top-level assignments of pure string literals are inert; anything
+		// else keeps the assignment (and the command) non-read-only.
+		return allTopLevelAssignmentsLiteral(ir, literals)
 	}
 	scriptBlockAssignments := map[string]int{}
 	for _, target := range ir.ScriptBlockAssignmentTargets {
-		name := normalizePowerShellVariableName(target)
-		scriptBlockAssignments[name]++
+		scriptBlockAssignments[normalizePowerShellVariableName(target)]++
 	}
 	for _, target := range ir.AssignmentTargets {
 		name := normalizePowerShellVariableName(target)
 		if strings.Contains(name, ":") || !simplePowerShellLocalVar.MatchString(name) {
 			return false
+		}
+		if literals[barePowerShellVarName(target)] {
+			continue
 		}
 		if scriptBlockAssignments[name] == 0 {
 			return false
@@ -223,11 +229,25 @@ func safePowerShellAssignments(ir *psBridgeIR) bool {
 	return true
 }
 
+func allTopLevelAssignmentsLiteral(ir *psBridgeIR, literals map[string]bool) bool {
+	for _, target := range ir.AssignmentTargets {
+		name := normalizePowerShellVariableName(target)
+		if strings.Contains(name, ":") || !simplePowerShellLocalVar.MatchString(name) {
+			return false
+		}
+		if !literals[barePowerShellVarName(target)] {
+			return false
+		}
+	}
+	return true
+}
+
 func safePowerShellVariables(ir *psBridgeIR, command string) bool {
 	assigned := assignedPowerShellLocals(ir)
+	literals := powerShellLiteralAssigned(command, ir)
 	for _, variable := range ir.Variables {
 		name := normalizePowerShellVariableName(variable)
-		if safePipelinePowerShellVariables[name] || assigned[name] {
+		if safePipelinePowerShellVariables[name] || assigned[name] || literals[name] {
 			continue
 		}
 		if name == "profile" || strings.HasPrefix(name, "env:") && simplePowerShellLocalVar.MatchString(strings.TrimPrefix(name, "env:")) {

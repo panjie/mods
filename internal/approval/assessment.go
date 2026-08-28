@@ -40,6 +40,12 @@ type CommandAssessment struct {
 	// layer uses it to skip probe resolution for targets whose value depends
 	// on runtime execution rather than the engine.
 	AssignedVariables []string
+	// LiteralAssignments maps the lowercase name of a PowerShell variable
+	// assigned exactly once at top level with a pure string-literal value (no
+	// interpolation) to that literal. The app layer uses it to materialize
+	// dynamic targets that reference the variable. Nil for POSIX and for
+	// commands with no such assignments.
+	LiteralAssignments map[string]string
 }
 
 func UnknownCommandAssessment() CommandAssessment {
@@ -193,12 +199,13 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 	dirs, dynamic, knownWrite := analyzePowerShellWritablePathsIR(ir, policy)
 	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
 	result := CommandAssessment{
-		Effect:            EffectUnknown,
-		DynamicTargets:    dynamic,
-		Reason:            "effects could not be proven",
-		Shape:             shape,
-		Reviewability:     reviewability,
-		AssignedVariables: assignedPowerShellVariables(ir),
+		Effect:             EffectUnknown,
+		DynamicTargets:     dynamic,
+		Reason:             "effects could not be proven",
+		Shape:              shape,
+		Reviewability:      reviewability,
+		AssignedVariables:  assignedPowerShellVariables(ir),
+		LiteralAssignments: powerShellLiteralAssignments(command, ir),
 	}
 	if readOnlyPowerShellIR(command, ir, policy) {
 		result.Effect = EffectRead

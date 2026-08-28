@@ -27,6 +27,7 @@ function New-IR {
         variables          = [System.Collections.Generic.List[string]]::new()
         assignment_targets = [System.Collections.Generic.List[string]]::new()
         script_block_assignment_targets = [System.Collections.Generic.List[string]]::new()
+        literal_assignments = @{}
         method_invocations = [System.Collections.Generic.List[string]]::new()
         member_expressions = [System.Collections.Generic.List[string]]::new()
         static_members     = [System.Collections.Generic.List[string]]::new()
@@ -57,6 +58,56 @@ function Test-InScriptBlockExpression {
         $parent = $parent.Parent
     }
     return $false
+}
+
+function Test-IsTopLevelStatement {
+    param($Node, $RootAst)
+    try {
+        foreach ($statement in @($RootAst.EndBlock.Statements)) {
+            if ([object]::ReferenceEquals($statement, $Node)) {
+                return $true
+            }
+        }
+    } catch {}
+    return $false
+}
+
+function Get-OrdinaryStringAssignment {
+    param($Node, $RootAst)
+
+    if ($Node.Operator -ne [System.Management.Automation.Language.TokenKind]::Equals -or
+        $Node.Left -isnot [System.Management.Automation.Language.VariableExpressionAst] -or
+        -not (Test-IsTopLevelStatement $Node $RootAst)) {
+        return $null
+    }
+
+    try {
+        $statements = @($Node.Right.Statements)
+        if ($statements.Count -ne 1 -or
+            $statements[0] -isnot [System.Management.Automation.Language.PipelineAst]) {
+            return $null
+        }
+        $elements = @($statements[0].PipelineElements)
+        if ($elements.Count -ne 1 -or
+            $elements[0] -isnot [System.Management.Automation.Language.CommandExpressionAst] -or
+            @($elements[0].Redirections).Count -ne 0) {
+            return $null
+        }
+        $expression = $elements[0].Expression
+        if ($expression -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            return $null
+        }
+        $constantType = $expression.StringConstantType.ToString()
+        if ($constantType -notin @('SingleQuoted', 'DoubleQuoted')) {
+            return $null
+        }
+        return [ordered]@{
+            name  = $Node.Left.VariablePath.UserPath.ToLower()
+            value = [string]$expression.Value
+        }
+    } catch {
+        return $null
+    }
 }
 
 $controlFlowTypes = @(
@@ -243,8 +294,13 @@ function Invoke-Parse {
                 $target = $node.Left.ToString().Trim()
                 if ($target) {
                     Add-Value $ir.assignment_targets $target
-                    if (Test-InScriptBlockExpression $node) {
+                    $inScriptBlock = Test-InScriptBlockExpression $node
+                    if ($inScriptBlock) {
                         Add-Value $ir.script_block_assignment_targets $target
+                    }
+                    $literal = Get-OrdinaryStringAssignment $node $ast
+                    if ($null -ne $literal -and $literal.name) {
+                        $ir.literal_assignments[$literal.name] = $literal.value
                     }
                 }
             } catch {}
@@ -347,6 +403,7 @@ function Write-IR {
         variables          = @($ir.variables)
         assignment_targets = @($ir.assignment_targets)
         script_block_assignment_targets = @($ir.script_block_assignment_targets)
+        literal_assignments = $ir.literal_assignments
         method_invocations = @($ir.method_invocations)
         member_expressions = @($ir.member_expressions)
         static_members     = @($ir.static_members)

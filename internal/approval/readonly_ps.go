@@ -57,7 +57,7 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 		return false
 	}
 
-	if !safePowerShellAssignments(command, ir) {
+	if !safePowerShellAssignments(ir) {
 		return false
 	}
 	if !safePowerShellVariables(ir, command) {
@@ -198,11 +198,11 @@ func assignedPowerShellLocals(ir *psBridgeIR) map[string]bool {
 	return assigned
 }
 
-func safePowerShellAssignments(command string, ir *psBridgeIR) bool {
+func safePowerShellAssignments(ir *psBridgeIR) bool {
 	if !ir.HasAssignment {
 		return true
 	}
-	literals := powerShellLiteralAssigned(command, ir)
+	literals := powerShellLiteralAssigned(ir)
 	if !ir.HasScriptBlock || len(ir.AssignmentTargets) == 0 || len(ir.ScriptBlockAssignmentTargets) == 0 {
 		// Without a script block to host accumulator assignments, only
 		// top-level assignments of pure string literals are inert; anything
@@ -244,7 +244,7 @@ func allTopLevelAssignmentsLiteral(ir *psBridgeIR, literals map[string]bool) boo
 
 func safePowerShellVariables(ir *psBridgeIR, command string) bool {
 	assigned := assignedPowerShellLocals(ir)
-	literals := powerShellLiteralAssigned(command, ir)
+	literals := powerShellLiteralAssigned(ir)
 	for _, variable := range ir.Variables {
 		name := normalizePowerShellVariableName(variable)
 		if safePipelinePowerShellVariables[name] || assigned[name] || literals[name] {

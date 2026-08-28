@@ -205,7 +205,7 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 		Shape:              shape,
 		Reviewability:      reviewability,
 		AssignedVariables:  assignedPowerShellVariables(ir),
-		LiteralAssignments: powerShellLiteralAssignments(command, ir),
+		LiteralAssignments: powerShellLiteralAssignments(ir),
 	}
 	if readOnlyPowerShellIR(command, ir, policy) {
 		result.Effect = EffectRead

@@ -17,7 +17,7 @@ import (
 var powerShellEnvMutationPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\$\{?env:[a-z0-9_.()]+\}?\s*[-+*/]?=`),
 	regexp.MustCompile(`(?i)\b(?:set|new|remove|copy|move|clear)-(?:item|content|variable)\b[^;|\r\n]*[^$]env:`),
-	regexp.MustCompile(`(?i)\[environment\]::setenvironmentvariable`),
+	regexp.MustCompile(`(?i)\[\s*(?:system\.)?environment\s*\]\s*::\s*setenvironmentvariable\b`),
 }
 
 func commandMutatesPowerShellEnvironment(command string) bool {

@@ -100,6 +100,42 @@ func TestParseWithBridgeAssignment(t *testing.T) {
 	require.True(t, ir.HasAssignment)
 	require.Contains(t, ir.AssignmentTargets, "$x")
 	require.Empty(t, ir.ScriptBlockAssignmentTargets)
+	require.Empty(t, ir.LiteralAssignments)
+}
+
+func TestParseWithBridgeLiteralAssignmentFacts(t *testing.T) {
+	t.Cleanup(func() { CloseBridge() })
+
+	tests := []struct {
+		name    string
+		command string
+		want    map[string]string
+	}{
+		{name: "double quoted", command: `$p="C:\x"`, want: map[string]string{"p": `C:\x`}},
+		{name: "single quoted", command: `$p='C:\x'`, want: map[string]string{"p": `C:\x`}},
+		{name: "braced variable", command: `${p}='C:\x'`, want: map[string]string{"p": `C:\x`}},
+		{name: "interpolated", command: `$p="C:\$name"`},
+		{name: "concatenated", command: `$p='C:\ws'+$suffix`},
+		{name: "method expression", command: `$p='C:\ws'.Replace('ws','outside')`},
+		{name: "compound assignment", command: `$p += 'C:\x'`},
+		{name: "single quoted here string", command: "$p=@'\nC:\\x\n'@"},
+		{name: "double quoted here string", command: "$p=@\"\nC:\\x\n\"@"},
+		{name: "script block", command: `& { $p='C:\x' }`},
+		{name: "control flow", command: `if ($true) { $p='C:\x' }`},
+		{name: "function body", command: `function Set-P { $p='C:\x' }`},
+		{name: "parenthesized assignment", command: `($p='C:\x')`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ir, err := parseWithBridge(tt.command)
+			require.NoError(t, err)
+			if len(tt.want) == 0 {
+				require.Empty(t, ir.LiteralAssignments)
+				return
+			}
+			require.Equal(t, tt.want, ir.LiteralAssignments)
+		})
+	}
 }
 
 func TestParseWithBridgeSafeScriptBlockFacts(t *testing.T) {

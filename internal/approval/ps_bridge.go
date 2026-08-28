@@ -39,6 +39,7 @@ type psBridgeIR struct {
 	Variables                    []string              `json:"variables"`
 	AssignmentTargets            []string              `json:"assignment_targets"`
 	ScriptBlockAssignmentTargets []string              `json:"script_block_assignment_targets"`
+	LiteralAssignments           map[string]string     `json:"literal_assignments"`
 	MethodInvocations            []string              `json:"method_invocations"`
 	MemberExpressions            []string              `json:"member_expressions"`
 	StaticMembers                []string              `json:"static_members"`

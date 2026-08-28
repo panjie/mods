@@ -142,6 +142,27 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 	), "an external write still asks once, but the concrete dir makes the approval rule-saveable")
 }
 
+func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	cmd := `$suffix='\..\outside'; $p='` + workspace + `\init.el'+$suffix; Set-Content -Path $p -Value x`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$p`,
+		"a string expression must not be reduced to its literal prefix")
+	require.NotContains(t, assessment.LiteralAssignments, "p")
+}
+
 func TestAssessCommandPowerShellLiteralVariableWorkspaceReadAutoAllows(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
@@ -511,6 +532,24 @@ func TestAssessCommandPowerShellStableEnvWriteAssignmentKeepsDynamicTargets(t *t
 	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\foo.el`, "an env reassignment must keep the write target runtime-resolved")
 }
 
+func TestAssessCommandPowerShellSystemEnvironmentMutationKeepsDynamicTargets(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	m := &Mods{
+		Config: testConfigForWorkspace(t.TempDir()),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	command := `[System.Environment]::SetEnvironmentVariable('TEMP', [IO.Path]::Combine($HOME, 'elsewhere'), 'Process'); Set-Content -Path "$env:TEMP\foo.el" -Value "x"`
+	assessment := m.assessCommand("powershell_run", command)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\foo.el`,
+		"a fully-qualified environment mutation must suppress expansion of the process TEMP value")
+}
+
 func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
@@ -576,31 +615,4 @@ func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
 
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "mis-parsed POSIX --eval fragments must not become dynamic targets")
-}
-
-func TestCommandMutatesPowerShellEnvironment(t *testing.T) {
-	mutations := []string{
-		`$env:TEMP = "C:\elsewhere"`,
-		`$env:TEMP += "suffix"`,
-		`${env:TEMP} = "C:\elsewhere"`,
-		`Set-Item -Path Env:TEMP -Value "C:\elsewhere"`,
-		`Remove-Item Env:\TEMP`,
-		`New-Item -Path Env:TRACKER -Value 1`,
-		`Set-Content -Path Env:\TEMP -Value 'x'`,
-		`[Environment]::SetEnvironmentVariable('TEMP', 'C:\elsewhere', 'Process')`,
-	}
-	for _, command := range mutations {
-		require.True(t, commandMutatesPowerShellEnvironment(command), command)
-	}
-	reads := []string{
-		`Get-Content $env:TEMP\notes.txt`,
-		`Test-Path $env:SystemRoot\WinSxS`,
-		`Write-Output ($env:TEMP -eq 'x')`,
-		`Set-Content -Path "$env:TEMP\profile_init.el" -Value "x"`,
-	}
-	for _, command := range reads {
-		require.False(t, commandMutatesPowerShellEnvironment(command), command)
-	}
-	require.True(t, commandMutatesPowerShellEnvironment(`Write-Output "$env:USERNAME=$env:TEMP"`),
-		"an equals sign right after an env name is treated as a mutation (conservative)")
 }

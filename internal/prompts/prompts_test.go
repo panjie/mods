@@ -44,6 +44,8 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "Where-Object")
 	require.Contains(t, ToolSelection, "Measure-Object")
 	require.Contains(t, ToolSelection, "git ls-files -z | xargs -0")
+	require.Contains(t, ToolSelection, "emacs --eval")
+	require.Contains(t, ToolSelection, "do not add 2>&1")
 	require.Contains(t, ToolSelectionShellWindows, "short, single-purpose commands")
 	require.Contains(t, ToolSelectionShellWindows, "keep necessary pipelines intact")
 	require.Contains(t, ToolSelection, "Return inspection output directly")
@@ -75,8 +77,9 @@ func TestIdentityHasPlanningPolicy(t *testing.T) {
 }
 
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
-	// Budget includes the form input kind and the todo planning policy;
-	// bump if a new tool capability legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 6*1024,
-		"default identity and tool-selection prompts must stay within ~6 KiB")
+	// Budget includes the form input kind, the todo planning policy, and the
+	// process_run literal-argv guidance; bump if a new tool capability
+	// legitimately grows the runtime prompts.
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 7*1024,
+		"default identity and tool-selection prompts must stay within ~7 KiB")
 }

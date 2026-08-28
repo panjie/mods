@@ -35,6 +35,11 @@ type CommandAssessment struct {
 	Reason         string
 	Shape          CommandShape
 	Reviewability  CommandReviewability
+	// AssignedVariables lists lowercase normalized names of PowerShell
+	// variables assigned within the command (from the parser IR). The app
+	// layer uses it to skip probe resolution for targets whose value depends
+	// on runtime execution rather than the engine.
+	AssignedVariables []string
 }
 
 func UnknownCommandAssessment() CommandAssessment {
@@ -188,11 +193,12 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 	dirs, dynamic, knownWrite := analyzePowerShellWritablePathsIR(ir, policy)
 	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
 	result := CommandAssessment{
-		Effect:         EffectUnknown,
-		DynamicTargets: dynamic,
-		Reason:         "effects could not be proven",
-		Shape:          shape,
-		Reviewability:  reviewability,
+		Effect:            EffectUnknown,
+		DynamicTargets:    dynamic,
+		Reason:            "effects could not be proven",
+		Shape:             shape,
+		Reviewability:     reviewability,
+		AssignedVariables: assignedPowerShellVariables(ir),
 	}
 	if readOnlyPowerShellIR(command, ir, policy) {
 		result.Effect = EffectRead
@@ -205,6 +211,30 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 		result.Reason = "write command (PowerShell AST static analysis)"
 	}
 	return result
+}
+
+// assignedPowerShellVariables returns the lowercase normalized names of every
+// variable assigned within the command, whether at top level or inside a
+// script block. The result feeds CommandAssessment.AssignedVariables so the
+// app-layer probe can avoid resolving a reference whose value the command
+// itself sets at runtime.
+func assignedPowerShellVariables(ir *psBridgeIR) []string {
+	if ir == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, list := range [][]string{ir.AssignmentTargets, ir.ScriptBlockAssignmentTargets} {
+		for _, target := range list {
+			name := normalizePowerShellVariableName(target)
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return dedupeSorted(names)
 }
 
 func powerShellDynamicTargetProbe(ir *psBridgeIR, dynamic []string) bool {

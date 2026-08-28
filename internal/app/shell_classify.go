@@ -77,13 +77,21 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 	}
 	// Path-shaped references to machine-level location variables ($env:SystemRoot,
 	// $env:ProgramFiles, ...) resolve deterministically for the child shell, so a
-	// proven read can carry them as concrete directories. This makes the approval
-	// scope rule-saveable instead of an unresolvable dynamic target. Probes keep
-	// their dynamic-target auto-allow semantics, and commands that reassign the
-	// environment never expand: the child would observe a different value.
-	if flavor == pathutil.FlavorPowerShell && result.Effect == approval.EffectRead && !result.DynamicProbe &&
-		!commandMutatesPowerShellEnvironment(command) {
+	// proven read or write can carry them as concrete directories. This makes the
+	// approval scope rule-saveable instead of an unresolvable dynamic target, and
+	// lets temp-dir writes such as Set-Content "$env:TEMP\file" reach the safe-dir
+	// allow cell of the approval matrix. Probes keep their dynamic-target
+	// auto-allow semantics, and commands that reassign the environment never
+	// expand: the child would observe a different value.
+	if flavor == pathutil.FlavorPowerShell &&
+		(result.Effect == approval.EffectRead || result.Effect == approval.EffectWrite) &&
+		!result.DynamicProbe && !commandMutatesPowerShellEnvironment(command) {
 		result.KnownDirs, result.DynamicTargets = resolveStableEnvTargets(result.KnownDirs, result.DynamicTargets, ws)
+		// Engine-automatic variables ($PROFILE / $HOME) resolve in a fresh
+		// child shell and can be materialized ahead of approval, turning an
+		// unresolvable dynamic target into a concrete, rule-saveable directory.
+		resolved := approval.ResolveEngineAutomaticTargets(result.DynamicTargets, probeAssignedSet(result.AssignedVariables))
+		result.KnownDirs, result.DynamicTargets = materializeProbeTargets(result.KnownDirs, result.DynamicTargets, resolved)
 	}
 	// A statically proven read with no explicit external target operates in the
 	// configured workspace context. Classifier-completed commands do not get
@@ -368,6 +376,44 @@ func appendMissingShellDirs(dirs []string, extra []string) []string {
 		}
 	}
 	return dirs
+}
+
+// probeAssignedSet converts the assessment's normalized assigned-variable
+// names into a lookup set for the probe eligibility check.
+func probeAssignedSet(assigned []string) map[string]bool {
+	if len(assigned) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(assigned))
+	for _, name := range assigned {
+		set[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+	return set
+}
+
+// materializeProbeTargets moves probe-resolved dynamic targets into the
+// concrete known directories. Each resolved target maps its original
+// expression to an absolute path; resolved expressions are dropped from the
+// dynamic list and their paths appended to known, mirroring
+// resolveStableEnvTargets so downstream parent-directory normalization and
+// rule generation see concrete paths.
+func materializeProbeTargets(known, dynamic []string, resolved map[string]string) ([]string, []string) {
+	if len(resolved) == 0 || len(dynamic) == 0 {
+		return known, dynamic
+	}
+	kept := make([]string, 0, len(dynamic))
+	var added []string
+	for _, target := range dynamic {
+		if path, ok := resolved[strings.TrimSpace(target)]; ok {
+			added = appendMissingShellDirs(added, []string{path})
+			continue
+		}
+		kept = append(kept, target)
+	}
+	if len(added) == 0 {
+		return known, dynamic
+	}
+	return appendMissingShellDirs(known, added), kept
 }
 
 // classifyShellWithLLM sends the tool+command to the configured LLM for

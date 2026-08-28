@@ -10,10 +10,13 @@ import (
 // powerShellEnvMutationPatterns detect command text that reassigns or removes
 // environment variables. Static stable-env expansion must be suppressed for
 // such commands because the classifier would resolve the pre-assignment value
-// while the child shell observes the mutated one.
+// while the child shell observes the mutated one. The Env: drive pattern below
+// matches only bare Env: tokens ([^$]env:): a $env:NAME reference inside an
+// argument reads the variable (for example Set-Content -Path "$env:TEMP\log")
+// and must not be mistaken for a mutation of it.
 var powerShellEnvMutationPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\$\{?env:[a-z0-9_.()]+\}?\s*[-+*/]?=`),
-	regexp.MustCompile(`(?i)\b(?:set|new|remove|copy|move|clear)-(?:item|content|variable)\b[^;|\r\n]*\benv:`),
+	regexp.MustCompile(`(?i)\b(?:set|new|remove|copy|move|clear)-(?:item|content|variable)\b[^;|\r\n]*[^$]env:`),
 	regexp.MustCompile(`(?i)\[environment\]::setenvironmentvariable`),
 }
 

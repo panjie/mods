@@ -126,10 +126,10 @@ func TestAnalyzeShellStaticPowerShell(t *testing.T) {
 }
 
 func TestUnresolvedShellPathExpression(t *testing.T) {
-	for _, value := range []string{`$PROFILE.CurrentUserCurrentHost`, `$prof`, `$(Join-Path $HOME x)`, `@args`} {
+	for _, value := range []string{`$PROFILE.CurrentUserCurrentHost`, `$prof`, `$(Join-Path $HOME x)`, `@args`, `%TEMP%\notes.txt`, `(Get-Location).Path`} {
 		require.True(t, IsUnresolvedShellPathExpression(value, false), value)
 	}
-	for _, value := range []string{`$HOME\Downloads\x`, `$env:USERPROFILE\Downloads\x`, `C:\Users\Test\x`, `relative\x`} {
+	for _, value := range []string{`$HOME\Downloads\x`, `$env:USERPROFILE\Downloads\x`, `C:\Users\Test\x`, `relative\x`, `%USERPROFILE%\Downloads\x`, `%s\`, `(progn (message \`, `%s\" (emacs-init-time)) (kill-emacs))"`} {
 		require.False(t, IsUnresolvedShellPathExpression(value, false), value)
 	}
 }

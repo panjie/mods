@@ -2,6 +2,7 @@ package approval
 
 import (
 	"path"
+	"regexp"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -329,14 +330,28 @@ func shellPathExpressionUnresolved(value string, posix bool) bool {
 			return false
 		}
 	}
-	if strings.Contains(value, "$(") || strings.Contains(value, "@(") || strings.HasPrefix(value, "(") {
+	if strings.Contains(value, "$(") || strings.Contains(value, "@(") {
+		return true
+	}
+	// A leading "(" is a runtime subexpression only when its parentheses
+	// actually close (for example "(Get-Location).Path"). An unbalanced
+	// fragment such as `(progn (message \` — a literal from a mis-parsed
+	// POSIX --eval argument — is data, not a runtime target.
+	if strings.HasPrefix(value, "(") && strings.Contains(value, ")") {
 		return true
 	}
 	if strings.Contains(value, "$") || strings.HasPrefix(value, "@") {
 		return true
 	}
-	return strings.Contains(value, "%") && !strings.HasPrefix(lower, "%userprofile%") && !strings.HasPrefix(lower, "%homedrive%%homepath%")
+	// Only cmd.exe variable syntax (%NAME%) is a runtime target; a lone "%"
+	// (a printf format such as %s, or a literal percent) is not.
+	if reCMDLocalVar.MatchString(value) && !strings.HasPrefix(lower, "%userprofile%") && !strings.HasPrefix(lower, "%homedrive%%homepath%") {
+		return true
+	}
+	return false
 }
+
+var reCMDLocalVar = regexp.MustCompile(`%[A-Za-z_][A-Za-z0-9_]*%`)
 
 // IsUnresolvedShellPathExpression reports whether a path-like value still
 // depends on shell runtime evaluation. Approval code must never normalize such

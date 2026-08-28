@@ -518,19 +518,19 @@ func TestAnalyzeShellCommandDoesNotConcreteDynamicClassifierPaths(t *testing.T) 
 		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
 			require.Equal(t, "powershell_run", tool)
 			return approval.CommandAssessment{
-				KnownDirs: []string{`$PROFILE.CurrentUserCurrentHost`},
-				Reason:    "writes PowerShell profile",
+				KnownDirs: []string{`$runtime_target`},
+				Reason:    "writes a runtime-resolved target",
 				Effect:    approval.EffectWrite,
 			}
 		},
 	}
 
-	got := m.assessCommand("powershell_run", `$prof = $PROFILE.CurrentUserCurrentHost; custom-writer -Path $prof`)
+	got := m.assessCommand("powershell_run", `custom-writer -Path $target`)
 	require.Equal(t, approval.EffectWrite, got.Effect)
 	require.Empty(t, got.KnownDirs)
-	require.Contains(t, got.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
+	require.Contains(t, got.DynamicTargets, `$runtime_target`)
 	for _, dir := range got.KnownDirs {
-		require.NotContains(t, dir, `$PROFILE`)
+		require.NotContains(t, dir, `$runtime_target`)
 	}
 }
 

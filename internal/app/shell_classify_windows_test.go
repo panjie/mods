@@ -82,13 +82,43 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 	got := m.assessCommand("powershell_run", cmd)
 
 	require.Equal(t, approval.EffectWrite, got.Effect)
-	require.Empty(t, got.KnownDirs)
+	// The engine-automatic $PROFILE.CurrentUserCurrentHost reference resolves
+	// to a concrete path; the command-local $prof / $dir stay runtime-resolved.
+	require.Len(t, got.KnownDirs, 1)
+	require.Contains(t, strings.ToLower(got.KnownDirs[0]), "profile", got.KnownDirs)
 	require.Contains(t, got.DynamicTargets, `$dir`)
 	require.Contains(t, got.DynamicTargets, `$prof`)
+	require.NotContains(t, got.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
 	for _, dir := range got.KnownDirs {
 		require.NotContains(t, dir, `$PROFILE`)
 		require.NotContains(t, dir, `$prof`)
 	}
+}
+
+func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Set-Content -Path $PROFILE -Value "Import-Module foo"`)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "an engine-automatic write target resolves to a concrete path")
+	require.Len(t, assessment.KnownDirs, 1)
+	require.Contains(t, strings.ToLower(assessment.KnownDirs[0]), "profile", assessment.KnownDirs)
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		approval.SafeDirs(),
+		ApprovalReviewMode(ReviewAuto),
+	), "an external write still asks once, but the concrete dir makes the approval rule-saveable")
 }
 
 func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *testing.T) {
@@ -341,6 +371,47 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 	))
 }
 
+func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `Set-Content -Path "$env:TEMP\profile_init.el" -Value "x"`)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "a stable-env write target resolves to a concrete directory")
+	require.Len(t, assessment.KnownDirs, 1)
+	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(os.TempDir())), assessment.KnownDirs)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		approval.SafeDirs(),
+		ApprovalReviewMode(ReviewAuto),
+	), "a write into the safe temp directory matches the allow cell of the approval matrix")
+}
+
+func TestAssessCommandPowerShellStableEnvWriteAssignmentKeepsDynamicTargets(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	m := &Mods{
+		Config: testConfigForWorkspace(t.TempDir()),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	assessment := m.assessCommand("powershell_run", `$env:TEMP = "C:\Users\Test\Documents"; Set-Content -Path "$env:TEMP\foo.el" -Value "x"`)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\foo.el`, "an env reassignment must keep the write target runtime-resolved")
+}
+
 func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
@@ -391,6 +462,23 @@ func TestResolveStableEnvTargets(t *testing.T) {
 	require.Nil(t, dynamic)
 }
 
+func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	m := &Mods{
+		Config: testConfigForWorkspace(t.TempDir()),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "prints emacs init time"}
+		},
+	}
+	cmd := `emacs --batch --eval "(progn (message \"load-time: %s\" (emacs-init-time)) (kill-emacs))" 2>&1`
+
+	assessment := m.assessCommand("shell_run", cmd)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "mis-parsed POSIX --eval fragments must not become dynamic targets")
+}
+
 func TestCommandMutatesPowerShellEnvironment(t *testing.T) {
 	mutations := []string{
 		`$env:TEMP = "C:\elsewhere"`,
@@ -399,6 +487,7 @@ func TestCommandMutatesPowerShellEnvironment(t *testing.T) {
 		`Set-Item -Path Env:TEMP -Value "C:\elsewhere"`,
 		`Remove-Item Env:\TEMP`,
 		`New-Item -Path Env:TRACKER -Value 1`,
+		`Set-Content -Path Env:\TEMP -Value 'x'`,
 		`[Environment]::SetEnvironmentVariable('TEMP', 'C:\elsewhere', 'Process')`,
 	}
 	for _, command := range mutations {
@@ -408,6 +497,7 @@ func TestCommandMutatesPowerShellEnvironment(t *testing.T) {
 		`Get-Content $env:TEMP\notes.txt`,
 		`Test-Path $env:SystemRoot\WinSxS`,
 		`Write-Output ($env:TEMP -eq 'x')`,
+		`Set-Content -Path "$env:TEMP\profile_init.el" -Value "x"`,
 	}
 	for _, command := range reads {
 		require.False(t, commandMutatesPowerShellEnvironment(command), command)

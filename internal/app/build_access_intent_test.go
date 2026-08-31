@@ -194,6 +194,98 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	}
 }
 
+func TestAssessProcessInvocationGitWorkspaceWritesAreStatic(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	m := &Mods{
+		Config: &cfg,
+		shellAnalyzer: func(_, input string) approval.CommandAssessment {
+			t.Fatalf("effect classifier should not run for supported Git writes: %s", input)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	for _, invocation := range []string{
+		`{"program":"git","args":["add","-A"]}`,
+		`{"program":"git","args":["checkout","--","internal/app/render.go"]}`,
+	} {
+		assessment := m.assessCommand("process_run", invocation)
+		require.Equal(t, approval.EffectWrite, assessment.Effect)
+		require.Contains(t, assessment.KnownDirs, cfg.ResolveWorkspace().Canonical)
+		require.Contains(t, assessment.KnownDirs, filepath.Join(cfg.ResolveWorkspace().Canonical, ".git"))
+	}
+}
+
+func TestAssessProcessInvocationGitEnvironmentRedirectFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = root
+	classifierCalls := 0
+	m := &Mods{
+		Config: &cfg,
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			classifierCalls++
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := m.assessCommand("process_run", `{"program":"git","args":["add","-A"],"secret_env":{"GIT_INDEX_FILE":"secret-ref"}}`)
+
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, 1, classifierCalls)
+	require.Empty(t, assessment.KnownDirs)
+}
+
+func TestAssessProcessInvocationGitExternalRepositoryStateRequiresReview(t *testing.T) {
+	for _, setup := range []struct {
+		name string
+		run  func(t *testing.T) (workspace, externalTarget string)
+	}{
+		{
+			name: "workspace nested inside parent repository",
+			run: func(t *testing.T) (string, string) {
+				parent := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(parent, ".git"), 0o755))
+				workspace := filepath.Join(parent, "nested-workspace")
+				require.NoError(t, os.Mkdir(workspace, 0o755))
+				return workspace, parent
+			},
+		},
+		{
+			name: "linked worktree metadata outside workspace",
+			run: func(t *testing.T) (string, string) {
+				workspace := t.TempDir()
+				gitDir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(workspace, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o600))
+				return workspace, gitDir
+			},
+		},
+	} {
+		t.Run(setup.name, func(t *testing.T) {
+			workspace, externalTarget := setup.run(t)
+			cfg := defaultConfig()
+			cfg.BuiltinTools.Workspace = workspace
+			m := &Mods{
+				Config: &cfg,
+				shellAnalyzer: func(_, input string) approval.CommandAssessment {
+					t.Fatalf("effect classifier should not run for deterministically scoped Git write: %s", input)
+					return approval.UnknownCommandAssessment()
+				},
+			}
+
+			assessment := m.assessCommand("process_run", `{"program":"git","args":["add","-A"]}`)
+			intent := assessment.AccessIntent()
+
+			require.Equal(t, approval.EffectWrite, assessment.Effect)
+			require.Contains(t, assessment.KnownDirs, canonicalTestPath(t, externalTarget))
+			require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(canonicalTestPath(t, workspace)), nil, ApprovalReviewMode(ReviewAuto)))
+		})
+	}
+}
+
 func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	root := canonicalTestPath(t, t.TempDir())
 	reg := toolregistry.NewRegistry()

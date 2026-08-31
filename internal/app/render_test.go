@@ -515,7 +515,7 @@ func TestToolResultDisplayLineNerdGlyphs(t *testing.T) {
 	)
 }
 
-func TestToolResultTTYUsesRendererWithoutMutatingResponse(t *testing.T) {
+func TestToolResultTTYAppendsInlineDisplayBlockWithoutMutatingResponse(t *testing.T) {
 	oldErrorTTY := IsErrorTTY
 	IsErrorTTY = func() bool { return true }
 	t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
@@ -537,17 +537,140 @@ func TestToolResultTTYUsesRendererWithoutMutatingResponse(t *testing.T) {
 	data := []byte(`{"command":` + strconv.Quote(command) + `}`)
 	cmd := m.toolResultOutputCmd("shell_run", data, nil)
 
-	require.NotNil(t, cmd)
+	require.Nil(t, cmd)
 	require.Empty(t, m.Output)
-	require.Empty(t, m.displayOutput)
 	require.Empty(t, m.glamOutput)
+	require.Len(t, m.displayBlocks, 1)
+	require.Equal(t, "MODS_DISPLAY_BLOCK_1\n\n", m.displayOutput)
 	status := ToolResultStatus("shell_run", data, nil, m.toolResultStatusWidth())
 	activityLine := m.toolResultDisplayLine(status)
+	require.Equal(t, activityLine, m.displayBlocks["MODS_DISPLAY_BLOCK_1"])
 	require.Contains(t, ansi.Strip(activityLine), "  │ ✓ shell_run:")
 	require.Contains(t, ansi.Strip(activityLine), " · exit 0")
 	require.LessOrEqual(t, lipgloss.Width(activityLine), 52)
 	require.Contains(t, activityLine, m.Styles.Comment.Render("  │ "))
 	require.Contains(t, activityLine, m.Styles.Interaction.Success.Render("✓"))
+}
+
+// TestToolResultInlineBetweenTextRounds locks in the interleaving contract: a
+// completed tool call's activity line is appended into the live message stream
+// at the current position, between the surrounding text rounds, while the raw
+// stream only ever gains whitespace paragraph boundaries.
+func TestToolResultInlineBetweenTextRounds(t *testing.T) {
+	oldErrorTTY := IsErrorTTY
+	IsErrorTTY = func() bool { return true }
+	t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
+	oldOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+
+	gr, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(52),
+	)
+	require.NoError(t, err)
+	m := &Mods{
+		Config:       &Config{InteractiveTTYAvailable: true},
+		Styles:       ui.MakeStylesWithTheme("dracula", true),
+		glam:         gr,
+		glamViewport: viewport.New(viewport.WithWidth(52), viewport.WithHeight(10)),
+		contentMutex: &sync.Mutex{},
+		width:        52,
+	}
+
+	m.appendToOutput("intro text")
+	cmd := m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil)
+	require.Nil(t, cmd)
+	m.appendToOutput("closing text")
+
+	// Raw stream carries only the whitespace paragraph boundary — never any
+	// tool-status text.
+	require.Equal(t, "intro text\n\nclosing text", m.Output)
+
+	introIdx := strings.Index(m.displayOutput, "intro text")
+	markerIdx := strings.Index(m.displayOutput, "MODS_DISPLAY_BLOCK_1")
+	closingIdx := strings.Index(m.displayOutput, "closing text")
+	require.GreaterOrEqual(t, introIdx, 0)
+	require.Greater(t, markerIdx, introIdx)
+	require.Greater(t, closingIdx, markerIdx)
+
+	// The newline-bearing appends flush the render; force one final flush so
+	// the trailing newline-less "closing text" round is included too (the
+	// same thing View does on its next pass).
+	m.flushRender()
+	plain := ansi.Strip(m.glamOutput)
+	railIdx := strings.Index(plain, "  │ ✓ fs_read_file: path=mods.go")
+	introIdx = strings.Index(plain, "intro text")
+	closingIdx = strings.Index(plain, "closing text")
+	require.GreaterOrEqual(t, railIdx, 0)
+	require.Greater(t, railIdx, introIdx)
+	require.Greater(t, closingIdx, railIdx)
+	require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_1")
+}
+
+// TestConsecutiveToolResultsShareOneBlock locks in the merge contract: a run
+// of consecutive tool results shares a single display block so their rail
+// lines render adjacently (no blank line between them), while the surrounding
+// text rounds keep exactly one blank line of separation.
+func TestConsecutiveToolResultsShareOneBlock(t *testing.T) {
+	oldErrorTTY := IsErrorTTY
+	IsErrorTTY = func() bool { return true }
+	t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
+	oldOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+
+	gr, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(52),
+	)
+	require.NoError(t, err)
+	m := &Mods{
+		Config:       &Config{InteractiveTTYAvailable: true},
+		Styles:       ui.MakeStylesWithTheme("dracula", true),
+		glam:         gr,
+		glamViewport: viewport.New(viewport.WithWidth(52), viewport.WithHeight(10)),
+		contentMutex: &sync.Mutex{},
+		width:        52,
+	}
+
+	m.appendToOutput("intro text")
+	require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil))
+	require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"git diff"}`), nil))
+	m.appendToOutput("closing text")
+	m.flushRender()
+
+	// The raw stream only ever gained whitespace paragraph boundaries.
+	require.Equal(t, "intro text\n\nclosing text", m.Output)
+	require.Equal(t, "intro text\n\nMODS_DISPLAY_BLOCK_1\n\nclosing text", m.displayOutput)
+
+	// Both records merged into a single block: two rail lines joined by
+	// exactly one newline.
+	require.Len(t, m.displayBlocks, 1)
+	status1 := m.toolResultDisplayLine(ToolResultStatus("fs_read_file", []byte(`{"path":"mods.go"}`), nil, m.toolResultStatusWidth()))
+	status2 := m.toolResultDisplayLine(ToolResultStatus("shell_run", []byte(`{"command":"git diff"}`), nil, m.toolResultStatusWidth()))
+	block := m.displayBlocks["MODS_DISPLAY_BLOCK_1"]
+	require.Equal(t, status1+"\n"+status2, block)
+	require.Equal(t, 1, strings.Count(block, "\n"))
+
+	// Post-glamour the rail lines render adjacently with no marker leakage,
+	// and the run keeps exactly one blank line (a whitespace-only gap with
+	// two newlines) from each surrounding text round.
+	plain := ansi.Strip(m.glamOutput)
+	require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_")
+	joined := ansi.Strip(status1) + "\n" + ansi.Strip(status2)
+	introIdx := strings.Index(plain, "intro text")
+	railIdx := strings.Index(plain, joined)
+	closingIdx := strings.Index(plain, "closing text")
+	require.GreaterOrEqual(t, introIdx, 0)
+	require.Greater(t, railIdx, introIdx)
+	require.Greater(t, closingIdx, railIdx)
+	gapBefore := plain[introIdx+len("intro text") : railIdx]
+	gapAfter := plain[railIdx+len(joined) : closingIdx]
+	require.Equal(t, 2, strings.Count(gapBefore, "\n"))
+	require.Equal(t, "", strings.TrimSpace(gapBefore))
+	require.Equal(t, 2, strings.Count(gapAfter, "\n"))
+	require.Equal(t, "", strings.TrimSpace(gapAfter))
 }
 
 func TestToolResultKeepsJSONStdoutValid(t *testing.T) {

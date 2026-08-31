@@ -74,6 +74,12 @@ func AnalyzeArgvStaticWithPolicy(program string, args []string, posix bool, poli
 // AssessArgvStaticWithPolicy assesses a direct executable invocation. Every
 // argument is treated as a literal value; no shell expansion is available.
 func AssessArgvStaticWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) CommandAssessment {
+	return AssessArgvStaticWithContext(program, args, posix, policy, ArgvStaticContext{})
+}
+
+// AssessArgvStaticWithContext assesses a direct executable invocation with
+// deterministic execution context used by program-specific analyzers.
+func AssessArgvStaticWithContext(program string, args []string, posix bool, policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
 	program = strings.TrimSpace(program)
 	result := UnknownCommandAssessment()
 	result.Shape = CommandShape{TopLevelActions: 1, Pipelines: 1}
@@ -96,6 +102,11 @@ func AssessArgvStaticWithPolicy(program string, args []string, posix bool, polic
 		result.Effect = EffectRead
 		result.Reason = reason
 		return result
+	}
+	if gitResult, handled := assessGitArgvStatic(tokens, posix, context); handled {
+		gitResult.Shape = result.Shape
+		gitResult.Reviewability = result.Reviewability
+		return gitResult
 	}
 	dirs := analyzeLiteralWritableTargetsFromTokens(tokens, posix).Dirs
 	if len(dirs) == 0 && !hasKnownRiskyInvocation(tokens, posix) {

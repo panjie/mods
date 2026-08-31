@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -303,6 +305,56 @@ func TestToolCallerPromptIntentWiring(t *testing.T) {
 	t.Run("write without any intent still asks", func(t *testing.T) {
 		require.ErrorIs(t, call(newMods([]approval.WriteScope{approval.WriteScopeWorkspace}, nil)), errReviewUnavailable)
 	})
+}
+
+func TestToolCallerPromptIntentGitProcessWritesSkipCommandClassifiers(t *testing.T) {
+	registry := toolregistry.NewRegistry()
+	require.NoError(t, registry.Register(toolregistry.Tool{
+		Spec: proto.ToolSpec{Name: "process_run"},
+		Capabilities: toolregistry.ToolCapabilities{
+			Mutable:        true,
+			ShellExecution: true,
+		},
+		Call: func(context.Context, json.RawMessage) (string, error) {
+			return "ok", nil
+		},
+	}))
+	workspaceScope := WorkspaceScope(canonicalTestPath(t, t.TempDir()))
+	require.NoError(t, os.Mkdir(filepath.Join(workspaceScope.Value, ".git"), 0o755))
+
+	cfg := defaultConfig()
+	cfg.PromptIntent = true
+	cfg.Minimal = true
+	cfg.BuiltinTools.Workspace = workspaceScope.Value
+	m := &Mods{
+		ctx:                 context.Background(),
+		Config:              &cfg,
+		currentToolRegistry: registry,
+		reviewer:            &toolReviewer{reviewMode: ReviewAuto, scope: workspaceScope},
+		shellAnalyzer: func(_, input string) approval.CommandAssessment {
+			t.Fatalf("effect classifier should not run for supported Git write: %s", input)
+			return approval.UnknownCommandAssessment()
+		},
+		promptIntentAnalyzer: func(string) []approval.PromptIntent {
+			return []approval.PromptIntent{approval.IntentWorkspaceEdit}
+		},
+		writeScopeClassifier: func(_, command string) []approval.WriteScope {
+			t.Fatalf("write-scope classifier should not run when Git dirs are known: %s", command)
+			return nil
+		},
+	}
+
+	for i, args := range [][]string{
+		{"add", "-A"},
+		{"checkout", "--", "internal/app/render.go"},
+	} {
+		arguments, err := json.Marshal(map[string]any{"program": "git", "args": args})
+		require.NoError(t, err)
+		_, err = m.toolCaller(registry, &cfg, "commit or discard the local changes")(proto.ToolCallRequest{
+			ID: "call-static-git", Index: i + 1, Total: 2, Name: "process_run", Arguments: arguments,
+		})
+		require.NoError(t, err)
+	}
 }
 
 func TestToolCallerPromptIntentUsesPrefix(t *testing.T) {

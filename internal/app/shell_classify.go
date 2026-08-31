@@ -171,9 +171,10 @@ func appendReviewabilityReason(reasons []approval.ReviewabilityReason, reason ap
 
 func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	var invocation struct {
-		Program string   `json:"program"`
-		Args    []string `json:"args"`
-		Cwd     string   `json:"cwd"`
+		Program   string            `json:"program"`
+		Args      []string          `json:"args"`
+		Cwd       string            `json:"cwd"`
+		SecretEnv map[string]string `json:"secret_env"`
 	}
 	if err := json.Unmarshal([]byte(raw), &invocation); err != nil || strings.TrimSpace(invocation.Program) == "" {
 		return approval.UnknownCommandAssessment()
@@ -193,7 +194,14 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	policy := m.readOnlyCommandPolicy()
 	pathArgs := append([]string{invocation.Program}, invocation.Args...)
 	explicitDirs := filterLiteralArgPaths(pathArgs, cwd, flavor)
-	result := approval.AssessArgvStaticWithPolicy(invocation.Program, invocation.Args, posix, policy)
+	environmentKeys := make([]string, 0, len(invocation.SecretEnv))
+	for key := range invocation.SecretEnv {
+		environmentKeys = append(environmentKeys, key)
+	}
+	result := approval.AssessArgvStaticWithContext(invocation.Program, invocation.Args, posix, policy, approval.ArgvStaticContext{
+		Cwd:             cwd,
+		EnvironmentKeys: environmentKeys,
+	})
 	staticDirs := append([]string(nil), result.KnownDirs...)
 	switch result.Effect {
 	case approval.EffectRead:

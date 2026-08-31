@@ -278,10 +278,14 @@ func (m *Mods) appendResponseBoundary() {
 }
 
 // toolResultOutputCmd emits a compact one-line activity record for a completed
-// tool call. It deliberately bypasses every response buffer so stdout and
-// RenderedOutput remain model-output-only. When Bubble Tea owns stderr, Println
-// inserts the record safely above the live renderer; otherwise write it
-// directly to stderr.
+// tool call. In TTY interactive mode the record is appended into the live
+// message stream as a display block (the same mechanism as the Thinking
+// panel): appendToOutputWithDisplayBlock receives an empty raw contribution,
+// so Output and RenderedOutput stay model-output-only, and the append runs
+// synchronously inside Update (handleToolCallsDone) on the thread that owns
+// the render state. Consecutive records share a single display block so their
+// rail lines render adjacently. Without an interactive TTY the record is
+// written directly to stderr instead.
 //
 // HideToolStatus suppresses these records too: the flag's name promises to hide
 // tool status, and the completed-call summary is part of that surface (the
@@ -301,7 +305,8 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd 
 		status = m.secrets.Redact(status)
 	}
 	if m.Config.InteractiveTTYAvailable && IsErrorTTY() {
-		return tea.Println(m.toolResultDisplayLine(status))
+		m.appendToolResultDisplayBlock(m.toolResultDisplayLine(status))
+		return nil
 	}
 	_, _ = fmt.Fprintln(os.Stderr, status)
 	return nil
@@ -387,6 +392,39 @@ func (m *Mods) nextDisplayBlockMarker(block string) string {
 	marker := fmt.Sprintf("MODS_DISPLAY_BLOCK_%d", m.displayBlockSeq)
 	m.displayBlocks[marker] = block
 	return marker
+}
+
+// appendToolResultDisplayBlock appends a one-line tool-result record into the
+// live message stream. Consecutive records merge into a single display block
+// so their rail lines render adjacently; multi-line blocks (panels) never
+// merge.
+func (m *Mods) appendToolResultDisplayBlock(line string) {
+	if marker, ok := m.trailingCompactBlockMarker(); ok && !strings.Contains(line, "\n") {
+		m.displayBlocks[marker] += "\n" + line
+		m.renderDirty = true
+		m.flushRender()
+		return
+	}
+	m.appendToOutputWithDisplayBlock("", line)
+}
+
+// trailingCompactBlockMarker reports the marker of a single-line display block
+// ending the display stream as `marker line + exactly one blank line`.
+func (m *Mods) trailingCompactBlockMarker() (string, bool) {
+	s := m.displayOutputBuilder.String()
+	if !strings.HasSuffix(s, "\n") {
+		return "", false
+	}
+	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+	if len(lines) < 2 || lines[len(lines)-1] != "" {
+		return "", false
+	}
+	marker := lines[len(lines)-2]
+	block, ok := m.displayBlocks[marker]
+	if !ok || strings.Contains(block, "\n") {
+		return "", false
+	}
+	return marker, true
 }
 
 func (m *Mods) shouldFlushRender(display string) bool {

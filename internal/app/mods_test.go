@@ -1316,7 +1316,7 @@ func TestToolResultOutput(t *testing.T) {
 		require.Empty(t, m.Output)
 	})
 
-	t.Run("interactive renderer returns a print command", func(t *testing.T) {
+	t.Run("interactive renderer appends inline display block", func(t *testing.T) {
 		oldErrorTTY := IsErrorTTY
 		IsErrorTTY = func() bool { return true }
 		t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
@@ -1325,10 +1325,13 @@ func TestToolResultOutput(t *testing.T) {
 		m.Config.InteractiveTTYAvailable = true
 		m.Styles = makeStyles(true)
 		stderr := captureStderr(t, func() {
-			require.NotNil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil))
+			require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil))
 		})
 		require.Empty(t, stderr)
 		require.Empty(t, m.Output)
+		require.Contains(t, m.displayOutput, "MODS_DISPLAY_BLOCK_1\n\n")
+		require.Len(t, m.displayBlocks, 1)
+		require.Contains(t, m.displayBlocks["MODS_DISPLAY_BLOCK_1"], "fs_read_file: path=mods.go")
 	})
 }
 

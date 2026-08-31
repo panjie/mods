@@ -58,6 +58,14 @@ members, encoded commands, and `Invoke-Expression` remain fail-closed.
 Direct processes are assessed from literal `program`, `args`, and `cwd`.
 Arguments are never interpreted as shell syntax, and an executable containing
 a path is never trusted because its basename resembles an allowlisted command.
+For a narrow set of Git worktree/index mutations (`add`, `checkout`, `restore`,
+`reset`, `clean`, `rm`, and `mv`), deterministic argv analysis walks from
+`cwd` to the repository marker and reports the worktree, Git directory, and a
+linked worktree's common directory as concrete targets. Repository-selection
+options, pathspec indirection, relevant `GIT_*` environment overrides, missing
+or malformed repository metadata, and unsupported Git subcommands remain
+unknown. This prevents a worktree whose administrative directory is external
+from being mistaken for a workspace-only write.
 Bare program names are resolved once before approval and the resulting absolute
 path is pinned to execution, so a later PATH lookup cannot select a different
 program. Workspace and temporary-directory resolutions remain unknown-effect
@@ -78,8 +86,9 @@ fill an unknown effect and add concrete directories. For `process_run`, LLM
 completion contributes only effect and reason: arbitrary executable effects
 cannot be safely bounded from program identity, and classifier-suggested
 directories therefore never become authorization scope. Process directories
-come only from deterministic argv analysis. Completion cannot replace
-parser-derived shape, dynamic targets, opacity, or reviewability. Variables,
+come only from deterministic argv analysis, including the bounded Git
+repository discovery described above. Completion cannot replace parser-derived
+shape, dynamic targets, opacity, or reviewability. Variables,
 substitutions, placeholders, and non-literal directory markers are discarded.
 User-visible fallback reason text is always `effects could not be proven`;
 diagnostic details are debug-only.

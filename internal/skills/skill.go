@@ -34,9 +34,10 @@ type Skill struct {
 }
 
 // Scan walks dir for */SKILL.md (one level, non-recursive) and returns
-// skills sorted by Name. Parse failures are skipped with a debug warning;
-// other skills continue. Returns nil, nil if dir does not exist or
-// contains no SKILL.md.
+// skills sorted by Name. Directory symlinks are followed, so skills
+// installed as symlinks (e.g. ~/.agents/skills aliases) are scanned.
+// Parse failures are skipped with a debug warning; other skills continue.
+// Returns nil, nil if dir does not exist or contains no SKILL.md.
 func Scan(dir string) ([]Skill, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -47,15 +48,17 @@ func Scan(dir string) ([]Skill, error) {
 	}
 	var found []Skill
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+		skillDir := filepath.Join(dir, entry.Name())
+		// os.Stat follows symlinks; DirEntry.IsDir does not, so a
+		// symlinked skill directory would otherwise be skipped.
+		if info, statErr := os.Stat(skillDir); statErr != nil || !info.IsDir() {
+			continue // not a directory (or broken symlink); skip silently
 		}
-		skillPath := filepath.Join(dir, entry.Name(), "SKILL.md")
-		data, readErr := os.ReadFile(skillPath)
+		data, readErr := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
 		if readErr != nil {
 			continue // no SKILL.md in this directory; skip silently
 		}
-		skill, parseErr := parseSkill(string(data), filepath.Join(dir, entry.Name()))
+		skill, parseErr := parseSkill(string(data), skillDir)
 		if parseErr != nil {
 			debug.Printf("skills: skipping %q: %v", entry.Name(), parseErr)
 			continue
@@ -146,7 +149,8 @@ func parseSkill(content, dir string) (Skill, error) {
 // not start with a frontmatter delimiter. The parser only reads the two
 // fields mods cares about (name, description); all other lines in the
 // block are ignored so unknown fields (license, requires, ...) don't
-// break parsing.
+// break parsing. Values may use YAML block scalars (> and |), which the
+// broader skills ecosystem uses for multi-line descriptions.
 func splitFrontmatter(content string) (name, description, body string, ok bool) {
 	const marker = "---"
 	content = textutil.NormalizeLineEndings(content)
@@ -175,27 +179,147 @@ func splitFrontmatter(content string) (name, description, body string, ok bool) 
 	fmBlock := lines[:closeIdx]
 	bodyLines := lines[closeIdx+1:]
 	body = strings.Join(bodyLines, "\n")
-	for _, line := range fmBlock {
+	name, description = parseFrontmatterFields(fmBlock)
+	return name, description, body, true
+}
+
+// parseFrontmatterFields scans frontmatter lines for name and description
+// values. Plain values are read from the key line (quotes stripped); block
+// scalar headers (>, |, with optional chomping/indent indicators such as
+// >- or |2) consume their indented continuation lines. Every other key is
+// ignored, and lines that are not key lines are skipped.
+func parseFrontmatterFields(fmBlock []string) (name, description string) {
+	for i := 0; i < len(fmBlock); {
+		line := fmBlock[i]
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			i++
 			continue
 		}
 		key, value, found := strings.Cut(line, ":")
 		if !found {
+			i++
 			continue
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
 		value = strings.TrimSpace(value)
-		// Strip surrounding quotes if present.
-		value = strings.Trim(value, "\"'")
+		var target *string
 		switch key {
 		case "name":
-			name = value
+			target = &name
 		case "description":
-			description = value
+			target = &description
+		default:
+			i++
+			continue
+		}
+		if style, isBlock := blockScalarStyle(value); isBlock {
+			*target, i = readBlockScalar(fmBlock, i+1, style)
+			continue
+		}
+		// Strip surrounding quotes if present.
+		*target = strings.Trim(value, "\"'")
+		i++
+	}
+	return name, description
+}
+
+// blockScalarStyle reports whether value is a YAML block scalar header —
+// > or | optionally followed by a chomping indicator (+/-) and/or an
+// explicit indentation digit — and returns the style character.
+func blockScalarStyle(value string) (byte, bool) {
+	if len(value) == 0 || len(value) > 3 {
+		return 0, false
+	}
+	switch value[0] {
+	case '>', '|':
+	default:
+		return 0, false
+	}
+	for _, r := range value[1:] {
+		switch {
+		case r == '+' || r == '-' || (r >= '1' && r <= '9'):
+		default:
+			return 0, false
 		}
 	}
-	return name, description, body, true
+	return value[0], true
+}
+
+// readBlockScalar collects the indented continuation lines of a block
+// scalar starting at fmBlock[start] and returns the decoded text plus
+// the index of the first line after the block. The block's indentation
+// is auto-detected from the first non-empty continuation line and ends
+// at the first non-empty line indented less than that (typically the
+// next frontmatter key).
+func readBlockScalar(fmBlock []string, start int, style byte) (string, int) {
+	indent := -1
+	i := start
+	for ; i < len(fmBlock); i++ {
+		if strings.TrimSpace(fmBlock[i]) == "" {
+			continue
+		}
+		indent = leadingSpaces(fmBlock[i])
+		break
+	}
+	if indent <= 0 {
+		// No indented content follows: empty scalar, next line is a key.
+		return "", i
+	}
+	var content []string
+	for ; i < len(fmBlock); i++ {
+		line := fmBlock[i]
+		if strings.TrimSpace(line) == "" {
+			content = append(content, "")
+			continue
+		}
+		if leadingSpaces(line) < indent {
+			break
+		}
+		content = append(content, line[indent:])
+	}
+	return foldBlockLines(content, style), i
+}
+
+// foldBlockLines renders block scalar lines per YAML semantics. Literal
+// style (|) keeps every line break. Folded style (>) joins adjacent
+// non-empty lines with a space, turns blank lines into newlines, and
+// keeps breaks around more-indented (literal) lines.
+func foldBlockLines(lines []string, style byte) string {
+	if style == '|' {
+		return strings.Join(lines, "\n")
+	}
+	var sb strings.Builder
+	prevEmpty := true
+	prevMoreIndented := false
+	for _, line := range lines {
+		if line == "" {
+			sb.WriteByte('\n')
+			prevEmpty = true
+			continue
+		}
+		moreIndented := line[0] == ' ' || line[0] == '\t'
+		switch {
+		case prevEmpty || prevMoreIndented || moreIndented:
+			if !prevEmpty {
+				sb.WriteByte('\n')
+			}
+		default:
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(line)
+		prevEmpty = false
+		prevMoreIndented = moreIndented
+	}
+	return sb.String()
+}
+
+func leadingSpaces(line string) int {
+	n := 0
+	for n < len(line) && line[n] == ' ' {
+		n++
+	}
+	return n
 }
 
 // CatalogRender describes a bounded catalog prompt.

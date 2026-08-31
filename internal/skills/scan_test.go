@@ -85,6 +85,57 @@ func TestScanUnknownFrontmatterFieldsIgnored(t *testing.T) {
 	require.Equal(t, "Body.", skills[0].Body)
 }
 
+func TestScanFoldedBlockScalarDescription(t *testing.T) {
+	root := t.TempDir()
+	content := "---\nname: folded\ndescription: >\n  Diagnose why a program crashed on this machine.\n  Use when a process has segfaulted or dumped core.\n\n  Second paragraph.\n---\n\nBody.\n"
+	writeSkill(t, root, "folded", content)
+	skills, err := Scan(root)
+	require.NoError(t, err)
+	require.Len(t, skills, 1)
+	require.Equal(t, "Diagnose why a program crashed on this machine. Use when a process has segfaulted or dumped core.\nSecond paragraph.", skills[0].Description)
+	require.Equal(t, "Body.", skills[0].Body)
+}
+
+func TestScanLiteralBlockScalarDescription(t *testing.T) {
+	root := t.TempDir()
+	content := "---\nname: literal\ndescription: |-\n  Line one.\n  Line two.\n---\n\nBody.\n"
+	writeSkill(t, root, "literal", content)
+	skills, err := Scan(root)
+	require.NoError(t, err)
+	require.Len(t, skills, 1)
+	require.Equal(t, "Line one.\nLine two.", skills[0].Description)
+	require.Equal(t, "Body.", skills[0].Body)
+}
+
+func TestScanBlockScalarWithFollowingKey(t *testing.T) {
+	root := t.TempDir()
+	content := "---\nname: with-license\ndescription: >\n  Folded description text.\nlicense: MIT\nrequires:\n  mcp: [rube]\n---\n\nBody.\n"
+	writeSkill(t, root, "with-license", content)
+	skills, err := Scan(root)
+	require.NoError(t, err)
+	require.Len(t, skills, 1)
+	require.Equal(t, "with-license", skills[0].Name)
+	require.Equal(t, "Folded description text.", skills[0].Description)
+	require.Equal(t, "Body.", skills[0].Body)
+}
+
+func TestScanBlockScalarEmptyAndMoreIndented(t *testing.T) {
+	root := t.TempDir()
+	content := "---\nname: empty-then-key\ndescription: >\nlicense: MIT\n---\n\nBody.\n"
+	writeSkill(t, root, "empty-then-key", content)
+	skills, err := Scan(root)
+	require.NoError(t, err)
+	require.Len(t, skills, 1)
+	require.Equal(t, "(no description)", skills[0].Description)
+
+	content = "---\nname: more-indented\ndescription: >\n  Intro line.\n    kept literal break\n  Outro line.\n---\n\nBody.\n"
+	writeSkill(t, root, "more-indented", content)
+	skills, err = Scan(root)
+	require.NoError(t, err)
+	require.Len(t, skills, 2)
+	require.Equal(t, "Intro line.\n  kept literal break\nOutro line.", skills[1].Description)
+}
+
 func TestScanUnterminatedFrontmatter(t *testing.T) {
 	root := t.TempDir()
 	writeSkill(t, root, "zeta", "---\nname: zeta\n\ndescription: never closed\n")
@@ -164,6 +215,43 @@ func TestScanSkipsDirsLackingSkillMd(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, skills, 1)
 	require.Equal(t, "real", skills[0].Name)
+}
+
+func TestScanFollowsSymlinkedSkillDirs(t *testing.T) {
+	root := t.TempDir()
+	writeSkill(t, root, "alpha", "---\nname: alpha\ndescription: Alpha skill.\n---\n\nalpha body.\n")
+
+	target := t.TempDir()
+	writeSkill(t, target, "real-dir", "---\nname: linked\ndescription: Linked skill.\n---\n\nlinked body.\n")
+	link := filepath.Join(root, "linked-skill")
+	if err := os.Symlink(filepath.Join(target, "real-dir"), link); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+
+	got, err := Scan(root)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, []string{"alpha", "linked"}, []string{got[0].Name, got[1].Name})
+	require.Equal(t, "Linked skill.", got[1].Description)
+	require.Equal(t, "linked body.", got[1].Body)
+	require.Equal(t, link, got[1].Dir)
+}
+
+func TestScanSkipsSymlinksThatAreNotSkillDirs(t *testing.T) {
+	root := t.TempDir()
+	// Symlink to a regular file: no SKILL.md can exist beneath it.
+	target := t.TempDir()
+	file := filepath.Join(target, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("hi"), 0o600))
+	if err := os.Symlink(file, filepath.Join(root, "to-file")); err != nil {
+		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
+	}
+	// Dangling symlink: os.Stat fails, entry is skipped silently.
+	require.NoError(t, os.Symlink(filepath.Join(target, "missing"), filepath.Join(root, "broken")))
+
+	got, err := Scan(root)
+	require.NoError(t, err)
+	require.Nil(t, got)
 }
 
 func TestCatalogPromptEmptyReturnsEmpty(t *testing.T) {

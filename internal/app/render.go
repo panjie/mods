@@ -23,6 +23,7 @@ type outputRenderer struct {
 	outputBuilder        strings.Builder
 	displayOutputBuilder strings.Builder
 	displayBlocks        map[string]string
+	toolResultBlocks     map[string]bool // markers owned by compact tool-result runs (mergeable)
 	displayBlockSeq      int
 	glamHeight           int
 	renderDirty          bool
@@ -371,7 +372,7 @@ func (m *Mods) appendToOutputWithDisplay(raw, display string) {
 	m.flushRender()
 }
 
-func (m *Mods) appendToOutputWithDisplayBlock(raw, block string) {
+func (m *Mods) appendToOutputWithDisplayBlock(raw, block string) string {
 	// The marker is replaced by its block via an exact whole-line match after
 	// glamour rendering, so it must start on its own line. When the display
 	// stream does not end in a newline (e.g. a block appended mid-stream
@@ -382,6 +383,7 @@ func (m *Mods) appendToOutputWithDisplayBlock(raw, block string) {
 	}
 	marker := m.nextDisplayBlockMarker(block)
 	m.appendToOutputWithDisplay(raw, marker+"\n\n")
+	return marker
 }
 
 func (m *Mods) nextDisplayBlockMarker(block string) string {
@@ -395,22 +397,34 @@ func (m *Mods) nextDisplayBlockMarker(block string) string {
 }
 
 // appendToolResultDisplayBlock appends a one-line tool-result record into the
-// live message stream. Consecutive records merge into a single display block
-// so their rail lines render adjacently; multi-line blocks (panels) never
-// merge.
+// live message stream. Merge membership is tracked by registry, not line
+// count: the first record of a run opens a display block and registers its
+// marker as mergeable, and every subsequent consecutive record appends to
+// that block — so a run of any length keeps rendering its rail lines
+// adjacently. Multi-line blocks (Thinking/todo panels) are never registered
+// and never merge.
 func (m *Mods) appendToolResultDisplayBlock(line string) {
-	if marker, ok := m.trailingCompactBlockMarker(); ok && !strings.Contains(line, "\n") {
+	if strings.Contains(line, "\n") { // defensive: never merge multi-line content
+		m.appendToOutputWithDisplayBlock("", line)
+		return
+	}
+	if marker, ok := m.trailingToolResultBlockMarker(); ok {
 		m.displayBlocks[marker] += "\n" + line
 		m.renderDirty = true
 		m.flushRender()
 		return
 	}
-	m.appendToOutputWithDisplayBlock("", line)
+	marker := m.appendToOutputWithDisplayBlock("", line)
+	if m.toolResultBlocks == nil {
+		m.toolResultBlocks = map[string]bool{}
+	}
+	m.toolResultBlocks[marker] = true
 }
 
-// trailingCompactBlockMarker reports the marker of a single-line display block
-// ending the display stream as `marker line + exactly one blank line`.
-func (m *Mods) trailingCompactBlockMarker() (string, bool) {
+// trailingToolResultBlockMarker reports the marker of a mergeable tool-result
+// block ending the display stream as `marker line + exactly one blank line`.
+// Panels (Thinking etc.) are not registered and never merge.
+func (m *Mods) trailingToolResultBlockMarker() (string, bool) {
 	s := m.displayOutputBuilder.String()
 	if !strings.HasSuffix(s, "\n") {
 		return "", false
@@ -420,8 +434,7 @@ func (m *Mods) trailingCompactBlockMarker() (string, bool) {
 		return "", false
 	}
 	marker := lines[len(lines)-2]
-	block, ok := m.displayBlocks[marker]
-	if !ok || strings.Contains(block, "\n") {
+	if !m.toolResultBlocks[marker] {
 		return "", false
 	}
 	return marker, true
@@ -496,6 +509,7 @@ func (m *Mods) resetOutputBuffers() {
 	m.outputBuilder.Reset()
 	m.displayOutputBuilder.Reset()
 	m.displayBlocks = nil
+	m.toolResultBlocks = nil
 	m.displayBlockSeq = 0
 	m.renderDirty = false
 	m.lastRenderFlush = time.Time{}

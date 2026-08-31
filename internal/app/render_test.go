@@ -673,6 +673,78 @@ func TestConsecutiveToolResultsShareOneBlock(t *testing.T) {
 	require.Equal(t, "", strings.TrimSpace(gapAfter))
 }
 
+// TestToolResultRunLongerThanTwoSharesOneBlock guards the registry-based merge
+// against the single-line heuristic it replaced: a run of three (or more)
+// consecutive tool results must still share ONE display block — the second
+// merge already makes the block multi-line, and that must not open a new
+// marker for the third record.
+func TestToolResultRunLongerThanTwoSharesOneBlock(t *testing.T) {
+	oldErrorTTY := IsErrorTTY
+	IsErrorTTY = func() bool { return true }
+	t.Cleanup(func() { IsErrorTTY = oldErrorTTY })
+	oldOutputTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldOutputTTY })
+
+	gr, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(52),
+	)
+	require.NoError(t, err)
+	m := &Mods{
+		Config:       &Config{InteractiveTTYAvailable: true},
+		Styles:       ui.MakeStylesWithTheme("dracula", true),
+		glam:         gr,
+		glamViewport: viewport.New(viewport.WithWidth(52), viewport.WithHeight(10)),
+		contentMutex: &sync.Mutex{},
+		width:        52,
+	}
+
+	m.appendToOutput("intro text")
+	require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"mods.go"}`), nil))
+	require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"git diff"}`), nil))
+	require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"git log --oneline -5"}`), nil))
+	m.appendToOutput("closing text")
+	m.flushRender()
+
+	// The raw stream only ever gained whitespace paragraph boundaries.
+	require.Equal(t, "intro text\n\nclosing text", m.Output)
+	require.Equal(t, "intro text\n\nMODS_DISPLAY_BLOCK_1\n\nclosing text", m.displayOutput)
+
+	// All three records merged into a single block: three rail lines joined
+	// by exactly two newlines.
+	require.Len(t, m.displayBlocks, 1)
+	status1 := m.toolResultDisplayLine(ToolResultStatus("fs_read_file", []byte(`{"path":"mods.go"}`), nil, m.toolResultStatusWidth()))
+	status2 := m.toolResultDisplayLine(ToolResultStatus("shell_run", []byte(`{"command":"git diff"}`), nil, m.toolResultStatusWidth()))
+	status3 := m.toolResultDisplayLine(ToolResultStatus("shell_run", []byte(`{"command":"git log --oneline -5"}`), nil, m.toolResultStatusWidth()))
+	block := m.displayBlocks["MODS_DISPLAY_BLOCK_1"]
+	require.Equal(t, status1+"\n"+status2+"\n"+status3, block)
+	require.Equal(t, 2, strings.Count(block, "\n"))
+
+	// Post-glamour the three rail lines render pairwise-adjacent (each pair
+	// joined by exactly one newline) with no marker leakage, and the run
+	// keeps exactly one blank line (a whitespace-only gap with two newlines)
+	// from each surrounding text round.
+	plain := ansi.Strip(m.glamOutput)
+	require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_")
+	plain1 := ansi.Strip(status1)
+	plain2 := ansi.Strip(status2)
+	plain3 := ansi.Strip(status3)
+	joined := plain1 + "\n" + plain2 + "\n" + plain3
+	introIdx := strings.Index(plain, "intro text")
+	railIdx := strings.Index(plain, joined)
+	closingIdx := strings.Index(plain, "closing text")
+	require.GreaterOrEqual(t, introIdx, 0)
+	require.Greater(t, railIdx, introIdx)
+	require.Greater(t, closingIdx, railIdx)
+	gapBefore := plain[introIdx+len("intro text") : railIdx]
+	gapAfter := plain[railIdx+len(joined) : closingIdx]
+	require.Equal(t, 2, strings.Count(gapBefore, "\n"))
+	require.Equal(t, "", strings.TrimSpace(gapBefore))
+	require.Equal(t, 2, strings.Count(gapAfter, "\n"))
+	require.Equal(t, "", strings.TrimSpace(gapAfter))
+}
+
 func TestToolResultKeepsJSONStdoutValid(t *testing.T) {
 	oldOutputTTY := IsOutputTTY
 	IsOutputTTY = func() bool { return false }

@@ -505,10 +505,16 @@ func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, d
 }
 
 func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode, shell bool) []Rule {
-	if intent.HasUnresolvedPaths() {
-		return nil
-	}
 	var rules []Rule
+	if intent.HasUnresolvedPaths() {
+		// Writes with runtime-resolved targets stay unrule-saveable: the
+		// corrective loop must keep applying. Reads offer a conversation-
+		// scoped DynamicReadAllow rule the user grants explicitly.
+		if intent.DominantClass() != AccessRead {
+			return nil
+		}
+		rules = append(rules, RulesForDynamicReads(scope)...)
+	}
 	for _, group := range intent.Groups() {
 		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
 		if reviewMode != ApprovalReviewMode(ReviewAlways) && ClassifyAccess(groupIntent, scope, safeDirs, reviewMode) != DecisionAsk {
@@ -531,6 +537,29 @@ func extractShellCommand(args []byte) string {
 		return ""
 	}
 	return parsed.Command
+}
+
+// extractSecretEnvNames returns the environment variable names this call
+// injects as secrets, in original and upper-case form. Static environment
+// path expansion must skip these names: the child shell would observe the
+// secret's value rather than the inherited one classification sees.
+func extractSecretEnvNames(data []byte) map[string]bool {
+	var parsed struct {
+		SecretEnv map[string]string `json:"secret_env"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil || len(parsed.SecretEnv) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, 2*len(parsed.SecretEnv))
+	for name := range parsed.SecretEnv {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		names[name] = true
+		names[strings.ToUpper(name)] = true
+	}
+	return names
 }
 
 func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles) string {

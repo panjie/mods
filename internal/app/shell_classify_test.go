@@ -675,6 +675,8 @@ func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
 	}
+	t.Setenv("FILE", "")
+	t.Setenv("ROOT", "")
 	workspace := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkspace(workspace),
@@ -1237,4 +1239,154 @@ func TestExtractExternalPathsIgnoresBareSlash(t *testing.T) {
 	ext := filepath.Clean(t.TempDir())
 	secret := filepath.Join(ext, "secret")
 	require.Equal(t, []string{secret}, extractExternalPaths("cat "+secret, ws))
+}
+
+func TestAnalyzeShellCommandPOSIXEnvPathReferenceResolvesConcreteDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	t.Setenv("MODS_TEST_DATA", "/srv/mods-test-data")
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := mods.assessCommand("shell_run", `cat "$MODS_TEST_DATA/config.yml"`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "the env-var reference expands to a concrete path")
+	require.Equal(t, []string{"/srv/mods-test-data/config.yml"}, assessment.KnownDirs)
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	intent := assessment.AccessIntent()
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+	require.NotEmpty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto), true),
+		"an external read through an env variable offers a rule-saveable directory")
+}
+
+func TestAnalyzeShellCommandPOSIXEnvBareReferenceResolvesValueDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	t.Setenv("MODS_TEST_DATA", "/srv/mods-test-data")
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := mods.assessCommand("shell_run", `ls $MODS_TEST_DATA`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "a value-shaped bare reference expands to the variable's directory value")
+	require.Equal(t, []string{"/srv/mods-test-data"}, assessment.KnownDirs)
+}
+
+func TestAnalyzeShellCommandPOSIXEnvAssignmentSuppressesExpansion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	t.Setenv("MODS_TEST_DATA", "/srv/mods-test-data")
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := mods.assessCommand("shell_run", `MODS_TEST_DATA=/elsewhere cat "$MODS_TEST_DATA/config.yml"`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, []string{"$MODS_TEST_DATA"}, assessment.DynamicTargets,
+		"an assigned variable must keep its reference runtime-resolved")
+}
+
+func TestAnalyzeShellCommandPOSIXReadBindingBuiltinSuppressesExpansion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	t.Setenv("MODS_TEST_DATA", "/srv/mods-test-data")
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads runtime-bound path"}
+		},
+	}
+
+	assessment := mods.assessCommand("shell_run", `read MODS_TEST_DATA; cat "$MODS_TEST_DATA/config.yml"`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, "$MODS_TEST_DATA",
+		"a runtime-bound variable must keep its reference dynamic")
+}
+
+func TestCommandMutatesPOSIXEnvironment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	mutations := []string{
+		`FOO=/x cmd`,
+		`FOO=/x; cmd`,
+		`export FOO=/x`,
+		`declare FOO=/x`,
+		`local FOO=/x`,
+		`unset FOO`,
+		`read FOO`,
+		`mapfile -t FOO`,
+		`for f in *; do echo $f; done`,
+		`f() { local X=1; }; f`,
+		`env FOO=/x cmd`,
+		`set -- a b`,
+		`shift`,
+		`(( COUNT += 1 ))`,
+		`cat <&0 2>err`, // unparseable or redirection-heavy input fails closed
+		`if [ -n "$X" ]; then Y=1; fi`,
+	}
+	for _, command := range mutations {
+		require.True(t, commandMutatesPOSIXEnvironment(command), command)
+	}
+
+	reads := []string{
+		`cat "$FOO/x"`,
+		`echo done && ls /tmp`,
+		`git status --short | head -3`,
+		`printf '%s\n' "$FOO"`,
+	}
+	for _, command := range reads {
+		require.False(t, commandMutatesPOSIXEnvironment(command), command)
+	}
+}
+
+func TestAnalyzeShellCommandPOSIXPublicEnvContentReadAutoAllows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := mods.assessCommand("shell_run", `echo $PATH`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "PATH is public machine metadata with no capability to review")
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
 }

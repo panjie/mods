@@ -408,7 +408,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content 
 			if name == "process_run" {
 				command = string(data)
 			}
-			assessed := m.assessCommand(name, command)
+			assessed := m.assessCommandWithEnv(name, command, extractSecretEnvNames(data))
 			if name == "process_run" {
 				assessed = m.constrainResolvedProcessAssessment(assessed, processBinding)
 			}

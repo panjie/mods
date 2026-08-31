@@ -379,9 +379,12 @@ func envValue(opts Options, key string) string {
 }
 
 // stableEnvPathVars lists machine-level Windows location variables whose
-// values are fixed for the lifetime of the mods process, so a PowerShell
-// path reference to one of them resolves identically at classification time
-// and inside the child shell.
+// values are fixed for the lifetime of the mods process. Secret environment
+// injection reserves these names so a secret can never shadow a variable the
+// child shell would otherwise inherit unchanged. Static path expansion
+// itself covers every variable whose value is a single absolute directory
+// (see EnvDirValue); callers guard non-reserved names against per-call
+// secret shadowing before expanding.
 var stableEnvPathVars = map[string]bool{
 	"APPDATA": true, "COMSPEC": true, "LOCALAPPDATA": true, "PROGRAMDATA": true,
 	"PROGRAMFILES": true, "PROGRAMFILES(X86)": true, "SYSTEMDRIVE": true,
@@ -389,41 +392,129 @@ var stableEnvPathVars = map[string]bool{
 }
 
 // IsStableEnvName reports whether name is one of the machine-level location
-// variables ExpandStableEnvPath may resolve. Secret environment injection
-// reserves these names so classification and the child shell cannot disagree.
+// variables secret environment injection reserves. Classification and the
+// child shell cannot disagree about these names.
 func IsStableEnvName(name string) bool {
 	return stableEnvPathVars[strings.ToUpper(strings.TrimSpace(name))]
 }
 
-// ExpandStableEnvPath resolves a PowerShell $env:NAME or ${env:NAME} token
-// whose variable holds a machine-level location (SystemRoot, ProgramFiles,
-// ...) into a concrete absolute path. Only path-shaped references (a path
-// separator follows the variable name) resolve; bare value references stay
-// dynamic. Resolution fails unless the value is present and absolute.
-func ExpandStableEnvPath(token string, opts Options) (string, bool) {
-	if opts.Flavor != FlavorPowerShell {
+// publicEnvPathVars lists environment variables whose values are public
+// machine metadata rather than capabilities: any local shell can already
+// observe them, so a read of their content needs no review. Deliberately
+// excludes anything that may carry user data, credentials, or pointers to
+// private files.
+var publicEnvPathVars = map[string]bool{
+	"NUMBER_OF_PROCESSORS":   true,
+	"OS":                     true,
+	"PATH":                   true,
+	"PATHEXT":                true,
+	"PROCESSOR_ARCHITECTURE": true,
+	"PROCESSOR_IDENTIFIER":   true,
+	"PROCESSOR_LEVEL":        true,
+	"PROCESSOR_REVISION":     true,
+}
+
+// IsPublicEnvName reports whether an environment variable's content is
+// public machine metadata whose read requires no review. Windows (the
+// PowerShell flavor) compares case-insensitively; POSIX variables are
+// case-sensitive and only PATH qualifies.
+func IsPublicEnvName(name string, flavor Flavor) bool {
+	if flavor == FlavorPOSIX {
+		return name == "PATH"
+	}
+	return publicEnvPathVars[strings.ToUpper(strings.TrimSpace(name))]
+}
+
+// EnvDirValue resolves an environment variable name to its value when the
+// value can serve as a concrete directory for static path expansion:
+// non-empty, absolute, single-line, and free of path-list separators (a
+// value such as PATH names several locations and must never expand).
+func EnvDirValue(name string, opts Options) (string, bool) {
+	if name == "" {
 		return "", false
 	}
+	value := envValue(opts, name)
+	if !envValueDirLike(value, opts.Flavor) {
+		return "", false
+	}
+	return value, true
+}
+
+func envValueDirLike(value string, flavor Flavor) bool {
+	if value == "" || strings.ContainsAny(value, "\r\n") {
+		return false
+	}
+	if !IsAbs(value) {
+		return false
+	}
+	if flavor == FlavorPOSIX {
+		return !strings.ContainsAny(value, ":;")
+	}
+	return !strings.Contains(value, ";")
+}
+
+// ExpandEnvPath resolves a shell environment variable reference with a
+// path-shaped tail into a concrete absolute path. The variable's value must
+// pass EnvDirValue hygiene so classification and the child shell agree on
+// the expansion whenever the value is inherited unchanged; callers must
+// additionally ensure the child observes the same value (no in-command
+// environment mutation, no secret injection under the name). PowerShell
+// accepts $env:NAME and ${env:NAME}; POSIX accepts $NAME and ${NAME}.
+// Bare value references do not expand here; use EnvDirValue for those.
+func ExpandEnvPath(token string, opts Options) (string, bool) {
 	token = strings.TrimSpace(token)
-	for _, form := range [...]string{"${env:", "$env:"} {
-		if !hasCaseInsensitivePrefix(token, form) {
-			continue
+	if token == "" {
+		return "", false
+	}
+	switch opts.Flavor {
+	case FlavorPowerShell:
+		for _, form := range [...]string{"${env:", "$env:"} {
+			if !hasCaseInsensitivePrefix(token, form) {
+				continue
+			}
+			rest := token[len(form):]
+			name, tail, ok := envPathNameAndTail(rest, strings.HasPrefix(form, "${"))
+			if !ok {
+				continue
+			}
+			value, valid := EnvDirValue(name, opts)
+			if !valid {
+				continue
+			}
+			return joinHome(value, tail), true
 		}
-		rest := token[len(form):]
-		name, tail, ok := stableEnvNameAndTail(rest, strings.HasPrefix(form, "${"))
-		if !ok {
-			continue
+	case FlavorPOSIX:
+		rest, isRef := strings.CutPrefix(token, "$")
+		if !isRef {
+			return "", false
 		}
-		value := envValue(opts, name)
-		if value == "" || !IsAbs(value) {
-			continue
+		var name, tail string
+		if braced, found := strings.CutPrefix(rest, "{"); found {
+			end := strings.IndexByte(braced, '}')
+			if end <= 0 || !validPOSIXEnvName(braced[:end]) {
+				return "", false
+			}
+			name, tail = braced[:end], braced[end+1:]
+		} else {
+			n := posixEnvNameLen(rest)
+			if n == 0 {
+				return "", false
+			}
+			name, tail = rest[:n], rest[n:]
+		}
+		if !strings.HasPrefix(tail, "/") {
+			return "", false
+		}
+		value, valid := EnvDirValue(name, opts)
+		if !valid {
+			return "", false
 		}
 		return joinHome(value, tail), true
 	}
 	return "", false
 }
 
-func stableEnvNameAndTail(rest string, braced bool) (name, tail string, ok bool) {
+func envPathNameAndTail(rest string, braced bool) (name, tail string, ok bool) {
 	if braced {
 		end := strings.IndexByte(rest, '}')
 		if end <= 0 {
@@ -440,7 +531,311 @@ func stableEnvNameAndTail(rest string, braced bool) (name, tail string, ok bool)
 	if tail == "" || tail[0] != '/' && tail[0] != '\\' {
 		return "", "", false
 	}
-	return name, tail, stableEnvPathVars[strings.ToUpper(name)]
+	if !validPowerShellEnvName(name) {
+		return "", "", false
+	}
+	return name, tail, true
+}
+
+// EnvRefParts decomposes an environment variable reference. For a
+// path-shaped reference ($env:NAME\tail, ${env:NAME}\tail, $NAME/tail,
+// ${NAME}/tail) it returns the variable name and pathShaped=true; for a
+// bare reference it returns the name and pathShaped=false. ok is false
+// when ref is not an environment reference of the requested flavor.
+func EnvRefParts(ref string, flavor Flavor) (name string, pathShaped bool, ok bool) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", false, false
+	}
+	if flavor == FlavorPowerShell {
+		if hasCaseInsensitivePrefix(ref, "${env:") {
+			rest := ref[len("${env:"):]
+			end := strings.IndexByte(rest, '}')
+			if end <= 0 || !validPowerShellEnvName(rest[:end]) {
+				return "", false, false
+			}
+			tail := rest[end+1:]
+			return rest[:end], tail != "" && isPathSeparatorByte(tail[0]), true
+		}
+		if hasCaseInsensitivePrefix(ref, "$env:") {
+			rest := ref[len("$env:"):]
+			sep := strings.IndexAny(rest, `/\`)
+			if sep < 0 {
+				if !validPowerShellEnvName(rest) {
+					return "", false, false
+				}
+				return rest, false, true
+			}
+			if sep == 0 || !validPowerShellEnvName(rest[:sep]) {
+				return "", false, false
+			}
+			return rest[:sep], true, true
+		}
+		return "", false, false
+	}
+	if flavor != FlavorPOSIX {
+		return "", false, false
+	}
+	rest, isRef := strings.CutPrefix(ref, "$")
+	if !isRef {
+		return "", false, false
+	}
+	if braced, found := strings.CutPrefix(rest, "{"); found {
+		end := strings.IndexByte(braced, '}')
+		if end <= 0 || !validPOSIXEnvName(braced[:end]) {
+			return "", false, false
+		}
+		tail := braced[end+1:]
+		return braced[:end], tail != "" && tail[0] == '/', true
+	}
+	n := posixEnvNameLen(rest)
+	if n == 0 {
+		return "", false, false
+	}
+	return rest[:n], strings.HasPrefix(rest[n:], "/"), true
+}
+
+// validPowerShellEnvName reports whether name is a plausible variable name
+// in PowerShell's Env: drive (letters, digits, underscore, dot, hyphen,
+// parentheses).
+func validPowerShellEnvName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9':
+		case ch == '_' || ch == '.' || ch == '(' || ch == ')' || ch == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func validPOSIXEnvName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch == '_':
+		case ch >= '0' && ch <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// posixEnvNameLen returns the length of the leading POSIX parameter name in
+// s, or 0 when s does not start with one.
+func posixEnvNameLen(s string) int {
+	n := 0
+	for n < len(s) {
+		ch := s[n]
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch == '_':
+			n++
+		case ch >= '0' && ch <= '9':
+			if n == 0 {
+				return 0
+			}
+			n++
+		default:
+			return n
+		}
+	}
+	return n
+}
+
+// EnvRefUses reports how a command text uses one environment variable.
+type EnvRefUses struct {
+	// Bare counts references consumed as values rather than path prefixes.
+	Bare int
+	// Paths lists the concrete expansions of every path-shaped reference.
+	Paths []string
+}
+
+// ExpandEnvRefs scans command for references to the named environment
+// variable and expands every path-shaped reference with ExpandEnvPath. It
+// reports ok=false when a use cannot be resolved soundly — the variable has
+// no dir-like value, or a reference is compound (adjacent to another
+// expansion, escape, or concatenation) — and callers keep such references
+// dynamic. Single-quoted spans never interpolate and are skipped in both
+// flavors.
+func ExpandEnvRefs(command, name string, opts Options) (EnvRefUses, bool) {
+	if command == "" || name == "" {
+		return EnvRefUses{}, false
+	}
+	ps := opts.Flavor == FlavorPowerShell
+	if !ps && opts.Flavor != FlavorPOSIX {
+		return EnvRefUses{}, false
+	}
+	if _, valid := EnvDirValue(name, opts); !valid {
+		return EnvRefUses{}, false
+	}
+	var forms []string
+	if ps {
+		forms = []string{"$env:" + name, "${env:" + name + "}"}
+	} else {
+		forms = []string{"$" + name, "${" + name + "}"}
+	}
+	var uses EnvRefUses
+	inSingle := false
+	escaped := false
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if inSingle {
+			switch {
+			case ch == '\'' && ps && i+1 < len(command) && command[i+1] == '\'':
+				i++ // doubled quote stays inside a PowerShell literal
+			case ch == '\'':
+				inSingle = false
+			}
+			continue
+		}
+		switch {
+		case ch == '\'':
+			inSingle = true
+		case ps && ch == '`', !ps && ch == '\\':
+			escaped = true
+		case ch == '$':
+			next, compound := scanEnvRefAt(command, i, forms, ps, opts, &uses)
+			if compound {
+				return EnvRefUses{}, false
+			}
+			i = next
+		}
+	}
+	return uses, true
+}
+
+// scanEnvRefAt examines the '$' at command[i] against the variable's
+// reference forms. It returns the index of the last consumed byte (i when
+// nothing matches) and compound=true when the reference continues into
+// another expansion, escape, or concatenation that static expansion cannot
+// bound.
+func scanEnvRefAt(command string, i int, forms []string, ps bool, opts Options, uses *EnvRefUses) (int, bool) {
+	for _, form := range forms {
+		end := i + len(form)
+		if end > len(command) {
+			continue
+		}
+		if ps {
+			if !strings.EqualFold(command[i:end], form) {
+				continue
+			}
+		} else if command[i:end] != form {
+			continue
+		}
+		braced := form[1] == '{'
+		next := byte(0)
+		if end < len(command) {
+			next = command[end]
+		}
+		if !braced && isEnvNameWordChar(next, ps) {
+			continue // a longer variable name, not this variable
+		}
+		if braced && isEnvNameWordChar(next, ps) {
+			return 0, true // concatenation without a separator
+		}
+		if next == '/' || ps && next == '\\' {
+			j := end
+			for j < len(command) && isEnvPathTailChar(command[j], ps) {
+				j++
+			}
+			if j < len(command) && refTailContinuesCompound(command, j, ps) {
+				return 0, true
+			}
+			resolved, ok := ExpandEnvPath(command[i:j], opts)
+			if !ok {
+				return 0, true
+			}
+			uses.Paths = appendUniqueDir(uses.Paths, resolved)
+			return j - 1, false
+		}
+		if refByteContinuesCompound(next, ps) {
+			return 0, true
+		}
+		uses.Bare++
+		return end - 1, false
+	}
+	return i, false
+}
+
+func refByteContinuesCompound(c byte, ps bool) bool {
+	switch c {
+	case '$', '\'', '"', '`':
+		return true
+	}
+	return !ps && c == '\\'
+}
+
+// refTailContinuesCompound reports whether the byte ending a consumed path
+// tail continues the word beyond static expansion: another expansion, an
+// escape, or a quote that concatenates more path text (a quote followed by
+// whitespace or a shell separator merely closes the word).
+func refTailContinuesCompound(command string, j int, ps bool) bool {
+	switch c := command[j]; c {
+	case '$', '`':
+		return true
+	case '"', '\'':
+		k := j
+		for k < len(command) && (command[k] == '"' || command[k] == '\'') {
+			k++
+		}
+		if k >= len(command) {
+			return false
+		}
+		return isEnvPathTailChar(command[k], ps) || isEnvNameWordChar(command[k], ps)
+	}
+	return !ps && command[j] == '\\'
+}
+
+func isEnvNameWordChar(c byte, ps bool) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_':
+		return true
+	}
+	return ps && (c == '.' || c == '(' || c == ')')
+}
+
+// isEnvPathTailChar reports whether c may continue a path-shaped reference
+// tail. Whitespace, quotes, shell separators, grouping braces, and
+// expansion starters end the tail; everything else (including glob
+// characters, handled later by glob truncation) continues it.
+func isEnvPathTailChar(c byte, ps bool) bool {
+	switch c {
+	case ' ', '\t', '\r', '\n', '"', '\'', '<', '>', '|', ';', ',', '&', '(', ')', '{', '}', '$', '`':
+		return false
+	}
+	if !ps && c == '\\' {
+		return false
+	}
+	return c >= 0x20
+}
+
+func isPathSeparatorByte(c byte) bool {
+	return c == '/' || c == '\\'
+}
+
+func appendUniqueDir(dirs []string, dir string) []string {
+	for _, existing := range dirs {
+		if existing == dir {
+			return dirs
+		}
+	}
+	return append(dirs, dir)
 }
 
 func expandHomeVariable(token string, opts Options) (string, bool) {

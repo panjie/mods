@@ -53,7 +53,40 @@ func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
 	ws := WorkspaceScope(t.TempDir())
 	rules := RulesForDirs([]string{ws.Value}, ws, AccessWrite)
 	intent := AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$PROFILE.CurrentUserCurrentHost"}}
-	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto))
+	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto),
+		"a dynamic write stays reviewable even when its concrete dirs are rule-covered")
+}
+
+func TestDynamicReadAllowRule(t *testing.T) {
+	ws := wsScope(t)
+	external := filepath.Clean(t.TempDir())
+
+	rules := RulesForDynamicReads(ws)
+	require.Len(t, rules, 1)
+	require.Equal(t, DynamicReadAllow, rules[0].Type)
+	require.Equal(t, "reads of runtime-resolved targets", rules[0].String())
+
+	dynamicRead := AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$FILE"}}
+	require.True(t, RulesAllowIntent(rules, dynamicRead, ws, nil, ReviewAuto),
+		"a granted dynamic-read rule covers the unresolved portion of a read")
+	require.True(t, RulesAllowIntent(rules, dynamicRead, ws, nil, ReviewAlways),
+		"saved rules bypass ReviewAlways like DirAllow does")
+	require.False(t, RulesAllowIntent(nil, dynamicRead, ws, nil, ReviewAuto),
+		"without the rule a dynamic read still asks")
+
+	dynamicWrite := AccessIntent{Class: AccessWrite, UnresolvedPaths: []string{"$FILE"}}
+	require.False(t, RulesAllowIntent(rules, dynamicWrite, ws, nil, ReviewAuto),
+		"the rule never covers writes")
+
+	mixed := AccessIntent{Class: AccessRead, Dirs: []string{external}, UnresolvedPaths: []string{"$FILE"}}
+	require.False(t, RulesAllowIntent(rules, mixed, ws, nil, ReviewAuto),
+		"concrete external dirs still need DirAllow coverage")
+	mixedRules := append(append([]Rule(nil), rules...), RulesForDirs([]string{external}, ws, AccessRead)...)
+	require.True(t, RulesAllowIntent(mixedRules, mixed, ws, nil, ReviewAuto))
+
+	other := wsScope(t)
+	require.False(t, RulesAllowIntent(RulesForDynamicReads(other), dynamicRead, ws, nil, ReviewAuto),
+		"the rule never applies outside its scope")
 }
 
 func TestClassifyAccessModeOverride(t *testing.T) {

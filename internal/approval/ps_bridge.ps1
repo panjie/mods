@@ -82,12 +82,25 @@ function Get-OrdinaryStringAssignment {
     }
 
     try {
-        $statements = @($Node.Right.Statements)
-        if ($statements.Count -ne 1 -or
-            $statements[0] -isnot [System.Management.Automation.Language.PipelineAst]) {
+        # The assignment right-hand side is an expression-level
+        # CommandExpressionAst in current PowerShell builds; some hosts wrap
+        # it in a single-statement StatementBlockAst or a PipelineAst. Accept
+        # every shape as long as it reduces to exactly one bare expression.
+        $elements = @()
+        if ($Node.Right -is [System.Management.Automation.Language.StatementBlockAst]) {
+            $statements = @($Node.Right.Statements)
+            if ($statements.Count -ne 1 -or
+                $statements[0] -isnot [System.Management.Automation.Language.PipelineAst]) {
+                return $null
+            }
+            $elements = @($statements[0].PipelineElements)
+        } elseif ($Node.Right -is [System.Management.Automation.Language.PipelineAst]) {
+            $elements = @($Node.Right.PipelineElements)
+        } elseif ($Node.Right -is [System.Management.Automation.Language.CommandExpressionAst]) {
+            $elements = @($Node.Right)
+        } else {
             return $null
         }
-        $elements = @($statements[0].PipelineElements)
         if ($elements.Count -ne 1 -or
             $elements[0] -isnot [System.Management.Automation.Language.CommandExpressionAst] -or
             @($elements[0].Redirections).Count -ne 0) {

@@ -20,6 +20,10 @@ const (
 	EditAll     RuleType = "edit_all"
 	ToolAll     RuleType = "tool_all"
 	DirAllow    RuleType = "dir_allow"
+	// DynamicReadAllow covers reads whose targets stay runtime-resolved
+	// (environment variables, command substitution). It is granted only
+	// through the review UI, never inferred, and never covers writes.
+	DynamicReadAllow RuleType = "dynamic_read_allow"
 
 	ScopeWorkspace ScopeKind = "workspace"
 )
@@ -79,6 +83,8 @@ func (r Rule) String() string {
 		return fmt.Sprintf("%s dirs: %s", r.Mode, strings.Join(r.Paths, ", "))
 	case ToolAll:
 		return r.Tool
+	case DynamicReadAllow:
+		return "reads of runtime-resolved targets"
 	default:
 		return r.Tool
 	}
@@ -111,7 +117,7 @@ func Dedupe(rules []Rule) []Rule {
 	seen := make(map[string]struct{}, len(rules))
 	result := make([]Rule, 0, len(rules))
 	for _, rule := range rules {
-		if rule.Tool == "" && rule.Type != DirAllow {
+		if rule.Tool == "" && rule.Type != DirAllow && rule.Type != DynamicReadAllow {
 			continue
 		}
 		if _, ok := seen[rule.key()]; ok {

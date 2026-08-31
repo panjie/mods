@@ -57,6 +57,7 @@ var NewAnim = ui.NewAnim
 var HideCommandWindow = platform.HideCommandWindow
 var BuildRegistry = tooling.BuildRegistry
 var RulesForDirs = approval.RulesForDirs
+var RulesForDynamicReads = approval.RulesForDynamicReads
 var RulesAllowDirs = approval.RulesAllowDirs
 var RulesAllowIntent = approval.RulesAllowIntent
 var RulesLabel = approval.RulesLabel

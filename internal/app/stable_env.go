@@ -29,72 +29,80 @@ func commandMutatesPowerShellEnvironment(command string) bool {
 	return false
 }
 
-// resolveStableEnvTargets moves path-shaped stable-environment expressions
-// (for example $env:SystemRoot\WinSxS) from the dynamic target list into
-// concrete known directories. Bare value references whose information is
-// fully covered by an expanded sibling expression are dropped; every other
-// dynamic target is kept unchanged.
-func resolveStableEnvTargets(known, dynamic []string, workspace string) ([]string, []string) {
+// resolvePowerShellEnvTargets materializes dynamic targets that reference
+// environment variables whose inherited values are statically known and
+// identical inside the child shell. Three kinds resolve:
+//
+//   - path-shaped references ($env:NAME\tail) expand to the joined path,
+//   - bare references with at least one value-shaped textual use expand to
+//     the variable's directory value (reads only; write value-uses stay
+//     dynamic so the corrective loop keeps applying),
+//   - bare references whose uses are all path-shaped are subsumed: every
+//     textual reference expands to a concrete path instead.
+//
+// References under a name shadowed by this call's secret environment never
+// expand: the child shell would observe the secret's value.
+func resolvePowerShellEnvTargets(known, dynamic []string, workspace, command string, shadowedEnv map[string]bool, allowValueDirs bool) ([]string, []string) {
 	if len(dynamic) == 0 {
 		return known, dynamic
 	}
 	opts := pathutil.DefaultOptions(workspace, pathutil.FlavorPowerShell)
 	kept := make([]string, 0, len(dynamic))
-	var expanded, expandedRefs []string
+	var expanded []string
 	for _, target := range dynamic {
 		trimmed := strings.TrimSpace(target)
-		if resolved, ok := pathutil.ExpandStableEnvPath(trimmed, opts); ok {
-			expanded = appendMissingShellDirs(expanded, []string{resolved})
-			expandedRefs = append(expandedRefs, trimmed)
+		name, pathShaped, ok := pathutil.EnvRefParts(trimmed, pathutil.FlavorPowerShell)
+		if !ok || shadowedEnv[strings.ToUpper(name)] {
+			kept = append(kept, target)
+			continue
+		}
+		if pathShaped {
+			if resolved, expandable := pathutil.ExpandEnvPath(trimmed, opts); expandable {
+				expanded = appendMissingShellDirs(expanded, []string{resolved})
+				continue
+			}
+			kept = append(kept, target)
+			continue
+		}
+		if dirs, resolved := bareEnvRefDirs(name, command, opts, allowValueDirs); resolved {
+			expanded = appendMissingShellDirs(expanded, dirs)
 			continue
 		}
 		kept = append(kept, target)
 	}
-	kept = dropSubsumedStableEnvRefs(kept, expandedRefs)
-	if len(expanded) == 0 {
+	if len(expanded) == 0 && len(kept) == len(dynamic) {
 		return known, dynamic
 	}
 	return appendMissingShellDirs(known, expanded), kept
 }
 
-func dropSubsumedStableEnvRefs(kept, expandedRefs []string) []string {
-	if len(expandedRefs) == 0 {
-		return kept
+// bareEnvRefDirs decides a bare environment-variable reference from its
+// textual uses: value-shaped uses make the variable's directory value the
+// honest scope; otherwise every path-shaped use expands to a concrete path
+// (subsumption). A well-known public variable (PATH, OS, ...) carries no
+// capability, so for reads its reference is dropped outright with nothing
+// to review. It reports false when the uses cannot be bounded soundly,
+// leaving the reference dynamic.
+func bareEnvRefDirs(name, command string, opts pathutil.Options, allowValueDir bool) ([]string, bool) {
+	if allowValueDir && pathutil.IsPublicEnvName(name, opts.Flavor) {
+		return nil, true
 	}
-	result := make([]string, 0, len(kept))
-	for _, target := range kept {
-		trimmed := strings.TrimSpace(target)
-		if stableEnvValueReference(trimmed) && stableEnvRefSubsumed(trimmed, expandedRefs) {
-			continue
+	uses, ok := pathutil.ExpandEnvRefs(command, name, opts)
+	if !ok {
+		return nil, false
+	}
+	if uses.Bare > 0 {
+		if !allowValueDir {
+			return nil, false
 		}
-		result = append(result, target)
-	}
-	return result
-}
-
-func stableEnvValueReference(ref string) bool {
-	lower := strings.ToLower(strings.TrimSpace(ref))
-	if strings.HasPrefix(lower, "$env:") {
-		return pathutil.IsStableEnvName(lower[len("$env:"):])
-	}
-	if strings.HasPrefix(lower, "${env:") && strings.HasSuffix(lower, "}") {
-		return pathutil.IsStableEnvName(lower[len("${env:") : len(lower)-1])
-	}
-	return false
-}
-
-func stableEnvRefSubsumed(ref string, expandedRefs []string) bool {
-	for _, expanded := range expandedRefs {
-		if len(expanded) <= len(ref) {
-			continue
+		value, valid := pathutil.EnvDirValue(name, opts)
+		if !valid {
+			return nil, false
 		}
-		if !strings.EqualFold(expanded[:len(ref)], ref) {
-			continue
-		}
-		next := expanded[len(ref)]
-		if next == '/' || next == '\\' {
-			return true
-		}
+		return []string{value}, true
 	}
-	return false
+	if len(uses.Paths) > 0 {
+		return uses.Paths, true
+	}
+	return nil, false
 }

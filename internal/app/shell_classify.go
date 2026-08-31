@@ -36,6 +36,13 @@ func shellToolUsesPowerShell(tool string) bool {
 }
 
 func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
+	return m.assessCommandWithEnv(tool, command, nil)
+}
+
+// assessCommandWithEnv additionally receives the environment names this
+// call injects as secrets; static environment path expansion skips them so
+// classification never substitutes a value the child shell will not see.
+func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string]bool) approval.CommandAssessment {
 	if tool == "process_run" {
 		return m.assessProcessInvocation(command)
 	}
@@ -75,27 +82,34 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 		}
 		result = mergeCommandAssessment(result, completion)
 	}
-	// Path-shaped references to machine-level location variables ($env:SystemRoot,
-	// $env:ProgramFiles, ...) resolve deterministically for the child shell, so a
-	// proven read or write can carry them as concrete directories. This makes the
-	// approval scope rule-saveable instead of an unresolvable dynamic target, and
-	// lets temp-dir writes such as Set-Content "$env:TEMP\file" reach the safe-dir
-	// allow cell of the approval matrix. Probes keep their dynamic-target
-	// auto-allow semantics, and commands that reassign the environment never
-	// expand: the child would observe a different value.
-	if flavor == pathutil.FlavorPowerShell &&
-		(result.Effect == approval.EffectRead || result.Effect == approval.EffectWrite) &&
-		!result.DynamicProbe && !commandMutatesPowerShellEnvironment(command) {
-		result.KnownDirs, result.DynamicTargets = resolveStableEnvTargets(result.KnownDirs, result.DynamicTargets, ws)
-		// Engine-automatic variables ($PROFILE / $HOME) resolve in a fresh
-		// child shell and can be materialized ahead of approval, turning an
-		// unresolvable dynamic target into a concrete, rule-saveable directory.
-		resolved := approval.ResolveEngineAutomaticTargets(result.DynamicTargets, probeAssignedSet(result.AssignedVariables))
-		result.KnownDirs, result.DynamicTargets = materializeProbeTargets(result.KnownDirs, result.DynamicTargets, resolved)
-		// Variables assigned a literal value in the same command resolve to a
-		// concrete path as well, so a target such as $p in `$p="C:\x"; Set-Content $p`
-		// becomes a reviewable, rule-saveable directory instead of a dynamic target.
-		result.KnownDirs, result.DynamicTargets = propagateLiteralTargets(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws)
+	// Path-shaped references to inherited environment variables resolve
+	// deterministically for the child shell whenever the command does not
+	// mutate the environment and the name is not shadowed by this call's
+	// secret environment. Materializing them as concrete directories makes
+	// the approval scope rule-saveable instead of an unresolvable dynamic
+	// target, lets temp-dir writes such as Set-Content "$env:TEMP\file"
+	// reach the safe-dir allow cell of the approval matrix, and stops bare
+	// references that only ever appear in path-shaped uses (for example
+	// $env:USERPROFILE inside "$env:USERPROFILE\.emacs.d\init.el") from
+	// re-dynamizing the intent. Probes keep their dynamic-target auto-allow
+	// semantics, and commands that reassign the environment never expand:
+	// the child would observe a different value.
+	if result.Effect == approval.EffectRead || result.Effect == approval.EffectWrite {
+		allowValueDirs := result.Effect == approval.EffectRead
+		if flavor == pathutil.FlavorPowerShell && !result.DynamicProbe && !commandMutatesPowerShellEnvironment(command) {
+			result.KnownDirs, result.DynamicTargets = resolvePowerShellEnvTargets(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs)
+			// Engine-automatic variables ($PROFILE / $HOME) resolve in a fresh
+			// child shell and can be materialized ahead of approval, turning an
+			// unresolvable dynamic target into a concrete, rule-saveable directory.
+			resolved := approval.ResolveEngineAutomaticTargets(result.DynamicTargets, probeAssignedSet(result.AssignedVariables))
+			result.KnownDirs, result.DynamicTargets = materializeProbeTargets(result.KnownDirs, result.DynamicTargets, resolved)
+			// Variables assigned a literal value in the same command resolve to a
+			// concrete path as well, so a target such as $p in `$p="C:\x"; Set-Content $p`
+			// becomes a reviewable, rule-saveable directory instead of a dynamic target.
+			result.KnownDirs, result.DynamicTargets = propagateLiteralTargets(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws)
+		} else if flavor == pathutil.FlavorPOSIX && !commandMutatesPOSIXEnvironment(command) {
+			result.KnownDirs, result.DynamicTargets = resolvePOSIXEnvTargets(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs)
+		}
 	}
 	// A statically proven read with no explicit external target operates in the
 	// configured workspace context. Classifier-completed commands do not get
@@ -407,7 +421,7 @@ func probeAssignedSet(assigned []string) map[string]bool {
 // concrete known directories. Each resolved target maps its original
 // expression to an absolute path; resolved expressions are dropped from the
 // dynamic list and their paths appended to known, mirroring
-// resolveStableEnvTargets so downstream parent-directory normalization and
+// resolvePowerShellEnvTargets so downstream parent-directory normalization and
 // rule generation see concrete paths.
 func materializeProbeTargets(known, dynamic []string, resolved map[string]string) ([]string, []string) {
 	if len(resolved) == 0 || len(dynamic) == 0 {

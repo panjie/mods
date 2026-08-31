@@ -309,6 +309,7 @@ func TestSessionData(t *testing.T) {
 		testScopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}),
 		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessRead}),
 		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessWrite}),
+		testScopedRule(ApprovalRule{Type: approvalDynamicReadAllow}),
 	}
 
 	require.NoError(t, db.SaveSession(id, "session", "openai", "gpt-5", messages, rules))

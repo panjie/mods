@@ -160,7 +160,11 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
-	require.Empty(t, rules, "runtime-resolved reads must never offer a persistent directory rule")
+	require.NotEmpty(t, rules, "a dynamic read offers the explicit-consent DynamicReadAllow rule")
+	labels := RulesLabel(rules)
+	require.Contains(t, labels, "reads of runtime-resolved targets")
+	require.Contains(t, labels, `read dirs: C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links`,
+		"concrete external dirs still offer their scoped DirAllow rule")
 }
 
 func TestNonPathShapedDynamicTargetHiddenFromReviewPanel(t *testing.T) {

@@ -112,15 +112,43 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 	return len(allowedPaths) > 0
 }
 
+// RulesForDynamicReads builds the candidate rule offered by the "Always
+// allow" choice for a read whose targets stay runtime-resolved. The user
+// grants it explicitly; it never covers writes and never applies to intents
+// with concrete directories (those still need DirAllow coverage).
+func RulesForDynamicReads(scope Scope) []Rule {
+	return scopeRules([]Rule{{
+		Type: DynamicReadAllow,
+	}}, scope)
+}
+
+// dynamicReadRuleSaved reports whether the scoped rule set contains a
+// user-granted DynamicReadAllow rule.
+func dynamicReadRuleSaved(rules []Rule, scope Scope) bool {
+	return slices.ContainsFunc(rulesForScope(rules, scope), func(rule Rule) bool {
+		return rule.Type == DynamicReadAllow
+	})
+}
+
 // RulesAllowIntent reports whether saved rules cover every access group that
 // still requires approval under the current policy. Groups already allowed by
 // the matrix (for example a temp-directory write in auto mode) need no rule.
+// A saved DynamicReadAllow rule covers the unresolved portion of a read
+// intent; concrete directory groups still require DirAllow coverage, so a
+// mixed intent is not blanket-allowed.
 func RulesAllowIntent(rules []Rule, intent AccessIntent, scope Scope, safeDirs []string, reviewMode ReviewMode) bool {
-	if intent.HasUnresolvedPaths() {
+	dynamicCovered := intent.HasUnresolvedPaths() &&
+		intent.DominantClass() == AccessRead && dynamicReadRuleSaved(rules, scope)
+	if intent.HasUnresolvedPaths() && !dynamicCovered {
 		return false
 	}
-	covered := false
+	covered := dynamicCovered
 	for _, group := range intent.Groups() {
+		if dynamicCovered && len(group.Dirs) == 0 {
+			// The read's scope is exactly its runtime-resolved targets,
+			// which the granted rule covers; there are no dirs to check.
+			continue
+		}
 		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
 		if reviewMode != ReviewAlways && ClassifyAccess(groupIntent, scope, safeDirs, reviewMode) == DecisionAllow {
 			continue

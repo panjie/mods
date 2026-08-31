@@ -11,7 +11,7 @@ import (
 // variable with a statically known literal value (from the assessment's
 // LiteralAssignments) into concrete directories. Resolved targets are dropped
 // from the dynamic list and their normalized paths appended to known,
-// mirroring resolveStableEnvTargets so downstream parent-directory
+// mirroring resolvePowerShellEnvTargets so downstream parent-directory
 // normalization and rule generation see concrete paths.
 func propagateLiteralTargets(known, dynamic []string, literals map[string]string, ws string) ([]string, []string) {
 	if len(literals) == 0 || len(dynamic) == 0 {

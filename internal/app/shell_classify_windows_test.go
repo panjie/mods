@@ -4,6 +4,7 @@ package app
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -574,30 +575,85 @@ func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	), "path-resolution probes keep their dynamic-target auto-allow semantics")
 }
 
-func TestResolveStableEnvTargets(t *testing.T) {
+func TestResolvePowerShellEnvTargets(t *testing.T) {
 	systemRoot := os.Getenv("SystemRoot")
 	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
+	t.Setenv("STARSHIP_CONFIG", "") // pin the unset case against dev machines
 
-	known, dynamic := resolveStableEnvTargets(nil, []string{`$env:SystemRoot`, `$env:SystemRoot\WinSxS`}, `C:\ws`)
+	known, dynamic := resolvePowerShellEnvTargets(nil, []string{`$env:SystemRoot`, `$env:SystemRoot\WinSxS`}, `C:\ws`, `Get-ChildItem "$env:SystemRoot\WinSxS"`, nil, true)
 	require.Len(t, known, 1)
 	require.True(t, strings.EqualFold(known[0], systemRoot+`\WinSxS`), known)
 	require.Empty(t, dynamic, "the bare variable reference is subsumed by its expanded path form")
 
-	known, dynamic = resolveStableEnvTargets(nil, []string{`$env:STARSHIP_CONFIG`, `$env:SystemRoot\WinSxS`}, `C:\ws`)
+	known, dynamic = resolvePowerShellEnvTargets(nil, []string{`$env:STARSHIP_CONFIG`, `$env:SystemRoot\WinSxS`}, `C:\ws`, `Get-ChildItem "$env:SystemRoot\WinSxS"`, nil, true)
 	require.Len(t, known, 1)
-	require.Equal(t, []string{`$env:STARSHIP_CONFIG`}, dynamic, "non-stable targets stay dynamic")
+	require.Equal(t, []string{`$env:STARSHIP_CONFIG`}, dynamic, "unset variable references stay dynamic")
 
-	known, dynamic = resolveStableEnvTargets([]string{known[0]}, []string{`$env:SystemRoot\WinSxS`}, `C:\ws`)
+	known, dynamic = resolvePowerShellEnvTargets([]string{known[0]}, []string{`$env:SystemRoot\WinSxS`}, `C:\ws`, `Get-ChildItem "$env:SystemRoot\WinSxS"`, nil, true)
 	require.Len(t, known, 1, "already-known concrete dirs are not duplicated")
 	require.Empty(t, dynamic)
 
-	known, dynamic = resolveStableEnvTargets(nil, []string{`$env:SECRET\x`}, `C:\ws`)
+	known, dynamic = resolvePowerShellEnvTargets(nil, []string{`$env:SECRET\x`}, `C:\ws`, `Get-Content "$env:SECRET\x"`, nil, true)
 	require.Empty(t, known)
 	require.Equal(t, []string{`$env:SECRET\x`}, dynamic)
 
-	known, dynamic = resolveStableEnvTargets([]string{`C:\ws`}, nil, `C:\ws`)
+	known, dynamic = resolvePowerShellEnvTargets([]string{`C:\ws`}, nil, `C:\ws`, ``, nil, true)
 	require.Equal(t, []string{`C:\ws`}, known)
 	require.Nil(t, dynamic)
+}
+
+func TestResolvePowerShellEnvTargetsBareReferencePolicy(t *testing.T) {
+	systemRoot := os.Getenv("SystemRoot")
+	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
+
+	// A bare reference with a genuine value-shaped use expands to the
+	// variable's directory value for reads.
+	known, dynamic := resolvePowerShellEnvTargets(nil, []string{`$env:SystemRoot`}, `C:\ws`, `Get-ChildItem $env:SystemRoot`, nil, true)
+	require.Len(t, known, 1)
+	require.True(t, strings.EqualFold(known[0], systemRoot), known)
+	require.Empty(t, dynamic)
+
+	// The same value-shaped use on a write keeps the reference dynamic: the
+	// corrective loop still applies to unbounded write targets.
+	known, dynamic = resolvePowerShellEnvTargets(nil, []string{`$env:SystemRoot`}, `C:\ws`, `Get-ChildItem $env:SystemRoot`, nil, false)
+	require.Empty(t, known)
+	require.Equal(t, []string{`$env:SystemRoot`}, dynamic)
+
+	// A name shadowed by this call's secret environment never expands: the
+	// child shell would observe the secret's value.
+	t.Setenv("MODS_TEST_SECRET_DIR", `C:\shadowed`)
+	known, dynamic = resolvePowerShellEnvTargets(nil, []string{`$env:MODS_TEST_SECRET_DIR`}, `C:\ws`, `Get-ChildItem $env:MODS_TEST_SECRET_DIR`, map[string]bool{"MODS_TEST_SECRET_DIR": true}, true)
+	require.Empty(t, known)
+	require.Equal(t, []string{`$env:MODS_TEST_SECRET_DIR`}, dynamic)
+}
+
+func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	require.NotEmpty(t, home)
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	cmd := `Get-Content "$env:USERPROFILE\.emacs.d\init.el" -TotalCount 300 -ErrorAction SilentlyContinue`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "the bare home-variable reference is subsumed by its expanded path form")
+	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.NotEmpty(t, assessment.KnownDirs)
+	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(home)+`\`), assessment.KnownDirs)
+	intent := assessment.AccessIntent()
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.NotEmpty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto), true),
+		"an external read through the home variable offers a rule-saveable directory")
 }
 
 func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
@@ -615,4 +671,132 @@ func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
 
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "mis-parsed POSIX --eval fragments must not become dynamic targets")
+}
+
+func TestReviewBannerAlwaysAllowForUserProfileEnvRead(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	require.NotEmpty(t, home)
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	cmd := `Get-Content "$env:USERPROFILE\.emacs.d\init.el" -TotalCount 300 -ErrorAction SilentlyContinue`
+	args := []byte(`{"command":` + strconv.Quote(cmd) + `}`)
+
+	assessment := m.assessCommand("powershell_run", cmd)
+	intent := assessment.AccessIntent()
+	scope := WorkspaceScope(workspace)
+	rules := candidateRulesForIntent(intent, scope, approval.SafeDirs(), ApprovalReviewMode(ReviewAuto), true)
+	require.NotEmpty(t, rules, "an external read through the home variable offers a rule-saveable directory")
+
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         scope,
+		reviewItem: &toolReviewItem{
+			name:           "powershell_run",
+			args:           args,
+			candidateRules: rules,
+			presentation:   formatReviewPresentationWithIntent("powershell_run", args, assessment, scope, intent),
+		},
+	}
+	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
+	require.Contains(t, rendered, "Always allow")
+	require.Contains(t, rendered, ".emacs.d")
+}
+
+func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := m.assessCommand("powershell_run", `$env:Path -split ';' | Where-Object { $_ }`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "a public machine-metadata variable carries no capability to review")
+	// With no dynamic target left, the read falls back to the workspace
+	// scope, which the matrix allows without review.
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	assessment := m.assessCommand("powershell_run", `Write-Output $env:GITHUB_TOKEN`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, `$env:GITHUB_TOKEN`,
+		"a secret-bearing variable is not public metadata and stays dynamic")
+	require.Equal(t, DecisionAsk, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestDynamicReadReviewOffersAlwaysAllowRule(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads runtime-resolved path"}
+		},
+	}
+	cmd := `Get-Content -LiteralPath $env:APP_NOTES_FILE`
+	args := []byte(`{"command":` + strconv.Quote(cmd) + `}`)
+
+	assessment := m.assessCommand("powershell_run", cmd)
+	intent := assessment.AccessIntent()
+	require.True(t, intent.HasUnresolvedPaths())
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+
+	scope := WorkspaceScope(workspace)
+	reviewer := &toolReviewer{
+		reviewPending: true,
+		scope:         scope,
+		reviewItem: &toolReviewItem{
+			name:           "powershell_run",
+			args:           args,
+			candidateRules: candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true),
+			presentation:   formatReviewPresentationWithIntent("powershell_run", args, assessment, scope, intent),
+		},
+	}
+	require.NotEmpty(t, reviewer.reviewItem.candidateRules, "a dynamic read offers the DynamicReadAllow rule")
+	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
+	require.Contains(t, rendered, "Always allow")
+	require.Contains(t, rendered, "reads of runtime-resolved targets")
+
+	// Granting the rule makes the same intent rule-covered afterwards.
+	reviewer.rules.Add(reviewer.reviewItem.candidateRules...)
+	require.True(t, RulesAllowIntent(reviewer.rules.Snapshot(), intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }

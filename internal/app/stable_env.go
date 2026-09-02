@@ -40,6 +40,10 @@ func commandMutatesPowerShellEnvironment(command string) bool {
 //   - bare references whose uses are all path-shaped are subsumed: every
 //     textual reference expands to a concrete path instead.
 //
+// A path-shaped token that cannot expand as one clean path (for example a
+// flattened PowerShell array argument mixing quotes and further references)
+// falls back to the textual-use scan.
+//
 // References under a name shadowed by this call's secret environment never
 // expand: the child shell would observe the secret's value.
 func resolvePowerShellEnvTargets(known, dynamic []string, workspace, command string, shadowedEnv map[string]bool, allowValueDirs bool) ([]string, []string) {
@@ -59,6 +63,14 @@ func resolvePowerShellEnvTargets(known, dynamic []string, workspace, command str
 		if pathShaped {
 			if resolved, expandable := pathutil.ExpandEnvPath(trimmed, opts); expandable {
 				expanded = appendMissingShellDirs(expanded, []string{resolved})
+				continue
+			}
+			// A token whose tail mixes quoting levels or further references —
+			// a flattened PowerShell array argument — cannot expand as one
+			// path; its textual uses still bound the variable soundly, so the
+			// same scan that subsumes bare references resolves it.
+			if dirs, resolved := bareEnvRefDirs(name, command, opts, allowValueDirs); resolved {
+				expanded = appendMissingShellDirs(expanded, dirs)
 				continue
 			}
 			kept = append(kept, target)

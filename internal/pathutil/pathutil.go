@@ -477,6 +477,9 @@ func ExpandEnvPath(token string, opts Options) (string, bool) {
 			if !ok {
 				continue
 			}
+			if !expandablePathTail(tail) {
+				continue
+			}
 			value, valid := EnvDirValue(name, opts)
 			if !valid {
 				continue
@@ -827,6 +830,22 @@ func isEnvPathTailChar(c byte, ps bool) bool {
 
 func isPathSeparatorByte(c byte) bool {
 	return c == '/' || c == '\\'
+}
+
+// expandablePathTail reports whether a path-shaped reference tail carries
+// only path characters. Tokens extracted from command text can flatten
+// several references or quoting levels into one string (a PowerShell array
+// literal such as "$env:A\x","$env:B\y" reaches classification as a single
+// argument); expanding such a token would graft the leftovers onto the first
+// reference's value as a hybrid path, so it must stay unexpanded. A space
+// remains legal: quoted arguments legitimately carry spaces in file names.
+func expandablePathTail(tail string) bool {
+	for i := 0; i < len(tail); i++ {
+		if c := tail[i]; c != ' ' && !isEnvPathTailChar(c, true) {
+			return false
+		}
+	}
+	return true
 }
 
 func appendUniqueDir(dirs []string, dir string) []string {

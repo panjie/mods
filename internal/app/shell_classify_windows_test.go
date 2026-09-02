@@ -627,6 +627,52 @@ func TestResolvePowerShellEnvTargetsBareReferencePolicy(t *testing.T) {
 	require.Equal(t, []string{`$env:MODS_TEST_SECRET_DIR`}, dynamic)
 }
 
+func TestResolvePowerShellEnvTargetsFlattenedArrayToken(t *testing.T) {
+	systemRoot := os.Getenv("SystemRoot")
+	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
+
+	command := `Remove-Item "$env:SystemRoot\a.wav","$env:SystemRoot\b.wav" -ErrorAction SilentlyContinue`
+	known, dynamic := resolvePowerShellEnvTargets(nil, []string{`$env:SystemRoot\a.wav","$env:SystemRoot\b.wav`}, `C:\ws`, command, nil, false)
+	require.Empty(t, dynamic, "the flattened array token resolves through its textual path uses")
+	require.Len(t, known, 2)
+	require.True(t, strings.EqualFold(known[0], systemRoot+`\a.wav`), known)
+	require.True(t, strings.EqualFold(known[1], systemRoot+`\b.wav`), known)
+}
+
+func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	temp := os.Getenv("TEMP")
+	require.NotEmpty(t, temp, "TEMP must be set on Windows")
+	workspace := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	command := `Remove-Item "$env:TEMP\tts_test.wav","$env:TEMP\tts_en.wav","$env:TEMP\t_ja.wav","$env:TEMP\t_en.wav","$env:TEMP\t_auto2.wav" -ErrorAction SilentlyContinue; "cleaned"`
+
+	assessment := m.assessCommand("powershell_run", command)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "each quoted array element expands to a concrete path instead of one flattened dynamic token")
+	intent := assessment.AccessIntent()
+	require.False(t, intent.HasUnresolvedPaths())
+	dirs := intent.AllDirs()
+	require.NotEmpty(t, dirs)
+	for _, dir := range dirs {
+		lower := strings.ToLower(dir)
+		require.True(t, lower == strings.ToLower(temp) || strings.HasPrefix(lower, strings.ToLower(temp)+`\`),
+			"every affected path stays inside TEMP: %v", dirs)
+	}
+	require.Equal(t, "external mutation", shellRiskLevel(assessment, WorkspaceScope(workspace)),
+		"the write is no longer classified as a dynamic mutation")
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
+		"a temp-dir write reaches the safe-dir allow cell instead of a dynamic-target review")
+}
+
 func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 

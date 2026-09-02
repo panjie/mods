@@ -146,6 +146,24 @@ func TestPowerShellWritableTargetAnalysisSeparatesPathFromContent(t *testing.T) 
 	require.Empty(t, concrete.Unresolved, "content variables are not path targets")
 }
 
+func TestPowerShellWritableTargetsIgnoreCommonParameterValues(t *testing.T) {
+	space := analyzeWritableTargetsFromTokens([]string{"Remove-Item", `C:\ws\a.wav`, "-ErrorAction", "SilentlyContinue"}, false)
+	require.True(t, space.Known)
+	require.Equal(t, []string{`C:\ws`}, space.Dirs, "an action-preference value is not a path operand")
+
+	leading := analyzeWritableTargetsFromTokens([]string{"Set-Content", "-ErrorAction", "SilentlyContinue", `C:\ws\a.log`}, false)
+	require.Equal(t, []string{`C:\ws`}, leading.Dirs, "a common parameter before the path must not hide the real target")
+
+	colon := analyzeWritableTargetsFromTokens([]string{"Remove-Item", `C:\ws\a.wav`, "-ErrorAction:SilentlyContinue"}, false)
+	require.Equal(t, []string{`C:\ws`}, colon.Dirs, "inline -ErrorAction:value carries its value inline")
+
+	switchParam := analyzeWritableTargetsFromTokens([]string{"Remove-Item", "-Verbose", `C:\ws\a.wav`}, false)
+	require.Equal(t, []string{`C:\ws`}, switchParam.Dirs, "switch parameters consume no value")
+
+	posix := analyzeWritableTargetsFromTokens([]string{"rm", "-f", "a.txt"}, true)
+	require.Equal(t, []string{"."}, posix.Dirs, "POSIX operand semantics stay unchanged")
+}
+
 func TestAnalyzeArgvStatic(t *testing.T) {
 	policy := ReadOnlyCommandPolicy{}
 	for _, tc := range []struct {

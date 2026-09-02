@@ -100,7 +100,7 @@ func writeTargetMode(path string, scope Scope) string {
 func shellRiskSummary(command string, assessment approval.CommandAssessment, scope Scope) string {
 	risk := shellRiskLevel(assessment, scope)
 	dirs := summarizeAffectedDirs(assessment.KnownDirs)
-	dynamic := summarizeAffectedDirs(assessment.DynamicTargets)
+	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
 	reason := strings.TrimSpace(assessment.Reason)
 	if shellRiskLocationUnknown(risk) {
 		// Classifier reasons for unbounded commands commonly restate the

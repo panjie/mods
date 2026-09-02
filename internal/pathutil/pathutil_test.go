@@ -125,6 +125,24 @@ func TestExpandEnvPath(t *testing.T) {
 	require.False(t, ok, "POSIX flavor must not expand PowerShell env references")
 }
 
+func TestExpandEnvPathRejectsFlattenedMultiReferenceToken(t *testing.T) {
+	opts := Options{
+		Workspace: `C:\work\project`,
+		Env:       map[string]string{"TEMP": `C:\Users\Test\AppData\Local\Temp`},
+		Flavor:    FlavorPowerShell,
+	}
+
+	_, ok := ExpandEnvPath(`$env:TEMP\a.wav","$env:TEMP\b.wav`, opts)
+	require.False(t, ok, "a token mixing quotes, separators, and further references must not expand into a hybrid path")
+
+	_, ok = ExpandEnvPath(`$env:TEMP\a.wav,$env:TEMP\b.wav`, opts)
+	require.False(t, ok, "a comma-flattened array token must not expand into a hybrid path")
+
+	expanded, ok := ExpandEnvPath(`$env:TEMP\log name.txt`, opts)
+	require.True(t, ok, "a space inside a quoted filename stays legitimate path content")
+	require.Equal(t, `C:\Users\Test\AppData\Local\Temp\log name.txt`, expanded)
+}
+
 func TestExpandEnvPathPOSIX(t *testing.T) {
 	opts := Options{
 		Workspace: "/workspace/project",

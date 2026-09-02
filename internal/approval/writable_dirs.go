@@ -197,8 +197,14 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 		}
 		return result
 	}
+	operandsFor := func(values []string) []string {
+		if posix {
+			return commandOperands(values)
+		}
+		return powerShellCommandOperands(values)
+	}
 	firstOperand := func(values []string) []string {
-		operands := commandOperands(values)
+		operands := operandsFor(values)
 		if len(operands) == 0 {
 			return nil
 		}
@@ -212,30 +218,30 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 		}
 		return writableTargetsFromTokens(nested, posix)
 	case "rm":
-		operands := commandOperands(args[1:])
+		operands := operandsFor(args[1:])
 		if removeTargetsAreDirs(args[1:]) {
 			return dirTargets(operands), true
 		}
 		return parentTargets(operands), true
 	case "rmdir":
-		return dirTargets(commandOperands(args[1:])), true
+		return dirTargets(operandsFor(args[1:])), true
 	case "unlink", "touch", "chmod", "chown":
-		return parentTargets(commandOperands(args[1:])), true
+		return parentTargets(operandsFor(args[1:])), true
 	case "mkdir":
-		return parentTargets(commandOperands(args[1:])), true
+		return parentTargets(operandsFor(args[1:])), true
 	case "cp", "mv":
 		if target := targetDirectoryOption(args[1:]); target != "" {
 			// -t names an existing target directory. The command writes inside
 			// that directory, rather than replacing the directory entry itself.
 			return dirTargets([]string{target}), true
 		}
-		operands := commandOperands(args[1:])
+		operands := operandsFor(args[1:])
 		if len(operands) == 0 {
 			return nil, true
 		}
 		return destinationTargets(operands[len(operands)-1:]), true
 	case "tee":
-		return parentTargets(commandOperands(args[1:])), true
+		return parentTargets(operandsFor(args[1:])), true
 	case "find":
 		if !findHasWriteAction(args[1:]) {
 			return nil, false
@@ -264,18 +270,18 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
 			return parentTargets(paths), true
 		}
-		return parentTargets(commandOperands(args[1:])), true
+		return parentTargets(operandsFor(args[1:])), true
 	case "copy-item", "move-item":
 		if destinations := powerShellParamValues(args, "destination"); len(destinations) > 0 {
 			return destinationTargets(destinations), true
 		}
-		operands := commandOperands(args[1:])
+		operands := operandsFor(args[1:])
 		if len(operands) == 0 {
 			return nil, true
 		}
 		return destinationTargets(operands[len(operands)-1:]), true
 	case "copy", "move":
-		operands := commandOperands(args[1:])
+		operands := operandsFor(args[1:])
 		if len(operands) == 0 {
 			return nil, true
 		}
@@ -607,6 +613,54 @@ func commandOperands(args []string) []string {
 			continue
 		}
 		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		operands = append(operands, arg)
+	}
+	return operands
+}
+
+// powerShellCommonValueParameters are the engine common parameters every
+// cmdlet accepts whose argument is an action preference or a variable name,
+// never a filesystem path. Abbreviated parameter names stay unhandled on
+// purpose: missing a skip only leaves a bogus operand, while skipping a real
+// path would under-scope the review.
+var powerShellCommonValueParameters = map[string]bool{
+	"erroraction":         true,
+	"warningaction":       true,
+	"informationaction":   true,
+	"progressaction":      true,
+	"errorvariable":       true,
+	"warningvariable":     true,
+	"informationvariable": true,
+	"pipelinevariable":    true,
+	"outvariable":         true,
+	"outbuffer":           true,
+}
+
+// powerShellCommandOperands extracts path operands the way commandOperands
+// does, additionally skipping the argument that follows a value-taking
+// common parameter (-ErrorAction SilentlyContinue): treating such a value as
+// a path operand yields a bogus "." write target.
+func powerShellCommandOperands(args []string) []string {
+	operands := make([]string, 0, len(args))
+	skipValue := false
+	for _, arg := range args {
+		if skipValue {
+			skipValue = false
+			continue
+		}
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			if strings.Contains(arg, ":") {
+				continue // inline form such as -ErrorAction:SilentlyContinue
+			}
+			skipValue = powerShellCommonValueParameters[strings.TrimLeft(strings.ToLower(arg), "-")]
 			continue
 		}
 		operands = append(operands, arg)

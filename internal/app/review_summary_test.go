@@ -183,6 +183,48 @@ func TestNonPathShapedDynamicTargetHiddenFromReviewPanel(t *testing.T) {
 		"non-path-shaped dynamic targets must not be shown as a review target")
 }
 
+func TestEmbeddedVariableDynamicTargetNotShownAsReviewTarget(t *testing.T) {
+	scope := WorkspaceScope(`C:\Users\panjie\dev\mods`)
+	analysis := approval.CommandAssessment{
+		Effect:         approval.EffectRead,
+		DynamicTargets: []string{`$env:GITLAB_TOKEN`, `PRIVATE-TOKEN: $env:GITLAB_TOKEN`},
+		Reason:         "reads the GitLab user API",
+	}
+	args := []byte(`{"command":"curl -s -k -H \"PRIVATE-TOKEN: $env:GITLAB_TOKEN\" http://git.example.com/api/v4/user"}`)
+	intent := AccessIntent{Class: AccessRead, UnresolvedPaths: analysis.DynamicTargets}
+
+	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Equal(t, "Read a dynamic target", presentation.headline)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: `$env:GITLAB_TOKEN`},
+		"the bare variable reference is the review target")
+	require.NotContains(t, presentation.rows, interactionRow{Label: "Target", Value: `$env:GITLAB_TOKEN, PRIVATE-TOKEN: $env:GITLAB_TOKEN`},
+		"a header value that merely embeds the variable is not a separate target")
+
+	summary := formatReviewSummaryWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Contains(t, summary, "dynamic read")
+	require.Contains(t, summary, `$env:GITLAB_TOKEN`)
+	require.NotContains(t, summary, `PRIVATE-TOKEN`, "the summary shows one runtime target, not the embedded duplicate")
+}
+
+func TestPathShapedDynamicTargetsDedupsEmbeddedReferences(t *testing.T) {
+	got := pathShapedDynamicTargets([]string{
+		`$env:GITLAB_TOKEN`,
+		`PRIVATE-TOKEN: $env:GITLAB_TOKEN`,
+		`$PROFILE.CurrentUserCurrentHost`,
+		`%TEMP%\notes.txt`,
+		`X: %TEMP%`,
+		`foo${BAR}baz`,
+		`(json-insert (emacs-startup-usage))`,
+	})
+	require.Equal(t, []string{
+		`$env:GITLAB_TOKEN`,
+		`$PROFILE.CurrentUserCurrentHost`,
+		`%TEMP%\notes.txt`,
+		`X: %TEMP%`,
+		`foo${BAR}baz`,
+	}, got, "a fragment embedding a displayed reference is dropped; one without a counterpart stays")
+}
+
 func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 	analysis := approval.CommandAssessment{
 		Shape: approval.CommandShape{TopLevelActions: 4, Pipelines: 2},

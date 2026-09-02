@@ -102,20 +102,43 @@ func commandReviewTarget(assessment approval.CommandAssessment, risk string) str
 }
 
 // pathShapedDynamicTargets drops dynamic targets that cannot be a filesystem
-// path (no path separators, variable, or cmd-var syntax). Non-path fragments —
-// for example elisp passed to an external program's --eval — must not be
-// presented to the user as a review "Target".
+// path (no path separators, cmd-var syntax, or leading variable reference).
+// Non-path fragments — for example elisp passed to an external program's
+// --eval — must not be presented to the user as a review "Target". A fragment
+// that merely embeds a displayed reference (a header value such as
+// "PRIVATE-TOKEN: $env:TOKEN") is dropped as a duplicate of that reference,
+// while one without a counterpart stays so the target never goes unshown.
 func pathShapedDynamicTargets(targets []string) []string {
 	if len(targets) == 0 {
 		return nil
 	}
-	kept := make([]string, 0, len(targets))
+	var refs, composites []string
 	for _, target := range targets {
-		if strings.ContainsAny(target, `/\$%`) {
-			kept = append(kept, target)
+		switch {
+		case strings.ContainsAny(target, `/\%`) || strings.HasPrefix(strings.TrimSpace(target), "$"):
+			refs = append(refs, target)
+		case strings.Contains(target, "$"):
+			composites = append(composites, target)
 		}
 	}
-	return kept
+	visible := append([]string(nil), refs...)
+	for _, composite := range composites {
+		if !embedsTargetOf(composite, refs) {
+			visible = append(visible, composite)
+		}
+	}
+	return visible
+}
+
+// embedsTargetOf reports whether target contains one of the displayed
+// variable references verbatim.
+func embedsTargetOf(target string, refs []string) bool {
+	for _, ref := range refs {
+		if ref != target && strings.Contains(target, ref) {
+			return true
+		}
+	}
+	return false
 }
 
 func toneForShellRisk(risk, command string) (interactionTone, string) {

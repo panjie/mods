@@ -1,11 +1,9 @@
 package app
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/secrets"
 )
 
 type reviewPresentation struct {
@@ -172,34 +170,4 @@ func shellRiskHeadline(risk string) string {
 	default:
 		return "Run with unknown effects"
 	}
-}
-
-func secretReferenceTargets(data []byte) string {
-	var root any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return "protected argument"
-	}
-	var paths []string
-	var walk func(any, string)
-	walk = func(value any, path string) {
-		switch value := value.(type) {
-		case string:
-			if secrets.IsRef(value) {
-				paths = append(paths, path)
-			}
-		case map[string]any:
-			for key, child := range value {
-				walk(child, path+"/"+strings.ReplaceAll(strings.ReplaceAll(key, "~", "~0"), "/", "~1"))
-			}
-		case []any:
-			for _, child := range value {
-				walk(child, path)
-			}
-		}
-	}
-	walk(root, "")
-	if len(paths) == 0 {
-		return "protected argument"
-	}
-	return strings.Join(paths, ", ")
 }

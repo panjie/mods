@@ -273,6 +273,12 @@ func newTextareaSingleLine(multiline bool) textarea.Model {
 	ta.ShowLineNumbers = false
 	ta.SetHeight(1)
 	ta.SetVirtualCursor(false)
+	// The default cursor-line style paints a solid background across the
+	// whole line; interaction panels style inputs themselves, so drop it.
+	styles := ta.Styles()
+	styles.Focused.CursorLine = lipgloss.NewStyle()
+	styles.Blurred.CursorLine = lipgloss.NewStyle()
+	ta.SetStyles(styles)
 	if multiline {
 		ta.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "new line"))
 	} else {
@@ -662,12 +668,12 @@ func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int,
 		if focused {
 			prefix = focusedFormPrefix(state.field.Label, styles.Input)
 			prefixWidth := lipgloss.Width(prefix)
-			contentWidth := max(1, innerWidth-prefixWidth-styles.Input.GetHorizontalFrameSize())
+			contentWidth := max(1, innerWidth-prefixWidth-1)
 			state.secret.SetWidth(max(1, contentWidth-1))
 			view := ui.NewCursorView(state.secret.View(), state.secret.Cursor()).
-				InStyle(styles.Input).
-				Translate(prefixWidth, 0)
-			return prefix + view.Content, view.Cursor
+				InStyle(formEditorStyle(styles)).
+				Translate(prefixWidth+1, 0)
+			return prefix + " " + view.Content, view.Cursor
 		}
 		return prefix + styles.Muted.Render(renderMaskedValue(state.secret.Value())), nil
 	case "select":
@@ -676,19 +682,19 @@ func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int,
 			current = state.field.Options[state.selected]
 		}
 		if focused {
-			return prefix + styles.Input.Render("› "+current+"  ← →"), nil
+			return focusedFormPrefix(state.field.Label, styles.Input) + " " + formEditorStyle(styles).Render(current+"  ← →"), nil
 		}
 		return prefix + styles.Muted.Render(current), nil
 	default: // text
 		if focused {
 			prefix = focusedFormPrefix(state.field.Label, styles.Input)
 			prefixWidth := lipgloss.Width(prefix)
-			contentWidth := max(1, innerWidth-prefixWidth-styles.Input.GetHorizontalFrameSize())
+			contentWidth := max(1, innerWidth-prefixWidth-1)
 			state.text.SetWidth(contentWidth)
 			view := ui.NewCursorView(state.text.View(), state.text.Cursor()).
-				InStyle(styles.Input).
-				Translate(prefixWidth, 0)
-			return prefix + view.Content, view.Cursor
+				InStyle(formEditorStyle(styles)).
+				Translate(prefixWidth+1, 0)
+			return prefix + " " + view.Content, view.Cursor
 		}
 		val := strings.TrimSpace(state.text.Value())
 		if val == "" {
@@ -699,6 +705,12 @@ func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int,
 		}
 		return prefix + styles.Muted.Render(val), nil
 	}
+}
+
+// formEditorStyle renders focused form input content with the input
+// foreground only, so the row keeps the panel's base background.
+func formEditorStyle(styles ui.InteractionStyles) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(styles.Input.GetForeground())
 }
 
 func focusedFormPrefix(label string, inputStyle lipgloss.Style) string {

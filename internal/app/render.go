@@ -44,7 +44,16 @@ func (m *Mods) View() tea.View {
 	}
 	if panel.Cursor != nil {
 		cursor := *panel.Cursor
-		cursor.Y += max(0, lipgloss.Height(content)-lipgloss.Height(panel.Content))
+		contentHeight := lipgloss.Height(content)
+		cursor.Y += max(0, contentHeight-lipgloss.Height(panel.Content))
+		// When the view is taller than the terminal, the renderer keeps only
+		// the last height lines. Translate the cursor into visible rows so the
+		// terminal does not clamp it onto the bottom line.
+		if m.height > 0 {
+			if dropped := contentHeight - m.height; dropped > 0 {
+				cursor.Y = max(0, cursor.Y-dropped)
+			}
+		}
 		view.Cursor = &cursor
 	}
 	return view

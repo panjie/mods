@@ -19,7 +19,6 @@ import (
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -467,17 +466,6 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config, content 
 		if approvalRecord.Source == "prompt intent" && approvalRecord.Detail != "" {
 			m.sendToolOperationStatus(ToolOperationLabel(name, data, m.width) + " · intent-allowed (" + approvalRecord.Detail + ")")
 		}
-		if secrets.ContainsRef(data) {
-			secretStarted := time.Now()
-			if err := m.reviewer.requestSecretApproval(m.ctx, name, data); err != nil {
-				approvalRecord.Source = "secret " + toolDebugStatusLabel(err)
-				approvalRecord.Detail = "protected credential"
-				approvalRecord.Duration += time.Since(secretStarted)
-				return "", err
-			}
-			approvalRecord.Detail += " · secret approved"
-			approvalRecord.Duration += time.Since(secretStarted)
-		}
 
 		callData := data
 		if m.secrets != nil {
@@ -531,11 +519,6 @@ func toolDebugStatus(err error) (status, symbol string) {
 		return "denied", "✗"
 	}
 	return "failed", "✗"
-}
-
-func toolDebugStatusLabel(err error) string {
-	status, _ := toolDebugStatus(err)
-	return status
 }
 
 func formatDebugDuration(duration time.Duration) string {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
@@ -370,23 +371,44 @@ func TestUserInputResetUnblocksPendingRequest(t *testing.T) {
 	}
 }
 
-func TestSecretUseApprovalIgnoresReviewNever(t *testing.T) {
-	oldTTY := IsInputTTY
-	IsInputTTY = func() bool { return true }
-	t.Cleanup(func() { IsInputTTY = oldTTY })
-	reviewer := &toolReviewer{
-		reviewMode: ReviewNever,
-		reviewChan: make(chan toolReviewItem, 1),
+// A secret reference is authorized at input time by its user-bound target, so
+// the downstream call needs no per-use approval; Resolve still enforces the
+// binding and output stays redacted.
+func TestSecretRefCallNeedsNoPerUseApproval(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.ReviewMode = ReviewNever
+	cfg.MCPTimeout = time.Second
+	store := secrets.New()
+	ref, err := store.Put("hunter2", secrets.Target{Tool: "lookup", Path: "/token"})
+	require.NoError(t, err)
+	m := &Mods{
+		Config:   &cfg,
+		ctx:      context.Background(),
+		reviewer: newToolReviewer(&cfg),
+		secrets:  store,
 	}
-	done := make(chan error, 1)
-	go func() {
-		done <- reviewer.requestSecretApproval(context.Background(), "db_query", []byte(`{"password":"mods-secret://ref"}`))
-	}()
-	item := <-reviewer.reviewChan
-	require.Empty(t, item.candidateRules)
-	require.Contains(t, item.summary, "protected credential")
-	item.resp <- reviewResponse{approved: true}
-	require.NoError(t, <-done)
+	registry := toolregistry.NewRegistry()
+	require.NoError(t, registry.Register(toolregistry.Tool{
+		Spec: proto.ToolSpec{
+			Name: "lookup",
+			InputSchema: map[string]any{
+				"type": "object", "required": []string{"token"},
+				"properties": map[string]any{"token": map[string]any{"type": "string"}},
+			},
+		},
+		Capabilities: toolregistry.ToolCapabilities{ReadOnly: true},
+		Call: func(_ context.Context, data json.RawMessage) (string, error) {
+			return "received " + string(data), nil
+		},
+	}))
+
+	out, err := m.toolCaller(registry, &cfg, "")(proto.ToolCallRequest{
+		ID: "call_secret", Index: 1, Total: 1, Name: "lookup",
+		Arguments: []byte(`{"token":"` + ref + `"}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, out, "[REDACTED]")
+	require.NotContains(t, out, "hunter2")
 }
 
 func TestSecretInputRenderKeepsAlignmentAndHelpStable(t *testing.T) {
@@ -731,6 +753,102 @@ func TestFormRealCursorPropagatesToModsView(t *testing.T) {
 
 	manager.pending = false
 	require.Nil(t, m.View().Cursor)
+}
+
+func TestFormFocusedInputHasNoBackgroundPill(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "OA 会话已过期，请输入登录信息：", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "username", Label: "OA 用户名", Kind: "text"},
+				{Key: "password", Label: "OA 密码", Kind: "secret"},
+				{Key: "scope", Label: "Scope", Kind: "select", Options: []string{"machine", "session"}},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	manager.handleKey(tea.KeyPressMsg{Code: 'p', Text: "p"})
+
+	styles := makeStyles(true).Interaction
+	view := manager.renderView(80, styles)
+	require.NotNil(t, view.Cursor)
+	line := strings.Split(view.Content, "\n")[view.Cursor.Y]
+
+	// The focused row must not paint the input background: no Surface pill
+	// padding cell right after the marker and no cursor-line black fill.
+	require.NotContains(t, line, "48;2;48;43;72")
+	require.NotContains(t, line, "\x1b[40m")
+	stripped := ansi.Strip(line)
+	require.Contains(t, stripped, "OA 用户名  › p")
+	require.Equal(t, visualColumn(stripped, "p")+1, view.Cursor.X, "cursor must sit right after the typed character")
+
+	// Focused select fields render the same marker+plain-value shape.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	selectView := manager.renderView(80, styles)
+	for _, line := range strings.Split(selectView.Content, "\n") {
+		if strings.Contains(ansi.Strip(line), "machine") {
+			require.NotContains(t, line, "48;2;48;43;72", "focused select row must not paint the input background")
+		}
+	}
+}
+
+func TestFormCursorTracksVisibleTailWhenViewOverflowsTerminal(t *testing.T) {
+	oldTTY := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = oldTTY })
+	oldOut := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldOut })
+
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Sign in", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "username", Label: "Username", Kind: "text"},
+				{Key: "password", Label: "Password", Kind: "secret"},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	newOverflowMods := func(height int) *Mods {
+		return &Mods{
+			Config: &Config{},
+			Styles: makeStyles(true),
+			state:  responseState,
+			width:  80,
+			height: height,
+			outputRenderer: outputRenderer{
+				glamOutput: strings.Repeat("history\n", 18) + "tail",
+			},
+			userInput:    manager,
+			reviewer:     &toolReviewer{},
+			contentMutex: &sync.Mutex{},
+		}
+	}
+
+	// With room to spare the cursor keeps its view-relative row.
+	view := newOverflowMods(40).View()
+	require.NotNil(t, view.Cursor)
+	lines := strings.Split(view.Content, "\n")
+	usernameRow := lineIndexContaining(lines, "Username")
+	require.GreaterOrEqual(t, usernameRow, 0)
+	require.Equal(t, usernameRow, view.Cursor.Y)
+
+	// When the view is taller than the terminal, the renderer keeps only the
+	// last height lines, so the cursor must shift up by the dropped line count.
+	overflow := newOverflowMods(20)
+	view = overflow.View()
+	require.NotNil(t, view.Cursor)
+	lines = strings.Split(view.Content, "\n")
+	usernameRow = lineIndexContaining(lines, "Username")
+	dropped := len(lines) - 20
+	require.Greater(t, dropped, 0)
+	require.Equal(t, usernameRow-dropped, view.Cursor.Y)
+	require.GreaterOrEqual(t, view.Cursor.Y, 0)
+	require.Less(t, view.Cursor.Y, 20)
 }
 
 func TestHandleFormInputRejectsUnknownSecretTarget(t *testing.T) {

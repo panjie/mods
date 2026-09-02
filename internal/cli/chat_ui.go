@@ -201,6 +201,15 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "ctrl+j", "ctrl+enter", "ctrl+s":
 			return m.submit()
+		case "enter":
+			// Insert the newline ourselves instead of letting the textarea's
+			// InsertNewline binding run: that path blocks once the logical
+			// line count reaches MaxHeight (legacy content guard), which
+			// silently swallows Enter after pasting a large multi-line
+			// message even though the viewport is meant to scroll, not cap
+			// content. InsertString uses the same insertion path as paste.
+			m.textarea.InsertString("\n")
+			return m, nil
 		case "ctrl+y":
 			if m.killText != "" {
 				m.textarea.InsertString(m.killText)

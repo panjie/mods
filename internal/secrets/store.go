@@ -1,7 +1,6 @@
 package secrets
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -46,8 +45,6 @@ func (s *Store) Put(value string, target Target) (string, error) {
 }
 
 func IsRef(value string) bool { return strings.HasPrefix(value, prefix) }
-
-func ContainsRef(data []byte) bool { return bytes.Contains(data, []byte(prefix)) }
 
 // Resolve replaces exact secret-reference string values in a JSON document.
 // Each reference is usable only at the tool/path bound when it was created.

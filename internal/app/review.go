@@ -457,53 +457,6 @@ func accessIntentSummary(intent AccessIntent) string {
 	return strings.Join(parts, " · ")
 }
 
-// requestSecretApproval is an unpersistable, per-use confirmation. Secret
-// references are capabilities: saved directory/tool rules and ReviewNever do
-// not authorize sending one to an external process or MCP server.
-func (r *toolReviewer) requestSecretApproval(ctx context.Context, name string, data []byte) error {
-	if !r.canReviewInteractively() {
-		return fmt.Errorf("%w: using a protected credential requires an interactive terminal", errReviewUnavailable)
-	}
-	respCh := make(chan reviewResponse, 1)
-	item := toolReviewItem{
-		name:    name,
-		args:    data,
-		summary: fmt.Sprintf("Use protected credential with %s\n\nArguments: %s", name, string(data)),
-		presentation: reviewPresentation{
-			tone:     interactionToneDanger,
-			toneText: "Danger",
-			headline: "Send a protected credential to an external tool",
-			rows: []interactionRow{
-				{Label: "Tool", Value: name},
-				{Label: "Target", Value: secretReferenceTargets(data)},
-			},
-		},
-		resp: respCh,
-	}
-	ch, done := r.snapshotSession()
-	if ch == nil {
-		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
-	}
-	select {
-	case ch <- item:
-	case <-done:
-		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	select {
-	case response := <-respCh:
-		if response.approved {
-			return nil
-		}
-		return fmt.Errorf("protected credential use denied by user for: %s", name)
-	case <-done:
-		return fmt.Errorf("%w: %s", errReviewUnavailable, name)
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
 func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode, shell bool) []Rule {
 	var rules []Rule
 	if intent.HasUnresolvedPaths() {

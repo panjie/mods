@@ -496,6 +496,17 @@ func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
 }
 
+func TestChatPromptEnterInsertsNewlineAfterLargePaste(t *testing.T) {
+	model := newChatPromptModel(nil)
+	content := strings.Repeat("pasted line\n", chatMaxHeight+2) + "last"
+	model = updateChatPrompt(t, model, tea.PasteMsg{Content: content})
+	require.Greater(t, model.textarea.LineCount(), chatMaxHeight)
+	model.textarea.MoveToEnd()
+
+	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, content+"\n", model.textarea.Value())
+}
+
 func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
 	model := newChatPromptModel(nil)
 	for _, width := range []int{60, 120, 180, 72} {

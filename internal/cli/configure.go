@@ -500,10 +500,10 @@ func RunConfigWizard() error {
 			huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Tool review").
-					Description("Choose how often mods asks before running tools.").
+					Description("Choose how often mods asks before writes.").
 					Options(
-						huh.NewOption("Auto — review risky actions (default)", "auto"),
-						huh.NewOption("Always — review every tool call", "always"),
+						huh.NewOption("Auto — review unsaved writes (default)", "auto"),
+						huh.NewOption("Always — review every non-temporary write", "always"),
 						huh.NewOption("Never — no review (automation only)", "never"),
 					).
 					Value(&reviewMode),

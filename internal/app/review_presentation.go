@@ -39,10 +39,10 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.headline = "Move or rename files"
 		result.rows = []interactionRow{{Label: "Source", Value: ArgString(parsed, "source_path")}, {Label: "Target", Value: ArgString(parsed, "dest_path")}}
 	case "fs_apply_patch":
-		result.headline = "Apply changes to workspace files"
+		result.headline = "Apply changes to local files"
 		result.rows = []interactionRow{{Label: "Patch", Value: patchSummary(ArgString(parsed, "patch"))}}
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
-		result.tone, result.toneText, result.headline = interactionToneInfo, "Info", "Read outside the workspace"
+		result.tone, result.toneText, result.headline = interactionToneInfo, "Info", "Read local files"
 		result.rows = []interactionRow{{Label: "Target", Value: readReviewTarget(parsed, scope, intent)}}
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
@@ -65,6 +65,9 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 			result.rows = []interactionRow{{Label: "Details", Value: summary}}
 		}
 	}
+	if origins := summarizeRemoteOrigins(intent.AllRemoteOrigins()); origins != "" && name != "shell_run" && name != "powershell_run" && name != "process_run" {
+		result.rows = append(result.rows, interactionRow{Label: "Remote", Value: origins})
+	}
 	if result.headline == "" {
 		result.headline = "This operation requires approval"
 	}
@@ -75,9 +78,15 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 }
 
 func commandReviewRows(command string, assessment approval.CommandAssessment, risk string) []interactionRow {
-	rows := []interactionRow{{Label: "Command", Value: command}}
+	rows := []interactionRow{{Label: "Command", Value: redactRemoteURLsForDisplay(command)}}
 	if target := commandReviewTarget(assessment, risk); target != "" {
 		rows = append(rows, interactionRow{Label: "Target", Value: target})
+	}
+	if origins := summarizeRemoteOrigins(assessment.RemoteOrigins); origins != "" {
+		rows = append(rows, interactionRow{Label: "Remote", Value: origins})
+	}
+	if len(assessment.UnresolvedRemoteTargets) > 0 {
+		rows = append(rows, interactionRow{Label: "Remote", Value: "Unknown"})
 	}
 	return rows
 }
@@ -140,10 +149,10 @@ func embedsTargetOf(target string, refs []string) bool {
 }
 
 func toneForShellRisk(risk, command string) (interactionTone, string) {
-	if strings.Contains(command, "sudo") || risk == "external mutation" || risk == "dynamic mutation" {
+	if strings.Contains(command, "sudo") || risk == "dynamic mutation" {
 		return interactionToneDanger, "Danger"
 	}
-	if risk == "workspace mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
+	if risk == "local mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
 		return interactionToneWarning, "Warning"
 	}
 	return interactionToneInfo, "Info"
@@ -151,20 +160,20 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 
 func shellRiskHeadline(risk string) string {
 	switch risk {
-	case "external mutation":
-		return "Modify outside the workspace"
 	case "dynamic mutation":
 		return "Modify a dynamic target"
 	case "dynamic read":
 		return "Read a dynamic target"
-	case "workspace mutation":
-		return "Modify workspace files"
+	case "local mutation":
+		return "Modify local files"
+	case "remote mutation":
+		return "Modify a remote resource"
+	case "unknown remote mutation":
+		return "Modify an unknown remote resource"
 	case "unknown-location mutation":
 		return "Modify an unknown target"
 	case "unknown effect and location":
 		return "Run with unknown effects"
-	case "external read":
-		return "Read outside the workspace"
 	case "read-only":
 		return "Run a read-only command"
 	default:

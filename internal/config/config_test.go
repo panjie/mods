@@ -79,7 +79,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	}
 	require.Equal(t, "80", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
-	require.Equal(t, "true", documented["prompt-intent"].Default)
+	require.NotContains(t, documented, "prompt-intent")
 	require.Equal(t, "false", documented["web-search"].Default)
 	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
 	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
@@ -103,19 +103,26 @@ func TestPromptConfig(t *testing.T) {
   identity: custom identity
   tool-selection: custom tools
   shell-classifier: custom shell
-  prompt-intent-classifier: custom intent
-  write-scope-classifier: custom scope
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
-	require.Equal(t, "custom intent", cfg.Prompts.PromptIntentClassifier)
-	require.Equal(t, "custom scope", cfg.Prompts.WriteScopeClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
-	require.Equal(t, "custom intent", cfg.Prompts.Value(prompts.KeyPromptIntentClassifier))
-	require.Equal(t, "custom scope", cfg.Prompts.Value(prompts.KeyWriteScopeClassifier))
+}
+
+func TestRemovedPromptIntentYAMLIsIgnored(t *testing.T) {
+	cfg := Default()
+	require.NoError(t, yaml.Unmarshal([]byte(`
+prompt-intent: true
+prompts:
+  prompt-intent-classifier: legacy intent prompt
+  write-scope-classifier: legacy scope prompt
+`), &cfg))
+	require.Empty(t, cfg.Prompts.Identity)
+	require.Empty(t, cfg.Prompts.ToolSelection)
+	require.Empty(t, cfg.Prompts.ShellClassifier)
 }
 
 func TestReasoningEffortOffYAML(t *testing.T) {
@@ -230,25 +237,6 @@ func TestMinimalConfig(t *testing.T) {
 		var cfg Config
 		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
 		require.True(t, cfg.Minimal)
-	})
-}
-
-func TestPromptIntentConfig(t *testing.T) {
-	t.Run("default is on", func(t *testing.T) {
-		require.True(t, Default().PromptIntent)
-	})
-
-	t.Run("yaml", func(t *testing.T) {
-		cfg := Default()
-		require.NoError(t, yaml.Unmarshal([]byte("prompt-intent: false"), &cfg))
-		require.False(t, cfg.PromptIntent)
-	})
-
-	t.Run("env", func(t *testing.T) {
-		t.Setenv("MODS_PROMPT_INTENT", "false")
-		cfg := Default()
-		require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
-		require.False(t, cfg.PromptIntent)
 	})
 }
 

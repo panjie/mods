@@ -1,5 +1,9 @@
 # 提示词意图授权（Prompt-Intent Approval）— 设计
 
+> **已被取代（2026-09-03）：** prompt-intent 与 write-scope 授权已移除。
+> 当前策略见
+> [`2026-09-03-write-target-approval-design.md`](2026-09-03-write-target-approval-design.md)。
+
 **日期：** 2026-08-27
 **状态：** Approved（默认开启；两意图标签 + 写范围分类器）
 **范围：** `internal/approval`（意图/写范围枚举）、`internal/app`（两个分类器 + 审批门）、`internal/prompts`（两个分类器提示词）、`internal/config`（开关 + 提示词覆盖）

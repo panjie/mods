@@ -259,29 +259,38 @@ is saved to the same session so you can resume it later with `--continue`.
 
 ## Safety & Review
 
-Mods asks for confirmation before any file write or shell command runs. You
-always see exactly what will execute, and you choose what happens next:
+Mods runs read-only operations without review, including reads from any local
+directory and reads whose path is resolved only at runtime. Writes to ordinary
+local directories or remote services require confirmation. You see what will
+execute and which write targets the decision covers:
 
 ```
-Review: Run: rm -f /path/to/workspace/demo.gif
+Review: Run: rm -f /path/to/project/demo.gif
 [Y] Approve  [N] Deny  [A] Always allow  [Ctrl+C] Cancel
-Always allows writes in /path/to/workspace
+Always allows writes in /path/to/project
 ```
 
 - `Y` — approve this one call
 - `N` — deny; Mods gets the failure and can react
-- `A` — save a per-session rule for the current workspace so similar calls skip the prompt from now on
+- `A` — in `auto` mode, save per-session rules for every shown directory and remote origin so matching writes skip later prompts
 - `Ctrl+C` — cancel the whole run
+
+`Always allow` is available only when every write target can be identified.
+Dynamic or otherwise unknown write targets can be allowed once, but cannot be
+saved. Remote rules use a credential-free origin such as
+`https://api.example.com` or `ssh://github.com`; paths, queries, fragments, and
+credentials never appear in the saved rule. Writes confined to Mods' safe
+temporary directories do not require review.
 
 Pick the mode that fits the task with `-V` / `--review-mode` (or `review-mode` in
 `mods.yml`, or the `MODS_REVIEW_MODE` env var). Use `-N` / `--no-review` as a
 shortcut for `--review-mode=never`:
 
-| Mode       | Behavior                                                          |
-|------------|-------------------------------------------------------------------|
-| `auto`     | Default. Reviews file writes and shell commands flagged as risky. |
-| `always`   | Reviews **every** tool call, including reads and searches.        |
-| `never`    | Disables review entirely. Use only for trusted, automated runs.   |
+| Mode       | Behavior                                                                    |
+|------------|-----------------------------------------------------------------------------|
+| `auto`     | Default. Reviews non-temporary writes unless saved target rules cover them. |
+| `always`   | Reviews every non-temporary write and ignores saved rules. Reads stay free.  |
+| `never`    | Disables review entirely. Use only for trusted, automated runs.             |
 
 ```sh
 mods --review-mode always "rename the fn to calculateTotal across the repo"
@@ -319,11 +328,11 @@ status line at the bottom shows what Mods is doing between tool calls
 with `--hide-tool-status`, which also suppresses the compact one-line record
 each completed tool call leaves in normal output (for example
 `> ✓ shell_run: ls -la · exit 0`).
-Shell paths that still depend on runtime expansion (for example PowerShell's
-`$PROFILE` or another variable) are shown as dynamic targets and can only be
-approved once; they are never saved as directory rules. For a reusable scoped
-approval, resolve the path first and use its literal absolute value in the
-mutation command.
+Write targets that still depend on runtime expansion (for example PowerShell's
+`$PROFILE` or a URL stored in a variable) are shown as dynamic targets and can
+only be approved once; they are never saved as directory or remote rules. For
+a reusable approval, resolve the target first and use its literal value
+in the mutation command. Dynamic reads do not require review.
 Mods also performs a bounded reviewability preflight for model-generated shell
 calls. When a call unnecessarily wraps one executable in a shell, mixes
 inspection and mutation, writes through a runtime path, or combines several

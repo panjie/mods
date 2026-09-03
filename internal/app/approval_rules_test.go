@@ -120,7 +120,7 @@ func TestDynamicProbeWithoutConcreteDirectorySkipsAutoReview(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestOldestDownloadsPipelineOffersReadOnlyDirectoryRule(t *testing.T) {
+func TestOldestDownloadsPipelineReadNeedsNoApproval(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX pipeline coverage applies to non-Windows shell_run")
 	}
@@ -152,28 +152,14 @@ func TestOldestDownloadsPipelineOffersReadOnlyDirectoryRule(t *testing.T) {
 	assessment := mods.assessCommand("shell_run", cmd)
 	intent := buildAccessIntent("shell_run", data, registry, &assessment)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- reviewer.requestApproval(reviewerDeps{
-			ctx:            context.Background(),
-			shellExecution: true,
-			assessment:     &assessment,
-			accessIntent:   intent,
-		}, "shell_run", data)
-	}()
+	require.Equal(t, []string{downloads}, intent.Dirs)
+	require.NoError(t, reviewer.requestApproval(reviewerDeps{
+		ctx:            context.Background(),
+		shellExecution: true,
+		assessment:     &assessment,
+		accessIntent:   intent,
+	}, "shell_run", data))
 
-	item := receiveReviewItem(t, reviewer.reviewChan)
-	require.Equal(t, interactionToneInfo, item.presentation.tone)
-	require.Equal(t, "Info", item.presentation.toneText)
-	require.Equal(t, "Read outside the workspace", item.presentation.headline)
-	require.Len(t, item.candidateRules, 1)
-	require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
-	require.Equal(t, AccessRead, item.candidateRules[0].Mode)
-	require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
-	item.resp <- reviewResponse{approved: true}
-	require.NoError(t, <-errCh)
-
-	reviewer.rules.Add(item.candidateRules...)
 	reviewer.reviewChan = nil
 	writeIntent := AccessIntent{Class: AccessWrite, Dirs: []string{downloads}}
 	err = reviewer.requestApproval(
@@ -241,44 +227,38 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 	require.Contains(t, rendered, "Always allow")
 }
 
-func TestReviewBannerAlwaysAllowReadsForExternalRead(t *testing.T) {
+func TestReviewBannerAlwaysAllowRemoteWrite(t *testing.T) {
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			name:    "shell_run",
-			args:    []byte(`{"command":"du -sh /Users/panjie/temp/*"}`),
-			summary: "Risk: external read - affects /Users/panjie/temp",
-			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
-				Type:  approvalDirAllow,
-				Paths: []string{"/Users/panjie/temp"},
-				Mode:  AccessRead,
-			})},
+			name:    "github_create_issue",
+			summary: "Remote write: https://api.github.com",
+			candidateRules: []ApprovalRule{{
+				Type:    approval.RemoteAllow,
+				Origins: []string{"https://api.github.com"},
+				Mode:    AccessWrite,
+			}},
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
 	require.Contains(t, rendered, "Always allow")
+	require.Contains(t, rendered, "https://api.github.com")
 }
 
-// TestReviewBannerAlwaysAllowLegacyFallback covers rules persisted before
-// mode-splitting (Mode == ""): the verb is inferred from the tool name and
-// review summary rather than the rule's mode.
-func TestReviewBannerAlwaysAllowLegacyFallback(t *testing.T) {
+func TestReviewBannerDoesNotOfferLegacyRule(t *testing.T) {
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			name:    "fs_read_file",
-			args:    []byte(`{"path":"/Users/panjie/temp/big.bin"}`),
-			summary: "Target: /Users/panjie/temp/big.bin - external read",
-			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
-				Type:  approvalDirAllow,
-				Paths: []string{"/Users/panjie/temp"},
-			})},
+			name:           "fs_write_file",
+			args:           []byte(`{"path":"/Users/panjie/temp/out.txt","content":"x"}`),
+			summary:        "Target: /Users/panjie/temp/out.txt - creates new file",
+			candidateRules: nil,
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Always allow")
+	require.NotContains(t, rendered, "Always allow")
 }
 
 func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
@@ -500,6 +480,11 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		))
 	})
 
+	t.Run("review never allows a missing access intent", func(t *testing.T) {
+		reviewer := &toolReviewer{reviewMode: ReviewNever, scope: scope}
+		require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background()}, "unknown_tool", nil))
+	})
+
 	t.Run("auto denies write without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
@@ -540,7 +525,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("auto requires review for shell command when classifier unavailable", func(t *testing.T) {
+	t.Run("auto allows statically proven read when classifier unavailable", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		command := "echo ok"
 		if runtime.GOOS == "windows" {
@@ -550,16 +535,16 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("auto requires approval for read-only shell parent traversal in non-TTY", func(t *testing.T) {
+	t.Run("auto allows read-only shell parent traversal in non-TTY", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"cat ../sibling/file"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
-	t.Run("auto requires approval for read-only shell tilde path in non-TTY", func(t *testing.T) {
+	t.Run("auto allows read-only shell tilde path in non-TTY", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"cat ~/Downloads/file"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
 	t.Run("auto denies compound shell after read-only prefix", func(t *testing.T) {
@@ -568,10 +553,14 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("auto requires approval for read-only powershell touching external path in non-TTY", func(t *testing.T) {
+	t.Run("auto allows read-only powershell touching external path in non-TTY", func(t *testing.T) {
+		mods.shellAnalyzer = func(string, string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, KnownDirs: []string{"C:\\Users"}}
+		}
+		defer func() { mods.shellAnalyzer = nil }()
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
 	t.Run("auto denies nested powershell", func(t *testing.T) {
@@ -580,10 +569,14 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("auto requires approval for read-only powershell pipeline touching external path in non-TTY", func(t *testing.T) {
+	t.Run("auto allows read-only powershell pipeline touching external path", func(t *testing.T) {
+		mods.shellAnalyzer = func(string, string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, KnownDirs: []string{"C:\\Users"}}
+		}
+		defer func() { mods.shellAnalyzer = nil }()
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
 	t.Run("auto denies mutating powershell command without interactive approval", func(t *testing.T) {
@@ -597,8 +590,8 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 			return approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"C:\\Users"}}
 		}
 		t.Cleanup(func() { mods.shellAnalyzer = nil })
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite}))
 		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`))
 		require.NoError(t, err)
 	})
@@ -614,27 +607,49 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 		require.ErrorIs(t, err, errReviewUnavailable)
 	})
 
-	t.Run("always denies read-only tool without interactive approval", func(t *testing.T) {
+	t.Run("always allows read-only tool without interactive approval", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		err := testRequestApproval(reviewer, mods, "fs_read_file", []byte(`{"path":"README.md"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
-	t.Run("always reviews read-only tool without directory intent", func(t *testing.T) {
+	t.Run("always allows read-only tool without directory intent", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
 		require.Equal(t, AccessRead, intent.Class)
 		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
+		require.NoError(t, err)
 	})
 
-	t.Run("saved rule allows matching tool", func(t *testing.T) {
+	t.Run("always ignores saved rule for matching write tool", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{testApprovalScope.Value}, Mode: AccessWrite}))
 		intent := AccessIntent{Class: AccessWrite, Dirs: []string{testApprovalScope.Value}}
 		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errReviewUnavailable)
 	})
+}
+
+func TestToolCallerReadsOutsideWorkspaceWithoutReview(t *testing.T) {
+	workspace := t.TempDir()
+	packageDir, err := os.Getwd()
+	require.NoError(t, err)
+	target := filepath.Join(packageDir, "approval_rules_test.go")
+
+	cfg := defaultConfig()
+	cfg.BuiltinTools.Workspace = workspace
+	cfg.ReviewMode = ReviewAlways
+	cfg.MCPTimeout = time.Second
+	mods := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
+	registry := toolregistry.NewRegistry()
+	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: workspace, SafeDirs: mods.safeDirs()}))
+
+	out, err := mods.toolCaller(registry, &cfg)(proto.ToolCallRequest{
+		ID: "external_read", Index: 1, Total: 1, Name: "fs_read_file",
+		Arguments: []byte(fmt.Sprintf(`{"path":%q,"start_line":1,"end_line":3}`, target)),
+	})
+	require.NoError(t, err)
+	require.Contains(t, out, "package app")
 }
 
 func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
@@ -783,20 +798,11 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Contains(t, item.summary, downloads)
-		require.NotContains(t, item.summary, downloads+string(filepath.Separator)+"*")
-		require.Len(t, item.candidateRules, 1)
-		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
-		require.Equal(t, AccessRead, item.candidateRules[0].Mode)
-		require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
-		item.resp <- reviewResponse{approved: true}
-		require.NoError(t, <-errCh)
+		assessment := mods.assessCommand("shell_run", `du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20`)
+		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), testApprovalScope.Value, "shell_run", true)
+		require.Equal(t, []string{downloads}, intent.Dirs)
+		require.Empty(t, candidateRulesForIntent(intent, testApprovalScope, nil, ApprovalReviewMode(ReviewAuto)))
+		require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`)))
 	})
 
 	t.Run("redirection target dirs fill unknown shell risk", func(t *testing.T) {
@@ -824,9 +830,9 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}()
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Contains(t, item.summary, "external mutation")
+		require.Contains(t, item.summary, "local mutation")
 		require.Contains(t, item.summary, targetDir)
-		require.NotEqual(t, "Risk: external mutation - affects /", item.summary)
+		require.NotEqual(t, "Risk: local mutation - affects /", item.summary)
 		require.NotContains(t, item.summary, "unknown")
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, []string{targetDir}, item.candidateRules[0].Paths)
@@ -834,7 +840,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		require.NoError(t, <-errCh)
 	})
 
-	t.Run("always still prompts when LLM says no review", func(t *testing.T) {
+	t.Run("always allows command when LLM proves it read-only", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
 			Config:              testConfigForWorkspace(workspaceScope.Value),
@@ -853,10 +859,6 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"ls"}`))
 		}()
 
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Empty(t, item.candidateRules)
-		require.Contains(t, item.summary, "Risk: read-only - affects "+workspaceScope.Value)
-		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})
 
@@ -872,8 +874,8 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 				}
 			},
 		}
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}}))
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: AccessWrite}))
 		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})
@@ -894,13 +896,13 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 				}
 			},
 		}
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}}))
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}, Mode: AccessWrite}))
 		err = testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})
 
-	t.Run("external read needs review even when LLM says no review", func(t *testing.T) {
+	t.Run("external read needs no review when classified read-only", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
 			Config:              &Config{},
@@ -914,26 +916,10 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			scope:      testApprovalScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"unknown-reader /etc/passwd"}`))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Equal(t, "shell_run", item.name)
-		// External read triggers review (H1 fix); the label says "external
-		// read" because the LLM classified it as not mutable but it touches
-		// /etc — outside the test scope /workspace.
-		require.Contains(t, item.summary, "external read")
-		require.Len(t, item.candidateRules, 1)
-		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
-		require.Equal(t, AccessRead, item.candidateRules[0].Mode)
-		require.Equal(t, []string{"/etc"}, item.candidateRules[0].Paths)
-		item.resp <- reviewResponse{approved: true}
-		require.NoError(t, <-errCh)
+		require.NoError(t, testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"unknown-reader /etc/passwd"}`)))
 	})
 
-	t.Run("fs external read offers directory read rule", func(t *testing.T) {
+	t.Run("fs external read needs no review or reusable rule", func(t *testing.T) {
 		home, err := os.UserHomeDir()
 		require.NoError(t, err)
 		require.NotEmpty(t, home)
@@ -950,22 +936,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			accessIntent: AccessIntent{Class: AccessRead, Dirs: []string{downloads}},
 		}
 
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- reviewer.requestApproval(deps, "fs_stat", []byte(fmt.Sprintf(`{"path":%q}`, target)))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Equal(t, "fs_stat", item.name)
-		require.Len(t, item.candidateRules, 1)
-		require.Equal(t, approvalDirAllow, item.candidateRules[0].Type)
-		require.Equal(t, AccessRead, item.candidateRules[0].Mode)
-		require.Equal(t, []string{downloads}, item.candidateRules[0].Paths)
-		require.Contains(t, item.summary, downloads)
-		require.NotContains(t, item.summary, "Codex.dmg")
-
-		item.resp <- reviewResponse{approved: true}
-		require.NoError(t, <-errCh)
+		require.NoError(t, reviewer.requestApproval(deps, "fs_stat", []byte(fmt.Sprintf(`{"path":%q}`, target))))
 	})
 
 	t.Run("saved fs directory read rule does not allow writes", func(t *testing.T) {
@@ -1164,82 +1135,91 @@ func TestShellCandidateRulesUseLLMAffectedDirs(t *testing.T) {
 		require.Len(t, rules, 1)
 		require.Equal(t, approvalDirAllow, rules[0].Type)
 		require.Equal(t, AccessWrite, rules[0].Mode)
+		require.Empty(t, rules[0].ScopeKind)
+		require.Empty(t, rules[0].ScopeValue)
 		require.ElementsMatch(t, []string{"/tmp/cache", "/var/tmp"}, rules[0].Paths)
+	})
+
+	t.Run("relative target is saved as an absolute task path", func(t *testing.T) {
+		rules := RulesForDirs([]string{"build"}, testApprovalScope, AccessWrite)
+		require.Len(t, rules, 1)
+		require.Equal(t, []string{"/workspace/build"}, rules[0].Paths)
+		require.Empty(t, rules[0].ScopeKind)
+		require.Empty(t, rules[0].ScopeValue)
 	})
 
 	t.Run("read command stamps read mode", func(t *testing.T) {
 		rules := RulesForDirs([]string{"/etc"}, testApprovalScope, AccessRead)
-		require.Len(t, rules, 1)
-		require.Equal(t, AccessRead, rules[0].Mode)
+		require.Empty(t, rules)
 	})
 }
 
 func TestDirAllowMatching(t *testing.T) {
 	t.Run("allows when target is within allowed dir", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm -rf /tmp/cache/foo"}`), testApprovalScope))
 	})
 
 	t.Run("allows when target equals allowed dir", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
 	})
 
 	t.Run("denies when target is outside allowed dir", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm -rf /etc/passwd"}`), testApprovalScope))
 	})
 
 	t.Run("denies partial match", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/other"}`), testApprovalScope))
 	})
 
 	t.Run("allows when all targets are within any allowed dir", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/", "/var/cache/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/", "/var/cache/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("shell_run", []byte(`{"command":"cp /tmp/a /var/cache/b"}`), testApprovalScope))
 	})
 
 	t.Run("denies when any target is outside allowed dirs", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"cp /tmp/a /etc/b"}`), testApprovalScope))
 	})
 
 	t.Run("denies empty command", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":""}`), testApprovalScope))
 	})
 
 	t.Run("denies when no paths extracted", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"echo"}`), testApprovalScope))
 	})
 
-	t.Run("cross-scope denial", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
+	t.Run("directory rule remains valid after working directory changes", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
-		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), WorkspaceScope("/other")))
+		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), WorkspaceScope("/other")))
 	})
 
 	t.Run("simple mode path extraction", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), testApprovalScope))
@@ -1247,14 +1227,14 @@ func TestDirAllowMatching(t *testing.T) {
 	})
 
 	t.Run("windows matching is case insensitive", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"remove-item c:\\users\\old.txt"}`), testApprovalScope))
 	})
 
 	t.Run("powershell legacy glob rule matches containing directory", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\Users\Test\Downloads\*`}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\Users\Test\Downloads\*`}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\Test\\Downloads\\old.txt"}`), testApprovalScope))
@@ -1262,21 +1242,21 @@ func TestDirAllowMatching(t *testing.T) {
 	})
 
 	t.Run("windows drive root allows children", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\`}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{`C:\`}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\old.txt"}`), testApprovalScope))
 	})
 
 	t.Run("denies sibling prefix", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/cache2/file"}`), testApprovalScope))
 	})
 
 	t.Run("legacy glob rule matches containing directory", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/*"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache/*"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/cache/file"}`), testApprovalScope))
@@ -1284,7 +1264,7 @@ func TestDirAllowMatching(t *testing.T) {
 	})
 
 	t.Run("denies windows sibling prefix", func(t *testing.T) {
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.False(t, rs.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users2\\old.txt"}`), testApprovalScope))
@@ -1295,7 +1275,7 @@ func TestDirAllowMatching(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, home)
 
-		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}})
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
 		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm ~/.config/mods/config.yml"}`), testApprovalScope))
@@ -1308,8 +1288,8 @@ func TestDirAllowModeSplit(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessRead})
 		var rs approvalRuleSet
 		rs.Add(rule)
-		// dirAllowForCommand extracts write targets and only honours
-		// write/legacy rules, so a read-only approval must not grant writes.
+		// dirAllowForCommand extracts write targets and only honours explicit
+		// write rules, so a read-only historical approval must not grant writes.
 		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
 	})
 
@@ -1320,36 +1300,56 @@ func TestDirAllowModeSplit(t *testing.T) {
 		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
 	})
 
-	t.Run("legacy rule satisfies a write command", func(t *testing.T) {
+	t.Run("legacy empty-mode rule does not satisfy a write command", func(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}})
 		var rs approvalRuleSet
 		rs.Add(rule)
-		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
+		require.False(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), testApprovalScope))
 	})
 
 	t.Run("RulesAllowDirs honours mode for read ops", func(t *testing.T) {
 		readRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/etc"}, Mode: AccessRead})
 		writeRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/etc"}, Mode: AccessWrite})
-		require.True(t, RulesAllowDirs([]ApprovalRule{readRule}, []string{"/etc"}, testApprovalScope, AccessRead))
+		require.False(t, RulesAllowDirs([]ApprovalRule{readRule}, []string{"/etc"}, testApprovalScope, AccessRead))
 		require.False(t, RulesAllowDirs([]ApprovalRule{readRule}, []string{"/etc"}, testApprovalScope, AccessWrite))
 		require.True(t, RulesAllowDirs([]ApprovalRule{writeRule}, []string{"/etc"}, testApprovalScope, AccessWrite))
 		require.False(t, RulesAllowDirs([]ApprovalRule{writeRule}, []string{"/etc"}, testApprovalScope, AccessRead))
 	})
 
-	t.Run("legacy rule satisfies both read and write via RulesAllowDirs", func(t *testing.T) {
+	t.Run("legacy empty-mode rule satisfies neither mode via RulesAllowDirs", func(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/etc"}})
-		require.True(t, RulesAllowDirs([]ApprovalRule{rule}, []string{"/etc"}, testApprovalScope, AccessRead))
-		require.True(t, RulesAllowDirs([]ApprovalRule{rule}, []string{"/etc"}, testApprovalScope, AccessWrite))
+		require.False(t, RulesAllowDirs([]ApprovalRule{rule}, []string{"/etc"}, testApprovalScope, AccessRead))
+		require.False(t, RulesAllowDirs([]ApprovalRule{rule}, []string{"/etc"}, testApprovalScope, AccessWrite))
 	})
 
 	t.Run("separate rules collectively cover all directories", func(t *testing.T) {
-		ruleA := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/a"}, Mode: AccessRead})
-		ruleB := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/b"}, Mode: AccessRead})
+		ruleA := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/a"}, Mode: AccessWrite})
+		ruleB := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/b"}, Mode: AccessWrite})
 		require.True(t, RulesAllowDirs(
 			[]ApprovalRule{ruleA, ruleB},
 			[]string{"/external/a/subdir", "/external/b/subdir"},
 			testApprovalScope,
-			AccessRead,
+			AccessWrite,
+		))
+	})
+
+	t.Run("directory coverage is independent of current workspace", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/a"}, Mode: AccessWrite})
+		require.True(t, RulesAllowDirs(
+			[]ApprovalRule{rule},
+			[]string{"/external/a/subdir"},
+			WorkspaceScope("/different-workspace"),
+			AccessWrite,
+		))
+	})
+
+	t.Run("legacy relative rule resolves against its original workspace", func(t *testing.T) {
+		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"generated"}, Mode: AccessWrite})
+		require.True(t, RulesAllowDirs(
+			[]ApprovalRule{rule},
+			[]string{"/workspace/generated/output"},
+			WorkspaceScope("/different-workspace"),
+			AccessWrite,
 		))
 	})
 
@@ -1370,22 +1370,19 @@ func TestMixedAccessIntentRules(t *testing.T) {
 		ReadDirs:  []string{"/external/source"},
 		WriteDirs: []string{filepath.Join(testApprovalScope.Value, "dest")},
 	}
-	readRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/source"}, Mode: AccessRead})
 	writeRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{testApprovalScope.Value}, Mode: AccessWrite})
 
 	require.True(t, RulesAllowIntent(
-		[]ApprovalRule{readRule, writeRule}, intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto),
+		[]ApprovalRule{writeRule}, intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto),
 	))
 	require.False(t, RulesAllowIntent(
-		[]ApprovalRule{readRule}, intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto),
+		nil, intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto),
 	))
 
-	candidates := candidateRulesForIntent(intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto), false)
-	require.Len(t, candidates, 2)
-	require.Equal(t, AccessRead, candidates[0].Mode)
-	require.Equal(t, []string{"/external/source"}, candidates[0].Paths)
-	require.Equal(t, AccessWrite, candidates[1].Mode)
-	require.Equal(t, []string{filepath.Join(testApprovalScope.Value, "dest")}, candidates[1].Paths)
+	candidates := candidateRulesForIntent(intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto))
+	require.Len(t, candidates, 1)
+	require.Equal(t, AccessWrite, candidates[0].Mode)
+	require.Equal(t, []string{filepath.Join(testApprovalScope.Value, "dest")}, candidates[0].Paths)
 }
 
 // TestToolReviewerSnapshotChanRaceFree exercises the mu-guarded reviewChan

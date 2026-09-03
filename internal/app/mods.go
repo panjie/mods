@@ -132,13 +132,6 @@ type Mods struct {
 	secrets   *secrets.Store
 
 	shellAnalyzer func(tool, command string) approval.CommandAssessment
-	// promptIntentAnalyzer is a test seam overriding the LLM prompt-intent
-	// classifier, mirroring shellAnalyzer.
-	promptIntentAnalyzer func(content string) []approval.PromptIntent
-
-	// writeScopeClassifier is a test seam overriding the write-scope
-	// classifier used for write commands with no static target.
-	writeScopeClassifier func(tool, command string) []approval.WriteScope
 
 	// skillCatalog merges binary-embedded skills with the result of
 	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time. User skills have

@@ -5,10 +5,9 @@ import (
 	"runtime"
 )
 
-// SafeDirs returns the filesystem directories that may be accessed without
-// explicit approval. Both the approval matrix and filesystem tool enforcement
-// must consume this function so a path cannot be approved by one layer and
-// rejected by the other.
+// SafeDirs returns scratch directories that may be written without explicit
+// approval. Filesystem enforcement also consumes this set so the execution
+// boundary agrees with the approval matrix.
 func SafeDirs() []string {
 	dirs := []string{os.TempDir()}
 	if runtime.GOOS != "windows" {

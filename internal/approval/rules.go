@@ -20,26 +20,25 @@ const (
 	EditAll     RuleType = "edit_all"
 	ToolAll     RuleType = "tool_all"
 	DirAllow    RuleType = "dir_allow"
-	// DynamicReadAllow covers reads whose targets stay runtime-resolved
-	// (environment variables, command substitution). It is granted only
-	// through the review UI, never inferred, and never covers writes.
-	DynamicReadAllow RuleType = "dynamic_read_allow"
+	RemoteAllow RuleType = "remote_allow"
 
 	ScopeWorkspace ScopeKind = "workspace"
 )
 
-// Scope identifies the boundary within which an approval rule applies.
+// Scope carries the current tool working directory for relative-path
+// resolution and runtime path classification. It is not an authorization
+// boundary for DirAllow or RemoteAllow rules.
 type Scope struct {
 	Kind  ScopeKind
 	Value string
 }
 
-// Rule is a scoped permission granted through the review UI.
+// Rule is a permission granted through the review UI. ScopeKind and ScopeValue
+// remain only for loading older rule types and database rows; directory and
+// remote write rules are task-scoped and are created without either field.
 //
-// Mode scopes a DirAllow rule to read or write access. It is empty for
-// non-DirAllow rules and for rules persisted before mode-splitting; an
-// empty Mode matches both read and write operations to preserve the
-// behaviour of legacy saved approvals.
+// Mode must be AccessWrite for DirAllow and RemoteAllow rules. Historical
+// empty or read modes are loaded but intentionally do not authorize writes.
 type Rule struct {
 	ScopeKind  ScopeKind   `db:"scope_kind"`
 	ScopeValue string      `db:"scope_value"`
@@ -47,6 +46,7 @@ type Rule struct {
 	Tool       string      `db:"tool_name"`
 	Pattern    string      `db:"pattern"`
 	Paths      []string    `db:"paths"`
+	Origins    []string    `db:"origins"`
 	Mode       AccessClass `db:"mode"`
 }
 
@@ -59,8 +59,9 @@ func WorkspaceScope(root string) Scope {
 
 func (r Rule) key() string {
 	pathsKey := strings.Join(r.Paths, "\x01")
+	originsKey := strings.Join(r.Origins, "\x01")
 	return string(r.ScopeKind) + "\x00" + r.ScopeValue + "\x00" +
-		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern + "\x00" + pathsKey + "\x00" + string(r.Mode)
+		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern + "\x00" + pathsKey + "\x00" + originsKey + "\x00" + string(r.Mode)
 }
 
 func (r Rule) matchesScope(scope Scope) bool {
@@ -81,10 +82,10 @@ func (r Rule) String() string {
 			return fmt.Sprintf("dirs: %s", strings.Join(r.Paths, ", "))
 		}
 		return fmt.Sprintf("%s dirs: %s", r.Mode, strings.Join(r.Paths, ", "))
+	case RemoteAllow:
+		return fmt.Sprintf("remote writes: %s", strings.Join(r.Origins, ", "))
 	case ToolAll:
 		return r.Tool
-	case DynamicReadAllow:
-		return "reads of runtime-resolved targets"
 	default:
 		return r.Tool
 	}
@@ -117,7 +118,7 @@ func Dedupe(rules []Rule) []Rule {
 	seen := make(map[string]struct{}, len(rules))
 	result := make([]Rule, 0, len(rules))
 	for _, rule := range rules {
-		if rule.Tool == "" && rule.Type != DirAllow && rule.Type != DynamicReadAllow {
+		if rule.Tool == "" && rule.Type != DirAllow && rule.Type != RemoteAllow {
 			continue
 		}
 		if _, ok := seen[rule.key()]; ok {

@@ -46,7 +46,7 @@ type reviewOption struct {
 //     snapshot the channel pointer under the lock and then send/receive on
 //     the snapshot so a concurrent reset does not race the receive.
 //
-//   - reviewMode, reviewPending, reviewItem, selected, rules.scope are only
+//   - reviewMode, reviewPending, reviewItem, selected, and scope are only
 //     touched from the Update goroutine (handleStartMsg, handleKey, reset,
 //     isPending, renderBanner) plus the View pass that Bubble Tea runs
 //     synchronously after each Update. rules has its own internal mutex.
@@ -298,11 +298,12 @@ func normalizeAccessIntentDirs(intent AccessIntent, workspace, tool string, shel
 		if intent.WriteDirs != nil {
 			intent.WriteDirs = normalize(intent.WriteDirs)
 		}
-		return intent
-	}
-	if len(intent.Dirs) > 0 {
+	} else if len(intent.Dirs) > 0 {
 		intent.Dirs = normalize(intent.Dirs)
 	}
+	intent.RemoteOrigins = NormalizeRemoteOrigins(intent.RemoteOrigins)
+	intent.ReadOrigins = NormalizeRemoteOrigins(intent.ReadOrigins)
+	intent.WriteOrigins = NormalizeRemoteOrigins(intent.WriteOrigins)
 	return intent
 }
 
@@ -319,15 +320,7 @@ type reviewerDeps struct {
 	assessment     *approval.CommandAssessment
 	accessIntent   AccessIntent
 	safeDirs       []string
-	// promptIntents carries the closed-enumeration labels classified from
-	// the current user message. Empty (feature off or classification
-	// failed) leaves the approval flow untouched.
-	promptIntents []approval.PromptIntent
-	// writeScopes carries the write-scope classifier result for a shell
-	// write with no statically-determined target. nil means the classifier
-	// never ran; an empty slice means "no local filesystem write".
-	writeScopes []approval.WriteScope
-	onDecision  func(approvalTrace)
+	onDecision     func(approvalTrace)
 }
 
 type approvalTrace struct {
@@ -360,29 +353,16 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		assessment.KnownDirs = normalizeShellAffectedDirsForTool(assessment.KnownDirs, r.scope.Value, name)
 		debug.Printf("command assessment: effect=%s dirs=%v dynamic=%v reason=%q", assessment.Effect, assessment.KnownDirs, assessment.DynamicTargets, assessment.Reason)
 	}
-	if intent.HasAccess() && RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
-		trace.Source = "saved rule"
+	if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
+		trace.Source = "auto"
 		trace.Detail = accessIntentSummary(intent)
 		return nil
 	}
-	if r.reviewMode != ReviewAlways && intent.HasAccess() {
-		if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
-			trace.Source = "auto"
-			trace.Detail = accessIntentSummary(intent)
-			return nil
-		}
-	}
-	// Prompt-intent gate: when the user's message already requested a
-	// capability (workspace edits / global reads) and this call falls inside
-	// it, review is skipped. ReviewAlways deliberately bypasses the gate so
-	// "always ask" keeps its meaning; ReviewNever already returned at the
-	// auto step above.
-	if r.reviewMode == ReviewAuto && len(deps.promptIntents) > 0 {
-		if label := promptIntentGrants(deps, intent, assessment, r.scope, safeDirSet); label != "" {
-			trace.Source = "prompt intent"
-			trace.Detail = label
-			return nil
-		}
+	if r.reviewMode == ReviewAuto && intent.HasAccess() &&
+		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
+		trace.Source = "saved rule"
+		trace.Detail = accessIntentSummary(intent)
+		return nil
 	}
 	if !r.canReviewInteractively() {
 		trace.Source = "unavailable"
@@ -396,7 +376,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
 	if intent.HasAccess() {
-		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode), shellExecution)
+		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode))
 	}
 	item := toolReviewItem{
 		name:           name,
@@ -452,32 +432,34 @@ func accessIntentSummary(intent AccessIntent) string {
 		if len(group.Dirs) > 0 {
 			part += " · " + strings.Join(group.Dirs, ", ")
 		}
+		if len(group.Origins) > 0 {
+			part += " · " + strings.Join(group.Origins, ", ")
+		}
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, " · ")
 }
 
-func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode, shell bool) []Rule {
-	var rules []Rule
-	if intent.HasUnresolvedPaths() {
-		// Writes with runtime-resolved targets stay unrule-saveable: the
-		// corrective loop must keep applying. Reads offer a conversation-
-		// scoped DynamicReadAllow rule the user grants explicitly.
-		if intent.DominantClass() != AccessRead {
-			return nil
-		}
-		rules = append(rules, RulesForDynamicReads(scope)...)
+func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode) []Rule {
+	if reviewMode != ApprovalReviewMode(ReviewAuto) || intent.HasUnresolvedWriteTargets() {
+		return nil
 	}
+	var rules []Rule
 	for _, group := range intent.Groups() {
-		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
-		if reviewMode != ApprovalReviewMode(ReviewAlways) && ClassifyAccess(groupIntent, scope, safeDirs, reviewMode) != DecisionAsk {
+		if group.Class == AccessRead {
 			continue
 		}
-		dirs := group.Dirs
-		if shell && group.Class == AccessRead {
-			dirs = ExternalDirs(groupIntent, scope, safeDirs)
+		if group.Class != AccessWrite || len(group.Dirs) == 0 && len(group.Origins) == 0 {
+			return nil
 		}
-		rules = append(rules, RulesForDirs(dirs, scope, group.Class)...)
+		var reviewDirs []string
+		for _, dir := range group.Dirs {
+			if ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}}, scope, safeDirs, reviewMode) == DecisionAsk {
+				reviewDirs = append(reviewDirs, dir)
+			}
+		}
+		rules = append(rules, RulesForDirs(reviewDirs, scope, AccessWrite)...)
+		rules = append(rules, RulesForRemoteOrigins(group.Origins)...)
 	}
 	return rules
 }
@@ -581,13 +563,13 @@ func formatReviewLabel(name string, args []byte) string {
 	case "fs_largest":
 		return fmt.Sprintf("Largest in %s", OneLinePreview(ArgString(parsed, "path")))
 	case "shell_run":
-		cmd := ShellCommandPreview(ArgString(parsed, "command"))
+		cmd := ShellCommandPreview(redactRemoteURLsForDisplay(ArgString(parsed, "command")))
 		return fmt.Sprintf("Run: %s", cmd)
 	case "powershell_run":
-		cmd := ShellCommandPreview(ArgString(parsed, "command"))
+		cmd := ShellCommandPreview(redactRemoteURLsForDisplay(ArgString(parsed, "command")))
 		return fmt.Sprintf("Run PowerShell: %s", cmd)
 	case "process_run":
-		return fmt.Sprintf("Run process: %s", ProcessCommandPreview(parsed))
+		return fmt.Sprintf("Run process: %s", redactRemoteURLsForDisplay(ProcessCommandPreview(parsed)))
 	default:
 		summary := ToolArgsSummary(parsed)
 		if summary != "" {

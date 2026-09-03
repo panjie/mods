@@ -58,9 +58,9 @@ func TestAnalyzeShellStaticPOSIX(t *testing.T) {
 		require.Equal(t, []string{"."}, got.AffectedDirs)
 	})
 
-	t.Run("runtime-expanded path requires review", func(t *testing.T) {
+	t.Run("runtime-expanded read stays read-only", func(t *testing.T) {
 		got := AnalyzeShellStatic("cat ${FILE}", true)
-		require.Equal(t, ShellStaticUnknown, got.Class)
+		require.Equal(t, ShellStaticRead, got.Class)
 		require.Contains(t, got.UnresolvedPaths, "$FILE")
 	})
 

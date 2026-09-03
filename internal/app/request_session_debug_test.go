@@ -52,7 +52,7 @@ func TestToolDebugLifecycleIncludesCallMetadataAndRedactsSecrets(t *testing.T) {
 		},
 	}))
 
-	result, err := m.toolCaller(registry, &cfg, "")(proto.ToolCallRequest{
+	result, err := m.toolCaller(registry, &cfg)(proto.ToolCallRequest{
 		ID: "call_xyz", Index: 2, Total: 3, Name: "lookup",
 		Arguments: []byte(`{"token":"super-secret-value"}`),
 	})
@@ -102,7 +102,7 @@ func TestToolDebugLifecycleRecordsValidationFailure(t *testing.T) {
 		Call:         func(context.Context, json.RawMessage) (string, error) { return "unexpected", nil },
 	}))
 
-	_, err := m.toolCaller(registry, &cfg, "")(proto.ToolCallRequest{ID: "bad_call", Index: 1, Total: 1, Name: "required_arg", Arguments: []byte(`{}`)})
+	_, err := m.toolCaller(registry, &cfg)(proto.ToolCallRequest{ID: "bad_call", Index: 1, Total: 1, Name: "required_arg", Arguments: []byte(`{}`)})
 	require.Error(t, err)
 	require.Contains(t, output.String(), "required_arg [bad_call]")
 	require.Contains(t, output.String(), "failed")

@@ -697,7 +697,7 @@ func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
 			assessment := mods.assessCommand("shell_run", tt.command)
 			require.Equal(t, approval.EffectRead, assessment.Effect)
 			require.Equal(t, []string{tt.target}, assessment.DynamicTargets)
-			require.Equal(t, DecisionAsk, ClassifyAccess(
+			require.Equal(t, DecisionAllow, ClassifyAccess(
 				assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto),
 			))
 			presentation := formatReviewPresentationWithIntent(
@@ -721,7 +721,7 @@ func TestAnalyzeShellCommandWorkspaceFileEnumerationSubstitutionRequiresReview(t
 	assessment := mods.assessCommand("shell_run", command)
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Equal(t, []string{"command substitution"}, assessment.DynamicTargets)
-	require.Equal(t, DecisionAsk, ClassifyAccess(
+	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto),
 	))
 }
@@ -957,11 +957,8 @@ func TestAnalyzeShellCommandBareHomeRejectsClassifierGuess(t *testing.T) {
 	)
 	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: home})
 
-	rules := candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto), true)
-	require.Len(t, rules, 1)
-	require.Equal(t, approval.DirAllow, rules[0].Type)
-	require.Equal(t, approval.AccessRead, rules[0].Mode)
-	require.Equal(t, []string{home}, rules[0].Paths)
+	rules := candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto))
+	require.Empty(t, rules)
 }
 
 func TestAnalyzeShellCommandWithoutBareHomeKeepsClassifierDirs(t *testing.T) {
@@ -1262,9 +1259,8 @@ func TestAnalyzeShellCommandPOSIXEnvPathReferenceResolvesConcreteDir(t *testing.
 	require.Equal(t, []string{"/srv/mods-test-data/config.yml"}, assessment.KnownDirs)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
 	intent := assessment.AccessIntent()
-	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
-	require.NotEmpty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto), true),
-		"an external read through an env variable offers a rule-saveable directory")
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAnalyzeShellCommandPOSIXEnvBareReferenceResolvesValueDir(t *testing.T) {
@@ -1296,9 +1292,8 @@ func TestAnalyzeShellCommandPOSIXEnvAssignmentSuppressesExpansion(t *testing.T) 
 	workspace := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkspace(workspace),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads assigned path"}
 		},
 	}
 

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/panjie/mods/internal/approval"
+	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,4 +45,17 @@ func TestInferCapabilities(t *testing.T) {
 		})
 		require.True(t, caps.ReadOnly)
 	})
+}
+
+func TestRemoteMCPIntentExtractor(t *testing.T) {
+	extractor := remoteMCPIntentExtractor(
+		toolregistry.ToolCapabilities{Mutable: true},
+		"https://mcp.example.com",
+	)
+	require.NotNil(t, extractor)
+	intent := extractor(nil)
+	require.Equal(t, approval.AccessWrite, intent.Class)
+	require.Equal(t, []string{"https://mcp.example.com"}, intent.RemoteOrigins)
+	require.Nil(t, remoteMCPIntentExtractor(toolregistry.ToolCapabilities{ReadOnly: true}, "https://mcp.example.com"))
+	require.Nil(t, remoteMCPIntentExtractor(toolregistry.ToolCapabilities{Mutable: true}, ""), "stdio MCP has no reusable remote origin")
 }

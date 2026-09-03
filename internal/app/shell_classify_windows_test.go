@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -211,9 +212,8 @@ func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testi
 	require.Empty(t, assessment.DynamicTargets)
 	require.Contains(t, assessment.KnownDirs, external)
 	intent := assessment.AccessIntent()
-	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
-	require.NotEmpty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto), true),
-		"an external read via a literal-assigned variable offers a rule-saveable directory")
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
@@ -234,7 +234,7 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	require.Len(t, assessment.KnownDirs, 1)
 	require.Contains(t, strings.ToLower(assessment.KnownDirs[0]), "profile", assessment.KnownDirs)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
-	require.Equal(t, DecisionAsk, ClassifyAccess(
+	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
 		WorkspaceScope(workspace),
 		approval.SafeDirs(),
@@ -349,7 +349,7 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:AWS_SHARED_CREDENTIALS_FILE`)
 	require.False(t, assessment.DynamicProbe)
-	require.Equal(t, DecisionAsk, ClassifyAccess(
+	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
 		WorkspaceScope(workspace),
 		nil,
@@ -381,7 +381,7 @@ func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 
 			require.Equal(t, approval.EffectRead, assessment.Effect)
 			require.False(t, assessment.DynamicProbe)
-			require.Equal(t, DecisionAsk, ClassifyAccess(
+			require.Equal(t, DecisionAllow, ClassifyAccess(
 				assessment.AccessIntent(),
 				WorkspaceScope(workspace),
 				nil,
@@ -460,12 +460,12 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 	require.True(t, strings.EqualFold(assessment.KnownDirs[0], systemRoot+`\WinSxS`), assessment.KnownDirs)
 	require.Empty(t, assessment.DynamicTargets)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
-	require.Equal(t, DecisionAsk, ClassifyAccess(
+	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
 		WorkspaceScope(workspace),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
-	), "an external read still asks once, but the concrete dir makes the approval rule-saveable")
+	))
 }
 
 func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testing.T) {
@@ -484,7 +484,7 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\notes.txt`, "an env reassignment must keep the target runtime-resolved")
 	require.Equal(t, []string{`C:\Users\Test\Documents`}, assessment.KnownDirs,
 		"the assigned literal is still extracted; the process TEMP location must not be substituted")
-	require.Equal(t, DecisionAsk, ClassifyAccess(
+	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
 		WorkspaceScope(workspace),
 		nil,
@@ -667,7 +667,7 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 		require.True(t, lower == strings.ToLower(temp) || strings.HasPrefix(lower, strings.ToLower(temp)+`\`),
 			"every affected path stays inside TEMP: %v", dirs)
 	}
-	require.Equal(t, "external mutation", shellRiskLevel(assessment, WorkspaceScope(workspace)),
+	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkspaceScope(workspace)),
 		"the write is no longer classified as a dynamic mutation")
 	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
 		"a temp-dir write reaches the safe-dir allow cell instead of a dynamic-target review")
@@ -697,9 +697,8 @@ func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.
 	require.NotEmpty(t, assessment.KnownDirs)
 	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(home)+`\`), assessment.KnownDirs)
 	intent := assessment.AccessIntent()
-	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
-	require.NotEmpty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto), true),
-		"an external read through the home variable offers a rule-saveable directory")
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
@@ -719,7 +718,7 @@ func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
 	require.Empty(t, assessment.DynamicTargets, "mis-parsed POSIX --eval fragments must not become dynamic targets")
 }
 
-func TestReviewBannerAlwaysAllowForUserProfileEnvRead(t *testing.T) {
+func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	home, err := os.UserHomeDir()
@@ -739,22 +738,10 @@ func TestReviewBannerAlwaysAllowForUserProfileEnvRead(t *testing.T) {
 	assessment := m.assessCommand("powershell_run", cmd)
 	intent := assessment.AccessIntent()
 	scope := WorkspaceScope(workspace)
-	rules := candidateRulesForIntent(intent, scope, approval.SafeDirs(), ApprovalReviewMode(ReviewAuto), true)
-	require.NotEmpty(t, rules, "an external read through the home variable offers a rule-saveable directory")
-
-	reviewer := &toolReviewer{
-		reviewPending: true,
-		scope:         scope,
-		reviewItem: &toolReviewItem{
-			name:           "powershell_run",
-			args:           args,
-			candidateRules: rules,
-			presentation:   formatReviewPresentationWithIntent("powershell_run", args, assessment, scope, intent),
-		},
-	}
-	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Always allow")
-	require.Contains(t, rendered, ".emacs.d")
+	rules := candidateRulesForIntent(intent, scope, approval.SafeDirs(), ApprovalReviewMode(ReviewAuto))
+	require.Empty(t, rules)
+	reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: scope}
+	require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "powershell_run", args))
 }
 
 func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
@@ -800,7 +787,7 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:GITHUB_TOKEN`,
 		"a secret-bearing variable is not public metadata and stays dynamic")
-	require.Equal(t, DecisionAsk, ClassifyAccess(
+	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
 		WorkspaceScope(workspace),
 		nil,
@@ -808,7 +795,7 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 	))
 }
 
-func TestDynamicReadReviewOffersAlwaysAllowRule(t *testing.T) {
+func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	workspace := t.TempDir()
@@ -824,25 +811,10 @@ func TestDynamicReadReviewOffersAlwaysAllowRule(t *testing.T) {
 	assessment := m.assessCommand("powershell_run", cmd)
 	intent := assessment.AccessIntent()
 	require.True(t, intent.HasUnresolvedPaths())
-	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
 
 	scope := WorkspaceScope(workspace)
-	reviewer := &toolReviewer{
-		reviewPending: true,
-		scope:         scope,
-		reviewItem: &toolReviewItem{
-			name:           "powershell_run",
-			args:           args,
-			candidateRules: candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true),
-			presentation:   formatReviewPresentationWithIntent("powershell_run", args, assessment, scope, intent),
-		},
-	}
-	require.NotEmpty(t, reviewer.reviewItem.candidateRules, "a dynamic read offers the DynamicReadAllow rule")
-	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Always allow")
-	require.Contains(t, rendered, "reads of runtime-resolved targets")
-
-	// Granting the rule makes the same intent rule-covered afterwards.
-	reviewer.rules.Add(reviewer.reviewItem.candidateRules...)
-	require.True(t, RulesAllowIntent(reviewer.rules.Snapshot(), intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: scope}
+	require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "powershell_run", args))
 }

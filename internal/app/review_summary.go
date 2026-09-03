@@ -25,7 +25,7 @@ func formatReviewSummaryWithIntent(name string, args []byte, assessment approval
 	parsed := ToolOperationArgs(args)
 	switch name {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
-		return fmt.Sprintf("Target: %s - external read", OneLinePreview(readReviewTarget(parsed, scope, intent)))
+		return fmt.Sprintf("Target: %s - read-only", OneLinePreview(readReviewTarget(parsed, scope, intent)))
 	case "fs_write_file":
 		path := ArgString(parsed, "path")
 		content := ArgString(parsed, "content")
@@ -53,6 +53,9 @@ func formatReviewSummaryWithIntent(name string, args []byte, assessment approval
 	case "process_run":
 		return shellRiskSummary(ProcessCommandPreview(parsed), assessment, scope)
 	default:
+		if origins := summarizeRemoteOrigins(intent.AllRemoteOrigins()); origins != "" {
+			return "Remote write: " + origins
+		}
 		return ""
 	}
 }
@@ -101,6 +104,8 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 	risk := shellRiskLevel(assessment, scope)
 	dirs := summarizeAffectedDirs(assessment.KnownDirs)
 	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
+	origins := summarizeRemoteOrigins(assessment.RemoteOrigins)
+	remoteUnknown := len(assessment.UnresolvedRemoteTargets) > 0
 	reason := strings.TrimSpace(assessment.Reason)
 	if shellRiskLocationUnknown(risk) {
 		// Classifier reasons for unbounded commands commonly restate the
@@ -120,20 +125,40 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 		return s
 	}
 	if dirs == "" {
-		s := fmt.Sprintf("Risk: %s - %s", risk, ShellCommandPreview(command))
+		if origins != "" || remoteUnknown {
+			if origins == "" {
+				origins = "Unknown"
+			} else if remoteUnknown {
+				origins += ", Unknown"
+			}
+			s := fmt.Sprintf("Risk: %s - writes to %s", risk, origins)
+			if reason != "" {
+				s += " (" + OneLinePreview(reason) + ")"
+			}
+			return s
+		}
+		displayCommand := redactRemoteURLsForDisplay(command)
+		s := fmt.Sprintf("Risk: %s - %s", risk, ShellCommandPreview(displayCommand))
 		if reason != "" {
-			s = fmt.Sprintf("Risk: %s (%s) - %s", risk, OneLinePreview(reason), ShellCommandPreview(command))
+			s = fmt.Sprintf("Risk: %s (%s) - %s", risk, OneLinePreview(reason), ShellCommandPreview(displayCommand))
 		}
 		return s
 	}
-	s := fmt.Sprintf("Risk: %s - affects %s", risk, dirs)
+	targets := dirs
+	if origins != "" {
+		targets += "; remote " + origins
+	}
+	if remoteUnknown {
+		targets += "; remote Unknown"
+	}
+	s := fmt.Sprintf("Risk: %s - affects %s", risk, targets)
 	if reason != "" {
-		s = fmt.Sprintf("Risk: %s - affects %s (%s)", risk, dirs, OneLinePreview(reason))
+		s = fmt.Sprintf("Risk: %s - affects %s (%s)", risk, targets, OneLinePreview(reason))
 	}
 	return s
 }
 
-func shellRiskLevel(assessment approval.CommandAssessment, scope Scope) string {
+func shellRiskLevel(assessment approval.CommandAssessment, _ Scope) string {
 	if len(assessment.DynamicTargets) > 0 {
 		switch assessment.Effect {
 		case approval.EffectRead:
@@ -150,34 +175,23 @@ func shellRiskLevel(assessment approval.CommandAssessment, scope Scope) string {
 		}
 		return "unknown"
 	}
+	if assessment.Effect == approval.EffectWrite && len(assessment.UnresolvedRemoteTargets) > 0 {
+		return "unknown remote mutation"
+	}
 	if assessment.Effect == approval.EffectRead {
-		for _, dir := range assessment.KnownDirs {
-			if !pathWithinScope(dir, scope) {
-				return "external read"
-			}
-		}
 		return "read-only"
+	}
+	if len(assessment.RemoteOrigins) > 0 && len(assessment.KnownDirs) == 0 {
+		return "remote mutation"
 	}
 	if len(assessment.KnownDirs) == 0 {
 		return "unknown-location mutation"
 	}
-	for _, dir := range assessment.KnownDirs {
-		if !pathWithinScope(dir, scope) {
-			return "external mutation"
-		}
-	}
-	return "workspace mutation"
+	return "local mutation"
 }
 
 func shellRiskLocationUnknown(risk string) bool {
-	return risk == "unknown effect and location" || risk == "unknown-location mutation"
-}
-
-func pathWithinScope(path string, scope Scope) bool {
-	if path == "" {
-		return false
-	}
-	return pathutil.Location(path, scope.Value, nil) == pathutil.LocationWorkspace
+	return risk == "unknown effect and location" || risk == "unknown-location mutation" || risk == "unknown remote mutation"
 }
 
 func summarizeAffectedDirs(dirs []string) string {
@@ -196,6 +210,10 @@ func summarizeAffectedDirs(dirs []string) string {
 		parts = append(parts, "+"+strconv.Itoa(len(dirs)-maxDirs)+" more")
 	}
 	return strings.Join(parts, ", ")
+}
+
+func summarizeRemoteOrigins(origins []string) string {
+	return summarizeAffectedDirs(approval.NormalizeRemoteOrigins(origins))
 }
 
 func patchSummary(patch string) string {

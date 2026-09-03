@@ -54,18 +54,18 @@ func TestFormatReviewSummary(t *testing.T) {
 		)
 		require.Contains(t,
 			formatReviewSummary("shell_run", []byte(`{"command":"touch out"}`), approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"."}}, scope),
-			"workspace mutation",
+			"local mutation",
 		)
 		unknownSummary := formatReviewSummary("shell_run", []byte(`{"command":"opaque-command"}`), approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{"/workspace"}}, scope)
 		require.Contains(t, unknownSummary, "unknown")
-		require.NotContains(t, unknownSummary, "workspace mutation")
+		require.NotContains(t, unknownSummary, "local mutation")
 		contradictoryWrite := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/workspace"}}
 		contradictoryWriteSummary := formatReviewSummary("shell_run", []byte(`{"command":"touch out"}`), contradictoryWrite, scope)
-		require.Contains(t, contradictoryWriteSummary, "workspace mutation")
+		require.Contains(t, contradictoryWriteSummary, "local mutation")
 		require.NotContains(t, contradictoryWriteSummary, "read-only")
 		require.Contains(t,
 			formatReviewSummary("shell_run", []byte(`{"command":"rm /tmp/x"}`), approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/tmp"}}, scope),
-			"external mutation",
+			"local mutation",
 		)
 		require.Contains(t,
 			formatReviewSummary("shell_run", []byte(`{"command":"unknown"}`), approval.CommandAssessment{Effect: approval.EffectWrite}, scope),
@@ -78,10 +78,10 @@ func TestFormatReviewSummary(t *testing.T) {
 		analysis := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/workspace"}}
 		args := []byte(`{"program":"rm","args":["path with space"]}`)
 		summary := formatReviewSummary("process_run", args, analysis, scope)
-		require.Contains(t, summary, "workspace mutation")
+		require.Contains(t, summary, "local mutation")
 		require.Contains(t, formatReviewLabel("process_run", args), `rm "path with space"`)
 		presentation := formatReviewPresentationWithIntent("process_run", args, analysis, scope, AccessIntent{Class: AccessWrite, Dirs: []string{"/workspace"}})
-		require.Equal(t, "Modify workspace files", presentation.headline)
+		require.Equal(t, "Modify local files", presentation.headline)
 		require.Equal(t, []interactionRow{
 			{Label: "Command", Value: `rm "path with space"`},
 			{Label: "Target", Value: "/workspace"},
@@ -100,7 +100,7 @@ func TestFormatReviewSummary(t *testing.T) {
 		scope := WorkspaceScope("/workspace")
 		got := formatReviewSummary("shell_run", []byte(`{"command":"scoop install nodejs"}`),
 			approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/home/user/scoop"}, Reason: "modifies system state"}, scope)
-		require.Contains(t, got, "external mutation")
+		require.Contains(t, got, "local mutation")
 		require.Contains(t, got, "modifies system state")
 	})
 
@@ -131,7 +131,7 @@ func TestDynamicShellTargetPresentation(t *testing.T) {
 	require.Contains(t, summary, "dynamic mutation")
 	require.Contains(t, summary, "$PROFILE.CurrentUserCurrentHost")
 
-	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
+	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
 	require.Empty(t, rules, "runtime-resolved targets must never offer a persistent directory rule")
 }
 
@@ -158,13 +158,9 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	require.Contains(t, summary, "dynamic read")
 	require.Contains(t, summary, `$v`)
 
-	require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
-	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto), true)
-	require.NotEmpty(t, rules, "a dynamic read offers the explicit-consent DynamicReadAllow rule")
-	labels := RulesLabel(rules)
-	require.Contains(t, labels, "reads of runtime-resolved targets")
-	require.Contains(t, labels, `read dirs: C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links`,
-		"concrete external dirs still offer their scoped DirAllow rule")
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
+	require.Empty(t, rules, "reads never need reusable approval rules")
 }
 
 func TestNonPathShapedDynamicTargetHiddenFromReviewPanel(t *testing.T) {
@@ -247,10 +243,10 @@ func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 	}, presentation.rows)
 }
 
-func TestFormatReviewSummaryExternalRead(t *testing.T) {
+func TestFormatReviewSummaryReadOnly(t *testing.T) {
 	scope := WorkspaceScope(t.TempDir())
 	got := formatReviewSummary("fs_read_file", []byte(`{"path":"/etc/passwd"}`), approval.CommandAssessment{}, scope)
-	require.Contains(t, got, "external read")
+	require.Contains(t, got, "read-only")
 	require.Contains(t, got, "/etc")
 	require.NotContains(t, got, "passwd")
 }

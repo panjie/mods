@@ -25,6 +25,12 @@ var posixBindingCommandNames = map[string]bool{
 // export forms), loop binding, function scope, or read-style builtin makes
 // statically known values unreliable for the child shell.
 func commandMutatesPOSIXEnvironment(command string) bool {
+	// mvdan's strict POSIX grammar can represent the common shell arithmetic
+	// command ((...)) without a LetClause. It still mutates shell variables,
+	// so conservatively treat the construct as an environment mutation.
+	if strings.Contains(command, "((") || strings.Contains(command, "<&") {
+		return true
+	}
 	file, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX)).Parse(strings.NewReader(command), "")
 	if err != nil {
 		return true // fail closed on unparseable input

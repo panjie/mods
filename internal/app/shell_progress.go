@@ -24,7 +24,7 @@ func shellProgressStatus(tool, command string, lastOutput string, width int) str
 		prefix = "Shell"
 	}
 	status := prefix
-	if command := ShellCommandPreview(command); command != "" {
+	if command := ShellCommandPreview(redactRemoteURLsForDisplay(command)); command != "" {
 		status += " - " + command
 	}
 	if output := shellProgressOutputPreview(lastOutput); output != "" {

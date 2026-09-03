@@ -16,7 +16,8 @@ import (
 // fallback tokenizer, and writable_dirs.go for directory extraction.
 
 func (s *RuleSet) Allows(name string, data []byte, scope Scope) bool {
-	rules := rulesForScope(s.Snapshot(), scope)
+	allRules := s.Snapshot()
+	rules := rulesForScope(allRules, scope)
 	if isBuiltinFilesystemEditTool(name) {
 		return slices.ContainsFunc(rules, func(rule Rule) bool {
 			return rule.Type == EditAll
@@ -28,7 +29,7 @@ func (s *RuleSet) Allows(name string, data []byte, scope Scope) bool {
 		if command == "" {
 			return false
 		}
-		return dirAllowForCommand(name, command, rules, scope.Value, shellToolUsesPOSIX(name))
+		return dirAllowForCommand(name, command, allRules, scope.Value, shellToolUsesPOSIX(name))
 	default:
 		return slices.ContainsFunc(rules, func(rule Rule) bool {
 			return rule.Type == ToolAll && rule.Tool == name
@@ -67,42 +68,53 @@ func isBuiltinFilesystemEditTool(name string) bool {
 	}
 }
 
-// RulesForDirs builds the candidate DirAllow rule offered by the
-// "Always allow" choice for a shell command. The mode stamps the rule
-// as read-only or write-only so that approving a read command does not
-// later auto-approve writes in the same directory.
+// RulesForDirs builds the task-scoped candidate DirAllow rule offered by the
+// "Always allow" choice. The current working directory is used only to turn
+// relative inputs into stable absolute paths; it is not stored as rule scope.
 func RulesForDirs(dirs []string, scope Scope, mode AccessClass) []Rule {
+	if len(dirs) == 0 || mode != AccessWrite {
+		return nil
+	}
+	dirs = normalizeDirsForScope(dirs, scope)
 	if len(dirs) == 0 {
 		return nil
 	}
-	return scopeRules([]Rule{{
+	return []Rule{{
 		Type:  DirAllow,
 		Paths: dirs,
 		Mode:  mode,
-	}}, scope)
+	}}
 }
 
-// RulesAllowDirs reports whether a saved DirAllow rule already covers
-// every affected directory for an operation of the given mode. A legacy
-// rule with an empty Mode matches both read and write operations.
+// RulesAllowDirs reports whether explicit write-mode, task-scoped DirAllow
+// rules cover every affected directory. The supplied scope only resolves
+// relative target paths. Legacy scoped write rules remain usable across a
+// changed working directory, while empty-mode and read rules never authorize
+// writes.
 func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) bool {
-	if len(dirs) == 0 {
+	if len(dirs) == 0 || mode != AccessWrite {
 		return false
 	}
 	dirs = normalizeDirsForScope(dirs, scope)
 	if len(dirs) == 0 {
 		return false
 	}
-	scopedRules := rulesForScope(rules, scope)
 	var allowedPaths []string
-	for _, rule := range scopedRules {
+	for _, rule := range rules {
 		if rule.Type != DirAllow {
 			continue
 		}
-		if rule.Mode != "" && rule.Mode != mode {
+		if rule.Mode != AccessWrite {
 			continue
 		}
-		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkspace(rule.Paths, scope.Value)...)
+		base := scope.Value
+		if rule.ScopeValue != "" {
+			// Pre-task-scope builds could persist relative paths together with
+			// their workspace. Resolve those paths against the original value,
+			// then ignore the scope for authorization matching.
+			base = rule.ScopeValue
+		}
+		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkspace(rule.Paths, base)...)
 	}
 	for _, dir := range dirs {
 		if !dirWithinPaths(allowedPaths, dir) {
@@ -112,51 +124,65 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 	return len(allowedPaths) > 0
 }
 
-// RulesForDynamicReads builds the candidate rule offered by the "Always
-// allow" choice for a read whose targets stay runtime-resolved. The user
-// grants it explicitly; it never covers writes and never applies to intents
-// with concrete directories (those still need DirAllow coverage).
-func RulesForDynamicReads(scope Scope) []Rule {
-	return scopeRules([]Rule{{
-		Type: DynamicReadAllow,
-	}}, scope)
+// RulesForRemoteOrigins builds a task-scoped remote-write allow rule. The
+// RuleSet itself belongs to one saved session, and origins remain stable if
+// that session is continued from another working directory.
+func RulesForRemoteOrigins(origins []string) []Rule {
+	origins = NormalizeRemoteOrigins(origins)
+	if len(origins) == 0 {
+		return nil
+	}
+	return []Rule{{Type: RemoteAllow, Origins: origins, Mode: AccessWrite}}
 }
 
-// dynamicReadRuleSaved reports whether the scoped rule set contains a
-// user-granted DynamicReadAllow rule.
-func dynamicReadRuleSaved(rules []Rule, scope Scope) bool {
-	return slices.ContainsFunc(rulesForScope(rules, scope), func(rule Rule) bool {
-		return rule.Type == DynamicReadAllow
-	})
+func RulesAllowRemoteOrigins(rules []Rule, origins []string) bool {
+	origins = NormalizeRemoteOrigins(origins)
+	if len(origins) == 0 {
+		return false
+	}
+	var allowed []string
+	for _, rule := range rules {
+		if rule.Type != RemoteAllow || rule.Mode != AccessWrite {
+			continue
+		}
+		allowed = append(allowed, NormalizeRemoteOrigins(rule.Origins)...)
+	}
+	for _, origin := range origins {
+		if !slices.Contains(allowed, origin) {
+			return false
+		}
+	}
+	return len(allowed) > 0
 }
 
 // RulesAllowIntent reports whether saved rules cover every access group that
 // still requires approval under the current policy. Groups already allowed by
 // the matrix (for example a temp-directory write in auto mode) need no rule.
-// A saved DynamicReadAllow rule covers the unresolved portion of a read
-// intent; concrete directory groups still require DirAllow coverage, so a
-// mixed intent is not blanket-allowed.
 func RulesAllowIntent(rules []Rule, intent AccessIntent, scope Scope, safeDirs []string, reviewMode ReviewMode) bool {
-	dynamicCovered := intent.HasUnresolvedPaths() &&
-		intent.DominantClass() == AccessRead && dynamicReadRuleSaved(rules, scope)
-	if intent.HasUnresolvedPaths() && !dynamicCovered {
+	if reviewMode != ReviewAuto || intent.HasUnresolvedWriteTargets() {
 		return false
 	}
-	covered := dynamicCovered
+	covered := false
 	for _, group := range intent.Groups() {
-		if dynamicCovered && len(group.Dirs) == 0 {
-			// The read's scope is exactly its runtime-resolved targets,
-			// which the granted rule covers; there are no dirs to check.
+		if group.Class == AccessRead {
 			continue
 		}
-		groupIntent := AccessIntent{Class: group.Class, Dirs: group.Dirs}
-		if reviewMode != ReviewAlways && ClassifyAccess(groupIntent, scope, safeDirs, reviewMode) == DecisionAllow {
-			continue
-		}
-		if !RulesAllowDirs(rules, group.Dirs, scope, group.Class) {
+		if group.Class != AccessWrite || len(group.Dirs) == 0 && len(group.Origins) == 0 {
 			return false
 		}
-		covered = true
+		var reviewDirs []string
+		for _, dir := range group.Dirs {
+			if locateDir(dir, scope, safeDirs) != locTemp {
+				reviewDirs = append(reviewDirs, dir)
+			}
+		}
+		if len(reviewDirs) > 0 && !RulesAllowDirs(rules, reviewDirs, scope, AccessWrite) {
+			return false
+		}
+		if len(group.Origins) > 0 && !RulesAllowRemoteOrigins(rules, group.Origins) {
+			return false
+		}
+		covered = covered || len(reviewDirs) > 0 || len(group.Origins) > 0
 	}
 	return covered
 }
@@ -321,34 +347,33 @@ func matchShellPrefix(pattern, command string) bool {
 }
 
 // dirAllowForCommand matches a shell command's writable directories
-// against saved DirAllow rules. Because it inspects write targets
-// extracted from the command, it only honours write-mode and legacy
-// (empty-mode) rules; a read-only approval must not satisfy a write.
+// against saved DirAllow rules. Only explicit write-mode rules participate;
+// legacy empty-mode and read rules cannot authorize writes.
 func dirAllowForCommand(tool string, command string, rules []Rule, workspace string, posix bool) bool {
 	targetDirs := normalizeShellDirsForWorkspaceWithMode(extractWritableDirs(command, posix), workspace, posix)
 	if len(targetDirs) == 0 {
 		return false
 	}
+	var allowedPaths []string
 	for _, rule := range rules {
 		if rule.Type != DirAllow {
 			continue
 		}
-		if rule.Mode != "" && rule.Mode != AccessWrite {
+		if rule.Mode != AccessWrite {
 			continue
 		}
-		rulePaths := normalizeShellDirsForWorkspaceWithMode(rule.Paths, workspace, posix)
-		allMatch := true
-		for _, targetDir := range targetDirs {
-			if !dirWithinPaths(rulePaths, targetDir) {
-				allMatch = false
-				break
-			}
+		base := workspace
+		if rule.ScopeValue != "" {
+			base = rule.ScopeValue
 		}
-		if allMatch {
-			return true
+		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkspaceWithMode(rule.Paths, base, posix)...)
+	}
+	for _, targetDir := range targetDirs {
+		if !dirWithinPaths(allowedPaths, targetDir) {
+			return false
 		}
 	}
-	return false
+	return len(allowedPaths) > 0
 }
 
 // dirWithinPaths reports whether target falls inside any of the

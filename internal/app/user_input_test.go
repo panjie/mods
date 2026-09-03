@@ -402,7 +402,7 @@ func TestSecretRefCallNeedsNoPerUseApproval(t *testing.T) {
 		},
 	}))
 
-	out, err := m.toolCaller(registry, &cfg, "")(proto.ToolCallRequest{
+	out, err := m.toolCaller(registry, &cfg)(proto.ToolCallRequest{
 		ID: "call_secret", Index: 1, Total: 1, Name: "lookup",
 		Arguments: []byte(`{"token":"` + ref + `"}`),
 	})

@@ -54,6 +54,11 @@ func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string
 
 	flavor := shellPathFlavor(tool)
 	result := approval.AssessShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
+	result.RemoteOrigins = append(result.RemoteOrigins, extractLiteralRemoteOrigins(command)...)
+	gitOrigins, unresolvedGitRemotes := m.resolveGitPushOrigins(tool, command, ws)
+	result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
+	result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
+	result.RemoteOrigins = approval.NormalizeRemoteOrigins(result.RemoteOrigins)
 	staticEffect := result.Effect
 	externalPaths := filterArgPaths(result.KnownDirs, ws, flavor)
 	// Keep a syntax-independent external-path fallback for both shell dialects.
@@ -152,6 +157,7 @@ func finalizeProcessAssessment(result approval.CommandAssessment) approval.Comma
 }
 
 func finalizeAssessmentReviewability(result approval.CommandAssessment) approval.CommandAssessment {
+	result.RemoteOrigins = approval.NormalizeRemoteOrigins(result.RemoteOrigins)
 	reviewability := result.Reviewability
 	if result.Effect == approval.EffectWrite && len(result.DynamicTargets) > 0 {
 		reviewability.Level = approval.ReviewabilityCompound
@@ -216,6 +222,13 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		Cwd:             cwd,
 		EnvironmentKeys: environmentKeys,
 	})
+	result.RemoteOrigins = extractLiteralRemoteOrigins(strings.Join(append([]string{invocation.Program}, invocation.Args...), " "))
+	if isGitProgram(invocation.Program) {
+		gitOrigins, unresolvedGitRemotes := m.resolveGitPushArgvOrigins(invocation.Args, cwd)
+		result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
+		result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
+	}
+	result.RemoteOrigins = approval.NormalizeRemoteOrigins(result.RemoteOrigins)
 	staticDirs := append([]string(nil), result.KnownDirs...)
 	switch result.Effect {
 	case approval.EffectRead:

@@ -1,5 +1,9 @@
 # 统一目录审批设计 (Unified Directory-Centric Approval)
 
+> **部分被取代（2026-09-03）：** 本文的读取审批矩阵和读取规则已由
+> [`2026-09-03-write-target-approval-design.md`](2026-09-03-write-target-approval-design.md)
+> 取代。
+
 - 状态：已确认（§1–§4 逐节通过）
 - 日期：2026-07-02
 - 范围：`internal/tools`、`internal/app`、`internal/approval`、`internal/prompts`

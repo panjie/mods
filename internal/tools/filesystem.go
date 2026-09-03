@@ -87,7 +87,7 @@ func filesystemReadFileTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_read_file",
-			Description: "Read a UTF-8 text file. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval. Read by line number with start_line/end_line (1-based, inclusive; output is line-numbered); page large files by bytes with offset/limit.",
+			Description: "Read a UTF-8 text file. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it. Read by line number with start_line/end_line (1-based, inclusive; output is line-numbered); page large files by bytes with offset/limit.",
 			InputSchema: objectSchema(map[string]any{
 				"path":       stringProp("Path to the file, relative to the workspace, absolute, or using the current user's home directory."),
 				"offset":     integerProp("Zero-based byte offset to start reading from (byte mode)."),
@@ -160,7 +160,7 @@ func filesystemListDirTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_list_dir",
-			Description: "List files and directories. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "List files and directories. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target directories outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path":        stringProp("Directory path, relative to the workspace, absolute, or using the current user's home directory."),
 				"max_entries": integerProp("Maximum entries to return."),
@@ -210,7 +210,7 @@ func filesystemStatTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_stat",
-			Description: "Get metadata for a file or directory. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "Get metadata for a file or directory. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target entries outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path": stringProp("Path to inspect, relative to the workspace, absolute, or using the current user's home directory."),
 			}, "path"),
@@ -243,7 +243,7 @@ func filesystemSearchTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_search",
-			Description: "Search text files for a literal query string. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "Search text files for a literal query string. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path":        stringProp("Directory or file path to search within, relative to the workspace, absolute, or using the current user's home directory."),
 				"query":       stringProp("Literal text to search for."),
@@ -285,7 +285,7 @@ func filesystemLargestTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_largest",
-			Description: "Find the largest files or directories under a path. Use kind=file for requests that specifically ask for files. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "Find the largest files or directories under a path. Use kind=file for requests that specifically ask for files. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target entries outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path":        stringProp("Directory or file path to inspect, relative to the workspace, absolute, or using the current user's home directory."),
 				"kind":        stringProp("What to rank: file, dir, or both. Defaults to file."),

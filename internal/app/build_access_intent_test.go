@@ -85,7 +85,7 @@ func TestBuildAccessIntent(t *testing.T) {
 // TestSymlinkAliasWorkspacePathsClassifyAsWorkspace pins the fix for
 // workspaces reached through a symlink (e.g. ~/.emacs.d -> real dir):
 // fs and shell reads spelled through the alias must classify as workspace
-// reads (auto-allow) while genuinely external paths still ask.
+// reads; genuinely external reads are also allowed by the write-only policy.
 func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
 	realRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "lisp"), 0o755))
@@ -123,7 +123,7 @@ func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
 	require.Equal(t, DecisionAllow, ClassifyAccess(intentShell, scope, nil, ApprovalReviewMode(ReviewAuto)))
 
 	intentExt := buildAccessIntent("fs_read_file", []byte(`{"path":"/etc/passwd"}`), regFs, nil)
-	require.Equal(t, DecisionAsk, ClassifyAccess(intentExt, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intentExt, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 // TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable
@@ -314,7 +314,7 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	require.Equal(t, AccessWrite, intent.Class)
 	require.Empty(t, intent.Dirs)
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
-	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto), true))
+	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	presentation := formatReviewPresentationWithIntent("process_run", data, assessment, WorkspaceScope(root), intent)
 	require.Equal(t, "Modify an unknown target", presentation.headline)

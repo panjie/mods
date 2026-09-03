@@ -17,6 +17,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -108,11 +109,14 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 			// underscores.
 			capturedSname := sname
 			capturedToolName := tool.Name
+			capabilities := inferCapabilities(tool)
+			intentExtractor := remoteMCPIntentExtractor(capabilities, serverSession.remoteOrigin)
 			if err := registry.Register(toolregistry.Tool{
-				Spec:          spec,
-				Kind:          toolregistry.ToolKindMCP,
-				TimeoutPolicy: toolregistry.TimeoutPolicyCaller,
-				Capabilities:  inferCapabilities(tool),
+				Spec:            spec,
+				Kind:            toolregistry.ToolKindMCP,
+				TimeoutPolicy:   toolregistry.TimeoutPolicyCaller,
+				Capabilities:    capabilities,
+				IntentExtractor: intentExtractor,
 				Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 					return session.ToolCall(ctx, capturedSname, capturedToolName, data)
 				},
@@ -123,6 +127,15 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 		}
 	}
 	return nil
+}
+
+func remoteMCPIntentExtractor(capabilities toolregistry.ToolCapabilities, remoteOrigin string) func(json.RawMessage) approval.AccessIntent {
+	if !capabilities.Mutable || remoteOrigin == "" {
+		return nil
+	}
+	return func(json.RawMessage) approval.AccessIntent {
+		return approval.AccessIntent{Class: approval.AccessWrite, RemoteOrigins: []string{remoteOrigin}}
+	}
 }
 
 // inferCapabilities maps an MCP tool's self-declared annotations to mods'
@@ -154,9 +167,10 @@ type ToolSession struct {
 }
 
 type toolServerSession struct {
-	client *client.Client
-	tools  []mcp.Tool
-	mu     sync.Mutex
+	client       *client.Client
+	tools        []mcp.Tool
+	remoteOrigin string
+	mu           sync.Mutex
 }
 
 func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
@@ -188,7 +202,11 @@ func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
 				}
 			}
 			mu.Lock()
-			session.servers[sname] = &toolServerSession{client: cli, tools: tools.Tools}
+			origin := ""
+			if server.Type == "http" || server.Type == "sse" {
+				origin, _ = approval.NormalizeRemoteOrigin(server.URL)
+			}
+			session.servers[sname] = &toolServerSession{client: cli, tools: tools.Tools, remoteOrigin: origin}
 			mu.Unlock()
 			return nil
 		})

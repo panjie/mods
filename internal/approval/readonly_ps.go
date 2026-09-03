@@ -89,7 +89,7 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 
 	// A standalone, explicitly recognized runtime value is a read. The
 	// assessment separately records whether the surrounding operation is only a
-	// path/capability probe; content readers remain subject to per-use review.
+	// path/capability probe; all proven reads are exempt from review.
 	if len(ir.Commands) == 0 && len(ir.TopLevelValueExpressions) == 0 {
 		return false
 	}

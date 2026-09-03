@@ -93,6 +93,22 @@ func TestApprovalRulesRejectsMalformedPathsJSON(t *testing.T) {
 	require.ErrorContains(t, err, "ApprovalRules: decode paths for dir_allow/")
 }
 
+func TestApprovalRulesRejectsMalformedOriginsJSON(t *testing.T) {
+	db := testDB(t)
+	const id = "ef31ae23ab8b75b5643c2f846c570997edc71334"
+	require.NoError(t, db.Save(id, "malformed remote approval rule", "openai", "gpt-5"))
+	_, err := db.db.Exec(`
+		INSERT INTO approval_rules (
+			session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode
+		) VALUES (?, '', '', 'remote_allow', '', '', '', '{', 'write')
+	`, id)
+	require.NoError(t, err)
+
+	rules, err := db.ApprovalRules(id)
+	require.Nil(t, rules)
+	require.ErrorContains(t, err, "ApprovalRules: decode origins for remote_allow/")
+}
+
 func TestSessionDB(t *testing.T) {
 	const testid = "df31ae23ab8b75b5643c2f846c570997edc71333"
 
@@ -309,7 +325,8 @@ func TestSessionData(t *testing.T) {
 		testScopedRule(ApprovalRule{Type: approvalEditAll, Tool: "file_edit"}),
 		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessRead}),
 		testScopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: accessWrite}),
-		testScopedRule(ApprovalRule{Type: approvalDynamicReadAllow}),
+		{Type: approvalRemoteAllow, Origins: []string{"https://api.example.com"}, Mode: accessWrite},
+		{Type: approvalRemoteAllow, Origins: []string{"https://api.example.com:8443"}, Mode: accessWrite},
 	}
 
 	require.NoError(t, db.SaveSession(id, "session", "openai", "gpt-5", messages, rules))
@@ -333,6 +350,43 @@ func TestSessionData(t *testing.T) {
 	deletedRules, err := db.ApprovalRules(id)
 	require.NoError(t, err)
 	require.Empty(t, deletedRules)
+}
+
+func TestApprovalRulesAreIsolatedBetweenSessions(t *testing.T) {
+	db := testDB(t)
+	first := newSessionID()
+	second := newSessionID()
+	rules := []ApprovalRule{{
+		Type: approvalRemoteAllow, Origins: []string{"https://api.example.com"}, Mode: accessWrite,
+	}}
+	require.NoError(t, db.SaveSession(first, "first", "openai", "gpt-5", nil, rules))
+	require.NoError(t, db.SaveSession(second, "second", "openai", "gpt-5", nil, nil))
+
+	loaded, err := db.ApprovalRules(first)
+	require.NoError(t, err)
+	require.Equal(t, rules, loaded)
+	loaded, err = db.ApprovalRules(second)
+	require.NoError(t, err)
+	require.Empty(t, loaded)
+}
+
+func TestDirectoryApprovalSurvivesWorkingDirectoryChange(t *testing.T) {
+	db := testDB(t)
+	id := newSessionID()
+	rules := []ApprovalRule{{
+		Type: approvalDirAllow, Paths: []string{"/approved/output"}, Mode: accessWrite,
+	}}
+	require.NoError(t, db.SaveSession(id, "directory approval", "openai", "gpt-5", nil, rules))
+
+	loaded, err := db.ApprovalRules(id)
+	require.NoError(t, err)
+	require.Equal(t, rules, loaded)
+	require.True(t, rulesAllowDirs(
+		loaded,
+		[]string{"/approved/output/nested"},
+		workspaceScope("/different/working-directory"),
+		accessWrite,
+	))
 }
 
 func TestSaveSessionRollsBackAtomically(t *testing.T) {
@@ -407,10 +461,9 @@ func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
 	require.False(t, ruleSet.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), workspaceScope("/workspace")))
 }
 
-// TestMigratesApprovalRulesToAddMode verifies that a DB persisted just
-// before mode-splitting (scope + paths columns, no mode column) migrates
-// cleanly: existing DirAllow rows survive with an empty Mode so they keep
-// matching both read and write, and new mode-scoped rules round-trip.
+// TestMigratesApprovalRulesToAddMode verifies that a DB persisted just before
+// mode-splitting migrates cleanly. Existing DirAllow rows survive for audit
+// and round-trip purposes but do not authorize writes.
 func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 	const (
 		legacyWorkspace = `C:\mods-workspace`
@@ -455,12 +508,14 @@ func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 	require.Len(t, rules, 1)
 	require.Equal(t, approvalDirAllow, rules[0].Type)
 	require.Equal(t, []string{legacyCacheDir}, rules[0].Paths)
-	require.Equal(t, AccessClass(""), rules[0].Mode) // legacy: empty mode matches both
+	require.Empty(t, rules[0].Origins)
+	require.Equal(t, AccessClass(""), rules[0].Mode)
 
-	// A legacy (empty-mode) rule still satisfies both read and write ops.
+	// Empty-mode legacy rules no longer authorize either mode. Reads are
+	// globally allowed by policy and writes require an explicit write rule.
 	legacyScope := workspaceScope(legacyWorkspace)
-	require.True(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessRead))
-	require.True(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessWrite))
+	require.False(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessRead))
+	require.False(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessWrite))
 
 	// New mode-scoped rules round-trip and coexist with the legacy row.
 	newRules := append(rules, ApprovalRule{

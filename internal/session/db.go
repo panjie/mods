@@ -168,9 +168,10 @@ func Open(ds string) (*DB, error) {
 			tool_name string NOT NULL,
 			pattern string NOT NULL DEFAULT '',
 			paths string NOT NULL DEFAULT '',
+			origins string NOT NULL DEFAULT '',
 			mode string NOT NULL DEFAULT '',
 			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
-			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode),
+			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode),
 			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
 		)
 	`); err != nil {
@@ -204,6 +205,15 @@ func Open(ds string) (*DB, error) {
 	}
 	if !hasMode {
 		if err := migrateApprovalRulesMode(db); err != nil {
+			return nil, fmt.Errorf("could not migrate db: %w", err)
+		}
+	}
+	hasOrigins, err := hasColumn(db, "approval_rules", "origins")
+	if err != nil {
+		return nil, fmt.Errorf("could not inspect db schema: %w", err)
+	}
+	if !hasOrigins {
+		if err := migrateApprovalRulesOrigins(db); err != nil {
 			return nil, fmt.Errorf("could not migrate db: %w", err)
 		}
 	}
@@ -370,11 +380,10 @@ func migrateApprovalRulesPaths(db *sqlx.DB) error {
 	`)
 }
 
-// migrateApprovalRulesMode adds the mode column (read/write) to
-// approval_rules and folds it into the primary key so a read-only and a
-// write-only approval for the same directory can coexist. Existing rows
-// are copied with mode = ” which matches both read and write, preserving
-// the behaviour of approvals saved before mode-splitting.
+// migrateApprovalRulesMode adds the mode column to approval_rules and folds it
+// into the primary key. Existing rows are copied with an empty mode; the
+// current write-only policy intentionally treats those historical rows as
+// non-authorizing.
 func migrateApprovalRulesMode(db *sqlx.DB) error {
 	return migrateApprovalRulesReplaceTable(db, `
 		CREATE TABLE approval_rules_migration_tmp (
@@ -394,6 +403,30 @@ func migrateApprovalRulesMode(db *sqlx.DB) error {
 		INSERT INTO approval_rules_migration_tmp
 			(session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode, created_at)
 		SELECT session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, '', created_at
+		FROM approval_rules
+	`)
+}
+
+func migrateApprovalRulesOrigins(db *sqlx.DB) error {
+	return migrateApprovalRulesReplaceTable(db, `
+		CREATE TABLE approval_rules_migration_tmp (
+			session_id string NOT NULL,
+			scope_kind string NOT NULL DEFAULT '',
+			scope_value string NOT NULL DEFAULT '',
+			rule_type string NOT NULL,
+			tool_name string NOT NULL,
+			pattern string NOT NULL DEFAULT '',
+			paths string NOT NULL DEFAULT '',
+			origins string NOT NULL DEFAULT '',
+			mode string NOT NULL DEFAULT '',
+			created_at datetime NOT NULL DEFAULT (strftime ('%Y-%m-%d %H:%M:%f', 'now')),
+			PRIMARY KEY (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode),
+			FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+		)
+	`, `
+		INSERT INTO approval_rules_migration_tmp
+			(session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode, created_at)
+		SELECT session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, '', mode, created_at
 		FROM approval_rules
 	`)
 }
@@ -523,10 +556,14 @@ func (c *DB) SaveSession(
 		if err != nil {
 			return fmt.Errorf("SaveSession paths: %w", err)
 		}
+		origins, err := json.Marshal(rule.Origins)
+		if err != nil {
+			return fmt.Errorf("SaveSession origins: %w", err)
+		}
 		if _, err := tx.Exec(tx.Rebind(`
-			INSERT INTO approval_rules (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths), string(rule.Mode)); err != nil {
+			INSERT INTO approval_rules (session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths), string(origins), string(rule.Mode)); err != nil {
 			return fmt.Errorf("SaveSession rule: %w", err)
 		}
 	}
@@ -556,6 +593,7 @@ type ruleRow struct {
 	Tool       string `db:"tool_name"`
 	Pattern    string `db:"pattern"`
 	Paths      string `db:"paths"`
+	Origins    string `db:"origins"`
 	Mode       string `db:"mode"`
 }
 
@@ -565,10 +603,10 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 		return nil, nil
 	}
 	if err := c.db.Select(&rows, c.db.Rebind(`
-		SELECT scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
+		SELECT scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode
 		FROM approval_rules
 		WHERE session_id = ?
-		ORDER BY created_at, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
+		ORDER BY created_at, scope_kind, scope_value, rule_type, tool_name, pattern, paths, origins, mode
 	`), id); err != nil {
 		return nil, fmt.Errorf("ApprovalRules: %w", err)
 	}
@@ -585,6 +623,11 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 		if row.Paths != "" && row.Paths != "null" {
 			if err := json.Unmarshal([]byte(row.Paths), &rule.Paths); err != nil {
 				return nil, fmt.Errorf("ApprovalRules: decode paths for %s/%s: %w", row.Type, row.Tool, err)
+			}
+		}
+		if row.Origins != "" && row.Origins != "null" {
+			if err := json.Unmarshal([]byte(row.Origins), &rule.Origins); err != nil {
+				return nil, fmt.Errorf("ApprovalRules: decode origins for %s/%s: %w", row.Type, row.Tool, err)
 			}
 		}
 		rules = append(rules, rule)

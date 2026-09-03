@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
 - Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.
+- Review now applies only to non-temporary writes: proven reads always run without review, while reusable approvals are scoped to local directory subtrees and normalized remote origins within the current session. `always` reviews every non-temporary write and ignores saved rules.
 
 ### Removed
 - Removed the DuckDuckGo web search provider.
 - Removed plan mode, including the `--plan` / `-p` flags and the `prompts.plan` override.
 - Removed the `max-input-chars`, `max-tokens`, `no-limit`, and `builtin-tools.shell-max-output` settings and their related input, response, and tool-output truncation behavior.
+- Removed prompt-intent and write-scope authorization, including their settings and classifier prompts.
 
 ## [3.3.0] - 2026-07-06
 

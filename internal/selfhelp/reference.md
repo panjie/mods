@@ -93,10 +93,11 @@ timeout state. Use shell tools for pipelines and other shell syntax. On
 Windows, native shell tools execute the reported PowerShell host. Use
 `runtime_info` only when platform or executable availability is uncertain.
 
-`review-mode: auto` allows recognized reads and reviews mutations;
-`review-mode: always` reviews all external access; `review-mode: never`
-suppresses interactive review. Directory approvals are conversation-scoped and
-distinguish read from write.
+All recognized reads run without review. `review-mode: auto` reviews
+non-temporary writes unless conversation-scoped directory and remote-origin
+rules cover every target; `review-mode: always` reviews every non-temporary
+write and ignores saved rules; `review-mode: never` suppresses interactive
+review. Unknown write targets can only be allowed once.
 
 MCP tools declaring `readOnlyHint: true` can use the read-only path in auto
 mode; unannotated tools are treated as mutable. User MCP tools are intentionally

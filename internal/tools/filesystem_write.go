@@ -24,7 +24,7 @@ func filesystemWriteFileTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_write_file",
-			Description: "Write a UTF-8 text file, replacing existing content. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "Write a UTF-8 text file, replacing existing content. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path":    stringProp("Path to write, relative to the workspace, absolute, or using the current user's home directory."),
 				"content": stringProp("Complete file content to write."),
@@ -122,7 +122,7 @@ func filesystemDeleteFileTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_delete_file",
-			Description: "Delete a single file or symlink. Refuses directories; use fs_delete_dir for directories. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "Delete a single file or symlink. Refuses directories; use fs_delete_dir for directories. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path": stringProp("File path to delete, relative to the workspace, absolute, or using the current user's home directory."),
 			}, "path"),
@@ -160,7 +160,7 @@ func filesystemDeleteDirTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathSelfIntent(root, approval.AccessWrite),
 		Spec: proto.ToolSpec{
 			Name:        "fs_delete_dir",
-			Description: "Delete a directory. Non-empty directories require recursive=true. Refuses files; use fs_delete_file for files. Workspace-relative paths are resolved inside the workspace; absolute or home-directory paths outside it require approval.",
+			Description: "Delete a directory. Non-empty directories require recursive=true. Refuses files; use fs_delete_file for files. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target directories outside it.",
 			InputSchema: objectSchema(map[string]any{
 				"path":      stringProp("Directory path to delete, relative to the workspace, absolute, or using the current user's home directory."),
 				"recursive": booleanProp("Set true to delete a non-empty directory and all contents."),

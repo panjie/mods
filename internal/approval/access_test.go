@@ -27,20 +27,25 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"write in workspace", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}}, DecisionAsk},
 		{"read in temp", AccessIntent{Class: AccessRead, Dirs: []string{tempDir}}, DecisionAllow},
 		{"write in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}}, DecisionAllow},
-		{"read external", AccessIntent{Class: AccessRead, Dirs: []string{external}}, DecisionAsk},
+		{"read external", AccessIntent{Class: AccessRead, Dirs: []string{external}}, DecisionAllow},
 		{"write external", AccessIntent{Class: AccessWrite, Dirs: []string{external}}, DecisionAsk},
 		{"read empty dirs", AccessIntent{Class: AccessRead}, DecisionAllow},
 		{"write empty dirs", AccessIntent{Class: AccessWrite}, DecisionAsk},
-		{"mixed ws+external read", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value, external}}, DecisionAsk},
+		{"mixed ws+external read", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value, external}}, DecisionAllow},
 		{"write spanning temp and external", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir, external}}, DecisionAsk},
-		{"copy external source to temp", AccessIntent{ReadDirs: []string{external}, WriteDirs: []string{tempDir}}, DecisionAsk},
+		{"copy external source to temp", AccessIntent{ReadDirs: []string{external}, WriteDirs: []string{tempDir}}, DecisionAllow},
 		{"copy workspace source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
 		{"copy workspace source to workspace", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
 		{"missing access intent fails closed", AccessIntent{}, DecisionAsk},
 		{"dynamic probe without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}, DynamicProbe: true}, DecisionAllow},
-		{"dynamic content read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
-		{"dynamic read with concrete dir", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
+		{"dynamic content read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
+		{"dynamic read with concrete dir", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
 		{"dynamic write target fails closed", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
+		{"remote read", AccessIntent{Class: AccessRead, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAllow},
+		{"remote write", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAsk},
+		{"unresolved remote write", AccessIntent{Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}, DecisionAsk},
+		{"uncertain write effect", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UncertainEffect: true}, DecisionAsk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -57,36 +62,11 @@ func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
 		"a dynamic write stays reviewable even when its concrete dirs are rule-covered")
 }
 
-func TestDynamicReadAllowRule(t *testing.T) {
+func TestReadsNeverNeedSavedRules(t *testing.T) {
 	ws := wsScope(t)
-	external := filepath.Clean(t.TempDir())
-
-	rules := RulesForDynamicReads(ws)
-	require.Len(t, rules, 1)
-	require.Equal(t, DynamicReadAllow, rules[0].Type)
-	require.Equal(t, "reads of runtime-resolved targets", rules[0].String())
-
 	dynamicRead := AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$FILE"}}
-	require.True(t, RulesAllowIntent(rules, dynamicRead, ws, nil, ReviewAuto),
-		"a granted dynamic-read rule covers the unresolved portion of a read")
-	require.True(t, RulesAllowIntent(rules, dynamicRead, ws, nil, ReviewAlways),
-		"saved rules bypass ReviewAlways like DirAllow does")
-	require.False(t, RulesAllowIntent(nil, dynamicRead, ws, nil, ReviewAuto),
-		"without the rule a dynamic read still asks")
-
-	dynamicWrite := AccessIntent{Class: AccessWrite, UnresolvedPaths: []string{"$FILE"}}
-	require.False(t, RulesAllowIntent(rules, dynamicWrite, ws, nil, ReviewAuto),
-		"the rule never covers writes")
-
-	mixed := AccessIntent{Class: AccessRead, Dirs: []string{external}, UnresolvedPaths: []string{"$FILE"}}
-	require.False(t, RulesAllowIntent(rules, mixed, ws, nil, ReviewAuto),
-		"concrete external dirs still need DirAllow coverage")
-	mixedRules := append(append([]Rule(nil), rules...), RulesForDirs([]string{external}, ws, AccessRead)...)
-	require.True(t, RulesAllowIntent(mixedRules, mixed, ws, nil, ReviewAuto))
-
-	other := wsScope(t)
-	require.False(t, RulesAllowIntent(RulesForDynamicReads(other), dynamicRead, ws, nil, ReviewAuto),
-		"the rule never applies outside its scope")
+	require.Equal(t, DecisionAllow, ClassifyAccess(dynamicRead, ws, nil, ReviewAlways))
+	require.False(t, RulesAllowIntent(nil, dynamicRead, ws, nil, ReviewAuto))
 }
 
 func TestClassifyAccessModeOverride(t *testing.T) {
@@ -95,6 +75,7 @@ func TestClassifyAccessModeOverride(t *testing.T) {
 	read := AccessIntent{Class: AccessRead, Dirs: []string{external}}
 	require.Equal(t, DecisionAllow, ClassifyAccess(read, ws, nil, ReviewNever))
 	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{Class: AccessWrite, UnresolvedPaths: []string{"$target"}}, ws, nil, ReviewNever))
+	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{}, ws, nil, ReviewNever))
 }
 
 func TestLocateDir(t *testing.T) {

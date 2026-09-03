@@ -7,9 +7,11 @@ import (
 )
 
 func TestCommandAssessmentAccessIntent(t *testing.T) {
-	readWithDir := CommandAssessment{Effect: EffectRead, KnownDirs: []string{"/etc"}, DynamicTargets: []string{"$PROFILE"}}
+	readWithDir := CommandAssessment{Effect: EffectRead, KnownDirs: []string{"/etc"}, RemoteOrigins: []string{"https://api.example.com"}, UnresolvedRemoteTargets: []string{"$REMOTE"}, DynamicTargets: []string{"$PROFILE"}}
 	require.Equal(t, AccessRead, readWithDir.AccessIntent().Class)
 	require.Equal(t, []string{"/etc"}, readWithDir.AccessIntent().Dirs)
+	require.Equal(t, []string{"https://api.example.com"}, readWithDir.AccessIntent().RemoteOrigins)
+	require.Equal(t, []string{"$REMOTE"}, readWithDir.AccessIntent().UnresolvedRemoteTargets)
 	require.Equal(t, []string{"$PROFILE"}, readWithDir.AccessIntent().UnresolvedPaths)
 
 	dynamicRead := CommandAssessment{Effect: EffectRead, DynamicTargets: []string{"$PROFILE"}, DynamicProbe: true}
@@ -38,9 +40,9 @@ func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
 				`[ "$count" -gt 0 ] 2>/dev/null && echo "$ext: $count lines, $files files"; done 2>/dev/null`,
 			wantEffect: EffectUnknown,
 		},
-		{name: "plain scalar", command: `printf '%s\n' "$value"`, wantEffect: EffectUnknown},
-		{name: "numeric test", command: `[ "$count" -gt 0 ]`, wantEffect: EffectUnknown},
-		{name: "reader operand", command: `cat "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "plain scalar", command: `printf '%s\n' "$value"`, wantEffect: EffectRead},
+		{name: "numeric test", command: `[ "$count" -gt 0 ]`, wantEffect: EffectRead},
+		{name: "reader operand", command: `cat "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectRead},
 		{name: "find root but not pattern", command: `find "$ROOT" -name "*.$ext" -print`, wantTargets: []string{"$ROOT"}, wantEffect: EffectUnknown},
 		{name: "input redirect", command: `wc -l < "$INPUT"`, wantTargets: []string{"$INPUT"}, wantEffect: EffectRead},
 		{name: "path command substitution", command: `cat "$(resolve_path)"`, wantTargets: []string{"command substitution"}, wantEffect: EffectUnknown},
@@ -80,9 +82,9 @@ func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
 		{name: "env option does not hide nested path", command: `env -u FOO cat "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
 		{name: "find path predicate stays dynamic", command: `find . -newer "$REFERENCE"`, wantTargets: []string{"$REFERENCE"}, wantEffect: EffectUnknown},
 		{name: "xargs input file stays dynamic", command: `xargs -a "$LIST" wc -l`, wantTargets: []string{"$LIST"}, wantEffect: EffectUnknown},
-		{name: "file test operand stays dynamic", command: `test -f "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "file test operand stays dynamic", command: `test -f "$FILE"`, wantTargets: []string{"$FILE"}, wantEffect: EffectRead},
 		{name: "assignment result does not hide nested path", command: `count=$(cat "$FILE")`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
-		{name: "output argument does not hide nested path", command: `printf '%s' "$(cat "$FILE")"`, wantTargets: []string{"$FILE"}, wantEffect: EffectUnknown},
+		{name: "output argument does not hide nested path", command: `printf '%s' "$(cat "$FILE")"`, wantTargets: []string{"$FILE"}, wantEffect: EffectRead},
 	}
 
 	for _, tt := range tests {

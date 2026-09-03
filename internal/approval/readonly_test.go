@@ -75,8 +75,8 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"stderr redirect to dev null", "ls missing 2>/dev/null", true},
 
 		// --- ParamExp ---
-		{"param exp", "echo $VAR", false},
-		{"param exp braced", "cat ${FILE}", false},
+		{"param exp", "echo $VAR", true},
+		{"param exp braced", "cat ${FILE}", true},
 		{"home param path", `cat "$HOME/Downloads/file"`, true},
 		{"braced home param path", `cat "${HOME}/Downloads/file"`, true},
 		{"home param modifier", `cat "${HOME:-$(touch owned.txt)}/file"`, false},

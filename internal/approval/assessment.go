@@ -28,13 +28,17 @@ type CommandShape struct {
 // process invocation. Approval policy is derived from it and never stored in
 // the assessment itself.
 type CommandAssessment struct {
-	Effect         CommandEffect
-	KnownDirs      []string
-	DynamicTargets []string
-	DynamicProbe   bool
-	Reason         string
-	Shape          CommandShape
-	Reviewability  CommandReviewability
+	Effect        CommandEffect
+	KnownDirs     []string
+	RemoteOrigins []string
+	// UnresolvedRemoteTargets records remote destinations that are known to
+	// exist but cannot be reduced to a deterministic origin.
+	UnresolvedRemoteTargets []string
+	DynamicTargets          []string
+	DynamicProbe            bool
+	Reason                  string
+	Shape                   CommandShape
+	Reviewability           CommandReviewability
 	// AssignedVariables lists lowercase normalized names of PowerShell
 	// variables assigned within the command (from the parser IR). The app
 	// layer uses it to skip probe resolution for targets whose value depends
@@ -63,11 +67,14 @@ func (assessment CommandAssessment) AccessIntent() AccessIntent {
 		class = AccessRead
 	}
 	return AccessIntent{
-		Class:           class,
-		Dirs:            append([]string(nil), assessment.KnownDirs...),
-		UnresolvedPaths: append([]string(nil), assessment.DynamicTargets...),
-		DynamicProbe:    assessment.DynamicProbe,
-		Reason:          assessment.Reason,
+		Class:                   class,
+		Dirs:                    append([]string(nil), assessment.KnownDirs...),
+		RemoteOrigins:           append([]string(nil), assessment.RemoteOrigins...),
+		UnresolvedRemoteTargets: append([]string(nil), assessment.UnresolvedRemoteTargets...),
+		UnresolvedPaths:         append([]string(nil), assessment.DynamicTargets...),
+		UncertainEffect:         assessment.Effect == EffectUnknown,
+		DynamicProbe:            assessment.DynamicProbe,
+		Reason:                  assessment.Reason,
 	}
 }
 

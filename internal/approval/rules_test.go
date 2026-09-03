@@ -140,10 +140,10 @@ func TestRuleSetScopeAndDedupe(t *testing.T) {
 	require.False(t, rules.Allows("shell_run", []byte(`{"command":"rm a.txt"}`), scope))
 	require.False(t, rules.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), WorkspaceScope("/other")))
 
-	rules.Add(scoped(Rule{Type: DirAllow, Paths: []string{"C:\\Users"}}))
+	rules.Add(scoped(Rule{Type: DirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite}))
 	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), scope))
 	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Windows\\old.txt"}`), scope))
-	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), WorkspaceScope("/other")))
+	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), WorkspaceScope("/other")))
 
 	rules.Add(scoped(Rule{Type: ToolAll, Tool: "mcp_tool"}))
 	require.True(t, rules.Allows("mcp_tool", []byte(`{"value":1}`), scope))

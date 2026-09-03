@@ -19,10 +19,10 @@ const (
 	sha1short  = ShortIDLength
 	sha1minLen = MinIDLength
 
-	approvalShellPrefix      = approval.ShellPrefix
-	approvalEditAll          = approval.EditAll
-	approvalDirAllow         = approval.DirAllow
-	approvalDynamicReadAllow = approval.DynamicReadAllow
+	approvalShellPrefix = approval.ShellPrefix
+	approvalEditAll     = approval.EditAll
+	approvalDirAllow    = approval.DirAllow
+	approvalRemoteAllow = approval.RemoteAllow
 
 	accessRead  = approval.AccessRead
 	accessWrite = approval.AccessWrite

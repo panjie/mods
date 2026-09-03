@@ -462,11 +462,10 @@ func wordIsReadOnly(word *syntax.Word, policy ReadOnlyCommandPolicy) bool {
 			}
 			return false
 		case *syntax.ParamExp:
-			if _, ok := simpleHomeExpansion(n); !ok {
-				// Arbitrary runtime values may resolve outside the workspace.
-				readonly = false
-				return false
-			}
+			// A runtime operand can change where a read lands, but reads no
+			// longer require approval outside the workspace. The command's
+			// effect remains read-only; unresolved target metadata is retained
+			// separately for presentation and write fail-closed behavior.
 			return true
 		default:
 			return true

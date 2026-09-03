@@ -1,5 +1,9 @@
 # 通用环境变量路径展开（General Env Path Expansion）— 设计
 
+> **审批策略更新（2026-09-03）：** 环境变量展开仍用于定位写目标，但读取不再
+> 需要规则，`dynamic_read_allow` 已移除。当前策略见
+> [`2026-09-03-write-target-approval-design.md`](2026-09-03-write-target-approval-design.md)。
+
 **日期：** 2026-08-31
 **状态：** Implemented
 **范围：** `internal/pathutil`（通用展开原语 + 引用扫描器）、`internal/app`（`stable_env.go` 重构、`posix_env.go` 新增、`assessCommand` 接线、`extractSecretEnvNames`）、`internal/approval/ps_bridge.ps1`（字面量赋值 AST 形状兼容修复）

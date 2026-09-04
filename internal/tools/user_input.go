@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/selfhelp"
@@ -14,11 +17,22 @@ const UserInputToolName = "request_user_input"
 
 const maxFormFields = 8
 
+const (
+	maxUserInputQuestionRunes    = 160
+	maxUserInputLabelRunes       = 24
+	maxUserInputPlaceholderRunes = 48
+	maxUserInputOptionRunes      = 48
+	maxUserInputOptionCount      = 8
+)
+
 const userInputToolDescription = "Pause and ask the local terminal user one necessary question or a short form of related fields. " +
 	"Call this tool, not assistant text, when a tool workflow needs missing user input. " +
+	"Keep it compact: the question is one short sentence of at most 80 characters with no preamble, field labels are 1-3 words, and examples or hints belong in the placeholder instead of the question or labels. " +
 	"Use kind=text, select, multiselect, secret, or form. Use kind=multiselect when one or more choices may be selected. " +
+	"Prefer select or multiselect with 2-8 concise options over free text whenever the choices are enumerable. " +
+	"Never enumerate numbered options inside the question; pass them as an options array with kind=select. " +
 	"Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. " +
-	"Use kind=form when related fields belong together, such as a username plus password. " +
+	"Use kind=form only when related fields belong together, such as a username plus password; otherwise ask the single most important field. " +
 	"For shell credentials, request the secret with a target path under /secret_env/NAME for shell_run or powershell_run; after this tool returns a secret_ref, pass that opaque value unchanged in the downstream tool's secret_env map and reference the environment variable in the command. " +
 	"Complete form example: {\"question\":\"OA login\",\"kind\":\"form\",\"fields\":[{\"key\":\"username\",\"label\":\"Username\",\"kind\":\"text\"},{\"key\":\"password\",\"label\":\"Password\",\"kind\":\"secret\",\"target\":{\"tool\":\"powershell_run\",\"path\":\"/secret_env/OA_PASSWORD\"}}]}. " +
 	"If the response contains form.password.secret_ref=\"mods-secret://...\" and form.username.answer=\"alice\", call powershell_run with {\"command\":\"oa-cli --user alice\",\"secret_env\":{\"OA_PASSWORD\":\"mods-secret://...\"}} and read the password from $env:OA_PASSWORD."
@@ -92,14 +106,18 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 			Name:        UserInputToolName,
 			Description: userInputToolDescription,
 			InputSchema: objectSchema(map[string]any{
-				"question": stringProp("A concise question or prompt shown verbatim to the user."),
+				"question": map[string]any{
+					"type": "string", "maxLength": maxUserInputQuestionRunes,
+					"description": "One short single-line question or prompt shown verbatim to the user; no preamble. Do not list options here; use kind=select with an options array.",
+				},
 				"kind": map[string]any{
 					"type": "string", "enum": []string{"text", "select", "multiselect", "secret", "form"},
 					"description": "text for free-form input, select for one choice, multiselect for one or more choices, secret for a masked credential, form for multiple related fields at once.",
 				},
 				"options": map[string]any{
-					"type": "array", "items": map[string]any{"type": "string"},
-					"description": "Required for select and multiselect; at least 2 unique non-empty choices.",
+					"type": "array", "minItems": 2, "maxItems": maxUserInputOptionCount,
+					"items":       map[string]any{"type": "string", "maxLength": maxUserInputOptionRunes},
+					"description": "Required for select and multiselect; 2 to 8 unique non-empty single-line choices.",
 				},
 				"multiline": booleanProp("Allow Ctrl+J newlines for text input."),
 				"target": map[string]any{
@@ -125,19 +143,25 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 								"pattern":     "^[a-zA-Z_][a-zA-Z0-9_]*$",
 								"description": "Unique key within the form. Returned as the response map key.",
 							},
-							"label": stringProp("Short label shown to the user."),
+							"label": map[string]any{
+								"type": "string", "maxLength": maxUserInputLabelRunes,
+								"description": "Short single-line label of 1-3 words shown next to the field.",
+							},
 							"kind": map[string]any{
 								"type":        "string",
 								"enum":        []string{"text", "select", "secret"},
 								"description": "Per-field input kind. Same rules as the top-level kind.",
 							},
 							"options": map[string]any{
-								"type":        "array",
-								"items":       map[string]any{"type": "string"},
-								"description": "Required when field kind=select; at least 2 unique non-empty choices.",
+								"type": "array", "minItems": 2, "maxItems": maxUserInputOptionCount,
+								"items":       map[string]any{"type": "string", "maxLength": maxUserInputOptionRunes},
+								"description": "Required when field kind=select; 2 to 8 unique non-empty single-line choices.",
 							},
-							"multiline":   booleanProp("Allow Ctrl+J newlines when field kind=text."),
-							"placeholder": stringProp("Optional placeholder shown when the field is empty."),
+							"multiline": booleanProp("Allow Ctrl+J newlines when field kind=text."),
+							"placeholder": map[string]any{
+								"type": "string", "maxLength": maxUserInputPlaceholderRunes,
+								"description": "Optional single-line hint shown when the field is empty; put examples here.",
+							},
 							"target": map[string]any{
 								"type":        "object",
 								"description": "Required when field kind=secret. Binds this secret to one downstream tool argument.",
@@ -177,6 +201,12 @@ func validateUserInputRequest(req UserInputRequest) error {
 	if req.Question == "" {
 		return fmt.Errorf("question is required")
 	}
+	if err := validateSingleLine("question", req.Question, maxUserInputQuestionRunes); err != nil {
+		return err
+	}
+	if req.Kind != "select" && req.Kind != "multiselect" && questionEnumeratesOptions(req.Question) {
+		return fmt.Errorf("question must not enumerate numbered options; pass them as options with kind=select (or a select form field) instead")
+	}
 	if req.Kind == "form" {
 		return validateFormFields(req.Fields, req.Options, req.Multiline, req.Target)
 	}
@@ -184,6 +214,41 @@ func validateUserInputRequest(req UserInputRequest) error {
 		return fmt.Errorf("%s input does not accept fields", req.Kind)
 	}
 	return validateInputKind(req.Kind, req.Options, req.Multiline, req.Target)
+}
+
+// validateSingleLine enforces the compact-display contract shared by the
+// question, field labels, placeholders, and options: short, single-line text
+// so the interaction panel never turns into a wall of wrapped prose.
+func validateSingleLine(what, value string, maxRunes int) error {
+	if strings.ContainsAny(value, "\n\r") {
+		return fmt.Errorf("%s must be a single line", what)
+	}
+	if utf8.RuneCountInString(value) > maxRunes {
+		return fmt.Errorf("%s must be at most %d characters; shorten it and move hints or examples to the placeholder", what, maxRunes)
+	}
+	return nil
+}
+
+var enumeratedOptionPatterns = []*regexp.Regexp{
+	// "1. option", "1、选项", "1) option" — numbered marker followed by text
+	// (a following digit is excluded so version strings like 1.22 stay inert).
+	regexp.MustCompile(`(?:^|[\s（(，。？！、：;,.?!:])[1-9][0-9]?[.、)）](?:\s|[\p{Han}A-Za-z“"'（(])`),
+	// "1 想启动…" — a bare number directly introducing CJK text.
+	regexp.MustCompile(`(?:^|[\s（(，。？！、：;,.?!:])[1-9][0-9]?\s+[\p{Han}]`),
+	// Circled enumerations ① through ⑳.
+	regexp.MustCompile(`[①-⑳]`),
+}
+
+// questionEnumeratesOptions reports whether a question inlines a numbered
+// option list ("1 foo 2 bar") that belongs in kind=select options instead.
+// Two or more markers are required so ordinary numbers ("port 8080",
+// "go 1.22") do not trip it.
+func questionEnumeratesOptions(question string) bool {
+	matches := 0
+	for _, pattern := range enumeratedOptionPatterns {
+		matches += len(pattern.FindAllString(question, -1))
+	}
+	return matches >= 2
 }
 
 // validateInputKind enforces the per-kind option/multiline/target rules shared
@@ -201,10 +266,16 @@ func validateInputKind(kind string, options []string, multiline bool, target Use
 		if len(options) < 2 {
 			return fmt.Errorf("%s input requires at least 2 options", kind)
 		}
+		if len(options) > maxUserInputOptionCount {
+			return fmt.Errorf("%s input supports at most %d options", kind, maxUserInputOptionCount)
+		}
 		seen := map[string]bool{}
 		for _, option := range options {
 			if option == "" || seen[option] {
 				return fmt.Errorf("%s options must be unique and non-empty", kind)
+			}
+			if err := validateSingleLine("option", option, maxUserInputOptionRunes); err != nil {
+				return err
 			}
 			seen[option] = true
 		}
@@ -243,6 +314,14 @@ func validateFormFields(fields []UserInputField, options []string, multiline boo
 		seenKeys[field.Key] = true
 		if field.Label == "" {
 			return fmt.Errorf("field %d (%s): label is required", i+1, field.Key)
+		}
+		if err := validateSingleLine(fmt.Sprintf("field %d (%s) label", i+1, field.Key), field.Label, maxUserInputLabelRunes); err != nil {
+			return err
+		}
+		if field.Placeholder != "" {
+			if err := validateSingleLine(fmt.Sprintf("field %d (%s) placeholder", i+1, field.Key), field.Placeholder, maxUserInputPlaceholderRunes); err != nil {
+				return err
+			}
 		}
 		if field.Kind == "multiselect" {
 			return fmt.Errorf("field %d (%s): form fields do not support multiselect", i+1, field.Key)

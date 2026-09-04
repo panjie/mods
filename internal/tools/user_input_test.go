@@ -35,6 +35,10 @@ func TestRegisterUserInputDescriptionGuidesSecrets(t *testing.T) {
 	desc := specs[0].Description
 	for _, want := range []string{
 		"Call this tool, not assistant text",
+		"one short sentence",
+		"1-3 words",
+		"placeholder",
+		"Never enumerate numbered options",
 		"kind=form",
 		"secret_ref",
 		"secret_env",
@@ -91,10 +95,31 @@ func TestUserInputValidation(t *testing.T) {
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "multiselect", Options: []string{"one", "two"}}}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text", Target: UserInputTarget{Tool: "x", Path: "/y"}}}},
 		{Question: "Text", Kind: "text", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text"}}},
+		{Question: "multi\nline", Kind: "text"},
+		{Question: strings.Repeat("x", maxUserInputQuestionRunes+1), Kind: "text"},
+		{Question: "Pick", Kind: "select", Options: []string{"one", strings.Repeat("x", maxUserInputOptionRunes+1)}},
+		{Question: "Pick", Kind: "select", Options: []string{"one\ntwo", "three"}},
+		{Question: "Pick", Kind: "select", Options: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: strings.Repeat("x", maxUserInputLabelRunes+1), Kind: "text"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "two\nlines", Kind: "text"}}},
+		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text", Placeholder: strings.Repeat("x", maxUserInputPlaceholderRunes+1)}}},
+		{Question: "哪个环节失败？1 是交叉编译 mods.exe？2 是实机运行失败？3 其他？", Kind: "text"},
+		{Question: "Pick: 1. cross-compile 2. run on Windows 3. other", Kind: "text"},
+		{Question: "选一个 ①WSL ②虚拟机 ③容器", Kind: "text"},
+		{Question: "1、虚拟机 2、WSL，选哪个？", Kind: "text"},
 	}
 	for _, req := range tests {
 		require.Error(t, validateUserInputRequest(req), "expected error for %+v", req)
 	}
+	// Ordinary numbers are not enumerations.
+	require.NoError(t, validateUserInputRequest(UserInputRequest{Question: "Use go 1.22 or 1.23?", Kind: "text"}))
+	require.NoError(t, validateUserInputRequest(UserInputRequest{Question: "Which port, 8080 or 3000?", Kind: "text"}))
+	// The same enumeration is fine once moved into select options.
+	require.NoError(t, validateUserInputRequest(UserInputRequest{
+		Question: "哪个环节失败？", Kind: "select",
+		Options: []string{"交叉编译 mods.exe", "实机运行失败", "其他"},
+	}))
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Password", Kind: "secret",
 		Target: UserInputTarget{Tool: "db_query", Path: "/password"},
@@ -102,10 +127,10 @@ func TestUserInputValidation(t *testing.T) {
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Pick", Kind: "multiselect", Options: []string{"one", "two"},
 	}))
-	// No upper cap: a long list of choices is valid.
+	// Exactly at the option cap is valid.
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Pick", Kind: "multiselect", Options: []string{
-			"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
+			"a", "b", "c", "d", "e", "f", "g", "h",
 		},
 	}))
 }

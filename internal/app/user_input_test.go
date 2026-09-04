@@ -243,8 +243,8 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 	plain := ansi.Strip(manager.render(100, styles))
 	require.Contains(t, plain, "(•) git pull (merge) - create a merge commit")
 	require.Contains(t, plain, "( ) git rebase - replay my commit on top of remote")
-	require.Contains(t, plain, "Space")
 	require.Contains(t, plain, "Confirm")
+	require.NotContains(t, plain, "Space", "radio select must not advertise the multiselect toggle key")
 	lines := strings.Split(plain, "\n")
 	mergeLine := lineIndexContaining(lines, "git pull")
 	rebaseLine := lineIndexContaining(lines, "git rebase")
@@ -780,7 +780,7 @@ func TestFormFocusedInputHasNoBackgroundPill(t *testing.T) {
 	require.NotContains(t, line, "48;2;48;43;72")
 	require.NotContains(t, line, "\x1b[40m")
 	stripped := ansi.Strip(line)
-	require.Contains(t, stripped, "OA 用户名  › p")
+	require.Contains(t, stripped, "OA 用户名 › p")
 	require.Equal(t, visualColumn(stripped, "p")+1, view.Cursor.X, "cursor must sit right after the typed character")
 
 	// Focused select fields render the same marker+plain-value shape.
@@ -989,6 +989,189 @@ func TestUserInputRealCursorPropagatesToModsView(t *testing.T) {
 			require.Nil(t, m.View().Cursor)
 		})
 	}
+}
+
+func TestUserInputTitlesAndHints(t *testing.T) {
+	styles := makeStyles(true).Interaction
+	newManager := func(req toolregistry.UserInputRequest) *userInputManager {
+		manager := newUserInputManager(&Config{})
+		manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+			req:  req,
+			resp: make(chan userInputResult, 1),
+		}})
+		return manager
+	}
+
+	// Single-line text: INPUT title, no Ctrl+J hint.
+	plain := ansi.Strip(newManager(toolregistry.UserInputRequest{Question: "Branch?", Kind: "text"}).render(80, styles))
+	require.Contains(t, plain, "INPUT")
+	require.NotContains(t, plain, "Ctrl+J")
+
+	// Multiline text advertises Ctrl+J.
+	plain = ansi.Strip(newManager(toolregistry.UserInputRequest{Question: "Branch?", Kind: "text", Multiline: true}).render(80, styles))
+	require.Contains(t, plain, "Ctrl+J")
+
+	// Secret: CREDENTIALS title.
+	plain = ansi.Strip(newManager(toolregistry.UserInputRequest{
+		Question: "Token?", Kind: "secret",
+		Target: toolregistry.UserInputTarget{Tool: "shell_run", Path: "/secret_env/TOKEN"},
+	}).render(80, styles))
+	require.Contains(t, plain, "CREDENTIALS")
+
+	// Form containing a secret field also gets the CREDENTIALS title.
+	plain = ansi.Strip(newManager(toolregistry.UserInputRequest{
+		Question: "Sign in", Kind: "form",
+		Fields: []toolregistry.UserInputField{
+			{Key: "u", Label: "User", Kind: "text"},
+			{Key: "p", Label: "Pass", Kind: "secret", Target: toolregistry.UserInputTarget{Tool: "shell_run", Path: "/secret_env/PASS"}},
+		},
+	}).render(80, styles))
+	require.Contains(t, plain, "CREDENTIALS")
+}
+
+func TestUserInputHeadlineClamped(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req:  toolregistry.UserInputRequest{Question: strings.Repeat("这是一个特别长的问题描述、", 30), Kind: "text"},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+	view := manager.render(40, styles)
+	lines := strings.Split(view, "\n")
+	// Title + at most 2 headline lines + blank + input + blank + actions,
+	// all inside the panel border.
+	require.LessOrEqual(t, len(lines), 8, "clamped headline must not flood the panel")
+	plain := ansi.Strip(view)
+	require.Contains(t, plain, "…", "clamped headline must end with an ellipsis")
+}
+
+func TestFormStacksOverlongLabels(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "补全信息", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "target", Label: "你想启动什么类型的 Windows 环境", Kind: "text", Placeholder: "如 WSL 或虚拟机"},
+				{Key: "logs", Label: "日志", Kind: "text"},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+	for _, width := range []int{40, 60, 80} {
+		for _, line := range strings.Split(manager.render(width, styles), "\n") {
+			require.LessOrEqual(t, lipgloss.Width(line), width, "width %d: line %q overflows", width, line)
+		}
+	}
+
+	plainLines := strings.Split(ansi.Strip(manager.render(80, styles)), "\n")
+	// The long label renders complete on its own line: never hard-wrapped
+	// mid-word like "Windo/ws".
+	idx := lineIndexContaining(plainLines, "你想启动什么类型的")
+	require.GreaterOrEqual(t, idx, 0)
+	require.Contains(t, plainLines[idx], "你想启动什么类型的 Windows 环境")
+	// The placeholder indents on the following line, under the label.
+	require.Less(t, idx+1, len(plainLines))
+	require.Contains(t, plainLines[idx+1], "如 WSL 或虚拟机")
+	// The short label stays inline on a single line.
+	logsIdx := lineIndexContaining(plainLines, "日志")
+	require.GreaterOrEqual(t, logsIdx, 0)
+	require.Contains(t, plainLines[logsIdx], "日志")
+}
+
+func TestFormDynamicLabelColumnAlignsPlaceholders(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Connect", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "host", Label: "Host", Kind: "text", Placeholder: "alpha.example.com"},
+				{Key: "port", Label: "Port", Kind: "text", Placeholder: "9999"},
+				{Key: "name", Label: "Name", Kind: "text"},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	// Move focus past the two fields under test so both render unfocused.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	require.Equal(t, 2, manager.focus)
+
+	lines := strings.Split(ansi.Strip(manager.render(80, makeStyles(true).Interaction)), "\n")
+	hostLine := lineContaining(lines, "alpha.example.com")
+	portLine := lineContaining(lines, "9999")
+	require.NotEmpty(t, hostLine)
+	require.NotEmpty(t, portLine)
+	require.Equal(t, visualColumn(hostLine, "alpha.example.com"), visualColumn(portLine, "9999"),
+		"unfocused values must align in one dynamic label column")
+}
+
+func TestFormRequiredFeedback(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Sign in", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "username", Label: "User", Kind: "text"},
+				{Key: "password", Label: "Pass", Kind: "secret", Target: toolregistry.UserInputTarget{Tool: "shell_run", Path: "/secret_env/PASS"}},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+
+	// Enter with the required username empty is blocked and flags the field.
+	handled, _ := manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.True(t, handled)
+	require.True(t, manager.isPending())
+	require.Equal(t, "username", manager.missingKey)
+	plain := ansi.Strip(manager.render(80, styles))
+	require.Contains(t, plain, "· required")
+
+	// Any subsequent keypress clears the flag.
+	handled, _ = manager.handleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	require.True(t, handled)
+	require.Empty(t, manager.missingKey)
+	require.NotContains(t, ansi.Strip(manager.render(80, styles)), "· required")
+
+	// Enter now blocks on the still-empty secret field instead.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.Equal(t, "password", manager.missingKey)
+	require.True(t, manager.isPending())
+}
+
+func TestFormContextualHints(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: "Deploy", Kind: "form",
+			Fields: []toolregistry.UserInputField{
+				{Key: "scope", Label: "Scope", Kind: "select", Options: []string{"staging", "prod"}},
+				{Key: "notes", Label: "Notes", Kind: "text", Multiline: true},
+				{Key: "name", Label: "Name", Kind: "text"},
+			},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+
+	// Select field focused: arrow hint only.
+	plain := ansi.Strip(manager.render(80, styles))
+	require.Contains(t, plain, "← →")
+	require.NotContains(t, plain, "Ctrl+J")
+
+	// Multiline text focused: Ctrl+J only.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	plain = ansi.Strip(manager.render(80, styles))
+	require.Contains(t, plain, "Ctrl+J")
+	require.NotContains(t, plain, "← →")
+
+	// Plain text focused: neither.
+	manager.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
+	plain = ansi.Strip(manager.render(80, styles))
+	require.NotContains(t, plain, "Ctrl+J")
+	require.NotContains(t, plain, "← →")
 }
 
 func lineIndexContaining(lines []string, value string) int {

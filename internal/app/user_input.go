@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/secrets"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
@@ -61,6 +62,7 @@ type userInputManager struct {
 	checked     []bool
 	formFields  []userFormFieldState
 	focus       int
+	missingKey  string
 	cfg         *Config
 }
 
@@ -214,6 +216,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 	u.selected = 0
 	u.checked = nil
 	u.focus = 0
+	u.missingKey = ""
 	u.formFields = nil
 	if item.req.Kind == "form" {
 		u.formFields = make([]userFormFieldState, len(item.req.Fields))
@@ -226,6 +229,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 				state.selected = 0
 			default:
 				state.text = newTextareaSingleLine(f.Multiline)
+				state.text.Placeholder = f.Placeholder
 			}
 			u.formFields[i] = state
 		}
@@ -492,14 +496,17 @@ func (u *userInputManager) choiceRows(includeSelectAll, radio bool) []interactio
 
 // handleFormKey dispatches keys for a kind=form prompt. Tab/Shift+Tab cycles
 // focus between fields, Enter submits the whole form once every required
-// field has a value, and other keys are routed to the focused field's editor.
+// field has a value (flagging the first empty field until the next keypress),
+// and other keys are routed to the focused field's editor.
 func (u *userInputManager) handleFormKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "tab":
+		u.missingKey = ""
 		u.focus = (u.focus + 1) % len(u.formFields)
 		u.focusFormEditor(u.focus)
 		return true, nil
 	case "shift+tab":
+		u.missingKey = ""
 		u.focus = (u.focus - 1 + len(u.formFields)) % len(u.formFields)
 		u.focusFormEditor(u.focus)
 		return true, nil
@@ -508,13 +515,20 @@ func (u *userInputManager) handleFormKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		for i := range u.formFields {
 			v := u.fieldValue(i)
 			if v == "" {
-				// Block submit silently while a required field is empty.
+				// Flag the first empty field, move focus to it so the user
+				// lands in the field blocking submission, and keep the flag
+				// until the next keypress.
+				u.missingKey = u.formFields[i].field.Key
+				u.focus = i
+				u.focusFormEditor(i)
 				return true, nil
 			}
 			values[u.formFields[i].field.Key] = v
 		}
+		u.missingKey = ""
 		return true, u.finish(userInputResult{form: values})
 	}
+	u.missingKey = ""
 	state := &u.formFields[u.focus]
 	var cmd tea.Cmd
 	switch state.field.Kind {
@@ -567,17 +581,17 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 	req := u.item.req
 	display := u.item.display
 	if display.title == "" {
-		display.title = "Input required"
+		display.title = "Input"
 		display.tone = interactionToneInfo
 		display.headline = req.Question
 		if req.Kind == "secret" {
-			display.title = "Authentication required"
+			display.title = "Credentials"
 			display.tone = interactionToneDanger
 		}
 		if req.Kind == "form" {
 			for _, f := range req.Fields {
 				if f.Kind == "secret" {
-					display.title = "Authentication required"
+					display.title = "Credentials"
 					display.tone = interactionToneDanger
 					break
 				}
@@ -591,6 +605,7 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 		Title: display.title, Tone: display.tone, Headline: display.headline, Rows: display.rows,
 	}
 	innerWidth := interactionPanelInnerWidth(styles, width)
+	panel.Headline = clampInteractionHeadline(panel.Headline, innerWidth, 2)
 	if req.Kind == "form" {
 		return u.renderFormBody(panel, innerWidth, styles, width)
 	}
@@ -598,7 +613,7 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 	case "select":
 		panel.Choices = u.choiceRows(false, true)
 		panel.StackChoices = true
-		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Space", Label: "Select"}, {Key: "Enter", Label: "Confirm"}, {Key: "Esc", Label: "Cancel"}}
+		panel.Actions = []interactionAction{{Key: "↑ ↓/Tab", Label: "Navigate"}, {Key: "Enter", Label: "Confirm"}, {Key: "Esc", Label: "Cancel"}}
 	case "multiselect":
 		panel.Choices = u.choiceRows(true, false)
 		panel.StackChoices = true
@@ -619,29 +634,78 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 		input := ui.NewCursorView("› "+u.text.View(), u.text.Cursor()).Translate(2, 0).InStyle(styles.Input)
 		panel.Body = []string{input.Content}
 		panel.Cursor = input.Cursor
-		panel.Actions = []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Ctrl+J", Label: "New line"}, {Key: "Esc", Label: "Cancel"}}
+		actions := []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}}
+		if req.Multiline {
+			actions = append([]interactionAction{{Key: "Ctrl+J", Label: "New line"}}, actions...)
+		}
+		panel.Actions = actions
 	}
 	return ui.RenderInteractionPanelView(styles, width, panel)
 }
 
-const formLabelWidth = 12
+const (
+	formLabelColMin = 8
+	formLabelColMax = 16
+	stackedIndent   = "  ›"
+)
 
-// renderFormBody lays out every form field on its own body line. Only the
-// focused text/secret field carries the real terminal cursor; select fields
-// show their current option with angle-bracket markers instead.
+// clampInteractionHeadline bounds a model-supplied headline to maxLines
+// wrapped lines with an ellipsis, so an overlong question cannot flood the
+// panel (validation caps it too; this is defense in depth).
+func clampInteractionHeadline(headline string, width, maxLines int) string {
+	if headline == "" || width <= 1 || maxLines <= 0 {
+		return headline
+	}
+	lines := strings.Split(ansi.Hardwrap(headline, width, false), "\n")
+	if len(lines) <= maxLines {
+		return headline
+	}
+	lines = lines[:maxLines]
+	last := len(lines) - 1
+	if lipgloss.Width(lines[last]) < width-1 {
+		lines[last] += "…"
+	} else {
+		lines[last] = ansi.Truncate(lines[last], width-1, "…")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// formLabelColumn sizes the inline label column from the actual labels,
+// reserving room for the focus marker and the input frame so the widest
+// label still renders inline. Clamped between formLabelColMin and
+// formLabelColMax so short forms stay compact while wide (e.g. CJK) labels
+// still get room.
+func formLabelColumn(fields []userFormFieldState, inputStyle lipgloss.Style) int {
+	maxWidth := 0
+	for i := range fields {
+		if w := lipgloss.Width(fields[i].field.Label); w > maxWidth {
+			maxWidth = w
+		}
+	}
+	inputLeftFrame := inputStyle.GetMarginLeft() + inputStyle.GetBorderLeftSize() + inputStyle.GetPaddingLeft()
+	return min(max(maxWidth+1+inputLeftFrame, formLabelColMin), formLabelColMax)
+}
+
+// renderFormBody lays out every form field on one or two body lines. Labels
+// wider than the label column stack the label on its own line above an
+// indented editor so nothing hard-wraps mid-word. Only the focused text/secret
+// field carries the real terminal cursor; select fields show their current
+// option with angle-bracket markers instead.
 func (u *userInputManager) renderFormBody(panel interactionPanel, innerWidth int, styles ui.InteractionStyles, width int) ui.CursorView {
-	body := make([]string, 0, len(u.formFields))
+	labelCol := formLabelColumn(u.formFields, styles.Input)
+	body := make([]string, 0, len(u.formFields)*2)
 	var cursor *tea.Cursor
 	cursorBody := -1
 	for i := range u.formFields {
 		state := &u.formFields[i]
 		focused := i == u.focus
-		line, lineCursor := renderFormLineEdit(state, focused, innerWidth, styles)
-		body = append(body, line)
+		missing := u.missingKey != "" && state.field.Key == u.missingKey
+		lines, lineCursor, cursorLine := renderFormLineEdit(state, focused, missing, innerWidth, labelCol, styles)
 		if lineCursor != nil {
 			cursor = lineCursor
-			cursorBody = i
+			cursorBody = len(body) + cursorLine
 		}
+		body = append(body, lines...)
 	}
 	panel.Body = body
 	panel.Cursor = cursor
@@ -651,60 +715,141 @@ func (u *userInputManager) renderFormBody(panel interactionPanel, innerWidth int
 		{Key: "Enter", Label: "Submit"},
 		{Key: "Esc", Label: "Cancel"},
 	}
-	if len(u.formFields) > 0 && u.formFields[u.focus].field.Kind == "select" {
-		actions = append([]interactionAction{{Key: "← →", Label: "Change"}}, actions...)
+	if len(u.formFields) > 0 {
+		field := u.formFields[u.focus].field
+		if field.Kind == "select" {
+			actions = append([]interactionAction{{Key: "← →", Label: "Change"}}, actions...)
+		} else if field.Multiline {
+			actions = append([]interactionAction{{Key: "Ctrl+J", Label: "New line"}}, actions...)
+		}
 	}
 	panel.Actions = actions
 	return ui.RenderInteractionPanelView(styles, width, panel)
 }
 
-// renderFormLineEdit renders one form field row. Focused text/secret fields
-// return a real terminal cursor; everything else returns nil.
-func renderFormLineEdit(state *userFormFieldState, focused bool, innerWidth int, styles ui.InteractionStyles) (string, *tea.Cursor) {
-	label := padFormLabel(state.field.Label, formLabelWidth)
-	prefix := label + " "
+// renderFormLineEdit renders one form field as one line (label inline) or two
+// lines (label stacked above an indented editor). Focused text/secret fields
+// return a real terminal cursor positioned on the editor line; everything
+// else returns nil. lineOffset positions the cursor when the editor renders
+// on a later line of the field's block.
+func renderFormLineEdit(state *userFormFieldState, focused, missing bool, innerWidth, labelCol int, styles ui.InteractionStyles) ([]string, *tea.Cursor, int) {
+	label := state.field.Label
+	inputLeftFrame := styles.Input.GetMarginLeft() + styles.Input.GetBorderLeftSize() + styles.Input.GetPaddingLeft()
+	if lipgloss.Width(label)+1 > labelCol+1-inputLeftFrame {
+		return renderFormStackedField(state, focused, missing, innerWidth, styles)
+	}
+	prefix := padFormLabel(label, labelCol) + " "
+	requiredSuffix := formRequiredSuffix(missing, styles)
 	switch state.field.Kind {
 	case "secret":
 		if focused {
-			prefix = focusedFormPrefix(state.field.Label, styles.Input)
-			prefixWidth := lipgloss.Width(prefix)
-			contentWidth := max(1, innerWidth-prefixWidth-1)
-			state.secret.SetWidth(max(1, contentWidth-1))
-			view := ui.NewCursorView(state.secret.View(), state.secret.Cursor()).
-				InStyle(formEditorStyle(styles)).
-				Translate(prefixWidth+1, 0)
-			return prefix + " " + view.Content, view.Cursor
+			return renderFormSecretEditor(&state.secret, focusedFormPrefix(label, labelCol, styles.Input), 0, innerWidth, styles, requiredSuffix)
 		}
-		return prefix + styles.Muted.Render(renderMaskedValue(state.secret.Value())), nil
+		value := renderMaskedValue(state.secret.Value())
+		return []string{prefix + renderFormValueSlot(value, missing, styles)}, nil, -1
 	case "select":
-		current := ""
-		if len(state.field.Options) > 0 && state.selected >= 0 && state.selected < len(state.field.Options) {
-			current = state.field.Options[state.selected]
-		}
+		current := formSelectCurrent(state)
 		if focused {
-			return focusedFormPrefix(state.field.Label, styles.Input) + " " + formEditorStyle(styles).Render(current+"  ← →"), nil
+			return []string{focusedFormPrefix(label, labelCol, styles.Input) + " " + formEditorStyle(styles).Render(current+"  ← →")}, nil, -1
 		}
-		return prefix + styles.Muted.Render(current), nil
+		return []string{prefix + styles.Muted.Render(current)}, nil, -1
 	default: // text
 		if focused {
-			prefix = focusedFormPrefix(state.field.Label, styles.Input)
-			prefixWidth := lipgloss.Width(prefix)
-			contentWidth := max(1, innerWidth-prefixWidth-1)
-			state.text.SetWidth(contentWidth)
-			view := ui.NewCursorView(state.text.View(), state.text.Cursor()).
-				InStyle(formEditorStyle(styles)).
-				Translate(prefixWidth+1, 0)
-			return prefix + " " + view.Content, view.Cursor
+			return renderFormTextEditor(&state.text, focusedFormPrefix(label, labelCol, styles.Input), 0, innerWidth, styles, requiredSuffix)
 		}
 		val := strings.TrimSpace(state.text.Value())
-		if val == "" {
+		if val == "" && !missing {
 			val = state.field.Placeholder
 		}
-		if val == "" {
-			return prefix + styles.Muted.Render(""), nil
-		}
-		return prefix + styles.Muted.Render(val), nil
+		return []string{prefix + renderFormValueSlot(val, missing, styles)}, nil, -1
 	}
+}
+
+// renderFormStackedField renders a field whose label is wider than the label
+// column: the label goes on its own line and the editor or value is indented
+// below it, so long (e.g. CJK) labels never hard-wrap mid-word.
+func renderFormStackedField(state *userFormFieldState, focused, missing bool, innerWidth int, styles ui.InteractionStyles) ([]string, *tea.Cursor, int) {
+	labelLine := ansi.Truncate(state.field.Label, max(1, innerWidth), "…")
+	requiredSuffix := formRequiredSuffix(missing, styles)
+	switch state.field.Kind {
+	case "secret":
+		if focused {
+			lines, cursor, lineOffset := renderFormSecretEditor(&state.secret, stackedIndent, 1, innerWidth, styles, requiredSuffix)
+			return append([]string{labelLine}, lines...), cursor, lineOffset
+		}
+		value := renderMaskedValue(state.secret.Value())
+		return []string{labelLine, "  " + renderFormValueSlot(value, missing, styles)}, nil, -1
+	case "select":
+		current := formSelectCurrent(state)
+		if focused {
+			return []string{labelLine, stackedIndent + " " + formEditorStyle(styles).Render(current+"  ← →")}, nil, -1
+		}
+		return []string{labelLine, "  " + styles.Muted.Render(current)}, nil, -1
+	default: // text
+		if focused {
+			lines, cursor, lineOffset := renderFormTextEditor(&state.text, stackedIndent, 1, innerWidth, styles, requiredSuffix)
+			return append([]string{labelLine}, lines...), cursor, lineOffset
+		}
+		val := strings.TrimSpace(state.text.Value())
+		if val == "" && !missing {
+			val = state.field.Placeholder
+		}
+		return []string{labelLine, "  " + renderFormValueSlot(val, missing, styles)}, nil, -1
+	}
+}
+
+// renderFormTextEditor renders a focused single-line textarea after prefix on
+// the field's lineOffset line and returns its real terminal cursor. A
+// non-empty suffix (required marker) is appended inside the line budget.
+func renderFormTextEditor(editor *textarea.Model, prefix string, lineOffset, innerWidth int, styles ui.InteractionStyles, suffix string) ([]string, *tea.Cursor, int) {
+	prefixWidth := lipgloss.Width(prefix)
+	suffixWidth := lipgloss.Width(suffix)
+	contentWidth := max(1, innerWidth-prefixWidth-1-suffixWidth)
+	editor.SetWidth(contentWidth)
+	view := ui.NewCursorView(editor.View(), editor.Cursor()).
+		InStyle(formEditorStyle(styles)).
+		Translate(prefixWidth+1, lineOffset)
+	return []string{prefix + " " + view.Content + suffix}, view.Cursor, lineOffset
+}
+
+// renderFormSecretEditor renders a focused masked textinput after prefix on
+// the field's lineOffset line. One trailing cell is reserved for the input's
+// virtual cursor so typing cannot wrap the line.
+func renderFormSecretEditor(editor *textinput.Model, prefix string, lineOffset, innerWidth int, styles ui.InteractionStyles, suffix string) ([]string, *tea.Cursor, int) {
+	prefixWidth := lipgloss.Width(prefix)
+	suffixWidth := lipgloss.Width(suffix)
+	contentWidth := max(1, innerWidth-prefixWidth-1-suffixWidth)
+	editor.SetWidth(max(1, contentWidth-1))
+	view := ui.NewCursorView(editor.View(), editor.Cursor()).
+		InStyle(formEditorStyle(styles)).
+		Translate(prefixWidth+1, lineOffset)
+	return []string{prefix + " " + view.Content + suffix}, view.Cursor, lineOffset
+}
+
+// formRequiredSuffix builds the warning marker appended to the focused editor
+// of the field currently blocking submission.
+func formRequiredSuffix(missing bool, styles ui.InteractionStyles) string {
+	if !missing {
+		return ""
+	}
+	return " " + styles.Warning.Render("· required")
+}
+
+// renderFormValueSlot renders the unfocused value area of a form field. An
+// empty flagged field points at itself with a warning marker instead of the
+// usual muted value or placeholder.
+func renderFormValueSlot(value string, missing bool, styles ui.InteractionStyles) string {
+	if value == "" && missing {
+		return styles.Warning.Render("· required")
+	}
+	return styles.Muted.Render(value)
+}
+
+func formSelectCurrent(state *userFormFieldState) string {
+	if len(state.field.Options) > 0 && state.selected >= 0 && state.selected < len(state.field.Options) {
+		return state.field.Options[state.selected]
+	}
+	return ""
 }
 
 // formEditorStyle renders focused form input content with the input
@@ -713,8 +858,8 @@ func formEditorStyle(styles ui.InteractionStyles) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(styles.Input.GetForeground())
 }
 
-func focusedFormPrefix(label string, inputStyle lipgloss.Style) string {
-	normalWidth := lipgloss.Width(padFormLabel(label, formLabelWidth)) + 1
+func focusedFormPrefix(label string, labelCol int, inputStyle lipgloss.Style) string {
+	normalWidth := labelCol + 1
 	inputLeftFrame := inputStyle.GetMarginLeft() + inputStyle.GetBorderLeftSize() + inputStyle.GetPaddingLeft()
 	width := normalWidth - inputLeftFrame
 	if width <= 0 {
@@ -753,7 +898,7 @@ func (m *Mods) handleSudoPrompt(ctx context.Context, prompt, command string) (st
 		Question: question,
 		Kind:     "secret",
 	}, userInputDisplay{
-		title:    "Authentication required",
+		title:    "Credentials",
 		tone:     interactionToneDanger,
 		headline: "sudo needs elevated privileges",
 		rows:     []interactionRow{{Label: "Command", Value: command}},

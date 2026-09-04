@@ -17,6 +17,10 @@ Use `request_user_input` for one necessary question during a tool workflow.
 Use kind text, select (one of 2+ choices), multiselect (one or more of 2+
 choices), secret, or form (for related fields).
 
+Keep the dialog compact: one short question sentence, 1-3 word labels, hints
+or examples in the placeholder, and select over free text when the choices
+are enumerable. Never enumerate options inside the question itself.
+
 Passwords, tokens, cookies, and other credentials must use `kind: secret` with
 the exact downstream tool and RFC 6901 argument path. Pass the returned opaque
 reference unchanged at that path. For shell commands, bind it under

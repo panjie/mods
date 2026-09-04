@@ -246,6 +246,67 @@ func shellWordsForAccess(words []*syntax.Word) []string {
 	return args
 }
 
+// scalarSubstPlaceholder stands in for an allowlisted scalar command
+// substitution while reducing a word to its deterministic directory scope.
+// It contains no path separator, "$", or "%", so parent-directory reduction
+// treats it as an ordinary final path segment.
+const scalarSubstPlaceholder = "0"
+
+// accessShellWordConfined renders word like accessShellWord, except that an
+// allowlisted scalar command substitution renders as a placeholder segment
+// (the substitution cannot introduce a path separator or "..", so the word's
+// directory scope stays deterministic). ok is false when the word contains
+// any other runtime expansion.
+func accessShellWordConfined(word *syntax.Word, confinementOK bool) (string, bool) {
+	if word == nil {
+		return "", false
+	}
+	var result strings.Builder
+	for _, part := range word.Parts {
+		if !appendAccessWordPartConfined(&result, part, confinementOK) {
+			return "", false
+		}
+	}
+	return result.String(), true
+}
+
+func appendAccessWordPartConfined(result *strings.Builder, part syntax.WordPart, confinementOK bool) bool {
+	switch value := part.(type) {
+	case *syntax.DblQuoted:
+		for _, quotedPart := range value.Parts {
+			if !appendAccessWordPartConfined(result, quotedPart, confinementOK) {
+				return false
+			}
+		}
+		return true
+	case *syntax.CmdSubst:
+		if confinementOK && cmdSubstScalarConfined(value) {
+			result.WriteString(scalarSubstPlaceholder)
+			return true
+		}
+		return false
+	default:
+		return appendAccessWordPart(result, part)
+	}
+}
+
+// shellWordsForAccessConfined resolves a call's words with scalar-confined
+// command substitutions materialized. Any word carrying a different runtime
+// expansion still rejects the whole invocation, because dropping or
+// misplacing a dynamic operand would corrupt position-based target
+// extraction (cp/mv destinations, rm operands).
+func shellWordsForAccessConfined(words []*syntax.Word, confinementOK bool) []string {
+	args := make([]string, 0, len(words))
+	for _, word := range words {
+		value, ok := accessShellWordConfined(word, confinementOK)
+		if !ok {
+			return nil
+		}
+		args = append(args, value)
+	}
+	return args
+}
+
 // StaticPOSIXLiteralArgs returns statically known argument values from every
 // simple command in a POSIX shell expression. Quoting is removed by the AST,
 // while parameter expansions and other dynamic words are omitted. Callers use

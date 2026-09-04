@@ -84,6 +84,21 @@ func TestCommandSimplificationMessageDoesNotEchoTargets(t *testing.T) {
 	require.NotContains(t, message, "$SECRET_PROFILE")
 }
 
+func TestCommandSimplificationMessageNamesSplittingIncentive(t *testing.T) {
+	assessment := approval.CommandAssessment{
+		Shape: approval.CommandShape{TopLevelActions: 5},
+		Reviewability: approval.CommandReviewability{
+			Level:         approval.ReviewabilityCompound,
+			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent, approval.ReviewabilityDecorativeOutput},
+			ShouldCorrect: true,
+		},
+	}
+	message := commandSimplificationMessage(assessment)
+	require.Contains(t, message, "separate single-purpose calls")
+	require.Contains(t, message, "Drop decorative echo/printf separators")
+	require.Contains(t, message, "Simple read-only commands run without review")
+}
+
 func TestToolCallerCorrectionDoesNotExecuteCommand(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.ReviewMode = ReviewAuto
@@ -148,4 +163,17 @@ func TestKnownCommandPassedAsShellScriptRequestsDirectProcess(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "known executable name")
 	require.Contains(t, err.Error(), "Retry with process_run and literal argv")
+}
+
+func TestNestedShellHostCorrectionNamesWrapping(t *testing.T) {
+	cfg := defaultConfig()
+	gate := newCommandPreflightGate(&cfg)
+	command := `sh -c "sed -i 's/^ShareInputState=No$/ShareInputState=Yes/' ~/.config/fcitx5/config && echo 'changed'"`
+	assessment := approval.AssessShellStaticWithPolicy(command, true, approval.ReadOnlyCommandPolicy{})
+	require.True(t, assessment.Reviewability.ShouldCorrect)
+	require.Contains(t, assessment.Reviewability.Reasons, approval.ReviewabilityNestedShellHost)
+	err := gate.check("shell_run", assessment)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "nests a shell host inside a shell tool")
+	require.Contains(t, err.Error(), "instead of nesting sh -c, bash -c, eval, or exec")
 }

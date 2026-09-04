@@ -30,6 +30,7 @@ const (
 	ReviewabilityMultipleDynamicTargets ReviewabilityReason = "multiple_dynamic_targets"
 	ReviewabilityDecorativeOutput       ReviewabilityReason = "decorative_output"
 	ReviewabilityOpaqueExecution        ReviewabilityReason = "opaque_execution"
+	ReviewabilityNestedShellHost        ReviewabilityReason = "nested_shell_host"
 	ReviewabilityCommandPassedAsScript  ReviewabilityReason = "command_passed_as_script"
 )
 
@@ -187,6 +188,7 @@ func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPoli
 		if ok && (name == "eval" || name == "exec" || shellHostPrograms[name]) {
 			shape.Opaque = true
 			result = opaqueReviewability()
+			result.Reasons = []ReviewabilityReason{ReviewabilityNestedShellHost}
 			result.ShouldCorrect = true
 			break
 		}
@@ -261,9 +263,10 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 	result := CommandReviewability{
 		Level: ReviewabilitySimple,
 	}
-	if powerShellIROpaque(ir) {
+	if reason, opaque := powerShellIROpaque(ir); opaque {
 		shape.Opaque = true
 		result = opaqueReviewability()
+		result.Reasons = []ReviewabilityReason{reason}
 		result.ShouldCorrect = true
 		return shape, result
 	}
@@ -312,22 +315,25 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 	return shape, result
 }
 
-func powerShellIROpaque(ir *psBridgeIR) bool {
+// powerShellIROpaque reports whether the PowerShell IR is opaque and, when it
+// is, the reviewability reason. A nested shell host invocation gets its own
+// reason so correction feedback can name the wrapping explicitly.
+func powerShellIROpaque(ir *psBridgeIR) (ReviewabilityReason, bool) {
 	if ir == nil || ir.HasStopParsing {
-		return true
+		return ReviewabilityOpaqueExecution, true
 	}
 	for _, flag := range ir.RiskFlags {
 		if flag == "invoke_expression" || flag == "syntax_error" {
-			return true
+			return ReviewabilityOpaqueExecution, true
 		}
 	}
 	for _, inv := range ir.Invocations {
 		name := normalizePowerShellCommandName(inv.Name)
 		if shellHostPrograms[name] && processArgsContainShellSourceFlag(name, inv.Args) {
-			return true
+			return ReviewabilityNestedShellHost, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func powerShellDirectProgram(ir *psBridgeIR) bool {

@@ -978,7 +978,7 @@ func TestAnalyzeShellCommandWithoutBareHomeKeepsClassifierDirs(t *testing.T) {
 		},
 	}
 
-	assessment := mods.assessCommand("shell_run", "sed -n '1p' settings.ini")
+	assessment := mods.assessCommand("shell_run", "awk '{print $1}' settings.ini")
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Equal(t, []string{classifierDir}, assessment.KnownDirs)
 }
@@ -1384,4 +1384,137 @@ func TestAnalyzeShellCommandPOSIXPublicEnvContentReadAutoAllows(t *testing.T) {
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
+}
+
+func TestExtractExternalPathsTrimsTruncatedSubstitutionToken(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	got := extractExternalPaths(
+		`cp ~/.config/hypr/input.lua ~/.config/hypr/input.lua.bak.gesture.$(date +%s)`,
+		"/workspace",
+	)
+	require.Contains(t, got, filepath.Join(home, ".config", "hypr"))
+	for _, p := range got {
+		require.Falsef(t, strings.HasSuffix(p, ".$"), "truncated substitution artifact %q must not leak into external paths", p)
+	}
+}
+
+func TestAnalyzeShellCommandTimestampedBackupCopyMaterializesScope(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
+	}
+	home := canonicalTestPath(t, t.TempDir())
+	workspace := canonicalTestPath(t, t.TempDir())
+	t.Setenv("HOME", home)
+	hyprDir := filepath.Join(home, ".config", "hypr")
+	require.NoError(t, os.MkdirAll(hyprDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hyprDir, "input.lua"), []byte("gesture"), 0o644))
+
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	command := `cp ~/.config/hypr/input.lua ~/.config/hypr/input.lua.bak.gesture.$(date +%s) && ls ~/.config/hypr/input.lua.bak.gesture.*`
+	assessment := mods.assessCommand("shell_run", command)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets)
+	for _, dir := range assessment.KnownDirs {
+		require.Falsef(t, strings.HasSuffix(dir, ".$"), "truncated substitution artifact in %q", dir)
+	}
+
+	intent := normalizeAccessIntentDirs(assessment.AccessIntent(), workspace, "shell_run", true)
+	require.Equal(t, []string{hyprDir}, intent.Dirs)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+
+	rules := candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto))
+	require.Len(t, rules, 1)
+	require.Equal(t, approval.DirAllow, rules[0].Type)
+	require.Equal(t, []string{hyprDir}, rules[0].Paths)
+	require.True(t, RulesAllowIntent(rules, intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)),
+		"a saved DirAllow rule must auto-approve this command class")
+
+	presentation := formatReviewPresentationWithIntent(
+		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
+		WorkspaceScope(workspace), intent,
+	)
+	require.Equal(t, "Modify local files", presentation.headline)
+	require.Equal(t, interactionToneWarning, presentation.tone)
+}
+
+func TestAnalyzeShellCommandCompoundInspectionChainAutoAllows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
+	}
+	workspace := canonicalTestPath(t, t.TempDir())
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	command := `grep -rn "default_entry\|remembers\|remember_last_entry\|2\b" /usr/share/omarchy/ /usr/share/omarchy/default/limine/ 2>/dev/null | head; echo "=== omarchy refs === "; zcat /proc/config.gz 2>/dev/null | grep -i limine | head; echo "--- try limine source/help referenced in entry-tool ---"; sed -n '1,60p' /usr/bin/limine-entry-tool`
+
+	assessment := mods.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkspaceScope(workspace),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	), "a fully read-only inspection chain must not prompt for review")
+
+	for _, split := range []string{
+		`zcat /proc/config.gz 2>/dev/null | grep -i limine | head`,
+		`sed -n '1,60p' /usr/bin/limine-entry-tool`,
+	} {
+		assessment := mods.assessCommand("shell_run", split)
+		require.Equal(t, approval.EffectRead, assessment.Effect, split)
+		require.Equal(t, DecisionAllow, ClassifyAccess(
+			assessment.AccessIntent(),
+			WorkspaceScope(workspace),
+			nil,
+			ApprovalReviewMode(ReviewAuto),
+		), "each split single-purpose read must auto-allow: %s", split)
+	}
+}
+
+func TestAnalyzeShellCommandStateBindingKeepsScalarSubstitutionDynamic(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
+	}
+	home := canonicalTestPath(t, t.TempDir())
+	workspace := canonicalTestPath(t, t.TempDir())
+	t.Setenv("HOME", home)
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	command := `export PATH=/tmp:$PATH; cp ~/cfg/a.lua ~/cfg/a.lua.$(date +%s)`
+	assessment := mods.assessCommand("shell_run", command)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Contains(t, assessment.DynamicTargets, "command substitution")
+
+	intent := normalizeAccessIntentDirs(assessment.AccessIntent(), workspace, "shell_run", true)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)),
+		"state-binding commands must never yield a reusable directory rule")
+
+	presentation := formatReviewPresentationWithIntent(
+		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
+		WorkspaceScope(workspace), intent,
+	)
+	require.Equal(t, "Modify a dynamic target", presentation.headline)
 }

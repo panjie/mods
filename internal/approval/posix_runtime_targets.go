@@ -11,6 +11,7 @@ func unresolvedPOSIXRuntimeExpressionsFromFile(file *syntax.File) []string {
 		return nil
 	}
 
+	confinementOK := posixFileAllowsScalarConfinement(file)
 	scalar := posixScalarRuntimeExpressions(file)
 	var unresolved []string
 	syntax.Walk(file, func(node syntax.Node) bool {
@@ -28,9 +29,16 @@ func unresolvedPOSIXRuntimeExpressionsFromFile(file *syntax.File) []string {
 				unresolved = append(unresolved, "parameter expansion")
 			}
 		case *syntax.CmdSubst:
-			if _, ok := scalar[node]; !ok {
-				unresolved = append(unresolved, "command substitution")
+			if _, ok := scalar[node]; ok {
+				return true
 			}
+			// An allowlisted scalar substitution cannot introduce a path
+			// separator or "..", so it never widens a target beyond the
+			// word's static directory scope.
+			if confinementOK && cmdSubstScalarConfined(node) {
+				return true
+			}
+			unresolved = append(unresolved, "command substitution")
 		case *syntax.ArithmExp:
 			if _, ok := scalar[node]; !ok {
 				unresolved = append(unresolved, "arithmetic expansion")

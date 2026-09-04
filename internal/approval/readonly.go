@@ -126,6 +126,11 @@ func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool
 			return true, "read-only command: find"
 		}
 		return false, ""
+	case "sed":
+		if sedInvocationReadOnly(args[1:]) {
+			return true, "read-only command: sed"
+		}
+		return false, ""
 	case "sort":
 		if sortInvocationReadOnly(args[1:]) {
 			return true, "read-only command: sort"
@@ -217,6 +222,85 @@ func findExecCommand(args []string, start int) (nested []string, next int, ok bo
 
 func findExpressionToken(arg string) bool {
 	return arg == "!" || arg == "(" || arg == ")" || strings.HasPrefix(arg, "-")
+}
+
+// sedInvocationReadOnly reports whether a sed invocation is provably
+// read-only. GNU sed can write files through the w/W script commands and
+// in-place editing (-i), and scripts loaded from a file (-f) are unknowable.
+// The analysis rejects in-place and script-file forms plus any unknown
+// option, and requires every script argument (from -e/--expression or the
+// first bare operand) to contain no "w" or "W" — a pattern such as s/hw/e/
+// merely stays unproven and falls back to the classifier, which is
+// fail-closed. Input file operands are unrestricted because output never
+// targets them.
+func sedInvocationReadOnly(args []string) bool {
+	scriptSeen := false
+	options := true
+	operands := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !options || arg == "--" || arg == "-" || !strings.HasPrefix(arg, "-") {
+			if arg == "--" {
+				options = false
+				continue
+			}
+			operands++
+			if operands == 1 && !scriptSeen {
+				if strings.ContainsAny(arg, "wW") {
+					return false
+				}
+				scriptSeen = true
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--") {
+			name, value, hasValue := strings.Cut(arg, "=")
+			switch name {
+			case "--quiet", "--silent", "--regexp-extended", "--separate",
+				"--unbuffered", "--null-data", "--binary", "--posix", "--debug":
+			case "--expression":
+				if !hasValue {
+					if i+1 >= len(args) {
+						return false
+					}
+					i++
+					value = args[i]
+				}
+				if strings.ContainsAny(value, "wW") {
+					return false
+				}
+				scriptSeen = true
+			default:
+				return false
+			}
+			continue
+		}
+		short := strings.TrimPrefix(arg, "-")
+		for len(short) > 0 {
+			option := short[0]
+			short = short[1:]
+			switch option {
+			case 'n', 'E', 'r', 's', 'u', 'z', 'b':
+			case 'e':
+				script := short
+				short = ""
+				if script == "" {
+					if i+1 >= len(args) {
+						return false
+					}
+					i++
+					script = args[i]
+				}
+				if strings.ContainsAny(script, "wW") {
+					return false
+				}
+				scriptSeen = true
+			default:
+				return false
+			}
+		}
+	}
+	return scriptSeen
 }
 
 func sortInvocationReadOnly(args []string) bool {
@@ -513,6 +597,7 @@ var readOnlyCommands = map[string]bool{
 	"grep": true, "egrep": true, "fgrep": true,
 	"diff": true, "uniq": true, "comm": true, "tr": true,
 	"cut": true, "strings": true, "xxd": true, "od": true,
+	"zcat":    true,
 	"hexdump": true, "nm": true, "objdump": true, "readelf": true,
 	"md5sum": true, "sha1sum": true, "sha256sum": true, "sha512sum": true,
 	"shasum": true, "cksum": true, "test": true, "[": true,

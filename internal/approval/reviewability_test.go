@@ -26,6 +26,9 @@ func TestAnalyzePOSIXCommandReviewability(t *testing.T) {
 		{name: "three inspections", command: "echo first; git status; git diff", level: ReviewabilityCompound, correct: true, reason: ReviewabilityMultipleIndependent, statements: 3},
 		{name: "mixed read and write", command: "git status; rm out.txt", level: ReviewabilityCompound, correct: true, reason: ReviewabilityMixedReadWrite, statements: 2},
 		{name: "opaque syntax", command: "if then", level: ReviewabilityOpaque, correct: false, reason: ReviewabilityOpaqueExecution},
+		{name: "nested sh host", command: `sh -c "sed -i 's/a/b/' file && grep x file"`, level: ReviewabilityOpaque, correct: true, reason: ReviewabilityNestedShellHost},
+		{name: "nested bash host", command: `bash -c 'rm out.txt'`, level: ReviewabilityOpaque, correct: true, reason: ReviewabilityNestedShellHost},
+		{name: "eval stays nested", command: `eval 'rm out.txt'`, level: ReviewabilityOpaque, correct: true, reason: ReviewabilityNestedShellHost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

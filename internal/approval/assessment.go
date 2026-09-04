@@ -159,6 +159,7 @@ func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
 	if file == nil {
 		return nil, false
 	}
+	confinementOK := posixFileAllowsScalarConfinement(file)
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch node := node.(type) {
 		case *syntax.Redirect:
@@ -166,7 +167,7 @@ func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
 				return true
 			}
 			known = true
-			if target, ok := accessShellWord(node.Word); ok && target != "" {
+			if target, ok := accessShellWordConfined(node.Word, confinementOK); ok && target != "" {
 				dirs = append(dirs, parentDir(target))
 			}
 		case *syntax.CallExpr:
@@ -176,7 +177,7 @@ func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
 			if name, ok := staticShellWord(node.Args[0]); ok && hasKnownRiskyInvocation([]string{name}, true) {
 				known = true
 			}
-			tokens := shellWordsForAccess(node.Args)
+			tokens := shellWordsForAccessConfined(node.Args, confinementOK)
 			if len(tokens) == 0 {
 				return true
 			}

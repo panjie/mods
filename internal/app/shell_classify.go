@@ -780,6 +780,7 @@ func extractExternalPathFactsWithPolicy(command, workspaceDir string, flavor pat
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
+		p = trimTruncatedSubstitutionPath(p)
 		p = pathutil.NormalizeShellPath(p, opts)
 		if pathutil.Location(p, workspaceDir, nil) != pathutil.LocationExternal {
 			return
@@ -858,12 +859,36 @@ func extractExternalPathFactsWithPolicy(command, workspaceDir string, flavor pat
 	// syntax are considered, so quoted program bodies remain ignored.
 	if readOnly, _ := approval.IsReadOnlyPOSIXWithPolicy(originalCommand, policy); readOnly {
 		for _, arg := range approval.StaticPOSIXLiteralArgs(originalCommand) {
+			if arg == "~" {
+				// A bare tilde in the literal recovery list may be quoted in
+				// the source, which the child shell never expands; the
+				// unquoted form is already covered by the bare-home check.
+				continue
+			}
 			if isExplicitShellPathArg(arg) {
 				add(arg)
 			}
 		}
 	}
 	return paths, hasBareHome
+}
+
+// trimTruncatedSubstitutionPath repairs raw-text path tokens cut off at a
+// command-substitution boundary. The extraction patterns' character classes
+// exclude "(", so a path such as ~/cfg/backup.$(date +%s) yields a dangling
+// "~/cfg/backup.$" token; a trailing "$" can only be such an artifact (a
+// complete expansion continues past it, and an unquoted "$" at word end is
+// literal). Trimming back to the last path-separator boundary recovers the
+// deterministic enclosing directory instead of re-dynamizing the scope.
+func trimTruncatedSubstitutionPath(token string) string {
+	if !strings.HasSuffix(token, "$") {
+		return token
+	}
+	idx := strings.LastIndexAny(token, `/\`)
+	if idx < 0 {
+		return ""
+	}
+	return token[:idx+1]
 }
 
 func addPowerShellQuotedPathArgs(command string, add func(string)) {

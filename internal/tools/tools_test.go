@@ -165,6 +165,15 @@ func TestPowerShellGuidanceDescriptions(t *testing.T) {
 	}
 }
 
+func TestPosixShellGuidanceDescription(t *testing.T) {
+	if !strings.Contains(PosixShellRunDescription, "already executed through the POSIX shell") {
+		t.Fatalf("expected description to state the command runs through the POSIX shell: %q", PosixShellRunDescription)
+	}
+	if !strings.Contains(PosixShellRunDescription, "do not wrap it in sh -c") {
+		t.Fatalf("expected description to discourage sh -c wrapping: %q", PosixShellRunDescription)
+	}
+}
+
 func TestFilesystemToolsStayInsideRoot(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

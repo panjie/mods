@@ -58,6 +58,8 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 			reasons = append(reasons, "uses multiple runtime-resolved paths")
 		case approval.ReviewabilityDecorativeOutput:
 			reasons = append(reasons, "adds presentation-only output")
+		case approval.ReviewabilityNestedShellHost:
+			reasons = append(reasons, "nests a shell host inside a shell tool")
 		case approval.ReviewabilityCommandPassedAsScript:
 			reasons = append(reasons, "passes a known executable name where the shell expects a script path")
 		}
@@ -72,13 +74,16 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 	if reviewability.RecommendedTool == "shell_run" || reviewability.RecommendedTool == "powershell_run" {
 		return message + "Retry with " + reviewability.RecommendedTool + " and pass the shell source directly instead of nesting a shell host in process_run."
 	}
+	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityNestedShellHost) {
+		return message + "Retry with the same tool and pass the shell source directly instead of nesting sh -c, bash -c, eval, or exec inside it."
+	}
 	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget) {
 		return message + "Resolve the target in a separate read-only call, then mutate the returned literal absolute path."
 	}
 	if len(assessment.DynamicTargets) > 0 {
 		return message + "Resolve runtime paths in one short read-only call, then use the returned literal absolute paths in later calls."
 	}
-	return message + "Retry as separate single-purpose calls for capability discovery, path inspection, mutation, and verification. Keep necessary pipelines intact."
+	return message + "Retry as separate single-purpose calls for capability discovery, path inspection, mutation, and verification. Drop decorative echo/printf separators and keep necessary pipelines intact. Simple read-only commands run without review; long multi-action chains always require it."
 }
 
 func containsReviewabilityReason(reasons []approval.ReviewabilityReason, target approval.ReviewabilityReason) bool {

@@ -38,9 +38,10 @@ func extractWritableDirsPOSIX(command string) []string {
 	if err != nil {
 		return nil
 	}
+	confinementOK := posixFileAllowsScalarConfinement(file)
 	var dirs []string
 	for _, stmt := range file.Stmts {
-		collectWritableDirsFromStmt(stmt, &dirs)
+		collectWritableDirsFromStmt(stmt, &dirs, confinementOK)
 	}
 	if len(dirs) == 0 {
 		return nil
@@ -48,7 +49,7 @@ func extractWritableDirsPOSIX(command string) []string {
 	return dedupeSorted(dirs)
 }
 
-func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string) {
+func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string, confinementOK bool) {
 	if stmt == nil || stmt.Cmd == nil {
 		return
 	}
@@ -56,22 +57,22 @@ func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string) {
 		if redir == nil || redir.Word == nil || !redirectionWritesPersistent(redir) {
 			continue
 		}
-		target, ok := accessShellWord(redir.Word)
+		target, ok := accessShellWordConfined(redir.Word, confinementOK)
 		if !ok || target == "" {
 			continue
 		}
 		*dirs = append(*dirs, parentDir(target))
 	}
 	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
-		collectWritableDirsFromStmt(binary.X, dirs)
-		collectWritableDirsFromStmt(binary.Y, dirs)
+		collectWritableDirsFromStmt(binary.X, dirs, confinementOK)
+		collectWritableDirsFromStmt(binary.Y, dirs, confinementOK)
 		return
 	}
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
 	if !ok || len(call.Args) == 0 {
 		return
 	}
-	args := shellWordsForAccess(call.Args)
+	args := shellWordsForAccessConfined(call.Args, confinementOK)
 	if len(args) == 0 {
 		return
 	}

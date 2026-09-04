@@ -17,13 +17,20 @@ type ArgvStaticContext struct {
 }
 
 var gitWorkspaceWriteSubcommands = map[string]bool{
-	"add":      true,
-	"checkout": true,
-	"clean":    true,
-	"mv":       true,
-	"reset":    true,
-	"restore":  true,
-	"rm":       true,
+	"add":         true,
+	"checkout":    true,
+	"cherry-pick": true,
+	"clean":       true,
+	"commit":      true,
+	"merge":       true,
+	"mv":          true,
+	"rebase":      true,
+	"reset":       true,
+	"restore":     true,
+	"revert":      true,
+	"rm":          true,
+	"stash":       true,
+	"switch":      true,
 }
 
 var gitRepositoryEnvironmentNames = map[string]bool{

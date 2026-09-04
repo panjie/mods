@@ -1447,6 +1447,63 @@ func TestAnalyzeShellCommandTimestampedBackupCopyMaterializesScope(t *testing.T)
 	require.Equal(t, interactionToneWarning, presentation.tone)
 }
 
+func TestAnalyzeShellCommandGitCommitResolvesRepositoryScope(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
+	}
+	repo := canonicalTestPath(t, t.TempDir())
+	gitDir := filepath.Join(repo, ".git")
+	require.NoError(t, os.Mkdir(gitDir, 0o755))
+	workspace := canonicalTestPath(t, t.TempDir())
+
+	mods := &Mods{
+		Config: testConfigForWorkspace(workspace),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			// Outside a repository the static path cannot prove the write, so
+			// the classifier fallback legitimately runs.
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	// The shell runs in the repository, not the workspace, mirroring a cwd
+	// override on the tool call.
+	cfg := testConfigForWorkspace(repo)
+	modsRepo := &Mods{
+		Config: cfg,
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for %q", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+
+	command := `git commit -m "Confine scalar command substitutions and widen read-only detection"`
+	assessment := modsRepo.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets)
+
+	intent := normalizeAccessIntentDirs(assessment.AccessIntent(), repo, "shell_run", true)
+	require.Equal(t, []string{repo}, intent.Dirs, "the repository directory covers its .git storage after normalization")
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
+
+	rules := candidateRulesForIntent(intent, WorkspaceScope(repo), nil, ApprovalReviewMode(ReviewAuto))
+	require.Len(t, rules, 1)
+	require.Equal(t, approval.DirAllow, rules[0].Type)
+	require.True(t, RulesAllowIntent(rules, intent, WorkspaceScope(repo), nil, ApprovalReviewMode(ReviewAuto)),
+		"a saved DirAllow rule must auto-approve later commits")
+
+	presentation := formatReviewPresentationWithIntent(
+		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
+		WorkspaceScope(repo), intent,
+	)
+	require.Equal(t, "Modify local files", presentation.headline)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: repo + ", " + gitDir})
+
+	// Outside a repository the same command still fails closed.
+	outside := mods.assessCommand("shell_run", command)
+	require.Equal(t, approval.EffectUnknown, outside.Effect)
+	require.Empty(t, outside.KnownDirs)
+}
+
 func TestAnalyzeShellCommandCompoundInspectionChainAutoAllows(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")

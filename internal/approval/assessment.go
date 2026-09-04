@@ -80,19 +80,30 @@ func (assessment CommandAssessment) AccessIntent() AccessIntent {
 
 // AssessShellStaticWithPolicy parses command exactly once and derives every
 // deterministic fact available from that syntax tree. Unknown effects are
-// intentionally left for the app-layer LLM completion step.
+// intentionally left for the app-layer LLM completion step. The cwd-less
+// form cannot resolve Git repository directories; callers that know the
+// execution directory should use AssessShellStaticWithContext.
 func AssessShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCommandPolicy) CommandAssessment {
+	return AssessShellStaticWithContext(command, posix, policy, "")
+}
+
+// AssessShellStaticWithContext additionally receives the deterministic
+// working directory the shell runs in. It lets Git workspace-write
+// invocations resolve their repository directories (worktree, Git
+// administrative storage) the same way direct argv invocations do. An empty
+// cwd disables that enrichment fail-closed.
+func AssessShellStaticWithContext(command string, posix bool, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return UnknownCommandAssessment()
 	}
 	if posix {
-		return assessPOSIXStatic(command, policy)
+		return assessPOSIXStatic(command, policy, cwd)
 	}
-	return assessPowerShellStatic(command, policy)
+	return assessPowerShellStatic(command, policy, cwd)
 }
 
-func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy) CommandAssessment {
+func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
 	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
 	file, err := parser.Parse(strings.NewReader(command), "")
 	if err != nil || len(file.Stmts) == 0 {
@@ -126,7 +137,7 @@ func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy) CommandAsse
 		return result
 	}
 
-	dirs, knownWrite := collectPOSIXWriteFacts(file)
+	dirs, knownWrite := collectPOSIXWriteFacts(file, cwd)
 	if knownWrite {
 		result.Effect = EffectWrite
 		result.KnownDirs = dedupeSorted(dirs)
@@ -155,7 +166,7 @@ func posixAccessArguments(file *syntax.File) []string {
 	return dedupeSorted(args)
 }
 
-func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
+func collectPOSIXWriteFacts(file *syntax.File, cwd string) (dirs []string, known bool) {
 	if file == nil {
 		return nil, false
 	}
@@ -181,6 +192,11 @@ func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
 			if len(tokens) == 0 {
 				return true
 			}
+			if gitResult, handled := assessGitArgvStatic(tokens, true, ArgvStaticContext{Cwd: cwd}); handled {
+				known = true
+				dirs = append(dirs, gitResult.KnownDirs...)
+				return true
+			}
 			analysis := analyzeWritableTargetsFromTokens(tokens, true)
 			if analysis.Known || hasKnownRiskyInvocation(tokens, true) {
 				known = true
@@ -192,7 +208,7 @@ func collectPOSIXWriteFacts(file *syntax.File) (dirs []string, known bool) {
 	return dedupeSorted(dirs), known
 }
 
-func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy) CommandAssessment {
+func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
 	ir, err := parseWithBridge(command)
 	if err != nil || len(ir.ParseErrors) > 0 {
 		result := UnknownCommandAssessment()
@@ -200,11 +216,11 @@ func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy) Comman
 		result.Reviewability = opaqueReviewability()
 		return result
 	}
-	return assessPowerShellIR(command, ir, policy)
+	return assessPowerShellIR(command, ir, policy, cwd)
 }
 
-func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy) CommandAssessment {
-	dirs, dynamic, knownWrite := analyzePowerShellWritablePathsIR(ir, policy)
+func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
+	dirs, dynamic, knownWrite := analyzePowerShellWritablePathsIR(ir, policy, cwd)
 	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
 	result := CommandAssessment{
 		Effect:             EffectUnknown,

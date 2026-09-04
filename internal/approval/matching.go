@@ -350,7 +350,7 @@ func matchShellPrefix(pattern, command string) bool {
 // against saved DirAllow rules. Only explicit write-mode rules participate;
 // legacy empty-mode and read rules cannot authorize writes.
 func dirAllowForCommand(tool string, command string, rules []Rule, workspace string, posix bool) bool {
-	targetDirs := normalizeShellDirsForWorkspaceWithMode(extractWritableDirs(command, posix), workspace, posix)
+	targetDirs := normalizeShellDirsForWorkspaceWithMode(ExtractWritableDirsWithCwd(command, posix, workspace), workspace, posix)
 	if len(targetDirs) == 0 {
 		return false
 	}

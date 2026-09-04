@@ -53,7 +53,7 @@ func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string
 	policy := m.readOnlyCommandPolicy()
 
 	flavor := shellPathFlavor(tool)
-	result := approval.AssessShellStaticWithPolicy(command, !shellToolUsesPowerShell(tool), policy)
+	result := approval.AssessShellStaticWithContext(command, !shellToolUsesPowerShell(tool), policy, ws)
 	result.RemoteOrigins = append(result.RemoteOrigins, extractLiteralRemoteOrigins(command)...)
 	gitOrigins, unresolvedGitRemotes := m.resolveGitPushOrigins(tool, command, ws)
 	result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)

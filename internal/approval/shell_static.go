@@ -118,12 +118,17 @@ func AssessArgvStaticWithContext(program string, args []string, posix bool, poli
 	return result
 }
 
-func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy) (dirs, unresolved []string, known bool) {
+func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy, cwd string) (dirs, unresolved []string, known bool) {
 	if ir == nil || len(ir.ParseErrors) > 0 {
 		return nil, nil, false
 	}
 	for _, inv := range ir.Invocations {
 		tokens := append([]string{inv.Name}, inv.Args...)
+		if gitResult, handled := assessGitArgvStatic(tokens, false, ArgvStaticContext{Cwd: cwd}); handled {
+			known = true
+			dirs = append(dirs, gitResult.KnownDirs...)
+			continue
+		}
 		analysis := analyzeWritableTargetsFromTokens(tokens, false)
 		if !analysis.Known {
 			args := inv.Args

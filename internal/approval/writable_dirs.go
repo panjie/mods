@@ -21,6 +21,23 @@ func ExtractWritableDirs(command string, posix bool) []string {
 	return extractWritableDirs(command, posix)
 }
 
+// ExtractWritableDirsWithCwd additionally resolves Git workspace-write
+// invocations against the deterministic working directory, mirroring the
+// assessment path. An empty cwd disables that resolution.
+func ExtractWritableDirsWithCwd(command string, posix bool, cwd string) []string {
+	if cwd == "" {
+		return extractWritableDirs(command, posix)
+	}
+	normalized := normalizeShellCommandWithMode(command, posix)
+	if normalized == "" {
+		return nil
+	}
+	if !posix {
+		return extractWritableDirsSimple(normalized)
+	}
+	return extractWritableDirsPOSIX(command, cwd)
+}
+
 func extractWritableDirs(command string, posix bool) []string {
 	normalized := normalizeShellCommandWithMode(command, posix)
 	if normalized == "" {
@@ -29,10 +46,10 @@ func extractWritableDirs(command string, posix bool) []string {
 	if !posix {
 		return extractWritableDirsSimple(normalized)
 	}
-	return extractWritableDirsPOSIX(command)
+	return extractWritableDirsPOSIX(command, "")
 }
 
-func extractWritableDirsPOSIX(command string) []string {
+func extractWritableDirsPOSIX(command, cwd string) []string {
 	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
 	file, err := parser.Parse(strings.NewReader(command), "")
 	if err != nil {
@@ -41,7 +58,7 @@ func extractWritableDirsPOSIX(command string) []string {
 	confinementOK := posixFileAllowsScalarConfinement(file)
 	var dirs []string
 	for _, stmt := range file.Stmts {
-		collectWritableDirsFromStmt(stmt, &dirs, confinementOK)
+		collectWritableDirsFromStmt(stmt, &dirs, confinementOK, cwd)
 	}
 	if len(dirs) == 0 {
 		return nil
@@ -49,7 +66,7 @@ func extractWritableDirsPOSIX(command string) []string {
 	return dedupeSorted(dirs)
 }
 
-func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string, confinementOK bool) {
+func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string, confinementOK bool, cwd string) {
 	if stmt == nil || stmt.Cmd == nil {
 		return
 	}
@@ -64,8 +81,8 @@ func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string, confinementO
 		*dirs = append(*dirs, parentDir(target))
 	}
 	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
-		collectWritableDirsFromStmt(binary.X, dirs, confinementOK)
-		collectWritableDirsFromStmt(binary.Y, dirs, confinementOK)
+		collectWritableDirsFromStmt(binary.X, dirs, confinementOK, cwd)
+		collectWritableDirsFromStmt(binary.Y, dirs, confinementOK, cwd)
 		return
 	}
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
@@ -74,6 +91,10 @@ func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string, confinementO
 	}
 	args := shellWordsForAccessConfined(call.Args, confinementOK)
 	if len(args) == 0 {
+		return
+	}
+	if gitResult, handled := assessGitArgvStatic(args, true, ArgvStaticContext{Cwd: cwd}); handled {
+		*dirs = append(*dirs, gitResult.KnownDirs...)
 		return
 	}
 	*dirs = append(*dirs, writableDirsFromTokens(args, true)...)

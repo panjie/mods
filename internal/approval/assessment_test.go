@@ -156,7 +156,7 @@ func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assessment := assessPowerShellIR(tc.command, tc.ir, ReadOnlyCommandPolicy{})
+			assessment := assessPowerShellIR(tc.command, tc.ir, ReadOnlyCommandPolicy{}, "")
 			require.Equal(t, EffectRead, assessment.Effect)
 			require.Contains(t, assessment.DynamicTargets, tc.target)
 			require.Empty(t, assessment.KnownDirs)
@@ -217,7 +217,7 @@ func TestAssessPowerShellIRRejectsUnsafeDynamicExpressions(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assessment := assessPowerShellIR(tc.command, tc.ir, ReadOnlyCommandPolicy{})
+			assessment := assessPowerShellIR(tc.command, tc.ir, ReadOnlyCommandPolicy{}, "")
 			require.Equal(t, EffectUnknown, assessment.Effect)
 			require.Equal(t, AccessWrite, assessment.AccessIntent().Class)
 		})

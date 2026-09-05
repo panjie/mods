@@ -1311,7 +1311,7 @@ func TestToolResultOutput(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review")))
 		})
-		require.Contains(t, stderr, "\u2717 fs_delete_file: path=C:\\Users\\panj... \u00b7 failed")
+		require.Contains(t, stderr, "✗ fs_delete_file · failed: execution denied b...")
 		require.NotContains(t, stderr, "Downloads")
 		require.Empty(t, m.Output)
 	})

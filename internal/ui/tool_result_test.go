@@ -55,6 +55,16 @@ func TestToolResultLine(t *testing.T) {
 		require.Equal(t, "> \u2713 fs_read_file: path=/a", got)
 	})
 
+	t.Run("user input shows question", func(t *testing.T) {
+		got := ToolResultLine("request_user_input", []byte(`{"question":"你的16寸MacBook内存多大","kind":"select"}`), nil)
+		require.Equal(t, "> \u2713 request_user_input: 你的16寸MacBook内存多大", got)
+	})
+
+	t.Run("user input failure keeps reason", func(t *testing.T) {
+		got := ToolResultLine("request_user_input", []byte(`{"question":"你的16寸MacBook内存多大","kind":"select"}`), errors.New("select input requires at least 2 options"))
+		require.Equal(t, "> \u2717 request_user_input: 你的16寸MacBook内存多大 \u00b7 failed: select input requires at least 2 options", got)
+	})
+
 	t.Run("missing command still shows tool", func(t *testing.T) {
 		got := ToolResultLine("shell_run", []byte(`{}`), nil)
 		require.Equal(t, "> \u2713 shell_run \u00b7 exit 0", got)
@@ -103,8 +113,31 @@ func TestToolResultStatusTruncatesWideContentToOneTerminalLine(t *testing.T) {
 
 func TestToolResultLineWidth(t *testing.T) {
 	got := ToolResultLineWidth("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review"), 48)
-	require.Equal(t, "> \u2717 fs_delete_file: path=C:\\Users\\panj... \u00b7 failed", got)
+	require.Equal(t, "> ✗ fs_delete_file · failed: execution denied b...", got)
 	require.LessOrEqual(t, ansi.StringWidth(strings.TrimPrefix(got, "> ")), 48)
+}
+
+// When the failure reason cannot share the line with a full-width argument
+// summary, the summary is dropped first and the detail is truncated in place
+// so the reason stays visible.
+func TestToolResultStatusPrefersDetailOverSummary(t *testing.T) {
+	t.Run("both fit when summary shrinks", func(t *testing.T) {
+		got := ToolResultStatus("fs_read_file", []byte(`{"path":"`+strings.Repeat("a", 80)+`"}`), errors.New("outside workspace"), 60)
+		require.True(t, strings.HasPrefix(got, "✗ fs_read_file: path="), got)
+		require.True(t, strings.HasSuffix(got, " · failed: outside workspace"), got)
+	})
+
+	t.Run("summary dropped before detail", func(t *testing.T) {
+		got := ToolResultStatus("fs_delete_file", []byte(`{"path":"`+strings.Repeat("a", 80)+`"}`), errors.New("execution denied by review"), 48)
+		require.Equal(t, "✗ fs_delete_file · failed: execution denied b...", got)
+	})
+
+	t.Run("detail truncated last", func(t *testing.T) {
+		got := ToolResultStatus("fs_delete_file", []byte(`{}`), errors.New(strings.Repeat("boom ", 30)), 40)
+		require.True(t, strings.HasPrefix(got, "✗ fs_delete_file · failed: boom"), got)
+		require.LessOrEqual(t, ansi.StringWidth(got), 40)
+		require.True(t, strings.HasSuffix(got, "..."), got)
+	})
 }
 
 type exitCodeErr struct{ code int }

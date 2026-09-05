@@ -105,6 +105,10 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 		return TruncateOperationStatus("Applying patch", width)
 	case "todo_write":
 		return TruncateOperationStatus("Updating plan", width)
+	case "request_user_input":
+		if question := OneLinePreview(ArgString(args, "question")); question != "" {
+			return TruncateOperationStatus("Asking: "+question, width)
+		}
 	case "load_skill":
 		skillName := OneLinePreview(ArgString(args, "name"))
 		file := OneLinePreview(ArgString(args, "file"))

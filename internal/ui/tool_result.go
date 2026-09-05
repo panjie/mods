@@ -80,10 +80,7 @@ func ToolResultStatus(name string, data []byte, err error, width int) string {
 
 func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
 	if detail != "" {
-		fullSuffix := suffix + ": " + detail
-		if summary == "" || width-displayWidth(prefix)-displayWidth(fullSuffix) >= minToolSummaryWidth {
-			suffix = fullSuffix
-		}
+		return toolStatusLineWithDetail(prefix, summary, suffix, detail, width)
 	}
 	if summary == "" {
 		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
@@ -95,6 +92,26 @@ func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
 	return prefix + TruncateOperationStatus(summary, available) + suffix
 }
 
+// toolStatusLineWithDetail renders a line that carries an error detail. The
+// failure reason outranks the argument summary: the summary shrinks first,
+// is dropped next, and only then is the detail itself truncated so the
+// reason behind a failure is never hidden by a long argument preview.
+func toolStatusLineWithDetail(prefix, summary, suffix, detail string, width int) string {
+	fullSuffix := suffix + ": " + detail
+	if available := width - displayWidth(prefix) - displayWidth(fullSuffix); summary != "" && available >= minToolSummaryWidth {
+		return prefix + TruncateOperationStatus(summary, available) + fullSuffix
+	}
+	base := strings.TrimSuffix(prefix, ": ")
+	if displayWidth(base)+displayWidth(fullSuffix) <= width {
+		return base + fullSuffix
+	}
+	detailWidth := width - displayWidth(base) - displayWidth(suffix) - displayWidth(": ")
+	if detailWidth < 1 {
+		return TruncateOperationStatus(base+fullSuffix, width)
+	}
+	return base + suffix + ": " + TruncateOperationStatus(detail, detailWidth)
+}
+
 const minToolSummaryWidth = 12
 
 func toolResultSummary(name string, data []byte) string {
@@ -104,6 +121,11 @@ func toolResultSummary(name string, data []byte) string {
 		}
 	}
 	args := ToolOperationArgs(data)
+	if name == "request_user_input" {
+		if question := OneLinePreview(ArgString(args, "question")); question != "" {
+			return question
+		}
+	}
 	if name == "process_run" {
 		return ProcessCommandPreview(args)
 	}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -305,7 +306,9 @@ func debugTools(tools []proto.ToolSpec, total int) {
 func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolCaller {
 	preflight := newCommandPreflightGate(cfg)
 	return func(call proto.ToolCallRequest) (output string, returnErr error) {
-		name, data := call.Name, call.Arguments
+		name := call.Name
+		data := registry.UnwrapArguments(call.Name, call.Arguments)
+		unwrappedArgs := !bytes.Equal(data, call.Arguments)
 		started := time.Now()
 		approvalRecord := approvalTrace{Source: "not reached"}
 		redactedArgs := string(data)
@@ -313,10 +316,14 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			redactedArgs = m.secrets.Redact(redactedArgs)
 		}
 		title := fmt.Sprintf("tool · turn %d · round %d · call %d/%d", m.debugTurn, m.debugRound, call.Index, call.Total)
+		callValue := fmt.Sprintf("→ %s [%s]", name, call.ID)
+		if unwrappedArgs {
+			callValue += " · unwrapped arguments"
+		}
 		debug.Print(DebugSection{
 			Title: title + " · start",
 			Fields: []DebugField{
-				{Label: "call", Value: fmt.Sprintf("→ %s [%s]", name, call.ID)},
+				{Label: "call", Value: callValue},
 			},
 			Blocks: []DebugBlock{debug.Arguments([]byte(redactedArgs))},
 		})

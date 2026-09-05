@@ -110,6 +110,19 @@ func (r *Registry) Call(ctx context.Context, name string, data []byte) (string, 
 	return tool.Call(ctx, json.RawMessage(data))
 }
 
+// UnwrapArguments reverses a lone "arguments"/"parameters" wrapper around a
+// tool call's real parameters (a common weak-model mistake) when the tool's
+// schema does not declare that key as a legitimate top-level property. It
+// returns data unchanged for unknown tools and payloads it cannot safely
+// rewrite.
+func (r *Registry) UnwrapArguments(name string, data []byte) []byte {
+	tool, ok := r.Tool(name)
+	if !ok {
+		return data
+	}
+	return UnwrapToolArguments(tool.Spec.InputSchema, data)
+}
+
 // Tool returns registered metadata for a tool.
 func (r *Registry) Tool(name string) (Tool, bool) {
 	tool, ok := r.tools[name]

@@ -976,8 +976,9 @@ func (m configWizardCopilotAuthModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m configWizardCopilotAuthModel) View() tea.View {
-	styles := m.data.theme.Theme(true)
-	palette := ui.MakeStylesWithTheme(config.Theme, true).Interaction.Palette
+	isDark := ui.StderrIsDark()
+	styles := m.data.theme.Theme(isDark)
+	palette := ui.MakeStylesWithTheme(config.Theme, isDark).Interaction.Palette
 	url := StderrStyles().InlineCode.Render(m.data.device.VerificationURI)
 	code := lipgloss.NewStyle().
 		Foreground(palette.Accent).
@@ -2137,7 +2138,7 @@ type summaryData struct {
 }
 
 func printConfigSummary(d summaryData) {
-	lightDark := lipgloss.LightDark(true)
+	lightDark := lipgloss.LightDark(ui.StderrIsDark())
 	accent := lightDark(lipgloss.Color("#5A56E0"), lipgloss.Color("#8B7CFF"))
 	muted := lightDark(lipgloss.Color("#6B7280"), lipgloss.Color("#9CA3AF"))
 	border := lightDark(lipgloss.Color("#D9D7FF"), lipgloss.Color("#48406F"))

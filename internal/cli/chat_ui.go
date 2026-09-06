@@ -133,7 +133,8 @@ type chatPromptModel struct {
 }
 
 func newChatPromptModel(history []string) chatPromptModel {
-	styles := makeChatStylesForTheme(true)
+	isDark := ui.StderrIsDark()
+	styles := makeChatStylesForTheme(isDark)
 	input := textarea.New()
 	input.Placeholder = "Type a message…"
 	input.Prompt = ""
@@ -166,7 +167,7 @@ func newChatPromptModel(history []string) chatPromptModel {
 		width:        chatDefaultWidth,
 		history:      append([]string(nil), history...),
 		historyIndex: len(history),
-		isDark:       true,
+		isDark:       isDark,
 	}
 }
 

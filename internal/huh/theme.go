@@ -141,7 +141,7 @@ func ThemeCharm(isDark bool) *Styles {
 	lightDark := lipgloss.LightDark(isDark)
 
 	var (
-		normalFg = lightDark(lipgloss.Color("252"), lipgloss.Color("235"))
+		normalFg = lightDark(lipgloss.Color("235"), lipgloss.Color("252"))
 		indigo   = lightDark(lipgloss.Color("#5A56E0"), lipgloss.Color("#7571F9"))
 		cream    = lightDark(lipgloss.Color("#FFFDF5"), lipgloss.Color("#FFFDF5"))
 		fuchsia  = lipgloss.Color("#F780E2")
@@ -168,7 +168,7 @@ func ThemeCharm(isDark bool) *Styles {
 	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(normalFg)
 	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(fuchsia)
 	t.Focused.Next = t.Focused.FocusedButton
-	t.Focused.BlurredButton = t.Focused.BlurredButton.Foreground(normalFg).Background(lightDark(lipgloss.Color("237"), lipgloss.Color("252")))
+	t.Focused.BlurredButton = t.Focused.BlurredButton.Foreground(normalFg).Background(lightDark(lipgloss.Color("252"), lipgloss.Color("237")))
 
 	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(green)
 	t.Focused.TextInput.Placeholder = t.Focused.TextInput.Placeholder.Foreground(lightDark(lipgloss.Color("248"), lipgloss.Color("238")))
@@ -188,16 +188,17 @@ func ThemeCharm(isDark bool) *Styles {
 // ThemeDracula returns a new theme based on the Dracula color scheme.
 func ThemeDracula(isDark bool) *Styles {
 	t := ThemeBase(isDark)
+	lightDark := lipgloss.LightDark(isDark)
 
 	var (
-		background = lipgloss.Color("#282a36")
-		selection  = lipgloss.Color("#44475a")
-		foreground = lipgloss.Color("#f8f8f2")
-		comment    = lipgloss.Color("#6272a4")
-		green      = lipgloss.Color("#50fa7b")
-		purple     = lipgloss.Color("#bd93f9")
-		red        = lipgloss.Color("#ff5555")
-		yellow     = lipgloss.Color("#f1fa8c")
+		background = lightDark(lipgloss.Color("#F7F7FA"), lipgloss.Color("#282a36"))
+		selection  = lightDark(lipgloss.Color("#D9D9E3"), lipgloss.Color("#44475a"))
+		foreground = lightDark(lipgloss.Color("#2E2F3E"), lipgloss.Color("#f8f8f2"))
+		comment    = lightDark(lipgloss.Color("#63657A"), lipgloss.Color("#6272a4"))
+		green      = lightDark(lipgloss.Color("#0C8B46"), lipgloss.Color("#50fa7b"))
+		purple     = lightDark(lipgloss.Color("#7C4DD8"), lipgloss.Color("#bd93f9"))
+		red        = lightDark(lipgloss.Color("#D22B4B"), lipgloss.Color("#ff5555"))
+		yellow     = lightDark(lipgloss.Color("#8A7A00"), lipgloss.Color("#f1fa8c"))
 	)
 
 	t.Focused.Base = t.Focused.Base.BorderForeground(selection)
@@ -218,7 +219,7 @@ func ThemeDracula(isDark bool) *Styles {
 	t.Focused.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(green)
 	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(foreground)
 	t.Focused.UnselectedPrefix = t.Focused.UnselectedPrefix.Foreground(comment)
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(yellow).Background(purple).Bold(true)
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(lightDark(lipgloss.Color("#FFFDF5"), yellow)).Background(purple).Bold(true)
 	t.Focused.BlurredButton = t.Focused.BlurredButton.Foreground(foreground).Background(background)
 
 	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(yellow)
@@ -239,6 +240,10 @@ func ThemeDracula(isDark bool) *Styles {
 // ThemeBase16 returns a new theme based on the base16 color scheme.
 func ThemeBase16(isDark bool) *Styles {
 	t := ThemeBase(isDark)
+	lightDark := lipgloss.LightDark(isDark)
+	// Option text must follow the terminal palette polarity: ANSI 7 is the
+	// palette's light color, which vanishes on light backgrounds.
+	optionFg := lightDark(lipgloss.Color("0"), lipgloss.Color("7"))
 
 	t.Focused.Base = t.Focused.Base.BorderForeground(lipgloss.Color("8"))
 	t.Focused.Card = t.Focused.Base
@@ -251,17 +256,17 @@ func ThemeBase16(isDark bool) *Styles {
 	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(lipgloss.Color("3"))
 	t.Focused.NextIndicator = t.Focused.NextIndicator.Foreground(lipgloss.Color("3"))
 	t.Focused.PrevIndicator = t.Focused.PrevIndicator.Foreground(lipgloss.Color("3"))
-	t.Focused.Option = t.Focused.Option.Foreground(lipgloss.Color("7"))
+	t.Focused.Option = t.Focused.Option.Foreground(optionFg)
 	t.Focused.MultiSelectSelector = t.Focused.MultiSelectSelector.Foreground(lipgloss.Color("3"))
 	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(lipgloss.Color("2"))
 	t.Focused.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(lipgloss.Color("2"))
-	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(lipgloss.Color("7"))
+	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(optionFg)
 	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(lipgloss.Color("7")).Background(lipgloss.Color("5"))
 	t.Focused.BlurredButton = t.Focused.BlurredButton.Foreground(lipgloss.Color("7")).Background(lipgloss.Color("0"))
 
-	t.Focused.TextInput.Cursor.Foreground(lipgloss.Color("5"))
-	t.Focused.TextInput.Placeholder.Foreground(lipgloss.Color("8"))
-	t.Focused.TextInput.Prompt.Foreground(lipgloss.Color("3"))
+	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(lipgloss.Color("5"))
+	t.Focused.TextInput.Placeholder = t.Focused.TextInput.Placeholder.Foreground(lipgloss.Color("8"))
+	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(lipgloss.Color("3"))
 
 	t.Blurred = t.Focused
 	t.Blurred.Base = t.Blurred.Base.BorderStyle(lipgloss.HiddenBorder())
@@ -270,7 +275,7 @@ func ThemeBase16(isDark bool) *Styles {
 	t.Blurred.Title = t.Blurred.NoteTitle.Foreground(lipgloss.Color("8"))
 
 	t.Blurred.TextInput.Prompt = t.Blurred.TextInput.Prompt.Foreground(lipgloss.Color("8"))
-	t.Blurred.TextInput.Text = t.Blurred.TextInput.Text.Foreground(lipgloss.Color("7"))
+	t.Blurred.TextInput.Text = t.Blurred.TextInput.Text.Foreground(optionFg)
 
 	t.Blurred.NextIndicator = lipgloss.NewStyle()
 	t.Blurred.PrevIndicator = lipgloss.NewStyle()

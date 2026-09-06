@@ -305,14 +305,15 @@ func newBrowserModel(sessions []Session, nerdGlyphs bool) *browserModel {
 		items = append(items, convItem{conv: c})
 	}
 
+	isDark := ui.StderrIsDark()
 	m := &browserModel{
 		db:         db,
 		marks:      map[string]bool{},
 		nerdGlyphs: nerdGlyphs,
 		state:      stateBrowsing,
 		width:      80, height: 24,
-		styles:     makeBrowserStyles(true),
-		textStyles: ui.MakeStyles(true),
+		styles:     makeBrowserStyles(isDark),
+		textStyles: ui.MakeStyles(isDark),
 	}
 	delegate := &convDelegate{b: m}
 	m.delegate = delegate

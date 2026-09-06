@@ -84,31 +84,56 @@ func MakeStylesWithTheme(theme string, isDark bool) (s Styles) {
 	s.SessionList = lipgloss.NewStyle().Padding(0, 1)
 	s.ShaHash = s.Flag
 	s.Timeago = lipgloss.NewStyle().Foreground(lightDark(lipgloss.Color("#999"), lipgloss.Color("#555")))
-	s.Interaction = makeInteractionStyles(interactionPalette(theme))
+	s.Interaction = makeInteractionStyles(interactionPalette(theme, isDark))
 	return s
 }
 
-func interactionPalette(theme string) InteractionPalette {
+// interactionPalette maps a theme name to a background-adaptive palette. Dark
+// values keep each theme's identity; light values darken text, muted, and
+// pastel status hues so panels stay readable on light terminal backgrounds.
+func interactionPalette(theme string, isDark bool) InteractionPalette {
+	lightDark := lipgloss.LightDark(isDark)
 	switch strings.ToLower(strings.TrimSpace(theme)) {
 	case "dracula":
 		return InteractionPalette{
-			Accent: lipgloss.Color("#BD93F9"), Surface: lipgloss.Color("#343746"), Text: lipgloss.Color("#F8F8F2"), Muted: lipgloss.Color("#A6A6B5"),
-			Danger: lipgloss.Color("#FF5555"), Warning: lipgloss.Color("#F1FA8C"), Success: lipgloss.Color("#50FA7B"),
+			Accent:  lightDark(lipgloss.Color("#7C4DD8"), lipgloss.Color("#BD93F9")),
+			Surface: lightDark(lipgloss.Color("#E9E8F2"), lipgloss.Color("#343746")),
+			Text:    lightDark(lipgloss.Color("#2E2F3E"), lipgloss.Color("#F8F8F2")),
+			Muted:   lightDark(lipgloss.Color("#63657A"), lipgloss.Color("#A6A6B5")),
+			Danger:  lightDark(lipgloss.Color("#D22B4B"), lipgloss.Color("#FF5555")),
+			Warning: lightDark(lipgloss.Color("#8A7A00"), lipgloss.Color("#F1FA8C")),
+			Success: lightDark(lipgloss.Color("#0C8B46"), lipgloss.Color("#50FA7B")),
 		}
 	case "catppuccin":
+		// Light values come from the official Catppuccin Latte flavour.
 		return InteractionPalette{
-			Accent: lipgloss.Color("#CBA6F7"), Surface: lipgloss.Color("#313244"), Text: lipgloss.Color("#CDD6F4"), Muted: lipgloss.Color("#A6ADC8"),
-			Danger: lipgloss.Color("#F38BA8"), Warning: lipgloss.Color("#F9E2AF"), Success: lipgloss.Color("#A6E3A1"),
+			Accent:  lightDark(lipgloss.Color("#8839EF"), lipgloss.Color("#CBA6F7")),
+			Surface: lightDark(lipgloss.Color("#CCD0DA"), lipgloss.Color("#313244")),
+			Text:    lightDark(lipgloss.Color("#4C4F69"), lipgloss.Color("#CDD6F4")),
+			Muted:   lightDark(lipgloss.Color("#6C6F85"), lipgloss.Color("#A6ADC8")),
+			Danger:  lightDark(lipgloss.Color("#D20F39"), lipgloss.Color("#F38BA8")),
+			Warning: lightDark(lipgloss.Color("#DF8E1D"), lipgloss.Color("#F9E2AF")),
+			Success: lightDark(lipgloss.Color("#40A02B"), lipgloss.Color("#A6E3A1")),
 		}
 	case "base16":
 		return InteractionPalette{
-			Accent: lipgloss.Color("#7CAFC2"), Surface: lipgloss.Color("#282828"), Text: lipgloss.Color("#D8D8D8"), Muted: lipgloss.Color("#B8B8B8"),
-			Danger: lipgloss.Color("#AB4642"), Warning: lipgloss.Color("#F7CA88"), Success: lipgloss.Color("#A1B56C"),
+			Accent:  lightDark(lipgloss.Color("#3D7E99"), lipgloss.Color("#7CAFC2")),
+			Surface: lightDark(lipgloss.Color("#DCDCDC"), lipgloss.Color("#282828")),
+			Text:    lightDark(lipgloss.Color("#2B2B2B"), lipgloss.Color("#D8D8D8")),
+			Muted:   lightDark(lipgloss.Color("#686868"), lipgloss.Color("#B8B8B8")),
+			Danger:  lipgloss.Color("#AB4642"),
+			Warning: lightDark(lipgloss.Color("#A07B2F"), lipgloss.Color("#F7CA88")),
+			Success: lightDark(lipgloss.Color("#647B36"), lipgloss.Color("#A1B56C")),
 		}
 	default:
 		return InteractionPalette{
-			Accent: lipgloss.Color("#7D56F4"), Surface: lipgloss.Color("#302B48"), Text: lipgloss.Color("#F4F1FF"), Muted: lipgloss.Color("#AAA3C7"),
-			Danger: lipgloss.Color("#FF5F87"), Warning: lipgloss.Color("#FFD75F"), Success: lipgloss.Color("#5FFFA2"),
+			Accent:  lightDark(lipgloss.Color("#5A56E0"), lipgloss.Color("#7D56F4")),
+			Surface: lightDark(lipgloss.Color("#EDE9FE"), lipgloss.Color("#302B48")),
+			Text:    lightDark(lipgloss.Color("#28203E"), lipgloss.Color("#F4F1FF")),
+			Muted:   lightDark(lipgloss.Color("#6E6592"), lipgloss.Color("#AAA3C7")),
+			Danger:  lightDark(lipgloss.Color("#D63468"), lipgloss.Color("#FF5F87")),
+			Warning: lightDark(lipgloss.Color("#A16207"), lipgloss.Color("#FFD75F")),
+			Success: lightDark(lipgloss.Color("#0B8A5E"), lipgloss.Color("#5FFFA2")),
 		}
 	}
 }

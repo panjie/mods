@@ -956,6 +956,102 @@ func TestCurrentGroupBecomingHiddenMovesToNextVisibleGroup(t *testing.T) {
 	}
 }
 
+type inspectFocusedFieldMsg struct {
+	reply chan string
+}
+
+type inspectInitCompleteMsg struct{}
+
+type inspectFormModel struct {
+	form        *Form
+	initialized chan struct{}
+}
+
+func (m inspectFormModel) Init() tea.Cmd {
+	return tea.Sequence(m.form.Init(), func() tea.Msg { return inspectInitCompleteMsg{} })
+}
+
+func (m inspectFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(inspectInitCompleteMsg); ok {
+		close(m.initialized)
+		return m, nil
+	}
+	if inspect, ok := msg.(inspectFocusedFieldMsg); ok {
+		switch m.form.GetFocusedField().(type) {
+		case *MultiSelect[string]:
+			inspect.reply <- "discovery"
+		case *Text:
+			inspect.reply <- "manual"
+		default:
+			inspect.reply <- "other"
+		}
+		return m, nil
+	}
+	next, cmd := m.form.Update(msg)
+	m.form = next.(*Form)
+	return m, cmd
+}
+
+func (m inspectFormModel) View() tea.View {
+	return tea.NewView(m.form.View())
+}
+
+func TestInitStartingOnHiddenGroupAdvancesOnce(t *testing.T) {
+	discoveryStarted := make(chan struct{})
+	releaseDiscovery := make(chan struct{})
+	discovered := []string{}
+
+	f := NewForm(
+		NewGroup(NewNote().Description("Hidden provider")).WithHide(true),
+		NewGroup(
+			NewMultiSelect[string]().
+				Title("Discovered models").
+				OptionsFunc(func() []Option[string] {
+					close(discoveryStarted)
+					<-releaseDiscovery
+					return []Option[string]{NewOption("gpt-test", "gpt-test")}
+				}, nil).
+				Value(&discovered),
+		),
+		NewGroup(NewText().Title("Manual models")),
+	)
+
+	initialized := make(chan struct{})
+	p := tea.NewProgram(inspectFormModel{form: f, initialized: initialized}, tea.WithInput(nil), tea.WithoutRenderer())
+	result := make(chan tea.Model, 1)
+	errResult := make(chan error, 1)
+	go func() {
+		model, err := p.Run()
+		result <- model
+		errResult <- err
+	}()
+	defer func() {
+		close(releaseDiscovery)
+		p.Quit()
+		<-result
+		if err := <-errResult; err != nil {
+			t.Errorf("run form: %v", err)
+		}
+	}()
+
+	select {
+	case <-discoveryStarted:
+	case <-time.After(time.Second):
+		t.Fatal("discovery did not start")
+	}
+	select {
+	case <-initialized:
+	case <-time.After(time.Second):
+		t.Fatal("form initialization did not finish")
+	}
+
+	reply := make(chan string, 1)
+	p.Send(inspectFocusedFieldMsg{reply: reply})
+	if focused := <-reply; focused != "discovery" {
+		t.Fatalf("expected discovery to remain active, got %q", focused)
+	}
+}
+
 func TestTextFieldSyncsExternalAccessorUpdate(t *testing.T) {
 	value := "before"
 	field := NewText().Title("Models").Value(&value)

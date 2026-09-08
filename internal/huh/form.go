@@ -524,17 +524,19 @@ func (f *Form) GetFocusedField() Field {
 // Init initializes the form.
 func (f *Form) Init() tea.Cmd {
 	var cmds []tea.Cmd
+	for i := 0; i < f.selector.Total(); i++ {
+		if !f.isGroupHidden(f.selector.Get(i)) {
+			f.selector.SetIndex(i)
+			break
+		}
+	}
 	f.selector.Range(func(i int, group *Group) bool {
-		if i == 0 {
+		if i == f.selector.Index() {
 			group.active = true
 		}
 		cmds = append(cmds, group.Init())
 		return true
 	})
-
-	if f.isGroupHidden(f.selector.Selected()) {
-		cmds = append(cmds, nextGroup)
-	}
 
 	cmds = append(cmds, tea.RequestWindowSize)
 	return tea.Sequence(cmds...)

@@ -311,8 +311,8 @@ func RunConfigWizard() error {
 				}),
 
 			// Discover models: live fetch with a spinner. Selected discovered
-			// models are saved automatically; if discovery fails or the user leaves
-			// the picker empty, the next page asks for model names manually.
+			// models are saved automatically; on failure the error stays visible
+			// here and the next page asks for model names manually.
 			huh.NewGroup(
 				huh.NewMultiSelect[string]().
 					TitleFunc(func() string {
@@ -320,7 +320,9 @@ func RunConfigWizard() error {
 						modelState.switchProvider(api, providerCatalog)
 						return fmt.Sprintf("Models for %s", api)
 					}, []any{&chosenAPI, &newProviderName}).
-					Description(configWizardDiscoveryDescription()).
+					DescriptionFunc(func() string {
+						return configWizardDiscoveryDescription(modelState.discoveryErrFor(currentProvider()))
+					}, []any{&chosenAPI, &newProviderName, &modelState.revision}).
 					Validate(func(value []string) error {
 						if modelState.discoveryErrFor(currentProvider()) != nil && len(value) == 0 {
 							return nil
@@ -334,10 +336,7 @@ func RunConfigWizard() error {
 			).
 				Title("discover models").
 				Description("Fetch the model list from the provider's API now.").
-				WithHideFunc(func() bool {
-					api := currentProvider()
-					return modelState.hideDiscovery(api, waitingForCopilotAuth())
-				}),
+				WithHideFunc(waitingForCopilotAuth),
 
 			// Manual model entry: shown when discovery failed or when the user did
 			// not select a discovered model, so setup never writes an unselected
@@ -659,10 +658,9 @@ func confirmConfigWizardConnection(apiName, apiType, modelName, baseURL, apiKey 
 		}
 		fmt.Fprintf(os.Stderr, "%s %s\n", alertMark, err)
 		var saveAnyway bool
-		if confirmErr := huh.NewConfirm().
-			Title("Connection test failed. Save configuration anyway?").
-			Value(&saveAnyway).
-			Run(); confirmErr != nil {
+		if confirmErr := newConfigWizardConnectionConfirmForm(
+			configWizardTheme(config.Theme), &saveAnyway,
+		).Run(); confirmErr != nil {
 			if errors.Is(confirmErr, huh.ErrUserAborted) {
 				fmt.Fprintln(os.Stderr, "Not saved.")
 				return false, nil
@@ -708,6 +706,18 @@ func newConfigWizardForm(cfg configWizardFormConfig, groups ...*huh.Group) *huh.
 		form = form.WithEscapeAbortConfirmation(cfg.escapeAbortText)
 	}
 	return form
+}
+
+func newConfigWizardConnectionConfirmForm(theme huh.Theme, saveAnyway *bool) *huh.Form {
+	return huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title("Connection test failed. Save configuration anyway?").
+			Value(saveAnyway),
+	)).
+		WithTheme(theme).
+		WithLayout(configWizardLayoutForTheme(theme)).
+		WithKeyMap(configWizardKeyMap()).
+		WithShowHelp(false)
 }
 
 func configWizardStorageGroup(settingsPath, portablePath string, saveLocation *string) *huh.Group {
@@ -997,14 +1007,18 @@ func (m configWizardCopilotAuthModel) View() tea.View {
 		"",
 		help,
 	)
-	cardWidth := min(max(40, m.width-8), 78)
+	// Match the wizard form's geometry: same field width the form layout
+	// gives its bordered inputs, wrapped in the form base padding so the card
+	// indents and spans like the surrounding wizard pages.
+	formFrame, fieldFrame := configWizardThemeFrames(m.data.theme)
+	cardWidth := max(1, m.width-formFrame-1-fieldFrame)
 	card := styles.Focused.Base.
 		Width(cardWidth).
 		Render(lipgloss.JoinVertical(lipgloss.Left,
 			styles.Focused.Title.Render("GitHub Copilot sign in"),
 			body,
 		))
-	return tea.NewView("\n" + card + "\n")
+	return tea.NewView("\n" + styles.Form.Base.Render(card) + "\n")
 }
 
 func validateConfigWizardCopilotChoice(ok bool) error {
@@ -1035,20 +1049,25 @@ func runConfigWizardCopilotAuth(ctx context.Context, apiName string, apiKey, key
 	return nil
 }
 
-func configWizardDiscoveryDescription() string {
-	return "Select models to add, or press Enter to enter model names manually. You will choose the default model next."
+func configWizardDiscoveryFailurePrefix(discoveryErr error) string {
+	if discoveryErr == nil {
+		return ""
+	}
+	return fmt.Sprintf("Model discovery failed: %v\n", discoveryErr)
+}
+
+func configWizardDiscoveryDescription(discoveryErr error) string {
+	return configWizardDiscoveryFailurePrefix(discoveryErr) +
+		"Select models to add, or press Enter to enter model names manually. You will choose the default model next."
 }
 
 func configWizardManualModelsDescription(discoveryErr error) string {
-	const manual = "Enter model identifiers here, one per line. You will choose the default model next."
-	if discoveryErr == nil {
-		return manual
-	}
-	return fmt.Sprintf("Model discovery failed: %v\n%s", discoveryErr, manual)
+	return configWizardDiscoveryFailurePrefix(discoveryErr) +
+		"Enter model identifiers here, one per line. You will choose the default model next."
 }
 
-func configWizardHideDiscoveryModels(waitingForCopilotAuth bool, discoveryErr error) bool {
-	return waitingForCopilotAuth || discoveryErr != nil
+func configWizardHideDiscoveryModels(waitingForCopilotAuth bool) bool {
+	return waitingForCopilotAuth
 }
 
 func configWizardHideManualModels(waitingForCopilotAuth, discoverySucceeded bool, discoveredPick []string) bool {
@@ -1071,17 +1090,20 @@ type configWizardLayout struct {
 	fieldHorizontalFrame int
 }
 
-func configWizardLayoutForTheme(theme huh.Theme) huh.Layout {
-	formFrame := 0
-	fieldFrame := 0
-	if theme != nil {
-		styles := theme.Theme(true)
-		formFrame = styles.Form.Base.GetHorizontalFrameSize()
-		fieldFrame = max(
+func configWizardThemeFrames(theme huh.Theme) (formFrame, fieldFrame int) {
+	if theme == nil {
+		return 0, 0
+	}
+	styles := theme.Theme(true)
+	return styles.Form.Base.GetHorizontalFrameSize(),
+		max(
 			styles.Focused.Base.GetHorizontalFrameSize(),
 			styles.Blurred.Base.GetHorizontalFrameSize(),
 		)
-	}
+}
+
+func configWizardLayoutForTheme(theme huh.Theme) huh.Layout {
+	formFrame, fieldFrame := configWizardThemeFrames(theme)
 	return configWizardLayout{
 		formHorizontalFrame:  formFrame,
 		fieldHorizontalFrame: fieldFrame,
@@ -1108,7 +1130,13 @@ func (l configWizardLayout) GroupWidth(_ *huh.Form, _ *huh.Group, width int) int
 }
 
 func configWizardTheme(theme string) huh.Theme {
-	return huh.ThemeFunc(func(isDark bool) *huh.Styles {
+	return configWizardThemeForBackground(theme, ui.StderrIsDark())
+}
+
+func configWizardThemeForBackground(theme string, isDark bool) huh.Theme {
+	// Huh forms do not request the terminal background, so retain mods'
+	// detected polarity instead of accepting Huh's default light value.
+	return huh.ThemeFunc(func(bool) *huh.Styles {
 		return configWizardStyles(theme, isDark)
 	})
 }
@@ -1573,10 +1601,6 @@ func (s *configWizardModelState) discoveryErrFor(apiName string) error {
 		return nil
 	}
 	return s.discoveryErr
-}
-
-func (s *configWizardModelState) hideDiscovery(apiName string, waitingForCopilotAuth bool) bool {
-	return configWizardHideDiscoveryModels(waitingForCopilotAuth, s.discoveryErrFor(apiName))
 }
 
 func (s *configWizardModelState) hideManual(apiName string, waitingForCopilotAuth bool) bool {

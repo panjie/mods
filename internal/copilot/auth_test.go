@@ -161,3 +161,9 @@ func TestDiscoverModelInfosPreservesSupportedEndpoints(t *testing.T) {
 	require.Equal(t, EndpointMessages, SelectEndpoint(infos[0]))
 	require.Equal(t, EndpointChatCompletions, SelectEndpoint(infos[1]))
 }
+
+func TestDefaultHTTPClientBoundsRequestTime(t *testing.T) {
+	client, ok := Client{}.httpClient().(*http.Client)
+	require.True(t, ok, "default client should be an *http.Client")
+	require.Positive(t, client.Timeout, "default client must set a request timeout")
+}

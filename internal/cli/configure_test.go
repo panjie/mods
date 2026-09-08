@@ -168,12 +168,11 @@ func TestDiscoverOptionsUsesCopilotProtocolForNewProviderNamedGitHubCopilot(t *t
 	require.Equal(t, "openai", configWizardDiscoveryType(addProviderOption, "groq", "openai"))
 }
 
-func TestConfigWizardDiscoveryDescriptionOmitsFailureDetails(t *testing.T) {
-	desc := configWizardDiscoveryDescription()
-	require.Contains(t, desc, "Select models to add")
-	require.Contains(t, desc, "choose the default model next")
-	require.NotContains(t, desc, "first selected")
-	require.NotContains(t, desc, "HTTP 401")
+func TestConfigWizardDiscoveryDescriptionShowsDiscoveryFailure(t *testing.T) {
+	require.NotContains(t, configWizardDiscoveryDescription(nil), "failed")
+	require.Contains(t, configWizardDiscoveryDescription(nil), "Select models to add")
+	require.Contains(t, configWizardDiscoveryDescription(fmt.Errorf("network unavailable")),
+		"Model discovery failed: network unavailable")
 }
 
 func TestConfigWizardManualModelsDescriptionShowsDiscoveryFailure(t *testing.T) {
@@ -231,6 +230,62 @@ func TestConfigWizardCopilotAuthViewShowsDeviceCode(t *testing.T) {
 	require.Contains(t, view, "ABCD-EFGH")
 	require.Contains(t, view, "Waiting for GitHub authorization")
 	require.Contains(t, view, "Esc cancel")
+}
+
+func TestConfigWizardCopilotAuthViewMatchesFormFieldGeometry(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	for _, windowWidth := range []int{80, 100, 120} {
+		t.Run(fmt.Sprintf("width=%d", windowWidth), func(t *testing.T) {
+			theme := configWizardTheme("charm")
+			provider := "openai"
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Provider").
+						Options(huh.NewOption("OpenAI", "openai")).
+						Value(&provider),
+				).
+					Title("mods setup"),
+			).
+				WithTheme(theme).
+				WithLayout(configWizardLayoutForTheme(theme)).
+				WithShowHelp(false)
+
+			form.Init()
+			model, _ := form.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
+			formIndent, formWidth := borderBoxMetrics(t, ansi.Strip(model.(*huh.Form).View()))
+
+			authModel := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
+				device: copilotDeviceCode{
+					UserCode:        "ABCD-EFGH",
+					VerificationURI: "https://github.com/login/device",
+				},
+				theme: theme,
+			})
+			defer authModel.cancel()
+			updated, _ := authModel.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
+			authIndent, authWidth := borderBoxMetrics(t,
+				ansi.Strip(updated.(configWizardCopilotAuthModel).View().Content))
+
+			require.Equal(t, formIndent, authIndent, "auth card indent should match the wizard form")
+			require.Equal(t, formWidth, authWidth, "auth card width should match the wizard form")
+		})
+	}
+}
+
+func borderBoxMetrics(t *testing.T, view string) (indent, width int) {
+	t.Helper()
+	for _, line := range strings.Split(view, "\n") {
+		start := strings.Index(line, "╭")
+		if start < 0 {
+			continue
+		}
+		end := strings.Index(line, "╮")
+		require.GreaterOrEqual(t, end, start)
+		return start, lipgloss.Width(line[:end+len("╮")])
+	}
+	t.Fatal("no border box rendered in view")
+	return 0, 0
 }
 
 func TestConfigWizardCopilotAuthCancel(t *testing.T) {
@@ -437,24 +492,43 @@ func TestConfigWizardLayoutKeepsFocusedBorderWithinWindow(t *testing.T) {
 }
 
 func TestConfigWizardThemeUsesInteractionPalette(t *testing.T) {
-	for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
-		t.Run(name, func(t *testing.T) {
-			palette := ui.MakeStylesWithTheme(name, true).Interaction.Palette
-			theme := configWizardTheme(name).Theme(true)
-			require.Equal(t, palette.Accent, theme.Group.Title.GetForeground())
-			require.Equal(t, palette.Text, theme.Focused.Title.GetForeground())
-			require.Equal(t, palette.Muted, theme.Focused.Description.GetForeground())
-			require.Equal(t, palette.Success, theme.Focused.SelectedOption.GetForeground())
-			require.Equal(t, palette.Danger, theme.Focused.ErrorMessage.GetForeground())
-		})
+	for _, isDark := range []bool{false, true} {
+		for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
+			t.Run(fmt.Sprintf("%s/dark=%t", name, isDark), func(t *testing.T) {
+				palette := ui.MakeStylesWithTheme(name, isDark).Interaction.Palette
+				theme := configWizardThemeForBackground(name, isDark).Theme(!isDark)
+				require.Equal(t, palette.Accent, theme.Group.Title.GetForeground())
+				require.Equal(t, palette.Text, theme.Focused.Title.GetForeground())
+				require.Equal(t, palette.Text, theme.Focused.UnselectedOption.GetForeground())
+				require.Equal(t, palette.Muted, theme.Focused.Description.GetForeground())
+				require.Equal(t, palette.Success, theme.Focused.SelectedOption.GetForeground())
+				require.Equal(t, palette.Danger, theme.Focused.ErrorMessage.GetForeground())
+			})
+		}
 	}
+}
+
+func TestConfigWizardConnectionConfirmUsesWizardStyle(t *testing.T) {
+	theme := configWizardThemeForBackground("charm", true)
+	saveAnyway := false
+	form := newConfigWizardConnectionConfirmForm(theme, &saveAnyway)
+
+	form.Init()
+	model, _ := form.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	view := ansi.Strip(model.(*huh.Form).View())
+	indent, _ := borderBoxMetrics(t, view)
+
+	require.Equal(t, 2, indent)
+	require.Contains(t, view, "Connection test failed. Save configuration anyway?")
+	require.Contains(t, view, "Yes")
+	require.Contains(t, view, "No")
 }
 
 func TestConfigWizardThemeUsesUnifiedListCursor(t *testing.T) {
 	for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
 		t.Run(name, func(t *testing.T) {
 			palette := ui.MakeStylesWithTheme(name, true).Interaction.Palette
-			theme := configWizardTheme(name).Theme(true)
+			theme := configWizardThemeForBackground(name, true).Theme(false)
 
 			require.Equal(t, "> ", theme.Focused.SelectSelector.Value())
 			require.Equal(t, theme.Focused.SelectSelector.Value(), theme.Focused.MultiSelectSelector.Value())
@@ -1021,11 +1095,9 @@ func TestConfigWizardPreselectsConfiguredDiscoveredModels(t *testing.T) {
 }
 
 func TestConfigWizardModelPageVisibilityAfterDiscoveryFailure(t *testing.T) {
-	discoveryErr := fmt.Errorf("invalid API key")
-
-	require.True(t, configWizardHideDiscoveryModels(false, discoveryErr),
-		"discovery picker should hide after discovery fails")
-	require.True(t, configWizardHideDiscoveryModels(true, nil),
+	require.False(t, configWizardHideDiscoveryModels(false),
+		"discovery picker should stay visible after discovery fails so the error is shown")
+	require.True(t, configWizardHideDiscoveryModels(true),
 		"discovery picker should hide while waiting for Copilot auth")
 	require.False(t, configWizardHideManualModels(false, false, nil),
 		"manual entry should show after discovery fails")
@@ -1144,11 +1216,11 @@ func TestConfigWizardModelStateScopesDiscoveryFailureByProvider(t *testing.T) {
 		state := newConfigWizardModelState("google", catalog)
 		state.setDiscoveryFailure("google", fmt.Errorf("invalid API key"))
 
-		require.True(t, state.hideDiscovery("google", false))
+		require.Error(t, state.discoveryErrFor("google"))
 
 		state.switchProvider("github-copilot", catalog)
-		require.False(t, state.hideDiscovery("github-copilot", false),
-			"Google discovery failure must not hide Copilot discovery after provider switch")
+		require.NoError(t, state.discoveryErrFor("github-copilot"),
+			"Google discovery failure must not affect Copilot after provider switch")
 	})
 }
 

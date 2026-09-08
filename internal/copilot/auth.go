@@ -373,9 +373,14 @@ func (c Client) copilotBaseURL() string {
 	return DefaultCopilotBaseURL
 }
 
+// defaultHTTPClient bounds every request the package issues on its own, so a
+// hanging endpoint surfaces as an error instead of stalling the config wizard
+// or the runtime token exchange indefinitely.
+var defaultHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 func (c Client) httpClient() httpDoer {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
-	return http.DefaultClient
+	return defaultHTTPClient
 }

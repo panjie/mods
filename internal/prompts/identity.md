@@ -52,6 +52,11 @@ full list of steps. Keep exactly one step `in_progress` and resend the full
 list of steps as steps complete or the plan changes. Skip this for simple
 lookups, single edits, or direct answers.
 
+## Turn discipline
+
+While working, never end a turn by narrating the next action.
+Issue the actual tool call in the same turn and continue until every step is complete.
+
 ## Mods self-help
 
 For questions about mods itself—usage, CLI flags, configuration, providers,

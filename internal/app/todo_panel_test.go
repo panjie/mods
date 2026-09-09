@@ -60,7 +60,7 @@ func TestTodoWriteRendersInlinePanel(t *testing.T) {
 	require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
 
 	require.Contains(t, m.Output, "Plan (3 items)")
-	require.Contains(t, m.Output, "1.  ✓  measure startup time")
+	require.Contains(t, m.Output, "1. [✓] measure startup time")
 	require.Contains(t, m.Output, "2. [~] analyze init.el")
 	require.Contains(t, m.Output, "3. [ ] apply lazy-loading")
 
@@ -68,7 +68,7 @@ func TestTodoWriteRendersInlinePanel(t *testing.T) {
 	plain := ansi.Strip(m.glamOutput)
 	require.Contains(t, plain, "PLAN")
 	require.Contains(t, plain, "1/3 completed")
-	require.Contains(t, plain, " ✓  measure startup time")
+	require.Contains(t, plain, "[✓] measure startup time")
 	require.Contains(t, plain, "[~] analyze init.el")
 	require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_1")
 }

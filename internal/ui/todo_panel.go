@@ -89,7 +89,7 @@ func RenderTodoPanel(styles InteractionStyles, width int, items []TodoItem) stri
 func todoMarker(status string) string {
 	switch status {
 	case "completed":
-		return " ✓ "
+		return "[✓]"
 	case "in_progress":
 		return "[~]"
 	default:
@@ -161,7 +161,7 @@ func todoItemLine(styles InteractionStyles, index int, item TodoItem) string {
 	number := styles.Muted.Render(fmt.Sprintf("%d.", index))
 	switch item.Status {
 	case "completed":
-		return number + " " + styles.Success.Render(" ✓ ") + " " + styles.Muted.Render(item.Content)
+		return number + " " + styles.Success.Render("[✓]") + " " + styles.Muted.Render(item.Content)
 	case "in_progress":
 		return number + " " + styles.Warning.Render("[~]") + " " + styles.Body.Render(item.Content)
 	default:

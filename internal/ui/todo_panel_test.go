@@ -26,7 +26,7 @@ func TestRenderTodoPanel(t *testing.T) {
 	require.Contains(t, stripped, "PLAN")
 	require.Contains(t, stripped, "1/3 completed")
 	require.Contains(t, stripped, "1 in progress")
-	require.Contains(t, stripped, "1.  ✓  measure startup time")
+	require.Contains(t, stripped, "1. [✓] measure startup time")
 	require.Contains(t, stripped, "2. [~] analyze init.el")
 	require.Contains(t, stripped, "3. [ ] apply lazy-loading")
 }

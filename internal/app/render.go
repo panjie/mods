@@ -32,7 +32,7 @@ type outputRenderer struct {
 
 func (m *Mods) viewportNeeded() bool {
 	if m.todoPanelVisible() {
-		return true
+		return m.glamViewport.TotalLineCount() > m.glamViewport.Height()
 	}
 	return m.glamHeight > m.height
 }
@@ -131,11 +131,17 @@ func (m *Mods) renderWithOperation(content string) string {
 // priority when the terminal cannot fit the full plan.
 func (m *Mods) footerView() string {
 	footer := m.statusFooterView()
+	// Break the shared panel rail before a prompt that needs user action.
+	// Count the blank row in the budget so small terminals still fit.
+	gap := 0
+	if footer != "" && (m.reviewer.isPending() || m.userInput.isPending()) {
+		gap = 1
+	}
 	var plan string
 	if m.todoPanelVisible() {
 		footerHeight := 0
 		if footer != "" {
-			footerHeight = lipgloss.Height(footer)
+			footerHeight = lipgloss.Height(footer) + gap
 		}
 		height := min(8, m.height/3, m.height-footerHeight-3)
 		if height >= 4 {
@@ -152,7 +158,7 @@ func (m *Mods) footerView() string {
 	if footer == "" {
 		return plan
 	}
-	return plan + "\n" + footer
+	return plan + strings.Repeat("\n", 1+gap) + footer
 }
 
 func (m *Mods) statusFooterView() string {

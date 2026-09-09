@@ -329,12 +329,13 @@ func TestTodoDockPreservesInputCursor(t *testing.T) {
 			{Key: "username", Label: "Username", Kind: "text"},
 		}}, resp: make(chan userInputResult, 1),
 	}})
-	m.appendToOutput(strings.Repeat("history\n", 50))
+	m.appendToOutput(strings.Repeat("history\n\n", 50))
 	view := m.View()
 	require.NotNil(t, view.Cursor)
 	require.Equal(t, 24, lipgloss.Height(view.Content))
 	require.Equal(t, lineIndexContaining(strings.Split(view.Content, "\n"), "Username"), view.Cursor.Y)
 	require.Contains(t, ansi.Strip(view.Content), "PLAN")
+	require.True(t, strings.HasSuffix(m.footerView(), "\n\n"+m.statusFooterView()))
 }
 
 func TestTodoDockAboveStatus(t *testing.T) {
@@ -348,5 +349,62 @@ func TestTodoDockAboveStatus(t *testing.T) {
 	view := ansi.Strip(m.View().Content)
 	require.Less(t, strings.Index(view, "Answer text"), strings.Index(view, "PLAN"))
 	require.Less(t, strings.Index(view, "apply lazy-loading"), strings.Index(view, "RUNNING"))
-	require.Equal(t, 24, lipgloss.Height(view))
+	require.Less(t, lipgloss.Height(view), m.height)
+}
+
+func TestTodoDockDoesNotPadShortOutput(t *testing.T) {
+	withOutputTTY(t, true)
+	for _, content := range []string{"", "Existing answer", "First line\nSecond line"} {
+		t.Run(content, func(t *testing.T) {
+			m := newTodoTestMods(t)
+			m.width, m.height = 80, 40
+			m.showOperationStatus = true
+			m.appendToOutput(content)
+			before := strings.TrimRight(m.glamOutput, "\n")
+			require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
+			view := m.View()
+			require.False(t, view.AltScreen)
+			if strings.TrimSpace(before) == "" {
+				require.Equal(t, m.footerView(), view.Content)
+			} else {
+				require.Equal(t, lipgloss.Height(before)+lipgloss.Height(m.footerView()), lipgloss.Height(view.Content))
+				normalize := func(s string) string {
+					lines := strings.Split(ansi.Strip(s), "\n")
+					for i := range lines {
+						lines[i] = strings.TrimRight(lines[i], " ")
+					}
+					return strings.Join(lines, "\n")
+				}
+				require.True(t, strings.HasPrefix(normalize(view.Content), normalize(before)), "answer should remain before the plan")
+			}
+			require.False(t, m.viewportNeeded())
+			for range 3 {
+				require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
+				require.Equal(t, view.Content, m.View().Content)
+			}
+		})
+	}
+}
+
+func TestTodoDockSeparatesApprovalPanel(t *testing.T) {
+	withOutputTTY(t, true)
+	for _, height := range []int{12, 24, 40} {
+		m := newTodoTestMods(t)
+		m.width, m.height = 80, height
+		m.todoItems = ui.TodoItemsFromArgs(todoWriteArgs())
+		m.reviewer = &toolReviewer{
+			reviewMode: ReviewAuto, reviewPending: true,
+			reviewItem: &toolReviewItem{
+				name: "shell_run", args: []byte(`{"command":"touch example.txt"}`),
+				summary: "Run touch example.txt", resp: make(chan reviewResponse, 1),
+			},
+		}
+		footer := m.footerView()
+		approval := m.statusFooterView()
+		require.Contains(t, ansi.Strip(footer), "PLAN")
+		require.True(t, strings.HasSuffix(footer, "\n\n"+approval))
+		require.LessOrEqual(t, lipgloss.Height(m.View().Content), height)
+		m.todoItems = nil
+		require.Equal(t, approval, m.footerView(), "no leading blank row without a plan")
+	}
 }

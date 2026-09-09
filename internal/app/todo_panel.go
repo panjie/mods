@@ -10,20 +10,24 @@ import (
 	"github.com/panjie/mods/internal/ui"
 )
 
-// Reserve the bottom rows for the plan and status/input panels. The answer
-// keeps the full terminal width and scrolls independently above them.
+// Reserve room for the plan without padding the answer to a full screen.
+// Short output grows naturally; overflowing output scrolls above the footer.
 func (m *Mods) renderTodoLayout(content string) string {
 	footer := m.footerView()
 	height := max(1, m.height-lipgloss.Height(footer))
 	m.setTodoViewport(content, m.width, height)
+	if strings.TrimSpace(content) == "" {
+		return footer
+	}
 	return m.glamViewport.View() + "\n" + footer
 }
 
 func (m *Mods) setTodoViewport(content string, width, height int) {
 	atBottom := m.glamViewport.AtBottom()
+	content = ansi.Hardwrap(strings.TrimRight(content, "\n"), width, true)
 	m.glamViewport.SetWidth(width)
-	m.glamViewport.SetHeight(height)
-	m.glamViewport.SetContent(ansi.Hardwrap(strings.TrimRight(content, "\n"), width, true))
+	m.glamViewport.SetHeight(min(height, lipgloss.Height(content)))
+	m.glamViewport.SetContent(content)
 	if atBottom {
 		m.glamViewport.GotoBottom()
 	}

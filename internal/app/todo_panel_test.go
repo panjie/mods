@@ -77,7 +77,7 @@ func TestTodoWriteUpdatesPanelWithoutAppendingOutput(t *testing.T) {
 	require.Equal(t, original, m.Output)
 }
 
-func TestTodoSidebarLayoutAndResize(t *testing.T) {
+func TestTodoDockLayoutAndResize(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)
 	m.width, m.height = 120, 24
@@ -88,18 +88,22 @@ func TestTodoSidebarLayoutAndResize(t *testing.T) {
 	require.LessOrEqual(t, lipgloss.Width(view), m.width)
 	require.Equal(t, m.height, lipgloss.Height(view))
 	require.Contains(t, ansi.Strip(view), "PLAN")
-	require.NotContains(t, m.footerView(), "PLAN")
-	// The plan stays in the same column when the answer scrolls.
+	require.Contains(t, m.footerView(), "PLAN")
+	require.Equal(t, 120, m.glamViewport.Width())
+	// The plan keeps its row when the answer scrolls.
+	planRow := lineIndexContaining(strings.Split(view, "\n"), "PLAN")
 	m.glamViewport.GotoTop()
 	view = ansi.Strip(m.View().Content)
-	for _, line := range strings.Split(view, "\n") {
-		if i := strings.Index(line, "PLAN"); i >= 0 {
-			require.GreaterOrEqual(t, ansi.StringWidth(line[:i]), 80)
-		}
-	}
+	require.Equal(t, planRow, lineIndexContaining(strings.Split(view, "\n"), "PLAN"))
+	require.Greater(t, planRow, 0)
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view = ansi.Strip(m.View().Content)
-	require.Zero(t, m.todoSidebarWidth())
+	require.True(t, m.todoPanelVisible())
+	require.Equal(t, 80, m.glamViewport.Width())
+	require.Contains(t, view, "[~] analyze init.el")
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 32, Height: 8})
+	view = ansi.Strip(m.View().Content)
+	require.False(t, m.todoPanelVisible())
 	require.Contains(t, view, "▸ analyze init.el")
 	require.NotContains(t, view, "[~]")
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
@@ -311,7 +315,7 @@ func TestSetupStreamContextTodoPlanLifecycle(t *testing.T) {
 	})
 }
 
-func TestTodoSidebarPreservesInputCursor(t *testing.T) {
+func TestTodoDockPreservesInputCursor(t *testing.T) {
 	withOutputTTY(t, true)
 	old := IsInputTTY
 	IsInputTTY = func() bool { return true }
@@ -331,4 +335,18 @@ func TestTodoSidebarPreservesInputCursor(t *testing.T) {
 	require.Equal(t, 24, lipgloss.Height(view.Content))
 	require.Equal(t, lineIndexContaining(strings.Split(view.Content, "\n"), "Username"), view.Cursor.Y)
 	require.Contains(t, ansi.Strip(view.Content), "PLAN")
+}
+
+func TestTodoDockAboveStatus(t *testing.T) {
+	withOutputTTY(t, true)
+	m := newTodoTestMods(t)
+	m.width, m.height = 80, 24
+	m.showOperationStatus = true
+	m.todoItems = ui.TodoItemsFromArgs(todoWriteArgs())
+	m.setActiveOperation("Shell: go test ./...")
+	m.appendToOutput("Answer text")
+	view := ansi.Strip(m.View().Content)
+	require.Less(t, strings.Index(view, "Answer text"), strings.Index(view, "PLAN"))
+	require.Less(t, strings.Index(view, "apply lazy-loading"), strings.Index(view, "RUNNING"))
+	require.Equal(t, 24, lipgloss.Height(view))
 }

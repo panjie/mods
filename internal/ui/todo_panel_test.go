@@ -127,7 +127,7 @@ func TestTodoFooterLine(t *testing.T) {
 	})
 }
 
-func TestTodoSidebarBoundsAndActiveStep(t *testing.T) {
+func TestTodoDockBoundsAndActiveStep(t *testing.T) {
 	styles := MakeStyles(true).Interaction
 	items := make([]TodoItem, 20)
 	for i := range items {
@@ -135,7 +135,7 @@ func TestTodoSidebarBoundsAndActiveStep(t *testing.T) {
 	}
 	items[15].Status = "in_progress"
 	for _, height := range []int{4, 6, 10, 24} {
-		panel := RenderTodoSidebar(styles, 33, height, items)
+		panel := RenderTodoDock(styles, 33, height, items)
 		require.LessOrEqual(t, lipgloss.Height(panel), height)
 		require.LessOrEqual(t, lipgloss.Width(panel), 33)
 		if height >= 10 {

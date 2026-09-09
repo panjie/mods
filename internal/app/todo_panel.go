@@ -10,23 +10,13 @@ import (
 	"github.com/panjie/mods/internal/ui"
 )
 
-// Keep the footer full-width so review banners and input cursors retain their
-// normal coordinates. Only the answer viewport shares its rows with the plan.
+// Reserve the bottom rows for the plan and status/input panels. The answer
+// keeps the full terminal width and scrolls independently above them.
 func (m *Mods) renderTodoLayout(content string) string {
 	footer := m.footerView()
 	height := max(1, m.height-lipgloss.Height(footer))
-	if footer == "" {
-		height = m.height
-	}
-	width := m.todoSidebarWidth()
-	m.setTodoViewport(content, m.width-width-2, height)
-	left := lipgloss.NewStyle().Width(m.width - width - 2).Height(height).Render(m.glamViewport.View())
-	right := ui.RenderTodoSidebar(m.Styles.Interaction, width, height, m.todoItems)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)
-	if footer != "" {
-		body += "\n" + footer
-	}
-	return body
+	m.setTodoViewport(content, m.width, height)
+	return m.glamViewport.View() + "\n" + footer
 }
 
 func (m *Mods) setTodoViewport(content string, width, height int) {
@@ -49,12 +39,12 @@ func (m *Mods) updateTodoPanel(data []byte) bool {
 }
 
 // Small terminals retain the compact footer instead of squeezing the answer.
-func (m *Mods) todoSidebarWidth() int {
+func (m *Mods) todoPanelVisible() bool {
 	if m.Config == nil || m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus ||
-		!IsOutputTTY() || len(m.todoItems) == 0 || m.width < 100 || m.height < 10 {
-		return 0
+		!IsOutputTTY() || len(m.todoItems) == 0 || m.width < 40 || m.height < 10 {
+		return false
 	}
-	return min(40, m.width/3)
+	return true
 }
 
 // todoItemsAllCompleted reports whether a plan exists and every step is

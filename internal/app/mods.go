@@ -73,7 +73,7 @@ type Mods struct {
 	showOperationStatus     bool
 	Thought                 string
 	thoughtFlushed          bool
-	// todoItems mirrors the most recent todo_write plan so the sidebar can
+	// todoItems mirrors the most recent todo_write plan so the bottom panel can
 	// render persistent progress. Updated on the Update goroutine from
 	// handleToolCallsDone; reset per turn by setupStreamContext when the
 	// previous plan completed, and restored from session history on

@@ -13,9 +13,9 @@ type TodoItem struct {
 	Status  string
 }
 
-// RenderTodoSidebar bounds both dimensions. On short terminals a window of
+// RenderTodoDock bounds both dimensions. On short terminals a window of
 // steps follows the active item, with counts indicating hidden steps.
-func RenderTodoSidebar(styles InteractionStyles, width, height int, items []TodoItem) string {
+func RenderTodoDock(styles InteractionStyles, width, height int, items []TodoItem) string {
 	if len(items) == 0 || height <= styles.Panel.GetVerticalFrameSize()+1 {
 		return ""
 	}

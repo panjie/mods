@@ -31,7 +31,7 @@ type outputRenderer struct {
 }
 
 func (m *Mods) viewportNeeded() bool {
-	if m.todoSidebarWidth() > 0 {
+	if m.todoPanelVisible() {
 		return true
 	}
 	return m.glamHeight > m.height
@@ -69,7 +69,7 @@ func (m *Mods) viewContent() string {
 		return ""
 	case requestState:
 		if !debug.Enabled() {
-			if m.todoSidebarWidth() > 0 {
+			if m.todoPanelVisible() {
 				return m.renderTodoLayout("")
 			}
 			return m.renderWithOperation("")
@@ -81,7 +81,7 @@ func (m *Mods) viewContent() string {
 			return m.renderWithOperation("")
 		}
 		if !m.Config.Raw && IsOutputTTY() {
-			if m.todoSidebarWidth() > 0 {
+			if m.todoPanelVisible() {
 				return m.renderTodoLayout(m.glamOutput)
 			}
 			if m.viewportNeeded() {
@@ -126,22 +126,36 @@ func (m *Mods) renderWithOperation(content string) string {
 	return strings.TrimRight(content, "\r\n") + "\n" + footer
 }
 
-// footerView is the single source of truth for the bottom status line. It is
-// the union of two independent surfaces:
-//
-//  1. The operation-status label ("Running: …") — gated by showOperationStatus
-//     (which encodes TTY + !raw + !hide-tool-status in production), exactly as
-//     before. This keeps showing even if the spinner itself can't render.
-//  2. The always-on spinner — gated by spinnerVisible (running phase, TTY,
-//     non-debug, anim present). Its palette reflects the current phase.
-//
-// A pending tool approval takes over the footer with its review banner (that is
-// a "waiting on the user" state, not a running phase, so the spinner is hidden).
-// While hidden the animation keeps cycling in the background (mods.Update
-// forwards every message to it), so the spinner resumes already-animating when
-// the banner is dismissed.
-// In the Tool phase both surfaces are active and composed as "spinner  label".
+// footerView composes the persistent plan above the operation status or the
+// active review/input panel. Reserve room for the answer and give input
+// priority when the terminal cannot fit the full plan.
 func (m *Mods) footerView() string {
+	footer := m.statusFooterView()
+	var plan string
+	if m.todoPanelVisible() {
+		footerHeight := 0
+		if footer != "" {
+			footerHeight = lipgloss.Height(footer)
+		}
+		height := min(8, m.height/3, m.height-footerHeight-3)
+		if height >= 4 {
+			plan = ui.RenderTodoDock(m.Styles.Interaction, m.width, height, m.todoItems)
+		} else if m.height-footerHeight > 1 {
+			plan = ui.TodoFooterLine(m.Styles, m.todoItems, m.width)
+		}
+	} else if !m.userInput.isPending() && !m.reviewer.isPending() {
+		plan = m.todoPlanLine()
+	}
+	if plan == "" {
+		return footer
+	}
+	if footer == "" {
+		return plan
+	}
+	return plan + "\n" + footer
+}
+
+func (m *Mods) statusFooterView() string {
 	if m.userInput.isPending() {
 		return m.userInput.render(m.width, m.Styles.Interaction)
 	}
@@ -166,12 +180,7 @@ func (m *Mods) footerView() string {
 			}
 		}
 	}
-	if plan := m.todoPlanLine(); plan != "" {
-		if footer == "" {
-			return plan
-		}
-		return plan + "\n" + footer
-	}
+
 	return footer
 }
 
@@ -180,7 +189,7 @@ func (m *Mods) footerView() string {
 // gating as the operation line and yields to the user-input and review
 // banners (which take over the footer earlier in footerView).
 func (m *Mods) todoPlanLine() string {
-	if m.Config == nil || !m.showOperationStatus || m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus || len(m.todoItems) == 0 || m.todoSidebarWidth() > 0 {
+	if m.Config == nil || !m.showOperationStatus || m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus || len(m.todoItems) == 0 || m.todoPanelVisible() {
 		return ""
 	}
 	return ui.TodoFooterLine(m.Styles, m.todoItems, m.width)
@@ -489,12 +498,12 @@ func (m *Mods) flushRender() {
 			MaxWidth(m.width).
 			Render(m.glamOutput)
 	}
-	if sidebar := m.todoSidebarWidth(); sidebar > 0 {
+	if m.todoPanelVisible() {
 		footerHeight := 0
 		if footer := m.footerView(); footer != "" {
 			footerHeight = lipgloss.Height(footer)
 		}
-		m.setTodoViewport(m.glamOutput, m.width-sidebar-2, max(1, m.height-footerHeight))
+		m.setTodoViewport(m.glamOutput, m.width, max(1, m.height-footerHeight))
 	} else {
 		m.glamViewport.SetContent(content)
 	}

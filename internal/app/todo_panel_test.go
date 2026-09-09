@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -33,6 +34,7 @@ func newTodoTestMods(t *testing.T) *Mods {
 		Config:       &Config{},
 		Styles:       makeStyles(true),
 		state:        responseState,
+		reviewer:     &toolReviewer{},
 		contentMutex: &sync.Mutex{},
 		width:        80,
 	}
@@ -53,43 +55,55 @@ func withOutputTTY(t *testing.T, tty bool) {
 	})
 }
 
-func TestTodoWriteRendersInlinePanel(t *testing.T) {
+func TestTodoWriteUpdatesPanelWithoutAppendingOutput(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)
-
+	m.width, m.height = 120, 24
+	m.showOperationStatus = true
+	m.appendToOutput("Let me look at your config.")
+	original := m.Output
 	require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
-
-	require.Contains(t, m.Output, "Plan (3 items)")
-	require.Contains(t, m.Output, "1. [✓] measure startup time")
-	require.Contains(t, m.Output, "2. [~] analyze init.el")
-	require.Contains(t, m.Output, "3. [ ] apply lazy-loading")
-
-	require.Contains(t, m.displayOutput, "MODS_DISPLAY_BLOCK_1")
-	plain := ansi.Strip(m.glamOutput)
-	require.Contains(t, plain, "PLAN")
-	require.Contains(t, plain, "1/3 completed")
-	require.Contains(t, plain, "[✓] measure startup time")
-	require.Contains(t, plain, "[~] analyze init.el")
-	require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_1")
+	require.Equal(t, original, m.Output)
+	require.Empty(t, m.displayBlocks)
+	view := ansi.Strip(m.View().Content)
+	require.Contains(t, view, "PLAN")
+	require.Contains(t, view, "[~] analyze init.el")
+	require.NotContains(t, m.glamOutput, "PLAN")
+	require.Equal(t, 1, strings.Count(view, "PLAN"))
+	require.Nil(t, m.toolResultOutputCmd("todo_write", completedTodoArgs(), nil))
+	view = ansi.Strip(m.View().Content)
+	require.Contains(t, view, "2/2 completed")
+	require.NotContains(t, view, "analyze init.el")
+	require.Equal(t, original, m.Output)
 }
 
-func TestTodoPanelAfterUnfinishedStreamText(t *testing.T) {
+func TestTodoSidebarLayoutAndResize(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)
-
-	// A todo_write can land mid-stream while the model's preceding text has
-	// no trailing newline. The display-block marker must still start on its
-	// own line so glamour word wrap cannot glue it to the text and defeat
-	// the exact-line replacement in replaceDisplayBlocks.
-	m.appendToOutput("I'd be happy to help. Let me look at your config.")
-	require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
-
-	plain := ansi.Strip(m.glamOutput)
-	require.Contains(t, plain, "PLAN")
-	require.Contains(t, plain, "[~] analyze init.el")
-	require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_1")
-
-	require.Contains(t, m.Output, "your config.\n\nPlan (3 items)")
+	m.width, m.height = 120, 24
+	m.showOperationStatus = true
+	m.todoItems = ui.TodoItemsFromArgs(todoWriteArgs())
+	m.appendToOutput(strings.Repeat("Long answer with 中文 and more text. ", 160))
+	view := m.View().Content
+	require.LessOrEqual(t, lipgloss.Width(view), m.width)
+	require.Equal(t, m.height, lipgloss.Height(view))
+	require.Contains(t, ansi.Strip(view), "PLAN")
+	require.NotContains(t, m.footerView(), "PLAN")
+	// The plan stays in the same column when the answer scrolls.
+	m.glamViewport.GotoTop()
+	view = ansi.Strip(m.View().Content)
+	for _, line := range strings.Split(view, "\n") {
+		if i := strings.Index(line, "PLAN"); i >= 0 {
+			require.GreaterOrEqual(t, ansi.StringWidth(line[:i]), 80)
+		}
+	}
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	view = ansi.Strip(m.View().Content)
+	require.Zero(t, m.todoSidebarWidth())
+	require.Contains(t, view, "▸ analyze init.el")
+	require.NotContains(t, view, "[~]")
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	require.Contains(t, ansi.Strip(m.View().Content), "[~] analyze init.el")
 }
 
 func TestTodoWriteNonTTYWritesStderrSummary(t *testing.T) {
@@ -295,4 +309,26 @@ func TestSetupStreamContextTodoPlanLifecycle(t *testing.T) {
 		require.NoError(t, m.setupStreamContext("follow up"))
 		require.Nil(t, m.todoItems)
 	})
+}
+
+func TestTodoSidebarPreservesInputCursor(t *testing.T) {
+	withOutputTTY(t, true)
+	old := IsInputTTY
+	IsInputTTY = func() bool { return true }
+	t.Cleanup(func() { IsInputTTY = old })
+	m := newTodoTestMods(t)
+	m.width, m.height = 120, 24
+	m.todoItems = ui.TodoItemsFromArgs(todoWriteArgs())
+	m.userInput = newUserInputManager(m.Config)
+	m.userInput.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{Question: "Sign in", Kind: "form", Fields: []toolregistry.UserInputField{
+			{Key: "username", Label: "Username", Kind: "text"},
+		}}, resp: make(chan userInputResult, 1),
+	}})
+	m.appendToOutput(strings.Repeat("history\n", 50))
+	view := m.View()
+	require.NotNil(t, view.Cursor)
+	require.Equal(t, 24, lipgloss.Height(view.Content))
+	require.Equal(t, lineIndexContaining(strings.Split(view.Content, "\n"), "Username"), view.Cursor.Y)
+	require.Contains(t, ansi.Strip(view.Content), "PLAN")
 }

@@ -31,6 +31,9 @@ type outputRenderer struct {
 }
 
 func (m *Mods) viewportNeeded() bool {
+	if m.todoSidebarWidth() > 0 {
+		return true
+	}
 	return m.glamHeight > m.height
 }
 
@@ -66,6 +69,9 @@ func (m *Mods) viewContent() string {
 		return ""
 	case requestState:
 		if !debug.Enabled() {
+			if m.todoSidebarWidth() > 0 {
+				return m.renderTodoLayout("")
+			}
 			return m.renderWithOperation("")
 		}
 	case responseState:
@@ -75,6 +81,9 @@ func (m *Mods) viewContent() string {
 			return m.renderWithOperation("")
 		}
 		if !m.Config.Raw && IsOutputTTY() {
+			if m.todoSidebarWidth() > 0 {
+				return m.renderTodoLayout(m.glamOutput)
+			}
 			if m.viewportNeeded() {
 				return m.renderWithOperation(m.glamViewport.View())
 			}
@@ -171,7 +180,7 @@ func (m *Mods) footerView() string {
 // gating as the operation line and yields to the user-input and review
 // banners (which take over the footer earlier in footerView).
 func (m *Mods) todoPlanLine() string {
-	if m.Config == nil || !m.showOperationStatus || m.Config.HideToolStatus || len(m.todoItems) == 0 {
+	if m.Config == nil || !m.showOperationStatus || m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus || len(m.todoItems) == 0 || m.todoSidebarWidth() > 0 {
 		return ""
 	}
 	return ui.TodoFooterLine(m.Styles, m.todoItems, m.width)
@@ -304,7 +313,7 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd 
 	if m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus {
 		return nil
 	}
-	if name == toolregistry.TodoWriteToolName && err == nil && IsOutputTTY() && m.appendTodoPanel(data) {
+	if name == toolregistry.TodoWriteToolName && err == nil && IsOutputTTY() && m.updateTodoPanel(data) {
 		return nil
 	}
 	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())
@@ -480,7 +489,15 @@ func (m *Mods) flushRender() {
 			MaxWidth(m.width).
 			Render(m.glamOutput)
 	}
-	m.glamViewport.SetContent(content)
+	if sidebar := m.todoSidebarWidth(); sidebar > 0 {
+		footerHeight := 0
+		if footer := m.footerView(); footer != "" {
+			footerHeight = lipgloss.Height(footer)
+		}
+		m.setTodoViewport(m.glamOutput, m.width-sidebar-2, max(1, m.height-footerHeight))
+	} else {
+		m.glamViewport.SetContent(content)
+	}
 	if oldHeight < m.glamHeight && wasAtBottom {
 		// If the viewport's at the bottom and we've received a new
 		// line of content, follow the output by auto scrolling to

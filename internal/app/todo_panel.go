@@ -1,18 +1,60 @@
 package app
 
 import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
 )
 
-func (m *Mods) appendTodoPanel(data []byte) bool {
+// Keep the footer full-width so review banners and input cursors retain their
+// normal coordinates. Only the answer viewport shares its rows with the plan.
+func (m *Mods) renderTodoLayout(content string) string {
+	footer := m.footerView()
+	height := max(1, m.height-lipgloss.Height(footer))
+	if footer == "" {
+		height = m.height
+	}
+	width := m.todoSidebarWidth()
+	m.setTodoViewport(content, m.width-width-2, height)
+	left := lipgloss.NewStyle().Width(m.width - width - 2).Height(height).Render(m.glamViewport.View())
+	right := ui.RenderTodoSidebar(m.Styles.Interaction, width, height, m.todoItems)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)
+	if footer != "" {
+		body += "\n" + footer
+	}
+	return body
+}
+
+func (m *Mods) setTodoViewport(content string, width, height int) {
+	atBottom := m.glamViewport.AtBottom()
+	m.glamViewport.SetWidth(width)
+	m.glamViewport.SetHeight(height)
+	m.glamViewport.SetContent(ansi.Hardwrap(strings.TrimRight(content, "\n"), width, true))
+	if atBottom {
+		m.glamViewport.GotoBottom()
+	}
+}
+
+func (m *Mods) updateTodoPanel(data []byte) bool {
 	items := ui.TodoItemsFromArgs(data)
 	if len(items) == 0 {
 		return false
 	}
-	m.appendToOutputWithDisplayBlock(ui.TodoPlainText(items), ui.RenderTodoPanel(m.Styles.Interaction, m.width, items))
+	m.todoItems = items
 	return true
+}
+
+// Small terminals retain the compact footer instead of squeezing the answer.
+func (m *Mods) todoSidebarWidth() int {
+	if m.Config == nil || m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus ||
+		!IsOutputTTY() || len(m.todoItems) == 0 || m.width < 100 || m.height < 10 {
+		return 0
+	}
+	return min(40, m.width/3)
 }
 
 // todoItemsAllCompleted reports whether a plan exists and every step is

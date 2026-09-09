@@ -4,11 +4,59 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 type TodoItem struct {
 	Content string
 	Status  string
+}
+
+// RenderTodoSidebar bounds both dimensions. On short terminals a window of
+// steps follows the active item, with counts indicating hidden steps.
+func RenderTodoSidebar(styles InteractionStyles, width, height int, items []TodoItem) string {
+	if len(items) == 0 || height <= styles.Panel.GetVerticalFrameSize()+1 {
+		return ""
+	}
+	innerWidth := InteractionPanelInnerWidth(styles, width)
+	rows := height - styles.Panel.GetVerticalFrameSize() - 1
+	start, end := 0, len(items)
+	if len(items) > rows {
+		visible := max(1, rows-2)
+		focus := 0
+		for i, item := range items {
+			if item.Status == "in_progress" {
+				focus = i
+				break
+			}
+			if item.Status == "completed" {
+				focus = min(i+1, len(items)-1)
+			}
+		}
+		start = max(0, min(focus-visible/2, len(items)-visible))
+		end = min(len(items), start+visible)
+	}
+	body := make([]string, 0, rows)
+	if start > 0 {
+		body = append(body, styles.Muted.Render(fmt.Sprintf("↑ %d earlier steps", start)))
+	}
+	for i := start; i < end; i++ {
+		item := items[i]
+		item.Content = strings.Join(strings.Fields(item.Content), " ")
+		body = append(body, ansi.Truncate(todoItemLine(styles, i+1, item), innerWidth, "…"))
+	}
+	if end < len(items) {
+		body = append(body, styles.Muted.Render(fmt.Sprintf("↓ %d more steps", len(items)-end)))
+	}
+	if len(body) > rows {
+		body = body[:rows]
+	}
+	completed, _ := todoCounts(items)
+	return RenderInteractionPanel(styles, width, InteractionPanel{
+		Title: "Plan", Meta: fmt.Sprintf("%d/%d completed", completed, len(items)),
+		Tone: InteractionToneInfo, Body: body,
+	})
 }
 
 func TodoItemsFromArgs(data []byte) []TodoItem {

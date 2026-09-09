@@ -73,7 +73,7 @@ type Mods struct {
 	showOperationStatus     bool
 	Thought                 string
 	thoughtFlushed          bool
-	// todoItems mirrors the most recent todo_write plan so the footer can
+	// todoItems mirrors the most recent todo_write plan so the sidebar can
 	// render persistent progress. Updated on the Update goroutine from
 	// handleToolCallsDone; reset per turn by setupStreamContext when the
 	// previous plan completed, and restored from session history on
@@ -424,6 +424,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.glamViewport.SetWidth(m.width)
 		m.glamViewport.SetHeight(m.height)
+		m.renderDirty = true
 		return m, nil
 	case tea.KeyMsg:
 		if handled, cmd := m.reviewer.handleKey(msg); handled {

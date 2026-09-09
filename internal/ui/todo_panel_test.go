@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"charm.land/lipgloss/v2"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -123,4 +125,24 @@ func TestTodoFooterLine(t *testing.T) {
 		line := TodoFooterLine(styles, items, 40)
 		require.LessOrEqual(t, ansi.StringWidth(ansi.Strip(line)), 40)
 	})
+}
+
+func TestTodoSidebarBoundsAndActiveStep(t *testing.T) {
+	styles := MakeStyles(true).Interaction
+	items := make([]TodoItem, 20)
+	for i := range items {
+		items[i] = TodoItem{Content: fmt.Sprintf("任务 %d %s", i+1, strings.Repeat("long 中文 ", 12)), Status: "pending"}
+	}
+	items[15].Status = "in_progress"
+	for _, height := range []int{4, 6, 10, 24} {
+		panel := RenderTodoSidebar(styles, 33, height, items)
+		require.LessOrEqual(t, lipgloss.Height(panel), height)
+		require.LessOrEqual(t, lipgloss.Width(panel), 33)
+		if height >= 10 {
+			require.Contains(t, ansi.Strip(panel), "16. [~] 任务 16")
+		}
+		if height == 10 {
+			require.Contains(t, ansi.Strip(panel), "earlier steps")
+		}
+	}
 }

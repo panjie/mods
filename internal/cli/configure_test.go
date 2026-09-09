@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,17 +9,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"charm.land/bubbles/v2/key"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -92,36 +82,6 @@ func TestBuildProviderOptionsGroupsConfiguredAndAvailableProviders(t *testing.T)
 	})
 }
 
-func TestConfigWizardProviderDraftsAreIsolated(t *testing.T) {
-	provider := "openai"
-	drafts := newConfigWizardProviderDrafts(Config{PersistentConfig: PersistentConfig{
-		APIs: []API{
-			{Name: "openai", APIKey: "saved-openai-key"},
-			{Name: "anthropic"},
-		},
-	}})
-	baseURL := drafts.accessor(func() string { return provider }, configWizardProviderDraftBaseURL)
-	apiKey := drafts.accessor(func() string { return provider }, configWizardProviderDraftAPIKey)
-	keyStorage := drafts.accessor(func() string { return provider }, configWizardProviderDraftKeyStorage)
-
-	require.Equal(t, "saved-openai-key", apiKey.Get())
-	require.Equal(t, "config", keyStorage.Get())
-	baseURL.Set("https://openai.example/v1")
-
-	provider = "anthropic"
-	require.Empty(t, baseURL.Get())
-	require.Empty(t, apiKey.Get())
-	require.Equal(t, "env", keyStorage.Get())
-	baseURL.Set("https://anthropic.example/v1")
-	apiKey.Set("anthropic-key")
-	keyStorage.Set("config")
-
-	provider = "openai"
-	require.Equal(t, "https://openai.example/v1", baseURL.Get())
-	require.Equal(t, "saved-openai-key", apiKey.Get())
-	require.Equal(t, "config", keyStorage.Get())
-}
-
 func TestBuildProviderOptionsIncludesUnconfiguredBuiltInProviders(t *testing.T) {
 	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
@@ -152,7 +112,7 @@ func TestConfiguredProviderModelsSummarySortsAndTruncates(t *testing.T) {
 	require.Equal(t, "alpha, beta, delta, +1 more", configuredProviderModelsSummary(api))
 }
 
-func providerOptionLabel(t *testing.T, options []huh.Option[string], value string) string {
+func providerOptionLabel(t *testing.T, options []setupOption, value string) string {
 	t.Helper()
 	for _, option := range options {
 		if option.Value == value {
@@ -181,190 +141,6 @@ func TestConfigWizardManualModelsDescriptionShowsDiscoveryFailure(t *testing.T) 
 		"Model discovery failed: network unavailable")
 }
 
-func TestConfigWizardCopilotAuthRunsOutsideFormValidation(t *testing.T) {
-	oldStart := startCopilotDeviceFlow
-	oldRunScreen := runConfigWizardCopilotAuthScreen
-	defer func() {
-		startCopilotDeviceFlow = oldStart
-		runConfigWizardCopilotAuthScreen = oldRunScreen
-	}()
-
-	startCopilotDeviceFlow = func(context.Context) (copilotDeviceCode, error) {
-		return copilotDeviceCode{UserCode: "ABCD-EFGH", VerificationURI: "https://github.com/login/device"}, nil
-	}
-	runConfigWizardCopilotAuthScreen = func(context.Context, copilotDeviceCode) (string, error) {
-		return "github-oauth-token", nil
-	}
-
-	var apiKey, keyStorage string
-	out := captureStderr(t, func() {
-		err := runConfigWizardCopilotAuth(context.Background(), "github-copilot", &apiKey, &keyStorage)
-		require.NoError(t, err)
-	})
-	require.Empty(t, out, "auth flow should render through the TUI, not write raw stderr")
-	require.Equal(t, "github-oauth-token", apiKey)
-	require.Equal(t, "config", keyStorage)
-
-	out = captureStderr(t, func() {
-		err := validateConfigWizardCopilotChoice(true)
-		require.NoError(t, err)
-	})
-	require.Empty(t, out, "validation must not write while the TUI owns stderr")
-}
-
-func TestConfigWizardCopilotAuthViewShowsDeviceCode(t *testing.T) {
-	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
-		device: copilotDeviceCode{
-			UserCode:        "ABCD-EFGH",
-			VerificationURI: "https://github.com/login/device",
-		},
-		theme: configWizardTheme("charm"),
-	})
-	defer model.cancel()
-	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
-	model = updated.(configWizardCopilotAuthModel)
-
-	view := ansi.Strip(model.View().Content)
-	require.Contains(t, view, "GitHub Copilot sign in")
-	require.Contains(t, view, "https://github.com/login/device")
-	require.Contains(t, view, "ABCD-EFGH")
-	require.Contains(t, view, "Waiting for GitHub authorization")
-	require.Contains(t, view, "Esc cancel")
-}
-
-func TestConfigWizardCopilotAuthViewMatchesFormFieldGeometry(t *testing.T) {
-	t.Setenv("TERM", "xterm-256color")
-	for _, windowWidth := range []int{80, 100, 120} {
-		t.Run(fmt.Sprintf("width=%d", windowWidth), func(t *testing.T) {
-			theme := configWizardTheme("charm")
-			provider := "openai"
-			form := huh.NewForm(
-				huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Provider").
-						Options(huh.NewOption("OpenAI", "openai")).
-						Value(&provider),
-				).
-					Title("mods setup"),
-			).
-				WithTheme(theme).
-				WithLayout(configWizardLayoutForTheme(theme)).
-				WithShowHelp(false)
-
-			form.Init()
-			model, _ := form.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
-			formIndent, formWidth := borderBoxMetrics(t, ansi.Strip(model.(*huh.Form).View()))
-
-			authModel := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
-				device: copilotDeviceCode{
-					UserCode:        "ABCD-EFGH",
-					VerificationURI: "https://github.com/login/device",
-				},
-				theme: theme,
-			})
-			defer authModel.cancel()
-			updated, _ := authModel.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
-			authIndent, authWidth := borderBoxMetrics(t,
-				ansi.Strip(updated.(configWizardCopilotAuthModel).View().Content))
-
-			require.Equal(t, formIndent, authIndent, "auth card indent should match the wizard form")
-			require.Equal(t, formWidth, authWidth, "auth card width should match the wizard form")
-		})
-	}
-}
-
-func borderBoxMetrics(t *testing.T, view string) (indent, width int) {
-	t.Helper()
-	for _, line := range strings.Split(view, "\n") {
-		start := strings.Index(line, "╭")
-		if start < 0 {
-			continue
-		}
-		end := strings.Index(line, "╮")
-		require.GreaterOrEqual(t, end, start)
-		return start, lipgloss.Width(line[:end+len("╮")])
-	}
-	t.Fatal("no border box rendered in view")
-	return 0, 0
-}
-
-func TestConfigWizardCopilotAuthCancel(t *testing.T) {
-	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
-		device: copilotDeviceCode{
-			UserCode:        "ABCD-EFGH",
-			VerificationURI: "https://github.com/login/device",
-		},
-		theme: configWizardTheme("charm"),
-	})
-	defer model.cancel()
-	updated, cmd := model.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	require.NotNil(t, cmd)
-	authModel := updated.(configWizardCopilotAuthModel)
-	require.True(t, authModel.canceled)
-}
-
-func TestConfigWizardCopilotAuthCancelStopsPolling(t *testing.T) {
-	oldPoll := pollCopilotDeviceFlow
-	defer func() { pollCopilotDeviceFlow = oldPoll }()
-
-	started := make(chan struct{})
-	var once sync.Once
-	pollCopilotDeviceFlow = func(ctx context.Context, _ copilotDeviceCode) (string, error) {
-		once.Do(func() { close(started) })
-		<-ctx.Done()
-		return "", ctx.Err()
-	}
-
-	model := newConfigWizardCopilotAuthModel(configWizardCopilotAuthData{
-		ctx:    context.Background(),
-		device: copilotDeviceCode{UserCode: "ABCD-EFGH"},
-		theme:  configWizardTheme("charm"),
-	})
-	defer model.cancel()
-
-	result := make(chan tea.Msg, 1)
-	go func() { result <- model.Init()() }()
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("Copilot polling did not start")
-	}
-
-	updated, _ := model.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	require.True(t, updated.(configWizardCopilotAuthModel).canceled)
-
-	select {
-	case msg := <-result:
-		errMsg, ok := msg.(configWizardCopilotAuthErrMsg)
-		require.True(t, ok)
-		require.ErrorIs(t, errMsg.err, context.Canceled)
-	case <-time.After(time.Second):
-		t.Fatal("Copilot polling did not stop after Esc")
-	}
-}
-
-func TestConfigWizardCopilotAuthCancelDoesNotSaveToken(t *testing.T) {
-	oldStart := startCopilotDeviceFlow
-	oldRunScreen := runConfigWizardCopilotAuthScreen
-	defer func() {
-		startCopilotDeviceFlow = oldStart
-		runConfigWizardCopilotAuthScreen = oldRunScreen
-	}()
-
-	startCopilotDeviceFlow = func(context.Context) (copilotDeviceCode, error) {
-		return copilotDeviceCode{UserCode: "ABCD-EFGH", VerificationURI: "https://github.com/login/device"}, nil
-	}
-	runConfigWizardCopilotAuthScreen = func(context.Context, copilotDeviceCode) (string, error) {
-		return "", huh.ErrUserAborted
-	}
-
-	var apiKey, keyStorage string
-	err := runConfigWizardCopilotAuth(context.Background(), "github-copilot", &apiKey, &keyStorage)
-	require.ErrorIs(t, err, huh.ErrUserAborted)
-	require.Empty(t, apiKey)
-	require.Empty(t, keyStorage)
-}
-
 func TestConfigWizardDiscoversCopilotOnlyAfterAuthToken(t *testing.T) {
 	require.True(t, configWizardWaitingForCopilotAuth("github-copilot", ""),
 		"Copilot model discovery must wait for device auth")
@@ -382,170 +158,6 @@ func TestConfigWizardUsesExistingCopilotToken(t *testing.T) {
 		require.False(t, configWizardWaitingForCopilotAuth("github-copilot", ""),
 			"configured Copilot auth token should not require device auth again")
 	})
-}
-
-func TestConfigWizardKeyMapPrevIncludesEscAndShiftTab(t *testing.T) {
-	keymap := configWizardKeyMap()
-	esc := tea.KeyPressMsg{Code: tea.KeyEsc}
-	shiftTab := tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
-
-	prevBindings := []key.Binding{
-		keymap.Input.Prev,
-		keymap.FilePicker.Prev,
-		keymap.Text.Prev,
-		keymap.Select.Prev,
-		keymap.MultiSelect.Prev,
-		keymap.Note.Prev,
-		keymap.Confirm.Prev,
-	}
-
-	for _, binding := range prevBindings {
-		require.True(t, key.Matches(esc, binding))
-		require.True(t, key.Matches(shiftTab, binding))
-	}
-}
-
-func TestConfigWizardStorageEscapeReturnsToReview(t *testing.T) {
-	reviewMode := "auto"
-	saveLocation := "standard"
-	theme := configWizardTheme("charm")
-	form := newConfigWizardForm(configWizardFormConfig{
-		theme:           theme,
-		keymap:          configWizardKeyMap(),
-		standardPath:    "/tmp/config/mods.yml",
-		portablePath:    "/tmp/portable/mods.yml",
-		saveLocation:    &saveLocation,
-		escapeAbortText: "Press Esc again to exit.",
-	},
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Tool review").
-				Options(huh.NewOption("Auto", "auto")).
-				Value(&reviewMode),
-		).
-			Title("review"),
-	)
-
-	form.Init()
-	form.NextGroup()
-	require.Contains(t, ansi.Strip(form.View()), "storage")
-
-	_, cmd := form.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	runConfigWizardFormCommands(t, form, cmd, 32)
-
-	require.Equal(t, huh.StateNormal, form.State)
-	view := ansi.Strip(form.View())
-	require.Contains(t, view, "review")
-	require.NotContains(t, view, "storage")
-}
-
-func runConfigWizardFormCommands(t *testing.T, form *huh.Form, cmd tea.Cmd, remaining int) {
-	t.Helper()
-	if cmd == nil {
-		return
-	}
-	require.Positive(t, remaining, "form command chain did not settle")
-
-	msg := cmd()
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, batchCmd := range batch {
-			runConfigWizardFormCommands(t, form, batchCmd, remaining-1)
-		}
-		return
-	}
-
-	_, next := form.Update(msg)
-	runConfigWizardFormCommands(t, form, next, remaining-1)
-}
-
-func TestConfigWizardLayoutKeepsFocusedBorderWithinWindow(t *testing.T) {
-	t.Setenv("TERM", "xterm-256color")
-	for _, windowWidth := range []int{30, 60, 64, 80, 120} {
-		t.Run(fmt.Sprintf("width=%d", windowWidth), func(t *testing.T) {
-			provider := "openai"
-			theme := configWizardTheme("charm")
-			form := huh.NewForm(
-				huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Provider").
-						Description("Choose the API backend mods should use by default.").
-						Options(huh.NewOption("OpenAI", "openai")).
-						Value(&provider),
-				).
-					Title("mods setup").
-					Description("Connect a provider and pick the model you want to start with."),
-			).
-				WithTheme(theme).
-				WithLayout(configWizardLayoutForTheme(theme)).
-				WithShowHelp(false)
-
-			form.Init()
-			model, _ := form.Update(tea.WindowSizeMsg{Width: windowWidth, Height: 20})
-			view := ansi.Strip(model.(*huh.Form).View())
-
-			for _, line := range strings.Split(view, "\n") {
-				require.LessOrEqual(t, lipgloss.Width(line), windowWidth, line)
-			}
-			require.Contains(t, view, "╭", "focused field border was not rendered")
-		})
-	}
-}
-
-func TestConfigWizardThemeUsesInteractionPalette(t *testing.T) {
-	for _, isDark := range []bool{false, true} {
-		for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
-			t.Run(fmt.Sprintf("%s/dark=%t", name, isDark), func(t *testing.T) {
-				palette := ui.MakeStylesWithTheme(name, isDark).Interaction.Palette
-				theme := configWizardThemeForBackground(name, isDark).Theme(!isDark)
-				require.Equal(t, palette.Accent, theme.Group.Title.GetForeground())
-				require.Equal(t, palette.Text, theme.Focused.Title.GetForeground())
-				require.Equal(t, palette.Text, theme.Focused.UnselectedOption.GetForeground())
-				require.Equal(t, palette.Muted, theme.Focused.Description.GetForeground())
-				require.Equal(t, palette.Success, theme.Focused.SelectedOption.GetForeground())
-				require.Equal(t, palette.Danger, theme.Focused.ErrorMessage.GetForeground())
-			})
-		}
-	}
-}
-
-func TestConfigWizardConnectionConfirmUsesWizardStyle(t *testing.T) {
-	theme := configWizardThemeForBackground("charm", true)
-	saveAnyway := false
-	form := newConfigWizardConnectionConfirmForm(theme, &saveAnyway)
-
-	form.Init()
-	model, _ := form.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
-	view := ansi.Strip(model.(*huh.Form).View())
-	indent, _ := borderBoxMetrics(t, view)
-
-	require.Equal(t, 2, indent)
-	require.Contains(t, view, "Connection test failed. Save configuration anyway?")
-	require.Contains(t, view, "Yes")
-	require.Contains(t, view, "No")
-}
-
-func TestConfigWizardThemeUsesUnifiedListCursor(t *testing.T) {
-	for _, name := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
-		t.Run(name, func(t *testing.T) {
-			palette := ui.MakeStylesWithTheme(name, true).Interaction.Palette
-			theme := configWizardThemeForBackground(name, true).Theme(false)
-
-			require.Equal(t, "> ", theme.Focused.SelectSelector.Value())
-			require.Equal(t, theme.Focused.SelectSelector.Value(), theme.Focused.MultiSelectSelector.Value())
-			require.Equal(t, palette.Accent, theme.Focused.SelectSelector.GetForeground())
-			require.Equal(t, palette.Accent, theme.Focused.MultiSelectSelector.GetForeground())
-			require.True(t, theme.Focused.SelectSelector.GetBold())
-			require.True(t, theme.Focused.MultiSelectSelector.GetBold())
-
-			require.Equal(t, "  ", theme.Blurred.SelectSelector.Value())
-			require.Equal(t, theme.Blurred.SelectSelector.Value(), theme.Blurred.MultiSelectSelector.Value())
-			require.Equal(
-				t,
-				lipgloss.Width(theme.Focused.SelectSelector.Value()),
-				lipgloss.Width(theme.Blurred.SelectSelector.Value()),
-			)
-		})
-	}
 }
 
 func TestNormalizeWebSearchProviderForWizard(t *testing.T) {
@@ -845,7 +457,7 @@ func TestSaveConfigWizardMigratesPortableConfigToStandard(t *testing.T) {
 		PortableDir:     portableDir,
 	}, func() {
 		output := captureStderr(t, func() {
-			err := saveConfigWizard(standardPath, portablePath, configWizardSaveData{
+			err := writeSetupConfig(standardPath, portablePath, configWizardSaveData{
 				apiName:                "ollama",
 				modelName:              "llama3.1",
 				reviewMode:             "auto",
@@ -853,13 +465,6 @@ func TestSaveConfigWizardMigratesPortableConfigToStandard(t *testing.T) {
 				webSearchProviderValue: "tavily",
 				addedModelNames:        []string{"llama3.1"},
 				portable:               false,
-			}, summaryData{
-				api:          "ollama",
-				model:        "llama3.1",
-				modelCount:   1,
-				fsMode:       "auto",
-				reviewMode:   "auto",
-				settingsPath: standardPath,
 			})
 			require.NoError(t, err)
 		})
@@ -868,76 +473,8 @@ func TestSaveConfigWizardMigratesPortableConfigToStandard(t *testing.T) {
 		_, err := os.Stat(portablePath)
 		require.ErrorIs(t, err, os.ErrNotExist,
 			"the old portable file must be removed or it will keep taking precedence")
-		require.Contains(t, output, "Standard mode will be active on the next launch.")
+		require.Empty(t, output, "persistence must not print while the TUI owns stderr")
 	})
-}
-
-func TestPrintConfigSummaryShowsEffectiveBaseURL(t *testing.T) {
-	output := captureStderr(t, func() {
-		printConfigSummary(summaryData{
-			api:                 "openrouter",
-			model:               "vendor/gpt-5.5:latest",
-			keyStorage:          "env",
-			envVarName:          "OPENROUTER_API_KEY",
-			baseURL:             "https://openrouter.ai/api/v1",
-			modelCount:          2,
-			addedModelCount:     2,
-			fsMode:              "auto",
-			webSearchProvider:   "tavily",
-			webSearchKeyStorage: "env",
-			reviewMode:          "auto",
-			settingsPath:        "/tmp/mods.yml",
-		})
-	})
-
-	require.Contains(t, output, "Base URL")
-	require.Contains(t, output, "https://openrouter.ai/api/v1")
-	require.Contains(t, output, "Added models")
-	require.Contains(t, output, "Default model")
-	require.NotContains(t, output, "first line")
-	// Default (OpenAI-compatible) providers must not show an API type row.
-	require.NotContains(t, output, "API type")
-}
-
-func TestPrintConfigSummaryUsesConfiguredCopilotKeyStorage(t *testing.T) {
-	drafts := newConfigWizardProviderDrafts(Config{PersistentConfig: PersistentConfig{
-		APIs: []API{{Name: "github-copilot", APIKey: "saved-github-oauth-token"}},
-	}})
-	draft := drafts.forProvider("github-copilot")
-
-	output := captureStderr(t, func() {
-		printConfigSummary(summaryData{
-			api:          "github-copilot",
-			model:        "gpt-5",
-			modelCount:   1,
-			keyStorage:   draft.keyStorage,
-			envVarName:   "GITHUB_COPILOT_API_KEY",
-			fsMode:       "auto",
-			reviewMode:   "auto",
-			settingsPath: "/tmp/mods.yml",
-		})
-	})
-
-	require.Contains(t, output, "saved in config")
-	require.NotContains(t, output, "env var GITHUB_COPILOT_API_KEY")
-}
-
-func TestPrintConfigSummaryShowsAPITypeForAnthropic(t *testing.T) {
-	output := captureStderr(t, func() {
-		printConfigSummary(summaryData{
-			api:          "acme-claude",
-			model:        "claude-sonnet-4",
-			apiType:      "anthropic",
-			keyStorage:   "env",
-			envVarName:   "ACME_CLAUDE_API_KEY",
-			baseURL:      "https://acme.example.com/v1",
-			fsMode:       "auto",
-			reviewMode:   "auto",
-			settingsPath: "/tmp/mods.yml",
-		})
-	})
-	require.Contains(t, output, "API type")
-	require.Contains(t, output, "anthropic")
 }
 
 func TestValidateNewProviderName(t *testing.T) {
@@ -1117,110 +654,6 @@ func TestManualModelTextForProviderUsesConfiguredModels(t *testing.T) {
 		got := catalog.manualModelText("google")
 
 		require.Equal(t, "gemini-2.5-flash\ngemini-2.5-pro", got)
-	})
-}
-
-func TestConfigWizardModelStateRefreshesManualTextWhenProviderChanges(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		APIs: []API{
-			{Name: "github-copilot", Models: map[string]Model{"gpt-5-mini": {}, "gpt-5.4-mini": {}}},
-			{Name: "fujitsu-google", Models: map[string]Model{"fujitsu-gemini": {}}},
-			{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}},
-		},
-	}}, func() {
-		catalog := newConfigWizardProviderCatalog(config)
-		state := newConfigWizardModelState("github-copilot", catalog)
-
-		state.switchProvider("google", catalog)
-		require.Equal(t, "gemini-3.5-flash", state.manualModelsText)
-
-		state.switchProvider("fujitsu-google", catalog)
-		require.Equal(t, "fujitsu-gemini", state.manualModelsText)
-	})
-}
-
-func TestConfigWizardModelStateKeepsEditsForSameProvider(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		API:   "google",
-		Model: "gemini-3.5-flash",
-		APIs:  []API{{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}}},
-	}}, func() {
-		catalog := newConfigWizardProviderCatalog(config)
-		state := newConfigWizardModelState("google", catalog)
-		state.manualModelsText = "user-edited-model"
-		state.defaultModel = "user-selected-default"
-
-		state.switchProvider("google", catalog)
-
-		require.Equal(t, "google", state.provider)
-		require.Equal(t, "user-edited-model", state.manualModelsText)
-		require.Equal(t, "user-selected-default", state.defaultModel)
-	})
-}
-
-func TestConfigWizardModelStateInitializesSavedDefaultOnlyForCurrentProvider(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		API:   "qwen",
-		Model: "qwen3.6-flash",
-		APIs: []API{
-			{Name: "qwen", Models: map[string]Model{"qwen3.6-flash": {}}},
-			{Name: "openai", Models: map[string]Model{"gpt-5.4": {}}},
-		},
-	}}, func() {
-		catalog := newConfigWizardProviderCatalog(config)
-		state := newConfigWizardModelState("qwen", catalog)
-		require.Equal(t, "qwen3.6-flash", state.defaultModel)
-
-		state.switchProvider("openai", catalog)
-		require.Empty(t, state.defaultModel)
-	})
-}
-
-func TestConfigWizardDefaultModelAccessorPreservesValidChoiceAndFallsBackAfterRemoval(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		API:   "qwen",
-		Model: "second",
-		APIs: []API{{
-			Name:   "qwen",
-			Models: map[string]Model{"first": {}, "second": {}},
-		}},
-	}}, func() {
-		catalog := newConfigWizardProviderCatalog(config)
-		state := newConfigWizardModelState("qwen", catalog)
-		state.discoveredPick = []string{"first", "second"}
-		accessor := configWizardDefaultModelAccessor{
-			state:   state,
-			catalog: catalog,
-			apiName: func() string { return "qwen" },
-		}
-
-		require.Equal(t, "second", accessor.Get())
-		accessor.Set("first")
-		require.Equal(t, "first", accessor.Get())
-
-		accessor.Set("second")
-		state.discoveredPick = []string{"first"}
-		require.Equal(t, "first", accessor.Get())
-		require.Equal(t, "first", state.defaultModel)
-	})
-}
-
-func TestConfigWizardModelStateScopesDiscoveryFailureByProvider(t *testing.T) {
-	withTestConfig(t, Config{PersistentConfig: PersistentConfig{
-		APIs: []API{
-			{Name: "google", Models: map[string]Model{"gemini-3.5-flash": {}}},
-			{Name: "github-copilot", Models: map[string]Model{"gpt-5.4-mini": {}}},
-		},
-	}}, func() {
-		catalog := newConfigWizardProviderCatalog(config)
-		state := newConfigWizardModelState("google", catalog)
-		state.setDiscoveryFailure("google", fmt.Errorf("invalid API key"))
-
-		require.Error(t, state.discoveryErrFor("google"))
-
-		state.switchProvider("github-copilot", catalog)
-		require.NoError(t, state.discoveryErrFor("github-copilot"),
-			"Google discovery failure must not affect Copilot after provider switch")
 	})
 }
 

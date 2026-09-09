@@ -508,6 +508,13 @@ mods --settings '<yaml>'     # recursively merge YAML into mods.yml
 mods --dirs      # show where mods stores its data
 ```
 
+The setup wizard keeps edits when you go back or switch providers, and saves
+only after you confirm the final summary. Use Enter to continue, Esc to go back,
+and Ctrl+C to cancel. Outside text inputs and filters, `j`/`k` move down/up
+and `q` cancels without saving. In model lists, Space selects, `/` filters, `r` retries
+discovery, and `m` switches to manual entry. Use Ctrl+J for a new line in manual
+model input and Page Up/Page Down to scroll long content.
+
 Most advanced defaults (model parameters, themes, MCP, debug, format hints)
 live in `mods.yml` and are documented inline. Run `mods --reset-settings` to
 back up the current file and restore the defaults.

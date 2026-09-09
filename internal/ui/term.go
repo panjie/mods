@@ -53,3 +53,10 @@ func staticBackgroundIsDark(colorFGBG string) bool {
 	_, _, lightness := termenv.ConvertToRGB(color).Hsl()
 	return lightness < 0.5
 }
+
+// StaticBackgroundKnown reports whether COLORFGBG supplies a usable background.
+func StaticBackgroundKnown() bool {
+	parts := strings.Split(os.Getenv("COLORFGBG"), ";")
+	n, err := strconv.Atoi(strings.TrimSpace(parts[len(parts)-1]))
+	return err == nil && n >= 0 && n <= 255
+}

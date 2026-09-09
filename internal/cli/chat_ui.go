@@ -120,21 +120,22 @@ func renderChatSaved(id string) {
 }
 
 type chatPromptModel struct {
-	textarea     textarea.Model
-	width        int
-	prompt       string
-	killText     string
-	history      []string
-	historyIndex int
-	draft        string
-	exit         bool
-	done         bool
-	isDark       bool
+	textarea        textarea.Model
+	width           int
+	prompt          string
+	killText        string
+	history         []string
+	historyIndex    int
+	draft           string
+	exit            bool
+	done            bool
+	isDark          bool
+	backgroundKnown bool
 }
 
 func newChatPromptModel(history []string) chatPromptModel {
 	isDark := ui.StderrIsDark()
-	styles := makeChatStylesForTheme(isDark)
+	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, isDark, ui.StaticBackgroundKnown()))
 	input := textarea.New()
 	input.Placeholder = "Type a message…"
 	input.Prompt = ""
@@ -163,11 +164,12 @@ func newChatPromptModel(history []string) chatPromptModel {
 	input.SetWidth(chatDefaultWidth)
 	_ = input.Focus()
 	return chatPromptModel{
-		textarea:     input,
-		width:        chatDefaultWidth,
-		history:      append([]string(nil), history...),
-		historyIndex: len(history),
-		isDark:       isDark,
+		textarea:        input,
+		width:           chatDefaultWidth,
+		history:         append([]string(nil), history...),
+		historyIndex:    len(history),
+		isDark:          isDark,
+		backgroundKnown: ui.StaticBackgroundKnown(),
 	}
 }
 
@@ -180,6 +182,7 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		m.isDark = msg.IsDark()
+		m.backgroundKnown = true
 		m.applyStyles()
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -299,13 +302,13 @@ func (m *chatPromptModel) resize(width int) {
 	// readability cap, but the active input surface should use all available
 	// space and react immediately to WindowSizeMsg changes.
 	m.width = width
-	styles := makeChatStylesForTheme(m.isDark)
+	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	innerWidth := ui.InteractionPanelInnerWidth(styles.interaction, m.width)
 	m.textarea.SetWidth(innerWidth)
 }
 
 func (m *chatPromptModel) applyStyles() {
-	styles := makeChatStylesForTheme(m.isDark)
+	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	inputStyles := m.textarea.Styles()
 	inputStyles.Focused.Base = styles.text
 	inputStyles.Focused.CursorLine = styles.text
@@ -321,7 +324,7 @@ func (m chatPromptModel) View() tea.View {
 	if m.done {
 		return tea.NewView("")
 	}
-	styles := makeChatStylesForTheme(m.isDark)
+	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	body := m.textarea.View()
 	actions := []ui.InteractionAction{
 		{Key: "Enter", Label: "New line"},

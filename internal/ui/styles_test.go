@@ -80,3 +80,30 @@ func TestInteractionSuccessStateUsesThemeSuccessColor(t *testing.T) {
 	require.Contains(t, rendered, "\x1b[")
 	require.Contains(t, ansi.Strip(rendered), "SAVED")
 }
+
+func TestInteractionContrastPairs(t *testing.T) {
+	for _, theme := range []string{"charm", "dracula", "catppuccin", "base16", "unknown"} {
+		for _, dark := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/%t", theme, dark), func(t *testing.T) {
+				s := MakeStylesWithTheme(theme, dark).Interaction
+				p := s.Palette
+				bg := lipgloss.Color("#FFFFFF")
+				if dark {
+					bg = lipgloss.Color("#181818")
+				}
+				for name, fg := range map[string]color.Color{"text": p.Text, "muted": p.Muted, "danger": p.Danger, "warning": p.Warning, "success": p.Success} {
+					require.GreaterOrEqual(t, contrastRatio(fg, bg), 4.5, name)
+					require.GreaterOrEqual(t, contrastRatio(fg, p.Surface), 4.5, name+" on surface")
+				}
+				require.GreaterOrEqual(t, contrastRatio(s.Selected.GetForeground(), s.Selected.GetBackground()), 4.5, "selected")
+				require.GreaterOrEqual(t, contrastRatio(s.Key.GetForeground(), s.Key.GetBackground()), 4.5, "key label")
+			})
+		}
+	}
+}
+func TestInteractionUnknownBackgroundUsesTerminalForeground(t *testing.T) {
+	s := MakeInteractionStyles("charm", true, false)
+	require.Nil(t, s.Palette.Text)
+	require.Nil(t, s.Palette.Muted)
+	require.Equal(t, "Title", ansi.Strip(s.Title.Render("Title")))
+}

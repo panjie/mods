@@ -2,7 +2,7 @@
 
 ## Commands
 - `go run github.com/go-task/task/v3/cmd/task@v3.51.1 build` writes `bin/mods` or `bin/mods.exe` with git version metadata.
-- Pre-PR baseline from README/CI: `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` (`go build ./...`) then `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` (root module plus `internal/huh`). To mirror CI exactly, run `go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci` (verbose build/tests with coverage for both modules).
+- Pre-PR baseline from README/CI: `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` (`go build ./...`) then `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` (root module). To mirror CI exactly, run `go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci` (verbose root-module build/tests with coverage).
 - Focus a normal test with `go test ./internal/app -run TestName -count=1` or the relevant package path.
 - Build task install-path tests live in `internal/buildtask`; run `go test ./internal/buildtask -run TestInstallDir -count=1` after touching `Taskfile.yml` or install-path logic.
 - Provider integration tests are excluded by default; run `go test -tags integration ./internal/app -run TestOpenAIIntegration -count=1` only with the matching provider key. Ollama integration uses `OLLAMA_HOST` or `http://localhost:11434` and model `llama3.1`.
@@ -11,6 +11,7 @@
 
 ## Architecture
 - Entry path is `main.go` -> `internal/cli.Run` -> Cobra root in `internal/cli/main.go`; `execute` loads settings with `config.Ensure`, initializes flags after config, and opens the conversation DB unless doing completion/help/version.
+- Configuration UI: `internal/cli/setup_model.go` owns the Bubble Tea page state and per-provider drafts; `setup_async.go` returns versioned messages for discovery/auth/connection checks; `setup_view.go` renders shared interaction styles. `configure.go` retains configuration and provider helpers. Network commands must never mutate drafts directly.
 - Runtime is `internal/app.Mods` (Bubble Tea): stdin/cache handling, provider selection, streaming, tool calls, and review prompts.
 - Provider-neutral contracts are `internal/proto` and `internal/stream`; provider adapters live in `internal/openai`, `internal/anthropic`, `internal/google`, and `internal/ollama`. OpenAI-compatible providers route through `internal/openai`.
 - Tool wiring is `internal/tooling.BuildRegistry`: native tools in `internal/tools`, MCP in `internal/mcpclient`, review rules in `internal/approval`. Tools are supported for OpenAI-compatible, Anthropic, and Ollama; Google skips implicit auto filesystem tools and errors when tools are explicitly enabled.

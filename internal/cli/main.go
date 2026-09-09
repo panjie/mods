@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	glamour "charm.land/glamour/v2/styles"
-	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	timeago "github.com/caarlos0/timea.go"
 	"github.com/charmbracelet/x/editor"
@@ -396,10 +395,10 @@ func handleError(err error) {
 			StderrStyles().ErrPadding.Render(StderrStyles().ErrorHeader.String(), merr.ReasonText),
 		}
 
-		// Skip the error details if the user simply canceled out of huh.
+		// Skip the error details if the user simply canceled an interactive prompt.
 		// Render only the inner err message so the ReasonText (already
 		// shown in the header above) is not repeated by Error.Error().
-		if merr.Err != nil && merr.Err != huh.ErrUserAborted {
+		if merr.Err != nil && !errors.Is(merr.Err, errSetupCanceled) {
 			format += "%s\n\n"
 			args = append(args, StderrStyles().ErrPadding.Render(StderrStyles().ErrorDetails.Render(merr.Err.Error())))
 		}
@@ -638,39 +637,20 @@ func askInfo() error {
 		return fmt.Errorf("no API models are configured; run %s to add one", "mods --config")
 	}
 
-	// wrapping is done by the caller
-	//nolint:wrapcheck
-	return huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Choose the API:").
-				Options(apis...).
-				Value(&config.API),
-			huh.NewSelect[string]().
-				TitleFunc(func() string {
-					return fmt.Sprintf("Choose the model for '%s':", config.API)
-				}, &config.API).
-				OptionsFunc(func() []huh.Option[string] {
-					return opts[config.API]
-				}, &config.API).
-				Value(&config.Model),
-		),
-	).
-		WithTheme(themeFrom(config.Theme)).
-		Run()
+	return runSetupPicker(apis, opts)
 }
 
-func askInfoOptions(cfg *Config) ([]huh.Option[string], map[string][]huh.Option[string], bool) {
+func askInfoOptions(cfg *Config) ([]setupOption, map[string][]setupOption, bool) {
 	var foundModel bool
-	apis := make([]huh.Option[string], 0, len(cfg.APIs))
-	opts := map[string][]huh.Option[string]{}
+	apis := make([]setupOption, 0, len(cfg.APIs))
+	opts := map[string][]setupOption{}
 	for _, api := range cfg.APIs {
 		if len(api.Models) == 0 {
 			continue
 		}
-		apis = append(apis, huh.NewOption(api.Name, api.Name))
+		apis = append(apis, newSetupOption(api.Name, api.Name))
 		for name, model := range api.Models {
-			opts[api.Name] = append(opts[api.Name], huh.NewOption(name, name))
+			opts[api.Name] = append(opts[api.Name], newSetupOption(name, name))
 
 			// Checks whether this is the configured model and normalizes aliases
 			// so later lookups can use the canonical API and model names.
@@ -730,19 +710,6 @@ func isVersionOrHelpCmd(args []string) bool {
 		}
 	}
 	return false
-}
-
-func themeFrom(theme string) huh.Theme {
-	switch strings.ToLower(strings.TrimSpace(theme)) {
-	case "dracula":
-		return huh.ThemeFunc(huh.ThemeDracula)
-	case "catppuccin":
-		return huh.ThemeFunc(huh.ThemeCatppuccin)
-	case "base16":
-		return huh.ThemeFunc(huh.ThemeBase16)
-	default:
-		return huh.ThemeFunc(huh.ThemeCharm)
-	}
 }
 
 // creates a temp file, opens it in user's editor, and then returns its contents.

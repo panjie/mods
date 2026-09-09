@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/editor"
 	"github.com/panjie/mods/internal/proto"
@@ -77,7 +77,7 @@ func gatherInteractivePrompt() error {
 	}
 
 	if isNoArgs() && IsInputTTY() {
-		if err := askInfoPrompt(); err != nil && err == huh.ErrUserAborted {
+		if err := askInfoPrompt(); errors.Is(err, errSetupCanceled) {
 			return modsError{
 				Err:        err,
 				ReasonText: "User canceled.",
@@ -97,7 +97,7 @@ func gatherInteractivePrompt() error {
 		}
 		if exit {
 			return modsError{
-				Err:        huh.ErrUserAborted,
+				Err:        errSetupCanceled,
 				ReasonText: "User canceled.",
 			}
 		}

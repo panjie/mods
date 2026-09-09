@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	debugpkg "github.com/panjie/mods/internal/debug"
@@ -162,24 +161,6 @@ func TestExecuteHelpAndVersionBypassConfigLoad(t *testing.T) {
 	}
 }
 
-func TestThemeFrom(t *testing.T) {
-	t.Run("charm", func(t *testing.T) {
-		require.NotNil(t, themeFrom("charm"))
-	})
-	t.Run("dracula", func(t *testing.T) {
-		require.NotNil(t, themeFrom("dracula"))
-	})
-	t.Run("catppuccin", func(t *testing.T) {
-		require.NotNil(t, themeFrom("catppuccin"))
-	})
-	t.Run("base16", func(t *testing.T) {
-		require.NotNil(t, themeFrom("base16"))
-	})
-	t.Run("unknown defaults to charm", func(t *testing.T) {
-		require.NotNil(t, themeFrom("nonexistent"))
-	})
-}
-
 func TestMinimalFlagRegistered(t *testing.T) {
 	require.NotNil(t, rootCmd.Flags().Lookup("minimal"))
 }
@@ -326,7 +307,7 @@ func TestAskInfoOptionsReportsNoConfiguredModels(t *testing.T) {
 	require.False(t, foundModel)
 }
 
-func optionValues(options []huh.Option[string]) []string {
+func optionValues(options []setupOption) []string {
 	values := make([]string, 0, len(options))
 	for _, option := range options {
 		values = append(values, option.Value)

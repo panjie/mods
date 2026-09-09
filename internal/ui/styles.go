@@ -91,7 +91,7 @@ func MakeStylesWithTheme(theme string, isDark bool) (s Styles) {
 // interactionPalette maps a theme name to a background-adaptive palette. Dark
 // values keep each theme's identity; light values darken text, muted, and
 // pastel status hues so panels stay readable on light terminal backgrounds.
-func interactionPalette(theme string, isDark bool) InteractionPalette {
+func rawInteractionPalette(theme string, isDark bool) InteractionPalette {
 	lightDark := lipgloss.LightDark(isDark)
 	switch strings.ToLower(strings.TrimSpace(theme)) {
 	case "dracula":
@@ -152,12 +152,28 @@ func makeInteractionStyles(p InteractionPalette) InteractionStyles {
 		Label:    lipgloss.NewStyle().Foreground(p.Muted).Bold(true),
 		Muted:    lipgloss.NewStyle().Foreground(p.Muted),
 		Input:    lipgloss.NewStyle().Foreground(p.Text).Background(p.Surface).Padding(0, 1),
-		Key:      lipgloss.NewStyle().Foreground(p.Accent).Background(p.Surface).Bold(true).Padding(0, 1),
+		Key:      lipgloss.NewStyle().Foreground(contrastForeground(p.Surface)).Background(p.Surface).Bold(true).Padding(0, 1),
 		Action:   lipgloss.NewStyle().Foreground(p.Text),
-		Selected: lipgloss.NewStyle().Foreground(p.Surface).Background(p.Accent).Bold(true).Padding(0, 1),
+		Selected: lipgloss.NewStyle().Foreground(contrastForeground(p.Accent)).Background(p.Accent).Bold(true).Padding(0, 1),
 		Danger:   lipgloss.NewStyle().Foreground(p.Danger).Bold(true),
 		Warning:  lipgloss.NewStyle().Foreground(p.Warning).Bold(true),
 		Info:     lipgloss.NewStyle().Foreground(p.Accent).Bold(true),
 		Success:  lipgloss.NewStyle().Foreground(p.Success).Bold(true),
 	}
+}
+
+// MakeInteractionStyles shares terminal-aware styling across interactive models.
+// Until the terminal reports its background, unpaired text uses its default
+// foreground rather than assuming a dark terminal.
+func MakeInteractionStyles(theme string, isDark, known bool) InteractionStyles {
+	p := interactionPalette(theme, isDark)
+	if !known {
+		p.Text = nil
+		p.Muted = nil
+	}
+	s := makeInteractionStyles(p)
+	if !known {
+		s.Input = s.Input.UnsetBackground()
+	}
+	return s
 }

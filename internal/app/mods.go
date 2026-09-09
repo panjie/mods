@@ -172,8 +172,10 @@ func New(
 	// user-input select (all descend from m.ctx) when the user quits. The
 	// parent ctx is untouched, so cancelling m.ctx does not affect any caller.
 	requestCtx, requestCancel := context.WithCancel(ctx)
+	styles := ui.MakeStylesWithTheme(cfg.Theme, isDark)
+	styles.Interaction = ui.MakeInteractionStyles(cfg.Theme, isDark, ui.StaticBackgroundKnown())
 	return &Mods{
-		Styles:              ui.MakeStylesWithTheme(cfg.Theme, isDark),
+		Styles:              styles,
 		glam:                gr,
 		state:               startState,
 		glamViewport:        vp,

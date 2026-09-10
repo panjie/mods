@@ -622,17 +622,26 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			if errors.As(call.Err, &correction) && correction.CorrectionSuggested() {
 				continue
 			}
-			if errors.Is(call.Err, errReviewUnavailable) || errors.Is(call.Err, errCommandReviewability) {
+			if errors.Is(call.Err, errReviewUnavailable) {
 				msg.runner.close()
 				m.currentToolRegistry = nil
-				reason := "Tool execution requires review."
-				if errors.Is(call.Err, errCommandReviewability) {
-					reason = "Command could not be made reviewable; execution stopped."
-				}
 				return tea.Sequence(append(outputCmds, msgCmd(modsError{
 					Err:        call.Err,
-					ReasonText: reason,
+					ReasonText: "Tool execution requires review.",
 				}))...)
+			}
+			if errors.Is(call.Err, errCommandReviewability) {
+				// The correction budget for this request is exhausted. End the
+				// turn with a visible notice instead of tearing down the session:
+				// the runner is closed so nothing further can execute, the
+				// transcript stays intact, and chat mode returns to the prompt
+				// with a fresh budget for the next request.
+				msg.runner.close()
+				m.currentToolRegistry = nil
+				m.messages = msg.runner.messages()
+				m.appendExecutionStoppedNotice()
+				m.debugEndTurn("stopped", call.Err)
+				return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 			}
 			continue
 		}

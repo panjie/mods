@@ -57,6 +57,8 @@ correction budget. Compound non-proven-read calls, opaque scripts and unresolved
 write targets cannot use ordinary approval. Static reads remain exempt; an LLM
 read verdict cannot remove structural rejection. The third rejected call is a
 terminal error, and changing the tool name or payload does not reset the budget.
+Exhaustion ends that turn with a stop notice in the transcript; the session
+stays usable and the next user request gets a fresh budget.
 Minimal mode retains the constraint; explicit review-never bypasses it.
 
 script_run accepts up to 8192 bytes of readable sh, PowerShell, Python, Node or

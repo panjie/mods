@@ -593,3 +593,21 @@ func thoughtDisplayBlock(styles ui.InteractionStyles, width int, thought string)
 		Body:  strings.Split(thought, "\n"),
 	})
 }
+
+// appendExecutionStoppedNotice records a terminal command-reviewability stop in
+// the transcript. The stream is already closed, so no model answer follows; the
+// notice is the user-visible explanation that replaces the former
+// screen-clearing fatal error path.
+func (m *Mods) appendExecutionStoppedNotice() {
+	const headline = "Command could not be made reviewable after two corrections."
+	m.appendToOutputWithDisplayBlock(
+		"> **Execution stopped:** "+headline+" No command was run.\n\n",
+		renderInteractionPanel(m.Styles.Interaction, m.width, interactionPanel{
+			Title:    "Execution stopped",
+			Tone:     interactionToneDanger,
+			ToneText: "Stopped",
+			Headline: headline,
+			Body:     []string{"No command was run. Rephrase the request with smaller, single-purpose steps."},
+		}),
+	)
+}

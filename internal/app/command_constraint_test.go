@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -93,12 +94,26 @@ func TestScriptReviewCannotUseSavedRulesOrTempExemption(t *testing.T) {
 	require.NoError(t, r.requestApproval(deps, "script_run", []byte(`{"interpreter":"sh","source":"echo x"}`)))
 }
 
-func TestCommandConstraintBudgetIsFatal(t *testing.T) {
-	m := &Mods{Config: &Config{}, reviewer: &toolReviewer{}, ctx: context.Background()}
+func TestCommandConstraintBudgetEndsTurnWithoutQuitting(t *testing.T) {
+	m := &Mods{
+		Config:       &Config{},
+		reviewer:     &toolReviewer{},
+		ctx:          context.Background(),
+		Styles:       makeStyles(true),
+		contentMutex: &sync.Mutex{},
+	}
 	runner := newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return modsError{Err: err} })
 	_, cmd := m.Update(streamEventMsg{kind: streamEventToolCalls, runner: runner, results: []proto.ToolCallStatus{{Name: "shell_run", Err: errCommandReviewability}}})
-	msg, ok := cmd().(modsError)
-	require.True(t, ok)
-	require.ErrorIs(t, msg.Err, errCommandReviewability)
 	require.True(t, runner.closed.Load())
+	require.Nil(t, m.Error, "the exhausted budget must end the turn, not the session")
+	require.Contains(t, m.Output, "Execution stopped")
+	require.Contains(t, m.Output, "could not be made reviewable")
+
+	event, ok := cmd().(streamEventMsg)
+	require.True(t, ok)
+	require.Equal(t, streamEventDone, event.kind)
+
+	model, quitCmd := m.Update(event)
+	require.Equal(t, doneState, model.(*Mods).state)
+	require.IsType(t, quitMsg{}, quitCmd())
 }

@@ -144,9 +144,9 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	for _, pair := range [][2]string{
 		{modsIdentityPrompt, "Tool selection:"},
 		{"Tool selection:", "Available skills"},
-		{"Available skills", "PROJECT_TOKEN"},
+		{"Available skills", "FORMAT_TOKEN"},
+		{"FORMAT_TOKEN", "PROJECT_TOKEN"},
 		{"PROJECT_TOKEN", "ROLE_TOKEN"},
-		{"ROLE_TOKEN", "FORMAT_TOKEN"},
 	} {
 		require.Less(t, strings.Index(wire, pair[0]), strings.Index(wire, pair[1]), pair)
 	}
@@ -165,7 +165,7 @@ func TestInjectToolSelectionPromptMinimal(t *testing.T) {
 	normalizedMinimal := proto.NormalizeSystemMessages(minimalMods.messages)
 	require.Len(t, normalizedMinimal, 2)
 	require.NotContains(t, normalizedMinimal[0].Content, "Runtime safety (highest priority)")
-	require.Contains(t, normalizedMinimal[0].Content, "Output format (lowest priority)")
+	require.Contains(t, normalizedMinimal[0].Content, "Output format contract")
 }
 
 func TestInjectToolSelectionPromptCustomOverride(t *testing.T) {

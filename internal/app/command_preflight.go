@@ -83,7 +83,7 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 	if len(assessment.DynamicTargets) > 0 {
 		return message + "Resolve runtime paths in one short read-only call, then use the returned literal absolute paths in later calls."
 	}
-	return message + "Retry as separate single-purpose calls for capability discovery, path inspection, mutation, and verification. Drop decorative echo/printf separators and keep necessary pipelines intact. Simple read-only commands run without review; long multi-action chains always require it."
+	return message + "Retry as separate single-purpose calls for capability discovery, path inspection, mutation, and verification. Drop decorative echo/printf separators and keep necessary pipelines intact. Recognized read-only commands run without review. Review depends on effects, targets, and the configured approval policy."
 }
 
 func containsReviewabilityReason(reasons []approval.ReviewabilityReason, target approval.ReviewabilityReason) bool {

@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/testutil"
 	"github.com/panjie/mods/internal/tooling"
 	"github.com/panjie/mods/internal/ui"
@@ -22,7 +23,7 @@ const (
 	FilesystemNever           = cfgpkg.FilesystemNever
 	minimalSystemPrompt       = cfgpkg.MinimalSystemPrompt
 	defaultMarkdownFormatText = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
-	defaultJSONFormatText     = "Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them."
+	defaultJSONFormatText     = prompts.JSONFormat
 )
 
 type approvalRuleSet = approval.RuleSet

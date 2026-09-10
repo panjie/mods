@@ -96,7 +96,7 @@ func TestCommandSimplificationMessageNamesSplittingIncentive(t *testing.T) {
 	message := commandSimplificationMessage(assessment)
 	require.Contains(t, message, "separate single-purpose calls")
 	require.Contains(t, message, "Drop decorative echo/printf separators")
-	require.Contains(t, message, "Simple read-only commands run without review")
+	require.Contains(t, message, "Recognized read-only commands run without review")
 }
 
 func TestToolCallerCorrectionDoesNotExecuteCommand(t *testing.T) {

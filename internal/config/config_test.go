@@ -179,7 +179,7 @@ func TestDefaultPromptText(t *testing.T) {
 		cfg.FormatText["markdown"],
 	)
 	require.Equal(t,
-		"Return valid JSON only. Do not include Markdown fences, prose, or explanations unless the user explicitly requests them.",
+		prompts.JSONFormat,
 		cfg.FormatText["json"],
 	)
 }

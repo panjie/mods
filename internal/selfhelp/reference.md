@@ -2,7 +2,8 @@
 
 Mods is a terminal AI agent for prompts, pipelines, and local work. It can read
 and edit files, run shell commands, search the web, use MCP servers, and chain
-multiple tool calls. A built-in review step prompts before mutating changes.
+multiple tool calls. A built-in review step applies the configured approval
+policy to mutating changes.
 
 The active config path depends on the platform and portable mode. The
 `mods_help` result reports the exact path and current filesystem mode.
@@ -23,9 +24,10 @@ because they may contain values loaded from the user's config.
 
 For a non-secret change, inspect only the relevant range with `fs_search` and
 `fs_read_file`, then use `fs_replace` with exact current text. Preserve comments
-and unrelated values. Reads and writes outside the workspace use mods' normal
-directory approval flow. Do not read or echo API keys. Prefer `api-key-env`
-instead of putting a secret directly in YAML.
+and unrelated values. Recognized reads run without review, including outside
+the workspace. Writes follow the configured approval policy by target.
+Do not read or echo API keys. Prefer `api-key-env` instead of putting a secret
+directly in YAML.
 
 For a manual command instead, `mods --settings 'nerd-font-glyphs: true'`
 recursively merges a YAML mapping into the settings file, bare
@@ -51,11 +53,14 @@ roles:
 `builtin-tools.filesystem` accepts `auto`, `true`, or `false`. Auto enables file
 tools when the current or recent request concerns files or a mods config
 mutation. Trusted shell command names apply to every argument and subcommand;
-unsafe shell structures such as redirection are still reviewed.
-Runtime-resolved shell paths such as PowerShell `$PROFILE` remain dynamic
-approval targets: they require per-use review and never create a saved
-directory rule. Resolve them in a read-only call and use the literal absolute
-result when a reusable scoped approval is needed.
+shell structures such as redirection are still assessed for effects and write
+targets.
+Mods can resolve eligible environment paths and PowerShell automatic variables
+such as `$PROFILE` into concrete targets before review. Resolved write targets
+can qualify for saved directory rules in auto mode or the temporary-write
+exemption. Unresolved write targets require per-use review in auto and always
+modes and cannot create saved rules. When a target remains unresolved, inspect
+it in a read-only call and use the literal absolute result.
 
 ## Providers
 
@@ -71,9 +76,24 @@ custom DeepSeek gateway uses `api-type: openai`,
 `provider-profile: deepseek`, and `endpoint: responses`. Unknown enum values
 are rejected, and custom providers require an explicit `base-url`.
 
-`-t` or `think: true` enables thinking where supported. Provider-specific model
-settings can override thinking type, budget, reasoning effort, returned thought
-fields, and inline thought tags.
+`-t` or `think: true` enables thinking where supported. `reasoning-effort`
+configures effort, including Anthropic adaptive `output_config.effort`;
+`reasoning-effort-off` configures model-aware OpenAI reasoning disablement.
+For Anthropic with thinking requested, `thinking-type` overrides inferred mode;
+`thinking-budget` applies only to manual `enabled` mode. Provider-specific
+settings also control returned thought fields and inline thought tags.
+
+For OpenAI-compatible transports, an explicit `endpoint` overrides automatic
+selection. Direct `api.openai.com` defaults to Responses; other defaults depend
+on the provider and model. Compatible endpoints can select `endpoint: responses`
+when supported by the server. The Azure adapter uses Chat Completions and does
+not support `endpoint: responses`.
+
+OpenAI Responses requests use `store: false` and replay encrypted continuation
+items locally. The DeepSeek Responses profile uses its own request dialect;
+it does not send OpenAI's store or encrypted-content include fields.
+`extra-params` must match the selected protocol. Anthropic uses Messages and
+locally replays complete signed thinking/tool blocks.
 
 Credential lookup uses `api-key`, `api-key-env`, or `api-key-cmd`. Prefer an
 environment variable so neither the config nor model context contains the
@@ -97,10 +117,13 @@ All recognized reads run without review. `review-mode: auto` reviews
 non-temporary writes unless conversation-scoped directory and remote-origin
 rules cover every target; `review-mode: always` reviews every non-temporary
 write and ignores saved rules; `review-mode: never` suppresses interactive
-review. Unknown write targets can only be allowed once.
+review. The temporary-write exemption requires a known effect and all write
+targets to be resolved local paths inside safe temporary directories, with no
+remote writes; the command's working directory alone does not qualify. In auto
+and always modes, unknown write targets can only be allowed once.
 
-MCP tools declaring `readOnlyHint: true` can use the read-only path in auto
-mode; unannotated tools are treated as mutable. User MCP tools are intentionally
+MCP tools declaring `readOnlyHint: true` use the read-only path in all review
+modes; unannotated tools are treated as mutable. User MCP tools are intentionally
 not enumerated here. The complete built-in catalog below is generated from the
 same registered ToolSpecs and capabilities used by `mods --list-tools`.
 

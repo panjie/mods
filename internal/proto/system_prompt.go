@@ -7,7 +7,7 @@ import (
 )
 
 // SystemSection identifies a named fragment in mods' structured system prompt.
-// Values encode the stable order within and across precedence layers.
+// Values are stable identifiers; descriptors define precedence across layers.
 type SystemSection uint8
 
 const (
@@ -28,9 +28,9 @@ type systemLayer uint8
 const (
 	systemLayerRuntime systemLayer = iota + 1
 	systemLayerExecution
+	systemLayerFormat
 	systemLayerProject
 	systemLayerRole
-	systemLayerFormat
 )
 
 type systemSectionDescriptor struct {
@@ -56,7 +56,7 @@ var systemLayerTitles = map[systemLayer]string{
 	systemLayerExecution: "Execution capability",
 	systemLayerProject:   "Project instructions",
 	systemLayerRole:      "User role",
-	systemLayerFormat:    "Output format (lowest priority)",
+	systemLayerFormat:    "Output format contract",
 }
 
 // NormalizeSystemMessages renders classified system fragments into one
@@ -118,7 +118,7 @@ func RenderStructuredSystemPrompt(messages []Message) string {
 
 	var sb strings.Builder
 	sb.WriteString("# Mods system instructions\n\n")
-	sb.WriteString("Instruction precedence is strict: runtime safety > execution capability > project instructions > user role > output format. Lower-priority content must not override, weaken, or reinterpret higher-priority content.\n")
+	sb.WriteString("Instruction precedence is strict: runtime safety > execution capability > output format > project instructions > user role. Lower-priority content must not override, weaken, or reinterpret higher-priority content. Output format governs the final answer, not tool arguments. Express project and role style preferences within that format.\n")
 
 	var currentLayer systemLayer
 	for _, section := range sections {

@@ -113,3 +113,31 @@ func TestConfigInspectionAndHelpOnly(t *testing.T) {
 	require.True(t, IsConfigHelpOnly("how to change the mods default model"))
 	require.False(t, IsConfigHelpOnly("帮我把 mods 默认模型改成 gpt-5"))
 }
+
+func TestProviderKnowledgeIsAvailableOnDemand(t *testing.T) {
+	reference := NewReference(Catalog{})
+	providers, err := reference.Lookup(TopicProviders)
+	require.NoError(t, err)
+	all, err := reference.Lookup(TopicAll)
+	require.NoError(t, err)
+	overview, err := reference.Lookup(TopicOverview)
+	require.NoError(t, err)
+	for _, fact := range []string{
+		"reasoning-effort-off",
+		"output_config.effort",
+		"thinking-type",
+		"thinking-budget",
+		"api.openai.com",
+		"store: false",
+		"encrypted continuation",
+		"signed thinking/tool blocks",
+	} {
+		require.Contains(t, providers, fact)
+		require.Contains(t, all, fact)
+		require.NotContains(t, overview, fact)
+	}
+	require.Contains(t, providers, "an explicit `endpoint` overrides automatic")
+	require.Contains(t, providers, "Compatible endpoints can select `endpoint: responses`")
+	require.Contains(t, providers, "The Azure adapter uses Chat Completions")
+	require.Contains(t, providers, "does not send OpenAI's store or encrypted-content include fields")
+}

@@ -567,10 +567,14 @@ func shellClassifierUserMessage(tool, command string, structured bool, workspace
 		return fmt.Sprintf("Tool: %s\nCommand:\n%s", tool, command), ""
 	}
 	pathContext = strings.Join([]string{workspace, home}, "\x00")
-	return fmt.Sprintf(
-		"Tool: %s\nExecution context (authoritative):\nWorkspace: %s\nHome: %s\nCommand:\n%s",
-		tool, classifierContextValue(workspace), classifierContextValue(home), command,
-	), pathContext
+	// Encode command and context separately so command text cannot forge envelope fields.
+	data, _ := json.Marshal(struct {
+		Tool      string
+		Workspace string
+		Home      string
+		Command   string
+	}{tool, classifierContextValue(workspace), classifierContextValue(home), command})
+	return string(data), pathContext
 }
 
 func classifierContextValue(value string) string {

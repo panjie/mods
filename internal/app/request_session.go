@@ -380,13 +380,51 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			return registry.Call(ctx, name, data)
 		}
 		var processBinding toolregistry.ProcessProgramBinding
-		if name == "process_run" {
+		cwd := cfg.ResolveWorkspace().Canonical
+		if name == "shell_run" || name == "powershell_run" || name == "process_run" || name == "script_run" {
+			var parsed map[string]json.RawMessage
+			if err := json.Unmarshal(data, &parsed); err != nil {
+				return "", err
+			}
+			if raw, ok := parsed["cwd"]; ok {
+				var input string
+				if err := json.Unmarshal(raw, &input); err != nil {
+					return "", err
+				}
+				var err error
+				cwd, err = toolregistry.NormalizeExecutionCwd(cwd, input)
+				if err != nil {
+					return "", err
+				}
+				parsed["cwd"], _ = json.Marshal(cwd)
+				data, _ = json.Marshal(parsed)
+			}
+		}
+		if name == "process_run" || name == "script_run" {
 			var prepareErr error
-			processBinding, prepareErr = toolregistry.PrepareProcessProgram(data)
+			processData := data
+			if name == "script_run" {
+				processData, prepareErr = toolregistry.ScriptProcessArguments(data)
+				if prepareErr != nil {
+					return "", prepareErr
+				}
+			}
+			processBinding, prepareErr = toolregistry.PrepareProcessProgram(processData)
 			if prepareErr != nil {
 				return "", prepareErr
 			}
 			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
+			if name == "script_run" {
+				var parsed map[string]json.RawMessage
+				_ = json.Unmarshal(data, &parsed)
+				executable := processBinding.Resolved
+				if executable == "" {
+					executable = processBinding.Requested
+				}
+				parsed["resolved_interpreter"], _ = json.Marshal(executable)
+				parsed["cwd"], _ = json.Marshal(cwd)
+				data, _ = json.Marshal(parsed)
+			}
 		}
 		var assessment *approval.CommandAssessment
 		if registry.ShellExecution(name) {
@@ -394,7 +432,10 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			if name == "process_run" {
 				command = string(data)
 			}
-			assessed := m.assessCommandWithEnv(name, command, extractSecretEnvNames(data))
+			assessed := m.assessCommandAtCwd(name, command, extractSecretEnvNames(data), cwd)
+			if cwd != cfg.ResolveWorkspace().Canonical {
+				assessed.KnownDirs = normalizeShellAffectedDirsForTool(assessed.KnownDirs, cwd, name)
+			}
 			if name == "process_run" {
 				assessed = m.constrainResolvedProcessAssessment(assessed, processBinding)
 			}
@@ -433,6 +474,10 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			return "", err
 		}
 		callData := data
+		// cwd is read-only execution context, separately authorized from writes.
+		if name == "process_run" || name == "script_run" {
+			ctx = toolregistry.WithAuthorizedDirs(ctx, append(toolregistry.AuthorizedDirs(ctx), cwd))
+		}
 		if m.secrets != nil {
 			var err error
 			callData, _, err = m.secrets.Resolve(name, data)

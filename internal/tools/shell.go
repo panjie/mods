@@ -84,6 +84,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			Name:        "shell_run",
 			Description: desc,
 			InputSchema: objectSchema(map[string]any{
+				"cwd":        stringProp("Optional literal working directory; defaults to the workspace. Use instead of cd or Set-Location."),
 				"command":    stringProp("Shell command to run."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
@@ -92,6 +93,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Command   string            `json:"command"`
+				Cwd       string            `json:"cwd"`
 				SecretEnv map[string]string `json:"secret_env"`
 				TimeoutMS *int64            `json:"timeout_ms"`
 			}
@@ -101,12 +103,16 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			if err := validateSecretEnv(args.SecretEnv); err != nil {
 				return "", err
 			}
+			cwd, cwdErr := NormalizeExecutionCwd(root, args.Cwd)
+			if cwdErr != nil {
+				return "", cwdErr
+			}
 			callCfg := cfg
 			callCfg.Timeout, err = resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
 			if err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, callCfg, root, "shell_run", args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
+			return runShellCommand(ctx, callCfg, cwd, "shell_run", args.Command, args.SecretEnv, cfg.SudoPrompt, shellCommand)
 		},
 	})
 }
@@ -128,6 +134,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			Name:        "powershell_run",
 			Description: PowerShellRunDescription,
 			InputSchema: objectSchema(map[string]any{
+				"cwd":        stringProp("Optional literal working directory; defaults to the workspace. Use instead of cd or Set-Location."),
 				"command":    stringProp("PowerShell command to run directly."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
@@ -136,6 +143,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
 				Command   string            `json:"command"`
+				Cwd       string            `json:"cwd"`
 				SecretEnv map[string]string `json:"secret_env"`
 				TimeoutMS *int64            `json:"timeout_ms"`
 			}
@@ -145,12 +153,16 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			if err := validateSecretEnv(args.SecretEnv); err != nil {
 				return "", err
 			}
+			cwd, cwdErr := NormalizeExecutionCwd(root, args.Cwd)
+			if cwdErr != nil {
+				return "", cwdErr
+			}
 			callCfg := cfg
 			callCfg.Timeout, err = resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
 			if err != nil {
 				return "", err
 			}
-			return runShellCommand(ctx, callCfg, root, "powershell_run", args.Command, args.SecretEnv, nil, powerShellCommand)
+			return runShellCommand(ctx, callCfg, cwd, "powershell_run", args.Command, args.SecretEnv, nil, powerShellCommand)
 		},
 	})
 }

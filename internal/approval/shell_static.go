@@ -79,9 +79,10 @@ func AssessArgvStaticWithPolicy(program string, args []string, posix bool, polic
 
 // AssessArgvStaticWithContext assesses a direct executable invocation with
 // deterministic execution context used by program-specific analyzers.
-func AssessArgvStaticWithContext(program string, args []string, posix bool, policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
+func AssessArgvStaticWithContext(program string, args []string, posix bool, policy ReadOnlyCommandPolicy, context ArgvStaticContext) (result CommandAssessment) {
+	defer func() { result.StaticRead = result.Effect == EffectRead }()
 	program = strings.TrimSpace(program)
-	result := UnknownCommandAssessment()
+	result = UnknownCommandAssessment()
 	result.Shape = CommandShape{TopLevelActions: 1, Pipelines: 1}
 	result.Reviewability = AnalyzeProcessReviewabilityWithPolicy(program, args, posix, policy)
 	result.Shape.Opaque = result.Reviewability.Level == ReviewabilityOpaque

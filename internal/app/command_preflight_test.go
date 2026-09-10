@@ -25,7 +25,7 @@ func complexReviewabilityAnalysis() approval.CommandAssessment {
 	}
 }
 
-func TestCommandPreflightGateCorrectsAtMostOnce(t *testing.T) {
+func TestCommandPreflightGateNeverReleasesRejectedCommands(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.ReviewMode = ReviewAuto
 	gate := newCommandPreflightGate(&cfg)
@@ -36,8 +36,8 @@ func TestCommandPreflightGateCorrectsAtMostOnce(t *testing.T) {
 	require.True(t, correction.CorrectionSuggested())
 	require.Contains(t, first.Error(), "4 top-level actions")
 
-	require.NoError(t, gate.check("powershell_run", complexReviewabilityAnalysis()))
-	require.NoError(t, gate.check("process_run", complexReviewabilityAnalysis()))
+	require.Error(t, gate.check("powershell_run", complexReviewabilityAnalysis()))
+	require.ErrorIs(t, gate.check("process_run", complexReviewabilityAnalysis()), errCommandReviewability)
 }
 
 func TestCommandPreflightGateModes(t *testing.T) {
@@ -45,10 +45,8 @@ func TestCommandPreflightGateModes(t *testing.T) {
 	minimal.Minimal = true
 	never := defaultConfig()
 	never.ReviewMode = ReviewNever
-	for _, cfg := range []*Config{&minimal, &never} {
-		gate := newCommandPreflightGate(cfg)
-		require.NoError(t, gate.check("shell_run", complexReviewabilityAnalysis()))
-	}
+	require.Error(t, newCommandPreflightGate(&minimal).check("shell_run", complexReviewabilityAnalysis()))
+	require.NoError(t, newCommandPreflightGate(&never).check("shell_run", complexReviewabilityAnalysis()))
 }
 
 func TestCommandPreflightGateConcurrentBudget(t *testing.T) {
@@ -67,7 +65,7 @@ func TestCommandPreflightGateConcurrentBudget(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	require.Equal(t, int32(1), corrections.Load())
+	require.Equal(t, int32(20), corrections.Load())
 }
 
 func TestCommandSimplificationMessageDoesNotEchoTargets(t *testing.T) {

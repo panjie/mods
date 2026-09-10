@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
@@ -17,6 +19,36 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 	parsed := ToolOperationArgs(args)
 	result := reviewPresentation{tone: interactionToneWarning, toneText: "Warning"}
 	switch name {
+	case "script_run":
+		result.tone, result.toneText = interactionToneDanger, "Danger"
+		result.headline = "Run reviewed script (unknown side effects)"
+		cwd := ArgString(parsed, "cwd")
+		if cwd == "" {
+			cwd = scope.Value
+		}
+		result.rows = []interactionRow{
+			{Label: "Interpreter", Value: ArgString(parsed, "interpreter")},
+			{Label: "Executable", Value: ArgString(parsed, "resolved_interpreter")},
+			{Label: "Working dir", Value: cwd},
+			{Label: "Scope", Value: "Imports, child processes and remote effects are not bounded. This is not a sandbox. Control characters below are escaped."},
+		}
+		if args, ok := parsed["args"]; ok {
+			result.rows = append(result.rows, interactionRow{Label: "Arguments", Value: fmt.Sprintf("%q", args)})
+		}
+		for i, line := range strings.Split(ArgString(parsed, "source"), "\n") {
+			result.rows = append(result.rows, interactionRow{Label: fmt.Sprintf("%d", i+1), Value: line})
+		}
+	case "http_download":
+		result.headline = "Download files"
+		overwrite, _ := parsed["overwrite"].(bool)
+		result.rows = []interactionRow{{Label: "Overwrite", Value: fmt.Sprint(overwrite)}}
+		if files, ok := parsed["files"].([]any); ok {
+			for i, file := range files {
+				if item, ok := file.(map[string]any); ok {
+					result.rows = append(result.rows, interactionRow{Label: fmt.Sprintf("File %d", i+1), Value: ArgString(item, "path")}, interactionRow{Label: "Source", Value: downloadReviewURL(ArgString(item, "url"))})
+				}
+			}
+		}
 	case "fs_delete_file":
 		result.tone, result.toneText, result.headline = interactionToneDanger, "Danger", "Delete a file"
 		result.rows = []interactionRow{{Label: "Target", Value: ArgString(parsed, "path")}}
@@ -50,6 +82,9 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
 		result.rows = commandReviewRows(command, assessment, risk)
+		if cwd := ArgString(parsed, "cwd"); cwd != "" {
+			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
+		}
 	case "process_run":
 		risk := shellRiskLevel(assessment, scope)
 		command := ProcessCommandPreview(parsed)
@@ -75,6 +110,18 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.tone, result.toneText = interactionToneInfo, "Info"
 	}
 	return result
+}
+
+func downloadReviewURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "[invalid URL]"
+	}
+	u.User, u.Fragment = nil, ""
+	if u.RawQuery != "" {
+		u.RawQuery = "[redacted query]"
+	}
+	return u.String()
 }
 
 func commandReviewRows(command string, assessment approval.CommandAssessment, risk string) []interactionRow {

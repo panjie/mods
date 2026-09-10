@@ -28,6 +28,8 @@ type CommandShape struct {
 // process invocation. Approval policy is derived from it and never stored in
 // the assessment itself.
 type CommandAssessment struct {
+	// StaticRead is set only by deterministic analysis, never by the LLM.
+	StaticRead    bool
 	Effect        CommandEffect
 	KnownDirs     []string
 	RemoteOrigins []string
@@ -97,10 +99,14 @@ func AssessShellStaticWithContext(command string, posix bool, policy ReadOnlyCom
 	if command == "" {
 		return UnknownCommandAssessment()
 	}
+	var result CommandAssessment
 	if posix {
-		return assessPOSIXStatic(command, policy, cwd)
+		result = assessPOSIXStatic(command, policy, cwd)
+	} else {
+		result = assessPowerShellStatic(command, policy, cwd)
 	}
-	return assessPowerShellStatic(command, policy, cwd)
+	result.StaticRead = result.Effect == EffectRead
+	return result
 }
 
 func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {

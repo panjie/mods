@@ -41,6 +41,8 @@ type ToolCapabilities struct {
 
 // Tool is a registered executable tool.
 type Tool struct {
+	// Validate checks structured arguments without executing or mutating state.
+	Validate        func(json.RawMessage) error
 	Spec            proto.ToolSpec
 	Call            Caller
 	Kind            ToolKind
@@ -195,6 +197,11 @@ func (r *Registry) ValidateRequiredArgs(name string, data []byte) error {
 	tool, ok := r.Tool(name)
 	if !ok {
 		return nil
+	}
+	if tool.Validate != nil {
+		if err := tool.Validate(data); err != nil {
+			return err
+		}
 	}
 	required, _ := tool.Spec.InputSchema["required"].([]string)
 	if len(required) == 0 {

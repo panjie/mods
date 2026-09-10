@@ -34,3 +34,9 @@
 - CI runs on Ubuntu, macOS, and Windows; platform-specific code is split with build tags in `internal/tools`, `internal/platform`, and `internal/clipboard`.
 - `DirAllow` and `RemoteAllow` approval rules are conversation-scoped (persisted in `approval_rules`, restored via `--continue`, not shared across conversations). Only explicit write-mode rules authorize writes; legacy empty-mode and read-mode directory rows are inert.
 - All text files use Unix (LF, `\n`) line endings; no root `.editorconfig` yet so keep new files consistent.
+
+## Command reviewability
+- `internal/approval/command_constraint.go` is the deterministic execution constraint before effect approval. Static reads bypass it; LLM read classification cannot erase opaque/compound structure. `command_preflight.go` allows two corrections then returns a terminal error. Minimal retains the gate, explicit ReviewNever bypasses it.
+- `script_run` requires complete inline source, pins the interpreter before review and uses unknown write intent (no temporary exemption or saved rules). Source is not reloaded from disk after review; imported files/subprocesses are not frozen. `review_pages.go` paginates shell/process/script/download reviews and gates approval until all pages are displayed.
+- `http_download` is a bounded structured batch tool using `netutil.SafeTransport` and ordinary filesystem path authorization. It uses the existing private-network opt-in, stops on failure, and preserves completed results.
+- Shell `cwd` is literal read-only execution context, normalized before assessment; it must never be inferred as a write target without evidence.

@@ -166,7 +166,7 @@ func (m *Mods) statusFooterView() string {
 		return m.userInput.render(m.width, m.Styles.Interaction)
 	}
 	if m.reviewer.isPending() {
-		return m.reviewer.renderBanner(m.width, m.Styles.Interaction)
+		return m.reviewer.renderBanner(m.width, m.Styles.Interaction, m.height)
 	}
 
 	var opLine string

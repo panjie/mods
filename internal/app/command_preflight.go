@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -8,29 +9,42 @@ import (
 	"github.com/panjie/mods/internal/approval"
 )
 
-// commandPreflightGate provides at most one model-facing correction per
-// request. It never approves, executes, rewrites, or splits a command.
+// Corrections are bounded, but the execution constraint never expires.
+var errCommandReviewability = errors.New("command remains unreviewable after two corrections; operation stopped")
+
 type commandPreflightGate struct {
 	mu      sync.Mutex
 	enabled bool
-	used    bool
+	used    int
+	advised bool
 }
 
 func newCommandPreflightGate(cfg *Config) *commandPreflightGate {
-	enabled := cfg != nil && !cfg.Minimal && cfg.ReviewMode != ReviewNever
+	enabled := cfg != nil && cfg.ReviewMode != ReviewNever
 	return &commandPreflightGate{enabled: enabled}
 }
 
 func (g *commandPreflightGate) check(tool string, assessment approval.CommandAssessment) error {
-	if g == nil || !assessment.Reviewability.ShouldCorrect {
+	if g == nil {
 		return nil
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if !g.enabled || g.used {
+	if !g.enabled || (assessment.StaticRead && assessment.Effect == approval.EffectRead) {
 		return nil
 	}
-	g.used = true
+	hard := assessment.RequiresSimplification()
+	if !hard {
+		if !assessment.Reviewability.ShouldCorrect || g.advised {
+			return nil
+		}
+		g.advised = true
+		return commandSimplificationError{message: commandSimplificationMessage(assessment)}
+	}
+	if g.used >= 2 {
+		return errCommandReviewability
+	}
+	g.used++
 	return commandSimplificationError{message: commandSimplificationMessage(assessment)}
 }
 
@@ -68,6 +82,9 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 		reasons = append(reasons, "is harder to review than necessary")
 	}
 	message := "command needs simplification: " + strings.Join(reasons, "; ") + ". "
+	if assessment.Shape.Opaque || reviewability.Level == approval.ReviewabilityOpaque {
+		message += "Opaque scripts cannot use ordinary command approval. For a necessary script, submit the complete, readable source to script_run for full review; never hide it in a temporary file or encoded argument. "
+	}
 	if reviewability.RecommendedTool == "process_run" {
 		return message + "Retry with process_run and literal argv; do not wrap the executable in shell syntax."
 	}

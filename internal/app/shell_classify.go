@@ -43,12 +43,16 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 // call injects as secrets; static environment path expansion skips them so
 // classification never substitutes a value the child shell will not see.
 func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string]bool) approval.CommandAssessment {
-	if tool == "process_run" {
-		return m.assessProcessInvocation(command)
-	}
 	ws := ""
 	if m.Config != nil {
 		ws = m.Config.ResolveWorkspace().Canonical
+	}
+	return m.assessCommandAtCwd(tool, command, shadowedEnv, ws)
+}
+
+func (m *Mods) assessCommandAtCwd(tool, command string, shadowedEnv map[string]bool, ws string) approval.CommandAssessment {
+	if tool == "process_run" {
+		return m.assessProcessInvocation(command)
 	}
 	policy := m.readOnlyCommandPolicy()
 
@@ -77,7 +81,7 @@ func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string
 		if m.shellAnalyzer != nil {
 			completion = m.shellAnalyzer(tool, command)
 		} else {
-			completion = m.classifyShellWithLLM(tool, command)
+			completion = m.classifyShellAtCwd(tool, command, ws)
 		}
 		if hasBareHome {
 			// The child shell and path normalizer share HOME. Once an unquoted
@@ -459,6 +463,11 @@ func materializeProbeTargets(known, dynamic []string, resolved map[string]string
 // classification and caches the result. On any failure (timeout, stream
 // error, parse error) it returns the fail-closed default.
 func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssessment {
+	workspace, _ := m.shellClassifierPathContext()
+	return m.classifyShellAtCwd(tool, command, workspace)
+}
+
+func (m *Mods) classifyShellAtCwd(tool, command, workspace string) approval.CommandAssessment {
 	system, structured, err := m.resolveShellClassifierPrompt()
 	if err != nil {
 		debug.Printf("assessCommand: prompt override failed: %v", err)
@@ -468,7 +477,7 @@ func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssess
 	if !structured {
 		parseMode = "yesno"
 	}
-	workspace, home := m.shellClassifierPathContext()
+	_, home := m.shellClassifierPathContext()
 	userMessage, pathContext := shellClassifierUserMessage(tool, command, structured, workspace, home)
 	cacheKey := shellClassifyCacheKey(tool, command, parseMode, system, pathContext)
 	if cached, ok := shellClassifyCache.Load(cacheKey); ok {

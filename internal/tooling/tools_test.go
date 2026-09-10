@@ -28,6 +28,8 @@ func TestBuiltinSpecs(t *testing.T) {
 	// Cross-platform builtins that must always be present (the shell tool is
 	// platform-specific: powershell_run on Windows, shell_run elsewhere).
 	want := map[string]bool{
+		"http_download": false,
+		"script_run":    false,
 		"fs_read_file":  false,
 		"fs_write_file": false,
 		"fs_replace":    false,

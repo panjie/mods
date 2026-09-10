@@ -61,6 +61,9 @@ func AnalyzeProcessReviewability(program string, args []string, posix bool) Comm
 func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) CommandReviewability {
 	name := strings.ToLower(path.Base(strings.ReplaceAll(strings.TrimSpace(program), `\`, "/")))
 	if !shellHostPrograms[name] {
+		if executableCarriesScript(program, args, 0) {
+			return opaqueReviewability()
+		}
 		return CommandReviewability{Level: ReviewabilitySimple}
 	}
 	if posix && posixShellHosts[name] && processArgsPassKnownCommandAsScript(args, policy) {
@@ -72,6 +75,9 @@ func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix 
 		}
 	}
 	if !processArgsContainShellSourceFlag(name, args) {
+		if executableCarriesScript(program, args, 0) {
+			return opaqueReviewability()
+		}
 		return CommandReviewability{Level: ReviewabilitySimple}
 	}
 	recommended := ""
@@ -81,9 +87,9 @@ func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix 
 	case !posix && (powerShellHosts[name] || name == "cmd" || name == "cmd.exe"):
 		recommended = "powershell_run"
 	default:
-		// The matching shell tool is not available on this host. Keep the
-		// literal process invocation instead of suggesting an unusable tool.
-		return CommandReviewability{Level: ReviewabilitySimple}
+		// A foreign shell still carries code. Do not erase that fact merely
+		// because the corresponding simple shell tool is unavailable.
+		return opaqueReviewability()
 	}
 	return CommandReviewability{
 		Level:           ReviewabilityOpaque,
@@ -131,6 +137,27 @@ func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPoli
 		shape.TopLevelActions += actions
 		shape.Pipelines += pipelines
 	}
+	syntax.Walk(file, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case *syntax.ForClause, *syntax.WhileClause, *syntax.IfClause, *syntax.CaseClause, *syntax.FuncDecl, *syntax.Block, *syntax.Subshell, *syntax.CmdSubst:
+			shape.Opaque = true
+		case *syntax.Stmt:
+			if n.Background {
+				shape.Opaque = true
+			}
+		case *syntax.CallExpr:
+			if len(n.Args) > 0 {
+				if _, literal := staticShellWord(n.Args[0]); !literal {
+					shape.Opaque = true
+				}
+				tokens := shellWordsForAccess(n.Args)
+				if len(tokens) > 0 && executableCarriesScript(tokens[0], tokens[1:], 0) {
+					shape.Opaque = true
+				}
+			}
+		}
+		return true
+	})
 
 	var leaves []shellLeaf
 	leavesOK := true
@@ -259,6 +286,7 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 	shape := CommandShape{
 		TopLevelActions: ir.TopLevelStatementCount,
 		Pipelines:       ir.PipelineCount,
+		Opaque:          ir.HasScriptBlock || !safePowerShellMethods(ir),
 	}
 	result := CommandReviewability{
 		Level: ReviewabilitySimple,
@@ -319,7 +347,7 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 // is, the reviewability reason. A nested shell host invocation gets its own
 // reason so correction feedback can name the wrapping explicitly.
 func powerShellIROpaque(ir *psBridgeIR) (ReviewabilityReason, bool) {
-	if ir == nil || ir.HasStopParsing {
+	if ir == nil || ir.HasStopParsing || ir.HasControlFlow || ir.HasBackground {
 		return ReviewabilityOpaqueExecution, true
 	}
 	for _, flag := range ir.RiskFlags {
@@ -329,8 +357,14 @@ func powerShellIROpaque(ir *psBridgeIR) (ReviewabilityReason, bool) {
 	}
 	for _, inv := range ir.Invocations {
 		name := normalizePowerShellCommandName(inv.Name)
+		if strings.ContainsAny(name, "$(){}") {
+			return ReviewabilityOpaqueExecution, true
+		}
 		if shellHostPrograms[name] && processArgsContainShellSourceFlag(name, inv.Args) {
 			return ReviewabilityNestedShellHost, true
+		}
+		if executableCarriesScript(trimPowerShellLiteral(inv.Name), inv.Args, 0) {
+			return ReviewabilityOpaqueExecution, true
 		}
 	}
 	return "", false

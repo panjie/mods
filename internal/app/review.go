@@ -60,6 +60,10 @@ type toolReviewer struct {
 	rules                      RuleSet
 	scope                      Scope
 	selected                   int
+	reviewPage                 int
+	reviewSeen                 int
+	reviewPages                int
+	reviewLayout               string
 	raw                        bool
 	reviewAvailabilityKnown    bool
 	interactiveReviewAvailable bool
@@ -151,6 +155,8 @@ func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
 	item := msg.item
 	r.reviewItem = &item
 	r.selected = 0
+	r.reviewPage, r.reviewSeen, r.reviewPages = 0, -1, 0
+	r.reviewLayout = ""
 }
 
 func (r *toolReviewer) reset() {
@@ -174,7 +180,20 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.selected = 0
 	}
 	switch msg.String() {
+	case "pgdown", "down":
+		if r.reviewPage+1 < r.reviewPages {
+			r.reviewPage++
+		}
+		return true, nil
+	case "pgup", "up":
+		if r.reviewPage > 0 {
+			r.reviewPage--
+		}
+		return true, nil
 	case "y", "Y":
+		if !r.canApprovePages() {
+			return true, nil
+		}
 		r.reviewItem.resp <- reviewResponse{approved: true}
 		r.reviewPending = false
 		r.reviewItem = nil
@@ -185,6 +204,9 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "a", "A":
+		if !r.canApprovePages() {
+			return true, nil
+		}
 		if len(r.reviewItem.candidateRules) == 0 {
 			return true, nil
 		}
@@ -211,6 +233,9 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		}
 		return true, nil
 	case "enter":
+		if (options[r.selected].action == reviewOptionApprove || options[r.selected].action == reviewOptionAlwaysAllow) && !r.canApprovePages() {
+			return true, nil
+		}
 		switch options[r.selected].action {
 		case reviewOptionApprove:
 			r.reviewItem.resp <- reviewResponse{approved: true}
@@ -252,7 +277,6 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 			return unknown.AccessIntent()
 		}
 		intent := assessment.AccessIntent()
-		intent.Dirs = normalizeShellAffectedDirsForTool(intent.Dirs, "", name)
 		return intent
 	}
 	if registry != nil {
@@ -497,9 +521,16 @@ func extractSecretEnvNames(data []byte) map[string]bool {
 	return names
 }
 
-func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles) string {
+func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heights ...int) string {
 	if width <= 0 {
 		width = 80
+	}
+	if pagedReviewTool(r.reviewItem.name) {
+		height := 28
+		if len(heights) > 0 {
+			height = heights[0]
+		}
+		return r.renderPagedReview(width, height, styles)
 	}
 	options := r.reviewOptions()
 	selected := r.selected

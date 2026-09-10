@@ -19,13 +19,14 @@ const (
 	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested. Project or role style preferences do not override this format."
 
 	ToolSelectionGeneral = `Tool selection:
-- Minimize tool calls and use only tools available in this request.
+- Use only tools available in this request. Keep calls single-purpose; do not combine independent operations merely to reduce tool calls. Batch explicit items through structured tools when available.
 - Mutations are routed through mods' review step. When the user requested the action, call the appropriate tool without asking for separate permission.
 - If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly. User denial or cancellation is not a repairable tool error; stop that operation.`
 
-	ToolSelectionFilesystem = `- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
+	ToolSelectionFilesystem = `- When http_download is available, use its explicit URL/path list for downloads instead of shell loops.
+- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
 
-	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers, installers, and interpreters with script or expression arguments (emacs --eval, python -c, node -e), with literal args/cwd. Pass each argument as one argv item even when it contains quotes or parentheses; stdout and stderr return separately, so do not add 2>&1. Windows .bat/.cmd require powershell_run. Never use it for shell -c/-Command. Inspect results; use runtime_info for unknown availability.`
+	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers and installers, with literal args/cwd. Pass each argument as one argv item even when it contains quotes or parentheses; stdout and stderr return separately, so do not add 2>&1. Windows .bat/.cmd require powershell_run. Never use it for shell -c/-Command or hidden script payloads. For a necessary script use script_run with the complete readable source for full review when available; otherwise explain the missing capability. Do not move rejected code into a temporary script or encoded argument. Inspect results; use runtime_info for unknown availability.`
 
 	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax: pipelines, redirection, expansion, globs, and builtins. It runs in reported cwd; do not prefix cd and pass only the command without sh -c or bash -c wrapping. Prefer portable sh, print inspections directly, and pass file lists through NUL pipelines rather than command substitution (git ls-files -z | xargs -0 ...). ` + POSIXIntentGuidance
 

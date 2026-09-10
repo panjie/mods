@@ -23,7 +23,7 @@ Use this procedure for command execution and troubleshooting.
    specific executable is relevant and not already known. Do not implement
    capability discovery with several `Get-Command` or `command -v` statements.
 5. Do not prepend `cd`, `Set-Location`, or `Push-Location`; use
-   `process_run.cwd`. Commands already start in the configured workspace when
+   the literal `cwd` argument on process/shell tools. Commands already start in the configured workspace when
    `cwd` is omitted.
 6. Treat paths as data. Keep paths containing spaces or Unicode in one argv
    element. Resolve runtime paths such as `$PROFILE` in a short read-only call,
@@ -51,3 +51,9 @@ Use this procedure for command execution and troubleshooting.
     simpler command, split the operation or switch to `process_run`; do not
     repeat the unchanged call. Check availability, cwd, syntax, permissions,
     and platform before any further retry.
+
+Use `http_download` when available for explicit URL/destination lists, after
+creating directories with `fs_mkdir`. Use a literal `cwd` instead of chaining
+location changes. Unreviewable commands remain blocked after two corrections.
+For a necessary script use `script_run` with complete readable source and full
+review; do not hide rejected commands in interpreter flags or temporary files.

@@ -308,8 +308,27 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `fs_search`          | Search file contents across the workspace.                |
 | `fs_apply_patch`     | Atomically apply unified or Codex-format multi-file edits. |
 | `process_run`        | Execute one program with literal argv and structured output. |
+| `http_download`      | Download an explicit URL/file list, preserving existing files by default. |
+| `script_run`         | Run complete script source after paginated, one-time review. |
 | `shell_run`          | Execute shell commands (POSIX; Windows uses `powershell_run` only). |
 | `runtime_info`       | Inspect the selected shell and resolve command availability. |
+
+Compound writes and opaque script payloads must be simplified before normal
+approval. Mods allows two corrections, then stops the operation; `--minimal`
+does not disable this check. Explicit `--review-mode never` bypasses it.
+Necessary scripts use `script_run` with complete source (up to 8192 bytes), a
+literal working directory and supported interpreter. Review uses that source
+snapshot; imports and child processes may have unknown effects. Long command
+and script reviews use Up/Down to page; approval becomes available after all
+pages have been displayed. This is not an execution sandbox.
+
+`http_download` accepts up to 32 URL/path pairs (16 MiB per file), stops on the
+first failure and reports completed/failed/skipped entries. It requires existing
+parent directories and preserves existing files unless `overwrite` is explicit.
+Downloads use the web-search private-network opt-in and never execute content.
+Publishing uses a same-directory rename for overwrite or a hard link for
+no-overwrite; filesystems without the required operation fail without falling
+back to a partial destination write. Batch completion is not transactional.
 
 Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
 `mods.yml`:

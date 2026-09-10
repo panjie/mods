@@ -622,12 +622,16 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			if errors.As(call.Err, &correction) && correction.CorrectionSuggested() {
 				continue
 			}
-			if errors.Is(call.Err, errReviewUnavailable) {
+			if errors.Is(call.Err, errReviewUnavailable) || errors.Is(call.Err, errCommandReviewability) {
 				msg.runner.close()
 				m.currentToolRegistry = nil
+				reason := "Tool execution requires review."
+				if errors.Is(call.Err, errCommandReviewability) {
+					reason = "Command could not be made reviewable; execution stopped."
+				}
 				return tea.Sequence(append(outputCmds, msgCmd(modsError{
 					Err:        call.Err,
-					ReasonText: "Tool execution requires review.",
+					ReasonText: reason,
 				}))...)
 			}
 			continue

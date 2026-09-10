@@ -56,6 +56,9 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		}); err != nil {
 			return nil, err
 		}
+		if err := toolregistry.RegisterDownload(registry, toolregistry.FilesystemConfig{Root: root, SafeDirs: safeDirs}); err != nil {
+			return nil, err
+		}
 	}
 
 	if cfg.WebSearch {
@@ -65,6 +68,14 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 	}
 
 	if cfg.BuiltinTools.Shell {
+		if _, ok := registry.Tool("http_download"); !ok {
+			if err := toolregistry.RegisterDownload(registry, toolregistry.FilesystemConfig{Root: root, SafeDirs: safeDirs}); err != nil {
+				return nil, err
+			}
+		}
+		if err := toolregistry.RegisterScript(registry, toolregistry.ProcessConfig{Root: root, SafeDirs: safeDirs, Timeout: cfg.BuiltinTools.ShellTimeout, Progress: handlers.ShellProgress}); err != nil {
+			return nil, err
+		}
 		if err := toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{
 			Root:       root,
 			SafeDirs:   safeDirs,
@@ -203,6 +214,8 @@ func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 		_ = toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: root})
 	}
 	_ = toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{Root: root})
+	_ = toolregistry.RegisterDownload(registry, toolregistry.FilesystemConfig{Root: root})
+	_ = toolregistry.RegisterScript(registry, toolregistry.ProcessConfig{Root: root})
 	_ = toolregistry.RegisterRuntimeInfo(registry, root)
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{})

@@ -73,9 +73,6 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 				return nil, err
 			}
 		}
-		if err := toolregistry.RegisterScript(registry, toolregistry.ProcessConfig{Root: root, SafeDirs: safeDirs, Timeout: cfg.BuiltinTools.ShellTimeout, Progress: handlers.ShellProgress}); err != nil {
-			return nil, err
-		}
 		if err := toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{
 			Root:       root,
 			SafeDirs:   safeDirs,
@@ -215,7 +212,6 @@ func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 	}
 	_ = toolregistry.RegisterProcess(registry, toolregistry.ProcessConfig{Root: root})
 	_ = toolregistry.RegisterDownload(registry, toolregistry.FilesystemConfig{Root: root})
-	_ = toolregistry.RegisterScript(registry, toolregistry.ProcessConfig{Root: root})
 	_ = toolregistry.RegisterRuntimeInfo(registry, root)
 	_ = toolregistry.RegisterWebSearch(registry, websearch.Config{})
 	_ = toolregistry.RegisterModsHelp(registry, toolregistry.ModsHelpConfig{})

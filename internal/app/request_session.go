@@ -381,7 +381,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		}
 		var processBinding toolregistry.ProcessProgramBinding
 		cwd := cfg.ResolveWorkspace().Canonical
-		if name == "shell_run" || name == "powershell_run" || name == "process_run" || name == "script_run" {
+		if name == "shell_run" || name == "powershell_run" || name == "process_run" {
 			var parsed map[string]json.RawMessage
 			if err := json.Unmarshal(data, &parsed); err != nil {
 				return "", err
@@ -400,31 +400,13 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 				data, _ = json.Marshal(parsed)
 			}
 		}
-		if name == "process_run" || name == "script_run" {
+		if name == "process_run" {
 			var prepareErr error
-			processData := data
-			if name == "script_run" {
-				processData, prepareErr = toolregistry.ScriptProcessArguments(data)
-				if prepareErr != nil {
-					return "", prepareErr
-				}
-			}
-			processBinding, prepareErr = toolregistry.PrepareProcessProgram(processData)
+			processBinding, prepareErr = toolregistry.PrepareProcessProgram(data)
 			if prepareErr != nil {
 				return "", prepareErr
 			}
 			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
-			if name == "script_run" {
-				var parsed map[string]json.RawMessage
-				_ = json.Unmarshal(data, &parsed)
-				executable := processBinding.Resolved
-				if executable == "" {
-					executable = processBinding.Requested
-				}
-				parsed["resolved_interpreter"], _ = json.Marshal(executable)
-				parsed["cwd"], _ = json.Marshal(cwd)
-				data, _ = json.Marshal(parsed)
-			}
 		}
 		var assessment *approval.CommandAssessment
 		if registry.ShellExecution(name) {
@@ -475,7 +457,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		}
 		callData := data
 		// cwd is read-only execution context, separately authorized from writes.
-		if name == "process_run" || name == "script_run" {
+		if name == "process_run" {
 			ctx = toolregistry.WithAuthorizedDirs(ctx, append(toolregistry.AuthorizedDirs(ctx), cwd))
 		}
 		if m.secrets != nil {

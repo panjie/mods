@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -56,11 +55,15 @@ func TestCommandConstraintStaticReadsAndAdvisory(t *testing.T) {
 }
 
 func TestFullReviewRequiresEveryPage(t *testing.T) {
-	data, _ := json.Marshal(map[string]string{"interpreter": "sh", "source": strings.Repeat("echo '中文 text'\n", 35) + "printf '\\033[2J'\n# \x1b[2J", "cwd": "/tmp"})
-	p := formatReviewPresentationWithIntent("script_run", data, approval.CommandAssessment{}, testApprovalScope, AccessIntent{})
+	rows := make([]interactionRow, 0, 40)
+	for i := 0; i < 35; i++ {
+		rows = append(rows, interactionRow{Label: "File", Value: fmt.Sprintf("dir/%d.txt", i)})
+	}
+	rows = append(rows, interactionRow{Label: "Source", Value: "https://example.com/x\x1b[2J"})
+	p := reviewPresentation{tone: interactionToneDanger, toneText: "Danger", headline: "Download files", rows: rows}
 	resp := make(chan reviewResponse, 1)
 	r := &toolReviewer{}
-	r.handleStartMsg(toolReviewStartMsg{item: toolReviewItem{name: "script_run", presentation: p, resp: resp}})
+	r.handleStartMsg(toolReviewStartMsg{item: toolReviewItem{name: "http_download", presentation: p, resp: resp}})
 	r.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	require.Empty(t, resp)
 	styles := makeStyles(true).Interaction
@@ -86,12 +89,12 @@ func TestFullReviewRequiresEveryPage(t *testing.T) {
 	require.True(t, (<-resp).approved)
 }
 
-func TestScriptReviewCannotUseSavedRulesOrTempExemption(t *testing.T) {
+func TestUncertainEffectReviewCannotUseSavedRulesOrTempExemption(t *testing.T) {
 	r := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope, raw: true}
 	deps := reviewerDeps{ctx: context.Background(), accessIntent: AccessIntent{Class: approval.AccessWrite, UncertainEffect: true}, safeDirs: []string{testApprovalScope.Value}}
-	require.ErrorIs(t, r.requestApproval(deps, "script_run", []byte(`{"interpreter":"sh","source":"echo x"}`)), errReviewUnavailable)
+	require.ErrorIs(t, r.requestApproval(deps, "shell_run", []byte(`{"command":"echo x"}`)), errReviewUnavailable)
 	r.reviewMode = ReviewNever
-	require.NoError(t, r.requestApproval(deps, "script_run", []byte(`{"interpreter":"sh","source":"echo x"}`)))
+	require.NoError(t, r.requestApproval(deps, "shell_run", []byte(`{"command":"echo x"}`)))
 }
 
 func TestCommandConstraintBudgetEndsTurnWithoutQuitting(t *testing.T) {

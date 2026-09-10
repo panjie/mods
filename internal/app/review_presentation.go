@@ -19,25 +19,6 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 	parsed := ToolOperationArgs(args)
 	result := reviewPresentation{tone: interactionToneWarning, toneText: "Warning"}
 	switch name {
-	case "script_run":
-		result.tone, result.toneText = interactionToneDanger, "Danger"
-		result.headline = "Run reviewed script (unknown side effects)"
-		cwd := ArgString(parsed, "cwd")
-		if cwd == "" {
-			cwd = scope.Value
-		}
-		result.rows = []interactionRow{
-			{Label: "Interpreter", Value: ArgString(parsed, "interpreter")},
-			{Label: "Executable", Value: ArgString(parsed, "resolved_interpreter")},
-			{Label: "Working dir", Value: cwd},
-			{Label: "Scope", Value: "Imports, child processes and remote effects are not bounded. This is not a sandbox. Control characters below are escaped."},
-		}
-		if args, ok := parsed["args"]; ok {
-			result.rows = append(result.rows, interactionRow{Label: "Arguments", Value: fmt.Sprintf("%q", args)})
-		}
-		for i, line := range strings.Split(ArgString(parsed, "source"), "\n") {
-			result.rows = append(result.rows, interactionRow{Label: fmt.Sprintf("%d", i+1), Value: line})
-		}
 	case "http_download":
 		result.headline = "Download files"
 		overwrite, _ := parsed["overwrite"].(bool)

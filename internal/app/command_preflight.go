@@ -83,7 +83,7 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 	}
 	message := "command needs simplification: " + strings.Join(reasons, "; ") + ". "
 	if assessment.Shape.Opaque || reviewability.Level == approval.ReviewabilityOpaque {
-		message += "Opaque scripts cannot use ordinary command approval. For a necessary script, submit the complete, readable source to script_run for full review; never hide it in a temporary file or encoded argument. "
+		message += "Opaque or dynamically evaluated content cannot use ordinary command approval. Split the work into separate literal single-purpose calls; never hide the code in interpreter flags, temporary files, or encoded arguments. "
 	}
 	if reviewability.RecommendedTool == "process_run" {
 		return message + "Retry with process_run and literal argv; do not wrap the executable in shell syntax."

@@ -29,7 +29,6 @@ func TestBuiltinSpecs(t *testing.T) {
 	// platform-specific: powershell_run on Windows, shell_run elsewhere).
 	want := map[string]bool{
 		"http_download": false,
-		"script_run":    false,
 		"fs_read_file":  false,
 		"fs_write_file": false,
 		"fs_replace":    false,

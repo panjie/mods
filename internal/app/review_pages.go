@@ -35,7 +35,7 @@ func (r *toolReviewer) canApprovePages() bool {
 
 func pagedReviewTool(name string) bool {
 	switch name {
-	case "script_run", "http_download", "shell_run", "powershell_run", "process_run":
+	case "http_download", "shell_run", "powershell_run", "process_run":
 		return true
 	}
 	return false

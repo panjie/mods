@@ -44,7 +44,7 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "Where-Object")
 	require.Contains(t, ToolSelection, "Measure-Object")
 	require.Contains(t, ToolSelection, "git ls-files -z | xargs -0")
-	require.Contains(t, ToolSelection, "script_run with the complete readable source")
+	require.Contains(t, ToolSelection, "there is no script execution tool")
 	require.Contains(t, ToolSelection, "do not add 2>&1")
 	require.Contains(t, ToolSelection, "without sh -c or bash -c wrapping")
 	require.Contains(t, ToolSelectionShellPOSIXFallback, "without sh -c or bash -c wrapping")

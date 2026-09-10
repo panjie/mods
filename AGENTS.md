@@ -37,6 +37,6 @@
 
 ## Command reviewability
 - `internal/approval/command_constraint.go` is the deterministic execution constraint before effect approval. Static reads bypass it; LLM read classification cannot erase opaque/compound structure. `command_preflight.go` allows two corrections then returns a terminal error; the terminal error ends that turn with a visible stop notice while the session and transcript stay intact. Minimal retains the gate, explicit ReviewNever bypasses it.
-- `script_run` requires complete inline source, pins the interpreter before review and uses unknown write intent (no temporary exemption or saved rules). Source is not reloaded from disk after review; imported files/subprocesses are not frozen. `review_pages.go` paginates shell/process/script/download reviews and gates approval until all pages are displayed.
+- `review_pages.go` paginates shell, process, and download reviews and gates approval until all pages are displayed. There is no general script execution tool: opaque or interpreter-wrapped content must be decomposed into separate single-purpose calls.
 - `http_download` is a bounded structured batch tool using `netutil.SafeTransport` and ordinary filesystem path authorization. It uses the existing private-network opt-in, stops on failure, and preserves completed results.
 - Shell `cwd` is literal read-only execution context, normalized before assessment; it must never be inferred as a write target without evidence.

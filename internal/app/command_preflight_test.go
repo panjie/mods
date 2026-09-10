@@ -37,7 +37,10 @@ func TestCommandPreflightGateNeverReleasesRejectedCommands(t *testing.T) {
 	require.Contains(t, first.Error(), "4 top-level actions")
 
 	require.Error(t, gate.check("powershell_run", complexReviewabilityAnalysis()))
-	require.ErrorIs(t, gate.check("process_run", complexReviewabilityAnalysis()), errCommandReviewability)
+	rejected := gate.check("process_run", complexReviewabilityAnalysis())
+	require.ErrorIs(t, rejected, errCommandRejected)
+	var retry correctionSuggester
+	require.False(t, errors.As(rejected, &retry), "an exhausted budget returns a plain rejection, not a correction")
 }
 
 func TestCommandPreflightGateModes(t *testing.T) {

@@ -34,7 +34,7 @@ func TestCommandConstraintRepeatedCallsNeverExecute(t *testing.T) {
 		_, err := caller(proto.ToolCallRequest{Name: "shell_run", Arguments: data})
 		require.Error(t, err)
 		if i >= 2 {
-			require.ErrorIs(t, err, errCommandReviewability)
+			require.ErrorIs(t, err, errCommandRejected)
 		}
 	}
 	require.Zero(t, executed.Load())
@@ -51,7 +51,7 @@ func TestCommandConstraintStaticReadsAndAdvisory(t *testing.T) {
 	require.Error(t, gate.check("shell_run", advice))
 	require.NoError(t, gate.check("shell_run", advice))
 	require.Error(t, gate.check("shell_run", a))
-	require.ErrorIs(t, gate.check("shell_run", a), errCommandReviewability)
+	require.ErrorIs(t, gate.check("shell_run", a), errCommandRejected)
 }
 
 func TestFullReviewRequiresEveryPage(t *testing.T) {
@@ -97,7 +97,7 @@ func TestUncertainEffectReviewCannotUseSavedRulesOrTempExemption(t *testing.T) {
 	require.NoError(t, r.requestApproval(deps, "shell_run", []byte(`{"command":"echo x"}`)))
 }
 
-func TestCommandConstraintBudgetEndsTurnWithoutQuitting(t *testing.T) {
+func TestCommandConstraintBudgetKeepsTurnRunning(t *testing.T) {
 	m := &Mods{
 		Config:       &Config{},
 		reviewer:     &toolReviewer{},
@@ -106,17 +106,9 @@ func TestCommandConstraintBudgetEndsTurnWithoutQuitting(t *testing.T) {
 		contentMutex: &sync.Mutex{},
 	}
 	runner := newStreamRunner(staticStream{}, nil, nil, func(err error) tea.Msg { return modsError{Err: err} })
-	_, cmd := m.Update(streamEventMsg{kind: streamEventToolCalls, runner: runner, results: []proto.ToolCallStatus{{Name: "shell_run", Err: errCommandReviewability}}})
-	require.True(t, runner.closed.Load())
-	require.Nil(t, m.Error, "the exhausted budget must end the turn, not the session")
-	require.Contains(t, m.Output, "Execution stopped")
-	require.Contains(t, m.Output, "could not be made reviewable")
-
-	event, ok := cmd().(streamEventMsg)
-	require.True(t, ok)
-	require.Equal(t, streamEventDone, event.kind)
-
-	model, quitCmd := m.Update(event)
-	require.Equal(t, doneState, model.(*Mods).state)
-	require.IsType(t, quitMsg{}, quitCmd())
+	_, cmd := m.Update(streamEventMsg{kind: streamEventToolCalls, runner: runner, results: []proto.ToolCallStatus{{Name: "shell_run", Err: errCommandRejected}}})
+	require.False(t, runner.closed.Load(), "a rejected call must not close the runner")
+	require.Nil(t, m.Error)
+	require.NotContains(t, m.Output, "Execution stopped")
+	require.NotNil(t, cmd)
 }

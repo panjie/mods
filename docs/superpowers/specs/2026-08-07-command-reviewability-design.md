@@ -21,7 +21,7 @@ effects, after the independent structural execution constraint passes.
 2. The command's deterministic `CommandAssessment` reports structural
    reviewability facts without a second parse or an LLM call.
 3. Every call passes a deterministic execution constraint. Up to two corrections
-   are allowed per request; exhaustion stops execution instead of permitting it.
+   are allowed per request; exhaustion rejects the call instead of permitting it.
 4. Structured downloads carry explicit URL/path lists. Ordinary shell/process
    reviews paginate long content and escape terminal controls. General scripts
    are not an execution path: opaque or interpreter-wrapped content must be
@@ -57,11 +57,13 @@ The gate is local to one request and protected for parallel calls. Advisory
 single-program tool selection is suggested once independently of the hard
 correction budget. Compound non-proven-read calls, opaque interpreter content
 and unresolved write targets cannot use ordinary approval. Static reads remain
-exempt; an LLM read verdict cannot remove structural rejection. The third
-rejected call is a terminal error, and changing the tool name or payload does
-not reset the budget. Exhaustion ends that turn with a stop notice in the
-transcript; the session stays usable and the next user request gets a fresh
-budget. Minimal mode retains the constraint; explicit review-never bypasses it.
+exempt; an LLM read verdict cannot remove structural rejection. The first two
+rejected calls return correction guidance; later unreviewable calls are
+rejected as ordinary tool failures, and changing the tool name or payload does
+not reset the budget. Exhaustion does not end the turn: the rejected call never
+runs, the model continues with the rejection as feedback, and the next user
+request gets a fresh budget. Minimal mode retains the constraint; explicit
+review-never bypasses it.
 
 Opaque or interpreter-wrapped content never receives ordinary approval; the
 correction feedback requires separate literal single-purpose calls and rejects

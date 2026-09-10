@@ -9,8 +9,10 @@ import (
 	"github.com/panjie/mods/internal/approval"
 )
 
-// Corrections are bounded, but the execution constraint never expires.
-var errCommandReviewability = errors.New("command remains unreviewable after two corrections; operation stopped")
+// Corrections are bounded, but the execution constraint never expires:
+// exhausted calls are rejected as ordinary tool failures while the turn
+// continues with other work.
+var errCommandRejected = errors.New("command rejected: it remained unreviewable after two corrections and was not run; do not retry this form, split it into separate literal single-purpose calls or report the blocker")
 
 type commandPreflightGate struct {
 	mu      sync.Mutex
@@ -42,7 +44,7 @@ func (g *commandPreflightGate) check(tool string, assessment approval.CommandAss
 		return commandSimplificationError{message: commandSimplificationMessage(assessment)}
 	}
 	if g.used >= 2 {
-		return errCommandReviewability
+		return errCommandRejected
 	}
 	g.used++
 	return commandSimplificationError{message: commandSimplificationMessage(assessment)}

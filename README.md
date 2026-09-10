@@ -313,7 +313,8 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `runtime_info`       | Inspect the selected shell and resolve command availability. |
 
 Compound writes and opaque or interpreter-wrapped payloads must be simplified
-before normal approval. Mods allows two corrections, then stops the operation;
+before normal approval. Mods allows two corrections per request; later
+unreviewable calls are rejected without running, and the turn continues;
 `--minimal` does not disable this check. Explicit `--review-mode never` bypasses
 it. There is no general script execution tool: split the work into separate
 single-purpose calls instead of hiding code in interpreter flags, temporary

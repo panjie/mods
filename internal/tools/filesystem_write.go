@@ -414,6 +414,9 @@ func copyFile(source, dest string, overwrite bool) (string, error) {
 			if destInfo.IsDir() {
 				return "", fmt.Errorf("destination %s is a directory", dest)
 			}
+			if os.SameFile(sourceInfo, destInfo) {
+				return "", fmt.Errorf("source and destination are the same file: %s", source)
+			}
 			if !overwrite {
 				return "", fmt.Errorf("destination %s already exists; set overwrite=true to replace it", dest)
 			}
@@ -502,6 +505,9 @@ func movePath(source, dest string, overwrite bool) (string, error) {
 		if err == nil {
 			if destInfo.Mode()&os.ModeSymlink != 0 {
 				return "", fmt.Errorf("destination %s is a symlink; refusing to overwrite it", dest)
+			}
+			if os.SameFile(sourceInfo, destInfo) {
+				return "", fmt.Errorf("source and destination are the same file: %s", source)
 			}
 			if sourceInfo.IsDir() || destInfo.IsDir() {
 				return "", fmt.Errorf("directory overwrites are refused")

@@ -352,6 +352,20 @@ func TestTodoDockAboveStatus(t *testing.T) {
 	require.Less(t, lipgloss.Height(view), m.height)
 }
 
+func TestTodoDockGapAboveContent(t *testing.T) {
+	withOutputTTY(t, true)
+	m := newTodoTestMods(t)
+	m.width, m.height = 80, 40
+	m.showOperationStatus = true
+	m.appendToOutput("Answer text")
+	require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
+	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+	contentRow := lineIndexContaining(lines, "Answer text")
+	planRow := lineIndexContaining(lines, "PLAN")
+	require.Equal(t, contentRow+2, planRow, "exactly one blank row must separate content from the plan")
+	require.Empty(t, strings.TrimSpace(lines[contentRow+1]))
+}
+
 func TestTodoDockDoesNotPadShortOutput(t *testing.T) {
 	withOutputTTY(t, true)
 	for _, content := range []string{"", "Existing answer", "First line\nSecond line"} {
@@ -367,7 +381,7 @@ func TestTodoDockDoesNotPadShortOutput(t *testing.T) {
 			if strings.TrimSpace(before) == "" {
 				require.Equal(t, m.footerView(), view.Content)
 			} else {
-				require.Equal(t, lipgloss.Height(before)+lipgloss.Height(m.footerView()), lipgloss.Height(view.Content))
+				require.Equal(t, lipgloss.Height(before)+1+lipgloss.Height(m.footerView()), lipgloss.Height(view.Content))
 				normalize := func(s string) string {
 					lines := strings.Split(ansi.Strip(s), "\n")
 					for i := range lines {

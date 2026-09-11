@@ -123,7 +123,11 @@ func (m *Mods) renderWithOperation(content string) string {
 	if strings.TrimSpace(content) == "" {
 		return footer
 	}
-	return strings.TrimRight(content, "\r\n") + "\n" + footer
+	sep := "\n"
+	if m.reviewer.isPending() || m.userInput.isPending() {
+		sep = "\n\n"
+	}
+	return strings.TrimRight(content, "\r\n") + sep + footer
 }
 
 // footerView composes the persistent plan above the operation status or the

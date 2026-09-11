@@ -12,14 +12,19 @@ import (
 
 // Reserve room for the plan without padding the answer to a full screen.
 // Short output grows naturally; overflowing output scrolls above the footer.
+// One blank row separates the answer from the plan panel.
 func (m *Mods) renderTodoLayout(content string) string {
 	footer := m.footerView()
-	height := max(1, m.height-lipgloss.Height(footer))
+	gap := 0
+	if strings.TrimSpace(content) != "" {
+		gap = 1
+	}
+	height := max(1, m.height-lipgloss.Height(footer)-gap)
 	m.setTodoViewport(content, m.width, height)
-	if strings.TrimSpace(content) == "" {
+	if gap == 0 {
 		return footer
 	}
-	return m.glamViewport.View() + "\n" + footer
+	return m.glamViewport.View() + "\n\n" + footer
 }
 
 func (m *Mods) setTodoViewport(content string, width, height int) {

@@ -387,6 +387,14 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		require.Contains(t, got, "REVIEW REQUIRED")
 		require.NotContains(t, got, "animating", "spinner stays paused while approval is pending")
 	})
+
+	t.Run("model output present: blank row separates output from the review prompt", func(t *testing.T) {
+		m.responseOutputStarted = true
+		lines := strings.Split(ansi.Strip(m.renderWithOperation("partial answer so far")), "\n")
+		contentRow := lineIndexContaining(lines, "partial answer so far")
+		require.Empty(t, strings.TrimSpace(lines[contentRow+1]))
+		require.Contains(t, lines[contentRow+2], "REVIEW REQUIRED")
+	})
 }
 
 func TestRenderWithOperationShowsSpinnerAndToolLabel(t *testing.T) {

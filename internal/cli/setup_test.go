@@ -35,6 +35,23 @@ func setupPress(m *setupModel, code rune, mod tea.KeyMod) tea.Cmd {
 	return cmd
 }
 
+func TestSetupTerminalOptionsIgnoreRawOutput(t *testing.T) {
+	oldInput, oldError := IsInputTTY, IsErrorTTY
+	t.Cleanup(func() { IsInputTTY, IsErrorTTY = oldInput, oldError })
+	IsInputTTY = func() bool { return true }
+	setupFixture(t, func(m *setupModel) {
+		config.Raw = true
+		IsErrorTTY = func() bool { return true }
+		buildSetupProgramOptions()
+		require.True(t, config.InteractiveTTYAvailable)
+		require.True(t, config.Raw, "setup must not change the model output preference")
+		buildTeaProgramOptions()
+		require.False(t, config.InteractiveTTYAvailable, "raw model requests still disable interaction")
+		IsErrorTTY = func() bool { return false }
+		require.EqualError(t, m.run(), "interactive setup requires a terminal")
+	})
+}
+
 func TestSetupConditionalPagesAndDefaults(t *testing.T) {
 	setupFixture(t, func(m *setupModel) {
 		require.NotContains(t, m.pages(), setupCredentials)

@@ -77,9 +77,10 @@ func parseDownloads(root string, data json.RawMessage) (downloadArgs, error) {
 // RegisterDownload uses the same path authorization as filesystem tools.
 func RegisterDownload(registry *Registry, cfg FilesystemConfig) error {
 	return registry.Register(Tool{
-		Kind:         ToolKindBuiltin,
-		Capabilities: ToolCapabilities{Mutable: true},
-		Validate:     func(data json.RawMessage) error { _, err := parseDownloads(cfg.Root, data); return err },
+		TimeoutPolicy: TimeoutPolicySelf,
+		Kind:          ToolKindBuiltin,
+		Capabilities:  ToolCapabilities{Mutable: true},
+		Validate:      func(data json.RawMessage) error { _, err := parseDownloads(cfg.Root, data); return err },
 		IntentExtractor: func(data json.RawMessage) approval.AccessIntent {
 			args, err := parseDownloads(cfg.Root, data)
 			if err != nil {

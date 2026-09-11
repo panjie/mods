@@ -17,6 +17,8 @@ var posixBindingCommandNames = map[string]bool{
 	"local": true, "mapfile": true, "read": true, "readarray": true,
 	"readonly": true, "set": true, "shift": true, "source": true,
 	"typeset": true, "unset": true,
+	// Directory changes also update shell-owned PWD/OLDPWD values.
+	"cd": true, "pushd": true, "popd": true,
 }
 
 // commandMutatesPOSIXEnvironment reports whether the command binds, exports,
@@ -75,6 +77,9 @@ func resolvePOSIXEnvTargets(known, dynamic []string, workspace, command string, 
 		return known, dynamic
 	}
 	opts := pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX)
+	// sh initializes PWD from its execution directory, not the parent mods
+	// process. An empty context must remain unresolved rather than inherit it.
+	opts.Env["PWD"] = workspace
 	kept := make([]string, 0, len(dynamic))
 	var expanded []string
 	for _, target := range dynamic {

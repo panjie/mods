@@ -41,10 +41,19 @@ var askInfoPrompt = askInfo
 // orchestration; the tty/raw decision tree was previously interleaved with
 // flag-validation code.
 func buildTeaProgramOptions() []tea.ProgramOption {
+	return teaProgramOptions(config.Raw)
+}
+
+// Explicit setup needs terminal input even when model output is configured raw.
+func buildSetupProgramOptions() []tea.ProgramOption {
+	return teaProgramOptions(false)
+}
+
+func teaProgramOptions(raw bool) []tea.ProgramOption {
 	opts := []tea.ProgramOption{}
 	config.InteractiveTTYAvailable = false
 
-	if config.Raw || !IsErrorTTY() {
+	if raw || !IsErrorTTY() {
 		opts = append(opts, tea.WithInput(nil))
 	} else if IsInputTTY() {
 		config.InteractiveTTYAvailable = true
@@ -56,7 +65,7 @@ func buildTeaProgramOptions() []tea.ProgramOption {
 		opts = append(opts, tea.WithInput(nil))
 	}
 
-	if IsErrorTTY() && !config.Raw && config.InteractiveTTYAvailable {
+	if IsErrorTTY() && !raw && config.InteractiveTTYAvailable {
 		opts = append(opts, tea.WithOutput(os.Stderr))
 	} else {
 		opts = append(opts, tea.WithoutRenderer())

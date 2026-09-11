@@ -163,7 +163,7 @@ func RunConfigWizard() error {
 }
 
 func (m *setupModel) run() error {
-	opts := buildTeaProgramOptions()
+	opts := buildSetupProgramOptions()
 	if !config.InteractiveTTYAvailable {
 		return errors.New("interactive setup requires a terminal")
 	}

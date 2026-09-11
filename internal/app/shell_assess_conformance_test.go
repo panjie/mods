@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func slashSet(values []string) []string {
 		out = append(out, filepath.ToSlash(filepath.Clean(v)))
 	}
 	sort.Strings(out)
-	return out
+	return slices.Compact(out)
 }
 
 type conformanceCase struct {
@@ -129,10 +130,9 @@ func posixConformanceCases() []conformanceCase {
 			wantDirs: []string{"<EXT>", "<EXT>/out.txt"},
 		},
 		{
-			name: "single external operand is recorded twice via both sources", tool: "shell_run",
+			name: "single external operand from both sources denotes one target", tool: "shell_run",
 			command: "rm -rf <SAFE>/x", want: approval.EffectWrite,
-			wantDirs: []string{"<SAFE>/x", "<SAFE>/x"},
-			note:     "duplicate fact in two separator styles: AST raw token plus normalized fallback",
+			wantDirs: []string{"<SAFE>/x"},
 		},
 		{
 			name: "pipeline reads both operands", tool: "shell_run",

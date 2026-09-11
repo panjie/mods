@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
 - Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.
 - Review now applies only to non-temporary writes: proven reads always run without review, while reusable approvals are scoped to local directory subtrees and normalized remote origins within the current session. `always` reviews every non-temporary write and ignores saved rules.
+- Rejected interpreter work now has a reviewable form: one bare interpreter with a single literal script path inside the workspace or a temporary directory (`python tools/check.py`) is approved against its complete displayed source, size, and SHA-256 instead of being rejected, and is refused if the file changed after review. Inline `-c`/`-e` code, encoded payloads, extra interpreter arguments, path-qualified interpreters, and scripts outside the workspace are still rejected.
 
 ### Removed
 - Removed the DuckDuckGo web search provider.

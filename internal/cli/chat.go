@@ -128,17 +128,10 @@ func validateChatMode() error {
 	return nil
 }
 
+// hasChatSessionAction reports whether a flag that cannot be combined with
+// --chat is selected. That set is declared as roleBlocksChat in the flag table.
 func hasChatSessionAction() bool {
-	return config.List ||
-		config.ListRoles ||
-		config.ListPrompts ||
-		config.ListSkills ||
-		config.Settings ||
-		config.ConfigSetup ||
-		config.ResetSettings ||
-		config.Dirs ||
-		config.MCPList ||
-		config.MCPListTools
+	return anyRoleSelected(roleBlocksChat)
 }
 
 func runChatTurn(ctx context.Context, prompt string, opts []tea.ProgramOption) (*Mods, error) {

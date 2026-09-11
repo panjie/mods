@@ -296,8 +296,6 @@ func newShellOutput() *shellOutput {
 
 func (w *shellOutput) String() string { return w.Snapshot().Text }
 
-func decodeOutput(out []byte) string { return decodeCommandOutput(out) }
-
 func appendExitStatus(text string, code int) string {
 	if text != "" {
 		return text + fmt.Sprintf("\n[exit status %d]", code)

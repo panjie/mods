@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -297,24 +298,71 @@ func TestHideToolStatusConfig(t *testing.T) {
 	})
 }
 
-func TestConfigTemplateIncludesHideToolStatus(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
+func TestConfigTemplateCoversEveryPersistentSetting(t *testing.T) {
+	rendered := readDefaultConfigFile(t)
 
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.True(t, strings.Contains(string(content), "hide-tool-status: false"))
+	for _, setting := range SelfHelpSettings() {
+		if strings.Contains(setting.Path, "<") {
+			// Map placeholders (apis.<provider>, mcp-servers.<server>) have no
+			// single template key; their value schemas are covered by
+			// TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults.
+			continue
+		}
+		leaf := setting.Path[strings.LastIndex(setting.Path, ".")+1:]
+		require.Truef(t, configTemplateDeclaresKey(rendered, leaf),
+			"setting %q is missing from config_template.yml", setting.Path)
+	}
 }
 
-func TestConfigTemplateIncludesPrompts(t *testing.T) {
+// TestConfigTemplateUsesOnlyDocumentedHelpKeys guards the template's help
+// interpolation. {{ index .Help "x" }} renders an empty line rather than failing
+// when x is absent from the Help map, so a typo would silently drop the
+// documentation for that key instead of breaking anything.
+func TestConfigTemplateUsesOnlyDocumentedHelpKeys(t *testing.T) {
+	pattern := regexp.MustCompile(`\{\{\s*index \.Help "([^"]+)"\s*\}\}`)
+	keys := pattern.FindAllStringSubmatch(configTemplate, -1)
+	require.NotEmpty(t, keys, "the template must interpolate configuration help text")
+	for _, match := range keys {
+		require.Contains(t, Help, match[1], "config_template.yml interpolates an unknown Help key")
+	}
+}
+
+// TestConfigTemplateRendersHelpTextForEveryKey asserts the interpolation
+// actually reaches the generated file, so a key whose help was dropped from the
+// template (rather than typo'd) is caught too.
+func TestConfigTemplateRendersHelpTextForEveryKey(t *testing.T) {
+	rendered := readDefaultConfigFile(t)
+	pattern := regexp.MustCompile(`\{\{\s*index \.Help "([^"]+)"\s*\}\}`)
+	for _, match := range pattern.FindAllStringSubmatch(configTemplate, -1) {
+		help := Help[match[1]]
+		if help == "" {
+			continue
+		}
+		require.Containsf(t, rendered, help,
+			"the generated config file does not contain the help text for %q", match[1])
+	}
+}
+
+// readDefaultConfigFile renders the default config file the user would get.
+func readDefaultConfigFile(t *testing.T) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))
-
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.Contains(t, string(content), "prompts:")
-	require.Contains(t, string(content), `identity: ""`)
-	require.Contains(t, string(content), `shell-classifier: ""`)
+	return string(content)
+}
+
+// configTemplateDeclaresKey reports whether the rendered template declares key as
+// a YAML key, at any nesting depth, commented out or not.
+func configTemplateDeclaresKey(rendered, key string) bool {
+	for _, line := range strings.Split(rendered, "\n") {
+		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
+		if strings.HasPrefix(line, key+":") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestShowTokenUsageConfig(t *testing.T) {
@@ -330,14 +378,6 @@ func TestShowTokenUsageConfig(t *testing.T) {
 	require.True(t, envCfg.ShowTokenUsage)
 }
 
-func TestConfigTemplateIncludesShowTokenUsage(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "show-token-usage: false")
-}
-
 func TestNerdFontGlyphsConfig(t *testing.T) {
 	require.False(t, Default().NerdFontGlyphs)
 
@@ -351,14 +391,6 @@ func TestNerdFontGlyphsConfig(t *testing.T) {
 	require.True(t, envCfg.NerdFontGlyphs)
 }
 
-func TestConfigTemplateIncludesNerdFontGlyphs(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "nerd-font-glyphs: false")
-}
-
 func TestConfigTemplateOmitsCLIOnlyImageInputs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, createConfigFile(path))
@@ -369,21 +401,6 @@ func TestConfigTemplateOmitsCLIOnlyImageInputs(t *testing.T) {
 	require.NotContains(t, text, "\n# images:")
 	require.NotContains(t, text, "\n# stdin-image:")
 	require.NotContains(t, text, "\n# clipboard-image:")
-}
-
-func TestConfigTemplateIncludesDefaultToolSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
-
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	text := string(content)
-
-	require.Contains(t, text, "filesystem: auto")
-	require.Contains(t, text, "shell: true")
-	require.Contains(t, text, "web-search: false")
-	require.Contains(t, text, "web-search-provider: tavily")
-	require.Contains(t, text, "web-search-api-key-env: TAVILY_API_KEY")
 }
 
 func TestCreateConfigFileUsesLFLineEndings(t *testing.T) {
@@ -401,18 +418,8 @@ func TestConfigTemplateUsesEnglishNeutralSections(t *testing.T) {
 
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
-	text := string(content)
-
-	for _, r := range text {
+	for _, r := range string(content) {
 		require.Falsef(t, unicode.Is(unicode.Han, r), "config template must not contain Chinese characters: %q", r)
-	}
-
-	for _, section := range []string{
-		"Chinese AI Providers",
-		"Major Cloud Providers",
-		"Enterprise / Alternative",
-	} {
-		require.NotContains(t, text, section)
 	}
 }
 
@@ -582,15 +589,6 @@ func TestEnsureRejectsInvalidShellReadOnlyCommand(t *testing.T) {
 	_, err := Ensure()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "shell-read-only-commands[0]")
-}
-
-func TestConfigTemplateIncludesShellReadOnlyCommands(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "mods.yml")
-	require.NoError(t, createConfigFile(path))
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "shell-read-only-commands: []")
-	require.Contains(t, string(content), "all arguments, subcommands, and internal side effects")
 }
 
 func TestSettingsFilePathUsesUniversalXDG(t *testing.T) {

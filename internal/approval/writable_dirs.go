@@ -484,47 +484,6 @@ func hasKnownRiskyInvocation(args []string, posix bool) bool {
 	}
 }
 
-func hasKnownRiskyShellCommand(command string, posix bool) bool {
-	if !posix {
-		for _, part := range splitSimpleCompound(normalizeSimpleCommand(command)) {
-			if hasKnownRiskyInvocation(tokenizeSimple(part), false) {
-				return true
-			}
-		}
-		return false
-	}
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return false
-	}
-	risky := false
-	syntax.Walk(file, func(node syntax.Node) bool {
-		if risky {
-			return false
-		}
-		if exp, ok := node.(*syntax.ParamExp); ok {
-			// Runtime-expanded arguments may resolve to external paths that the
-			// approval matrix cannot derive from the command text.
-			if _, known := simpleHomeExpansion(exp); !known {
-				risky = true
-				return false
-			}
-			return true
-		}
-		call, ok := node.(*syntax.CallExpr)
-		if !ok {
-			return true
-		}
-		if args := shellWordsForAccess(call.Args); len(args) > 0 && hasKnownRiskyInvocation(args, true) {
-			risky = true
-			return false
-		}
-		return true
-	})
-	return risky
-}
-
 func findHasWriteAction(args []string) bool {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {

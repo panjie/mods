@@ -318,9 +318,19 @@ unreviewable calls are rejected without running, and the turn continues;
 `--minimal` does not disable this check. Explicit `--review-mode never` bypasses
 it. There is no general script execution tool: split the work into separate
 single-purpose calls instead of hiding code in interpreter flags, temporary
-files, or encoded arguments. Long command reviews use Up/Down to page;
-approval becomes available after all pages have been displayed. This is not an
-execution sandbox.
+files, or encoded arguments.
+
+The one shape that stays reviewable is a script that already exists as a file.
+One bare interpreter with a single literal script-path argument inside the
+workspace or a temporary directory (`python tools/check.py`) is shown in full:
+the resolved path, size, SHA-256, and the complete source, with approval
+withheld until every page has been displayed. No saved path rule can approve it,
+and it is refused if the file changed between review and execution. Inline
+`-c`/`-e` code, encoded payloads, extra interpreter arguments, path-qualified
+interpreters, and scripts outside the workspace are still rejected.
+
+Long command reviews use Up/Down to page; approval becomes available after all
+pages have been displayed. This is not an execution sandbox.
 
 `http_download` accepts up to 32 URL/path pairs (16 MiB per file), stops on the
 first failure and reports completed/failed/skipped entries. It requires existing

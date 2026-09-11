@@ -11,7 +11,7 @@ func shouldAutoConfig(args []string) (bool, error) {
 	if config.SettingsExisted || db == nil {
 		return false, nil
 	}
-	if isCompletionCmd(args) || isVersionOrHelpCmd(args) || isAutoConfigSkippedAction() {
+	if isCompletionCmd(args) || helpOrVersionRequested(args) || isAutoConfigSkippedAction() {
 		return false, nil
 	}
 	hasSessions, err := db.HasSessions()
@@ -38,17 +38,14 @@ func cleanupAutoCreatedConfig(args []string) error {
 	return nil
 }
 
+// isPassiveAutoConfigSkippedAction reports whether the invocation is a passive
+// listing/help that must not leave an auto-created config file behind. The flag
+// set is declared as roleBlocksPassiveAutoConfig in the flag table.
 func isPassiveAutoConfigSkippedAction(args []string) bool {
 	return isCompletionCmd(args) ||
-		isVersionOrHelpCmd(args) ||
-		config.Dirs ||
-		config.List ||
-		config.ListRoles ||
-		config.ListPrompts ||
-		config.ListSkills ||
+		helpOrVersionRequested(args) ||
 		showSkillsDirs ||
-		config.MCPList ||
-		config.MCPListTools
+		anyRoleSelected(roleBlocksPassiveAutoConfig)
 }
 
 func maybeRunAutoConfig(args []string) (bool, error) {
@@ -62,18 +59,11 @@ func maybeRunAutoConfig(args []string) (bool, error) {
 	return true, runAutoConfig()
 }
 
+// isAutoConfigSkippedAction reports whether the invocation selects a one-shot
+// action that should not trigger first-run auto configuration. The flag set is
+// declared as roleBlocksAutoConfig in the flag table.
 func isAutoConfigSkippedAction() bool {
-	return config.Dirs ||
-		config.Settings ||
-		config.ConfigSetup ||
-		config.ResetSettings ||
-		config.List ||
-		config.ListRoles ||
-		config.ListPrompts ||
-		config.ListSkills ||
-		showSkillsDirs ||
-		config.MCPList ||
-		config.MCPListTools
+	return showSkillsDirs || anyRoleSelected(roleBlocksAutoConfig)
 }
 
 func runAutoConfig() error {

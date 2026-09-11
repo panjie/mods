@@ -357,7 +357,7 @@ func TestExtractExternalPathsWindowsFlavor(t *testing.T) {
 	})
 }
 
-func TestMentionsExternalPath(t *testing.T) {
+func TestExtractExternalPathsDetectsExternalReferences(t *testing.T) {
 	ws := filepath.Clean(t.TempDir())
 	ext := filepath.Clean(t.TempDir())
 	cases := []struct {
@@ -381,27 +381,43 @@ func TestMentionsExternalPath(t *testing.T) {
 		{"echo $HOME is nice", false},
 	}
 	for _, c := range cases {
-		require.Equalf(t, c.want, mentionsExternalPath(c.cmd, ws), "cmd=%q", c.cmd)
+		require.Equalf(t, c.want, len(extractExternalPaths(c.cmd, ws)) > 0, "cmd=%q", c.cmd)
 	}
 }
 
-func TestMentionsExternalPathEmptyRoot(t *testing.T) {
+func TestExtractExternalPathsEmptyRoot(t *testing.T) {
 	// No workspace context: any absolute path is treated as potentially external.
-	require.True(t, mentionsExternalPath("cat /etc/passwd", ""))
-	require.False(t, mentionsExternalPath("cat README.md", ""))
+	require.NotEmpty(t, extractExternalPaths("cat /etc/passwd", ""))
+	require.Empty(t, extractExternalPaths("cat README.md", ""))
 }
 
-func TestFilterArgPathsPowerShellPreservesSpacedWindowsPath(t *testing.T) {
+func TestShellExternalPathFactsKeepsSpacedWindowsPath(t *testing.T) {
 	ws := filepath.Clean(t.TempDir())
 
-	got := filterArgPaths([]string{`C:\Program Files\App\notes.txt`}, ws, pathutil.FlavorPowerShell)
+	got := shellExternalPathFacts([]string{`C:\Program Files\App\notes.txt`}, ws, pathutil.FlavorPowerShell)
 	require.Equal(t, []string{`C:\Program Files\App\notes.txt`}, got)
 	require.NotContains(t, got, `C:\Program`)
 }
 
-func TestFilterArgPathsPowerShellIgnoresUnixStyleArgs(t *testing.T) {
-	got := filterArgPaths([]string{"/out", "/reference", "/etc/passwd"}, "", pathutil.FlavorPowerShell)
+// TestShellExternalPathFactsPowerShellDropsUnixStyleTokens pins the PowerShell
+// dialect policy: leading-slash tokens are native-program flags or division,
+// never filesystem paths, so they must not become external path facts.
+func TestShellExternalPathFactsPowerShellDropsUnixStyleTokens(t *testing.T) {
+	got := shellExternalPathFacts([]string{"/out", "/reference", "/etc/passwd"}, "", pathutil.FlavorPowerShell)
 	require.Empty(t, got)
+}
+
+// TestShellExternalPathFactsPOSIXKeepsNonExplicitExternals pins the POSIX side
+// of the same boundary: approval extracted the token from a real shell parse,
+// so an external location is kept even when it carries no explicit path syntax
+// (a UNC-style literal). Re-judging it here used to empty the fact list, which
+// then collapsed the read into the workspace scope.
+func TestShellExternalPathFactsPOSIXKeepsNonExplicitExternals(t *testing.T) {
+	ws := filepath.Clean(t.TempDir())
+
+	got := shellExternalPathFacts([]string{`\\server\share\f`}, ws, pathutil.FlavorPOSIX)
+	require.Len(t, got, 1)
+	require.Equal(t, pathutil.LocationExternal, pathutil.Location(got[0], ws, nil))
 }
 
 func TestShellRunPathFlavor(t *testing.T) {

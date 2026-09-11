@@ -6,7 +6,6 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/panjie/mods/internal/proto"
 )
 
 func (m *Mods) findSessionDetails() tea.Cmd {
@@ -107,16 +106,4 @@ func (m *Mods) readStdinCmd() tea.Msg {
 
 func (m *Mods) readLimitedStdin(reader io.Reader) ([]byte, error) {
 	return io.ReadAll(reader)
-}
-
-func (m *Mods) readFromSession() tea.Cmd {
-	return func() tea.Msg {
-		var messages []proto.Message
-		if err := m.db.ReadMessages(m.Config.SessionReadFromID, &messages); err != nil {
-			return modsError{Err: err, ReasonText: "There was an error loading the session."}
-		}
-
-		m.appendToOutput(proto.Session(messages).String())
-		return streamEventMsg{kind: streamEventDone}
-	}
 }

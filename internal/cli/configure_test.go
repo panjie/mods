@@ -128,13 +128,6 @@ func TestDiscoverOptionsUsesCopilotProtocolForNewProviderNamedGitHubCopilot(t *t
 	require.Equal(t, "openai", configWizardDiscoveryType(addProviderOption, "groq", "openai"))
 }
 
-func TestConfigWizardDiscoveryDescriptionShowsDiscoveryFailure(t *testing.T) {
-	require.NotContains(t, configWizardDiscoveryDescription(nil), "failed")
-	require.Contains(t, configWizardDiscoveryDescription(nil), "Select models to add")
-	require.Contains(t, configWizardDiscoveryDescription(fmt.Errorf("network unavailable")),
-		"Model discovery failed: network unavailable")
-}
-
 func TestConfigWizardManualModelsDescriptionShowsDiscoveryFailure(t *testing.T) {
 	require.NotContains(t, configWizardManualModelsDescription(nil), "failed")
 	require.Contains(t, configWizardManualModelsDescription(fmt.Errorf("network unavailable")),
@@ -507,7 +500,7 @@ func TestValidateNewModelName(t *testing.T) {
 	})
 }
 
-func TestParseNewModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
+func TestConfigWizardModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
 	withTestConfig(t, Config{
 		PersistentConfig: PersistentConfig{
 			APIs: []API{{
@@ -518,14 +511,23 @@ func TestParseNewModelNamesTrimsSkipsEmptyAndDeduplicates(t *testing.T) {
 			}},
 		},
 	}, func() {
-		models, err := parseNewModelNames("openrouter", "\n vendor/gpt-5.5:latest \n\nvendor/gpt-5.5:latest\nopenai/gpt-5.4\n")
+		models, err := configWizardModelNames("openrouter", nil, "\n vendor/gpt-5.5:latest \n\nvendor/gpt-5.5:latest\nopenai/gpt-5.4\n")
 		require.NoError(t, err)
 		require.Equal(t, []string{"vendor/gpt-5.5:latest", "openai/gpt-5.4"}, models)
 
-		_, err = parseNewModelNames("openrouter", "\n \t")
+		_, err = configWizardModelNames("openrouter", nil, "\n \t")
 		require.Error(t, err)
-		_, err = parseNewModelNames("openrouter", "anthropic/claude-sonnet-4-6")
-		require.Error(t, err)
+
+		// The wizard accepts a model that is already configured: re-running
+		// --config on the same provider must not reject the existing entries.
+		models, err = configWizardModelNames("openrouter", nil, "anthropic/claude-sonnet-4-6")
+		require.NoError(t, err)
+		require.Equal(t, []string{"anthropic/claude-sonnet-4-6"}, models)
+
+		// A successful discovery selection takes precedence over manual text.
+		models, err = configWizardModelNames("openrouter", []string{"picked/model"}, "manual/model")
+		require.NoError(t, err)
+		require.Equal(t, []string{"picked/model"}, models)
 	})
 }
 
@@ -629,15 +631,6 @@ func TestConfigWizardPreselectsConfiguredDiscoveredModels(t *testing.T) {
 
 		require.Equal(t, []string{"gpt-5.4"}, got)
 	})
-}
-
-func TestConfigWizardModelPageVisibilityAfterDiscoveryFailure(t *testing.T) {
-	require.False(t, configWizardHideDiscoveryModels(false),
-		"discovery picker should stay visible after discovery fails so the error is shown")
-	require.True(t, configWizardHideDiscoveryModels(true),
-		"discovery picker should hide while waiting for Copilot auth")
-	require.False(t, configWizardHideManualModels(false, false, nil),
-		"manual entry should show after discovery fails")
 }
 
 func TestManualModelTextForProviderUsesConfiguredModels(t *testing.T) {

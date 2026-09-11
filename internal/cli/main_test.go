@@ -90,7 +90,7 @@ func TestSessionCompletions(t *testing.T) {
 	require.Equal(t, []string{"df31ae2\tmessage 1"}, results)
 }
 
-func TestIsVersionOrHelpCmd(t *testing.T) {
+func TestHelpOrVersionRequested(t *testing.T) {
 	for args, is := range map[string]bool{
 		"":                        false,
 		"mods":                    false,
@@ -103,10 +103,25 @@ func TestIsVersionOrHelpCmd(t *testing.T) {
 		"mods --model gpt-4":      false,
 		"mods -v -m gpt-4":        true,
 		"mods -m gpt-4 --version": true,
+		"mods something --help":   true,
+		"mods --help something":   true,
+		// Everything after "--" is prompt text, so it must not be read as a
+		// help/version request; the old string scan got these wrong and made
+		// the prompt path skip the configuration file.
+		"mods -- --help":          false,
+		"mods -- -h":              false,
+		"mods -- --version":       false,
+		"mods -- -v":              false,
+		"mods -- --help a prompt": false,
+		// Explicitly disabled, and values consumed by another flag, are not
+		// help requests either.
+		"mods --help=false":   false,
+		"mods -h=false":       false,
+		"mods --model --help": false,
 	} {
 		t.Run(args, func(t *testing.T) {
 			vargs := append([]string{"mods"}, strings.Fields(args)...)
-			if b := isVersionOrHelpCmd(vargs); b != is {
+			if b := helpOrVersionRequested(vargs); b != is {
 				t.Errorf("%v: expected %v, got %v", vargs, is, b)
 			}
 		})
@@ -157,6 +172,57 @@ func TestExecuteHelpAndVersionBypassConfigLoad(t *testing.T) {
 			require.Equal(t, 0, code)
 			require.Empty(t, stderr)
 			require.Contains(t, stdout, tc.wantOutput)
+		})
+	}
+}
+
+// TestExecutePromptContainingHelpTokenLoadsConfig locks in the fix for a
+// hand-rolled argv scan that treated any bare "--help"/"-h"/"--version"/"-v"
+// token as a help request. The scan ignored pflag's "--" terminator, so a
+// prompt such as `mods -- "--help"` was misrouted: execute() skipped Ensure()
+// and the session DB, then Cobra ran the prompt anyway, and the turn used a
+// default configuration with a nil database.
+func TestExecutePromptContainingHelpTokenLoadsConfig(t *testing.T) {
+	for _, args := range [][]string{
+		{"mods", "--", "--help"},
+		{"mods", "--", "-h"},
+		{"mods", "--", "--version"},
+		{"mods", "--", "-v"},
+	} {
+		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
+			savedArgs := os.Args
+			savedEnsure := Ensure
+			savedConfig := config
+			savedDB := db
+			savedIsInputTTY := IsInputTTY
+			t.Cleanup(func() {
+				os.Args = savedArgs
+				Ensure = savedEnsure
+				config = savedConfig
+				db = savedDB
+				IsInputTTY = savedIsInputTTY
+				rootCmd.SetArgs(nil)
+			})
+
+			calledEnsure := false
+			Ensure = func() (Config, error) {
+				calledEnsure = true
+				return Config{}, fmt.Errorf("sentinel: config load must be attempted")
+			}
+			IsInputTTY = func() bool { return true }
+			os.Args = args
+
+			var code int
+			var stderr string
+			_ = captureStdout(t, func() {
+				stderr = captureStderr(t, func() {
+					code = execute()
+				})
+			})
+
+			require.True(t, calledEnsure, "a prompt must load the configuration file")
+			require.Equal(t, 1, code)
+			require.Contains(t, stderr, "Could not load your configuration file")
 		})
 	}
 }
@@ -619,37 +685,52 @@ func TestRoleNames(t *testing.T) {
 
 func TestIsNoArgs(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
-		cfg := Config{}
-		require.True(t, isNoArgsCfg(cfg))
+		withTestConfig(t, Config{}, func() {
+			require.True(t, isNoArgs())
+		})
 	})
 	t.Run("with prefix", func(t *testing.T) {
-		cfg := Config{Prefix: "hello"}
-		require.False(t, isNoArgsCfg(cfg))
+		withTestConfig(t, Config{Prefix: "hello"}, func() {
+			require.False(t, isNoArgs())
+		})
 	})
 	t.Run("with list prompts", func(t *testing.T) {
-		cfg := Config{ListPrompts: true}
-		require.False(t, isNoArgsCfg(cfg))
+		withTestConfig(t, Config{ListPrompts: true}, func() {
+			require.False(t, isNoArgs())
+		})
 	})
 	t.Run("with list skills", func(t *testing.T) {
-		cfg := Config{ListSkills: true}
-		require.False(t, isNoArgsCfg(cfg))
+		withTestConfig(t, Config{ListSkills: true}, func() {
+			require.False(t, isNoArgs())
+		})
 	})
-}
-
-func isNoArgsCfg(cfg Config) bool {
-	return cfg.Prefix == "" &&
-		!cfg.ShowHelp &&
-		!cfg.List &&
-		!cfg.ListRoles &&
-		!cfg.ListPrompts &&
-		!cfg.ListSkills &&
-		!cfg.MCPList &&
-		!cfg.MCPListTools &&
-		!cfg.Dirs &&
-		!cfg.Settings &&
-		!cfg.ConfigSetup &&
-		!cfg.Chat &&
-		!cfg.ResetSettings
+	t.Run("with dirs", func(t *testing.T) {
+		withTestConfig(t, Config{Dirs: true}, func() {
+			require.False(t, isNoArgs())
+		})
+	})
+	t.Run("with show help", func(t *testing.T) {
+		withTestConfig(t, Config{ShowHelp: true}, func() {
+			require.False(t, isNoArgs())
+		})
+	})
+	t.Run("with chat", func(t *testing.T) {
+		withTestConfig(t, Config{Chat: true}, func() {
+			require.False(t, isNoArgs())
+		})
+	})
+	t.Run("with skills dirs listing", func(t *testing.T) {
+		// showSkillsDirs is set by extractSkillsDirsAction before Cobra parses,
+		// so it is an input to isNoArgs that no Config field can express. The
+		// copy of isNoArgs that used to live in this file omitted it, which is
+		// exactly the drift the real function must be tested for.
+		saved := showSkillsDirs
+		showSkillsDirs = true
+		t.Cleanup(func() { showSkillsDirs = saved })
+		withTestConfig(t, Config{}, func() {
+			require.False(t, isNoArgs())
+		})
+	})
 }
 
 func TestHelpUsageShowsAllPublicFlags(t *testing.T) {
@@ -702,7 +783,11 @@ func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 			seen[f.Name]++
 			require.Equal(t, category.Name, flagCategory(f))
 		}
-		require.Equal(t, category.Flags, names, category.Name)
+		declared := make([]string, 0, len(category.Flags))
+		for _, spec := range category.Flags {
+			declared = append(declared, spec.Name)
+		}
+		require.Equal(t, declared, names, category.Name)
 	}
 
 	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
@@ -710,6 +795,66 @@ func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 			require.Equal(t, 1, seen[f.Name], f.Name)
 		}
 	})
+}
+
+// TestFlagTableMatchesRegistration is the drift guard for the flag surface. A
+// public flag must be declared in flagCategorySpecs and registered in
+// registerFlags with the same shorthand and tier, so adding a flag to only one
+// of the two places fails here instead of surfacing as a missing help entry or
+// an uncategorized flag.
+func TestFlagTableMatchesRegistration(t *testing.T) {
+	declared := make(map[string]flagSpec)
+	for _, category := range flagCategorySpecs {
+		for _, spec := range category.Flags {
+			require.NotContains(t, declared, spec.Name, "duplicate table entry for --%s", spec.Name)
+			declared[spec.Name] = spec
+		}
+	}
+
+	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			return
+		}
+		spec, ok := declared[f.Name]
+		require.Truef(t, ok, "--%s is registered but missing from flagCategorySpecs", f.Name)
+		require.Equal(t, f.Shorthand, spec.Short, "--%s shorthand", f.Name)
+		require.Equal(t, spec.Advanced, flagIsAdvanced(f), "--%s advanced tier", f.Name)
+		delete(declared, f.Name)
+	})
+	require.Empty(t, declared, "flags declared in flagCategorySpecs but not registered")
+}
+
+// TestOneShotRoleAssignments locks which flags carry each predicate role. The
+// roles drive isNoArgs, hasChatSessionAction and the first-run auto-config
+// skips, so changing one of these sets changes when mods treats an invocation
+// as "no arguments" or as a side-effect action. Make such a change here, on
+// purpose.
+func TestOneShotRoleAssignments(t *testing.T) {
+	require.ElementsMatch(t, []string{
+		"settings", "list-sessions", "continue", "continue-last", "reset-settings",
+		"config", "list-mcps", "list-tools", "list-prompts", "list-skills",
+	}, sessionActionFlags, "mutually exclusive one-shot actions")
+	require.Equal(t, []string{"continue"}, sessionCompleteFlags, "flags taking a session id")
+
+	require.ElementsMatch(t, []string{
+		"help", "chat", "list-sessions", "list-roles", "list-prompts", "list-tools",
+		"list-skills", "list-mcps", "config", "settings", "dirs", "reset-settings",
+	}, flagNamesWithRole(roleNoArgs), "flags that make the invocation non-empty")
+
+	require.ElementsMatch(t, []string{
+		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
+		"list-mcps", "config", "settings", "dirs", "reset-settings",
+	}, flagNamesWithRole(roleBlocksChat), "flags that cannot be combined with --chat")
+
+	require.ElementsMatch(t, []string{
+		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
+		"list-mcps", "config", "settings", "dirs", "reset-settings",
+	}, flagNamesWithRole(roleBlocksAutoConfig), "flags that skip first-run auto configuration")
+
+	require.ElementsMatch(t, []string{
+		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
+		"list-mcps", "dirs",
+	}, flagNamesWithRole(roleBlocksPassiveAutoConfig), "flags that skip the auto-created config cleanup")
 }
 
 func TestSelfHelpCatalogMatchesEveryPublicFlag(t *testing.T) {

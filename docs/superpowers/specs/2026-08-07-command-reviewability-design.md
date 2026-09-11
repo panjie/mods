@@ -69,6 +69,39 @@ Opaque or interpreter-wrapped content never receives ordinary approval; the
 correction feedback requires separate literal single-purpose calls and rejects
 hiding code in interpreter flags, temporary files, or encoded arguments.
 
+## Script execution release valve
+
+Updated 2026-09-11. An interpreter invocation stays opaque, but one shape can be
+reviewed honestly instead of being rejected: a whole command that is a single
+bare interpreter with exactly one literal script-path operand.
+
+- Detection lives in `internal/approval/script_exec.go` and keeps the command
+  opaque (`ReviewabilityScriptExecution` plus a candidate
+  `ScriptExecutionFacts`). Inline `-c`/`-e`, module flags, extra arguments,
+  encoded payloads, nested shell hosts, pipelines, redirections, assignments,
+  dynamic or glob operands, path-qualified interpreters, and external scripts
+  stay opaque and are rejected exactly as before.
+- Eligibility lives in the app layer (`internal/app/script_review.go`): the
+  operand must resolve inside the workspace or a safe directory, survive symlink
+  resolution, and be a readable, NUL-free, valid UTF-8 regular file of at most
+  128 KiB. Otherwise the facts stay unverified and the preflight rejects the
+  call.
+- The effect is forced back to unknown. A classifier read verdict must not lift
+  the payload into the always-allowed read cell, and a guessed target must not
+  advertise a bounded scope.
+- Review shows the resolved path, size, SHA-256, and the complete escaped source.
+  Shell and process reviews are already paginated, so approval stays unavailable
+  until every page has been displayed. `candidateRulesForIntent` offers no rule
+  for the intent, and `requestApproval` skips the saved-rule shortcut for
+  verified script calls: a path rule cannot speak for bytes that may change.
+- Execution is bound to the displayed bytes: the reviewer refreshes the digest
+  while rendering, and `request_session.go` re-reads the file immediately before
+  the call and refuses to run a script that changed. The residual window between
+  that check and the interpreter opening the file is accepted on purpose;
+  executing a snapshot copy would change the interpreter's view of its own path.
+- There is still no general script execution tool, and a script executed directly
+  by path (`./tools/check.py`) or through a shell host remains opaque.
+
 Correction messages describe structural facts but do not echo commands,
 dynamic target expressions, secret references, or argument values.
 

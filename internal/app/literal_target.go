@@ -46,7 +46,7 @@ func resolveLiteralTarget(target string, literals map[string]string, opts pathut
 				continue
 			}
 			rest := target[len(prefix):]
-			if rest != "" && !isShellPathSeparator(rest[0]) {
+			if rest != "" && !approval.IsShellPathSeparator(rest[0]) {
 				continue
 			}
 			resolved := pathutil.NormalizeShellPath(value+rest, opts)

@@ -131,22 +131,9 @@ func configWizardDiscoveryFailurePrefix(discoveryErr error) string {
 	return fmt.Sprintf("Model discovery failed: %v\n", discoveryErr)
 }
 
-func configWizardDiscoveryDescription(discoveryErr error) string {
-	return configWizardDiscoveryFailurePrefix(discoveryErr) +
-		"Select models to add, or press Enter to enter model names manually. You will choose the default model next."
-}
-
 func configWizardManualModelsDescription(discoveryErr error) string {
 	return configWizardDiscoveryFailurePrefix(discoveryErr) +
 		"Enter model identifiers here, one per line. You will choose the default model next."
-}
-
-func configWizardHideDiscoveryModels(waitingForCopilotAuth bool) bool {
-	return waitingForCopilotAuth
-}
-
-func configWizardHideManualModels(waitingForCopilotAuth, discoverySucceeded bool, discoveredPick []string) bool {
-	return waitingForCopilotAuth || discoverySucceeded && len(discoveredPick) > 0
 }
 
 func configWizardDiscoveryType(chosenAPI, newProviderName, apiType string) string {
@@ -207,10 +194,6 @@ func validateNewModelName(provider, value string) error {
 		break
 	}
 	return nil
-}
-
-func parseNewModelNames(provider, value string) ([]string, error) {
-	return parseModelNames(provider, value, false)
 }
 
 func parseModelNames(provider, value string, allowExisting bool) ([]string, error) {
@@ -645,10 +628,6 @@ func discoverModelsContext(ctx context.Context, apiType, baseURL, apiKey string)
 	}
 }
 
-func discoverCopilotModels(baseURL, apiKey string) ([]string, map[string]string, error) {
-	return discoverCopilotModelsContext(context.Background(), baseURL, apiKey)
-}
-
 func discoverCopilotModelsContext(ctx context.Context, baseURL, apiKey string) ([]string, map[string]string, error) {
 	infos, err := copilot.DiscoverModelInfos(ctx, copilot.Client{
 		APIBaseURL:     copilotGitHubAPIBaseURL,
@@ -666,13 +645,9 @@ func discoverCopilotModelsContext(ctx context.Context, baseURL, apiKey string) (
 	return ids, endpoints, nil
 }
 
-// fetchModelIDs performs a GET and extracts model identifiers from either an
-// OpenAI/Anthropic-shaped response ({"data":[{"id":"..."}]}) or an
+// fetchModelIDsContext performs a GET and extracts model identifiers from
+// either an OpenAI/Anthropic-shaped response ({"data":[{"id":"..."}]}) or an
 // Ollama-shaped one ({"models":[{"name":"..."}]}).
-func fetchModelIDs(url, authHeader, authValue string, extraHeaders map[string]string) ([]string, error) {
-	return fetchModelIDsContext(context.Background(), url, authHeader, authValue, extraHeaders)
-}
-
 func fetchModelIDsContext(ctx context.Context, url, authHeader, authValue string, extraHeaders map[string]string) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil) //nolint:gosec,noctx
 	if err != nil {
@@ -766,13 +741,10 @@ func googleListModelsBase(base string) string {
 	return u.String()
 }
 
-// fetchGoogleModels queries the Google Generative Language list-models endpoint
-// and returns model IDs that support generateContent (filtering out embedding
-// and text-only models). Auth is via the key= query parameter, not a header.
-func fetchGoogleModels(urlStr string) ([]string, error) {
-	return fetchGoogleModelsContext(context.Background(), urlStr)
-}
-
+// fetchGoogleModelsContext queries the Google Generative Language list-models
+// endpoint and returns model IDs that support generateContent (filtering out
+// embedding and text-only models). Auth is via the key= query parameter, not a
+// header.
 func fetchGoogleModelsContext(ctx context.Context, urlStr string) ([]string, error) {
 	ids, err := fetchGoogleModelsWithClientContext(ctx, urlStr, &http.Client{Timeout: 15 * time.Second})
 	if err == nil || !isNetworkError(err) {
@@ -788,10 +760,6 @@ func fetchGoogleModelsContext(ctx context.Context, urlStr string) ([]string, err
 		return ids, nil
 	}
 	return nil, fmt.Errorf("%v (IPv4 retry failed: %v)", err, ipv4Err)
-}
-
-func fetchGoogleModelsWithClient(urlStr string, client *http.Client) ([]string, error) {
-	return fetchGoogleModelsWithClientContext(context.Background(), urlStr, client)
 }
 
 func fetchGoogleModelsWithClientContext(ctx context.Context, urlStr string, client *http.Client) ([]string, error) {

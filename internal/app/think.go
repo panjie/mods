@@ -22,15 +22,6 @@ var (
 	anthropicSonnet5Re            = regexp.MustCompile(`^claude-sonnet-5(?:-|$)`)
 )
 
-func (m *Mods) resolveThink(
-	mod *Model,
-	accfg *anthropic.Config,
-	gccfg *google.Config,
-	ccfg *openai.Config,
-) (bool, error) {
-	return m.resolveThinkWithOllama(mod, accfg, gccfg, nil, ccfg)
-}
-
 func (m *Mods) resolveThinkWithOllama(
 	mod *Model,
 	accfg *anthropic.Config,

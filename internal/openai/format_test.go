@@ -13,11 +13,11 @@ func TestFromProtoMessagesMergesStructuredSystemPrompt(t *testing.T) {
 	format := proto.Message{Role: proto.RoleSystem, Content: "format"}
 	format.SetSystemSection(proto.SystemSectionOutputFormat)
 
-	got := fromProtoMessages([]proto.Message{
+	got := fromProtoMessagesForProfile([]proto.Message{
 		format,
 		{Role: proto.RoleUser, Content: "hello"},
 		identity,
-	})
+	}, ProviderProfileOpenAI)
 	require.Len(t, got, 2)
 	require.Equal(t, proto.RoleSystem, msgRole(got[0]))
 	require.Contains(t, toProtoMessage(got[0]).Content, "identity")

@@ -14,7 +14,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
 )
@@ -329,26 +328,16 @@ func TestSessionOutputFlushesForNonTTY(t *testing.T) {
 	IsOutputTTY = func() bool { return false }
 	t.Cleanup(func() { IsOutputTTY = oldIsOutputTTY })
 
-	db := testDB(t)
-	id := session.NewID()
-	require.NoError(t, db.SaveSession(
-		id,
-		"show flush",
-		"openai",
-		"gpt-4",
-		[]proto.Message{{Role: proto.RoleUser, Content: "show me"}},
-		nil,
-	))
-
+	// Session continuation appends the saved transcript to the output; the
+	// behavior under test is that such appended output still reaches a non-TTY
+	// stdout. The command that used to produce it (readFromSession) is gone, so
+	// the transcript is appended directly.
 	m := &Mods{
-		Config:       &Config{SessionReadFromID: id},
-		db:           db,
 		contentMutex: &sync.Mutex{},
 		reviewer:     &toolReviewer{},
 	}
-	msg := m.readFromSession()()
-	require.IsType(t, streamEventMsg{}, msg)
-	_, _ = m.Update(msg)
+	m.appendToOutput(proto.Session([]proto.Message{{Role: proto.RoleUser, Content: "show me"}}).String())
+	_, _ = m.Update(streamEventMsg{kind: streamEventDone})
 
 	output := captureStdout(t, func() { _ = m.View() })
 	require.Contains(t, output, "**User**: show me")

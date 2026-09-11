@@ -25,62 +25,139 @@ const (
 	flagCategoryOther             = "Other"
 )
 
-type flagCategorySpec struct {
+// flagRole classifies how a flag participates in the one-shot invocation
+// predicates (isNoArgs, hasChatSessionAction, and the first-run auto-config
+// skips). The bits are orthogonal, so a new flag needs exactly one table entry
+// instead of an edit in every predicate.
+type flagRole uint8
+
+const (
+	// roleExclusive marks a flag that selects one side effect and is mutually
+	// exclusive with the other such flags.
+	roleExclusive flagRole = 1 << iota
+	// roleSessionComplete marks a flag whose value is a session id or title and
+	// therefore participates in shell completion.
+	roleSessionComplete
+	// roleNoArgs marks a flag whose presence means the invocation is not empty,
+	// so mods must not fall through to the "no prompt, no action" path.
+	roleNoArgs
+	// roleBlocksChat marks a flag that cannot be combined with --chat.
+	roleBlocksChat
+	// roleBlocksAutoConfig marks a flag that skips first-run auto configuration.
+	roleBlocksAutoConfig
+	// roleBlocksPassiveAutoConfig marks a flag that skips the cleanup of a
+	// config file that auto configuration created.
+	roleBlocksPassiveAutoConfig
+)
+
+// flagSpec declares one public flag's metadata: its usage category and order,
+// its tier, and its role in the one-shot predicates. Registration itself (type,
+// default, bound field) stays in initFlags because it is typed code; the guard
+// test asserts table and registration agree in both directions, so a flag
+// cannot be half-added.
+type flagSpec struct {
 	Name  string
-	Flags []string
+	Short string
+	// Advanced marks the flag as an advanced-tier entry in --help and in the
+	// runtime self-help catalog.
+	Advanced bool
+	// Set reports whether this flag currently selects its side effect. It reads
+	// the bound config field at call time, so a value supplied by mods.yml or
+	// the environment counts exactly as an explicit flag does. Only flags that
+	// carry one of the predicate roles need it.
+	Set  func() bool
+	Role flagRole
 }
 
-// flagCategorySpecs is the single source of truth for both category order and
-// flag order in --help. Keep every public flag here; groupedUsageFlags retains
-// an Other fallback so a newly added flag is still visible until categorized.
+type flagCategorySpec struct {
+	Name  string
+	Flags []flagSpec
+}
+
+// flagCategorySpecs is the single source of truth for a public flag's category,
+// order in --help, tier and one-shot role. Keep every public flag here;
+// groupedUsageFlags retains an Other fallback so a newly added flag is still
+// visible until categorized, and TestFlagTableMatchesRegistration fails when
+// the table and the registrations disagree.
 var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModelProvider,
-		Flags: []string{
-			"api", "model", "max-retries", "http-proxy",
+		Flags: []flagSpec{
+			{Name: "api", Short: "a"},
+			{Name: "model", Short: "m"},
+			{Name: "max-retries", Advanced: true},
+			{Name: "http-proxy", Short: "x", Advanced: true},
 		},
 	},
 	{
 		Name: flagCategoryModesSessions,
-		Flags: []string{
-			flagChat, "think", flagContinue, flagContinueLast,
-			flagListSessions, "no-save",
+		Flags: []flagSpec{
+			{Name: flagChat, Set: func() bool { return config.Chat }, Role: roleNoArgs},
+			{Name: "think", Short: "t"},
+			{Name: flagContinue, Short: "C", Role: roleExclusive | roleSessionComplete},
+			{Name: flagContinueLast, Short: "c", Role: roleExclusive},
+			{Name: flagListSessions, Short: "l", Set: func() bool { return config.List }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
+			{Name: "no-save", Short: "n", Advanced: true},
 		},
 	},
 	{
 		Name: flagCategoryPromptContext,
-		Flags: []string{
-			"editor", "role", "list-roles", "image", "stdin-image",
-			"clipboard-image", "no-instructions", flagListPrompts,
+		Flags: []flagSpec{
+			{Name: "editor", Short: "e"},
+			{Name: "role", Short: "r"},
+			{Name: "list-roles", Set: func() bool { return config.ListRoles }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
+			{Name: "image", Short: "i"},
+			{Name: "stdin-image", Advanced: true},
+			{Name: "clipboard-image", Short: "I", Advanced: true},
+			{Name: "no-instructions", Advanced: true},
+			{Name: flagListPrompts, Set: func() bool { return config.ListPrompts }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 		},
 	},
 	{
-		Name:  flagCategoryWorkspaceReview,
-		Flags: []string{"workspace", "review-mode", "no-review"},
+		Name: flagCategoryWorkspaceReview,
+		Flags: []flagSpec{
+			{Name: "workspace"},
+			{Name: "review-mode", Short: "V"},
+			{Name: "no-review", Short: "N"},
+		},
 	},
 	{
 		Name: flagCategoryToolsIntegrations,
-		Flags: []string{
-			flagListTools, "skills-dirs", flagListSkills,
-			"web-search", flagListMCPs,
+		Flags: []flagSpec{
+			{Name: flagListTools, Advanced: true, Set: func() bool { return config.MCPListTools }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
+			{Name: "skills-dirs"},
+			{Name: flagListSkills, Set: func() bool { return config.ListSkills }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
+			{Name: "web-search"},
+			{Name: flagListMCPs, Advanced: true, Set: func() bool { return config.MCPList }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 		},
 	},
 	{
 		Name: flagCategoryOutputDisplay,
-		Flags: []string{
-			"format", "minimal", "raw", "word-wrap", "hide-tool-status",
-			"show-token-usage",
+		Flags: []flagSpec{
+			{Name: "format", Short: "f"},
+			{Name: "minimal"},
+			{Name: "raw"},
+			{Name: "word-wrap", Advanced: true},
+			{Name: "hide-tool-status", Advanced: true},
+			{Name: "show-token-usage", Short: "s", Advanced: true},
 		},
 	},
 	{
 		Name: flagCategoryConfigMaintenance,
-		Flags: []string{
-			flagConfig, flagSettings, "dirs", flagResetSettings,
+		Flags: []flagSpec{
+			{Name: flagConfig, Set: func() bool { return config.ConfigSetup }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
+			{Name: flagSettings, Set: func() bool { return config.Settings }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
+			{Name: "dirs", Set: func() bool { return config.Dirs }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
+			{Name: flagResetSettings, Set: func() bool { return config.ResetSettings }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
 		},
 	},
 	{
-		Name:  flagCategoryHelpDiagnostics,
-		Flags: []string{"help", "version", "debug"},
+		Name: flagCategoryHelpDiagnostics,
+		Flags: []flagSpec{
+			{Name: "help", Short: "h", Set: func() bool { return config.ShowHelp }, Role: roleNoArgs},
+			{Name: "version", Short: "v"},
+			{Name: "debug", Short: "D", Advanced: true},
+		},
 	},
 }
 
@@ -88,9 +165,7 @@ var flagCategorySpecs = []flagCategorySpec{
 // side-effect (open settings, browse sessions, MCP listing, reset
 // settings) instead of starting a chat. They are mutually exclusive with
 // each other and several of them share completion/suggestion logic, so the
-// canonical lists live here to avoid the four-way duplication that previously
-// existed between initFlags, MarkFlagsMutuallyExclusive, isNoArgs and the
-// session browser.
+// canonical lists live in the flag table above.
 const (
 	flagSettings      = "settings"
 	flagListSessions  = "list-sessions"
@@ -107,25 +182,41 @@ const (
 	settingsEditorFlagValue = "__MODS_OPEN_SETTINGS_EDITOR__"
 )
 
-// sessionActionFlags are mutually exclusive: at most one may be passed per
-// invocation. MarkFlagsMutuallyExclusive consumes this slice verbatim.
-var sessionActionFlags = []string{
-	flagSettings,
-	flagListSessions,
-	flagContinue,
-	flagContinueLast,
-	flagResetSettings,
-	flagConfig,
-	flagListMCPs,
-	flagListTools,
-	flagListPrompts,
-	flagListSkills,
+var (
+	// sessionActionFlags are mutually exclusive: at most one may be passed per
+	// invocation. MarkFlagsMutuallyExclusive consumes this slice verbatim.
+	sessionActionFlags = flagNamesWithRole(roleExclusive)
+	// sessionCompleteFlags take a session id or title as their value and
+	// therefore participate in shell completion.
+	sessionCompleteFlags = flagNamesWithRole(roleSessionComplete)
+)
+
+// flagNamesWithRole returns the names of the flags carrying role, in usage
+// order.
+func flagNamesWithRole(role flagRole) []string {
+	var names []string
+	for _, category := range flagCategorySpecs {
+		for _, spec := range category.Flags {
+			if spec.Role&role != 0 {
+				names = append(names, spec.Name)
+			}
+		}
+	}
+	return names
 }
 
-// sessionCompleteFlags take a session id or title as their value and
-// therefore participate in shell completion.
-var sessionCompleteFlags = []string{
-	flagContinue,
+// anyRoleSelected reports whether any flag carrying role currently selects its
+// side effect. Set reads the bound config value, so this matches the previous
+// hand-written predicates exactly, including values that came from config.
+func anyRoleSelected(role flagRole) bool {
+	for _, category := range flagCategorySpecs {
+		for _, spec := range category.Flags {
+			if spec.Role&role != 0 && spec.Set != nil && spec.Set() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // flagDesc renders the help text for a flag from the shared Help map.
@@ -290,16 +381,23 @@ func extractSkillsDirsAction(args []string) ([]string, bool) {
 	return out, show
 }
 
-func markAdvanced(flags *pflag.FlagSet, names ...string) {
-	for _, name := range names {
-		flag := flags.Lookup(name)
-		if flag == nil {
-			continue
+// applyFlagTiers marks the advanced tier from the flag table, so the tier is
+// declared once per flag rather than repeated in an initFlags name list.
+func applyFlagTiers(flags *pflag.FlagSet) {
+	for _, category := range flagCategorySpecs {
+		for _, spec := range category.Flags {
+			if !spec.Advanced {
+				continue
+			}
+			flag := flags.Lookup(spec.Name)
+			if flag == nil {
+				continue
+			}
+			if flag.Annotations == nil {
+				flag.Annotations = map[string][]string{}
+			}
+			flag.Annotations[flagTierAnnotation] = []string{flagTierAdvanced}
 		}
-		if flag.Annotations == nil {
-			flag.Annotations = map[string][]string{}
-		}
-		flag.Annotations[flagTierAnnotation] = []string{flagTierAdvanced}
 	}
 }
 
@@ -318,7 +416,9 @@ func markCategory(flags *pflag.FlagSet, category string, names ...string) {
 
 func applyFlagCategories(flags *pflag.FlagSet) {
 	for _, category := range flagCategorySpecs {
-		markCategory(flags, category.Name, category.Flags...)
+		for _, spec := range category.Flags {
+			markCategory(flags, category.Name, spec.Name)
+		}
 	}
 }
 
@@ -343,13 +443,13 @@ func groupedUsageFlags(flags *pflag.FlagSet) map[string][]*pflag.Flag {
 	groups := make(map[string][]*pflag.Flag)
 	seen := make(map[string]struct{})
 	for _, category := range flagCategorySpecs {
-		for _, name := range category.Flags {
-			f := flags.Lookup(name)
+		for _, spec := range category.Flags {
+			f := flags.Lookup(spec.Name)
 			if !flagVisibleInUsage(f) {
 				continue
 			}
 			groups[category.Name] = append(groups[category.Name], f)
-			seen[name] = struct{}{}
+			seen[spec.Name] = struct{}{}
 		}
 	}
 

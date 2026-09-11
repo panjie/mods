@@ -104,11 +104,6 @@ func (r *toolReviewer) snapshotSession() (chan toolReviewItem, <-chan struct{}) 
 	return r.reviewChan, r.reviewSessionDone
 }
 
-func (r *toolReviewer) snapshotChan() chan toolReviewItem {
-	ch, _ := r.snapshotSession()
-	return ch
-}
-
 func (r *toolReviewer) stopSessionLocked() {
 	if r.reviewSessionDone != nil {
 		close(r.reviewSessionDone)
@@ -382,7 +377,11 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		trace.Detail = accessIntentSummary(intent)
 		return nil
 	}
-	if r.reviewMode == ReviewAuto && intent.HasAccess() &&
+	// A path-based saved rule cannot speak for a script whose bytes may change
+	// between calls: reviewed script execution always needs this call's content
+	// displayed before it can be approved.
+	scriptReview := assessment.Reviewability.ScriptExecution.Verified()
+	if !scriptReview && r.reviewMode == ReviewAuto && intent.HasAccess() &&
 		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
 		trace.Source = "saved rule"
 		trace.Detail = accessIntentSummary(intent)
@@ -488,16 +487,6 @@ func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string
 	return rules
 }
 
-func extractShellCommand(args []byte) string {
-	var parsed struct {
-		Command string `json:"command"`
-	}
-	if err := json.Unmarshal(args, &parsed); err != nil {
-		return ""
-	}
-	return parsed.Command
-}
-
 // extractSecretEnvNames returns the environment variable names this call
 // injects as secrets, in original and upper-case form. Static environment
 // path expansion must skip these names: the child shell would observe the
@@ -559,53 +548,4 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heig
 		Rows:     rows,
 		Actions:  actions,
 	})
-}
-
-func formatReviewLabel(name string, args []byte) string {
-	parsed := ToolOperationArgs(args)
-	switch name {
-	case "fs_write_file":
-		path := OneLinePreview(ArgString(parsed, "path"))
-		content := ArgString(parsed, "content")
-		size := len(content)
-		return fmt.Sprintf("Write %s (%d bytes)", path, size)
-	case "fs_replace":
-		return fmt.Sprintf("Replace text in %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_delete_file":
-		return fmt.Sprintf("Delete file %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_delete_dir":
-		return fmt.Sprintf("Delete directory %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_mkdir":
-		return fmt.Sprintf("Create directory %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_copy":
-		return fmt.Sprintf("Copy %s to %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
-	case "fs_move":
-		return fmt.Sprintf("Move %s to %s", OneLinePreview(ArgString(parsed, "source_path")), OneLinePreview(ArgString(parsed, "dest_path")))
-	case "fs_apply_patch":
-		return "Apply patch to workspace files"
-	case "fs_read_file":
-		return fmt.Sprintf("Read %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_list_dir":
-		return fmt.Sprintf("List %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_stat":
-		return fmt.Sprintf("Stat %s", OneLinePreview(ArgString(parsed, "path")))
-	case "fs_search":
-		return fmt.Sprintf("Search %q in %s", ArgString(parsed, "query"), OneLinePreview(ArgString(parsed, "path")))
-	case "fs_largest":
-		return fmt.Sprintf("Largest in %s", OneLinePreview(ArgString(parsed, "path")))
-	case "shell_run":
-		cmd := ShellCommandPreview(redactRemoteURLsForDisplay(ArgString(parsed, "command")))
-		return fmt.Sprintf("Run: %s", cmd)
-	case "powershell_run":
-		cmd := ShellCommandPreview(redactRemoteURLsForDisplay(ArgString(parsed, "command")))
-		return fmt.Sprintf("Run PowerShell: %s", cmd)
-	case "process_run":
-		return fmt.Sprintf("Run process: %s", redactRemoteURLsForDisplay(ProcessCommandPreview(parsed)))
-	default:
-		summary := ToolArgsSummary(parsed)
-		if summary != "" {
-			return fmt.Sprintf("Execute %s (%s)", name, summary)
-		}
-		return fmt.Sprintf("Execute %s", name)
-	}
 }

@@ -544,18 +544,6 @@ func (m *Mods) replaceDisplayBlocks(rendered string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m *Mods) resetOutputBuffers() {
-	m.Output = ""
-	m.displayOutput = ""
-	m.outputBuilder.Reset()
-	m.displayOutputBuilder.Reset()
-	m.displayBlocks = nil
-	m.toolResultBlocks = nil
-	m.displayBlockSeq = 0
-	m.renderDirty = false
-	m.lastRenderFlush = time.Time{}
-}
-
 // flushThought renders the accumulated reasoning/thinking content before the
 // answer. Raw output keeps the explicit markdown separator for compatibility,
 // while the TTY display uses the same panel language as runtime prompts.

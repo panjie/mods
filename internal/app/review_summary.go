@@ -17,10 +17,6 @@ type patchFileChange struct {
 	removed int
 }
 
-func formatReviewSummary(name string, args []byte, assessment approval.CommandAssessment, scope Scope) string {
-	return formatReviewSummaryWithIntent(name, args, assessment, scope, AccessIntent{})
-}
-
 func formatReviewSummaryWithIntent(name string, args []byte, assessment approval.CommandAssessment, scope Scope, intent AccessIntent) string {
 	parsed := ToolOperationArgs(args)
 	switch name {

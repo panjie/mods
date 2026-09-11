@@ -231,9 +231,14 @@ func TestValidateRequiredArgs(t *testing.T) {
 
 func TestShellRunnerProgress(t *testing.T) {
 	runner := ShellRunner{
-		Root:             t.TempDir(),
-		Tool:             "shell_run",
-		Timeout:          2 * time.Second,
+		Root: t.TempDir(),
+		Tool: "shell_run",
+		// This test asserts progress reporting, not timeout behaviour: the
+		// helper child writes two lines and exits on its own in ~110ms. The
+		// timeout only bounds how long a starved child process may take to
+		// start, and 2s was not enough when the whole module's packages run in
+		// parallel ("run: command timed out after 2s" flakes).
+		Timeout:          30 * time.Second,
 		ProgressInterval: 10 * time.Millisecond,
 		BuildCommand: func(ctx context.Context, _ string) *exec.Cmd {
 			cmd := exec.CommandContext(ctx, os.Args[0])
@@ -1367,14 +1372,14 @@ func TestPowerShellRun(t *testing.T) {
 	})
 }
 
-func TestDecodeOutputPrefersUTF8(t *testing.T) {
+func TestDecodeCommandOutputPrefersUTF8(t *testing.T) {
 	want := `[{"creator":"潘捷","receiveTime":"7-14","title":"差旅费报销申请"}]`
-	if got := decodeOutput([]byte(want)); got != want {
-		t.Fatalf("decodeOutput() = %q, want %q", got, want)
+	if got := decodeCommandOutput([]byte(want)); got != want {
+		t.Fatalf("decodeCommandOutput() = %q, want %q", got, want)
 	}
 }
 
-func TestDecodeOutputRecognizesUnicodeBOMs(t *testing.T) {
+func TestDecodeCommandOutputRecognizesUnicodeBOMs(t *testing.T) {
 	want := "Windows 路径 🚀"
 	encodeUTF16 := func(littleEndian bool) []byte {
 		units := utf16.Encode([]rune(want))
@@ -1398,7 +1403,7 @@ func TestDecodeOutputRecognizesUnicodeBOMs(t *testing.T) {
 		"utf16-be-bom": encodeUTF16(false),
 	} {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, want, decodeOutput(data))
+			require.Equal(t, want, decodeCommandOutput(data))
 		})
 	}
 }

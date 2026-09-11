@@ -15,7 +15,7 @@ func TestResolveThink(t *testing.T) {
 		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: true}}}
 		ccfg := openai.Config{}
 
-		active, err := m.resolveThink(&Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, &ccfg)
+		active, err := m.resolveThinkWithOllama(&Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, nil, &ccfg)
 
 		require.NoError(t, err)
 		require.True(t, active)
@@ -26,7 +26,7 @@ func TestResolveThink(t *testing.T) {
 		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: true}}}
 		ccfg := openai.Config{}
 
-		active, err := m.resolveThink(&Model{API: "deepseek", Name: "deepseek-reasoner", ThinkingType: "enabled"}, nil, nil, &ccfg)
+		active, err := m.resolveThinkWithOllama(&Model{API: "deepseek", Name: "deepseek-reasoner", ThinkingType: "enabled"}, nil, nil, nil, &ccfg)
 
 		require.NoError(t, err)
 		require.True(t, active)
@@ -37,7 +37,7 @@ func TestResolveThink(t *testing.T) {
 		m := &Mods{Config: &Config{PersistentConfig: PersistentConfig{Think: false}}}
 		ccfg := openai.Config{}
 
-		active, err := m.resolveThink(&Model{API: "openai", Name: "gpt-5.4-mini-2026-03-17"}, nil, nil, &ccfg)
+		active, err := m.resolveThinkWithOllama(&Model{API: "openai", Name: "gpt-5.4-mini-2026-03-17"}, nil, nil, nil, &ccfg)
 
 		require.NoError(t, err)
 		require.False(t, active)

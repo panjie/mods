@@ -37,10 +37,6 @@ func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 	return tools
 }
 
-func fromProtoMessages(input []proto.Message) []openai.ChatCompletionMessageParamUnion {
-	return fromProtoMessagesForProfile(input, ProviderProfileOpenAI)
-}
-
 func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile) []openai.ChatCompletionMessageParamUnion {
 	input = proto.NormalizeSystemMessages(input)
 	var messages []openai.ChatCompletionMessageParamUnion

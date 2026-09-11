@@ -17,6 +17,7 @@ import (
 	timeago "github.com/caarlos0/timea.go"
 	"github.com/charmbracelet/x/editor"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // Build vars.
@@ -135,68 +136,64 @@ func Run(version, commit string) int {
 	return execute()
 }
 
-func initFlags() {
-	flags := rootCmd.Flags()
-	regStr(flags, &config.Model, "model", "m", config.Model)
-	regStr(flags, &config.API, "api", "a", config.API)
-	regStr(flags, &config.HTTPProxy, "http-proxy", "x", config.HTTPProxy)
-	fF := flags.VarPF(newFormatFlag(config.Format, &config.Format), "format", "f", flagDesc("format"))
+// registerFlags declares every public flag on flags, binding parsed values
+// into c (and memprofileFlag). It is deliberately separate from initFlags so
+// the pre-Cobra help/version probe can reuse these exact definitions against a
+// throwaway FlagSet and a scratch Config: parsing argv with pflag itself is the
+// only way to stay in agreement with the parsing Cobra will perform.
+func registerFlags(flags *pflag.FlagSet, c *Config, memprofileFlag *bool) {
+	regStr(flags, &c.Model, "model", "m", c.Model)
+	regStr(flags, &c.API, "api", "a", c.API)
+	regStr(flags, &c.HTTPProxy, "http-proxy", "x", c.HTTPProxy)
+	fF := flags.VarPF(newFormatFlag(c.Format, &c.Format), "format", "f", flagDesc("format"))
 	fF.NoOptDefVal = "markdown"
-	regBool(flags, &config.Minimal, "minimal", "", config.Minimal)
-	regBool(flags, &config.Raw, "raw", "", config.Raw)
-	regStr(flags, &config.Continue, "continue", "C", "")
-	regBool(flags, &config.ContinueLast, "continue-last", "c", false)
-	regBool(flags, &config.List, flagListSessions, "l", config.List)
-	regBool(flags, &config.Chat, flagChat, "", false)
-	regBool(flags, &config.HideToolStatus, "hide-tool-status", "", config.HideToolStatus)
-	regBool(flags, &config.ShowTokenUsage, "show-token-usage", "s", config.ShowTokenUsage)
-	regBool(flags, &config.ShowHelp, "help", "h", false)
-	regBool(flags, &config.Version, "version", "v", false)
-	regInt(flags, &config.MaxRetries, "max-retries", config.MaxRetries)
-	regInt(flags, &config.WordWrap, "word-wrap", config.WordWrap)
-	regStr(flags, &config.BuiltinTools.Workspace, "workspace", "", config.BuiltinTools.Workspace)
-	regStrArr(flags, &config.SkillsDirs, "skills-dirs", "", config.SkillsDirs)
-	regBool(flags, &config.NoSave, "no-save", "n", config.NoSave)
-	regBool(flags, &config.NoInstructions, "no-instructions", "", config.NoInstructions)
-	regBool(flags, &config.ResetSettings, "reset-settings", "", config.ResetSettings)
-	regSettingsFlag(flags, &config)
-	regBool(flags, &config.ConfigSetup, "config", "", false)
-	regBool(flags, &config.Dirs, "dirs", "", false)
-	regStr(flags, &config.Role, "role", "r", config.Role)
-	regBool(flags, &config.ListRoles, "list-roles", "", config.ListRoles)
-	regBool(flags, &config.ListPrompts, flagListPrompts, "", config.ListPrompts)
-	regBool(flags, &config.ListSkills, flagListSkills, "", config.ListSkills)
-	regBool(flags, &config.OpenEditor, "editor", "e", false)
-	regBool(flags, &config.MCPList, "list-mcps", "", false)
-	regBool(flags, &config.MCPListTools, "list-tools", "", false)
+	regBool(flags, &c.Minimal, "minimal", "", c.Minimal)
+	regBool(flags, &c.Raw, "raw", "", c.Raw)
+	regStr(flags, &c.Continue, "continue", "C", "")
+	regBool(flags, &c.ContinueLast, "continue-last", "c", false)
+	regBool(flags, &c.List, flagListSessions, "l", c.List)
+	regBool(flags, &c.Chat, flagChat, "", false)
+	regBool(flags, &c.HideToolStatus, "hide-tool-status", "", c.HideToolStatus)
+	regBool(flags, &c.ShowTokenUsage, "show-token-usage", "s", c.ShowTokenUsage)
+	regBool(flags, &c.ShowHelp, "help", "h", false)
+	regBool(flags, &c.Version, "version", "v", false)
+	regInt(flags, &c.MaxRetries, "max-retries", c.MaxRetries)
+	regInt(flags, &c.WordWrap, "word-wrap", c.WordWrap)
+	regStr(flags, &c.BuiltinTools.Workspace, "workspace", "", c.BuiltinTools.Workspace)
+	regStrArr(flags, &c.SkillsDirs, "skills-dirs", "", c.SkillsDirs)
+	regBool(flags, &c.NoSave, "no-save", "n", c.NoSave)
+	regBool(flags, &c.NoInstructions, "no-instructions", "", c.NoInstructions)
+	regBool(flags, &c.ResetSettings, "reset-settings", "", c.ResetSettings)
+	regSettingsFlag(flags, c)
+	regBool(flags, &c.ConfigSetup, "config", "", false)
+	regBool(flags, &c.Dirs, "dirs", "", false)
+	regStr(flags, &c.Role, "role", "r", c.Role)
+	regBool(flags, &c.ListRoles, "list-roles", "", c.ListRoles)
+	regBool(flags, &c.ListPrompts, flagListPrompts, "", c.ListPrompts)
+	regBool(flags, &c.ListSkills, flagListSkills, "", c.ListSkills)
+	regBool(flags, &c.OpenEditor, "editor", "e", false)
+	regBool(flags, &c.MCPList, "list-mcps", "", false)
+	regBool(flags, &c.MCPListTools, "list-tools", "", false)
 
-	regBool(flags, &config.WebSearch, "web-search", "", config.WebSearch)
-	regStrArr(flags, &config.Images, "image", "i", config.Images)
-	regBool(flags, &config.StdinImage, "stdin-image", "", config.StdinImage)
-	regBool(flags, &config.ClipboardImage, "clipboard-image", "I", config.ClipboardImage)
-	regBool(flags, &config.Debug, "debug", "D", config.Debug)
-	regBool(flags, &config.Think, "think", "t", config.Think)
-	flags.VarP(newReviewFlag(config.ReviewMode, &config.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
-	noReviewFlag := flags.VarPF(newReviewNeverFlag(&config.ReviewMode), "no-review", "N", flagDesc("no-review"))
+	regBool(flags, &c.WebSearch, "web-search", "", c.WebSearch)
+	regStrArr(flags, &c.Images, "image", "i", c.Images)
+	regBool(flags, &c.StdinImage, "stdin-image", "", c.StdinImage)
+	regBool(flags, &c.ClipboardImage, "clipboard-image", "I", c.ClipboardImage)
+	regBool(flags, &c.Debug, "debug", "D", c.Debug)
+	regBool(flags, &c.Think, "think", "t", c.Think)
+	flags.VarP(newReviewFlag(c.ReviewMode, &c.ReviewMode), "review-mode", "V", flagDesc("review-mode"))
+	noReviewFlag := flags.VarPF(newReviewNeverFlag(&c.ReviewMode), "no-review", "N", flagDesc("no-review"))
 	noReviewFlag.NoOptDefVal = "true"
 
-	flags.BoolVar(&memprofile, "memprofile", false, "Write memory profiles to CWD")
+	flags.BoolVar(memprofileFlag, "memprofile", false, "Write memory profiles to CWD")
 	_ = flags.MarkHidden("memprofile")
-	markAdvanced(
-		flags,
-		"http-proxy",
-		"max-retries",
-		"word-wrap",
-		"hide-tool-status",
-		"show-token-usage",
-		"list-mcps",
-		"list-tools",
-		"debug",
-		"stdin-image",
-		"clipboard-image",
-		"no-save",
-		"no-instructions",
-	)
+}
+
+func initFlags() {
+	flags := rootCmd.Flags()
+	registerFlags(flags, &config, &memprofile)
+
+	applyFlagTiers(flags)
 	applyFlagCategories(flags)
 	registeredSelfHelpFlags = selfHelpFlagGroups(flags)
 
@@ -263,7 +260,13 @@ func execute() (exitCode int) {
 			exitCode = 1
 		}
 	}()
-	if isVersionOrHelpCmd(os.Args) {
+	// Cobra itself decides whether this invocation is a help/version request;
+	// this probe only decides whether the expensive pre-Cobra setup (config
+	// file load, session DB open, migrations) can be skipped. It must agree with
+	// Cobra: when the two disagree the prompt path runs against a configuration
+	// that was never loaded.
+	helpOrVersion := helpOrVersionRequested(os.Args)
+	if helpOrVersion {
 		initFlagsOnce()
 		rootCmd.SetArgs(os.Args[1:])
 		if err := rootCmd.Execute(); err != nil {
@@ -284,7 +287,7 @@ func execute() (exitCode int) {
 	// XXX: this must come after creating the config.
 	initFlags()
 
-	if !isCompletionCmd(os.Args) && !isVersionOrHelpCmd(os.Args) {
+	if !isCompletionCmd(os.Args) {
 		if err := MigrateDefaultStorage(config.SessionDir); err != nil {
 			handleError(modsError{Err: err, ReasonText: "Could not migrate session storage."})
 			return 1
@@ -597,25 +600,12 @@ func persistSession(mods *Mods) (string, string, error) {
 }
 
 // isNoArgs reports whether the invocation is effectively empty (no prompt and
-// no side-effect action). It deliberately checks Config fields directly rather
-// than scanning sessionActionFlags: it must also consider ListRoles, Dirs and
-// ShowHelp, which are NOT part of the mutually-exclusive action set. Keep this
-// in sync with sessionActionFlags when adding a new session action.
+// no side-effect action). The flags that make an invocation non-empty declare
+// roleNoArgs in flagCategorySpecs; that set is wider than the mutually
+// exclusive session actions, because ShowHelp, Chat, ListRoles and Dirs also
+// select behaviour without being part of it.
 func isNoArgs() bool {
-	return config.Prefix == "" &&
-		!config.ShowHelp &&
-		!config.List &&
-		!config.Chat &&
-		!config.ListRoles &&
-		!config.ListPrompts &&
-		!config.ListSkills &&
-		!config.MCPList &&
-		!config.MCPListTools &&
-		!showSkillsDirs &&
-		!config.Dirs &&
-		!config.Settings &&
-		!config.ConfigSetup &&
-		!config.ResetSettings
+	return config.Prefix == "" && !showSkillsDirs && !anyRoleSelected(roleNoArgs)
 }
 
 func askInfo() error {
@@ -699,17 +689,42 @@ func isCompletionCmd(args []string) bool {
 	return false
 }
 
-//nolint:mnd
-func isVersionOrHelpCmd(args []string) bool {
-	if len(args) <= 1 {
+// helpOrVersionRequested reports whether Cobra will handle this invocation as a
+// --help or --version request instead of running a prompt. osArgs is the full
+// argument vector, program name included (the same convention isCompletionCmd
+// uses).
+//
+// The flags are parsed with pflag against the real registrations bound to a
+// scratch Config, mirroring the checks Cobra performs after it parses the real
+// flag set. A string scan cannot stand in for this: it would not honor the "--"
+// terminator, `--help=false`, or value-taking flags such as `--model --help`,
+// and any disagreement makes the prompt path skip Ensure() and run with an
+// unloaded configuration and no session database.
+func helpOrVersionRequested(osArgs []string) bool {
+	flags := pflag.NewFlagSet("mods", pflag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var scratch Config
+	var scratchMemprofile bool
+	registerFlags(flags, &scratch, &scratchMemprofile)
+	if err := flags.Parse(osArgs[1:]); err != nil {
+		// Unknown or malformed flags are Cobra's to report on the real flag set.
 		return false
 	}
-	for _, arg := range args[1:] {
-		if arg == "--version" || arg == "-v" || arg == "--help" || arg == "-h" {
-			return true
-		}
+	// Mirror cobra.Command.execute: help first, then version, and only when a
+	// version template is worth printing. The version check reads the package
+	// Version rather than rootCmd.Version: this function is reachable from the
+	// rootCmd initializer (through RunE -> first-run predicates), and referring
+	// to rootCmd here would make Go report an initialization cycle for rootCmd.
+	// buildVersion always assigns rootCmd.Version from Version during init, so
+	// the two agree by the time anything can call this.
+	if help, _ := flags.GetBool("help"); help {
+		return true
 	}
-	return false
+	if Version == "" {
+		return false
+	}
+	version, _ := flags.GetBool("version")
+	return version
 }
 
 // creates a temp file, opens it in user's editor, and then returns its contents.

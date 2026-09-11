@@ -1120,11 +1120,6 @@ final answer: {"needs_review":false,"affected_dirs":[],"reason":"read-only with 
 		require.False(t, ok)
 		require.Equal(t, AccessWrite, approval.UnknownCommandAssessment().AccessIntent().Class)
 	})
-
-	t.Run("legacy yes no parser still works", func(t *testing.T) {
-		require.True(t, classifyResponse("YES"))
-		require.False(t, classifyResponse("NO"))
-	})
 }
 
 func TestShellCandidateRulesUseLLMAffectedDirs(t *testing.T) {
@@ -1385,12 +1380,12 @@ func TestMixedAccessIntentRules(t *testing.T) {
 	require.Equal(t, []string{filepath.Join(testApprovalScope.Value, "dest")}, candidates[0].Paths)
 }
 
-// TestToolReviewerSnapshotChanRaceFree exercises the mu-guarded reviewChan
+// TestToolReviewerSnapshotSessionRaceFree exercises the mu-guarded reviewChan
 // replacement so go test -race does not flag the field load/store. The test
 // reads the channel from a sender goroutine while the main goroutine swaps
 // it via startSession / reset, which is the pattern that the production
 // code uses across Update vs. tool-caller goroutines.
-func TestToolReviewerSnapshotChanRaceFree(t *testing.T) {
+func TestToolReviewerSnapshotSessionRaceFree(t *testing.T) {
 	r := &toolReviewer{}
 
 	var wg sync.WaitGroup
@@ -1405,7 +1400,7 @@ func TestToolReviewerSnapshotChanRaceFree(t *testing.T) {
 			case <-done:
 				return
 			default:
-				_ = r.snapshotChan()
+				_, _ = r.snapshotSession()
 			}
 		}
 	}()

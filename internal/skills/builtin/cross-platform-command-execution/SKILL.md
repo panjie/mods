@@ -57,3 +57,10 @@ creating directories with `fs_mkdir`. Use a literal `cwd` instead of chaining
 location changes. Unreviewable commands remain blocked after two corrections.
 Split rejected commands into separate simpler literal calls; do not hide them
 in interpreter flags, temporary files, or encoded arguments.
+
+When the work needs an interpreted script, write the file into the workspace
+first and then call one bare interpreter with that single literal path
+(`python tools/check.py`). The review shows the complete source, size, and
+SHA-256, so it is refused if the file changes after review. Inline `-c`/`-e`
+code, encoded payloads, extra interpreter arguments, path-qualified
+interpreters, and scripts outside the workspace are still rejected.

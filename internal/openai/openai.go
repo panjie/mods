@@ -124,7 +124,6 @@ func (c *Client) Capabilities() stream.Capabilities {
 	}
 	if c.config.UseResponses && c.profile() == ProviderProfileDeepSeek {
 		capabilities.NativeWebSearch = true
-		capabilities.HostedWebSearch = true
 		capabilities.CustomApplyPatch = true
 		capabilities.CustomTools = true
 		capabilities.Images = false

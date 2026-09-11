@@ -229,3 +229,68 @@ func TestBuiltinSpecsIncludesSkillDiscoveryButExcludesInstallTools(t *testing.T)
 	require.False(t, have["install_skill"], "install_skill must not appear in --list-tools")
 	require.False(t, have["thinking_note"], "removed thinking_note must not appear in --list-tools")
 }
+
+// TestBuiltinCatalogueCoversEveryRuntimeTool is the drift guard for the built-in
+// tool table. Runtime registration and the --list-tools catalogue walk the same
+// table, so with every built-in enabled the catalogue must name at least every
+// tool the runtime can register. Before the table existed, the two registration
+// chains were hand-copied and could disagree silently.
+func TestBuiltinCatalogueCoversEveryRuntimeTool(t *testing.T) {
+	runtimeRegistry := runtimeEnabledBuiltinRegistry(t)
+
+	specs, err := BuiltinSpecs()
+	require.NoError(t, err)
+	listed := make(map[string]bool, len(specs))
+	for _, spec := range specs {
+		listed[spec.Name] = true
+	}
+
+	runtimeSpecs := runtimeRegistry.Specs()
+	require.NotEmpty(t, runtimeSpecs)
+	for _, spec := range runtimeSpecs {
+		require.Truef(t, listed[spec.Name],
+			"--%s: tool is registered at runtime but missing from the --list-tools catalogue", spec.Name)
+	}
+}
+
+// runtimeEnabledBuiltinRegistry registers every built-in through the runtime
+// path with all features enabled and stub handlers, so the guard above compares
+// the widest runtime surface with the catalogue.
+func runtimeEnabledBuiltinRegistry(t *testing.T) *toolregistry.Registry {
+	t.Helper()
+	cfg := cfgpkg.Default()
+	cfg.BuiltinTools.Filesystem = cfgpkg.FilesystemAlways
+	cfg.BuiltinTools.Shell = true
+	cfg.WebSearch = true
+
+	registry := toolregistry.NewRegistry()
+	env := builtinEnv{
+		registry: registry,
+		cfg:      &cfg,
+		root:     t.TempDir(),
+		skills:   []skills.Skill{{Name: "demo", Description: "Demo."}},
+		handlers: toolregistry.InteractionHandlers{
+			UserInput: func(context.Context, toolregistry.UserInputRequest) (toolregistry.UserInputResponse, error) {
+				return toolregistry.UserInputResponse{}, nil
+			},
+		},
+	}
+	require.NoError(t, registerBuiltins(env, false))
+	return registry
+}
+
+// TestBuiltinTableEntriesRegisterSomething guards each table entry on its own.
+// Catalogue mode deliberately swallows a registration error (listing must not
+// break on one tool), so an entry whose stub registration started failing would
+// silently vanish from --list-tools; this asserts every entry still produces at
+// least one tool.
+func TestBuiltinTableEntriesRegisterSomething(t *testing.T) {
+	var cfg cfgpkg.Config
+	for _, tool := range builtinTools() {
+		t.Run(tool.group, func(t *testing.T) {
+			registry := toolregistry.NewRegistry()
+			require.NoError(t, tool.register(builtinEnv{registry: registry, cfg: &cfg}))
+			require.NotEmpty(t, registry.Specs(), "entry %q registered no tools", tool.group)
+		})
+	}
+}

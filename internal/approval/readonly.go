@@ -477,6 +477,9 @@ func readOnlySubcommandInvocation(name string, args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
+	if name == "git" && gitDiscoveryReadOnly(args) {
+		return true
+	}
 	subcommands, ok := subcommandReadOnly[name]
 	if !ok {
 		return false
@@ -506,6 +509,65 @@ func readOnlySubcommandInvocation(name string, args []string) bool {
 		return false
 	}
 	return true
+}
+
+// gitDiscoveryReadOnly recognizes local repository/configuration queries. In
+// particular remote and config cannot be allowed by subcommand name alone:
+// both also support writes.
+func gitDiscoveryReadOnly(args []string) bool {
+	switch args[0] {
+	case "branch":
+		for _, arg := range args[1:] {
+			switch arg {
+			case "--show-current", "-v", "-vv", "--verbose", "-a", "--all", "-r", "--remotes", "--list", "-l":
+			default:
+				return false
+			}
+		}
+		return true
+	case "remote":
+		if len(args) == 1 || len(args) == 2 && (args[1] == "-v" || args[1] == "--verbose") {
+			return true
+		}
+		if len(args) < 3 || args[1] != "get-url" {
+			return false
+		}
+		operands := 0
+		for _, arg := range args[2:] {
+			if arg == "--push" || arg == "--all" {
+				continue
+			}
+			if strings.HasPrefix(arg, "-") {
+				return false
+			}
+			operands++
+		}
+		return operands == 1
+	case "config":
+		action, operands := "", 0
+		for _, arg := range args[1:] {
+			switch arg {
+			case "--list", "-l", "--get", "--get-all", "--get-regexp":
+				if action != "" {
+					return false
+				}
+				action = arg
+			case "--local", "--global", "--system", "--worktree", "--includes", "--no-includes", "--show-origin", "--show-scope", "--name-only", "--null", "-z":
+			default:
+				if strings.HasPrefix(arg, "-") {
+					return false
+				}
+				operands++
+			}
+		}
+		switch action {
+		case "--list", "-l":
+			return operands == 0
+		case "--get", "--get-all", "--get-regexp":
+			return operands == 1 || operands == 2
+		}
+	}
+	return false
 }
 
 func isBarePOSIXCommand(name string) bool {

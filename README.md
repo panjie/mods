@@ -260,9 +260,23 @@ is saved to the same session so you can resume it later with `--continue`.
 ## Safety & Review
 
 Mods runs read-only operations without review, including reads from any local
-directory and reads whose path is resolved only at runtime. Writes to ordinary
-local directories or remote services require confirmation. You see what will
-execute and which write targets the decision covers:
+directory and reads whose path is resolved only at runtime. In the default
+`auto` mode, Mods first asks the current model which directories and remote
+destinations your request reasonably requires writing to. It may run one batch
+of read-only discovery tools, then saves the inferred write permissions in the
+current session. For example, "commit and push the current code" can authorize
+the repository directory and its discovered push origin before execution.
+
+This happens automatically, including with `--minimal`. It takes one model
+request, or two when discovery is needed, with a 30-second overall timeout.
+If inference fails or identifies only some targets, uncovered writes use normal
+review. These permissions work like `Always allow`: directory subtrees and
+exact remote origins, restored with `--continue`, never shared with another
+session. With `--no-save`, they last only for the current run. `always` and
+`never` skip inference and retain their normal behavior.
+
+Writes not covered by the current review policy require confirmation. You see
+what will execute and which write targets the decision covers:
 
 ```
 Review: Run: rm -f /path/to/project/demo.gif
@@ -288,7 +302,7 @@ shortcut for `--review-mode=never`:
 
 | Mode       | Behavior                                                                    |
 |------------|-----------------------------------------------------------------------------|
-| `auto`     | Default. Reviews non-temporary writes unless saved target rules cover them. |
+| `auto`     | Default. Infers session write permissions from your request; reviews uncovered non-temporary writes. |
 | `always`   | Reviews every non-temporary write and ignores saved rules. Reads stay free.  |
 | `never`    | Disables review entirely. Use only for trusted, automated runs.             |
 

@@ -136,6 +136,11 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		TrackUsage: cfg.ShowTokenUsage,
 		ToolCaller: m.toolCaller(registry, cfg),
 	}
+	if err := m.prepareWriteTargets(client, registry, request); err != nil {
+		_ = registry.Close()
+		cancel()
+		return requestSession{}, err
+	}
 	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
 		request.ResponseFormat = &cfg.Format
 	}

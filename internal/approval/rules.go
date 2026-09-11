@@ -33,7 +33,8 @@ type Scope struct {
 	Value string
 }
 
-// Rule is a permission granted through the review UI. ScopeKind and ScopeValue
+// Rule is a permission granted through review or user-request target inference.
+// ScopeKind and ScopeValue
 // remain only for loading older rule types and database rows; directory and
 // remote write rules are task-scoped and are created without either field.
 //

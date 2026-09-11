@@ -60,7 +60,11 @@ type Mods struct {
 	// observes them through Bubble Tea's internal channel send/receive.
 	// There is intentionally no per-field mutex; callers must not introduce
 	// new background goroutines that touch m.messages outside this pattern.
-	messages                []proto.Message
+	messages []proto.Message
+	// Mods is created anew for each chat turn. Keep inference state across
+	// this turn's request retries, independently of debug/UI lifecycle flags.
+	writeTargetsDone        bool
+	writeTargetsUsage       proto.TokenUsage
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
 	anim                    tea.Model
@@ -380,6 +384,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleToolCallsDone(msg)
 		case streamEventDone:
 			usage := msg.runner.takeUsage()
+			usage.Add(m.writeTargetsUsage)
+			m.writeTargetsUsage = proto.TokenUsage{}
 			m.tokenUsage.Add(usage)
 			if usage.Available() {
 				debug.Printf("token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",

@@ -11,7 +11,9 @@
 `review-mode=always` 再次询问。无法判定读写性质时按未知写操作处理。
 
 写操作按确定性目标授权：本地文件系统使用目录子树，远程资源使用完整
-origin。用户的自然语言意图不构成授权，LLM 也不能生成可持久化的目标。
+origin。在 `auto` 下，执行前的写目标预判可依据用户提示词生成普通 session
+写规则；执行时仍按实际工具调用的写目标匹配规则。详见
+`2026-09-11-write-target-inference-design.md`。
 
 ## 2026-09-10 补充：执行结构约束
 
@@ -71,7 +73,8 @@ allow。
 
 静态分析能证明 effect 时不调用 LLM。静态无法证明时 LLM 只返回 read、write
 或 unknown 以及本地目录提示；解析失败、调用失败或非法响应按 unknown/write
-进入单次审批。LLM 输出中的远程地址永远不会成为授权依据。
+进入单次审批。此处的 shell effect 分类器不生成远端授权；独立的执行前
+预判可以根据用户请求推断远端目标，并生成普通 session 规则。
 
 ## 执行与展示
 
@@ -92,7 +95,7 @@ replace-table 模式，旧行的 `origins` 置为空数组语义。
 - 目录子树、origin 精确匹配、混合目标全覆盖和旧规则失效；
 - HTTP 默认端口、非默认端口、凭据脱敏、SSH/SCP、Git alias 与动态远端；
 - HTTP/SSE 与 stdio MCP 的 Always allow 差异；
-- LLM 仅作为 effect 回退且异常时 fail closed；
+- 执行阶段的 LLM 作为 effect 回退且异常时 fail closed；预判失败回到普通审批；
 - origins 数据库迁移、session 恢复、session 隔离，以及改变 workspace 后目录
   和远程规则仍有效；
 - POSIX、PowerShell 以及项目标准 `check`、`test`。

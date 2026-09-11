@@ -202,6 +202,15 @@ func TestEnvDirValue(t *testing.T) {
 	require.True(t, ok)
 	_, ok = EnvDirValue("LISTY", posix)
 	require.False(t, ok, "POSIX path-list values never expand")
+
+	posixWindows := Options{Flavor: FlavorPOSIX, Env: map[string]string{
+		"DRIVE": `C:\Users\Test`, "DRIVELIST": `C:\a:C:\b`,
+	}}
+	value, ok = EnvDirValue("DRIVE", posixWindows)
+	require.True(t, ok, "a Windows drive path is absolute under POSIX flavor")
+	require.Equal(t, `C:\Users\Test`, value)
+	_, ok = EnvDirValue("DRIVELIST", posixWindows)
+	require.False(t, ok, "a colon-separated list with drive paths never expands")
 }
 
 func TestEnvRefParts(t *testing.T) {

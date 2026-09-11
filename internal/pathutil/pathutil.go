@@ -428,7 +428,8 @@ func IsPublicEnvName(name string, flavor Flavor) bool {
 // EnvDirValue resolves an environment variable name to its value when the
 // value can serve as a concrete directory for static path expansion:
 // non-empty, absolute, single-line, and free of path-list separators (a
-// value such as PATH names several locations and must never expand).
+// value such as PATH names several locations and must never expand). A
+// Windows drive-letter colon is part of the path, not a list separator.
 func EnvDirValue(name string, opts Options) (string, bool) {
 	if name == "" {
 		return "", false
@@ -448,6 +449,9 @@ func envValueDirLike(value string, flavor Flavor) bool {
 		return false
 	}
 	if flavor == FlavorPOSIX {
+		if windowsDriveAbs(value) {
+			return !strings.ContainsAny(value[2:], ":;")
+		}
 		return !strings.ContainsAny(value, ":;")
 	}
 	return !strings.Contains(value, ";")

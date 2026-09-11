@@ -501,10 +501,10 @@ Replace the fast-path section (lines 47-57) with the 3-tier pipeline. The old co
 	// including read-only commands that touch external paths, goes to the
 	// LLM classifier for precise analysis.
 	if isSimpleReadOnly(command) && len(extractExternalPaths(command, ws)) == 0 {
-		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, workspace-local", debug.Truncate(command, 80))
+		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, cwd-local", debug.Truncate(command, 80))
 		return shellCommandAnalysis{
 			NeedsReview: false,
-			Reason:      "read-only command, workspace-local (local heuristic)",
+			Reason:      "read-only command, cwd-local (local heuristic)",
 		}
 	}
 ```
@@ -516,7 +516,7 @@ Replace with:
 
 	// Tier 1: AST-based read-only classifier (POSIX only, skip powershell_run).
 	// Handles pipes, &&/||, subshells, command substitution, and subcommand
-	// tables. Covers both workspace-local and external-path read-only commands;
+	// tables. Covers both cwd-local and external-path read-only commands;
 	// the approval matrix decides whether external reads need review.
 	if tool != "powershell_run" {
 		if ro, reason := approval.IsReadOnlyPOSIX(command); ro {
@@ -533,10 +533,10 @@ Replace with:
 	// can't handle (e.g. cmd.exe syntax on Windows). Only matches commands
 	// with no shell metacharacters and no external-path references.
 	if isSimpleReadOnly(command) && len(externalPaths) == 0 {
-		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, workspace-local", debug.Truncate(command, 80))
+		debug.Printf("analyzeShellCommand: cmd=%q -> local: read-only, cwd-local", debug.Truncate(command, 80))
 		return shellCommandAnalysis{
 			NeedsReview: false,
-			Reason:      "read-only command, workspace-local (local heuristic)",
+			Reason:      "read-only command, cwd-local (local heuristic)",
 		}
 	}
 ```

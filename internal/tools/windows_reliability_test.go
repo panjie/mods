@@ -144,7 +144,7 @@ func TestWindowsReliabilityPathsAndJunctionBoundary(t *testing.T) {
 	if err := os.MkdirAll(deep, 0o700); err != nil {
 		t.Fatalf("create long Unicode path: %v", err)
 	}
-	resolved, err := resolveWorkspacePath(context.Background(), root, filepath.Join(deep, "mixed\\child.txt"), nil)
+	resolved, err := resolveAuthorizedPath(context.Background(), root, filepath.Join(deep, "mixed\\child.txt"), nil)
 	if err != nil || !contains(root, resolved) {
 		t.Fatalf("long/mixed path resolved=%q err=%v", resolved, err)
 	}
@@ -155,7 +155,7 @@ func TestWindowsReliabilityPathsAndJunctionBoundary(t *testing.T) {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("blocked/not covered: junction creation unavailable: %v (%s)", err, output)
 	}
-	if _, err := resolveWorkspacePath(context.Background(), root, filepath.Join(junction, "escape.txt"), nil); err == nil {
+	if _, err := resolveAuthorizedPath(context.Background(), root, filepath.Join(junction, "escape.txt"), nil); err == nil {
 		t.Fatal("junction escape was accepted")
 	}
 }
@@ -167,7 +167,7 @@ func TestWindowsReliabilityUNCPath(t *testing.T) {
 		t.Skip("blocked/not covered: TEST_UNC_ROOT is required for real UNC validation")
 	}
 	ctx := WithAuthorizedDirs(context.Background(), []string{uncRoot})
-	if _, err := resolveWorkspacePath(ctx, root, uncRoot, nil); err != nil {
+	if _, err := resolveAuthorizedPath(ctx, root, uncRoot, nil); err != nil {
 		t.Fatalf("approved UNC root rejected: %v", err)
 	}
 }

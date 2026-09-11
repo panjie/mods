@@ -90,7 +90,7 @@ func AssessShellStaticWithPolicy(command string, posix bool, policy ReadOnlyComm
 }
 
 // AssessShellStaticWithContext additionally receives the deterministic
-// working directory the shell runs in. It lets Git workspace-write
+// working directory the shell runs in. It lets Git cwd-write
 // invocations resolve their repository directories (worktree, Git
 // administrative storage) the same way direct argv invocations do. An empty
 // cwd disables that enrichment fail-closed.

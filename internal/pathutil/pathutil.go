@@ -17,37 +17,37 @@ const (
 )
 
 type Options struct {
-	Workspace string
-	Home      string
-	Env       map[string]string
-	Flavor    Flavor
+	WorkingDir string
+	Home       string
+	Env        map[string]string
+	Flavor     Flavor
 }
 
 type LocationKind int
 
 const (
 	LocationUnknown LocationKind = iota
-	LocationWorkspace
+	LocationWorkingDir
 	LocationSafe
 	LocationExternal
 )
 
-func DefaultOptions(workspace string, flavor Flavor) Options {
+func DefaultOptions(cwd string, flavor Flavor) Options {
 	home := ""
 	if dir, err := os.UserHomeDir(); err == nil {
 		home = dir
 	}
 	return Options{
-		Workspace: workspace,
-		Home:      home,
-		Env:       envMap(),
-		Flavor:    flavor,
+		WorkingDir: cwd,
+		Home:       home,
+		Env:        envMap(),
+		Flavor:     flavor,
 	}
 }
 
 func ExpandToken(token string, opts Options) string {
 	token = strings.TrimSpace(token)
-	if token == "" || literalWorkspaceTilde(token) {
+	if token == "" || literalWorkingDirTilde(token) {
 		return token
 	}
 	home := userHome(opts)
@@ -83,10 +83,10 @@ func NormalizePath(token string, opts Options) string {
 	if IsAbs(expanded) {
 		return cleanPath(expanded)
 	}
-	if opts.Workspace == "" {
+	if opts.WorkingDir == "" {
 		return cleanPath(expanded)
 	}
-	return joinPath(opts.Workspace, expanded)
+	return joinPath(opts.WorkingDir, expanded)
 }
 
 func NormalizeShellPath(token string, opts Options) string {
@@ -205,7 +205,7 @@ func Contains(root, target string) bool {
 	return strings.HasPrefix(t, descendantPrefix(r))
 }
 
-func Location(target, workspace string, safeDirs []string) LocationKind {
+func Location(target, cwd string, safeDirs []string) LocationKind {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return LocationUnknown
@@ -214,11 +214,11 @@ func Location(target, workspace string, safeDirs []string) LocationKind {
 		return LocationExternal
 	}
 	if !IsAbs(target) {
-		return LocationWorkspace
+		return LocationWorkingDir
 	}
 	target = cleanPath(target)
-	if Contains(workspace, target) {
-		return LocationWorkspace
+	if Contains(cwd, target) {
+		return LocationWorkingDir
 	}
 	for _, safe := range safeDirs {
 		if Contains(safe, target) {
@@ -226,15 +226,15 @@ func Location(target, workspace string, safeDirs []string) LocationKind {
 		}
 	}
 	// Lexical comparison missed. Resolve symlinks on both the target and
-	// the boundaries before concluding the path is external: a workspace
+	// the boundaries before concluding the path is external: a cwd
 	// (or safe directory) reached through a symlink alias still counts as
 	// inside the boundary. Any resolution failure falls back to the
 	// lexical verdict, which fails closed (external -> review).
 	resolved, err := ResolveThroughExistingParent(target)
 	if err == nil {
-		if ws := strings.TrimSpace(workspace); ws != "" && IsAbs(ws) {
+		if ws := strings.TrimSpace(cwd); ws != "" && IsAbs(ws) {
 			if wsResolved, wsErr := ResolveThroughExistingParent(cleanPath(ws)); wsErr == nil && Contains(wsResolved, resolved) {
-				return LocationWorkspace
+				return LocationWorkingDir
 			}
 		}
 		for _, safe := range safeDirs {
@@ -914,7 +914,7 @@ func joinPath(base, elem string) string {
 	return cleanPath(path.Join(base, strings.ReplaceAll(elem, `\`, "/")))
 }
 
-func literalWorkspaceTilde(token string) bool {
+func literalWorkingDirTilde(token string) bool {
 	return strings.HasPrefix(token, "./~/") ||
 		strings.HasPrefix(token, `.\~\`) ||
 		strings.HasPrefix(token, `./~\`) ||

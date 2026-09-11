@@ -142,7 +142,7 @@ type dirLocation int
 
 const (
 	locUnknown dirLocation = iota
-	locWorkspace
+	locWorkingDir
 	locTemp
 	locExternal
 )
@@ -155,8 +155,8 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 	switch pathutil.Location(path, scope.Value, safeDirs) {
 	case pathutil.LocationUnknown:
 		return locUnknown
-	case pathutil.LocationWorkspace:
-		return locWorkspace
+	case pathutil.LocationWorkingDir:
+		return locWorkingDir
 	case pathutil.LocationSafe:
 		return locTemp
 	default:
@@ -194,7 +194,7 @@ func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode Re
 		}
 		for _, d := range group.Dirs {
 			switch locateDir(d, scope, safeDirs) {
-			case locExternal, locWorkspace, locUnknown:
+			case locExternal, locWorkingDir, locUnknown:
 				return DecisionAsk
 			case locTemp:
 				// Safe temporary writes never require review.
@@ -205,8 +205,8 @@ func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode Re
 }
 
 // ExternalDirs returns the subset of all read and write directories that fall
-// outside the workspace and outside any safe directory. Callers inject these
-// into the tool-call context so resolveWorkspacePath can honor approval.
+// outside the cwd and outside any safe directory. Callers inject these
+// into the tool-call context so resolveAuthorizedPath can honor approval.
 func ExternalDirs(intent AccessIntent, scope Scope, safeDirs []string) []string {
 	seen := map[string]struct{}{}
 	var out []string

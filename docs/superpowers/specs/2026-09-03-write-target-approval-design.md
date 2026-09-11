@@ -7,7 +7,7 @@
 ## 目标
 
 审批只保护可产生持久副作用的操作。只要工具调用已被静态分析或 LLM
-分类为只读，就无条件执行，不因 workspace 边界、动态路径或
+分类为只读，就无条件执行，不因 cwd 边界、动态路径或
 `review-mode=always` 再次询问。无法判定读写性质时按未知写操作处理。
 
 写操作按确定性目标授权：本地文件系统使用目录子树，远程资源使用完整
@@ -47,8 +47,8 @@ origin。审批策略只消费写组；读组仍保留在意图中，以便文�
   授权任何写操作。
 - 规则保存在当前 session 的 `approval_rules` 中；`--continue` 恢复，新 session
   不继承。本地目录规则保存规范化后的绝对目录，远程规则保存规范化后的
-  origin；两者都不以 workspace 为授权边界，因此继续同一 session 并改变
-  工具工作目录后仍然有效。workspace 只用于解析调用中的相对路径。
+  origin；两者都不以 cwd 为授权边界，因此继续同一 session 并改变
+  工具工作目录后仍然有效。cwd 只用于解析调用中的相对路径。
 - `always` 不读取规则来放行，也不展示没有实际作用的 Always allow。
 
 远程 origin 统一为 `scheme://host[:non-default-port]`。scheme 和 host 小写，
@@ -90,12 +90,12 @@ replace-table 模式，旧行的 `origins` 置为空数组语义。
 
 ## 验证重点
 
-- workspace、外部、空目标和动态目标读取在 `auto`/`always` 下均免审；
+- cwd、外部、空目标和动态目标读取在 `auto`/`always` 下均免审；
 - 临时目录写免审，普通写询问，`never` 全放行；
 - 目录子树、origin 精确匹配、混合目标全覆盖和旧规则失效；
 - HTTP 默认端口、非默认端口、凭据脱敏、SSH/SCP、Git alias 与动态远端；
 - HTTP/SSE 与 stdio MCP 的 Always allow 差异；
 - 执行阶段的 LLM 作为 effect 回退且异常时 fail closed；预判失败回到普通审批；
-- origins 数据库迁移、session 恢复、session 隔离，以及改变 workspace 后目录
+- origins 数据库迁移、session 恢复、session 隔离，以及改变 cwd 后目录
   和远程规则仍有效；
 - POSIX、PowerShell 以及项目标准 `check`、`test`。

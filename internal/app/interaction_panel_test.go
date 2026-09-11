@@ -17,7 +17,7 @@ func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
 		t.Run("width="+strconv.Itoa(width), func(t *testing.T) {
 			rendered := renderInteractionPanel(styles, width, interactionPanel{
 				Title: "Review required", Meta: "shell_run", Tone: interactionToneDanger,
-				ToneText: "Danger", Headline: "Delete a file outside the workspace",
+				ToneText: "Danger", Headline: "Delete a file outside the cwd",
 				Rows: []interactionRow{{Label: "Command", Value: command}, {Label: "Scope", Value: "/usr/local/bin"}},
 				Actions: []interactionAction{
 					{Key: "Y", Label: "Allow once", Selected: true},

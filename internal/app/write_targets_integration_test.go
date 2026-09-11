@@ -38,7 +38,7 @@ func TestWriteTargetsFollowupPushIntegration(t *testing.T) {
 	}
 	cfg, err := config.Ensure()
 	require.NoError(t, err)
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	cfg.BuiltinTools.Shell = true
 	cfg.MCPServers = nil
 	cfg.WebSearch = false

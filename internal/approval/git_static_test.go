@@ -16,7 +16,7 @@ func makeStaticGitRepo(t *testing.T) string {
 	return root
 }
 
-func TestAssessArgvStaticGitWorkspaceWrites(t *testing.T) {
+func TestAssessArgvStaticGitWorkingDirWrites(t *testing.T) {
 	root := makeStaticGitRepo(t)
 	canonicalRoot, err := canonicalExistingDir(root)
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestAssessArgvStaticGitMalformedMetadataFailsClosed(t *testing.T) {
 	require.Empty(t, got.KnownDirs)
 }
 
-func TestAssessShellStaticGitWorkspaceWrites(t *testing.T) {
+func TestAssessShellStaticGitWorkingDirWrites(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
 	}

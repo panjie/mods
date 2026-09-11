@@ -71,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Approval and path authorization now pass approved external directories through context before tool execution.
 
 ### Fixed
-- Hardened MCP subprocess environment filtering, remote MCP URL validation, patch path validation, and safe-workspace checks.
+- Hardened MCP subprocess environment filtering, remote MCP URL validation, patch path validation, and temporary-directory checks.
 - Fixed Gemini streaming/history handling, Cohere nil stream/tail message panics, and config error fallback behavior.
 - Fixed model discovery edge cases, configured API key error labels, provider routing overrides, and shell external path expansion.
 - Fixed XDG install-path detection to honor only `XDG_BIN_HOME` or `XDG=1`.
@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive setup wizard (`mods --config`) and first-run configuration.
 - Continuous chat mode for longer interactive sessions.
 - Mods identity system prompt so models understand the CLI and tools.
-- Safe workspace filesystem tools (`fs_read` / `fs_write` / `fs_list` / `fs_stat`).
+- Filesystem tools (`fs_read` / `fs_write` / `fs_list` / `fs_stat`).
 - Plan mode improvements: multi-proposal selection, local shell classification.
 - Configurable `web-search-api-key-env` (default `TAVILY_API_KEY`).
 - Clipboard image shorthand flag and nightly release automation.
@@ -119,7 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.1] - 2026-06-10
 
 ### Added
-- Configurable workspace root, shell detection for non-POSIX shells, and conversation-scoped approval rules.
+- Shell detection for non-POSIX shells, and conversation-scoped approval rules.
 - Direct PowerShell tool on Windows; config entries for new settings.
 
 ### Changed

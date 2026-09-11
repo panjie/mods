@@ -17,7 +17,7 @@ import (
 // one-liners) keeps the nudges, because its text is the only thing there is to
 // review. This is deliberately a syntactic test with no filesystem access: it
 // must behave identically for scripts the app cannot resolve (a skill directory
-// outside the workspace), and it must never become a path-authorization
+// outside the cwd), and it must never become a path-authorization
 // decision.
 
 // scriptFileSuffixes are the file extensions that identify a program operand as

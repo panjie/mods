@@ -487,7 +487,7 @@ func TestDefaultShellCommandAnalysisIsUnknown(t *testing.T) {
 }
 
 func TestShellStaticAnalysisSetsEffect(t *testing.T) {
-	m := &Mods{Config: testConfigForWorkspace(t.TempDir())}
+	m := &Mods{Config: testConfigForWorkingDir(t.TempDir())}
 
 	read := m.analyzeShellCommand("shell_run", "git status")
 	require.False(t, read.NeedsReview)
@@ -613,16 +613,16 @@ Add this test to `internal/app/approval_rules_test.go`:
 
 ```go
 func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T) {
-	workspaceScope := testShellWorkspaceScope(t)
+	cwdScope := testShellWorkingDirScope(t)
 	registry := testReviewRegistry(t)
 	mods := &Mods{
 		ctx:                 context.Background(),
-		Config:              testConfigForWorkspace(workspaceScope.Value),
+		Config:              testConfigForWorkingDir(cwdScope.Value),
 		currentToolRegistry: registry,
 		shellAnalyzer: func(string, string) shellCommandAnalysis {
 			return shellCommandAnalysis{
 				NeedsReview:  true,
-				AffectedDirs: []string{workspaceScope.Value},
+				AffectedDirs: []string{cwdScope.Value},
 				Reason:       "classifier could not prove read-only",
 				Effect:       shellEffectUnknown,
 			}
@@ -630,7 +630,7 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	}
 	reviewer := &toolReviewer{
 		reviewMode: ReviewAuto,
-		scope:      workspaceScope,
+		scope:      cwdScope,
 		reviewChan: make(chan toolReviewItem, 1),
 	}
 	data := []byte(`{"command":"opaque-command"}`)
@@ -648,7 +648,7 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 
 	item := receiveReviewItem(t, reviewer.reviewChan)
 	require.Contains(t, item.summary, "unknown")
-	require.NotContains(t, item.summary, "workspace mutation")
+	require.NotContains(t, item.summary, "cwd mutation")
 	require.Equal(t, "Run a command with unknown effects", item.presentation.headline)
 	item.resp <- reviewResponse{approved: true}
 	require.NoError(t, <-errCh)
@@ -716,7 +716,7 @@ Expected: PASS.
 - Produces risk label behavior:
   - unknown effect => `unknown`
   - read effect + external dirs => `external read`
-  - write effect + workspace dirs => `workspace mutation`
+  - write effect + cwd dirs => `cwd mutation`
   - write effect + external dirs => `external mutation`
 
 - [ ] **Step 1: Write failing summary tests**
@@ -724,16 +724,16 @@ Expected: PASS.
 Update `TestFormatReviewSummary` in `internal/app/review_summary_test.go` by adding:
 
 ```go
-unknownSummary := formatReviewSummary("shell_run", []byte(`{"command":"opaque-command"}`), shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown, AffectedDirs: []string{"/workspace"}}, scope)
+unknownSummary := formatReviewSummary("shell_run", []byte(`{"command":"opaque-command"}`), shellCommandAnalysis{NeedsReview: true, Effect: shellEffectUnknown, AffectedDirs: []string{"/cwd"}}, scope)
 require.Contains(t, unknownSummary, "unknown")
-require.NotContains(t, unknownSummary, "workspace mutation")
+require.NotContains(t, unknownSummary, "cwd mutation")
 ```
 
 - [ ] **Step 2: Run tests and confirm failure**
 
 Run: `go test ./internal/app -run 'TestFormatReviewSummary' -count=1`
 
-Expected: failure because `shellRiskLevel` treats `NeedsReview=true` with workspace dirs as `workspace mutation`.
+Expected: failure because `shellRiskLevel` treats `NeedsReview=true` with cwd dirs as `cwd mutation`.
 
 - [ ] **Step 3: Update `shellRiskLevel`**
 
@@ -760,7 +760,7 @@ func shellRiskLevel(analysis shellCommandAnalysis, scope Scope) string {
 			return "external mutation"
 		}
 	}
-	return "workspace mutation"
+	return "cwd mutation"
 }
 ```
 
@@ -803,8 +803,8 @@ import (
 func TestAnalyzeShellCommandPowerShellLineCountPipelineIsReadOnly(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
-	m := &Mods{Config: testConfigForWorkspace(workspace)}
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	cmd := `Get-ChildItem -Recurse -Filter *.go | Select-Object FullName | ForEach-Object { $lines = (Get-Content $_.FullName | Measure-Object -Line).Lines; "$($_.FullName): $lines lines" } | Sort-Object { [int]($_.Split(':')[1].Trim().Split(' ')[0]) } -Descending`
 
 	got := m.analyzeShellCommand("shell_run", cmd)

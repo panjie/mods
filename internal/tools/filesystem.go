@@ -51,7 +51,7 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			debug.Printf("RegisterFilesystem: workspace %q does not exist, skipping filesystem tools", root)
+			debug.Printf("RegisterFilesystem: cwd %q does not exist, skipping filesystem tools", root)
 			return nil
 		}
 		return err
@@ -87,9 +87,9 @@ func filesystemReadFileTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_read_file",
-			Description: "Read a UTF-8 text file. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it. Read by line number with start_line/end_line (1-based, inclusive; output is line-numbered); page large files by bytes with offset/limit.",
+			Description: "Read a UTF-8 text file. Relative paths are resolved inside the cwd; absolute and home-directory paths may target files outside it. Read by line number with start_line/end_line (1-based, inclusive; output is line-numbered); page large files by bytes with offset/limit.",
 			InputSchema: objectSchema(map[string]any{
-				"path":       stringProp("Path to the file, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":       stringProp("Path to the file, relative to the cwd, absolute, or using the current user's home directory."),
 				"offset":     integerProp("Zero-based byte offset to start reading from (byte mode)."),
 				"limit":      integerProp("Maximum bytes to return (byte mode)."),
 				"start_line": integerProp("1-based first line to return (line mode). When set, reads by line number instead of byte offset."),
@@ -107,7 +107,7 @@ func filesystemReadFileTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -160,9 +160,9 @@ func filesystemListDirTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_list_dir",
-			Description: "List files and directories. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target directories outside it.",
+			Description: "List files and directories. Relative paths are resolved inside the cwd; absolute and home-directory paths may target directories outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory path, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":        stringProp("Directory path, relative to the cwd, absolute, or using the current user's home directory."),
 				"max_entries": integerProp("Maximum entries to return."),
 			}, "path"),
 		},
@@ -174,7 +174,7 @@ func filesystemListDirTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -210,9 +210,9 @@ func filesystemStatTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_stat",
-			Description: "Get metadata for a file or directory. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target entries outside it.",
+			Description: "Get metadata for a file or directory. Relative paths are resolved inside the cwd; absolute and home-directory paths may target entries outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path": stringProp("Path to inspect, relative to the workspace, absolute, or using the current user's home directory."),
+				"path": stringProp("Path to inspect, relative to the cwd, absolute, or using the current user's home directory."),
 			}, "path"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
@@ -222,7 +222,7 @@ func filesystemStatTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -243,9 +243,9 @@ func filesystemSearchTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_search",
-			Description: "Search text files for a literal query string. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it.",
+			Description: "Search text files for a literal query string. Relative paths are resolved inside the cwd; absolute and home-directory paths may target files outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory or file path to search within, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":        stringProp("Directory or file path to search within, relative to the cwd, absolute, or using the current user's home directory."),
 				"query":       stringProp("Literal text to search for."),
 				"max_results": integerProp("Maximum matching lines to return."),
 			}, "path", "query"),
@@ -262,7 +262,7 @@ func filesystemSearchTool(root string, safeDirs []string) Tool {
 			if args.Query == "" {
 				return "", fmt.Errorf("query is required")
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -285,9 +285,9 @@ func filesystemLargestTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, true),
 		Spec: proto.ToolSpec{
 			Name:        "fs_largest",
-			Description: "Find the largest files or directories under a path. Use kind=file for requests that specifically ask for files. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target entries outside it.",
+			Description: "Find the largest files or directories under a path. Use kind=file for requests that specifically ask for files. Relative paths are resolved inside the cwd; absolute and home-directory paths may target entries outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path":        stringProp("Directory or file path to inspect, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":        stringProp("Directory or file path to inspect, relative to the cwd, absolute, or using the current user's home directory."),
 				"kind":        stringProp("What to rank: file, dir, or both. Defaults to file."),
 				"max_results": integerProp("Maximum entries to return, up to 100. Defaults to 10."),
 				"max_depth":   integerProp("Maximum directory depth to descend from path. Omit or use a negative value for unlimited depth."),
@@ -303,7 +303,7 @@ func filesystemLargestTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -409,8 +409,8 @@ func searchFiles(ctx context.Context, root, path, query string, limit int) (stri
 			return err
 		}
 		// Skip symlinks and other non-regular files: os.Open below follows
-		// symlinks, which would let an in-workspace link read its target
-		// outside the workspace and bypass the boundary check applied to the
+		// symlinks, which would let an in-cwd link read its target
+		// outside the cwd and bypass the boundary check applied to the
 		// search root. Mirrors the guard in largestPaths.
 		if !info.Mode().IsRegular() {
 			return nil

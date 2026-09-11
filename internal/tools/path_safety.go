@@ -8,13 +8,13 @@ import (
 	"github.com/panjie/mods/internal/pathutil"
 )
 
-// Workspace path resolution and safety. Every filesystem tool calls
-// resolveWorkspacePath before touching the filesystem; the helpers here
+// Authorized path resolution and safety. Every filesystem tool calls
+// resolveAuthorizedPath before touching the filesystem; the helpers here
 // are the only thing standing between an LLM-authored path and an
 // arbitrary location on disk, so they are deliberately defensive.
 //
 // Boundary precedence for a resolved path:
-//  1. workspace
+//  1. cwd
 //  2. a configured safe directory (e.g. os.TempDir())
 //  3. an approval-authorized external directory carried via ctx
 //
@@ -22,7 +22,7 @@ import (
 // symlink-aware EvalSymlinks comparison so a symlink cannot smuggle a
 // path outside its boundary.
 
-func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []string) (string, error) {
+func resolveAuthorizedPath(ctx context.Context, root, input string, safeDirs []string) (string, error) {
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -32,14 +32,14 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	}
 
 	// boundary is the directory the resolved path must stay inside after
-	// symlink evaluation. The default is the workspace; if the input
+	// symlink evaluation. The default is the cwd; if the input
 	// instead lives under a configured safe directory (e.g. os.TempDir()),
 	// that safe directory becomes the boundary so a symlink inside it
 	// cannot escape to arbitrary paths like /etc/passwd. An approval-
 	// authorized external directory (carried via ctx) behaves the same.
 	// The lexical pre-check only selects the boundary; the authoritative
 	// decision is the symlink-aware comparison below, so a path spelled
-	// through a symlink alias of the workspace still resolves inside it.
+	// through a symlink alias of the cwd still resolves inside it.
 	boundary := root
 	if err := ensureInsideRoot(root, path); err != nil {
 		if safe, ok := matchSafeDir(path, safeDirs); ok {
@@ -71,7 +71,7 @@ func resolveWorkspacePath(ctx context.Context, root, input string, safeDirs []st
 	return resolved, nil
 }
 
-func resolveWorkspacePathNoFollowLeaf(ctx context.Context, root, input string, safeDirs []string) (string, error) {
+func resolveAuthorizedPathNoFollowLeaf(ctx context.Context, root, input string, safeDirs []string) (string, error) {
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -140,7 +140,7 @@ func contains(dir, path string) bool {
 	return pathutil.Contains(dir, path)
 }
 
-func workspaceRel(root, path string) string {
+func cwdRel(root, path string) string {
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
 		return path
@@ -148,19 +148,19 @@ func workspaceRel(root, path string) string {
 	return filepath.ToSlash(rel)
 }
 
-// displayPath renders a filesystem path for tool output: workspace-relative
-// (slash-separated) when it lives inside the workspace, otherwise the path
+// displayPath renders a filesystem path for tool output: cwd-relative
+// (slash-separated) when it lives inside the cwd, otherwise the path
 // itself in slash-separated form.
 func displayPath(root, path string) string {
 	if contains(root, path) {
-		return workspaceRel(root, path)
+		return cwdRel(root, path)
 	}
 	return filepath.ToSlash(path)
 }
 
 func ensureInsideRoot(root, path string) error {
 	if !contains(root, path) {
-		return fmt.Errorf("path %q is outside workspace; approval required to access paths outside the workspace", path)
+		return fmt.Errorf("path %q is outside authorized directories", path)
 	}
 	return nil
 }

@@ -35,9 +35,9 @@ func TestRemoteRulesMatchExactOrigin(t *testing.T) {
 }
 
 func TestMixedWriteIntentRequiresDirectoryAndRemoteRules(t *testing.T) {
-	scope := WorkspaceScope("/workspace")
-	intent := AccessIntent{Class: AccessWrite, Dirs: []string{"/workspace"}, RemoteOrigins: []string{"https://api.example.com/v1"}}
-	dirs := RulesForDirs([]string{"/workspace"}, scope, AccessWrite)
+	scope := WorkingDirScope("/cwd")
+	intent := AccessIntent{Class: AccessWrite, Dirs: []string{"/cwd"}, RemoteOrigins: []string{"https://api.example.com/v1"}}
+	dirs := RulesForDirs([]string{"/cwd"}, scope, AccessWrite)
 	remote := RulesForRemoteOrigins([]string{"https://api.example.com"})
 	require.False(t, RulesAllowIntent(dirs, intent, scope, nil, ReviewAuto))
 	require.False(t, RulesAllowIntent(remote, intent, scope, nil, ReviewAuto))

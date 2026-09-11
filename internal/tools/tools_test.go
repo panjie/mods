@@ -452,7 +452,7 @@ func TestProcessRunValidationAndRuntimeInfo(t *testing.T) {
 	var info runtimeInfoResult
 	require.NoError(t, json.Unmarshal([]byte(out), &info))
 	require.Equal(t, runtime.GOOS, info.OS)
-	require.Equal(t, root, info.Workspace)
+	require.Equal(t, root, info.WorkingDir)
 	require.NotEmpty(t, info.Shell.Executable)
 	require.True(t, info.Commands["go"].Found)
 	require.False(t, info.Commands["definitely-not-a-mods-command"].Found)
@@ -494,8 +494,8 @@ func TestPrepareProcessProgramRejectsWindowsBatchFiles(t *testing.T) {
 }
 
 func TestSearchSkipsSymlinks(t *testing.T) {
-	// Regression: fs_search must not follow in-workspace symlinks. Before the
-	// fix, os.Open followed the link and read its (possibly out-of-workspace)
+	// Regression: fs_search must not follow in-cwd symlinks. Before the
+	// fix, os.Open followed the link and read its (possibly out-of-cwd)
 	// target, bypassing the boundary check applied only to the search root.
 	if runtime.GOOS == "windows" {
 		t.Skip("symlinks not reliably supported on this Windows build")
@@ -521,7 +521,7 @@ func TestSearchSkipsSymlinks(t *testing.T) {
 		t.Fatalf("search: %v", err)
 	}
 	if strings.Contains(got, "TOPSECRET") {
-		t.Fatalf("fs_search followed symlink and leaked out-of-workspace content: %q", got)
+		t.Fatalf("fs_search followed symlink and leaked out-of-cwd content: %q", got)
 	}
 }
 
@@ -954,7 +954,7 @@ func TestFilesystemApplyPatchCodexFormatRejectsTraversal(t *testing.T) {
 
 	patch := "*** Begin Patch\n*** Add File: ../escape.txt\n+pwned\n*** End Patch\n"
 	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
-	require.ErrorContains(t, err, "outside workspace")
+	require.ErrorContains(t, err, "outside authorized directories")
 	require.NoFileExists(t, filepath.Join(root, "..", "escape.txt"))
 }
 
@@ -1118,14 +1118,14 @@ func TestFilesystemApplyPatchRejectsTraversal(t *testing.T) {
 		t.Fatalf("register filesystem: %v", err)
 	}
 
-	// A patch that tries to write outside the workspace via a literal `..` path.
+	// A patch that tries to write outside the cwd via a literal `..` path.
 	patch := "--- a/../outside.txt\n+++ b/../outside.txt\n@@ -0,0 +1 @@\n+pwned\n"
 	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	if err == nil {
 		t.Fatal("expected traversal patch to be rejected")
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "..", "outside.txt")); statErr == nil {
-		t.Fatal("file was created outside the workspace")
+		t.Fatal("file was created outside the cwd")
 	}
 }
 
@@ -1182,7 +1182,7 @@ func TestFilesystemApplyPatchAcceptsQuotedLegitPath(t *testing.T) {
 // TestFilesystemApplyPatchRejectsRenameTraversal pins the fix for the
 // rename-header bypass: a rename-only diff carries no +++/--- lines, so
 // the old validatePatchPaths skipped its target entirely. A rename target
-// that escapes the workspace must now be rejected too.
+// that escapes the cwd must now be rejected too.
 func TestFilesystemApplyPatchRejectsRenameTraversal(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()
@@ -1226,13 +1226,13 @@ func TestFilesystemApplyPatchAcceptsTabbedTimestamp(t *testing.T) {
 	}
 }
 
-// TestResolveWorkspacePathRejectsSymlinkEscapeFromSafeDir pins the fix for
+// TestResolveAuthorizedPathRejectsSymlinkEscapeFromSafeDir pins the fix for
 // the safe-dir bypass: a symlink inside the safe directory that points
 // outside (e.g. /tmp/sub/link -> /etc) used to slip past
-// resolveWorkspacePath because the safe-dir branch returned early without
+// resolveAuthorizedPath because the safe-dir branch returned early without
 // running EvalSymlinks. After the fix the resolved real path must still
 // be inside the matched safe boundary, so escaping symlinks are rejected.
-func TestResolveWorkspacePathRejectsSymlinkEscapeFromSafeDir(t *testing.T) {
+func TestResolveAuthorizedPathRejectsSymlinkEscapeFromSafeDir(t *testing.T) {
 	root := t.TempDir()
 	safe := t.TempDir()
 	outside := t.TempDir()
@@ -1252,15 +1252,15 @@ func TestResolveWorkspacePathRejectsSymlinkEscapeFromSafeDir(t *testing.T) {
 		t.Fatal("test sanity: matchSafeDir must report target inside safe dir")
 	}
 
-	if _, err := resolveWorkspacePath(context.Background(), root, target, []string{safe}); err == nil {
-		t.Fatalf("resolveWorkspacePath must reject symlink escape via safe dir")
+	if _, err := resolveAuthorizedPath(context.Background(), root, target, []string{safe}); err == nil {
+		t.Fatalf("resolveAuthorizedPath must reject symlink escape via safe dir")
 	}
 }
 
-// TestResolveWorkspacePathAcceptsSymlinkWithinSafeDir checks the
+// TestResolveAuthorizedPathAcceptsSymlinkWithinSafeDir checks the
 // complementary case: a symlink that stays inside the safe dir remains
 // usable.
-func TestResolveWorkspacePathAcceptsSymlinkWithinSafeDir(t *testing.T) {
+func TestResolveAuthorizedPathAcceptsSymlinkWithinSafeDir(t *testing.T) {
 	root := t.TempDir()
 	safe := t.TempDir()
 
@@ -1277,7 +1277,7 @@ func TestResolveWorkspacePathAcceptsSymlinkWithinSafeDir(t *testing.T) {
 	}
 
 	target := filepath.Join(safe, "a", "data.txt")
-	resolved, err := resolveWorkspacePath(context.Background(), root, target, []string{safe})
+	resolved, err := resolveAuthorizedPath(context.Background(), root, target, []string{safe})
 	if err != nil {
 		t.Fatalf("symlink within safe dir must be accepted: %v", err)
 	}
@@ -1426,10 +1426,10 @@ func TestShellCommandUsesPowerShellOnWindows(t *testing.T) {
 	}
 }
 
-// TestResolveWorkspacePathAuthorizesApprovedExternal verifies the new
-// behavior: a path outside the workspace is rejected unless the caller
+// TestResolveAuthorizedPathAuthorizesApprovedExternal verifies the new
+// behavior: a path outside the cwd is rejected unless the caller
 // carries an approval-authorized directory (via ctx) that contains it.
-func TestResolveWorkspacePathAuthorizesApprovedExternal(t *testing.T) {
+func TestResolveAuthorizedPathAuthorizesApprovedExternal(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 	target := filepath.Join(outside, "data.txt")
@@ -1438,13 +1438,13 @@ func TestResolveWorkspacePathAuthorizesApprovedExternal(t *testing.T) {
 	}
 
 	// Unapproved external access is rejected.
-	if _, err := resolveWorkspacePath(context.Background(), root, target, nil); err == nil {
+	if _, err := resolveAuthorizedPath(context.Background(), root, target, nil); err == nil {
 		t.Fatal("expected unapproved external path to be rejected")
 	}
 
 	// Approved external access is allowed.
 	ctx := WithAuthorizedDirs(context.Background(), []string{outside})
-	got, err := resolveWorkspacePath(ctx, root, target, nil)
+	got, err := resolveAuthorizedPath(ctx, root, target, nil)
 	if err != nil {
 		t.Fatalf("approved external path must resolve: %v", err)
 	}
@@ -1457,10 +1457,10 @@ func TestResolveWorkspacePathAuthorizesApprovedExternal(t *testing.T) {
 	}
 }
 
-// TestResolveWorkspacePathRejectsSymlinkEscapeFromAuthorized ensures a
+// TestResolveAuthorizedPathRejectsSymlinkEscapeFromAuthorized ensures a
 // symlink inside an authorized directory that points outside is still
 // rejected, mirroring the safe-dir protection.
-func TestResolveWorkspacePathRejectsSymlinkEscapeFromAuthorized(t *testing.T) {
+func TestResolveAuthorizedPathRejectsSymlinkEscapeFromAuthorized(t *testing.T) {
 	root := t.TempDir()
 	authorized := t.TempDir()
 	secret := t.TempDir()
@@ -1473,8 +1473,8 @@ func TestResolveWorkspacePathRejectsSymlinkEscapeFromAuthorized(t *testing.T) {
 	}
 
 	ctx := WithAuthorizedDirs(context.Background(), []string{authorized})
-	if _, err := resolveWorkspacePath(ctx, root, filepath.Join(authorized, "escape", "pwn"), nil); err == nil {
-		t.Fatal("resolveWorkspacePath must reject symlink escaping the authorized dir")
+	if _, err := resolveAuthorizedPath(ctx, root, filepath.Join(authorized, "escape", "pwn"), nil); err == nil {
+		t.Fatal("resolveAuthorizedPath must reject symlink escaping the authorized dir")
 	}
 }
 
@@ -1635,7 +1635,7 @@ func TestFilesystemHomePathExpansion(t *testing.T) {
 	}
 
 	ctx := WithAuthorizedDirs(context.Background(), []string{downloads})
-	resolved, err := resolveWorkspacePath(ctx, root, "~/Downloads/Codex.dmg", nil)
+	resolved, err := resolveAuthorizedPath(ctx, root, "~/Downloads/Codex.dmg", nil)
 	if err != nil {
 		t.Fatalf("approved home read must resolve: %v", err)
 	}
@@ -1660,7 +1660,7 @@ func TestFilesystemHomePathExpansion(t *testing.T) {
 		t.Fatalf("fs_write_file dirs=%v want [%s]", intentWrite.Dirs, outDir)
 	}
 	ctx = WithAuthorizedDirs(context.Background(), []string{outDir})
-	resolved, err = resolveWorkspacePath(ctx, root, "~/mods-out/out.txt", nil)
+	resolved, err = resolveAuthorizedPath(ctx, root, "~/mods-out/out.txt", nil)
 	if err != nil {
 		t.Fatalf("approved home write must resolve: %v", err)
 	}
@@ -1674,7 +1674,7 @@ func TestFilesystemHomePathExpansion(t *testing.T) {
 	}
 }
 
-func TestFilesystemLiteralWorkspaceTilde(t *testing.T) {
+func TestFilesystemLiteralWorkingDirTilde(t *testing.T) {
 	root := t.TempDir()
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -1705,9 +1705,9 @@ func TestFilesystemLiteralWorkspaceTilde(t *testing.T) {
 		t.Fatalf("fs_stat dirs=%v want [%s]", intent.Dirs, literalDir)
 	}
 
-	resolved, err := resolveWorkspacePath(context.Background(), root, "./~/literal/file.txt", nil)
+	resolved, err := resolveAuthorizedPath(context.Background(), root, "./~/literal/file.txt", nil)
 	if err != nil {
-		t.Fatalf("literal workspace tilde must resolve without external approval: %v", err)
+		t.Fatalf("literal cwd tilde must resolve without external approval: %v", err)
 	}
 	wantResolved, err := filepath.EvalSymlinks(literalFile)
 	if err != nil {
@@ -1718,19 +1718,19 @@ func TestFilesystemLiteralWorkspaceTilde(t *testing.T) {
 	}
 }
 
-func TestResolveWorkspacePathRejectsUnsupportedOtherUserHome(t *testing.T) {
+func TestResolveAuthorizedPathRejectsUnsupportedOtherUserHome(t *testing.T) {
 	root := t.TempDir()
 	ctx := WithAuthorizedDirs(context.Background(), []string{"~root"})
-	if _, err := resolveWorkspacePath(ctx, root, "~root/.ssh/config", nil); err == nil {
-		t.Fatal("unsupported other-user home path must not resolve into the workspace")
+	if _, err := resolveAuthorizedPath(ctx, root, "~root/.ssh/config", nil); err == nil {
+		t.Fatal("unsupported other-user home path must not resolve into the cwd")
 	}
 }
 
-// TestFilesystemToolsAcceptWorkspaceSymlinkAlias pins the fix for workspaces
+// TestFilesystemToolsAcceptWorkingDirSymlinkAlias pins the fix for cwds
 // reached through a symlink (e.g. ~/.emacs.d -> real dir): absolute paths
-// spelled through the alias resolve inside the canonical workspace without
+// spelled through the alias resolve inside the canonical cwd without
 // approval, and writes land in the real directory.
-func TestFilesystemToolsAcceptWorkspaceSymlinkAlias(t *testing.T) {
+func TestFilesystemToolsAcceptWorkingDirSymlinkAlias(t *testing.T) {
 	realRoot := t.TempDir()
 	aliasRoot := filepath.Join(t.TempDir(), "alias-root")
 	if err := os.Symlink(realRoot, aliasRoot); err != nil {
@@ -1751,7 +1751,7 @@ func TestFilesystemToolsAcceptWorkspaceSymlinkAlias(t *testing.T) {
 	target := filepath.Join(aliasRoot, "lisp", "init.el")
 	got, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`))
 	if err != nil {
-		t.Fatalf("read via workspace symlink alias must succeed: %v", err)
+		t.Fatalf("read via cwd symlink alias must succeed: %v", err)
 	}
 	if !strings.Contains(got, "seed") {
 		t.Fatalf("read via alias returned %q", got)
@@ -1759,17 +1759,17 @@ func TestFilesystemToolsAcceptWorkspaceSymlinkAlias(t *testing.T) {
 
 	writeTarget := filepath.Join(aliasRoot, "lisp", "new.el")
 	if _, err := registry.Call(context.Background(), "fs_write_file", []byte(`{"path":`+strconv.Quote(writeTarget)+`,"content":"new"}`)); err != nil {
-		t.Fatalf("write via workspace symlink alias must succeed: %v", err)
+		t.Fatalf("write via cwd symlink alias must succeed: %v", err)
 	}
 	if data, err := os.ReadFile(filepath.Join(realRoot, "lisp", "new.el")); err != nil || string(data) != "new" {
-		t.Fatalf("write via alias did not land in workspace: %v %q", err, data)
+		t.Fatalf("write via alias did not land in cwd: %v %q", err, data)
 	}
 }
 
-// TestResolveWorkspacePathStillRejectsExternalViaSymlinkAlias checks the
+// TestResolveAuthorizedPathStillRejectsExternalViaSymlinkAlias checks the
 // fail-closed companion case: a symlink alias of a directory outside the
-// workspace must keep resolving outside and be rejected.
-func TestResolveWorkspacePathStillRejectsExternalViaSymlinkAlias(t *testing.T) {
+// cwd must keep resolving outside and be rejected.
+func TestResolveAuthorizedPathStillRejectsExternalViaSymlinkAlias(t *testing.T) {
 	root := t.TempDir()
 	external := t.TempDir()
 	if err := os.WriteFile(filepath.Join(external, "secret.txt"), []byte("secret"), 0o600); err != nil {

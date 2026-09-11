@@ -22,11 +22,11 @@ import (
 func TestCommandConstraintNudgesThenDefersToApproval(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.ReviewMode = ReviewAuto
-	cfg.BuiltinTools.Workspace = t.TempDir()
+	cfg.WorkingDir = t.TempDir()
 	m := &Mods{
 		Config:   &cfg,
 		ctx:      context.Background(),
-		reviewer: &toolReviewer{reviewMode: ReviewAuto, scope: WorkspaceScope(cfg.BuiltinTools.Workspace), raw: true},
+		reviewer: &toolReviewer{reviewMode: ReviewAuto, scope: WorkingDirScope(cfg.WorkingDir), raw: true},
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
 			return approval.UnknownCommandAssessment()
 		},

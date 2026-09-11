@@ -84,7 +84,7 @@ the model to restructure it is what breaks a skill's own scripts.
   `-EncodedCommand`, `/c`, compound statements, pipelines, redirections, dynamic
   or glob operands, and dynamic command names.
 - The test is syntactic with no filesystem access. It must behave identically for
-  a script the app cannot resolve (a skill directory outside the workspace), and
+  a script the app cannot resolve (a skill directory outside the cwd), and
   it must never become a path-authorization decision.
 - Structural facts are unchanged by the exemption: the command is still reported
   as opaque where it is opaque, and it still reaches ordinary approval. Only the

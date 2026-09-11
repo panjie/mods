@@ -197,8 +197,25 @@ func TestToolSelectionRulesCoverCoreChoices(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Do not retry blindly")
 }
 
-func TestWorkspaceHelpUsesWorkspaceTerminology(t *testing.T) {
-	require.Contains(t, Help["workspace"], "Set the workspace")
+func TestWorkingDirectoryIsNotPersistentSetting(t *testing.T) {
+	require.NotContains(t, Help, "workspace")
+	require.NotContains(t, Help, "builtin-tools.workspace")
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	canonical, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	cfg := Default()
+	// Old configuration cannot redirect tools or project-instruction loading.
+	require.NoError(t, yaml.Unmarshal([]byte("builtin-tools:\n  workspace: /obsolete\n"), &cfg))
+	require.Equal(t, canonical, cfg.ResolveWorkingDir().Canonical)
+	require.Equal(t, cwd, cfg.ResolveWorkingDir().Display)
+
+	cfg.WorkingDir = t.TempDir()
+	encoded, err := yaml.Marshal(cfg)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "workspace:")
+	require.NotContains(t, string(encoded), cfg.WorkingDir)
 }
 
 func TestDefaultToolSettings(t *testing.T) {

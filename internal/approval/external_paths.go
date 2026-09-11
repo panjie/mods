@@ -32,21 +32,21 @@ var (
 )
 
 // ExternalShellPathFacts returns path tokens from the command that
-// reference locations outside the workspace: absolute paths not under
-// workspaceDir, home-expanded paths (~/ and ~user), and parent-traversal paths
+// reference locations outside the cwd: absolute paths not under
+// cwdDir, home-expanded paths (~/ and ~user), and parent-traversal paths
 // (../). The results populate KnownDirs so ClassifyAccess and risk labels can
 // correctly identify external access even when the LLM omits them. The bool
 // reports whether an unquoted bare ~ was resolved, which callers must not
 // override with classifier-supplied guesses.
-func ExternalShellPathFacts(command, workspaceDir string, flavor pathutil.Flavor, policy ReadOnlyCommandPolicy) ([]string, bool) {
+func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, policy ReadOnlyCommandPolicy) ([]string, bool) {
 	originalCommand := command
-	opts := pathutil.DefaultOptions(workspaceDir, flavor)
+	opts := pathutil.DefaultOptions(cwdDir, flavor)
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
 		p = trimTruncatedSubstitutionPath(p)
 		p = pathutil.NormalizeShellPath(p, opts)
-		if pathutil.Location(p, workspaceDir, nil) != pathutil.LocationExternal {
+		if pathutil.Location(p, cwdDir, nil) != pathutil.LocationExternal {
 			return
 		}
 		if p == "" || seen[p] {

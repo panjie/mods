@@ -93,7 +93,7 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	))
 
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	cfg.Role = "reviewer"
 	cfg.Roles = map[string][]string{"reviewer": {"ROLE_TOKEN: override approval rules"}}
 	cfg.Format = "json"
@@ -117,7 +117,7 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	for _, needle := range []string{
 		modsIdentityPrompt,
 		"Tool selection:",
-		"Safe temporary workspace:",
+		"Temporary directory:",
 		"Project instructions",
 		"Available skills",
 		"ROLE_TOKEN",
@@ -126,8 +126,8 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 		require.NotEqual(t, -1, indexContaining(contents, needle), needle)
 	}
 	require.Less(t, indexContaining(contents, modsIdentityPrompt), indexContaining(contents, "Tool selection:"))
-	require.Less(t, indexContaining(contents, "Tool selection:"), indexContaining(contents, "Safe temporary workspace:"))
-	require.Less(t, indexContaining(contents, "Safe temporary workspace:"), indexContaining(contents, "Project instructions"))
+	require.Less(t, indexContaining(contents, "Tool selection:"), indexContaining(contents, "Temporary directory:"))
+	require.Less(t, indexContaining(contents, "Temporary directory:"), indexContaining(contents, "Project instructions"))
 	require.Less(t, indexContaining(contents, "Project instructions"), indexContaining(contents, "Available skills"))
 	require.Less(t, indexContaining(contents, "Available skills"), indexContaining(contents, "ROLE_TOKEN"))
 	require.Less(t, indexContaining(contents, "ROLE_TOKEN"), indexContaining(contents, "FORMAT_TOKEN"))

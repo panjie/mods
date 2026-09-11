@@ -76,7 +76,7 @@ var Help = map[string]string{
 	"help":             "Show Help and exit",
 	"version":          "Show version and exit",
 	"max-retries":      "Maximum number of times to retry API calls",
-	"no-instructions":  "Disable auto-loading AGENTS.md from the workspace root as project context",
+	"no-instructions":  "Disable auto-loading AGENTS.md from the current working directory as project context",
 	"word-wrap":        "Wrap formatted output at specific width (default is 80)",
 	"settings":         "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
 	"config":           "Interactive setup wizard for provider, model, API key, and tools",
@@ -109,7 +109,6 @@ var Help = map[string]string{
 	"no-review":              "Disable tool review; shorthand for --review-mode=never",
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Pass the CLI flag without a directory to print the effective directories. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
-	"workspace":              "Set the workspace for filesystem tools and shell, resolving relative paths from the current working directory",
 
 	"prompts.identity":         "Override the built-in identity prompt; empty uses the built-in default",
 	"prompts.tool-selection":   "Override tool-selection guidance; empty uses capability-filtered defaults",
@@ -119,7 +118,6 @@ var Help = map[string]string{
 	"builtin-tools.shell":                    "Enable the native shell execution tool",
 	"builtin-tools.shell-read-only-commands": "Additional executable names to trust as read-only; a match trusts all arguments, subcommands, and internal side effects, while unsafe shell structures are still reviewed",
 	"builtin-tools.shell-timeout":            "Default timeout for shell and process_run commands; per-call timeout_ms may override it in either direction",
-	"builtin-tools.workspace":                "Root directory for filesystem and shell tools; empty uses the current working directory",
 
 	"mcp-servers.<server>.type":         "MCP transport type: stdio, sse, or http",
 	"mcp-servers.<server>.command":      "Command used to start a stdio MCP server",
@@ -284,6 +282,9 @@ type PersistentConfig struct {
 // so that all persisted fields are promoted and accessible directly on Config.
 // The remaining fields are CLI-only flags or computed runtime state.
 type Config struct {
+	// WorkingDir is runtime execution context, never a persistent setting. Empty uses os.Getwd.
+	WorkingDir string `yaml:"-"`
+
 	PersistentConfig `yaml:",inline"`
 
 	// CLI-flag-only fields (one-shot operations, never persisted).
@@ -342,19 +343,17 @@ func (p PromptConfig) Value(key string) string {
 	}
 }
 
-// Workspace describes the configured workspace in normalized forms.
-type Workspace struct {
-	Input     string
-	Abs       string
+// WorkingDir describes the process working directory in normalized forms.
+type WorkingDir struct {
 	Canonical string
 	Display   string
 }
 
-func (c Config) ResolveWorkspace() Workspace {
-	input := c.BuiltinTools.Workspace
+func (c Config) ResolveWorkingDir() WorkingDir {
+	input := c.WorkingDir
 	abs := ""
-	if c.BuiltinTools.Workspace != "" {
-		if resolved, err := filepath.Abs(c.BuiltinTools.Workspace); err == nil {
+	if c.WorkingDir != "" {
+		if resolved, err := filepath.Abs(c.WorkingDir); err == nil {
 			abs = resolved
 		}
 	} else if cwd, err := os.Getwd(); err == nil {
@@ -368,9 +367,7 @@ func (c Config) ResolveWorkspace() Workspace {
 	if eval, err := filepath.EvalSymlinks(canonical); err == nil {
 		canonical = eval
 	}
-	return Workspace{
-		Input:     input,
-		Abs:       filepath.Clean(abs),
+	return WorkingDir{
 		Canonical: canonical,
 		Display:   filepath.Clean(abs),
 	}
@@ -382,7 +379,6 @@ type BuiltinToolsConfig struct {
 	Shell                 bool           `yaml:"shell"`
 	ShellReadOnlyCommands []string       `yaml:"shell-read-only-commands"`
 	ShellTimeout          time.Duration  `yaml:"shell-timeout"`
-	Workspace             string         `yaml:"workspace"`
 }
 
 func validateShellReadOnlyCommands(c *Config) error {

@@ -16,7 +16,7 @@ type ArgvStaticContext struct {
 	EnvironmentKeys []string
 }
 
-var gitWorkspaceWriteSubcommands = map[string]bool{
+var gitWorkingDirWriteSubcommands = map[string]bool{
 	"add":         true,
 	"checkout":    true,
 	"cherry-pick": true,
@@ -48,7 +48,7 @@ var gitRepositoryEnvironmentNames = map[string]bool{
 // whose built-in filesystem effects stay within the selected repository. The
 // returned directories include both the worktree and Git administrative
 // storage; linked worktrees therefore expose an external common Git directory
-// instead of being mistaken for workspace-only writes.
+// instead of being mistaken for cwd-only writes.
 func assessGitArgvStatic(tokens []string, posix bool, context ArgvStaticContext) (CommandAssessment, bool) {
 	if len(tokens) < 2 || normalizedGitProgram(tokens[0], posix) != "git" {
 		return CommandAssessment{}, false
@@ -60,7 +60,7 @@ func assessGitArgvStatic(tokens []string, posix bool, context ArgvStaticContext)
 		return CommandAssessment{}, false
 	}
 	subcommand := strings.ToLower(strings.TrimSpace(tokens[1]))
-	if !gitWorkspaceWriteSubcommands[subcommand] || gitInvocationHasUnsupportedIndirection(tokens[2:]) {
+	if !gitWorkingDirWriteSubcommands[subcommand] || gitInvocationHasUnsupportedIndirection(tokens[2:]) {
 		return CommandAssessment{}, false
 	}
 	if gitRepositoryEnvironmentOverridden(context.EnvironmentKeys) {

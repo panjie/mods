@@ -125,7 +125,7 @@ func TestIsReadOnlyPowerShellNotReadOnly(t *testing.T) {
 		{"git diff output file", "git diff --output=owned.txt"},
 		{"git show output file", "git show --output owned.txt HEAD"},
 		{"git diff external helper", "git diff --ext-diff"},
-		{"workspace executable with cmdlet basename", `.\Get-Content.exe file.txt`},
+		{"cwd executable with cmdlet basename", `.\Get-Content.exe file.txt`},
 		{"go vet external tool", `go vet -vettool=.\payload.exe .\...`},
 
 		// Excluded cmdlets (security traps)

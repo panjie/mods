@@ -84,7 +84,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 			Name:        "shell_run",
 			Description: desc,
 			InputSchema: objectSchema(map[string]any{
-				"cwd":        stringProp("Optional literal working directory; defaults to the workspace. Use instead of cd or Set-Location."),
+				"cwd":        stringProp("Optional literal working directory; defaults to the cwd. Use instead of cd or Set-Location."),
 				"command":    stringProp("Shell command to run."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
@@ -134,7 +134,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 			Name:        "powershell_run",
 			Description: PowerShellRunDescription,
 			InputSchema: objectSchema(map[string]any{
-				"cwd":        stringProp("Optional literal working directory; defaults to the workspace. Use instead of cd or Set-Location."),
+				"cwd":        stringProp("Optional literal working directory; defaults to the cwd. Use instead of cd or Set-Location."),
 				"command":    stringProp("PowerShell command to run directly."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),

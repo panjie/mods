@@ -16,7 +16,7 @@ import (
 func TestLoadProjectInstructions(t *testing.T) {
 	cfgWith := func(root string) *Config {
 		cfg := &Config{}
-		cfg.BuiltinTools.Workspace = root
+		cfg.WorkingDir = root
 		return cfg
 	}
 	writeAgents := func(t *testing.T, root, body string) {
@@ -84,7 +84,7 @@ func TestSetupStreamContextInjectsAgentsMD(t *testing.T) {
 
 	newMods := func(modify func(*Config)) *Mods {
 		cfg := Config{}
-		cfg.BuiltinTools.Workspace = root
+		cfg.WorkingDir = root
 		if modify != nil {
 			modify(&cfg)
 		}

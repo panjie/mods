@@ -182,7 +182,7 @@ func (s *commandSimplicityFakeState) result(name string, data []byte) string {
 		if s.starshipFound {
 			starshipPath = `C:\\Users\\tester\\AppData\\Local\\Microsoft\\WinGet\\Links\\starship.exe`
 		}
-		return `{"os":"windows","architecture":"amd64","workspace":"C:\\repo","shell":{"executable":"pwsh.exe","dialect":"powershell","version":"7.5.2"},"commands":[{"name":"winget","found":true,"path":"C:\\Windows\\winget.exe"},{"name":"starship","found":` + fmt.Sprintf("%t", s.starshipFound) + `,"path":"` + starshipPath + `"}]}`
+		return `{"os":"windows","architecture":"amd64","cwd":"C:\\repo","shell":{"executable":"pwsh.exe","dialect":"powershell","version":"7.5.2"},"commands":[{"name":"winget","found":true,"path":"C:\\Windows\\winget.exe"},{"name":"starship","found":` + fmt.Sprintf("%t", s.starshipFound) + `,"path":"` + starshipPath + `"}]}`
 	case "process_run":
 		var args struct {
 			Program string   `json:"program"`

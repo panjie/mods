@@ -29,11 +29,11 @@ const defaultShellClassifyPrompt = prompts.ShellClassifier
 // classification and caches the result. On any failure (timeout, stream
 // error, parse error) it returns the fail-closed default.
 func (m *Mods) classifyShellWithLLM(tool, command string) approval.CommandAssessment {
-	workspace, _ := m.shellClassifierPathContext()
-	return m.classifyShellAtCwd(tool, command, workspace)
+	cwd, _ := m.shellClassifierPathContext()
+	return m.classifyShellAtCwd(tool, command, cwd)
 }
 
-func (m *Mods) classifyShellAtCwd(tool, command, workspace string) approval.CommandAssessment {
+func (m *Mods) classifyShellAtCwd(tool, command, cwd string) approval.CommandAssessment {
 	system, structured, err := m.resolveShellClassifierPrompt()
 	if err != nil {
 		debug.Printf("assessCommand: prompt override failed: %v", err)
@@ -44,7 +44,7 @@ func (m *Mods) classifyShellAtCwd(tool, command, workspace string) approval.Comm
 		parseMode = "yesno"
 	}
 	_, home := m.shellClassifierPathContext()
-	userMessage, pathContext := shellClassifierUserMessage(tool, command, structured, workspace, home)
+	userMessage, pathContext := shellClassifierUserMessage(tool, command, structured, cwd, home)
 	cacheKey := shellClassifyCacheKey(tool, command, parseMode, system, pathContext)
 	if cached, ok := shellClassifyCache.Load(cacheKey); ok {
 		debug.Printf("assessCommand: cmd=%q cached -> effect=%s dirs=%v", debug.Truncate(command, 80), cached.Effect, cached.KnownDirs)
@@ -129,26 +129,26 @@ func (m *Mods) classifyShellAtCwd(tool, command, workspace string) approval.Comm
 	return assessment
 }
 
-func (m *Mods) shellClassifierPathContext() (workspace, home string) {
+func (m *Mods) shellClassifierPathContext() (cwd, home string) {
 	if m != nil && m.Config != nil {
-		workspace = m.Config.ResolveWorkspace().Canonical
+		cwd = m.Config.ResolveWorkingDir().Canonical
 	}
 	home, _ = os.UserHomeDir()
-	return strings.TrimSpace(workspace), strings.TrimSpace(home)
+	return strings.TrimSpace(cwd), strings.TrimSpace(home)
 }
 
-func shellClassifierUserMessage(tool, command string, structured bool, workspace, home string) (message, pathContext string) {
+func shellClassifierUserMessage(tool, command string, structured bool, cwd, home string) (message, pathContext string) {
 	if !structured {
 		return fmt.Sprintf("Tool: %s\nCommand:\n%s", tool, command), ""
 	}
-	pathContext = strings.Join([]string{workspace, home}, "\x00")
+	pathContext = strings.Join([]string{cwd, home}, "\x00")
 	// Encode command and context separately so command text cannot forge envelope fields.
 	data, _ := json.Marshal(struct {
-		Tool      string
-		Workspace string
-		Home      string
-		Command   string
-	}{tool, classifierContextValue(workspace), classifierContextValue(home), command})
+		Tool       string
+		WorkingDir string
+		Home       string
+		Command    string
+	}{tool, classifierContextValue(cwd), classifierContextValue(home), command})
 	return string(data), pathContext
 }
 

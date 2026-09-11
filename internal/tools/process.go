@@ -98,7 +98,7 @@ func PrepareProcessProgram(data []byte) (ProcessProgramBinding, error) {
 
 // WithProcessProgramBinding attaches a prepared process binding to one tool
 // call. An empty resolved path means the caller supplied an explicit path that
-// still needs ordinary workspace/authorization resolution in runProcess.
+// still needs ordinary cwd/authorization resolution in runProcess.
 func WithProcessProgramBinding(ctx context.Context, binding ProcessProgramBinding) context.Context {
 	if binding.Resolved == "" {
 		return ctx
@@ -145,7 +145,7 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 			InputSchema: objectSchema(map[string]any{
 				"program":    stringProp("Executable name or path. Shell builtins, pipelines, redirection, globbing, and variable expansion are not supported."),
 				"args":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Literal argument vector. Each item is passed as one argument without shell parsing."},
-				"cwd":        stringProp("Optional working directory. Defaults to the configured workspace; relative paths resolve from that workspace."),
+				"cwd":        stringProp("Optional working directory. Defaults to the current working directory; relative paths resolve from that cwd."),
 				"timeout_ms": integerProp("Optional positive timeout in milliseconds; overrides the configured default (builtin-tools.shell-timeout) and may be larger or smaller than it."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
 			}, "program"),
@@ -185,7 +185,7 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 	cwd := root
 	if strings.TrimSpace(args.Cwd) != "" {
 		var err error
-		cwd, err = resolveWorkspacePath(ctx, root, args.Cwd, cfg.SafeDirs)
+		cwd, err = resolveAuthorizedPath(ctx, root, args.Cwd, cfg.SafeDirs)
 		if err != nil {
 			return "", err
 		}
@@ -291,7 +291,7 @@ func resolveProcessProgram(ctx context.Context, root, cwd, program string, safeD
 		if !filepath.IsAbs(input) {
 			input = filepath.Join(cwd, input)
 		}
-		resolved, err := resolveWorkspacePath(ctx, root, input, safeDirs)
+		resolved, err := resolveAuthorizedPath(ctx, root, input, safeDirs)
 		if err != nil {
 			return "", err
 		}
@@ -345,11 +345,11 @@ type runtimeCommandInfo struct {
 }
 
 type runtimeInfoResult struct {
-	OS        string                        `json:"os"`
-	Arch      string                        `json:"arch"`
-	Workspace string                        `json:"workspace"`
-	Shell     RuntimeShellInfo              `json:"shell"`
-	Commands  map[string]runtimeCommandInfo `json:"commands,omitempty"`
+	OS         string                        `json:"os"`
+	Arch       string                        `json:"arch"`
+	WorkingDir string                        `json:"cwd"`
+	Shell      RuntimeShellInfo              `json:"shell"`
+	Commands   map[string]runtimeCommandInfo `json:"commands,omitempty"`
 }
 
 func RegisterRuntimeInfo(registry *Registry, root string) error {
@@ -377,7 +377,7 @@ func RegisterRuntimeInfo(registry *Registry, root string) error {
 			if len(args.Commands) > maxRuntimeInfoCommands {
 				return "", fmt.Errorf("commands must contain at most %d names", maxRuntimeInfoCommands)
 			}
-			result := runtimeInfoResult{OS: runtime.GOOS, Arch: runtime.GOARCH, Workspace: absRoot, Shell: SelectedShellInfo()}
+			result := runtimeInfoResult{OS: runtime.GOOS, Arch: runtime.GOARCH, WorkingDir: absRoot, Shell: SelectedShellInfo()}
 			if len(args.Commands) > 0 {
 				result.Commands = make(map[string]runtimeCommandInfo)
 			}

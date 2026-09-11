@@ -8,23 +8,23 @@ import (
 
 func TestExpandTokenPOSIX(t *testing.T) {
 	opts := Options{
-		Workspace: "/workspace/project",
-		Home:      "/home/test",
-		Flavor:    FlavorPOSIX,
+		WorkingDir: "/cwd/project",
+		Home:       "/home/test",
+		Flavor:     FlavorPOSIX,
 	}
 
 	require.Equal(t, "/home/test/Downloads", NormalizePath("~/Downloads", opts))
 	require.Equal(t, "/home/test/Downloads", NormalizePath("$HOME/Downloads", opts))
 	require.Equal(t, "/home/test/Downloads", NormalizePath("${HOME}/Downloads", opts))
-	require.Equal(t, "/workspace/sibling/file", NormalizePath("../sibling/file", opts))
-	require.Equal(t, "/workspace/project/~/literal", NormalizePath("./~/literal", opts))
+	require.Equal(t, "/cwd/sibling/file", NormalizePath("../sibling/file", opts))
+	require.Equal(t, "/cwd/project/~/literal", NormalizePath("./~/literal", opts))
 }
 
 func TestExpandTokenPowerShell(t *testing.T) {
 	opts := Options{
-		Workspace: `C:\work\project`,
-		Home:      `C:\Users\Test`,
-		Flavor:    FlavorPowerShell,
+		WorkingDir: `C:\work\project`,
+		Home:       `C:\Users\Test`,
+		Flavor:     FlavorPowerShell,
 	}
 
 	require.Equal(t, `C:\Users\Test\Downloads`, NormalizePath(`~\Downloads`, opts))
@@ -38,7 +38,7 @@ func TestExpandTokenPowerShell(t *testing.T) {
 
 func TestExpandTokenCMD(t *testing.T) {
 	opts := Options{
-		Workspace: `C:\work\project`,
+		WorkingDir: `C:\work\project`,
 		Env: map[string]string{
 			"USERPROFILE": `C:\Users\Test`,
 			"HOMEDRIVE":   `C:`,
@@ -74,7 +74,7 @@ func TestIsPublicEnvName(t *testing.T) {
 
 func TestExpandEnvPath(t *testing.T) {
 	opts := Options{
-		Workspace: `C:\work\project`,
+		WorkingDir: `C:\work\project`,
 		Env: map[string]string{
 			"SYSTEMROOT":        `C:\Windows`,
 			"PROGRAMFILES(X86)": `C:\Program Files (x86)`,
@@ -127,9 +127,9 @@ func TestExpandEnvPath(t *testing.T) {
 
 func TestExpandEnvPathRejectsFlattenedMultiReferenceToken(t *testing.T) {
 	opts := Options{
-		Workspace: `C:\work\project`,
-		Env:       map[string]string{"TEMP": `C:\Users\Test\AppData\Local\Temp`},
-		Flavor:    FlavorPowerShell,
+		WorkingDir: `C:\work\project`,
+		Env:        map[string]string{"TEMP": `C:\Users\Test\AppData\Local\Temp`},
+		Flavor:     FlavorPowerShell,
 	}
 
 	_, ok := ExpandEnvPath(`$env:TEMP\a.wav","$env:TEMP\b.wav`, opts)
@@ -145,7 +145,7 @@ func TestExpandEnvPathRejectsFlattenedMultiReferenceToken(t *testing.T) {
 
 func TestExpandEnvPathPOSIX(t *testing.T) {
 	opts := Options{
-		Workspace: "/workspace/project",
+		WorkingDir: "/cwd/project",
 		Env: map[string]string{
 			"DATA": "/srv/data",
 			"PATH": "/usr/bin:/bin",
@@ -335,22 +335,22 @@ func TestContains(t *testing.T) {
 }
 
 func TestLocation(t *testing.T) {
-	workspace := "/workspace/project"
+	cwd := "/cwd/project"
 	safe := "/tmp"
 
-	require.Equal(t, LocationWorkspace, Location("/workspace/project/a.txt", workspace, []string{safe}))
-	require.Equal(t, LocationWorkspace, Location("relative/path", workspace, []string{safe}))
-	require.Equal(t, LocationSafe, Location("/tmp/cache/x", workspace, []string{safe}))
-	require.Equal(t, LocationExternal, Location("/etc/passwd", workspace, []string{safe}))
-	require.Equal(t, LocationExternal, Location("~root/.ssh/authorized_keys", workspace, []string{safe}))
-	require.Equal(t, LocationUnknown, Location("", workspace, []string{safe}))
+	require.Equal(t, LocationWorkingDir, Location("/cwd/project/a.txt", cwd, []string{safe}))
+	require.Equal(t, LocationWorkingDir, Location("relative/path", cwd, []string{safe}))
+	require.Equal(t, LocationSafe, Location("/tmp/cache/x", cwd, []string{safe}))
+	require.Equal(t, LocationExternal, Location("/etc/passwd", cwd, []string{safe}))
+	require.Equal(t, LocationExternal, Location("~root/.ssh/authorized_keys", cwd, []string{safe}))
+	require.Equal(t, LocationUnknown, Location("", cwd, []string{safe}))
 }
 
 func TestNormalizeDirs(t *testing.T) {
 	opts := Options{
-		Workspace: "/workspace/project",
-		Home:      "/home/test",
-		Flavor:    FlavorPOSIX,
+		WorkingDir: "/cwd/project",
+		Home:       "/home/test",
+		Flavor:     FlavorPOSIX,
 	}
 
 	got := NormalizeDirs([]string{
@@ -360,33 +360,33 @@ func TestNormalizeDirs(t *testing.T) {
 	}, opts)
 	require.ElementsMatch(t, []string{
 		"/home/test/Downloads",
-		"/workspace/sibling/file",
+		"/cwd/sibling/file",
 	}, got)
 }
 
 func TestNormalizeShellPathGlob(t *testing.T) {
 	posix := Options{
-		Workspace: "/workspace/project",
-		Home:      "/home/test",
-		Flavor:    FlavorPOSIX,
+		WorkingDir: "/cwd/project",
+		Home:       "/home/test",
+		Flavor:     FlavorPOSIX,
 	}
 
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("~/Downloads/*", posix))
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("$HOME/Downloads/*", posix))
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("${HOME}/Downloads/*", posix))
 	require.Equal(t, "/tmp", NormalizeShellPath("/tmp/*.log", posix))
-	require.Equal(t, "/workspace/sibling", NormalizeShellPath("../sibling/*.txt", posix))
+	require.Equal(t, "/cwd/sibling", NormalizeShellPath("../sibling/*.txt", posix))
 	require.Equal(t, "/home/test/Downloads", NormalizeShellPath("~/Downloads/**/*.zip", posix))
 	require.Equal(t, "/", NormalizeShellPath("/*", posix))
-	require.Equal(t, "/workspace/project/src", NormalizeShellPath("src/*.go", posix))
+	require.Equal(t, "/cwd/project/src", NormalizeShellPath("src/*.go", posix))
 	require.Equal(t, "/tmp/*.log", NormalizePath("/tmp/*.log", posix))
 }
 
 func TestNormalizeShellPathGlobPowerShell(t *testing.T) {
 	opts := Options{
-		Workspace: `C:\work\project`,
-		Home:      `C:\Users\Test`,
-		Flavor:    FlavorPowerShell,
+		WorkingDir: `C:\work\project`,
+		Home:       `C:\Users\Test`,
+		Flavor:     FlavorPowerShell,
 	}
 
 	require.Equal(t, `C:\Users\Test\Downloads`, NormalizeShellPath(`~\Downloads\*`, opts))
@@ -399,7 +399,7 @@ func TestNormalizeShellPathGlobPowerShell(t *testing.T) {
 
 func TestNormalizeShellPathGlobCMD(t *testing.T) {
 	opts := Options{
-		Workspace: `C:\work\project`,
+		WorkingDir: `C:\work\project`,
 		Env: map[string]string{
 			"USERPROFILE": `C:\Users\Test`,
 			"HOMEDRIVE":   `C:`,

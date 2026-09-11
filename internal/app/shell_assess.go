@@ -41,7 +41,7 @@ func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
 func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string]bool) approval.CommandAssessment {
 	ws := ""
 	if m.Config != nil {
-		ws = m.Config.ResolveWorkspace().Canonical
+		ws = m.Config.ResolveWorkingDir().Canonical
 	}
 	return m.assessCommandAtCwd(tool, command, shadowedEnv, ws)
 }
@@ -76,7 +76,7 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 	// literal extraction is a syntax-independent fallback for the forms
 	// command-specific extraction deliberately misses. Both feed one merge, and
 	// an authoritative directory is never dropped in favour of the fallback: an
-	// omitted external literal must never silently collapse to the workspace
+	// omitted external literal must never silently collapse to the cwd
 	// approval scope.
 	externalPaths := shellExternalPathFacts(result.KnownDirs, ws, flavor)
 	extractedPaths, hasBareHome := approval.ExternalShellPathFacts(command, ws, flavor, policy)
@@ -131,7 +131,7 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 		}
 	}
 	// A statically proven read with no explicit external target operates in the
-	// configured workspace context. Classifier-completed commands do not get
+	// current working directory context. Classifier-completed commands do not get
 	// this fallback: cwd is execution context, not evidence of an affected dir.
 	if staticEffect == approval.EffectRead && len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(ws) != "" {
 		result.KnownDirs = []string{ws}
@@ -140,17 +140,17 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 }
 
 // shellExternalPathFacts keeps the directories approval reported whose location
-// is outside the workspace.
+// is outside the cwd.
 //
 // For the POSIX dialect it deliberately does not re-judge whether a token
 // "looks like" an explicit path: approval already extracted it from a real
 // shell parse, and a second heuristic here could only drop facts. Dropping one
 // is unsafe because the read branch replaces the fact list wholesale, so an
-// emptied list falls back to the workspace scope below — turning an external
-// read into a silent workspace read. Measured example: `cat \\server\share\f`
+// emptied list falls back to the cwd scope below — turning an external
+// read into a silent cwd read. Measured example: `cat \\server\share\f`
 // in the POSIX dialect is reported by approval as external but does not look
 // like an explicit path to the older heuristic, and used to collapse to the
-// workspace scope.
+// cwd scope.
 //
 // The PowerShell dialect keeps the explicit-path gate, because there it encodes
 // a dialect policy rather than a distrust of approval: leading-slash tokens are
@@ -244,15 +244,15 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	if err := json.Unmarshal([]byte(raw), &invocation); err != nil || strings.TrimSpace(invocation.Program) == "" {
 		return approval.UnknownCommandAssessment()
 	}
-	workspace := ""
+	baseDir := ""
 	if m.Config != nil {
-		workspace = m.Config.ResolveWorkspace().Canonical
+		baseDir = m.Config.ResolveWorkingDir().Canonical
 	}
 	cwd := strings.TrimSpace(invocation.Cwd)
 	if cwd == "" {
-		cwd = workspace
+		cwd = baseDir
 	} else if !pathutil.IsAbs(cwd) {
-		cwd = pathutil.NormalizeShellPath(cwd, pathutil.DefaultOptions(workspace, shellPathFlavor("process_run")))
+		cwd = pathutil.NormalizeShellPath(cwd, pathutil.DefaultOptions(baseDir, shellPathFlavor("process_run")))
 	}
 	flavor := shellPathFlavor("process_run")
 	posix := !shellToolUsesPowerShell("process_run")
@@ -301,7 +301,7 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		// An LLM may recognize that a program mutates state, but it cannot
 		// safely bound an arbitrary executable's filesystem effects. In
 		// particular, cwd in the classifier input is execution context rather
-		// than evidence that the workspace is the mutation target. Preserve
+		// than evidence that the cwd is the mutation target. Preserve
 		// effect/reason completion while deriving process directories only from
 		// deterministic argv analysis.
 		completion.KnownDirs = nil
@@ -309,7 +309,7 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, explicitDirs)
 	}
 	// An executable given by an explicit relative or absolute path that lives
-	// inside the workspace or a safe directory stays reviewable even when the
+	// inside the cwd or a safe directory stays reviewable even when the
 	// classifier calls it read-only: the script itself may do anything once it
 	// runs. Bare names resolved into those directories are handled separately
 	// via the pinned PATH binding in constrainResolvedProcessAssessment.
@@ -319,10 +319,10 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		if !pathutil.IsAbs(resolved) {
 			resolved = pathutil.NormalizeShellPath(resolved, pathutil.DefaultOptions(cwd, flavor))
 		}
-		switch pathutil.Location(resolved, workspace, m.safeDirs()) {
-		case pathutil.LocationWorkspace, pathutil.LocationSafe:
+		switch pathutil.Location(resolved, baseDir, m.safeDirs()) {
+		case pathutil.LocationWorkingDir, pathutil.LocationSafe:
 			result.Effect = approval.EffectUnknown
-			result.Reason = "executable resolves from a workspace or temporary directory"
+			result.Reason = "executable resolves from a cwd or temporary directory"
 		}
 	}
 	return finalizeProcessAssessment(result)
@@ -332,13 +332,13 @@ func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessm
 	if binding.Resolved == "" || m == nil || m.Config == nil {
 		return result
 	}
-	workspace := m.Config.ResolveWorkspace().Canonical
-	location := pathutil.Location(binding.Resolved, workspace, m.safeDirs())
-	if location != pathutil.LocationWorkspace && location != pathutil.LocationSafe {
+	cwd := m.Config.ResolveWorkingDir().Canonical
+	location := pathutil.Location(binding.Resolved, cwd, m.safeDirs())
+	if location != pathutil.LocationWorkingDir && location != pathutil.LocationSafe {
 		return result
 	}
 	result.Effect = approval.EffectUnknown
-	result.Reason = "executable resolves from a workspace or temporary directory"
+	result.Reason = "executable resolves from a cwd or temporary directory"
 	return result
 }
 
@@ -400,7 +400,7 @@ func normalizeLiteralProcessPath(value, cwd string, flavor pathutil.Flavor) stri
 			value = "./" + value
 		}
 	}
-	return pathutil.NormalizePath(value, pathutil.Options{Workspace: cwd, Flavor: flavor})
+	return pathutil.NormalizePath(value, pathutil.Options{WorkingDir: cwd, Flavor: flavor})
 }
 
 func (m *Mods) readOnlyCommandPolicy() approval.ReadOnlyCommandPolicy {

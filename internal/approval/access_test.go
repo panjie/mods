@@ -9,7 +9,7 @@ import (
 
 func wsScope(t *testing.T) Scope {
 	t.Helper()
-	return WorkspaceScope(filepath.Clean(t.TempDir()))
+	return WorkingDirScope(filepath.Clean(t.TempDir()))
 }
 
 func TestClassifyAccessMatrix(t *testing.T) {
@@ -23,8 +23,8 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		intent AccessIntent
 		want   Decision
 	}{
-		{"read in workspace", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}}, DecisionAllow},
-		{"write in workspace", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}}, DecisionAsk},
+		{"read in cwd", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}}, DecisionAllow},
+		{"write in cwd", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}}, DecisionAsk},
 		{"read in temp", AccessIntent{Class: AccessRead, Dirs: []string{tempDir}}, DecisionAllow},
 		{"write in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}}, DecisionAllow},
 		{"read external", AccessIntent{Class: AccessRead, Dirs: []string{external}}, DecisionAllow},
@@ -34,8 +34,8 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"mixed ws+external read", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value, external}}, DecisionAllow},
 		{"write spanning temp and external", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir, external}}, DecisionAsk},
 		{"copy external source to temp", AccessIntent{ReadDirs: []string{external}, WriteDirs: []string{tempDir}}, DecisionAllow},
-		{"copy workspace source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
-		{"copy workspace source to workspace", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
+		{"copy cwd source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
+		{"copy cwd source to cwd", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
 		{"missing access intent fails closed", AccessIntent{}, DecisionAsk},
 		{"dynamic probe without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}, DynamicProbe: true}, DecisionAllow},
 		{"dynamic content read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
@@ -55,7 +55,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 }
 
 func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
-	ws := WorkspaceScope(t.TempDir())
+	ws := WorkingDirScope(t.TempDir())
 	rules := RulesForDirs([]string{ws.Value}, ws, AccessWrite)
 	intent := AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$PROFILE.CurrentUserCurrentHost"}}
 	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto),
@@ -84,8 +84,8 @@ func TestLocateDir(t *testing.T) {
 	safeDirs := []string{tempDir}
 	external := filepath.Clean(t.TempDir())
 
-	require.Equal(t, locWorkspace, locateDir(filepath.Join(ws.Value, "a.txt"), ws, safeDirs))
-	require.Equal(t, locWorkspace, locateDir("relative/path", ws, safeDirs), "relative path treated as workspace-local")
+	require.Equal(t, locWorkingDir, locateDir(filepath.Join(ws.Value, "a.txt"), ws, safeDirs))
+	require.Equal(t, locWorkingDir, locateDir("relative/path", ws, safeDirs), "relative path treated as cwd-local")
 	require.Equal(t, locTemp, locateDir(filepath.Join(tempDir, "x"), ws, safeDirs))
 	require.Equal(t, locExternal, locateDir(external, ws, safeDirs))
 	require.Equal(t, locUnknown, locateDir("", ws, safeDirs))

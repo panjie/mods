@@ -23,7 +23,7 @@ Use this procedure for command execution and troubleshooting.
    specific executable is relevant and not already known. Do not implement
    capability discovery with several `Get-Command` or `command -v` statements.
 5. Do not prepend `cd`, `Set-Location`, or `Push-Location`; use
-   the literal `cwd` argument on process/shell tools. Commands already start in the configured workspace when
+   the literal `cwd` argument on process/shell tools. Commands already start in the current working directory when
    `cwd` is omitted.
 6. Treat paths as data. Keep paths containing spaces or Unicode in one argv
    element. Resolve runtime paths such as `$PROFILE` in a short read-only call,

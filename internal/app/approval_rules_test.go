@@ -22,21 +22,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testApprovalScope = WorkspaceScope("/workspace")
+var testApprovalScope = WorkingDirScope("/cwd")
 
-func testConfigForWorkspace(workspace string) *Config {
+func testConfigForWorkingDir(cwd string) *Config {
 	cfg := &Config{}
-	cfg.BuiltinTools.Workspace = workspace
+	cfg.WorkingDir = cwd
 	return cfg
 }
 
-func testShellWorkspaceScope(t *testing.T) Scope {
+func testShellWorkingDirScope(t *testing.T) Scope {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		home, err := os.UserHomeDir()
 		require.NoError(t, err)
 		require.NotEmpty(t, home)
-		return WorkspaceScope(filepath.Join(home, "mods-test-workspace"))
+		return WorkingDirScope(filepath.Join(home, "mods-test-cwd"))
 	}
 	return testApprovalScope
 }
@@ -52,11 +52,11 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	IsInputTTY = func() bool { return true }
 	t.Cleanup(func() { IsInputTTY = oldInputTTY })
 
-	workspaceScope := testShellWorkspaceScope(t)
+	cwdScope := testShellWorkingDirScope(t)
 	registry := testReviewRegistry(t)
 	mods := &Mods{
 		ctx:                 context.Background(),
-		Config:              testConfigForWorkspace(workspaceScope.Value),
+		Config:              testConfigForWorkingDir(cwdScope.Value),
 		currentToolRegistry: registry,
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
 			return approval.CommandAssessment{
@@ -67,7 +67,7 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	}
 	reviewer := &toolReviewer{
 		reviewMode: ReviewAuto,
-		scope:      workspaceScope,
+		scope:      cwdScope,
 		reviewChan: make(chan toolReviewItem, 1),
 	}
 	data := []byte(`{"command":"opaque-command"}`)
@@ -85,7 +85,7 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	}()
 
 	item := receiveReviewItem(t, reviewer.reviewChan)
-	require.NotContains(t, item.summary, workspaceScope.Value)
+	require.NotContains(t, item.summary, cwdScope.Value)
 	require.Contains(t, item.summary, "Risk: unknown effect and location")
 	require.NotContains(t, item.summary, "effects could not be proven")
 	require.Equal(t, interactionToneWarning, item.presentation.tone)
@@ -131,11 +131,11 @@ func TestOldestDownloadsPipelineReadNeedsNoApproval(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	downloads := filepath.Join(home, "Downloads")
-	workspace := canonicalTestPath(t, t.TempDir())
+	cwd := canonicalTestPath(t, t.TempDir())
 	registry := testReviewRegistry(t)
 	mods := &Mods{
 		ctx:                 context.Background(),
-		Config:              testConfigForWorkspace(workspace),
+		Config:              testConfigForWorkingDir(cwd),
 		currentToolRegistry: registry,
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
 			t.Fatal("LLM classifier should not be called")
@@ -144,7 +144,7 @@ func TestOldestDownloadsPipelineReadNeedsNoApproval(t *testing.T) {
 	}
 	reviewer := &toolReviewer{
 		reviewMode: ReviewAuto,
-		scope:      WorkspaceScope(workspace),
+		scope:      WorkingDirScope(cwd),
 		reviewChan: make(chan toolReviewItem, 1),
 	}
 	cmd := `find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`
@@ -378,7 +378,7 @@ func TestRequestApprovalUsesInteractiveReviewAvailability(t *testing.T) {
 	registry := testReviewRegistry(t)
 	mods := &Mods{
 		ctx:                 context.Background(),
-		Config:              testConfigForWorkspace(testApprovalScope.Value),
+		Config:              testConfigForWorkingDir(testApprovalScope.Value),
 		currentToolRegistry: registry,
 	}
 	mods.Config.InteractiveTTYAvailable = true
@@ -401,7 +401,7 @@ func TestRequestApprovalRawModeIgnoresInteractiveReviewAvailability(t *testing.T
 	IsInputTTY = func() bool { return false }
 	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
 
-	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	cfg := testConfigForWorkingDir(testApprovalScope.Value)
 	cfg.Raw = true
 	cfg.InteractiveTTYAvailable = true
 	reviewer := newToolReviewer(cfg)
@@ -419,7 +419,7 @@ func TestRequestApprovalRawTTYModeDoesNotWaitForReview(t *testing.T) {
 	IsInputTTY = func() bool { return true }
 	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
 
-	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	cfg := testConfigForWorkingDir(testApprovalScope.Value)
 	cfg.Raw = true
 	reviewer := newToolReviewer(cfg)
 	reviewer.reviewChan = make(chan toolReviewItem, 1)
@@ -440,7 +440,7 @@ func TestRequestApprovalTTYInputWithoutReviewUIIsUnavailable(t *testing.T) {
 	IsInputTTY = func() bool { return true }
 	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
 
-	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	cfg := testConfigForWorkingDir(testApprovalScope.Value)
 	reviewer := newToolReviewer(cfg)
 	reviewer.reviewChan = make(chan toolReviewItem, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -463,10 +463,10 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	t.Cleanup(func() { isInputTTY = oldIsInputTTY })
 	t.Cleanup(func() { IsInputTTY = oldInputTTY })
 
-	scope := testShellWorkspaceScope(t)
+	scope := testShellWorkingDirScope(t)
 	mods := &Mods{
 		ctx:    context.Background(),
-		Config: testConfigForWorkspace(scope.Value),
+		Config: testConfigForWorkingDir(scope.Value),
 	}
 	registry := testReviewRegistry(t)
 	mods.currentToolRegistry = registry
@@ -630,19 +630,19 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	})
 }
 
-func TestToolCallerReadsOutsideWorkspaceWithoutReview(t *testing.T) {
-	workspace := t.TempDir()
+func TestToolCallerReadsOutsideWorkingDirWithoutReview(t *testing.T) {
+	cwd := t.TempDir()
 	packageDir, err := os.Getwd()
 	require.NoError(t, err)
 	target := filepath.Join(packageDir, "approval_rules_test.go")
 
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = workspace
+	cfg.WorkingDir = cwd
 	cfg.ReviewMode = ReviewAlways
 	cfg.MCPTimeout = time.Second
 	mods := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
 	registry := toolregistry.NewRegistry()
-	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: workspace, SafeDirs: mods.safeDirs()}))
+	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: cwd, SafeDirs: mods.safeDirs()}))
 
 	out, err := mods.toolCaller(registry, &cfg)(proto.ToolCallRequest{
 		ID: "external_read", Index: 1, Total: 1, Name: "fs_read_file",
@@ -658,18 +658,18 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	t.Cleanup(func() { IsInputTTY = oldInputTTY })
 
 	registry := testReviewRegistry(t)
-	workspaceScope := testShellWorkspaceScope(t)
+	cwdScope := testShellWorkingDirScope(t)
 
 	t.Run("auto skips review when LLM says no review", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
-			Config:              testConfigForWorkspace(workspaceScope.Value),
+			Config:              testConfigForWorkingDir(cwdScope.Value),
 			currentToolRegistry: registry,
 			shellAnalyzer: func(string, string) approval.CommandAssessment {
 				return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only"}
 			},
 		}
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: workspaceScope}
+		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: cwdScope}
 		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"ls"}`))
 		require.NoError(t, err)
 	})
@@ -843,7 +843,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	t.Run("always allows command when LLM proves it read-only", func(t *testing.T) {
 		mods := &Mods{
 			ctx:                 context.Background(),
-			Config:              testConfigForWorkspace(workspaceScope.Value),
+			Config:              testConfigForWorkingDir(cwdScope.Value),
 			currentToolRegistry: registry,
 			shellAnalyzer: func(string, string) approval.CommandAssessment {
 				return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only"}
@@ -851,7 +851,7 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 		}
 		reviewer := &toolReviewer{
 			reviewMode: ReviewAlways,
-			scope:      workspaceScope,
+			scope:      cwdScope,
 			reviewChan: make(chan toolReviewItem, 1),
 		}
 		errCh := make(chan error, 1)
@@ -1140,7 +1140,7 @@ func TestShellCandidateRulesUseLLMAffectedDirs(t *testing.T) {
 		require.Len(t, rules, 1)
 		// Stored rule paths use the host separator; the scope value is POSIX
 		// style, so compare through FromSlash instead of the raw literal.
-		require.Equal(t, []string{filepath.FromSlash("/workspace/build")}, rules[0].Paths)
+		require.Equal(t, []string{filepath.FromSlash("/cwd/build")}, rules[0].Paths)
 		require.Empty(t, rules[0].ScopeKind)
 		require.Empty(t, rules[0].ScopeValue)
 	})
@@ -1212,7 +1212,7 @@ func TestDirAllowMatching(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/"}, Mode: AccessWrite})
 		var rs approvalRuleSet
 		rs.Add(rule)
-		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), WorkspaceScope("/other")))
+		require.True(t, rs.Allows("shell_run", []byte(`{"command":"rm /tmp/foo"}`), WorkingDirScope("/other")))
 	})
 
 	t.Run("simple mode path extraction", func(t *testing.T) {
@@ -1330,22 +1330,22 @@ func TestDirAllowModeSplit(t *testing.T) {
 		))
 	})
 
-	t.Run("directory coverage is independent of current workspace", func(t *testing.T) {
+	t.Run("directory coverage is independent of current cwd", func(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/external/a"}, Mode: AccessWrite})
 		require.True(t, RulesAllowDirs(
 			[]ApprovalRule{rule},
 			[]string{"/external/a/subdir"},
-			WorkspaceScope("/different-workspace"),
+			WorkingDirScope("/different-cwd"),
 			AccessWrite,
 		))
 	})
 
-	t.Run("legacy relative rule resolves against its original workspace", func(t *testing.T) {
+	t.Run("legacy relative rule resolves against its original cwd", func(t *testing.T) {
 		rule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"generated"}, Mode: AccessWrite})
 		require.True(t, RulesAllowDirs(
 			[]ApprovalRule{rule},
-			[]string{"/workspace/generated/output"},
-			WorkspaceScope("/different-workspace"),
+			[]string{"/cwd/generated/output"},
+			WorkingDirScope("/different-cwd"),
 			AccessWrite,
 		))
 	})
@@ -1363,18 +1363,18 @@ func TestDirAllowModeSplit(t *testing.T) {
 }
 
 func TestMixedAccessIntentRules(t *testing.T) {
-	// Use a native workspace: a POSIX scope value combined with the host path
+	// Use a native cwd: a POSIX scope value combined with the host path
 	// normalizer is not a Windows-absolute input, so it cannot exercise rule
 	// matching on Windows.
-	workspace := t.TempDir()
-	scope := WorkspaceScope(workspace)
-	writeDir := filepath.Join(workspace, "dest")
+	cwd := t.TempDir()
+	scope := WorkingDirScope(cwd)
+	writeDir := filepath.Join(cwd, "dest")
 	intent := AccessIntent{
-		ReadDirs:  []string{filepath.Join(workspace, "source")},
+		ReadDirs:  []string{filepath.Join(cwd, "source")},
 		WriteDirs: []string{writeDir},
 	}
 	writeRule := ApprovalRule{
-		Type: approvalDirAllow, Paths: []string{workspace}, Mode: AccessWrite,
+		Type: approvalDirAllow, Paths: []string{cwd}, Mode: AccessWrite,
 		ScopeKind: scope.Kind, ScopeValue: scope.Value,
 	}
 

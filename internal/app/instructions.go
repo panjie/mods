@@ -13,16 +13,16 @@ import (
 // context, keeping per-turn token cost bounded for very large files.
 const maxInstructionsBytes = 16 * 1024
 
-// loadProjectInstructions reads AGENTS.md from the workspace root to inject as
+// loadProjectInstructions reads AGENTS.md from the cwd root to inject as
 // project context. It returns "" when disabled (cfg.NoInstructions), in
-// minimal mode, when no workspace is configured, or when AGENTS.md is absent
-// (the common case). A missing file is not an error: most workspaces have no
+// minimal mode, when no cwd is configured, or when AGENTS.md is absent
+// (the common case). A missing file is not an error: most cwds have no
 // AGENTS.md and the model simply runs without project-specific guidance.
 func loadProjectInstructions(cfg *Config) string {
 	if cfg == nil || cfg.NoInstructions || cfg.Minimal {
 		return ""
 	}
-	root := cfg.ResolveWorkspace().Canonical
+	root := cfg.ResolveWorkingDir().Canonical
 	if root == "" {
 		return ""
 	}

@@ -101,7 +101,7 @@ func TestRequestApprovalUsesInteractiveReviewAvailability(t *testing.T) {
 	registry := testReviewRegistry(t)
 	mods := &Mods{
 		ctx:                 context.Background(),
-		Config:              testConfigForWorkspace(testApprovalScope.Value),
+		Config:              testConfigForWorkingDir(testApprovalScope.Value),
 		currentToolRegistry: registry,
 	}
 	mods.Config.InteractiveReviewAvailable = true
@@ -124,7 +124,7 @@ func TestRequestApprovalRawModeIgnoresInteractiveReviewAvailability(t *testing.T
 	IsInputTTY = func() bool { return false }
 	t.Cleanup(func() { IsInputTTY = oldIsInputTTY })
 
-	cfg := testConfigForWorkspace(testApprovalScope.Value)
+	cfg := testConfigForWorkingDir(testApprovalScope.Value)
 	cfg.Raw = true
 	cfg.InteractiveReviewAvailable = true
 	reviewer := newToolReviewer(cfg)

@@ -1087,7 +1087,7 @@ Replace the tier 1 section (lines 46-59). The old code:
 ```go
 	// Tier 1: AST-based read-only classifier (POSIX only, skip powershell_run).
 	// Handles pipes, &&/||, subshells, command substitution, and subcommand
-	// tables. Covers both workspace-local and external-path read-only commands;
+	// tables. Covers both cwd-local and external-path read-only commands;
 	// the approval matrix decides whether external reads need review.
 	if tool != "powershell_run" {
 		if ro, reason := approval.IsReadOnlyPOSIX(command); ro {
@@ -1107,7 +1107,7 @@ Replace with:
 	// Tier 1: AST-based read-only classifier.
 	// POSIX: handles pipes, &&/||, subshells, command substitution, subcommand tables.
 	// PowerShell: uses a persistent pwsh.exe bridge to call Parser::ParseInput.
-	// Both cover workspace-local and external-path read-only commands;
+	// Both cover cwd-local and external-path read-only commands;
 	// the approval matrix decides whether external reads need review.
 	if tool == "powershell_run" {
 		if ro, reason := approval.IsReadOnlyPowerShell(command); ro {

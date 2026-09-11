@@ -16,8 +16,8 @@ import (
 func TestAnalyzeShellCommandPowerShellLineCountPipelineIsReadOnly(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
-	m := &Mods{Config: testConfigForWorkspace(workspace)}
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	cmd := `Get-ChildItem -Recurse -Filter *.go | Select-Object FullName | ForEach-Object { $lines = (Get-Content $_.FullName | Measure-Object -Line).Lines; "$($_.FullName): $lines lines" } | Sort-Object { [int]($_.Split(':')[1].Trim().Split(' ')[0]) } -Descending`
 
 	got := m.assessCommand("shell_run", cmd)
@@ -33,7 +33,7 @@ func TestAnalyzeShellCommandPowerShellUserProfileDoesNotInventPlaceholder(t *tes
 	require.NotEmpty(t, home)
 
 	m := &Mods{
-		Config: testConfigForWorkspace(t.TempDir()),
+		Config: testConfigForWorkingDir(t.TempDir()),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -49,12 +49,12 @@ func TestAnalyzeShellCommandPowerShellUserProfileDoesNotInventPlaceholder(t *tes
 	require.NotContains(t, got.KnownDirs[0], "<user>")
 }
 
-func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkspaceRead(t *testing.T) {
+func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkingDirRead(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -65,15 +65,15 @@ func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkspaceRead(t *testing.T)
 	got := m.assessCommand("powershell_run", cmd)
 
 	require.Equal(t, approval.EffectRead, got.Effect)
-	require.Equal(t, []string{workspace}, got.KnownDirs)
+	require.Equal(t, []string{cwd}, got.KnownDirs)
 }
 
 func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -100,9 +100,9 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 func TestAssessCommandPowerShellLiteralVariableReadResolvesConcreteDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads emacs init content"}
 		},
@@ -120,9 +120,9 @@ func TestAssessCommandPowerShellLiteralVariableReadResolvesConcreteDir(t *testin
 func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -138,7 +138,7 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
 	require.Equal(t, DecisionAsk, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
 	), "an external write still asks once, but the concrete dir makes the approval rule-saveable")
@@ -147,15 +147,15 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
 		},
 	}
-	cmd := `$suffix='\..\outside'; $p='` + workspace + `\init.el'+$suffix; Set-Content -Path $p -Value x`
+	cmd := `$suffix='\..\outside'; $p='` + cwd + `\init.el'+$suffix; Set-Content -Path $p -Value x`
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
@@ -165,39 +165,39 @@ func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testin
 	require.NotContains(t, assessment.LiteralAssignments, "p")
 }
 
-func TestAssessCommandPowerShellLiteralVariableWorkspaceReadAutoAllows(t *testing.T) {
+func TestAssessCommandPowerShellLiteralVariableWorkingDirReadAutoAllows(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for a statically-proven read: %s", command)
 			return approval.UnknownCommandAssessment()
 		},
 	}
-	cmd := `$p = "` + workspace + `\init.el"; Get-Content $p | Select-Object -Skip 83 -First 5`
+	cmd := `$p = "` + cwd + `\init.el"; Get-Content $p | Select-Object -Skip 83 -First 5`
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
 	require.Equal(t, approval.EffectRead, assessment.Effect,
 		"a pure-literal top-level assignment must not block the static read-only proof")
 	require.Empty(t, assessment.DynamicTargets)
-	require.Contains(t, assessment.KnownDirs, workspace+`\init.el`)
+	require.Contains(t, assessment.KnownDirs, cwd+`\init.el`)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
-	), "a workspace read via a literal-assigned variable auto-allows")
+	), "a cwd read via a literal-assigned variable auto-allows")
 }
 
 func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for a statically-proven read: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -212,16 +212,16 @@ func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testi
 	require.Empty(t, assessment.DynamicTargets)
 	require.Contains(t, assessment.KnownDirs, external)
 	intent := assessment.AccessIntent()
-	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
-	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -234,8 +234,8 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	require.Len(t, assessment.KnownDirs, 1)
 	require.Contains(t, strings.ToLower(assessment.KnownDirs[0]), "profile", assessment.KnownDirs)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
-	scope := WorkspaceScope(workspace)
-	// $PROFILE lives outside the workspace, so the write still asks once; the
+	scope := WorkingDirScope(cwd)
+	// $PROFILE lives outside the cwd, so the write still asks once; the
 	// concrete resolved directory is what makes the answer saveable as a rule.
 	require.Equal(t, DecisionAsk, ClassifyAccess(
 		assessment.AccessIntent(),
@@ -254,9 +254,9 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
 			return approval.CommandAssessment{
 				Effect: approval.EffectRead,
@@ -276,7 +276,7 @@ func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *t
 func TestAnalyzeShellCommandPowerShellProfileProbeIsCompound(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	m := &Mods{Config: testConfigForWorkspace(t.TempDir())}
+	m := &Mods{Config: testConfigForWorkingDir(t.TempDir())}
 	cmd := `"USERPROFILE=$env:USERPROFILE"; "Profile: $PROFILE"; "ProfileExists: $(Test-Path $PROFILE)"; Get-ChildItem $env:USERPROFILE\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName`
 
 	got := m.assessCommand("powershell_run", cmd)
@@ -293,7 +293,7 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	m := &Mods{
-		Config: testConfigForWorkspace(t.TempDir()),
+		Config: testConfigForWorkingDir(t.TempDir()),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -313,7 +313,7 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 		require.Equal(t, AccessRead, assessment.AccessIntent().Class)
 		require.Equal(t, []string{tc.target}, assessment.AccessIntent().UnresolvedPaths)
 		require.True(t, assessment.AccessIntent().DynamicProbe)
-		require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(m.Config.ResolveWorkspace().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
+		require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkingDirScope(m.Config.ResolveWorkingDir().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
 		require.Equal(t, approval.ReviewabilityCompound, assessment.Reviewability.Level)
 	}
 }
@@ -321,9 +321,9 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -338,15 +338,15 @@ func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
 	require.Equal(t, approval.ReviewabilitySimple, assessment.Reviewability.Level)
 	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, assessment.AccessIntent().UnresolvedPaths)
 	require.True(t, assessment.AccessIntent().DynamicProbe)
-	require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -359,7 +359,7 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 	require.False(t, assessment.DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -368,9 +368,9 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -391,7 +391,7 @@ func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 			require.False(t, assessment.DynamicProbe)
 			require.Equal(t, DecisionAllow, ClassifyAccess(
 				assessment.AccessIntent(),
-				WorkspaceScope(workspace),
+				WorkingDirScope(cwd),
 				nil,
 				ApprovalReviewMode(ReviewAuto),
 			))
@@ -402,9 +402,9 @@ func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -417,7 +417,7 @@ func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
 	require.True(t, assessment.DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -426,9 +426,9 @@ func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
 func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -441,7 +441,7 @@ func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
 	require.True(t, assessment.DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -453,9 +453,9 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 	systemRoot := os.Getenv("SystemRoot")
 	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -470,7 +470,7 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -479,9 +479,9 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
 			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads notes"}
 		},
@@ -494,7 +494,7 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 		"the assigned literal is still extracted; the process TEMP location must not be substituted")
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -503,9 +503,9 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -519,7 +519,7 @@ func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) 
 	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(os.TempDir())), assessment.KnownDirs)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
 	), "a write into the safe temp directory matches the allow cell of the approval matrix")
@@ -529,7 +529,7 @@ func TestAssessCommandPowerShellStableEnvWriteAssignmentKeepsDynamicTargets(t *t
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	m := &Mods{
-		Config: testConfigForWorkspace(t.TempDir()),
+		Config: testConfigForWorkingDir(t.TempDir()),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -545,7 +545,7 @@ func TestAssessCommandPowerShellSystemEnvironmentMutationKeepsDynamicTargets(t *
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	m := &Mods{
-		Config: testConfigForWorkspace(t.TempDir()),
+		Config: testConfigForWorkingDir(t.TempDir()),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -562,9 +562,9 @@ func TestAssessCommandPowerShellSystemEnvironmentMutationKeepsDynamicTargets(t *
 func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -577,7 +577,7 @@ func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	require.NotEmpty(t, assessment.DynamicTargets)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	), "path-resolution probes keep their dynamic-target auto-allow semantics")
@@ -652,9 +652,9 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 
 	temp := os.Getenv("TEMP")
 	require.NotEmpty(t, temp, "TEMP must be set on Windows")
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
 			return approval.UnknownCommandAssessment()
@@ -675,9 +675,9 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 		require.True(t, lower == strings.ToLower(temp) || strings.HasPrefix(lower, strings.ToLower(temp)+`\`),
 			"every affected path stays inside TEMP: %v", dirs)
 	}
-	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkspaceScope(workspace)),
+	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)),
 		"the write is no longer classified as a dynamic mutation")
-	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
 		"a temp-dir write reaches the safe-dir allow cell instead of a dynamic-target review")
 }
 
@@ -687,9 +687,9 @@ func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	require.NotEmpty(t, home)
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -705,15 +705,15 @@ func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.
 	require.NotEmpty(t, assessment.KnownDirs)
 	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(home)+`\`), assessment.KnownDirs)
 	intent := assessment.AccessIntent()
-	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
-	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(workspace), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	m := &Mods{
-		Config: testConfigForWorkspace(t.TempDir()),
+		Config: testConfigForWorkingDir(t.TempDir()),
 		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
 			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "prints emacs init time"}
 		},
@@ -732,9 +732,9 @@ func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	require.NotEmpty(t, home)
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -745,7 +745,7 @@ func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 
 	assessment := m.assessCommand("powershell_run", cmd)
 	intent := assessment.AccessIntent()
-	scope := WorkspaceScope(workspace)
+	scope := WorkingDirScope(cwd)
 	rules := candidateRulesForIntent(intent, scope, approval.SafeDirs(), ApprovalReviewMode(ReviewAuto))
 	require.Empty(t, rules)
 	reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: scope}
@@ -755,9 +755,9 @@ func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -768,11 +768,11 @@ func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
 
 	require.Equal(t, approval.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a public machine-metadata variable carries no capability to review")
-	// With no dynamic target left, the read falls back to the workspace
+	// With no dynamic target left, the read falls back to the cwd
 	// scope, which the matrix allows without review.
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -781,9 +781,9 @@ func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
 func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, command string) approval.CommandAssessment {
 			t.Fatalf("LLM classifier should not be called for %q", command)
 			return approval.UnknownCommandAssessment()
@@ -797,7 +797,7 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 		"a secret-bearing variable is not public metadata and stays dynamic")
 	require.Equal(t, DecisionAllow, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
 	))
@@ -806,9 +806,9 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
-	workspace := t.TempDir()
+	cwd := t.TempDir()
 	m := &Mods{
-		Config: testConfigForWorkspace(workspace),
+		Config: testConfigForWorkingDir(cwd),
 		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
 			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads runtime-resolved path"}
 		},
@@ -819,9 +819,9 @@ func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	assessment := m.assessCommand("powershell_run", cmd)
 	intent := assessment.AccessIntent()
 	require.True(t, intent.HasUnresolvedPaths())
-	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkspaceScope(workspace), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 
-	scope := WorkspaceScope(workspace)
+	scope := WorkingDirScope(cwd)
 	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 	reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: scope}
 	require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "powershell_run", args))

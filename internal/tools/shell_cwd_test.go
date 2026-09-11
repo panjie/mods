@@ -14,7 +14,7 @@ import (
 // TestShellLiteralCwd covers the literal read-only execution context of the
 // shell tool: an existing cwd must be honored verbatim (including paths with
 // spaces, non-ASCII characters, and shell metacharacters), and a missing cwd
-// must fail rather than silently falling back to the workspace.
+// must fail rather than silently falling back to the cwd.
 //
 // It intentionally lives in a file without build tags: command_review_windows_test.go
 // forwards the Windows reliability lanes to it (TestWindowsReliabilityLiteralShellCwd),

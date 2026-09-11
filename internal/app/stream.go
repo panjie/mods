@@ -27,8 +27,8 @@ func (m *Mods) setupStreamContext(content string) error {
 		m.todoItems = nil
 	}
 
-	workspace := m.Config.ResolveWorkspace()
-	root := workspace.Display
+	cwd := m.Config.ResolveWorkingDir()
+	root := cwd.Display
 	hostname, _ := os.Hostname()
 	user := os.Getenv("USER")
 	if user == "" {
@@ -40,7 +40,6 @@ func (m *Mods) setupStreamContext(content string) error {
 		shell = "sh"
 	}
 	sysParts := []string{
-		fmt.Sprintf("workspace=%s", root),
 		fmt.Sprintf("cwd=%s", root),
 		fmt.Sprintf("user=%s", user),
 		fmt.Sprintf("host=%s", hostname),
@@ -70,8 +69,8 @@ func (m *Mods) setupStreamContext(content string) error {
 		m.toolSelectionInsertAt = len(m.messages)
 		safeDir := os.TempDir()
 		m.messages = append(m.messages, structuredSystemMessage(
-			formatSafeWorkspacePrompt(safeDir),
-			proto.SystemSectionExecutionWorkspace,
+			formatTemporaryDirectoryPrompt(safeDir),
+			proto.SystemSectionExecutionTemporaryDirectory,
 		))
 		if instructions := loadProjectInstructions(cfg); instructions != "" {
 			msg := structuredSystemMessage(

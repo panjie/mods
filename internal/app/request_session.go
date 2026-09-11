@@ -385,7 +385,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			return registry.Call(ctx, name, data)
 		}
 		var processBinding toolregistry.ProcessProgramBinding
-		cwd := cfg.ResolveWorkspace().Canonical
+		cwd := cfg.ResolveWorkingDir().Canonical
 		if name == "shell_run" || name == "powershell_run" || name == "process_run" {
 			var parsed map[string]json.RawMessage
 			if err := json.Unmarshal(data, &parsed); err != nil {
@@ -420,7 +420,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 				command = string(data)
 			}
 			assessed := m.assessCommandAtCwd(name, command, extractSecretEnvNames(data), cwd)
-			if cwd != cfg.ResolveWorkspace().Canonical {
+			if cwd != cfg.ResolveWorkingDir().Canonical {
 				assessed.KnownDirs = normalizeShellAffectedDirsForTool(assessed.KnownDirs, cwd, name)
 			}
 			if name == "process_run" {
@@ -437,7 +437,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		safeDirs := m.safeDirs()
 		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
 
-		// Inject authorized external directories so resolveWorkspacePath honors
+		// Inject authorized external directories so resolveAuthorizedPath honors
 		// approval. This applies whether or not review is skipped below: a
 		// saved DirAllow rule may auto-approve the call, but the tool still
 		// needs the authorization to touch the external path.

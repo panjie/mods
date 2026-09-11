@@ -25,7 +25,7 @@ because they may contain values loaded from the user's config.
 For a non-secret change, inspect only the relevant range with `fs_search` and
 `fs_read_file`, then use `fs_replace` with exact current text. Preserve comments
 and unrelated values. Recognized reads run without review, including outside
-the workspace. Writes follow the configured approval policy by target.
+the cwd. Writes follow the configured approval policy by target.
 Do not read or echo API keys. Prefer `api-key-env` instead of putting a secret
 directly in YAML.
 

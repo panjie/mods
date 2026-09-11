@@ -22,7 +22,7 @@ const (
 	DirAllow    RuleType = "dir_allow"
 	RemoteAllow RuleType = "remote_allow"
 
-	ScopeWorkspace ScopeKind = "workspace"
+	ScopeWorkingDir ScopeKind = "directory"
 )
 
 // Scope carries the current tool working directory for relative-path
@@ -51,9 +51,9 @@ type Rule struct {
 	Mode       AccessClass `db:"mode"`
 }
 
-func WorkspaceScope(root string) Scope {
+func WorkingDirScope(root string) Scope {
 	return Scope{
-		Kind:  ScopeWorkspace,
+		Kind:  ScopeWorkingDir,
 		Value: filepath.Clean(root),
 	}
 }

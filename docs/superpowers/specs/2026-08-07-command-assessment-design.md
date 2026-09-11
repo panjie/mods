@@ -65,10 +65,10 @@ linked worktree's common directory as concrete targets. Repository-selection
 options, pathspec indirection, relevant `GIT_*` environment overrides, missing
 or malformed repository metadata, and unsupported Git subcommands remain
 unknown. This prevents a worktree whose administrative directory is external
-from being mistaken for a workspace-only write.
+from being mistaken for a cwd-only write.
 Bare program names are resolved once before approval and the resulting absolute
 path is pinned to execution, so a later PATH lookup cannot select a different
-program. Workspace and temporary-directory resolutions remain unknown-effect
+program. WorkingDir and temporary-directory resolutions remain unknown-effect
 and therefore reviewable. On Windows, `.bat` and `.cmd` launchers are rejected
 because the operating system necessarily inserts shell parsing and cannot
 preserve the literal argument-vector contract.
@@ -114,7 +114,7 @@ verified scope evidence.
 ## Invariants
 
 - Unknown effects are write-like for policy but remain visibly unknown.
-- Unknown locations never fall back to the workspace and never produce a
+- Unknown locations never fall back to the cwd and never produce a
   reusable directory-approval rule.
 - LLM output cannot erase static dynamic targets or AST structure.
 - Dynamic capability probes with no concrete directory are auto-allowed in

@@ -33,6 +33,6 @@ func (m *Mods) resolvePrompt(key, fallback string) (string, error) {
 	return content, nil
 }
 
-func formatSafeWorkspacePrompt(path string) string {
-	return strings.ReplaceAll(prompts.SafeWorkspaceTemplate, "{safe_workspace}", path)
+func formatTemporaryDirectoryPrompt(path string) string {
+	return strings.ReplaceAll(prompts.TemporaryDirectoryTemplate, "{temporary_directory}", path)
 }

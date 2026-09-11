@@ -15,7 +15,7 @@ const (
 	SystemSectionRuntimeIdentity
 	SystemSectionExecutionContext
 	SystemSectionExecutionTools
-	SystemSectionExecutionWorkspace
+	SystemSectionExecutionTemporaryDirectory
 	SystemSectionExecutionSkills
 	SystemSectionExecutionSelfHelp
 	SystemSectionProjectInstructions
@@ -39,16 +39,16 @@ type systemSectionDescriptor struct {
 }
 
 var systemSectionDescriptors = map[SystemSection]systemSectionDescriptor{
-	SystemSectionUnspecified:         {layer: systemLayerRuntime, title: "Additional runtime instructions"},
-	SystemSectionRuntimeIdentity:     {layer: systemLayerRuntime, title: "Identity and runtime safety"},
-	SystemSectionExecutionContext:    {layer: systemLayerExecution, title: "Runtime context"},
-	SystemSectionExecutionTools:      {layer: systemLayerExecution, title: "Tool and execution guidance"},
-	SystemSectionExecutionWorkspace:  {layer: systemLayerExecution, title: "Safe workspace"},
-	SystemSectionExecutionSkills:     {layer: systemLayerExecution, title: "Available skills"},
-	SystemSectionExecutionSelfHelp:   {layer: systemLayerExecution, title: "Self-help reference"},
-	SystemSectionProjectInstructions: {layer: systemLayerProject, title: "Project instructions"},
-	SystemSectionUserRole:            {layer: systemLayerRole, title: "User-selected role"},
-	SystemSectionOutputFormat:        {layer: systemLayerFormat, title: "Output format"},
+	SystemSectionUnspecified:                 {layer: systemLayerRuntime, title: "Additional runtime instructions"},
+	SystemSectionRuntimeIdentity:             {layer: systemLayerRuntime, title: "Identity and runtime safety"},
+	SystemSectionExecutionContext:            {layer: systemLayerExecution, title: "Runtime context"},
+	SystemSectionExecutionTools:              {layer: systemLayerExecution, title: "Tool and execution guidance"},
+	SystemSectionExecutionTemporaryDirectory: {layer: systemLayerExecution, title: "Temporary directory"},
+	SystemSectionExecutionSkills:             {layer: systemLayerExecution, title: "Available skills"},
+	SystemSectionExecutionSelfHelp:           {layer: systemLayerExecution, title: "Self-help reference"},
+	SystemSectionProjectInstructions:         {layer: systemLayerProject, title: "Project instructions"},
+	SystemSectionUserRole:                    {layer: systemLayerRole, title: "User-selected role"},
+	SystemSectionOutputFormat:                {layer: systemLayerFormat, title: "Output format"},
 }
 
 var systemLayerTitles = map[systemLayer]string{

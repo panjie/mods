@@ -159,7 +159,6 @@ func registerFlags(flags *pflag.FlagSet, c *Config, memprofileFlag *bool) {
 	regBool(flags, &c.Version, "version", "v", false)
 	regInt(flags, &c.MaxRetries, "max-retries", c.MaxRetries)
 	regInt(flags, &c.WordWrap, "word-wrap", c.WordWrap)
-	regStr(flags, &c.BuiltinTools.Workspace, "workspace", "", c.BuiltinTools.Workspace)
 	regStrArr(flags, &c.SkillsDirs, "skills-dirs", "", c.SkillsDirs)
 	regBool(flags, &c.NoSave, "no-save", "n", c.NoSave)
 	regBool(flags, &c.NoInstructions, "no-instructions", "", c.NoInstructions)

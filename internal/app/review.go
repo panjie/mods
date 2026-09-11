@@ -70,10 +70,10 @@ type toolReviewer struct {
 }
 
 func newToolReviewer(cfg *Config) *toolReviewer {
-	workspace := cfg.ResolveWorkspace()
+	cwd := cfg.ResolveWorkingDir()
 	return &toolReviewer{
 		reviewMode:                 cfg.ReviewMode,
-		scope:                      WorkspaceScope(workspace.Canonical),
+		scope:                      WorkingDirScope(cwd.Canonical),
 		raw:                        cfg.Raw,
 		reviewAvailabilityKnown:    true,
 		interactiveReviewAvailable: !cfg.Raw && cfg.InteractiveTTYAvailable,
@@ -292,23 +292,23 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 // alongside (or instead of) its containing directory; without this, the
 // "Always allows" line would advertise a file name as if it were a dir.
 func normalizeAffectedDirs(dirs []string) []string {
-	return normalizeAffectedDirsForWorkspace(dirs, "")
+	return normalizeAffectedDirsForWorkingDir(dirs, "")
 }
 
-func normalizeAffectedDirsForWorkspace(dirs []string, workspace string) []string {
-	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+func normalizeAffectedDirsForWorkingDir(dirs []string, cwd string) []string {
+	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX))
 }
 
-func normalizeShellAffectedDirsForTool(dirs []string, workspace string, tool string) []string {
-	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, shellPathFlavor(tool)))
+func normalizeShellAffectedDirsForTool(dirs []string, cwd string, tool string) []string {
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(cwd, shellPathFlavor(tool)))
 }
 
-func normalizeAccessIntentDirs(intent AccessIntent, workspace, tool string, shell bool) AccessIntent {
+func normalizeAccessIntentDirs(intent AccessIntent, cwd, tool string, shell bool) AccessIntent {
 	normalize := func(dirs []string) []string {
 		if shell {
-			return normalizeShellAffectedDirsForTool(dirs, workspace, tool)
+			return normalizeShellAffectedDirsForTool(dirs, cwd, tool)
 		}
-		return normalizeAffectedDirsForWorkspace(dirs, workspace)
+		return normalizeAffectedDirsForWorkingDir(dirs, cwd)
 	}
 	if intent.ReadDirs != nil || intent.WriteDirs != nil {
 		if intent.ReadDirs != nil {

@@ -120,8 +120,6 @@ builtin-tools:
   shell-read-only-commands: []
   # {{ index .Help "builtin-tools.shell-timeout" }}
   shell-timeout: 60s
-  # {{ index .Help "builtin-tools.workspace" }}
-  workspace: ""
 # {{ index .Help "web-search" }}
 web-search: {{ .Config.WebSearch }}
 # {{ index .Help "web-search-provider" }}

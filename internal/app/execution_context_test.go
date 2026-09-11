@@ -26,7 +26,7 @@ func TestShellAssessmentPWDUsesExecutionDirectory(t *testing.T) {
 	child, err = filepath.EvalSymlinks(child)
 	require.NoError(t, err)
 	t.Setenv("PWD", parent)
-	m := &Mods{Config: testConfigForWorkspace(parent), shellAnalyzer: func(string, string) approval.CommandAssessment {
+	m := &Mods{Config: testConfigForWorkingDir(parent), shellAnalyzer: func(string, string) approval.CommandAssessment {
 		return approval.UnknownCommandAssessment()
 	}}
 	for _, command := range []string{`touch "$PWD/probe.txt"`, `touch "${PWD}/probe.txt"`} {
@@ -38,8 +38,8 @@ func TestShellAssessmentPWDUsesExecutionDirectory(t *testing.T) {
 			dir     string
 			allowed bool
 		}{{parent, false}, {child, true}} {
-			rules := approval.RulesForDirs([]string{tc.dir}, WorkspaceScope(parent), AccessWrite)
-			require.Equal(t, tc.allowed, approval.RulesAllowIntent(rules, intent, WorkspaceScope(parent), nil, approval.ReviewAuto))
+			rules := approval.RulesForDirs([]string{tc.dir}, WorkingDirScope(parent), AccessWrite)
+			require.Equal(t, tc.allowed, approval.RulesAllowIntent(rules, intent, WorkingDirScope(parent), nil, approval.ReviewAuto))
 		}
 	}
 	for _, tc := range []struct {
@@ -74,21 +74,21 @@ func TestDownloadToolCallerUsesOwnTimeoutAndHonorsCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = t.TempDir()
+	cfg.WorkingDir = t.TempDir()
 	cfg.ReviewMode = ReviewNever
 	cfg.MCPTimeout = time.Nanosecond
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	m := &Mods{Config: &cfg, ctx: ctx, reviewer: newToolReviewer(&cfg)}
 	registry := toolregistry.NewRegistry()
-	require.NoError(t, toolregistry.RegisterDownload(registry, toolregistry.FilesystemConfig{Root: cfg.BuiltinTools.Workspace}))
+	require.NoError(t, toolregistry.RegisterDownload(registry, toolregistry.FilesystemConfig{Root: cfg.WorkingDir}))
 	data, err := json.Marshal(map[string]any{"files": []map[string]string{{"url": server.URL, "path": "test.txt"}}})
 	require.NoError(t, err)
 	caller := m.toolCaller(registry, &cfg)
 	out, err := caller(proto.ToolCallRequest{Name: "http_download", Arguments: data})
 	require.NoError(t, err)
 	require.Contains(t, out, `"completed"`)
-	content, err := os.ReadFile(filepath.Join(cfg.BuiltinTools.Workspace, "test.txt"))
+	content, err := os.ReadFile(filepath.Join(cfg.WorkingDir, "test.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "downloaded", string(content))
 	cancel()
@@ -96,5 +96,5 @@ func TestDownloadToolCallerUsesOwnTimeoutAndHonorsCancellation(t *testing.T) {
 	require.NoError(t, err)
 	_, err = caller(proto.ToolCallRequest{Name: "http_download", Arguments: data})
 	require.Error(t, err)
-	require.NoFileExists(t, filepath.Join(cfg.BuiltinTools.Workspace, "canceled.txt"))
+	require.NoFileExists(t, filepath.Join(cfg.WorkingDir, "canceled.txt"))
 }

@@ -21,7 +21,7 @@ func ExtractWritableDirs(command string, posix bool) []string {
 	return extractWritableDirs(command, posix)
 }
 
-// ExtractWritableDirsWithCwd additionally resolves Git workspace-write
+// ExtractWritableDirsWithCwd additionally resolves Git cwd-write
 // invocations against the deterministic working directory, mirroring the
 // assessment path. An empty cwd disables that resolution.
 func ExtractWritableDirsWithCwd(command string, posix bool, cwd string) []string {
@@ -383,7 +383,7 @@ var reCMDLocalVar = regexp.MustCompile(`%[A-Za-z_][A-Za-z0-9_]*%`)
 
 // IsUnresolvedShellPathExpression reports whether a path-like value still
 // depends on shell runtime evaluation. Approval code must never normalize such
-// a value relative to the workspace or persist it in a directory rule.
+// a value relative to the cwd or persist it in a directory rule.
 func IsUnresolvedShellPathExpression(value string, posix bool) bool {
 	return shellPathExpressionUnresolved(value, posix)
 }

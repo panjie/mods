@@ -304,7 +304,7 @@ All warnings go through the existing `debug` logger so they appear only when `MO
 ## Out of Scope / Future Extensions
 
 - **Bundled skills**: embed a curated set in the binary via `embed.FS`.
-- **Project-local skills**: scan `.mods/skills/` in the workspace.
+- **Project-local skills**: scan `.mods/skills/` in the cwd.
 - **Recursive catalog scanning**: scan `**/SKILL.md` so a user can point `skills-dir` at a collection like `composio-skills/` wholesale. Currently the user copies individual skill dirs to the top level.
 - **Multiple `skills-dir` paths**: support a list of directories.
 - **Catalog truncation/summarization**: cap catalog size when the user has dozens of skills. Currently the user curates the set.

@@ -72,14 +72,14 @@ func basePOSIXCommandName(literal string) string {
 // identical inside the child shell; see resolvePowerShellEnvTargets for the
 // shared policy. POSIX dynamic targets are bare $NAME references, so only
 // the bare-reference decisions apply here.
-func resolvePOSIXEnvTargets(known, dynamic []string, workspace, command string, shadowedEnv map[string]bool, allowValueDirs bool) ([]string, []string) {
+func resolvePOSIXEnvTargets(known, dynamic []string, cwd, command string, shadowedEnv map[string]bool, allowValueDirs bool) ([]string, []string) {
 	if len(dynamic) == 0 {
 		return known, dynamic
 	}
-	opts := pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX)
+	opts := pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX)
 	// sh initializes PWD from its execution directory, not the parent mods
 	// process. An empty context must remain unresolved rather than inherit it.
-	opts.Env["PWD"] = workspace
+	opts.Env["PWD"] = cwd
 	kept := make([]string, 0, len(dynamic))
 	var expanded []string
 	for _, target := range dynamic {

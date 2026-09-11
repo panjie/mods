@@ -27,7 +27,7 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"md5sum", "md5sum file", true},
 		{"full path", "/bin/ls", false},
 		{"full path with arg", "/usr/bin/cat file", false},
-		{"workspace executable with allowed basename", "./cat README.md", false},
+		{"cwd executable with allowed basename", "./cat README.md", false},
 
 		// --- Pipes (all leaves read-only) ---
 		{"pipe cat grep", "cat file | grep foo", true},

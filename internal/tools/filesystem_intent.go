@@ -40,7 +40,7 @@ func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval
 
 // patchIntent builds an AccessIntent extractor for fs_apply_patch. It
 // parses the +++ headers (after stripping a/ b/ prefixes) and reports each
-// touched file's parent directory. Patch paths are workspace-relative by
+// touched file's parent directory. Patch paths are cwd-relative by
 // construction (validatePatchPaths rejects absolute/.. paths), so they are
 // joined onto root.
 func patchIntent(root string) func(json.RawMessage) approval.AccessIntent {

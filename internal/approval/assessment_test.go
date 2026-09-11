@@ -19,7 +19,7 @@ func TestCommandAssessmentAccessIntent(t *testing.T) {
 	require.Empty(t, dynamicRead.AccessIntent().Dirs)
 	require.Equal(t, []string{"$PROFILE"}, dynamicRead.AccessIntent().UnresolvedPaths)
 	require.True(t, dynamicRead.AccessIntent().DynamicProbe)
-	require.Equal(t, DecisionAllow, ClassifyAccess(dynamicRead.AccessIntent(), Scope{Value: "/workspace"}, nil, ReviewAuto))
+	require.Equal(t, DecisionAllow, ClassifyAccess(dynamicRead.AccessIntent(), Scope{Value: "/cwd"}, nil, ReviewAuto))
 
 	dynamicWrite := CommandAssessment{Effect: EffectWrite, DynamicTargets: []string{"$PROFILE"}}
 	require.Equal(t, AccessWrite, dynamicWrite.AccessIntent().Class)
@@ -47,7 +47,7 @@ func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
 		{name: "input redirect", command: `wc -l < "$INPUT"`, wantTargets: []string{"$INPUT"}, wantEffect: EffectRead},
 		{name: "path command substitution", command: `cat "$(resolve_path)"`, wantTargets: []string{"command substitution"}, wantEffect: EffectUnknown},
 		{
-			name:        "workspace file enumeration substitution remains unresolved",
+			name:        "cwd file enumeration substitution remains unresolved",
 			command:     `wc -l $(git ls-files '*.go' | grep -v '_test.go') | tail -1`,
 			wantTargets: []string{"command substitution"},
 			wantEffect:  EffectRead,
@@ -71,7 +71,7 @@ func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
 			wantEffect:  EffectRead,
 		},
 		{
-			name:        "external git working directory is not bounded to workspace",
+			name:        "external git working directory is not bounded to cwd",
 			command:     `wc -l $(git -C /etc ls-files '*.go')`,
 			wantTargets: []string{"command substitution"},
 			wantEffect:  EffectUnknown,

@@ -76,7 +76,7 @@ func TestToolResultLine(t *testing.T) {
 	})
 
 	t.Run("leading comment hidden in preview", func(t *testing.T) {
-		got := ToolResultLine("shell_run", []byte(`{"command":"# probe workspace config\nls .opencode*"}`), exitCodeErr{code: 1})
+		got := ToolResultLine("shell_run", []byte(`{"command":"# probe cwd config\nls .opencode*"}`), exitCodeErr{code: 1})
 		require.Equal(t, "> \u2717 shell_run: ls .opencode* \u00b7 exit 1", got)
 	})
 }
@@ -122,9 +122,9 @@ func TestToolResultLineWidth(t *testing.T) {
 // so the reason stays visible.
 func TestToolResultStatusPrefersDetailOverSummary(t *testing.T) {
 	t.Run("both fit when summary shrinks", func(t *testing.T) {
-		got := ToolResultStatus("fs_read_file", []byte(`{"path":"`+strings.Repeat("a", 80)+`"}`), errors.New("outside workspace"), 60)
+		got := ToolResultStatus("fs_read_file", []byte(`{"path":"`+strings.Repeat("a", 80)+`"}`), errors.New("permission denied"), 60)
 		require.True(t, strings.HasPrefix(got, "✗ fs_read_file: path="), got)
-		require.True(t, strings.HasSuffix(got, " · failed: outside workspace"), got)
+		require.True(t, strings.HasSuffix(got, " · failed: permission denied"), got)
 	})
 
 	t.Run("summary dropped before detail", func(t *testing.T) {

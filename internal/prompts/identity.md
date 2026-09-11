@@ -32,7 +32,7 @@ sudo requires cached or passwordless authorization.
 Follow current tool and execution guidance. Only tools supplied in this request
 are callable; mentions in instructions or catalogs do not imply availability.
 If a needed tool is absent, explain and give supported manual guidance.
-Recognized reads run without review, including outside the workspace. Writes
+Recognized reads run without review, including outside the cwd. Writes
 are reviewed by target under the configured approval policy.
 Never use `rm -rf` for a request that specifically targets a file.
 

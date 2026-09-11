@@ -11,11 +11,11 @@ import (
 // classification tests exercise the path heuristics through them, and
 // production code must not carry wrappers that only tests call.
 
-func extractExternalPaths(command, workspaceDir string) []string {
-	return extractExternalPathsWithFlavor(command, workspaceDir, pathutil.FlavorPOSIX)
+func extractExternalPaths(command, cwdDir string) []string {
+	return extractExternalPathsWithFlavor(command, cwdDir, pathutil.FlavorPOSIX)
 }
 
-func extractExternalPathsWithFlavor(command, workspaceDir string, flavor pathutil.Flavor) []string {
-	paths, _ := approval.ExternalShellPathFacts(command, workspaceDir, flavor, approval.ReadOnlyCommandPolicy{})
+func extractExternalPathsWithFlavor(command, cwdDir string, flavor pathutil.Flavor) []string {
+	paths, _ := approval.ExternalShellPathFacts(command, cwdDir, flavor, approval.ReadOnlyCommandPolicy{})
 	return paths
 }

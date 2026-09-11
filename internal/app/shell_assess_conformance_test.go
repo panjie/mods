@@ -100,12 +100,12 @@ type conformanceCase struct {
 func posixConformanceCases() []conformanceCase {
 	return []conformanceCase{
 		{
-			name: "workspace read falls back to workspace scope", tool: "shell_run",
+			name: "cwd read falls back to cwd scope", tool: "shell_run",
 			command: "ls -la", want: approval.EffectRead,
 			wantDirs: []string{"<WS>"},
 		},
 		{
-			name: "workspace file read falls back to workspace scope", tool: "shell_run",
+			name: "cwd file read falls back to cwd scope", tool: "shell_run",
 			command: "cat README.md", want: approval.EffectRead,
 			wantDirs: []string{"<WS>"},
 		},
@@ -192,7 +192,7 @@ func posixConformanceCases() []conformanceCase {
 			wantDirs: []string{"<HOME>/x", "<EXT>/from-classifier"},
 		},
 		{
-			name: "UNC-style external read is not collapsed into the workspace", tool: "shell_run",
+			name: "UNC-style external read is not collapsed into the cwd", tool: "shell_run",
 			command: `cat \\server\share\f`, want: approval.EffectRead,
 			wantDirs: []string{`\\server\share\f`},
 			note:     "regression: this fact carries no explicit-path syntax and used to be replaced by <WS>",
@@ -227,8 +227,8 @@ func TestShellAssessmentConformancePOSIX(t *testing.T) {
 // approval's own analysis reports as external must still be covered by the
 // merged result. The literal-extraction fallback may only add, never replace.
 //
-// Workspace and safe-directory targets are exempt: neither needs a review
-// scope, so the read branch may replace them with the workspace fallback.
+// WorkingDir and safe-directory targets are exempt: neither needs a review
+// scope, so the read branch may replace them with the cwd fallback.
 func TestShellAssessmentKeepsAuthoritativePathFacts(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := conformanceMods(dirs.ext)
@@ -258,7 +258,7 @@ func TestShellAssessmentKeepsAuthoritativePathFacts(t *testing.T) {
 func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := &Mods{
-		Config: testConfigForWorkspace(dirs.ws),
+		Config: testConfigForWorkingDir(dirs.ws),
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
 			return approval.UnknownCommandAssessment()
 		},

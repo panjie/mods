@@ -113,7 +113,7 @@ func runDownloads(ctx context.Context, cfg FilesystemConfig, data json.RawMessag
 	}
 	// Validate every local target before the first network request or write.
 	for i := range args.Files {
-		p, err := resolveWorkspacePathNoFollowLeaf(ctx, cfg.Root, args.Files[i].Path, cfg.SafeDirs)
+		p, err := resolveAuthorizedPathNoFollowLeaf(ctx, cfg.Root, args.Files[i].Path, cfg.SafeDirs)
 		if err != nil {
 			return "", err
 		}

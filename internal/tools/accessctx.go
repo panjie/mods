@@ -6,7 +6,7 @@ type authorizedDirsKey struct{}
 
 // WithAuthorizedDirs returns a derived context carrying the authorized
 // external directories for the current tool call. An empty/nil slice
-// returns ctx unchanged so workspace-only calls pay no allocation.
+// returns ctx unchanged so cwd-only calls pay no allocation.
 // The slice is copied so later mutation by the caller cannot affect the
 // value stored in the context.
 func WithAuthorizedDirs(ctx context.Context, dirs []string) context.Context {

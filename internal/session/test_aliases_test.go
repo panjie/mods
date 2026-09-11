@@ -12,7 +12,7 @@ var newSessionID = NewID
 var sha1reg = IDPattern
 var errNoMatches = ErrNoMatches
 var errManyMatches = ErrManyMatches
-var workspaceScope = approval.WorkspaceScope
+var cwdScope = approval.WorkingDirScope
 var rulesAllowDirs = approval.RulesAllowDirs
 
 const (

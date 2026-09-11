@@ -12,14 +12,14 @@ import (
 
 // Patch path validation. Runs before `git apply` to ensure every path
 // referenced by the patch (including rename/copy targets and C-style
-// quoted paths) stays inside the workspace. This is the security
+// quoted paths) stays inside the cwd. This is the security
 // boundary that prevents a malicious patch from writing to /etc/passwd
 // via a symlink created earlier in the same diff.
 
 // patchPathLinePrefixes maps each path-bearing header that can appear in a
 // unified or git diff to the slice index where its path component begins.
 // rename/copy headers are included so a rename-only diff (which carries no
-// +++/--- lines) cannot smuggle a path outside the workspace via its target
+// +++/--- lines) cannot smuggle a path outside the cwd via its target
 // header.
 var patchPathLinePrefixes = []struct {
 	prefix string
@@ -36,10 +36,10 @@ var patchPathLinePrefixes = []struct {
 func validatePatchPaths(ctx context.Context, root, patch string) error {
 	for _, line := range textutil.SplitLines(patch) {
 		// Refuse symlink creation. A single patch can first create a symlink
-		// inside the workspace (e.g. `escape -> /etc`) and then write through
+		// inside the cwd (e.g. `escape -> /etc`) and then write through
 		// it in a later diff. Because validation runs before `git apply`,
 		// such a patch would pass the path checks below and escape the
-		// workspace at apply time. There is no safe way to allow
+		// cwd at apply time. There is no safe way to allow
 		// mode 120000 via fs_apply_patch.
 		if strings.HasSuffix(line, "mode 120000") &&
 			(strings.HasPrefix(line, "new file mode ") ||
@@ -72,9 +72,9 @@ func validatePatchPaths(ctx context.Context, root, patch string) error {
 			path = path[2:]
 		}
 		if filepath.IsAbs(path) || strings.HasPrefix(filepath.Clean(path), "..") {
-			return fmt.Errorf("patch path %q is outside workspace", path)
+			return fmt.Errorf("patch path %q is outside authorized directories", path)
 		}
-		if _, err := resolveWorkspacePath(ctx, root, path, nil); err != nil && !os.IsNotExist(err) {
+		if _, err := resolveAuthorizedPath(ctx, root, path, nil); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
@@ -90,7 +90,7 @@ func validatePatchPaths(ctx context.Context, root, patch string) error {
 //     C-style double quotes. Without unquoting, a path like
 //     "b/escape \"file" would have its first whitespace-delimited token
 //     accepted ("b/escape) which neither matches the real target nor flags
-//     as outside-workspace, letting a follow-on apply step write to the
+//     as outside-cwd, letting a follow-on apply step write to the
 //     real (escaped) destination.
 //
 // An unquoted path is required to contain no whitespace; trailing whitespace

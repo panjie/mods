@@ -158,7 +158,7 @@ func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {
 }
 
 func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
-	workspace := t.TempDir()
+	toolDir := t.TempDir()
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 	skillsRoot, err := os.MkdirTemp(cwd, ".mods-test-skills-*")
@@ -173,7 +173,7 @@ func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
 
 	cfg := cfgpkg.Default()
 	cfg.BuiltinTools.Filesystem = cfgpkg.FilesystemAlways
-	cfg.BuiltinTools.Workspace = workspace
+	cfg.WorkingDir = toolDir
 	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", catalog)
 	require.NoError(t, err)
 
@@ -181,7 +181,7 @@ func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
 	args, err := json.Marshal(map[string]string{"path": target, "content": "not-safe"})
 	require.NoError(t, err)
 	_, err = reg.Call(context.Background(), "fs_write_file", args)
-	require.ErrorContains(t, err, "outside workspace")
+	require.ErrorContains(t, err, "outside authorized directories")
 }
 
 func TestBuildRegistryRegistersTodoWrite(t *testing.T) {

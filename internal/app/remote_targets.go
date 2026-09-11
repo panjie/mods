@@ -56,7 +56,7 @@ func trimRemoteToken(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), `.,;)]}`)
 }
 
-func (m *Mods) resolveGitPushOrigins(tool, command, workspace string) (origins, unresolved []string) {
+func (m *Mods) resolveGitPushOrigins(tool, command, baseDir string) (origins, unresolved []string) {
 	if tool == "process_run" {
 		return nil, nil
 	}
@@ -64,11 +64,11 @@ func (m *Mods) resolveGitPushOrigins(tool, command, workspace string) (origins, 
 	if len(match) == 0 {
 		return nil, nil
 	}
-	cwd := workspace
+	cwd := baseDir
 	if strings.TrimSpace(match[1]) != "" {
 		cwd = unquoteSimpleToken(match[1])
 		if !filepath.IsAbs(cwd) {
-			cwd = filepath.Join(workspace, cwd)
+			cwd = filepath.Join(baseDir, cwd)
 		}
 	}
 	return m.resolveGitRemoteOrigins(strings.Fields(strings.TrimSpace(match[2])), cwd)

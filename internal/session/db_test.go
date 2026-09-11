@@ -24,7 +24,7 @@ func testDB(tb testing.TB) *sessionDB {
 }
 
 func testScopedRule(rule ApprovalRule) ApprovalRule {
-	scope := workspaceScope("/workspace")
+	scope := cwdScope("/cwd")
 	rule.ScopeKind = scope.Kind
 	rule.ScopeValue = scope.Value
 	return rule
@@ -84,7 +84,7 @@ func TestApprovalRulesRejectsMalformedPathsJSON(t *testing.T) {
 	_, err := db.db.Exec(`
 		INSERT INTO approval_rules (
 			session_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths, mode
-		) VALUES (?, 'workspace', '/workspace', 'dir_allow', '', '', '{', 'read')
+		) VALUES (?, 'workspace', '/cwd', 'dir_allow', '', '', '{', 'read')
 	`, id)
 	require.NoError(t, err)
 
@@ -384,7 +384,7 @@ func TestDirectoryApprovalSurvivesWorkingDirectoryChange(t *testing.T) {
 	require.True(t, rulesAllowDirs(
 		loaded,
 		[]string{"/approved/output/nested"},
-		workspaceScope("/different/working-directory"),
+		cwdScope("/different/working-directory"),
 		accessWrite,
 	))
 }
@@ -458,7 +458,7 @@ func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
 
 	var ruleSet approvalRuleSet
 	ruleSet.Replace(rules)
-	require.False(t, ruleSet.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), workspaceScope("/workspace")))
+	require.False(t, ruleSet.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), cwdScope("/cwd")))
 }
 
 // TestMigratesApprovalRulesToAddMode verifies that a DB persisted just before
@@ -466,8 +466,8 @@ func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
 // and round-trip purposes but do not authorize writes.
 func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 	const (
-		legacyWorkspace = `C:\mods-workspace`
-		legacyCacheDir  = `C:\mods-cache`
+		legacyWorkingDir = `C:\mods-cwd`
+		legacyCacheDir   = `C:\mods-cache`
 	)
 	path := filepath.Join(t.TempDir(), "mods.db")
 	raw, err := sql.Open("sqlite", path)
@@ -494,7 +494,7 @@ func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 		);
 		INSERT INTO conversations (id, title) VALUES ('abc', 'pre-mode');
 		INSERT INTO approval_rules (conversation_id, scope_kind, scope_value, rule_type, tool_name, pattern, paths)
-		VALUES ('abc', 'workspace', 'C:\mods-workspace', 'dir_allow', '', '', '["C:\\mods-cache"]');
+		VALUES ('abc', 'workspace', 'C:\mods-cwd', 'dir_allow', '', '', '["C:\\mods-cache"]');
 	`)
 	require.NoError(t, err)
 	require.NoError(t, raw.Close())
@@ -513,13 +513,14 @@ func TestMigratesApprovalRulesToAddMode(t *testing.T) {
 
 	// Empty-mode legacy rules no longer authorize either mode. Reads are
 	// globally allowed by policy and writes require an explicit write rule.
-	legacyScope := workspaceScope(legacyWorkspace)
+	legacyScope := cwdScope(legacyWorkingDir)
+	require.Equal(t, legacyScope.Kind, rules[0].ScopeKind)
 	require.False(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessRead))
 	require.False(t, rulesAllowDirs(rules, []string{legacyCacheDir}, legacyScope, accessWrite))
 
 	// New mode-scoped rules round-trip and coexist with the legacy row.
 	newRules := append(rules, ApprovalRule{
-		ScopeKind: "workspace", ScopeValue: legacyScope.Value,
+		ScopeKind: legacyScope.Kind, ScopeValue: legacyScope.Value,
 		Type: approvalDirAllow, Paths: []string{legacyCacheDir}, Mode: accessWrite,
 	})
 	require.NoError(t, db.SaveSession("abc", "pre-mode", "openai", "gpt-5", nil, newRules))

@@ -189,13 +189,13 @@ func BuildRegistry(ctx context.Context, cfg *cfgpkg.Config, wscfg websearch.Conf
 		handlers = interaction[0]
 	}
 
-	workspace := cfg.ResolveWorkspace()
+	cwd := cfg.ResolveWorkingDir()
 	if err := registerBuiltins(builtinEnv{
 		registry: registry,
 		cfg:      cfg,
 		wscfg:    wscfg,
 		prompt:   prompt,
-		root:     workspace.Canonical,
+		root:     cwd.Canonical,
 		safeDirs: approval.SafeDirs(),
 		skills:   skillCatalog,
 		handlers: handlers,

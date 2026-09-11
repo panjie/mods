@@ -48,7 +48,7 @@ func TestResolveThroughExistingParent(t *testing.T) {
 	})
 }
 
-func TestLocationResolvesWorkspaceSymlinkAlias(t *testing.T) {
+func TestLocationResolvesWorkingDirSymlinkAlias(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation requires admin on Windows")
 	}
@@ -56,7 +56,7 @@ func TestLocationResolvesWorkspaceSymlinkAlias(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "lisp"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(realRoot, "lisp", "init.el"), []byte("x"), 0o600))
 
-	// The workspace is reached through a symlink alias, mirroring
+	// The cwd is reached through a symlink alias, mirroring
 	// ~/.emacs.d -> /real/dot.emacs.d. The scope is the canonical path.
 	aliasRoot := filepath.Join(t.TempDir(), "alias-root")
 	if err := os.Symlink(realRoot, aliasRoot); err != nil {
@@ -65,7 +65,7 @@ func TestLocationResolvesWorkspaceSymlinkAlias(t *testing.T) {
 
 	target := filepath.Join(aliasRoot, "lisp", "init.el")
 	require.Equal(t, LocationExternal, Location(target, "unrelated-lexical-scope", nil))
-	require.Equal(t, LocationWorkspace, Location(target, realRoot, nil))
+	require.Equal(t, LocationWorkingDir, Location(target, realRoot, nil))
 }
 
 func TestLocationResolvesSafeDirSymlinkAlias(t *testing.T) {
@@ -92,5 +92,5 @@ func TestLocationDanglingSymlinkFallsBackLexical(t *testing.T) {
 	}
 
 	target := filepath.Join(parent, "dangling", "file.txt")
-	require.Equal(t, LocationExternal, Location(target, filepath.Join(parent, "workspace"), nil))
+	require.Equal(t, LocationExternal, Location(target, filepath.Join(parent, "cwd"), nil))
 }

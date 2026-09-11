@@ -24,9 +24,9 @@ func filesystemWriteFileTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_write_file",
-			Description: "Write a UTF-8 text file, replacing existing content. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it.",
+			Description: "Write a UTF-8 text file, replacing existing content. Relative paths are resolved inside the cwd; absolute and home-directory paths may target files outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path":    stringProp("Path to write, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":    stringProp("Path to write, relative to the cwd, absolute, or using the current user's home directory."),
 				"content": stringProp("Complete file content to write."),
 			}, "path", "content"),
 		},
@@ -38,7 +38,7 @@ func filesystemWriteFileTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -62,7 +62,7 @@ func filesystemReplaceTool(root string, safeDirs []string) Tool {
 			Name:        "fs_replace",
 			Description: "Replace exactly one occurrence of old_text in an existing UTF-8 text file. Prefer this for small targeted edits after reading the file; use fs_apply_patch for multi-file or git-style diffs. old_text must match the current file contents exactly and should include enough surrounding context to be unique.",
 			InputSchema: objectSchema(map[string]any{
-				"path":     stringProp("Path to edit, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":     stringProp("Path to edit, relative to the cwd, absolute, or using the current user's home directory."),
 				"old_text": stringProp("Exact text to replace. Must appear exactly once in the current file; include surrounding context to make it unique."),
 				"new_text": stringPropAllowEmpty("Replacement text. May be empty to delete old_text."),
 			}, "path", "old_text", "new_text"),
@@ -82,7 +82,7 @@ func filesystemReplaceTool(root string, safeDirs []string) Tool {
 			if args.NewText == nil {
 				return "", fmt.Errorf("new_text is required")
 			}
-			path, err := resolveWorkspacePath(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPath(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -122,9 +122,9 @@ func filesystemDeleteFileTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_delete_file",
-			Description: "Delete a single file or symlink. Refuses directories; use fs_delete_dir for directories. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target files outside it.",
+			Description: "Delete a single file or symlink. Refuses directories; use fs_delete_dir for directories. Relative paths are resolved inside the cwd; absolute and home-directory paths may target files outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path": stringProp("File path to delete, relative to the workspace, absolute, or using the current user's home directory."),
+				"path": stringProp("File path to delete, relative to the cwd, absolute, or using the current user's home directory."),
 			}, "path"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
@@ -134,7 +134,7 @@ func filesystemDeleteFileTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -160,9 +160,9 @@ func filesystemDeleteDirTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathSelfIntent(root, approval.AccessWrite),
 		Spec: proto.ToolSpec{
 			Name:        "fs_delete_dir",
-			Description: "Delete a directory. Non-empty directories require recursive=true. Refuses files; use fs_delete_file for files. Workspace-relative paths are resolved inside the workspace; absolute and home-directory paths may target directories outside it.",
+			Description: "Delete a directory. Non-empty directories require recursive=true. Refuses files; use fs_delete_file for files. Relative paths are resolved inside the cwd; absolute and home-directory paths may target directories outside it.",
 			InputSchema: objectSchema(map[string]any{
-				"path":      stringProp("Directory path to delete, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":      stringProp("Directory path to delete, relative to the cwd, absolute, or using the current user's home directory."),
 				"recursive": booleanProp("Set true to delete a non-empty directory and all contents."),
 			}, "path"),
 		},
@@ -174,7 +174,7 @@ func filesystemDeleteDirTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -208,7 +208,7 @@ func filesystemMkdirTool(root string, safeDirs []string) Tool {
 			Name:        "fs_mkdir",
 			Description: "Create a directory. Parent directories are created by default; set parents=false to require the immediate parent to already exist.",
 			InputSchema: objectSchema(map[string]any{
-				"path":    stringProp("Directory path to create, relative to the workspace, absolute, or using the current user's home directory."),
+				"path":    stringProp("Directory path to create, relative to the cwd, absolute, or using the current user's home directory."),
 				"parents": booleanProp("Create missing parent directories. Defaults to true."),
 			}, "path"),
 		},
@@ -220,7 +220,7 @@ func filesystemMkdirTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			path, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.Path, safeDirs)
+			path, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, args.Path, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -263,11 +263,11 @@ func filesystemMoveTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			source, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.SourcePath, safeDirs)
+			source, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, args.SourcePath, safeDirs)
 			if err != nil {
 				return "", err
 			}
-			dest, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.DestPath, safeDirs)
+			dest, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, args.DestPath, safeDirs)
 			if err != nil {
 				return "", err
 			}
@@ -305,11 +305,11 @@ func filesystemCopyTool(root string, safeDirs []string) Tool {
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
 			}
-			source, err := resolveWorkspacePath(ctx, root, args.SourcePath, safeDirs)
+			source, err := resolveAuthorizedPath(ctx, root, args.SourcePath, safeDirs)
 			if err != nil {
 				return "", err
 			}
-			dest, err := resolveWorkspacePathNoFollowLeaf(ctx, root, args.DestPath, safeDirs)
+			dest, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, args.DestPath, safeDirs)
 			if err != nil {
 				return "", err
 			}

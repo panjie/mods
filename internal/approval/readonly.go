@@ -609,7 +609,7 @@ func wordIsReadOnly(word *syntax.Word, policy ReadOnlyCommandPolicy) bool {
 			return false
 		case *syntax.ParamExp:
 			// A runtime operand can change where a read lands, but reads no
-			// longer require approval outside the workspace. The command's
+			// longer require approval outside the cwd. The command's
 			// effect remains read-only; unresolved target metadata is retained
 			// separately for presentation and write fail-closed behavior.
 			return true

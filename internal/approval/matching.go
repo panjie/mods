@@ -110,11 +110,11 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 		base := scope.Value
 		if rule.ScopeValue != "" {
 			// Pre-task-scope builds could persist relative paths together with
-			// their workspace. Resolve those paths against the original value,
+			// their cwd. Resolve those paths against the original value,
 			// then ignore the scope for authorization matching.
 			base = rule.ScopeValue
 		}
-		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkspace(rule.Paths, base)...)
+		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkingDir(rule.Paths, base)...)
 	}
 	for _, dir := range dirs {
 		if !dirWithinPaths(allowedPaths, dir) {
@@ -349,8 +349,8 @@ func matchShellPrefix(pattern, command string) bool {
 // dirAllowForCommand matches a shell command's writable directories
 // against saved DirAllow rules. Only explicit write-mode rules participate;
 // legacy empty-mode and read rules cannot authorize writes.
-func dirAllowForCommand(tool string, command string, rules []Rule, workspace string, posix bool) bool {
-	targetDirs := normalizeShellDirsForWorkspaceWithMode(ExtractWritableDirsWithCwd(command, posix, workspace), workspace, posix)
+func dirAllowForCommand(tool string, command string, rules []Rule, cwd string, posix bool) bool {
+	targetDirs := normalizeShellDirsForWorkingDirWithMode(ExtractWritableDirsWithCwd(command, posix, cwd), cwd, posix)
 	if len(targetDirs) == 0 {
 		return false
 	}
@@ -362,11 +362,11 @@ func dirAllowForCommand(tool string, command string, rules []Rule, workspace str
 		if rule.Mode != AccessWrite {
 			continue
 		}
-		base := workspace
+		base := cwd
 		if rule.ScopeValue != "" {
 			base = rule.ScopeValue
 		}
-		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkspaceWithMode(rule.Paths, base, posix)...)
+		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkingDirWithMode(rule.Paths, base, posix)...)
 	}
 	for _, targetDir := range targetDirs {
 		if !dirWithinPaths(allowedPaths, targetDir) {
@@ -398,21 +398,21 @@ func dirWithinPaths(allowed []string, target string) bool {
 }
 
 func normalizeDirsForScope(dirs []string, scope Scope) []string {
-	return normalizeDirsForWorkspace(dirs, scope.Value)
+	return normalizeDirsForWorkingDir(dirs, scope.Value)
 }
 
-func normalizeDirsForWorkspace(dirs []string, workspace string) []string {
-	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+func normalizeDirsForWorkingDir(dirs []string, cwd string) []string {
+	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX))
 }
 
-func normalizeShellDirsForWorkspace(dirs []string, workspace string) []string {
-	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, pathutil.FlavorPOSIX))
+func normalizeShellDirsForWorkingDir(dirs []string, cwd string) []string {
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX))
 }
 
-func normalizeShellDirsForWorkspaceWithMode(dirs []string, workspace string, posix bool) []string {
+func normalizeShellDirsForWorkingDirWithMode(dirs []string, cwd string, posix bool) []string {
 	flavor := pathutil.FlavorPowerShell
 	if posix {
 		flavor = pathutil.FlavorPOSIX
 	}
-	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(workspace, flavor))
+	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(cwd, flavor))
 }

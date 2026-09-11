@@ -195,7 +195,7 @@ func TestRealAIBlackBoxUsesFilesystemToolsToCompleteTask(t *testing.T) {
 	}
 
 	input := "invoice,units,unit_price\nA17,3,19\nB04,5,7\nC99,2,23\n"
-	if err := os.WriteFile(filepath.Join(h.workspace, "invoices.csv"), []byte(input), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(h.cwd, "invoices.csv"), []byte(input), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 
@@ -204,13 +204,13 @@ func TestRealAIBlackBoxUsesFilesystemToolsToCompleteTask(t *testing.T) {
 		"",
 		"You are completing an automated filesystem task. You MUST use the "+
 			"filesystem tools to read invoices.csv and create result.json in the "+
-			"workspace. result.json must be a JSON object with invoice_count, "+
+			"cwd. result.json must be a JSON object with invoice_count, "+
 			"total_units, subtotal, and status. Set status to \"verified\". Compute "+
 			"the numeric fields from the CSV. After writing the file, read it back "+
 			"with a filesystem tool to verify it. Do not merely print the JSON.",
 	)
 
-	resultPath := filepath.Join(h.workspace, "result.json")
+	resultPath := filepath.Join(h.cwd, "result.json")
 	content, err := os.ReadFile(resultPath)
 	if err != nil {
 		t.Fatalf("model did not create result.json: %v", err)
@@ -241,7 +241,7 @@ func TestRealAIBlackBoxExecutesComplexReadOnlyShellPipeline(t *testing.T) {
 		"nested/beta records.txt": "one\ntwo\nthree\n",
 	}
 	for name, content := range fixtures {
-		path := filepath.Join(h.workspace, filepath.FromSlash(name))
+		path := filepath.Join(h.cwd, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatalf("create fixture directory: %v", err)
 		}
@@ -253,7 +253,7 @@ func TestRealAIBlackBoxExecutesComplexReadOnlyShellPipeline(t *testing.T) {
 	stdout, _ := h.run(
 		t,
 		"",
-		"Use the shell tool to inspect the workspace. You MUST run this exact command: "+
+		"Use the shell tool to inspect the cwd. You MUST run this exact command: "+
 			"find . -type f -name '*.txt' -print0 | xargs -0 wc -l | sort -n. "+
 			"Return only one JSON object with file_count and total_lines. Count only "+
 			"the individual files, not wc's total row.",
@@ -269,7 +269,7 @@ func TestRealAIBlackBoxExecutesComplexReadOnlyShellPipeline(t *testing.T) {
 	}
 }
 
-func TestRealAIBlackBoxRejectsFilesystemAccessOutsideWorkspace(t *testing.T) {
+func TestRealAIBlackBoxReadsAbsolutePath(t *testing.T) {
 	h := newRealAIHarnessWithTools(t, true, false, "auto")
 	if !h.profile.filesystemTools {
 		t.Skipf("%s does not support built-in filesystem tools", h.profile.name)
@@ -281,30 +281,27 @@ func TestRealAIBlackBoxRejectsFilesystemAccessOutsideWorkspace(t *testing.T) {
 	}
 	outsideDir, err := os.MkdirTemp(repoRoot, ".mods-blackbox-boundary-*")
 	if err != nil {
-		t.Fatalf("create outside-workspace fixture directory: %v", err)
+		t.Fatalf("create outside-cwd fixture directory: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
 	outsideSecretPath := filepath.Join(outsideDir, "outside-secret.txt")
 	const outsideSecret = "BOUNDARY-SECRET-7391"
 	if err := os.WriteFile(outsideSecretPath, []byte(outsideSecret), 0o600); err != nil {
-		t.Fatalf("write outside-workspace fixture: %v", err)
+		t.Fatalf("write outside-cwd fixture: %v", err)
 	}
 
-	stdout, stderr := h.runExpectFailure(
+	stdout, _ := h.run(
 		t,
 		"",
 		fmt.Sprintf(
-			"Use the filesystem read tool to read %q, which is outside the workspace. "+
+			"Use the filesystem read tool to read %q, which is outside the cwd. "+
 				"If the tool succeeds, return only the file contents. Do not guess them.",
 			outsideSecretPath,
 		),
 	)
 
-	if strings.Contains(stdout, outsideSecret) {
-		t.Fatalf("model exposed a file from outside the workspace:\n%s", stdout)
-	}
-	if !strings.Contains(stderr, "requires review") {
-		t.Fatalf("outside-workspace access failed without an approval error:\n%s", stderr)
+	if !strings.Contains(stdout, outsideSecret) {
+		t.Fatalf("absolute-path read did not return file contents:\n%s", stdout)
 	}
 }
 
@@ -412,10 +409,10 @@ func supportedProviderKeyEnvs() string {
 }
 
 type realAIHarness struct {
-	binary    string
-	workspace string
-	env       []string
-	profile   providerProfile
+	binary  string
+	cwd     string
+	env     []string
+	profile providerProfile
 }
 
 func newRealAIHarness(t *testing.T, filesystemTools bool) *realAIHarness {
@@ -439,13 +436,13 @@ func newRealAIHarnessWithTools(t *testing.T, filesystemTools, shellTools bool, r
 	dataHome := filepath.Join(root, "data")
 	cacheHome := filepath.Join(root, "cache")
 	home := filepath.Join(root, "home")
-	workspace := filepath.Join(root, "workspace")
+	cwd := filepath.Join(root, "cwd")
 	for _, dir := range []string{
 		filepath.Join(configHome, "mods"),
 		dataHome,
 		cacheHome,
 		home,
-		workspace,
+		cwd,
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("create isolated test directory: %v", err)
@@ -480,13 +477,12 @@ mcp-servers: {}
 builtin-tools:
   filesystem: %s
   shell: %s
-  workspace: %q
 apis:
   %s:
 %s    api-key-env: %s
     models:
       %s: {}
-`, profile.name, model, reviewMode, filesystem, shell, workspace, profile.name, baseURL, profile.keyEnv, model)
+`, profile.name, model, reviewMode, filesystem, shell, profile.name, baseURL, profile.keyEnv, model)
 
 	configPath := filepath.Join(configHome, "mods", "mods.yml")
 	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
@@ -504,10 +500,10 @@ apis:
 	)
 
 	return &realAIHarness{
-		binary:    modsBinary,
-		workspace: workspace,
-		env:       env,
-		profile:   profile,
+		binary:  modsBinary,
+		cwd:     cwd,
+		env:     env,
+		profile: profile,
 	}
 }
 
@@ -537,7 +533,7 @@ func (h *realAIHarness) execute(t *testing.T, stdin string, args ...string) (str
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, h.binary, args...)
-	cmd.Dir = h.workspace
+	cmd.Dir = h.cwd
 	cmd.Env = h.env
 	cmd.Stdin = strings.NewReader(stdin)
 

@@ -98,7 +98,7 @@ func TestWriteTargetsOneReadBatch(t *testing.T) {
 				require.Empty(t, rules)
 			} else {
 				require.NoError(t, err)
-				require.True(t, RulesAllowDirs(rules, []string{"/workspace/subdir"}, testApprovalScope, AccessWrite))
+				require.True(t, RulesAllowDirs(rules, []string{"/cwd/subdir"}, testApprovalScope, AccessWrite))
 				require.True(t, RulesAllowRemoteOrigins(rules, []string{"ssh://github.com"}))
 			}
 			require.Equal(t, 2, reads)
@@ -121,7 +121,7 @@ func TestWriteTargetsFallbackAndPartialResult(t *testing.T) {
 	}{
 		{name: "no writes", output: `{"write_dirs":[],"write_urls":[]}`},
 		{name: "bad JSON", output: "I cannot tell", wantError: true},
-		{name: "bad field type", output: `{"write_dirs":"/workspace"}`, wantError: true},
+		{name: "bad field type", output: `{"write_dirs":"/cwd"}`, wantError: true},
 		{name: "stream error", streamErr: errors.New("offline"), wantError: true},
 		{name: "partial targets", output: `{"write_dirs":[".","$unknown/out"],"write_urls":["not a URL"]}`, wantRules: 1},
 	} {
@@ -182,7 +182,7 @@ func TestWriteTargetsMessagesKeepUserIntentSeparate(t *testing.T) {
 	var envelope map[string]any
 	require.NoError(t, json.Unmarshal([]byte(result[1].Content), &envelope))
 	require.Equal(t, "请提交并推送它", envelope["current_request"])
-	require.Equal(t, "/work/repo", envelope["workspace"])
+	require.Equal(t, "/work/repo", envelope["cwd"])
 	require.Len(t, envelope["history"], 2)
 	require.NotContains(t, result[1].Content, "unrelated output format")
 	require.Len(t, messages, 4)
@@ -232,7 +232,7 @@ func TestWriteTargetsPreparationFallsBackUnlessCancelled(t *testing.T) {
 
 func TestWriteTargetsDiscoveryOnlyReads(t *testing.T) {
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = t.TempDir()
+	cfg.WorkingDir = t.TempDir()
 	cfg.MCPTimeout = time.Second
 	m := &Mods{ctx: context.Background(), Config: &cfg, reviewer: newToolReviewer(&cfg)}
 	registry := toolregistry.NewRegistry()
@@ -275,7 +275,7 @@ func TestWriteTargetsDiscoveryOnlyReads(t *testing.T) {
 
 func TestWriteTargetsExternalRead(t *testing.T) {
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = t.TempDir()
+	cfg.WorkingDir = t.TempDir()
 	cfg.MCPTimeout = time.Second
 	m := &Mods{ctx: context.Background(), Config: &cfg, reviewer: newToolReviewer(&cfg)}
 	registry := toolregistry.NewRegistry()
@@ -335,13 +335,13 @@ func TestWriteTargetsRequestSession(t *testing.T) {
 	cfg.NoSave = true
 	cfg.ReviewMode = ReviewAuto
 	cfg.ShowTokenUsage = true
-	cfg.BuiltinTools.Workspace = t.TempDir()
+	cfg.WorkingDir = t.TempDir()
 	cfg.BuiltinTools.Filesystem = FilesystemAlways
 	cfg.API, cfg.Model = "openai", "test-model"
 	cfg.APIs = []API{{Name: "openai", BaseURL: server.URL, APIKey: "test-key", Models: map[string]Model{
 		"test-model": {Name: "test-model", API: "openai", Endpoint: "chat-completions"},
 	}}}
-	require.NoError(t, os.WriteFile(filepath.Join(cfg.BuiltinTools.Workspace, "facts.txt"), []byte("discovery fact"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.WorkingDir, "facts.txt"), []byte("discovery fact"), 0o600))
 	m := &Mods{ctx: context.Background(), Config: &cfg, reviewer: newToolReviewer(&cfg)}
 	requestSession, err := m.buildRequestSession("please edit the current repository")
 	require.NoError(t, err)
@@ -379,7 +379,7 @@ func TestWriteTargetsRequestSession(t *testing.T) {
 }
 
 func TestWriteTargetsPersistAndUseOrdinaryReview(t *testing.T) {
-	scope := testShellWorkspaceScope(t)
+	scope := testShellWorkingDirScope(t)
 	data, err := json.Marshal(map[string]any{"write_dirs": []string{scope.Value}, "write_urls": []string{"git@github.com:example/repo.git"}})
 	require.NoError(t, err)
 	rules, err := parseWriteTargets(string(data), scope)
@@ -407,6 +407,6 @@ func TestWriteTargetsPersistAndUseOrdinaryReview(t *testing.T) {
 	r.rules.Replace(nil)
 	require.ErrorIs(t, r.requestApproval(deps, "process_run", nil), errReviewUnavailable, "another session must not inherit grants")
 	if runtime.GOOS != "windows" {
-		require.Equal(t, "/workspace", rules[0].Paths[0])
+		require.Equal(t, "/cwd", rules[0].Paths[0])
 	}
 }

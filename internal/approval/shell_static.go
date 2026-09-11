@@ -51,7 +51,7 @@ func AnalyzeShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCom
 
 // AnalyzeArgvStaticWithPolicy classifies a direct executable invocation whose
 // arguments are literal values rather than shell source. Executable paths are
-// intentionally not trusted by basename: a workspace binary named like a
+// intentionally not trusted by basename: a cwd binary named like a
 // read-only system command may have arbitrary behavior.
 func AnalyzeArgvStaticWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) ShellStaticAnalysis {
 	assessment := AssessArgvStaticWithPolicy(program, args, posix, policy)

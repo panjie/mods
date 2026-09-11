@@ -39,7 +39,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	}
 	intentDynamic := buildAccessIntent("shell_run", []byte(`{"command":"writer $target"}`), reg, &dynamicAssessment)
 	require.Equal(t, []string{"$target"}, intentDynamic.UnresolvedPaths)
-	require.Equal(t, DecisionAsk, ClassifyAccess(intentDynamic, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAsk, ClassifyAccess(intentDynamic, WorkingDirScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// Unknown effect remains write-like even when analyzer output is inconsistent.
 	unknownAssessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{"/ws/opaque"}}
@@ -59,7 +59,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentWeb := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), regFs, nil)
 	require.Equal(t, AccessRead, intentWeb.Class)
 	require.Empty(t, intentWeb.Dirs)
-	require.Equal(t, DecisionAllow, ClassifyAccess(intentWeb, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intentWeb, WorkingDirScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// registered tools without extractor and without read-only capability
 	// still fail closed to writes.
@@ -70,7 +70,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	intentCustom := buildAccessIntent("custom_tool", []byte(`{}`), regFs, nil)
 	require.Equal(t, AccessWrite, intentCustom.Class)
 	require.Empty(t, intentCustom.Dirs)
-	require.Equal(t, DecisionAsk, ClassifyAccess(intentCustom, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAsk, ClassifyAccess(intentCustom, WorkingDirScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// unknown tool -> write fallback (fail-closed).
 	intentUnk := buildAccessIntent("mcp_x", []byte(`{}`), regFs, nil)
@@ -82,11 +82,11 @@ func TestBuildAccessIntent(t *testing.T) {
 	require.Equal(t, AccessWrite, intentNil.Class)
 }
 
-// TestSymlinkAliasWorkspacePathsClassifyAsWorkspace pins the fix for
-// workspaces reached through a symlink (e.g. ~/.emacs.d -> real dir):
-// fs and shell reads spelled through the alias must classify as workspace
+// TestSymlinkAliasWorkingDirPathsClassifyAsWorkingDir pins the fix for
+// cwds reached through a symlink (e.g. ~/.emacs.d -> real dir):
+// fs and shell reads spelled through the alias must classify as cwd
 // reads; genuinely external reads are also allowed by the write-only policy.
-func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
+func TestSymlinkAliasWorkingDirPathsClassifyAsWorkingDir(t *testing.T) {
 	realRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, "lisp"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(realRoot, "lisp", "init.el"), []byte("x"), 0o600))
@@ -94,7 +94,7 @@ func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
 	if err := os.Symlink(realRoot, aliasRoot); err != nil {
 		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
 	}
-	scope := WorkspaceScope(canonicalTestPath(t, realRoot))
+	scope := WorkingDirScope(canonicalTestPath(t, realRoot))
 	aliasTarget := filepath.Join(aliasRoot, "lisp", "init.el")
 
 	regFs := toolregistry.NewRegistry()
@@ -105,7 +105,7 @@ func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
 	require.Equal(t, DecisionAllow, ClassifyAccess(intentFs, scope, nil, ApprovalReviewMode(ReviewAuto)))
 
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = realRoot
+	cfg.WorkingDir = realRoot
 	cfg.BuiltinTools.ShellReadOnlyCommands = []string{"cat"}
 	m := &Mods{
 		Config: &cfg,
@@ -126,11 +126,11 @@ func TestSymlinkAliasWorkspacePathsClassifyAsWorkspace(t *testing.T) {
 	require.Equal(t, DecisionAllow, ClassifyAccess(intentExt, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
-// TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable
+// TestAssessProcessInvocationSymlinkAliasWorkingDirProgramStaysReviewable
 // checks that the security rule forcing review for executables living inside
-// the workspace also fires when the program is spelled through a symlink
-// alias of the workspace.
-func TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable(t *testing.T) {
+// the cwd also fires when the program is spelled through a symlink
+// alias of the cwd.
+func TestAssessProcessInvocationSymlinkAliasWorkingDirProgramStaysReviewable(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "tool.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	aliasRoot := filepath.Join(t.TempDir(), "alias-root")
@@ -138,7 +138,7 @@ func TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable(t *t
 		t.Skipf("symlink creation not supported (requires admin on Windows): %v", err)
 	}
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	m := &Mods{
 		Config: &cfg,
 		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
@@ -149,7 +149,7 @@ func TestAssessProcessInvocationSymlinkAliasWorkspaceProgramStaysReviewable(t *t
 	invoke := fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(aliasRoot, "tool.sh"))
 	assessment := m.assessCommand("process_run", invoke)
 	require.Equal(t, approval.EffectUnknown, assessment.Effect)
-	require.Contains(t, assessment.Reason, "workspace or temporary directory")
+	require.Contains(t, assessment.Reason, "cwd or temporary directory")
 }
 
 func TestBuildAccessIntentForProcessRun(t *testing.T) {
@@ -157,9 +157,9 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	reg := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterProcess(reg, toolregistry.ProcessConfig{Root: root}))
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	m := &Mods{Config: &cfg}
-	canonicalRoot := cfg.ResolveWorkspace().Canonical
+	canonicalRoot := cfg.ResolveWorkingDir().Canonical
 
 	readAssessment := m.assessCommand("process_run", `{"program":"git","args":["status"]}`)
 	read := buildAccessIntent("process_run", nil, reg, &readAssessment)
@@ -194,11 +194,11 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	}
 }
 
-func TestAssessProcessInvocationGitWorkspaceWritesAreStatic(t *testing.T) {
+func TestAssessProcessInvocationGitWorkingDirWritesAreStatic(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	m := &Mods{
 		Config: &cfg,
 		shellAnalyzer: func(_, input string) approval.CommandAssessment {
@@ -213,8 +213,8 @@ func TestAssessProcessInvocationGitWorkspaceWritesAreStatic(t *testing.T) {
 	} {
 		assessment := m.assessCommand("process_run", invocation)
 		require.Equal(t, approval.EffectWrite, assessment.Effect)
-		require.Contains(t, assessment.KnownDirs, cfg.ResolveWorkspace().Canonical)
-		require.Contains(t, assessment.KnownDirs, filepath.Join(cfg.ResolveWorkspace().Canonical, ".git"))
+		require.Contains(t, assessment.KnownDirs, cfg.ResolveWorkingDir().Canonical)
+		require.Contains(t, assessment.KnownDirs, filepath.Join(cfg.ResolveWorkingDir().Canonical, ".git"))
 	}
 }
 
@@ -222,7 +222,7 @@ func TestAssessProcessInvocationGitEnvironmentRedirectFailsClosed(t *testing.T) 
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	classifierCalls := 0
 	m := &Mods{
 		Config: &cfg,
@@ -242,32 +242,32 @@ func TestAssessProcessInvocationGitEnvironmentRedirectFailsClosed(t *testing.T) 
 func TestAssessProcessInvocationGitExternalRepositoryStateRequiresReview(t *testing.T) {
 	for _, setup := range []struct {
 		name string
-		run  func(t *testing.T) (workspace, externalTarget string)
+		run  func(t *testing.T) (cwd, externalTarget string)
 	}{
 		{
-			name: "workspace nested inside parent repository",
+			name: "cwd nested inside parent repository",
 			run: func(t *testing.T) (string, string) {
 				parent := t.TempDir()
 				require.NoError(t, os.Mkdir(filepath.Join(parent, ".git"), 0o755))
-				workspace := filepath.Join(parent, "nested-workspace")
-				require.NoError(t, os.Mkdir(workspace, 0o755))
-				return workspace, parent
+				cwd := filepath.Join(parent, "nested-cwd")
+				require.NoError(t, os.Mkdir(cwd, 0o755))
+				return cwd, parent
 			},
 		},
 		{
-			name: "linked worktree metadata outside workspace",
+			name: "linked worktree metadata outside cwd",
 			run: func(t *testing.T) (string, string) {
-				workspace := t.TempDir()
+				cwd := t.TempDir()
 				gitDir := t.TempDir()
-				require.NoError(t, os.WriteFile(filepath.Join(workspace, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o600))
-				return workspace, gitDir
+				require.NoError(t, os.WriteFile(filepath.Join(cwd, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o600))
+				return cwd, gitDir
 			},
 		},
 	} {
 		t.Run(setup.name, func(t *testing.T) {
-			workspace, externalTarget := setup.run(t)
+			cwd, externalTarget := setup.run(t)
 			cfg := defaultConfig()
-			cfg.BuiltinTools.Workspace = workspace
+			cfg.WorkingDir = cwd
 			m := &Mods{
 				Config: &cfg,
 				shellAnalyzer: func(_, input string) approval.CommandAssessment {
@@ -281,7 +281,7 @@ func TestAssessProcessInvocationGitExternalRepositoryStateRequiresReview(t *test
 
 			require.Equal(t, approval.EffectWrite, assessment.Effect)
 			require.Contains(t, assessment.KnownDirs, canonicalTestPath(t, externalTarget))
-			require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(canonicalTestPath(t, workspace)), nil, ApprovalReviewMode(ReviewAuto)))
+			require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(canonicalTestPath(t, cwd)), nil, ApprovalReviewMode(ReviewAuto)))
 		})
 	}
 }
@@ -291,7 +291,7 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	reg := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterProcess(reg, toolregistry.ProcessConfig{Root: root}))
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	m := &Mods{
 		Config: &cfg,
 		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
@@ -300,7 +300,7 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 			return approval.CommandAssessment{
 				Effect:    approval.EffectWrite,
 				KnownDirs: []string{root, filepath.Join(root, "go.mod")},
-				Reason:    "installer may update the workspace and module cache",
+				Reason:    "installer may update the cwd and module cache",
 			}
 		},
 	}
@@ -313,19 +313,19 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	intent := buildAccessIntent("process_run", data, reg, &assessment)
 	require.Equal(t, AccessWrite, intent.Class)
 	require.Empty(t, intent.Dirs)
-	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
-	require.Empty(t, candidateRulesForIntent(intent, WorkspaceScope(root), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(root), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
-	presentation := formatReviewPresentationWithIntent("process_run", data, assessment, WorkspaceScope(root), intent)
+	presentation := formatReviewPresentationWithIntent("process_run", data, assessment, WorkingDirScope(root), intent)
 	require.Equal(t, "Modify an unknown target", presentation.headline)
 	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
 	require.Len(t, presentation.rows, 2)
 }
 
-func TestConstrainResolvedProcessAssessmentForWorkspaceExecutable(t *testing.T) {
+func TestConstrainResolvedProcessAssessmentForWorkingDirExecutable(t *testing.T) {
 	root := t.TempDir()
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	m := &Mods{Config: &cfg}
 	assessment := approval.CommandAssessment{
 		Effect:    approval.EffectRead,
@@ -339,13 +339,13 @@ func TestConstrainResolvedProcessAssessmentForWorkspaceExecutable(t *testing.T) 
 	})
 	require.Equal(t, approval.EffectUnknown, got.Effect)
 	require.Equal(t, assessment.KnownDirs, got.KnownDirs)
-	require.Contains(t, got.Reason, "workspace or temporary directory")
+	require.Contains(t, got.Reason, "cwd or temporary directory")
 }
 
-func TestAssessProcessInvocationExplicitWorkspaceProgramStaysReviewable(t *testing.T) {
+func TestAssessProcessInvocationExplicitWorkingDirProgramStaysReviewable(t *testing.T) {
 	root := t.TempDir()
 	cfg := defaultConfig()
-	cfg.BuiltinTools.Workspace = root
+	cfg.WorkingDir = root
 	m := &Mods{
 		Config: &cfg,
 		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
@@ -362,16 +362,16 @@ func TestAssessProcessInvocationExplicitWorkspaceProgramStaysReviewable(t *testi
 		wantReason string
 	}{
 		{
-			name:       "relative workspace program stays reviewable",
+			name:       "relative cwd program stays reviewable",
 			invoke:     `{"program":"./tool.sh","args":["--run"]}`,
 			expect:     approval.EffectUnknown,
-			wantReason: "workspace or temporary directory",
+			wantReason: "cwd or temporary directory",
 		},
 		{
-			name:       "absolute workspace program stays reviewable",
+			name:       "absolute cwd program stays reviewable",
 			invoke:     fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(root, "tool.sh")),
 			expect:     approval.EffectUnknown,
-			wantReason: "workspace or temporary directory",
+			wantReason: "cwd or temporary directory",
 		},
 		{
 			name:   "external absolute program keeps classifier effect",

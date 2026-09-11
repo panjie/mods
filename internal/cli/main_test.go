@@ -736,7 +736,8 @@ func TestIsNoArgs(t *testing.T) {
 func TestHelpUsageShowsAllPublicFlags(t *testing.T) {
 	flags := rootCmd.Flags()
 	require.True(t, flagVisibleInUsage(flags.Lookup("model")))
-	require.True(t, flagVisibleInUsage(flags.Lookup("workspace")))
+	require.Nil(t, flags.Lookup("workspace"))
+	require.Nil(t, flags.Lookup("cwd"))
 	require.True(t, flagVisibleInUsage(flags.Lookup("word-wrap")))
 	require.False(t, flagVisibleInUsage(flags.Lookup("memprofile")))
 	require.Nil(t, flags.Lookup("help-all"))
@@ -1163,7 +1164,7 @@ func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
 
 	require.Contains(t, output, "## identity\n\n")
 	require.Contains(t, output, "## shell-classifier\n\n")
-	require.Contains(t, output, "## safe-workspace-template\n\n")
+	require.Contains(t, output, "## temporary-directory-template\n\n")
 	require.Contains(t, output, "You are running inside mods")
 	require.Contains(t, output, "Analyze this shell command for review.")
 }

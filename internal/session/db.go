@@ -612,6 +612,11 @@ func (c *DB) ApprovalRules(id string) ([]approval.Rule, error) {
 	}
 	rules := make([]approval.Rule, 0, len(rows))
 	for _, row := range rows {
+		// Normalize the old serialized directory context on read. New rules
+		// use the current discriminator; legacy modes remain unchanged.
+		if row.ScopeKind == "workspace" {
+			row.ScopeKind = string(approval.ScopeWorkingDir)
+		}
 		rule := approval.Rule{
 			ScopeKind:  approval.ScopeKind(row.ScopeKind),
 			ScopeValue: row.ScopeValue,

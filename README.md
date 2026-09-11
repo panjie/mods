@@ -173,7 +173,7 @@ export OPENAI_API_KEY=sk-...
 git log --oneline -20 | mods -f "group these commits by theme"
 
 # Let Mods read and edit files in the current directory
-mods --workspace . "read README.md and suggest three improvements"
+mods "read README.md and suggest three improvements"
 ```
 
 ## See It In Action
@@ -189,7 +189,7 @@ git diff | mods -f "review this diff — flag bugs, security issues, and naming 
 
 ```sh
 # Bring your vim config in line with current community best practices
-mods --workspace "$HOME" "modernize my .vimrc to the most popular 2026 setup, but preserve my keybindings"
+mods "modernize ~/.vimrc to the most popular 2026 setup, but preserve my keybindings"
 
 # Migrate a codebase from one library to another
 mods "replace all requests usage with httpx, keep behavior identical"
@@ -317,9 +317,9 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | Tool                 | What it does                                              |
 |----------------------|-----------------------------------------------------------|
 | `fs_read_file`       | Read UTF-8 files (with offset/limit for large files).     |
-| `fs_write_file`      | Create or overwrite files in the workspace.               |
+| `fs_write_file`      | Create or overwrite files.                          |
 | `fs_replace`         | Replace exact text in an existing file.                   |
-| `fs_search`          | Search file contents across the workspace.                |
+| `fs_search`          | Search file contents under a path.                   |
 | `fs_apply_patch`     | Atomically apply unified or Codex-format multi-file edits. |
 | `process_run`        | Execute one program with literal argv and structured output. |
 | `http_download`      | Download an explicit URL/file list, preserving existing files by default. |
@@ -360,11 +360,11 @@ builtin-tools:
   filesystem: auto          # auto, true, or false
   shell: true
   shell-timeout: 60s        # default timeout; per-call timeout_ms may override
-  workspace: ""             # defaults to the current working directory
 ```
 
-Pass `--workspace` to scope filesystem and shell tools to a project workspace. The
-status line at the bottom shows what Mods is doing between tool calls
+Filesystem paths resolve from the process current working directory. Shell and
+process tools start there by default and accept a per-call `cwd` argument.
+The status line at the bottom shows what Mods is doing between tool calls
 ("Reading file: ...", "Running command: ...", "Searching web: ..."). Hide it
 with `--hide-tool-status`, which also suppresses the compact one-line record
 each completed tool call leaves in normal output (for example
@@ -602,7 +602,7 @@ boundaries, command shims, and output encodings while producing an auditable rep
 
 Real-AI CLI black-box tests are kept behind the `integration` build tag and
 are not part of the default CI suite. They build and execute the `mods` binary
-with isolated config, data, cache, home, and workspace directories. To run the
+with isolated config, data, cache, home, and working directories. To run the
 real-AI scenarios:
 
 ```sh
@@ -612,7 +612,7 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-blackbox-ai
 
 These scenarios make paid network requests and cover structured pipe input,
 session continuation across processes, complex read-only shell pipelines,
-filesystem tool use, and enforcement of the filesystem workspace boundary. The
+filesystem tool use, and absolute-path reads outside the current directory. The
 runner uses the first available key in this provider order: DeepSeek, Qwen,
 OpenAI, Anthropic, GLM, then Google. Google runs the non-tool scenarios because
 its adapter does not expose built-in filesystem or shell tools.

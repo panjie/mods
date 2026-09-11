@@ -169,17 +169,17 @@ func validateCodexPatchOperations(ctx context.Context, root string, ops []codexP
 			path := candidate.path
 			clean := filepath.Clean(filepath.FromSlash(path))
 			if filepath.IsAbs(clean) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("patch path %q is outside workspace", path)
+				return fmt.Errorf("patch path %q is outside authorized directories", path)
 			}
 			if _, ok := seen[clean]; ok {
 				return fmt.Errorf("patch path %q is touched more than once", path)
 			}
 			seen[clean] = struct{}{}
 			if candidate.source {
-				if _, err := resolveWorkspacePath(ctx, root, clean, nil); err != nil {
+				if _, err := resolveAuthorizedPath(ctx, root, clean, nil); err != nil {
 					return err
 				}
-			} else if _, err := resolveWorkspacePathNoFollowLeaf(ctx, root, clean, nil); err != nil && !os.IsNotExist(err) {
+			} else if _, err := resolveAuthorizedPathNoFollowLeaf(ctx, root, clean, nil); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 		}

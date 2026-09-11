@@ -17,7 +17,7 @@ const (
 	flagCategoryModelProvider     = "Model & Provider"
 	flagCategoryModesSessions     = "Modes & Sessions"
 	flagCategoryPromptContext     = "Prompt & Context"
-	flagCategoryWorkspaceReview   = "Workspace & Review"
+	flagCategoryReview            = "Review"
 	flagCategoryToolsIntegrations = "Tools & Integrations"
 	flagCategoryOutputDisplay     = "Output & Display"
 	flagCategoryConfigMaintenance = "Configuration & Maintenance"
@@ -114,9 +114,8 @@ var flagCategorySpecs = []flagCategorySpec{
 		},
 	},
 	{
-		Name: flagCategoryWorkspaceReview,
+		Name: flagCategoryReview,
 		Flags: []flagSpec{
-			{Name: "workspace"},
 			{Name: "review-mode", Short: "V"},
 			{Name: "no-review", Short: "N"},
 		},

@@ -67,7 +67,7 @@ func TestScriptFilePayloadArgvShape(t *testing.T) {
 }
 
 // The exemption is syntax only: it never becomes a path decision, so a script
-// path outside the workspace is still recognised.
+// path outside the cwd is still recognised.
 func TestScriptFilePayloadIgnoresLocation(t *testing.T) {
 	require.True(t, AnalyzeProcessReviewability("python", []string{`/opt/skills/run.py`}, true).ScriptFilePayload)
 	require.True(t, AnalyzeProcessReviewability("bash", []string{`C:\skills\run.sh`}, false).ScriptFilePayload)

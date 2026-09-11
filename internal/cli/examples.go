@@ -18,7 +18,7 @@ var examples = map[string]string{
 	"Continue a session":               `mods --continue-last "Turn that summary into release notes"`,
 	"Show recent sessions":             `mods --list-sessions`,
 	"Use a custom role":                `mods --role shell "list the largest files in the current directory"`,
-	"Review file edits":                `mods --review-mode auto --workspace . "Read README.md and write docs/cli-notes.md with a short usage guide"`,
+	"Review file edits":                `mods --review-mode auto "Read README.md and write docs/cli-notes.md with a short usage guide"`,
 	"Inspect MCP servers":              `mods --list-mcps`,
 	"Inspect tools":                    `mods --list-tools`,
 	"List installed skills":            `mods --list-skills`,

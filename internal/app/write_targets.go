@@ -57,19 +57,19 @@ func (m *Mods) prepareWriteTargets(client stream.Client, registry *toolregistry.
 	return nil
 }
 
-func writeTargetMessages(messages []proto.Message, workspace string) []proto.Message {
+func writeTargetMessages(messages []proto.Message, cwd string) []proto.Message {
 	type entry struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	}
 	home, _ := os.UserHomeDir()
 	envelope := struct {
-		Workspace string  `json:"workspace"`
-		Home      string  `json:"home"`
-		OS        string  `json:"os"`
-		History   []entry `json:"history"`
-		Current   string  `json:"current_request"`
-	}{Workspace: workspace, Home: home, OS: runtime.GOOS}
+		WorkingDir string  `json:"cwd"`
+		Home       string  `json:"home"`
+		OS         string  `json:"os"`
+		History    []entry `json:"history"`
+		Current    string  `json:"current_request"`
+	}{WorkingDir: cwd, Home: home, OS: runtime.GOOS}
 	for i, message := range messages {
 		if message.Role == proto.RoleSystem {
 			continue
@@ -188,7 +188,7 @@ func (m *Mods) writeTargetToolCaller(ctx context.Context, registry *toolregistry
 		}
 		callCtx, cancel := context.WithTimeout(ctx, m.Config.MCPTimeout)
 		defer cancel()
-		cwd := m.Config.ResolveWorkspace().Canonical
+		cwd := m.Config.ResolveWorkingDir().Canonical
 		var assessment *approval.CommandAssessment
 		if registry.ShellExecution(name) {
 			var args struct {

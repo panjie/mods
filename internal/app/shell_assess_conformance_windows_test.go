@@ -70,7 +70,7 @@ func TestShellAssessmentConformancePowerShell(t *testing.T) {
 func TestShellAssessmentScriptFilePayloadConformancePowerShell(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := &Mods{
-		Config: testConfigForWorkspace(dirs.ws),
+		Config: testConfigForWorkingDir(dirs.ws),
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
 			return approval.UnknownCommandAssessment()
 		},

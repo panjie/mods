@@ -1138,7 +1138,9 @@ func TestShellCandidateRulesUseLLMAffectedDirs(t *testing.T) {
 	t.Run("relative target is saved as an absolute task path", func(t *testing.T) {
 		rules := RulesForDirs([]string{"build"}, testApprovalScope, AccessWrite)
 		require.Len(t, rules, 1)
-		require.Equal(t, []string{"/workspace/build"}, rules[0].Paths)
+		// Stored rule paths use the host separator; the scope value is POSIX
+		// style, so compare through FromSlash instead of the raw literal.
+		require.Equal(t, []string{filepath.FromSlash("/workspace/build")}, rules[0].Paths)
 		require.Empty(t, rules[0].ScopeKind)
 		require.Empty(t, rules[0].ScopeValue)
 	})
@@ -1361,23 +1363,32 @@ func TestDirAllowModeSplit(t *testing.T) {
 }
 
 func TestMixedAccessIntentRules(t *testing.T) {
+	// Use a native workspace: a POSIX scope value combined with the host path
+	// normalizer is not a Windows-absolute input, so it cannot exercise rule
+	// matching on Windows.
+	workspace := t.TempDir()
+	scope := WorkspaceScope(workspace)
+	writeDir := filepath.Join(workspace, "dest")
 	intent := AccessIntent{
-		ReadDirs:  []string{"/external/source"},
-		WriteDirs: []string{filepath.Join(testApprovalScope.Value, "dest")},
+		ReadDirs:  []string{filepath.Join(workspace, "source")},
+		WriteDirs: []string{writeDir},
 	}
-	writeRule := scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{testApprovalScope.Value}, Mode: AccessWrite})
+	writeRule := ApprovalRule{
+		Type: approvalDirAllow, Paths: []string{workspace}, Mode: AccessWrite,
+		ScopeKind: scope.Kind, ScopeValue: scope.Value,
+	}
 
 	require.True(t, RulesAllowIntent(
-		[]ApprovalRule{writeRule}, intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto),
+		[]ApprovalRule{writeRule}, intent, scope, safeDirs(), ApprovalReviewMode(ReviewAuto),
 	))
 	require.False(t, RulesAllowIntent(
-		nil, intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto),
+		nil, intent, scope, safeDirs(), ApprovalReviewMode(ReviewAuto),
 	))
 
-	candidates := candidateRulesForIntent(intent, testApprovalScope, safeDirs(), ApprovalReviewMode(ReviewAuto))
+	candidates := candidateRulesForIntent(intent, scope, safeDirs(), ApprovalReviewMode(ReviewAuto))
 	require.Len(t, candidates, 1)
 	require.Equal(t, AccessWrite, candidates[0].Mode)
-	require.Equal(t, []string{filepath.Join(testApprovalScope.Value, "dest")}, candidates[0].Paths)
+	require.Equal(t, []string{writeDir}, candidates[0].Paths)
 }
 
 // TestToolReviewerSnapshotSessionRaceFree exercises the mu-guarded reviewChan

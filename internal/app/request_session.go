@@ -455,11 +455,6 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		}, name, data); err != nil {
 			return "", err
 		}
-		// A reviewed script is bound to the bytes that were displayed. Refuse to
-		// run it when the file changed while the prompt was open.
-		if err := verifyReviewedScript(assessment); err != nil {
-			return "", err
-		}
 		callData := data
 		// cwd is read-only execution context, separately authorized from writes.
 		if name == "process_run" {

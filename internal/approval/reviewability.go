@@ -32,23 +32,22 @@ const (
 	ReviewabilityOpaqueExecution        ReviewabilityReason = "opaque_execution"
 	ReviewabilityNestedShellHost        ReviewabilityReason = "nested_shell_host"
 	ReviewabilityCommandPassedAsScript  ReviewabilityReason = "command_passed_as_script"
-	ReviewabilityScriptExecution        ReviewabilityReason = "script_execution"
 )
 
 // CommandReviewability contains deterministic structural facts about shell
-// source. ShouldCorrect is deliberately narrow: false does not mean the
-// command is safe, only that the preflight should not ask the model to retry.
+// source. It is advisory metadata: the preflight uses it to nudge the model
+// toward reviewable shapes, and the review panel shows it to the human. It never
+// blocks a call by itself.
 type CommandReviewability struct {
 	Level           ReviewabilityLevel
 	Reasons         []ReviewabilityReason
 	RecommendedTool string
-	ShouldCorrect   bool
-	// ScriptExecution records the narrow "one bare interpreter, one literal
-	// script path" shape. It is set while the command is still opaque: only the
-	// app layer may verify the operand against the workspace and bind the
-	// reviewed bytes, and only the preflight may then release the call into
-	// ordinary review.
-	ScriptExecution *ScriptExecutionFacts
+	// ScriptFilePayload marks a command whose payload is a pre-written script
+	// file rather than ad-hoc generated source: one interpreter or shell host
+	// with a literal script path, or the path to a script itself. The advisory
+	// nudges skip these calls, because the reviewer can inspect the file and
+	// rewriting it is how pre-written skill scripts break.
+	ScriptFilePayload bool
 }
 
 // AnalyzeCommandReviewability parses shell source without executing it.
@@ -66,11 +65,14 @@ func AnalyzeProcessReviewability(program string, args []string, posix bool) Comm
 // either wrap shell source or accidentally pass a known executable name where
 // a POSIX shell expects a script path.
 func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) CommandReviewability {
+	result := analyzeProcessReviewability(program, args, posix, policy)
+	result.ScriptFilePayload = scriptFilePayload(program, args)
+	return result
+}
+
+func analyzeProcessReviewability(program string, args []string, posix bool, policy ReadOnlyCommandPolicy) CommandReviewability {
 	name := strings.ToLower(path.Base(strings.ReplaceAll(strings.TrimSpace(program), `\`, "/")))
 	if !shellHostPrograms[name] {
-		if facts, ok := scriptExecutionFacts(program, args); ok {
-			return scriptReviewability(facts)
-		}
 		if executableCarriesScript(program, args, 0) {
 			return opaqueReviewability()
 		}
@@ -81,7 +83,6 @@ func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix 
 			Level:           ReviewabilityOpaque,
 			Reasons:         []ReviewabilityReason{ReviewabilityCommandPassedAsScript},
 			RecommendedTool: "process_run",
-			ShouldCorrect:   true,
 		}
 	}
 	if !processArgsContainShellSourceFlag(name, args) {
@@ -105,7 +106,6 @@ func AnalyzeProcessReviewabilityWithPolicy(program string, args []string, posix 
 		Level:           ReviewabilityOpaque,
 		Reasons:         []ReviewabilityReason{ReviewabilityOpaqueExecution},
 		RecommendedTool: recommended,
-		ShouldCorrect:   true,
 	}
 }
 
@@ -140,12 +140,12 @@ func processArgsContainShellSourceFlag(program string, args []string) bool {
 }
 
 func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPolicy, dynamic []string) (CommandShape, CommandReviewability) {
-	// A whole-command interpreter script call is opaque but reviewable once the
-	// app layer binds the script bytes; every other shape keeps the existing
-	// structural analysis below.
-	if facts, ok := posixScriptExecution(file); ok {
-		return CommandShape{TopLevelActions: 1, Opaque: true}, scriptReviewability(facts)
-	}
+	shape, result := analyzePOSIXReviewability(file, policy, dynamic)
+	result.ScriptFilePayload = posixScriptFilePayload(file)
+	return shape, result
+}
+
+func analyzePOSIXReviewability(file *syntax.File, policy ReadOnlyCommandPolicy, dynamic []string) (CommandShape, CommandReviewability) {
 	shape := CommandShape{}
 	result := CommandReviewability{Level: ReviewabilitySimple}
 	for _, stmt := range file.Stmts {
@@ -207,7 +207,6 @@ func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPoli
 	if readCount > 0 && writeCount > 0 {
 		result.Level = ReviewabilityCompound
 		result.Reasons = appendReason(result.Reasons, ReviewabilityMixedReadWrite)
-		result.ShouldCorrect = true
 	}
 	if decorative >= 2 {
 		result.Reasons = appendReason(result.Reasons, ReviewabilityDecorativeOutput)
@@ -218,10 +217,6 @@ func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPoli
 	if posixDirectProgram(file) {
 		result.Reasons = appendReason(result.Reasons, ReviewabilitySingleProgramInShell)
 		result.RecommendedTool = "process_run"
-		result.ShouldCorrect = true
-	}
-	if shape.TopLevelActions >= 3 || shape.TopLevelActions > 1 && len(dynamic) > 0 {
-		result.ShouldCorrect = true
 	}
 	for _, leaf := range leaves {
 		if leaf.call == nil || len(leaf.call.Args) == 0 {
@@ -232,7 +227,6 @@ func analyzePOSIXReviewabilityFile(file *syntax.File, policy ReadOnlyCommandPoli
 			shape.Opaque = true
 			result = opaqueReviewability()
 			result.Reasons = []ReviewabilityReason{ReviewabilityNestedShellHost}
-			result.ShouldCorrect = true
 			break
 		}
 	}
@@ -299,12 +293,12 @@ func posixDirectProgram(file *syntax.File) bool {
 }
 
 func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy, dynamic []string) (CommandShape, CommandReviewability) {
-	// A whole-command interpreter script call is opaque but reviewable once the
-	// app layer binds the script bytes; every other shape keeps the existing
-	// structural analysis below.
-	if facts, ok := powerShellScriptExecution(ir); ok {
-		return CommandShape{TopLevelActions: 1, Opaque: true}, scriptReviewability(facts)
-	}
+	shape, result := analyzePowerShellReviewability(ir, policy, dynamic)
+	result.ScriptFilePayload = powerShellScriptFilePayload(ir)
+	return shape, result
+}
+
+func analyzePowerShellReviewability(ir *psBridgeIR, policy ReadOnlyCommandPolicy, dynamic []string) (CommandShape, CommandReviewability) {
 	shape := CommandShape{
 		TopLevelActions: ir.TopLevelStatementCount,
 		Pipelines:       ir.PipelineCount,
@@ -317,7 +311,6 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 		shape.Opaque = true
 		result = opaqueReviewability()
 		result.Reasons = []ReviewabilityReason{reason}
-		result.ShouldCorrect = true
 		return shape, result
 	}
 	if shape.TopLevelActions == 0 && len(ir.Invocations) > 0 {
@@ -346,7 +339,6 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 	if readCount > 0 && writeCount > 0 {
 		result.Level = ReviewabilityCompound
 		result.Reasons = appendReason(result.Reasons, ReviewabilityMixedReadWrite)
-		result.ShouldCorrect = true
 	}
 	if decorative >= 2 {
 		result.Reasons = appendReason(result.Reasons, ReviewabilityDecorativeOutput)
@@ -357,10 +349,6 @@ func analyzePowerShellReviewabilityIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 	if powerShellDirectProgram(ir) {
 		result.Reasons = appendReason(result.Reasons, ReviewabilitySingleProgramInShell)
 		result.RecommendedTool = "process_run"
-		result.ShouldCorrect = true
-	}
-	if shape.TopLevelActions >= 3 || shape.TopLevelActions > 1 && len(dynamic) > 0 {
-		result.ShouldCorrect = true
 	}
 	return shape, result
 }

@@ -75,7 +75,11 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 		}
 		actions = append(actions, interactionAction{Key: option.key, Label: option.label, Selected: i == r.selected})
 	}
-	actions = append(actions, interactionAction{Key: "↑/↓", Label: "Pages"})
+	// The navigation hint is only meaningful while content actually spans
+	// multiple pages; a single-page review has nothing to scroll to.
+	if r.reviewPages > 1 {
+		actions = append(actions, interactionAction{Key: "↑/↓", Label: "Pages"})
+	}
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title: "Full review", Meta: fmt.Sprintf("%d/%d", r.reviewPage+1, r.reviewPages),
 		Tone: p.tone, ToneText: p.toneText, Headline: p.headline,

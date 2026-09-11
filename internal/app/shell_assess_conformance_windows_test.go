@@ -3,8 +3,6 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
@@ -66,14 +64,11 @@ func TestShellAssessmentConformancePowerShell(t *testing.T) {
 	}
 }
 
-// TestShellAssessmentScriptExecutionConformancePowerShell pins the PowerShell
-// half of the script-review release valve: one bare interpreter and one literal
-// workspace script stay opaque with unknown effect, and the binding only
-// verifies for a readable text file inside the workspace.
-func TestShellAssessmentScriptExecutionConformancePowerShell(t *testing.T) {
+// TestShellAssessmentScriptFilePayloadConformancePowerShell pins the PowerShell
+// half of the script-payload exemption: a pre-written script runs as written
+// without advisory nudges, while inline source still gets them.
+func TestShellAssessmentScriptFilePayloadConformancePowerShell(t *testing.T) {
 	dirs := newConformanceDirs(t)
-	target := filepath.Join(dirs.ws, "check.py")
-	require.NoError(t, os.WriteFile(target, []byte("print('ok')\n"), 0o600))
 	m := &Mods{
 		Config: testConfigForWorkspace(dirs.ws),
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
@@ -81,13 +76,16 @@ func TestShellAssessmentScriptExecutionConformancePowerShell(t *testing.T) {
 		},
 	}
 
-	got := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python check.py", nil, dirs.ws)
-	require.Equal(t, approval.EffectUnknown, got.Effect)
-	facts := got.Reviewability.ScriptExecution
-	require.NotNil(t, facts)
-	require.True(t, facts.Verified())
-	require.Equal(t, filepath.Clean(target), filepath.Clean(facts.ResolvedPath))
+	script := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python check.py", nil, dirs.ws)
+	require.True(t, script.Reviewability.ScriptFilePayload)
+	require.Equal(t, approval.EffectUnknown, script.Effect)
+	require.NoError(t, newCommandPreflightGate(m.Config).check("powershell_run", script))
 
 	inline := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python -c 'print(1)'", nil, dirs.ws)
-	require.Nil(t, inline.Reviewability.ScriptExecution)
+	require.False(t, inline.Reviewability.ScriptFilePayload)
+	require.Error(t, newCommandPreflightGate(m.Config).check("powershell_run", inline))
+
+	file := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "pwsh -File build.ps1", nil, dirs.ws)
+	require.True(t, file.Reviewability.ScriptFilePayload)
+	require.NoError(t, newCommandPreflightGate(m.Config).check("powershell_run", file))
 }

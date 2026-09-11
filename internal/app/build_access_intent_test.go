@@ -356,23 +356,26 @@ func TestAssessProcessInvocationExplicitWorkspaceProgramStaysReviewable(t *testi
 	}
 
 	tests := []struct {
-		name   string
-		invoke string
-		expect approval.CommandEffect
+		name       string
+		invoke     string
+		expect     approval.CommandEffect
+		wantReason string
 	}{
 		{
-			name:   "relative workspace program stays reviewable",
-			invoke: `{"program":"./tool.sh","args":["--run"]}`,
-			expect: approval.EffectUnknown,
+			name:       "relative workspace program stays reviewable",
+			invoke:     `{"program":"./tool.sh","args":["--run"]}`,
+			expect:     approval.EffectUnknown,
+			wantReason: "workspace or temporary directory",
 		},
 		{
-			name:   "absolute workspace program stays reviewable",
-			invoke: fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(root, "tool.sh")),
-			expect: approval.EffectUnknown,
+			name:       "absolute workspace program stays reviewable",
+			invoke:     fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(root, "tool.sh")),
+			expect:     approval.EffectUnknown,
+			wantReason: "workspace or temporary directory",
 		},
 		{
 			name:   "external absolute program keeps classifier effect",
-			invoke: `{"program":"/usr/bin/python3","args":["-c","pass"]}`,
+			invoke: `{"program":"/usr/local/bin/deploy","args":["--dry-run"]}`,
 			expect: approval.EffectRead,
 		},
 	}
@@ -381,8 +384,8 @@ func TestAssessProcessInvocationExplicitWorkspaceProgramStaysReviewable(t *testi
 		t.Run(tc.name, func(t *testing.T) {
 			assessment := m.assessCommand("process_run", tc.invoke)
 			require.Equal(t, tc.expect, assessment.Effect)
-			if tc.expect == approval.EffectUnknown {
-				require.Contains(t, assessment.Reason, "workspace or temporary directory")
+			if tc.wantReason != "" {
+				require.Contains(t, assessment.Reason, tc.wantReason)
 			}
 		})
 	}

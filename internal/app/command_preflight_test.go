@@ -1,180 +1,113 @@
 package app
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/proto"
-	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
 
-func complexReviewabilityAnalysis() approval.CommandAssessment {
+// The command preflight is advisory: it nudges the model toward command shapes
+// that are easier to review, but it never stops a call. Any test here that
+// expects a nudge must also be clear that the call still reaches approval.
+
+func compoundAssessment() approval.CommandAssessment {
 	return approval.CommandAssessment{
-		Shape: approval.CommandShape{TopLevelActions: 4},
+		Effect: approval.EffectWrite,
+		Shape:  approval.CommandShape{TopLevelActions: 4},
 		Reviewability: approval.CommandReviewability{
-			Level:         approval.ReviewabilityCompound,
-			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
-			ShouldCorrect: true,
+			Level:   approval.ReviewabilityCompound,
+			Reasons: []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
 		},
 	}
 }
 
-func TestCommandPreflightGateNeverReleasesRejectedCommands(t *testing.T) {
+func TestCommandPreflightNudgesAreBoundedAndNeverBlock(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.ReviewMode = ReviewAuto
 	gate := newCommandPreflightGate(&cfg)
-	first := gate.check("powershell_run", complexReviewabilityAnalysis())
-	require.Error(t, first)
-	var correction correctionSuggester
-	require.True(t, errors.As(first, &correction))
-	require.True(t, correction.CorrectionSuggested())
-	require.Contains(t, first.Error(), "4 top-level actions")
 
-	require.Error(t, gate.check("powershell_run", complexReviewabilityAnalysis()))
-	rejected := gate.check("process_run", complexReviewabilityAnalysis())
-	require.ErrorIs(t, rejected, errCommandRejected)
-	var retry correctionSuggester
-	require.False(t, errors.As(rejected, &retry), "an exhausted budget returns a plain rejection, not a correction")
+	for i := 0; i < commandCorrectionBudget; i++ {
+		err := gate.check("powershell_run", compoundAssessment())
+		require.Error(t, err, "nudge %d", i)
+		var correction correctionSuggester
+		require.ErrorAs(t, err, &correction)
+		require.True(t, correction.CorrectionSuggested())
+		require.Contains(t, err.Error(), "4 top-level actions")
+	}
+	require.NoError(t, gate.check("powershell_run", compoundAssessment()),
+		"an exhausted budget defers to approval instead of stopping the call")
+	require.NoError(t, gate.check("shell_run", compoundAssessment()))
 }
 
-func TestCommandPreflightGateModes(t *testing.T) {
+func TestCommandPreflightSkipsReadsAndPreWrittenScripts(t *testing.T) {
+	cfg := defaultConfig()
+	read := approval.CommandAssessment{
+		Effect:     approval.EffectRead,
+		StaticRead: true,
+		Shape:      approval.CommandShape{TopLevelActions: 5, Opaque: true},
+	}
+	require.NoError(t, newCommandPreflightGate(&cfg).check("shell_run", read))
+
+	script := compoundAssessment()
+	script.Reviewability.ScriptFilePayload = true
+	require.NoError(t, newCommandPreflightGate(&cfg).check("shell_run", script),
+		"a skill's own script must run as written")
+}
+
+func TestCommandPreflightModes(t *testing.T) {
 	minimal := defaultConfig()
 	minimal.Minimal = true
 	never := defaultConfig()
 	never.ReviewMode = ReviewNever
-	require.Error(t, newCommandPreflightGate(&minimal).check("shell_run", complexReviewabilityAnalysis()))
-	require.NoError(t, newCommandPreflightGate(&never).check("shell_run", complexReviewabilityAnalysis()))
+	require.Error(t, newCommandPreflightGate(&minimal).check("shell_run", compoundAssessment()))
+	require.NoError(t, newCommandPreflightGate(&never).check("shell_run", compoundAssessment()))
 }
 
-func TestCommandPreflightGateConcurrentBudget(t *testing.T) {
+func TestCommandPreflightBudgetIsConcurrencySafe(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.ReviewMode = ReviewAuto
 	gate := newCommandPreflightGate(&cfg)
-	var corrections atomic.Int32
+	var nudges atomic.Int32
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if gate.check("shell_run", complexReviewabilityAnalysis()) != nil {
-				corrections.Add(1)
+			if gate.check("shell_run", compoundAssessment()) != nil {
+				nudges.Add(1)
 			}
 		}()
 	}
 	wg.Wait()
-	require.Equal(t, int32(20), corrections.Load())
+	require.Equal(t, int32(commandCorrectionBudget), nudges.Load())
 }
 
-func TestCommandSimplificationMessageDoesNotEchoTargets(t *testing.T) {
+func TestCommandSimplificationMessageGuidesWithoutEchoingTargets(t *testing.T) {
 	assessment := approval.CommandAssessment{
 		DynamicTargets: []string{"$SECRET_PROFILE"},
 		Reviewability: approval.CommandReviewability{
-			Level:         approval.ReviewabilityCompound,
-			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityDynamicWriteTarget},
-			ShouldCorrect: true,
+			Level:   approval.ReviewabilityCompound,
+			Reasons: []approval.ReviewabilityReason{approval.ReviewabilityDynamicWriteTarget},
 		},
 	}
 	message := commandSimplificationMessage(assessment)
 	require.Contains(t, message, "runtime-resolved path")
 	require.NotContains(t, message, "$SECRET_PROFILE")
-}
 
-func TestCommandSimplificationMessageNamesSplittingIncentive(t *testing.T) {
-	assessment := approval.CommandAssessment{
-		Shape: approval.CommandShape{TopLevelActions: 5},
-		Reviewability: approval.CommandReviewability{
-			Level:         approval.ReviewabilityCompound,
-			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent, approval.ReviewabilityDecorativeOutput},
-			ShouldCorrect: true,
-		},
+	opaque := approval.CommandAssessment{
+		Shape:         approval.CommandShape{Opaque: true},
+		Reviewability: approval.CommandReviewability{Level: approval.ReviewabilityOpaque},
 	}
-	message := commandSimplificationMessage(assessment)
-	require.Contains(t, message, "separate single-purpose calls")
-	require.Contains(t, message, "Drop decorative echo/printf separators")
-	require.Contains(t, message, "Recognized read-only commands run without review")
+	require.Contains(t, commandSimplificationMessage(opaque), "cannot be analyzed")
 }
 
-func TestToolCallerCorrectionDoesNotExecuteCommand(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.ReviewMode = ReviewAuto
-	cfg.BuiltinTools.Workspace = t.TempDir()
-	m := &Mods{Config: &cfg, ctx: context.Background()}
-
-	registry := toolregistry.NewRegistry()
-	var executed atomic.Int32
-	require.NoError(t, registry.Register(toolregistry.Tool{
-		Kind:         toolregistry.ToolKindShell,
-		Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true},
-		Spec: proto.ToolSpec{
-			Name: "shell_run",
-			InputSchema: map[string]any{
-				"type":     "object",
-				"required": []string{"command"},
-				"properties": map[string]any{
-					"command": map[string]any{"type": "string"},
-				},
-			},
-		},
-		Call: func(context.Context, json.RawMessage) (string, error) {
-			executed.Add(1)
-			return "unexpected", nil
-		},
-	}))
-
-	_, err := m.toolCaller(registry, &cfg)(proto.ToolCallRequest{ID: "call-1", Index: 1, Total: 1, Name: "shell_run", Arguments: []byte(`{"command":"rm out.txt"}`)})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "process_run")
-	require.Zero(t, executed.Load(), "preflight correction must happen before tool execution")
-}
-
-func TestReadOnlyProcessRecommendationDoesNotConsumeCorrection(t *testing.T) {
-	cfg := defaultConfig()
-	m := &Mods{Config: &cfg}
-	analysis := m.assessCommand("shell_run", "git status")
-	require.Equal(t, "process_run", analysis.Reviewability.RecommendedTool)
-	require.False(t, analysis.Reviewability.ShouldCorrect)
-
-	gate := newCommandPreflightGate(&cfg)
-	require.NoError(t, gate.check("shell_run", analysis))
-	require.Error(t, gate.check("shell_run", complexReviewabilityAnalysis()), "the correction budget must remain available for a compound call")
-}
-
-func TestNestedShellProcessRequestsCorrection(t *testing.T) {
-	cfg := defaultConfig()
-	gate := newCommandPreflightGate(&cfg)
-	analysis := approval.CommandAssessment{Reviewability: approval.AnalyzeProcessReviewability("pwsh", []string{"-Command", "Get-Date"}, false)}
-	err := gate.check("process_run", analysis)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "powershell_run")
-}
-
-func TestKnownCommandPassedAsShellScriptRequestsDirectProcess(t *testing.T) {
-	cfg := defaultConfig()
-	gate := newCommandPreflightGate(&cfg)
-	analysis := approval.CommandAssessment{Reviewability: approval.AnalyzeProcessReviewability(
-		"sh", []string{"head", "-80", "internal/app/status_flags.go"}, true,
-	)}
-	err := gate.check("process_run", analysis)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "known executable name")
-	require.Contains(t, err.Error(), "Retry with process_run and literal argv")
-}
-
-func TestNestedShellHostCorrectionNamesWrapping(t *testing.T) {
-	cfg := defaultConfig()
-	gate := newCommandPreflightGate(&cfg)
-	command := `sh -c "sed -i 's/^ShareInputState=No$/ShareInputState=Yes/' ~/.config/fcitx5/config && echo 'changed'"`
-	assessment := approval.AssessShellStaticWithPolicy(command, true, approval.ReadOnlyCommandPolicy{})
-	require.True(t, assessment.Reviewability.ShouldCorrect)
-	require.Contains(t, assessment.Reviewability.Reasons, approval.ReviewabilityNestedShellHost)
-	err := gate.check("shell_run", assessment)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "nests a shell host inside a shell tool")
-	require.Contains(t, err.Error(), "instead of nesting sh -c, bash -c, eval, or exec")
+// The nudge must not invite a rewrite of the operation itself: model rewrites of
+// pre-written scripts are exactly the failure this advice has to avoid.
+func TestCommandSimplificationMessageKeepsBehaviorStable(t *testing.T) {
+	message := commandSimplificationMessage(compoundAssessment())
+	require.Contains(t, message, "keep the operation's behavior identical")
+	require.Contains(t, message, "never rewrite an existing script file")
 }

@@ -234,12 +234,21 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	require.Len(t, assessment.KnownDirs, 1)
 	require.Contains(t, strings.ToLower(assessment.KnownDirs[0]), "profile", assessment.KnownDirs)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
-	require.Equal(t, DecisionAllow, ClassifyAccess(
+	scope := WorkspaceScope(workspace)
+	// $PROFILE lives outside the workspace, so the write still asks once; the
+	// concrete resolved directory is what makes the answer saveable as a rule.
+	require.Equal(t, DecisionAsk, ClassifyAccess(
 		assessment.AccessIntent(),
-		WorkspaceScope(workspace),
+		scope,
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
-	), "an external write still asks once, but the concrete dir makes the approval rule-saveable")
+	))
+	require.NotEmpty(t, candidateRulesForIntent(
+		assessment.AccessIntent(),
+		scope,
+		approval.SafeDirs(),
+		ApprovalReviewMode(ReviewAuto),
+	), "the concrete dir must make the approval rule-saveable")
 }
 
 func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *testing.T) {
@@ -274,10 +283,10 @@ func TestAnalyzeShellCommandPowerShellProfileProbeIsCompound(t *testing.T) {
 
 	require.Equal(t, approval.EffectRead, got.Effect)
 	require.Equal(t, approval.ReviewabilityCompound, got.Reviewability.Level)
-	require.True(t, got.Reviewability.ShouldCorrect)
 	require.Equal(t, 4, got.Shape.TopLevelActions)
 	require.Contains(t, got.Reviewability.Reasons, approval.ReviewabilityMultipleIndependent)
-	require.Error(t, newCommandPreflightGate(m.Config).check("powershell_run", got))
+	require.NoError(t, newCommandPreflightGate(m.Config).check("powershell_run", got),
+		"a proven static read is exempt from the advisory nudge")
 }
 
 func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
@@ -306,7 +315,6 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 		require.True(t, assessment.AccessIntent().DynamicProbe)
 		require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkspaceScope(m.Config.ResolveWorkspace().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
 		require.Equal(t, approval.ReviewabilityCompound, assessment.Reviewability.Level)
-		require.True(t, assessment.Reviewability.ShouldCorrect)
 	}
 }
 

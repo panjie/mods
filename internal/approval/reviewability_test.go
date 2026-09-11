@@ -12,30 +12,28 @@ func TestAnalyzePOSIXCommandReviewability(t *testing.T) {
 		name          string
 		command       string
 		level         ReviewabilityLevel
-		correct       bool
 		recommended   string
 		reason        ReviewabilityReason
 		statements    int
 		pipelineCount int
 	}{
-		{name: "single executable", command: "git status", level: ReviewabilitySimple, correct: true, recommended: "process_run", reason: ReviewabilitySingleProgramInShell, statements: 1},
-		{name: "pipeline remains one purpose", command: "find . -name '*.go' | wc -l", level: ReviewabilitySimple, correct: false, statements: 1, pipelineCount: 1},
-		{name: "find exec reader pipeline", command: "find . -name '*.go' -exec cat {} + | wc -l", level: ReviewabilitySimple, correct: false, statements: 1, pipelineCount: 1},
-		{name: "shell builtin stays shell", command: "printf '%s\\n' hello", level: ReviewabilitySimple, correct: false, statements: 1},
-		{name: "quoted semicolon", command: "printf '%s\\n' 'a;b'", level: ReviewabilitySimple, correct: false, statements: 1},
-		{name: "three inspections", command: "echo first; git status; git diff", level: ReviewabilityCompound, correct: true, reason: ReviewabilityMultipleIndependent, statements: 3},
-		{name: "mixed read and write", command: "git status; rm out.txt", level: ReviewabilityCompound, correct: true, reason: ReviewabilityMixedReadWrite, statements: 2},
-		{name: "opaque syntax", command: "if then", level: ReviewabilityOpaque, correct: false, reason: ReviewabilityOpaqueExecution},
-		{name: "nested sh host", command: `sh -c "sed -i 's/a/b/' file && grep x file"`, level: ReviewabilityOpaque, correct: true, reason: ReviewabilityNestedShellHost},
-		{name: "nested bash host", command: `bash -c 'rm out.txt'`, level: ReviewabilityOpaque, correct: true, reason: ReviewabilityNestedShellHost},
-		{name: "eval stays nested", command: `eval 'rm out.txt'`, level: ReviewabilityOpaque, correct: true, reason: ReviewabilityNestedShellHost},
+		{name: "single executable", command: "git status", level: ReviewabilitySimple, recommended: "process_run", reason: ReviewabilitySingleProgramInShell, statements: 1},
+		{name: "pipeline remains one purpose", command: "find . -name '*.go' | wc -l", level: ReviewabilitySimple, statements: 1, pipelineCount: 1},
+		{name: "find exec reader pipeline", command: "find . -name '*.go' -exec cat {} + | wc -l", level: ReviewabilitySimple, statements: 1, pipelineCount: 1},
+		{name: "shell builtin stays shell", command: "printf '%s\\n' hello", level: ReviewabilitySimple, statements: 1},
+		{name: "quoted semicolon", command: "printf '%s\\n' 'a;b'", level: ReviewabilitySimple, statements: 1},
+		{name: "three inspections", command: "echo first; git status; git diff", level: ReviewabilityCompound, reason: ReviewabilityMultipleIndependent, statements: 3},
+		{name: "mixed read and write", command: "git status; rm out.txt", level: ReviewabilityCompound, reason: ReviewabilityMixedReadWrite, statements: 2},
+		{name: "opaque syntax", command: "if then", level: ReviewabilityOpaque, reason: ReviewabilityOpaqueExecution},
+		{name: "nested sh host", command: `sh -c "sed -i 's/a/b/' file && grep x file"`, level: ReviewabilityOpaque, reason: ReviewabilityNestedShellHost},
+		{name: "nested bash host", command: `bash -c 'rm out.txt'`, level: ReviewabilityOpaque, reason: ReviewabilityNestedShellHost},
+		{name: "eval stays nested", command: `eval 'rm out.txt'`, level: ReviewabilityOpaque, reason: ReviewabilityNestedShellHost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assessment := AssessShellStaticWithPolicy(tt.command, true, ReadOnlyCommandPolicy{})
 			got := assessment.Reviewability
 			require.Equal(t, tt.level, got.Level)
-			require.Equal(t, tt.correct, got.ShouldCorrect)
 			require.Equal(t, tt.recommended, got.RecommendedTool)
 			if tt.reason != "" {
 				require.Contains(t, got.Reasons, tt.reason)
@@ -57,7 +55,6 @@ func TestAnalyzePowerShellCommandReviewability(t *testing.T) {
 	t.Run("single native executable", func(t *testing.T) {
 		got := AnalyzeCommandReviewability(`winget install --id Starship.Starship -e`, false, ReadOnlyCommandPolicy{})
 		require.Equal(t, ReviewabilitySimple, got.Level)
-		require.True(t, got.ShouldCorrect)
 		require.Equal(t, "process_run", got.RecommendedTool)
 		require.Contains(t, got.Reasons, ReviewabilitySingleProgramInShell)
 	})
@@ -67,7 +64,6 @@ func TestAnalyzePowerShellCommandReviewability(t *testing.T) {
 		assessment := AssessShellStaticWithPolicy(cmd, false, ReadOnlyCommandPolicy{})
 		got := assessment.Reviewability
 		require.Equal(t, ReviewabilityCompound, got.Level)
-		require.True(t, got.ShouldCorrect)
 		require.GreaterOrEqual(t, assessment.Shape.TopLevelActions, 4)
 		require.Contains(t, assessment.DynamicTargets, `$v`)
 		require.Contains(t, got.Reasons, ReviewabilityDecorativeOutput)
@@ -78,33 +74,27 @@ func TestAnalyzeProcessReviewability(t *testing.T) {
 	require.Equal(t, ReviewabilitySimple, AnalyzeProcessReviewability("git", []string{"status"}, true).Level)
 
 	miswrapped := AnalyzeProcessReviewability("sh", []string{"head", "-80", "internal/app/status_flags.go"}, true)
-	require.True(t, miswrapped.ShouldCorrect)
 	require.Equal(t, ReviewabilityOpaque, miswrapped.Level)
 	require.Equal(t, "process_run", miswrapped.RecommendedTool)
 	require.Contains(t, miswrapped.Reasons, ReviewabilityCommandPassedAsScript)
 
 	configured := AnalyzeProcessReviewabilityWithPolicy("/bin/bash", []string{"rg", "needle", "."}, true, ReadOnlyCommandPolicy{Commands: []string{"rg"}})
-	require.True(t, configured.ShouldCorrect)
 	require.Equal(t, "process_run", configured.RecommendedTool)
 	require.Contains(t, configured.Reasons, ReviewabilityCommandPassedAsScript)
 
 	posix := AnalyzeProcessReviewability("/bin/sh", []string{"-c", "git status"}, true)
-	require.True(t, posix.ShouldCorrect)
 	require.Equal(t, "shell_run", posix.RecommendedTool)
 	require.Contains(t, posix.Reasons, ReviewabilityOpaqueExecution)
 
 	powershell := AnalyzeProcessReviewability(`C:\Program Files\PowerShell\7\pwsh.exe`, []string{"-NoProfile", "-Command", "Get-Date"}, false)
-	require.True(t, powershell.ShouldCorrect)
 	require.Equal(t, "powershell_run", powershell.RecommendedTool)
 	require.Equal(t, ReviewabilityOpaque, AnalyzeProcessReviewability("pwsh", []string{"-Command", "Get-Date"}, true).Level)
 
 	implicit := AnalyzeProcessReviewability("powershell.exe", []string{"Get-Content", "internal/tools/windows_reliability_test.go", "-TotalCount", "25"}, false)
-	require.True(t, implicit.ShouldCorrect)
 	require.Equal(t, "powershell_run", implicit.RecommendedTool)
 	require.Contains(t, implicit.Reasons, ReviewabilityOpaqueExecution)
 
 	implicitPwsh := AnalyzeProcessReviewability(`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, []string{"head", "-1", "file.txt"}, false)
-	require.True(t, implicitPwsh.ShouldCorrect)
 	require.Equal(t, "powershell_run", implicitPwsh.RecommendedTool)
 
 	require.Equal(t, ReviewabilityOpaque, AnalyzeProcessReviewability("powershell.exe", nil, false).Level)

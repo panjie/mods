@@ -98,12 +98,11 @@ func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
 
 func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 	tests := []struct {
-		name       string
-		command    string
-		ir         *psBridgeIR
-		target     string
-		compound   bool
-		correction bool
+		name     string
+		command  string
+		ir       *psBridgeIR
+		target   string
+		compound bool
 	}{
 		{
 			name:    "profile member then test path",
@@ -118,9 +117,8 @@ func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 				TopLevelStatementCount:   2,
 				PipelineCount:            2,
 			},
-			target:     `$PROFILE.CurrentUserCurrentHost`,
-			compound:   true,
-			correction: true,
+			target:   `$PROFILE.CurrentUserCurrentHost`,
+			compound: true,
 		},
 		{
 			name:    "environment value then test path",
@@ -134,9 +132,8 @@ func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 				TopLevelStatementCount:   2,
 				PipelineCount:            2,
 			},
-			target:     `$env:STARSHIP_CONFIG`,
-			compound:   true,
-			correction: true,
+			target:   `$env:STARSHIP_CONFIG`,
+			compound: true,
 		},
 		{
 			name:    "single profile probe",
@@ -167,7 +164,6 @@ func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 			} else {
 				require.Equal(t, ReviewabilitySimple, assessment.Reviewability.Level)
 			}
-			require.Equal(t, tc.correction, assessment.Reviewability.ShouldCorrect)
 		})
 	}
 }

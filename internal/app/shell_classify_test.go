@@ -490,8 +490,7 @@ func TestMergeCommandAssessmentOnlyCompletesUnknownEffect(t *testing.T) {
 		DynamicTargets: []string{"$PROFILE"},
 		Shape:          approval.CommandShape{TopLevelActions: 2, Pipelines: 2},
 		Reviewability: approval.CommandReviewability{
-			Level:         approval.ReviewabilityCompound,
-			ShouldCorrect: true,
+			Level: approval.ReviewabilityCompound,
 		},
 	}
 	completion := approval.CommandAssessment{

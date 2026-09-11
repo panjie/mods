@@ -47,20 +47,19 @@ Use this procedure for command execution and troubleshooting.
 9. Inspect the structured `process_run` result: `exit_code`, `stderr`,
    `timed_out`, and truncation fields. A nonzero exit code is an outcome, not a
    tool failure. When output is truncated, narrow the command or selector.
-10. Use a concrete error to make one targeted repair. If mods asks for a
-    simpler command, split the operation or switch to `process_run`; do not
-    repeat the unchanged call. Check availability, cwd, syntax, permissions,
-    and platform before any further retry.
+10. Use a concrete error to make one targeted repair. Check availability, cwd,
+    syntax, permissions, and platform before any further retry. If mods offers
+    simplification advice, treat it as advice: keep the operation's behavior
+    identical, and re-send the same command when it is already correct.
 
 Use `http_download` when available for explicit URL/destination lists, after
 creating directories with `fs_mkdir`. Use a literal `cwd` instead of chaining
-location changes. Unreviewable commands remain blocked after two corrections.
-Split rejected commands into separate simpler literal calls; do not hide them
-in interpreter flags, temporary files, or encoded arguments.
+location changes.
 
-When the work needs an interpreted script, write the file into the workspace
-first and then call one bare interpreter with that single literal path
-(`python tools/check.py`). The review shows the complete source, size, and
-SHA-256, so it is refused if the file changes after review. Inline `-c`/`-e`
-code, encoded payloads, extra interpreter arguments, path-qualified
-interpreters, and scripts outside the workspace are still rejected.
+Run a script that already exists as a file exactly as written, with one
+interpreter or shell host and the literal path (`bash scripts/build.sh`,
+`python tools/check.py`, `pwsh -File build.ps1`). Those calls never get
+simplification advice, so never split, rewrite, or inline an existing script to
+make it "easier to review" — that only breaks it. Prefer putting multi-step work
+in a script file over inline `-c`/`-e` code or encoded payloads, which do get
+advice and always reach approval as written.

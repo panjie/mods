@@ -377,11 +377,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		trace.Detail = accessIntentSummary(intent)
 		return nil
 	}
-	// A path-based saved rule cannot speak for a script whose bytes may change
-	// between calls: reviewed script execution always needs this call's content
-	// displayed before it can be approved.
-	scriptReview := assessment.Reviewability.ScriptExecution.Verified()
-	if !scriptReview && r.reviewMode == ReviewAuto && intent.HasAccess() &&
+	if r.reviewMode == ReviewAuto && intent.HasAccess() &&
 		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
 		trace.Source = "saved rule"
 		trace.Detail = accessIntentSummary(intent)

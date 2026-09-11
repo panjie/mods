@@ -312,22 +312,20 @@ Mods ships with native tools that auto-activate when your prompt needs them:
 | `shell_run`          | Execute shell commands (POSIX; Windows uses `powershell_run` only). |
 | `runtime_info`       | Inspect the selected shell and resolve command availability. |
 
-Compound writes and opaque or interpreter-wrapped payloads must be simplified
-before normal approval. Mods allows two corrections per request; later
-unreviewable calls are rejected without running, and the turn continues;
-`--minimal` does not disable this check. Explicit `--review-mode never` bypasses
-it. There is no general script execution tool: split the work into separate
-single-purpose calls instead of hiding code in interpreter flags, temporary
-files, or encoded arguments.
+Compound and opaque command text gets advisory simplification feedback before
+approval: mods nudges the model at most twice per request toward shapes whose
+effects and targets can be reviewed, and `--minimal` keeps that advice. The
+advice never blocks anything. Once the two nudges are used, or whenever the
+command is already the right one, the call goes to ordinary approval and you
+decide; no command is ever rejected on structural grounds.
 
-The one shape that stays reviewable is a script that already exists as a file.
-One bare interpreter with a single literal script-path argument inside the
-workspace or a temporary directory (`python tools/check.py`) is shown in full:
-the resolved path, size, SHA-256, and the complete source, with approval
-withheld until every page has been displayed. No saved path rule can approve it,
-and it is refused if the file changed between review and execution. Inline
-`-c`/`-e` code, encoded payloads, extra interpreter arguments, path-qualified
-interpreters, and scripts outside the workspace are still rejected.
+Commands whose payload is a pre-written script file are exempt from the nudges
+entirely: `bash scripts/build.sh`, `python tools/check.py`, and `pwsh -File
+build.ps1` run exactly as written, because a skill's own scripts must not be
+rewritten to satisfy review. Ad-hoc inline source (`-c`, `-e`, `-Command`,
+encoded payloads) still gets the advice. There is no general script execution
+tool: put multi-step work in a script file instead of hiding it in interpreter
+flags or encoded arguments. Explicit `--review-mode never` bypasses review.
 
 Long command reviews use Up/Down to page; approval becomes available after all
 pages have been displayed. This is not an execution sandbox.

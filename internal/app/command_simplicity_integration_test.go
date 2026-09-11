@@ -58,7 +58,7 @@ func TestDeepSeekCommandSimplicityIntegration(t *testing.T) {
 			analysis = m.assessCommand(name, string(data))
 		}
 		if name == "powershell_run" && strings.Contains(lower, "$profile") && (strings.Contains(lower, ";") || strings.Contains(lower, "if (")) {
-			analysis = complexReviewabilityAnalysis()
+			analysis = compoundAssessment()
 			analysis.Effect = approval.EffectRead
 			analysis.DynamicTargets = []string{"$PROFILE"}
 		}
@@ -289,7 +289,7 @@ func assertSimpleStarshipToolSequence(t *testing.T, calls []recordedToolCall) {
 			}
 			require.NoError(t, json.Unmarshal(call.data, &args))
 			wrapped := approval.AnalyzeProcessReviewability(args.Program, args.Args, false)
-			require.False(t, wrapped.ShouldCorrect, "process_run must not wrap shell source")
+			require.NotContains(t, wrapped.Reasons, approval.ReviewabilityNestedShellHost, "process_run must not wrap shell source")
 		}
 		if call.name == "fs_write_file" || call.name == "fs_replace" {
 			profileWrite = true

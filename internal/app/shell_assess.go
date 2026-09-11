@@ -136,7 +136,6 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 	if staticEffect == approval.EffectRead && len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(ws) != "" {
 		result.KnownDirs = []string{ws}
 	}
-	result = m.verifyScriptExecution(result, ws, flavor)
 	return finalizeCommandAssessment(result, flavor)
 }
 
@@ -218,22 +217,12 @@ func finalizeAssessmentReviewability(result approval.CommandAssessment) approval
 	if result.Effect == approval.EffectWrite && len(result.DynamicTargets) > 0 {
 		reviewability.Level = approval.ReviewabilityCompound
 		reviewability.Reasons = appendReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget)
-		reviewability.ShouldCorrect = true
-	}
-	if result.Effect == approval.EffectRead && reviewabilityOnlyRecommendsProcess(reviewability) {
-		// Keep the process_run recommendation in presentation metadata, but do
-		// not spend the request's single corrective round on a harmless read.
-		reviewability.ShouldCorrect = false
 	}
 	if len(result.DynamicTargets) > 1 {
 		reviewability.Reasons = appendReviewabilityReason(reviewability.Reasons, approval.ReviewabilityMultipleDynamicTargets)
 	}
 	result.Reviewability = reviewability
 	return result
-}
-
-func reviewabilityOnlyRecommendsProcess(reviewability approval.CommandReviewability) bool {
-	return len(reviewability.Reasons) == 1 && reviewability.Reasons[0] == approval.ReviewabilitySingleProgramInShell
 }
 
 func appendReviewabilityReason(reasons []approval.ReviewabilityReason, reason approval.ReviewabilityReason) []approval.ReviewabilityReason {
@@ -336,7 +325,6 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 			result.Reason = "executable resolves from a workspace or temporary directory"
 		}
 	}
-	result = m.verifyScriptExecution(result, cwd, flavor)
 	return finalizeProcessAssessment(result)
 }
 

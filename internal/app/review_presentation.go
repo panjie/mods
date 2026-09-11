@@ -63,7 +63,6 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
 		result.rows = commandReviewRows(command, assessment, risk)
-		result.rows = appendScriptReviewRows(result.rows, assessment)
 		if cwd := ArgString(parsed, "cwd"); cwd != "" {
 			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
 		}
@@ -73,7 +72,6 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
 		result.rows = commandReviewRows(command, assessment, risk)
-		result.rows = appendScriptReviewRows(result.rows, assessment)
 		if cwd := ArgString(parsed, "cwd"); cwd != "" && cwd != scope.Value {
 			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
 		}

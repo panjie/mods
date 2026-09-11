@@ -55,7 +55,7 @@ func TestReviewPresentationsStayConcise(t *testing.T) {
 			analysis: approval.CommandAssessment{
 				Effect: approval.EffectWrite, KnownDirs: []string{"/workspace"}, Reason: "static classifier detail",
 				Shape:         approval.CommandShape{TopLevelActions: 4, Pipelines: 2},
-				Reviewability: approval.CommandReviewability{Level: approval.ReviewabilityCompound, ShouldCorrect: true},
+				Reviewability: approval.CommandReviewability{Level: approval.ReviewabilityCompound},
 			},
 			intent: AccessIntent{Class: AccessWrite, Dirs: []string{"/workspace"}}, maxRows: 2,
 		},

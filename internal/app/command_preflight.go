@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,16 +8,20 @@ import (
 	"github.com/panjie/mods/internal/approval"
 )
 
-// Corrections are bounded, but the execution constraint never expires:
-// exhausted calls are rejected as ordinary tool failures while the turn
-// continues with other work.
-var errCommandRejected = errors.New("command rejected: it remained unreviewable after two corrections and was not run; do not retry this form, split it into separate literal single-purpose calls or report the blocker")
+// The command preflight is advisory. It nudges the model toward command shapes
+// that are easier to review, but it never decides whether a command may run:
+// once the correction budget is spent the call goes to ordinary approval, where
+// the user decides. Nothing is silently stopped.
+//
+// Pre-written script payloads are exempt from the nudges entirely. A skill's
+// script is a file the reviewer can inspect, and asking the model to rewrite it
+// is how those scripts break.
+const commandCorrectionBudget = 2
 
 type commandPreflightGate struct {
 	mu      sync.Mutex
 	enabled bool
 	used    int
-	advised bool
 }
 
 func newCommandPreflightGate(cfg *Config) *commandPreflightGate {
@@ -26,6 +29,8 @@ func newCommandPreflightGate(cfg *Config) *commandPreflightGate {
 	return &commandPreflightGate{enabled: enabled}
 }
 
+// check returns a correction error while the advisory budget lasts, and nil
+// afterwards so the call continues into approval. It never rejects a call.
 func (g *commandPreflightGate) check(tool string, assessment approval.CommandAssessment) error {
 	if g == nil {
 		return nil
@@ -35,44 +40,17 @@ func (g *commandPreflightGate) check(tool string, assessment approval.CommandAss
 	if !g.enabled || (assessment.StaticRead && assessment.Effect == approval.EffectRead) {
 		return nil
 	}
-	// Verified script execution is the one opaque shape that stays reviewable:
-	// the reviewer sees the interpreter, the resolved path, the digest, and the
-	// complete source, and approval is withheld until every page is displayed.
-	// This only stops the structural constraint from rejecting a call whose
-	// payload is fully visible; the call still passes ordinary approval.
-	if verifiedScriptExecution(assessment) {
+	if assessment.Reviewability.ScriptFilePayload {
 		return nil
 	}
-	hard := assessment.RequiresSimplification()
-	if !hard {
-		if !assessment.Reviewability.ShouldCorrect || g.advised {
-			return nil
-		}
-		g.advised = true
-		return commandSimplificationError{message: commandSimplificationMessage(assessment)}
+	if !assessment.RequiresSimplification() {
+		return nil
 	}
-	if g.used >= 2 {
-		return errCommandRejected
+	if g.used >= commandCorrectionBudget {
+		return nil
 	}
 	g.used++
 	return commandSimplificationError{message: commandSimplificationMessage(assessment)}
-}
-
-// verifiedScriptExecution reports whether the app layer bound reviewed script
-// bytes to an otherwise-opaque interpreter call. The shape and dynamic-target
-// guards keep the exemption from ever covering a compound or runtime-resolved
-// command if the eligible shape is widened by mistake later.
-func verifiedScriptExecution(assessment approval.CommandAssessment) bool {
-	facts := assessment.Reviewability.ScriptExecution
-	if !facts.Verified() {
-		return false
-	}
-	if !containsReviewabilityReason(assessment.Reviewability.Reasons, approval.ReviewabilityScriptExecution) {
-		return false
-	}
-	return assessment.Shape.TopLevelActions <= 1 &&
-		len(assessment.DynamicTargets) == 0 &&
-		len(assessment.UnresolvedRemoteTargets) == 0
 }
 
 type commandSimplificationError struct {
@@ -103,8 +81,6 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 			reasons = append(reasons, "nests a shell host inside a shell tool")
 		case approval.ReviewabilityCommandPassedAsScript:
 			reasons = append(reasons, "passes a known executable name where the shell expects a script path")
-		case approval.ReviewabilityScriptExecution:
-			reasons = append(reasons, "runs an interpreter over a script file")
 		}
 	}
 	if len(reasons) == 0 {
@@ -112,27 +88,24 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 	}
 	message := "command needs simplification: " + strings.Join(reasons, "; ") + ". "
 	if assessment.Shape.Opaque || reviewability.Level == approval.ReviewabilityOpaque {
-		message += "Opaque or dynamically evaluated content cannot use ordinary command approval. Split the work into separate literal single-purpose calls; never hide the code in interpreter flags, temporary files, or encoded arguments. "
+		message += "Its payload cannot be analyzed, so approval is requested for exactly this command. "
 	}
 	if reviewability.RecommendedTool == "process_run" {
-		return message + "Retry with process_run and literal argv; do not wrap the executable in shell syntax."
+		return message + "Prefer process_run with literal argv instead of wrapping the executable in shell syntax."
 	}
 	if reviewability.RecommendedTool == "shell_run" || reviewability.RecommendedTool == "powershell_run" {
-		return message + "Retry with " + reviewability.RecommendedTool + " and pass the shell source directly instead of nesting a shell host in process_run."
+		return message + "Prefer " + reviewability.RecommendedTool + " and pass the shell source directly instead of nesting a shell host in process_run."
 	}
 	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityNestedShellHost) {
-		return message + "Retry with the same tool and pass the shell source directly instead of nesting sh -c, bash -c, eval, or exec inside it."
-	}
-	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityScriptExecution) {
-		return message + "Retry with one bare interpreter and one literal script path inside the workspace (for example python tools/check.py): its complete content is then shown for approval. Inline -c/-e code, encoded payloads, extra interpreter arguments, path-qualified interpreters, and scripts outside the workspace cannot be reviewed this way."
+		return message + "Prefer passing the shell source directly instead of nesting sh -c, bash -c, eval, or exec inside it."
 	}
 	if containsReviewabilityReason(reviewability.Reasons, approval.ReviewabilityDynamicWriteTarget) {
-		return message + "Resolve the target in a separate read-only call, then mutate the returned literal absolute path."
+		return message + "Resolving the target in a separate read-only call and then using the literal absolute path makes the target reviewable."
 	}
 	if len(assessment.DynamicTargets) > 0 {
-		return message + "Resolve runtime paths in one short read-only call, then use the returned literal absolute paths in later calls."
+		return message + "Resolving runtime paths in one short read-only call and then using the literal paths keeps the effect reviewable."
 	}
-	return message + "Retry as separate single-purpose calls for capability discovery, path inspection, mutation, and verification. Drop decorative echo/printf separators and keep necessary pipelines intact. Recognized read-only commands run without review. Review depends on effects, targets, and the configured approval policy."
+	return message + "Splitting capability discovery, mutation, and verification into separate calls, and dropping decorative echo/printf separators, makes effects and targets reviewable; keep necessary pipelines intact. This is advice only: keep the operation's behavior identical, never rewrite an existing script file to satisfy review, and re-send the same command if it is already the right one."
 }
 
 func containsReviewabilityReason(reasons []approval.ReviewabilityReason, target approval.ReviewabilityReason) bool {

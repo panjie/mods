@@ -224,9 +224,8 @@ func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 	analysis := approval.CommandAssessment{
 		Shape: approval.CommandShape{TopLevelActions: 4, Pipelines: 2},
 		Reviewability: approval.CommandReviewability{
-			Level:         approval.ReviewabilityCompound,
-			Reasons:       []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
-			ShouldCorrect: true,
+			Level:   approval.ReviewabilityCompound,
+			Reasons: []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
 		},
 	}
 	presentation := formatReviewPresentationWithIntent(

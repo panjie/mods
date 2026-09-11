@@ -251,16 +251,12 @@ func TestShellAssessmentKeepsAuthoritativePathFacts(t *testing.T) {
 	}
 }
 
-// TestShellAssessmentScriptExecutionConformance pins the one interpreter shape
-// that keeps a script payload reviewable, deliberately separate from the fact
-// tables above: the merged effect stays unknown, the script path is never
-// reported as a directory fact, and only a readable text file inside the
-// workspace earns a verified binding.
-func TestShellAssessmentScriptExecutionConformance(t *testing.T) {
+// TestShellAssessmentScriptFilePayloadConformance pins the one exemption the
+// advisory preflight grants: a command whose payload is a pre-written script
+// file is never nudged, because rewriting it is how skill scripts break. The
+// structural facts are unchanged; only the nudge is skipped.
+func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 	dirs := newConformanceDirs(t)
-	scriptDir := filepath.Join(dirs.ws, "tools")
-	require.NoError(t, os.MkdirAll(scriptDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(scriptDir, "check.py"), []byte("print('ok')\n"), 0o600))
 	m := &Mods{
 		Config: testConfigForWorkspace(dirs.ws),
 		shellAnalyzer: func(string, string) approval.CommandAssessment {
@@ -268,32 +264,22 @@ func TestShellAssessmentScriptExecutionConformance(t *testing.T) {
 		},
 	}
 
-	got := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 tools/check.py", nil, dirs.ws)
-	require.Equal(t, approval.EffectUnknown, got.Effect)
-	require.Empty(t, slashSet(got.KnownDirs))
-	require.Empty(t, slashSet(got.DynamicTargets))
-	require.True(t, got.RequiresSimplification(), "the structural constraint still holds")
-	facts := got.Reviewability.ScriptExecution
-	require.NotNil(t, facts)
-	require.True(t, facts.Verified())
-	require.Equal(t, filepath.Clean(filepath.Join(scriptDir, "check.py")), filepath.Clean(facts.ResolvedPath))
+	script := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 tools/check.py", nil, dirs.ws)
+	require.True(t, script.Reviewability.ScriptFilePayload)
+	require.Equal(t, approval.EffectUnknown, script.Effect)
+	require.Empty(t, slashSet(script.KnownDirs))
+	require.Empty(t, slashSet(script.DynamicTargets))
+	require.NoError(t, newCommandPreflightGate(m.Config).check("shell_run", script),
+		"a pre-written script is executed as written")
 
-	for _, tc := range []struct{ command, note string }{
-		{command: "python3 -c 'print(1)'", note: "inline source"},
-		{command: "python3 tools/check.py extra", note: "extra argument"},
-	} {
-		t.Run(tc.note, func(t *testing.T) {
-			out := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, tc.command, nil, dirs.ws)
-			require.Nil(t, out.Reviewability.ScriptExecution)
-		})
-	}
+	inline := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 -c 'print(1)'", nil, dirs.ws)
+	require.False(t, inline.Reviewability.ScriptFilePayload)
+	require.Error(t, newCommandPreflightGate(m.Config).check("shell_run", inline),
+		"ad-hoc inline source still gets advisory feedback")
 
-	t.Run("external script stays unverified", func(t *testing.T) {
-		command := "python3 " + filepath.ToSlash(filepath.Join(dirs.ext, "check.py"))
-		out := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, dirs.ws)
-		require.NotNil(t, out.Reviewability.ScriptExecution)
-		require.False(t, out.Reviewability.ScriptExecution.Verified())
-	})
+	external := "python3 " + filepath.ToSlash(filepath.Join(dirs.ext, "check.py"))
+	require.True(t, m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, external, nil, dirs.ws).Reviewability.ScriptFilePayload,
+		"the exemption is syntactic and does not depend on the script's location")
 }
 
 // conformanceCoversDir reports whether values contains the same directory as

@@ -82,9 +82,11 @@ func (intent AccessIntent) HasUnresolvedRemoteTargets() bool {
 	return len(intent.UnresolvedRemoteTargets) > 0
 }
 
+// Effect uncertainty alone does not make a concrete target unresolved.
+// It still requires review, but explicit target rules may authorize it.
 func (intent AccessIntent) HasUnresolvedWriteTargets() bool {
 	return intent.DominantClass() == AccessWrite &&
-		(intent.UncertainEffect || intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets())
+		(intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets())
 }
 
 func (intent AccessIntent) DominantClass() AccessClass {

@@ -45,7 +45,7 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 	p := r.reviewItem.presentation
 	if width < 40 || height < 16 {
 		r.reviewPages = 0
-		return renderInteractionPanel(styles, width, interactionPanel{Title: "Review required", Headline: "Enlarge terminal to review all content (40 columns × 16 rows).", Actions: []interactionAction{{Key: "N", Label: "Deny"}, {Key: "Ctrl+C", Label: "Cancel"}}})
+		return renderInteractionPanel(styles, width, interactionPanel{Title: "Review", Headline: "Enlarge terminal to review all content (40 columns × 16 rows).", Actions: []interactionAction{{Key: "N", Label: "Deny"}, {Key: "Ctrl+C", Label: "Cancel"}}})
 	}
 	inner := max(1, interactionPanelInnerWidth(styles, width))
 	var lines []string
@@ -81,7 +81,7 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 		actions = append(actions, interactionAction{Key: "↑/↓", Label: "Pages"})
 	}
 	return renderInteractionPanel(styles, width, interactionPanel{
-		Title: "Full review", Meta: fmt.Sprintf("%d/%d", r.reviewPage+1, r.reviewPages),
+		Title: "Review", Meta: fmt.Sprintf("%d/%d", r.reviewPage+1, r.reviewPages),
 		Tone: p.tone, ToneText: p.toneText, Headline: p.headline,
 		Body: lines[start:end], Actions: actions,
 	})

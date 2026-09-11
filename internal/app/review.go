@@ -473,7 +473,7 @@ func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string
 		}
 		var reviewDirs []string
 		for _, dir := range group.Dirs {
-			if ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}}, scope, safeDirs, reviewMode) == DecisionAsk {
+			if intent.UncertainEffect || ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}}, scope, safeDirs, reviewMode) == DecisionAsk {
 				reviewDirs = append(reviewDirs, dir)
 			}
 		}
@@ -537,7 +537,7 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heig
 		rows = append(rows, interactionRow{Label: "Always", Value: RulesLabel(r.reviewItem.candidateRules)})
 	}
 	return renderInteractionPanel(styles, width, interactionPanel{
-		Title:    "Review required",
+		Title:    "Review",
 		Tone:     presentation.tone,
 		ToneText: presentation.toneText,
 		Headline: presentation.headline,

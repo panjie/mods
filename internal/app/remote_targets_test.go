@@ -146,13 +146,15 @@ func TestUnknownRemoteWriteHasNoAlwaysRule(t *testing.T) {
 	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
-func TestUnknownEffectWithKnownOriginHasNoAlwaysRule(t *testing.T) {
+func TestUnknownEffectWithKnownOriginHasAlwaysRule(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
 	intent := approval.CommandAssessment{
 		Effect: approval.EffectUnknown, RemoteOrigins: []string{"https://api.example.com"},
 	}.AccessIntent()
 	require.True(t, intent.UncertainEffect)
-	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
+	require.Equal(t, approval.RulesForRemoteOrigins(intent.RemoteOrigins), rules)
+	require.True(t, RulesAllowIntent(rules, intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestTemporaryWriteAlwaysAllowsEvenInAlwaysMode(t *testing.T) {

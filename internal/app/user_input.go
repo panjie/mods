@@ -605,7 +605,11 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 		Title: display.title, Tone: display.tone, Headline: display.headline, Rows: display.rows,
 	}
 	innerWidth := interactionPanelInnerWidth(styles, width)
-	panel.Headline = clampInteractionHeadline(panel.Headline, innerWidth, 2)
+	maxHeadlineLines := maxInteractionHeadlineLines
+	if (req.Kind == "select" || req.Kind == "multiselect") && strings.ContainsAny(panel.Headline, "\n\r") {
+		maxHeadlineLines = maxMultiLineQuestionLines
+	}
+	panel.Headline = clampInteractionHeadline(panel.Headline, innerWidth, maxHeadlineLines)
 	if req.Kind == "form" {
 		return u.renderFormBody(panel, innerWidth, styles, width)
 	}
@@ -647,6 +651,11 @@ const (
 	formLabelColMin = 8
 	formLabelColMax = 16
 	stackedIndent   = "  ›"
+)
+
+const (
+	maxInteractionHeadlineLines = 2
+	maxMultiLineQuestionLines   = 40
 )
 
 // clampInteractionHeadline bounds a model-supplied headline to maxLines

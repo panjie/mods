@@ -18,18 +18,19 @@ const UserInputToolName = "request_user_input"
 const maxFormFields = 8
 
 const (
-	maxUserInputQuestionRunes    = 160
-	maxUserInputLabelRunes       = 24
-	maxUserInputPlaceholderRunes = 48
-	maxUserInputOptionRunes      = 48
-	maxUserInputOptionCount      = 8
+	maxUserInputQuestionRunes          = 160
+	maxUserInputMultiLineQuestionRunes = 3000
+	maxUserInputLabelRunes             = 24
+	maxUserInputPlaceholderRunes       = 48
+	maxUserInputOptionRunes            = 160
+	maxUserInputOptionCount            = 10
 )
 
 const userInputToolDescription = "Pause and ask the local terminal user one necessary question or a short form of related fields. " +
 	"Call this tool, not assistant text, when a tool workflow needs missing user input. " +
-	"Keep it compact: the question is one short sentence of at most 80 characters with no preamble, field labels are 1-3 words, and examples or hints belong in the placeholder instead of the question or labels. " +
+	"Keep it compact: most questions are one short single-line sentence with no preamble; select and multiselect may use a multi-line question when an enumerated list must be shown in full, such as an approval checklist with one item per line. Field labels are 1-3 words, and examples or hints belong in the placeholder instead of the question or labels. " +
 	"Use kind=text, select, multiselect, secret, or form. Use kind=multiselect when one or more choices may be selected. " +
-	"Prefer select or multiselect with 2-8 concise options over free text whenever the choices are enumerable. " +
+	"Prefer select or multiselect with 2-10 concise options over free text whenever the choices are enumerable. " +
 	"Never enumerate numbered options inside the question; pass them as an options array with kind=select. " +
 	"Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. " +
 	"Use kind=form only when related fields belong together, such as a username plus password; otherwise ask the single most important field. " +
@@ -107,8 +108,8 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 			Description: userInputToolDescription,
 			InputSchema: objectSchema(map[string]any{
 				"question": map[string]any{
-					"type": "string", "maxLength": maxUserInputQuestionRunes,
-					"description": "One short single-line question or prompt shown verbatim to the user; no preamble. Do not list options here; use kind=select with an options array.",
+					"type": "string", "maxLength": maxUserInputMultiLineQuestionRunes,
+					"description": "One short single-line question or prompt shown verbatim to the user; no preamble. select and multiselect may use a multi-line question with one item per line. Do not list options here; use kind=select with an options array.",
 				},
 				"kind": map[string]any{
 					"type": "string", "enum": []string{"text", "select", "multiselect", "secret", "form"},
@@ -117,7 +118,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 				"options": map[string]any{
 					"type": "array", "minItems": 2, "maxItems": maxUserInputOptionCount,
 					"items":       map[string]any{"type": "string", "maxLength": maxUserInputOptionRunes},
-					"description": "Required for select and multiselect; 2 to 8 unique non-empty single-line choices.",
+					"description": "Required for select and multiselect; 2 to 10 unique non-empty single-line choices.",
 				},
 				"multiline": booleanProp("Allow Ctrl+J newlines for text input."),
 				"target": map[string]any{
@@ -155,7 +156,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 							"options": map[string]any{
 								"type": "array", "minItems": 2, "maxItems": maxUserInputOptionCount,
 								"items":       map[string]any{"type": "string", "maxLength": maxUserInputOptionRunes},
-								"description": "Required when field kind=select; 2 to 8 unique non-empty single-line choices.",
+								"description": "Required when field kind=select; 2 to 10 unique non-empty single-line choices.",
 							},
 							"multiline": booleanProp("Allow Ctrl+J newlines when field kind=text."),
 							"placeholder": map[string]any{
@@ -201,7 +202,7 @@ func validateUserInputRequest(req UserInputRequest) error {
 	if req.Question == "" {
 		return fmt.Errorf("question is required")
 	}
-	if err := validateSingleLine("question", req.Question, maxUserInputQuestionRunes); err != nil {
+	if err := validateUserInputQuestion(req.Kind, req.Question); err != nil {
 		return err
 	}
 	if req.Kind != "select" && req.Kind != "multiselect" && questionEnumeratesOptions(req.Question) {
@@ -214,6 +215,22 @@ func validateUserInputRequest(req UserInputRequest) error {
 		return fmt.Errorf("%s input does not accept fields", req.Kind)
 	}
 	return validateInputKind(req.Kind, req.Options, req.Multiline, req.Target)
+}
+
+// validateUserInputQuestion keeps the question compact for most kinds while
+// allowing select and multiselect the multi-line form used by multi-item
+// approvals, where each item occupies its own line.
+func validateUserInputQuestion(kind, question string) error {
+	if !strings.ContainsAny(question, "\n\r") {
+		return validateSingleLine("question", question, maxUserInputQuestionRunes)
+	}
+	if kind != "select" && kind != "multiselect" {
+		return fmt.Errorf("question must be a single line")
+	}
+	if utf8.RuneCountInString(question) > maxUserInputMultiLineQuestionRunes {
+		return fmt.Errorf("question must be at most %d characters; shorten it and move hints or examples to the placeholder", maxUserInputMultiLineQuestionRunes)
+	}
+	return nil
 }
 
 // validateSingleLine enforces the compact-display contract shared by the

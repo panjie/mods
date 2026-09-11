@@ -35,7 +35,7 @@ func TestRegisterUserInputDescriptionGuidesSecrets(t *testing.T) {
 	desc := specs[0].Description
 	for _, want := range []string{
 		"Call this tool, not assistant text",
-		"one short sentence",
+		"one short single-line sentence",
 		"1-3 words",
 		"placeholder",
 		"Never enumerate numbered options",
@@ -99,8 +99,9 @@ func TestUserInputValidation(t *testing.T) {
 		{Question: strings.Repeat("x", maxUserInputQuestionRunes+1), Kind: "text"},
 		{Question: "Pick", Kind: "select", Options: []string{"one", strings.Repeat("x", maxUserInputOptionRunes+1)}},
 		{Question: "Pick", Kind: "select", Options: []string{"one\ntwo", "three"}},
-		{Question: "Pick", Kind: "select", Options: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}},
-		{Question: "Pick", Kind: "multiselect", Options: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}},
+		{Question: "Pick", Kind: "select", Options: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}},
+		{Question: "Pick", Kind: "multiselect", Options: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}},
+		{Question: "Confirm:\n" + strings.Repeat("x", maxUserInputMultiLineQuestionRunes), Kind: "select", Options: []string{"yes", "no"}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: strings.Repeat("x", maxUserInputLabelRunes+1), Kind: "text"}}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "two\nlines", Kind: "text"}}},
 		{Question: "Form", Kind: "form", Fields: []UserInputField{{Key: "a", Label: "A", Kind: "text", Placeholder: strings.Repeat("x", maxUserInputPlaceholderRunes+1)}}},
@@ -130,8 +131,19 @@ func TestUserInputValidation(t *testing.T) {
 	// Exactly at the option cap is valid.
 	require.NoError(t, validateUserInputRequest(UserInputRequest{
 		Question: "Pick", Kind: "multiselect", Options: []string{
-			"a", "b", "c", "d", "e", "f", "g", "h",
+			"a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
 		},
+	}))
+	// select and multiselect accept multi-line questions (approval checklists).
+	require.NoError(t, validateUserInputRequest(UserInputRequest{
+		Question: "确认批准：\n#1 出差申请-马俊-2026-09-09 | 马俊 | 2026-09-09 08:30\n#2 费用报销-张三-2026-09-09 | 张三 | 2026-09-09 09:00",
+		Kind:     "select",
+		Options:  []string{"确认批准", "取消"},
+	}))
+	// Verbatim option labels up to the option cap are valid.
+	require.NoError(t, validateUserInputRequest(UserInputRequest{
+		Question: "Pick", Kind: "multiselect",
+		Options: []string{strings.Repeat("x", maxUserInputOptionRunes), strings.Repeat("y", maxUserInputOptionRunes)},
 	}))
 }
 

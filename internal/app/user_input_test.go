@@ -1045,6 +1045,23 @@ func TestUserInputHeadlineClamped(t *testing.T) {
 	require.Contains(t, plain, "…", "clamped headline must end with an ellipsis")
 }
 
+func TestUserInputMultiLineSelectRendersAllItems(t *testing.T) {
+	question := "确认批准：\n#1 出差申请-马俊-2026-09-09 | 马俊 | 2026-09-09 08:30\n#2 费用报销-张三-2026-09-09 | 张三 | 2026-09-09 09:00\n\n审批意见：同意"
+	manager := newUserInputManager(&Config{})
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req: toolregistry.UserInputRequest{
+			Question: question, Kind: "select",
+			Options: []string{"确认批准", "取消"},
+		},
+		resp: make(chan userInputResult, 1),
+	}})
+	styles := makeStyles(true).Interaction
+	view := ansi.Strip(manager.render(120, styles))
+	require.Contains(t, view, "#1 出差申请-马俊-2026-09-09")
+	require.Contains(t, view, "#2 费用报销-张三-2026-09-09")
+	require.Contains(t, view, "审批意见：同意")
+}
+
 func TestFormStacksOverlongLabels(t *testing.T) {
 	manager := newUserInputManager(&Config{})
 	manager.handleStartMsg(userInputStartMsg{item: userInputItem{

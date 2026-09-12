@@ -473,7 +473,7 @@ func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string
 		}
 		var reviewDirs []string
 		for _, dir := range group.Dirs {
-			if intent.UncertainEffect || ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}}, scope, safeDirs, reviewMode) == DecisionAsk {
+			if ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}}, scope, safeDirs, reviewMode) == DecisionAsk {
 				reviewDirs = append(reviewDirs, dir)
 			}
 		}

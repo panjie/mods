@@ -68,10 +68,12 @@ unknown. This prevents a worktree whose administrative directory is external
 from being mistaken for a cwd-only write.
 Bare program names are resolved once before approval and the resulting absolute
 path is pinned to execution, so a later PATH lookup cannot select a different
-program. WorkingDir and temporary-directory resolutions remain unknown-effect
-and therefore reviewable. On Windows, `.bat` and `.cmd` launchers are rejected
-because the operating system necessarily inserts shell parsing and cannot
-preserve the literal argument-vector contract.
+program. WorkingDir resolutions remain unknown-effect and therefore reviewable;
+unknown effects whose concrete targets all fall inside a safe temporary
+directory follow the ordinary location rules and need no review. On Windows,
+`.bat` and `.cmd` launchers are rejected because the operating system
+necessarily inserts shell parsing and cannot preserve the literal
+argument-vector contract.
 
 ## Restricted LLM completion
 

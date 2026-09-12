@@ -172,7 +172,7 @@ func RulesAllowIntent(rules []Rule, intent AccessIntent, scope Scope, safeDirs [
 		}
 		var reviewDirs []string
 		for _, dir := range group.Dirs {
-			if intent.UncertainEffect || locateDir(dir, scope, safeDirs) != locTemp {
+			if locateDir(dir, scope, safeDirs) != locTemp {
 				reviewDirs = append(reviewDirs, dir)
 			}
 		}

@@ -40,8 +40,11 @@ type AccessIntent struct {
 	// selected at runtime. A write with an unresolved remote target can be
 	// approved once, but can never produce a reusable allow rule.
 	UnresolvedRemoteTargets []string
-	// UncertainEffect marks a fail-closed write intent produced when command
-	// analysis could not determine whether or where persistent effects occur.
+	// UncertainEffect marks a write intent produced when command analysis
+	// could not determine whether or where persistent effects occur. It no
+	// longer forces review by itself: concrete targets still follow the
+	// ordinary location rules, so a safe temporary directory is exempt even
+	// when the effect could not be proven.
 	UncertainEffect bool
 	DynamicProbe    bool
 	Reason          string
@@ -83,7 +86,9 @@ func (intent AccessIntent) HasUnresolvedRemoteTargets() bool {
 }
 
 // Effect uncertainty alone does not make a concrete target unresolved.
-// It still requires review, but explicit target rules may authorize it.
+// Concrete targets follow the ordinary location rules: safe temporary
+// directories are exempt, others require review and explicit target rules may
+// authorize them.
 func (intent AccessIntent) HasUnresolvedWriteTargets() bool {
 	return intent.DominantClass() == AccessWrite &&
 		(intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets())
@@ -167,9 +172,10 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 }
 
 // ClassifyAccess applies the write-only approval matrix. Reads are always
-// allowed, irrespective of location, dynamic targets, or review mode. Writes
-// ask unless every target is a safe temporary directory. ReviewNever forces
-// allow. Empty or unresolved write targets fail closed to ask.
+// allowed, irrespective of location, dynamic targets, or review mode. Writes,
+// including unknown effects mapped to write, ask unless every target is a safe
+// temporary directory. ReviewNever forces allow. Empty or unresolved write
+// targets fail closed to ask.
 func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode ReviewMode) Decision {
 	if mode == ReviewNever {
 		return DecisionAllow
@@ -185,7 +191,7 @@ func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode Re
 		if group.Class != AccessWrite {
 			return DecisionAsk
 		}
-		if intent.UncertainEffect || intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets() {
+		if intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets() {
 			return DecisionAsk
 		}
 		if len(group.Dirs) == 0 && len(group.Origins) == 0 {

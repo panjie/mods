@@ -45,7 +45,12 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"remote write", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAsk},
 		{"unresolved remote write", AccessIntent{Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}, DecisionAsk},
 		{"uncertain write effect", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}, UncertainEffect: true}, DecisionAsk},
-		{"uncertain effect in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UncertainEffect: true}, DecisionAllow},
+		{"uncertain effect in temp subdirectory", AccessIntent{Class: AccessWrite, Dirs: []string{filepath.Join(tempDir, "out")}, UncertainEffect: true}, DecisionAllow},
+		{"uncertain effect without dirs", AccessIntent{Class: AccessWrite, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect spanning temp and external", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir, external}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect with dynamic target", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UnresolvedPaths: []string{"$target"}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect with unresolved remote target", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UnresolvedRemoteTargets: []string{"$API_URL"}, UncertainEffect: true}, DecisionAsk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -1583,44 +1583,54 @@ func TestNormalizeAffectedDirs(t *testing.T) {
 
 func TestUnknownEffectAlwaysAllowKnownTargets(t *testing.T) {
 	for _, tool := range []string{"shell_run", "powershell_run", "process_run"} {
-		for _, temporary := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/temp=%v", tool, temporary), func(t *testing.T) {
-				dir := filepath.Clean(t.TempDir())
-				scope := WorkingDirScope(dir)
-				var safe []string
-				if temporary {
-					safe = []string{dir}
-				}
-				assessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{dir}}
-				intent := assessment.AccessIntent()
-				r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: true}
-				r.startSession()
-				defer r.reset()
-				deps := reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent, safeDirs: safe}
-				data := []byte(`{"command":"opaque-command"}`)
-				done := make(chan error, 1)
-				go func() { done <- r.requestApproval(deps, tool, data) }()
-				item := receiveReviewItem(t, r.reviewChan)
-				require.NotEmpty(t, item.candidateRules)
-				r.handleStartMsg(toolReviewStartMsg{item: item})
-				banner := r.renderBanner(160, makeStyles(true).Interaction, 40)
-				require.Contains(t, banner, "Always allow")
-				require.NotContains(t, banner, "FULL REVIEW")
-				require.NotContains(t, banner, "REVIEW REQUIRED")
-				r.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
-				require.NoError(t, <-done)
-				r.raw = true // Reuse must succeed without another interactive prompt.
-				require.NoError(t, r.requestApproval(deps, tool, data))
-				deps.accessIntent.Dirs = []string{filepath.Join(filepath.Dir(dir), "other-target")}
-				require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-				deps.accessIntent = intent
-				deps.accessIntent.UnresolvedPaths = []string{"$target"}
-				require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-				require.Empty(t, candidateRulesForIntent(deps.accessIntent, scope, safe, ApprovalReviewMode(ReviewAuto)))
-				deps.accessIntent = intent
-				r.reviewMode = ReviewAlways
-				require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-			})
-		}
+		t.Run(fmt.Sprintf("%s/known-target", tool), func(t *testing.T) {
+			dir := filepath.Clean(t.TempDir())
+			scope := WorkingDirScope(dir)
+			assessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{dir}}
+			intent := assessment.AccessIntent()
+			r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: true}
+			r.startSession()
+			defer r.reset()
+			deps := reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent, safeDirs: []string{filepath.Clean(t.TempDir())}}
+			data := []byte(`{"command":"opaque-command"}`)
+			done := make(chan error, 1)
+			go func() { done <- r.requestApproval(deps, tool, data) }()
+			item := receiveReviewItem(t, r.reviewChan)
+			require.NotEmpty(t, item.candidateRules)
+			r.handleStartMsg(toolReviewStartMsg{item: item})
+			banner := r.renderBanner(160, makeStyles(true).Interaction, 40)
+			require.Contains(t, banner, "Always allow")
+			require.NotContains(t, banner, "FULL REVIEW")
+			require.NotContains(t, banner, "REVIEW REQUIRED")
+			r.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
+			require.NoError(t, <-done)
+			r.raw = true // Reuse must succeed without another interactive prompt.
+			require.NoError(t, r.requestApproval(deps, tool, data))
+			deps.accessIntent.Dirs = []string{filepath.Join(filepath.Dir(dir), "other-target")}
+			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
+			deps.accessIntent = intent
+			deps.accessIntent.UnresolvedPaths = []string{"$target"}
+			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
+			require.Empty(t, candidateRulesForIntent(deps.accessIntent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+			deps.accessIntent = intent
+			r.reviewMode = ReviewAlways
+			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
+		})
+
+		t.Run(fmt.Sprintf("%s/safe-temp-target", tool), func(t *testing.T) {
+			safe := filepath.Clean(t.TempDir())
+			scope := WorkingDirScope(filepath.Clean(t.TempDir()))
+			assessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{safe}}
+			deps := reviewerDeps{
+				ctx:            context.Background(),
+				shellExecution: true,
+				assessment:     &assessment,
+				accessIntent:   assessment.AccessIntent(),
+				safeDirs:       []string{safe},
+			}
+			r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: false}
+			require.NoError(t, r.requestApproval(deps, tool, []byte(`{"command":"opaque-command"}`)),
+				"an unknown effect whose only target is a safe temp dir must not prompt")
+		})
 	}
 }

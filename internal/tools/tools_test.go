@@ -1056,6 +1056,89 @@ func TestFilesystemReplaceRequiresUniqueOldText(t *testing.T) {
 	}
 }
 
+func TestFilesystemReplaceMatchesLFTextInCRLFFile(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	path := filepath.Join(root, "crlf.txt")
+	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbeta\r\ngamma\r\n"), 0o644))
+
+	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"beta\ngamma\n","new_text":"delta\nepsilon\n"}`))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "alpha\r\ndelta\r\nepsilon\r\n", string(content))
+}
+
+func TestFilesystemReplaceMatchesCRLFTextInLFFile(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	path := filepath.Join(root, "lf.txt")
+	require.NoError(t, os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o644))
+
+	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"lf.txt","old_text":"beta\r\ngamma\r\n","new_text":"delta\r\nepsilon\r\n"}`))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "alpha\ndelta\nepsilon\n", string(content))
+}
+
+func TestFilesystemReplaceKeepsCRLFEndingsForNewText(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	path := filepath.Join(root, "crlf.txt")
+	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbeta\r\ngamma\r\n"), 0o644))
+
+	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"beta\r\n","new_text":"delta\n"}`))
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "alpha\r\ndelta\r\ngamma\r\n", string(content))
+}
+
+func TestFilesystemReplaceNormalizedMatchStillRequiresUniqueText(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	path := filepath.Join(root, "crlf.txt")
+	require.NoError(t, os.WriteFile(path, []byte("same\r\nsame\r\n"), 0o644))
+
+	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"same\n","new_text":"once\n"}`))
+	require.ErrorContains(t, err, "matched 2 times")
+
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "same\r\nsame\r\n", string(content))
+}
+
+func TestFilesystemReplaceRoundTripFromLineReadOnCRLF(t *testing.T) {
+	root := t.TempDir()
+	registry := NewRegistry()
+	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+	path := filepath.Join(root, "crlf.txt")
+	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbeta\r\ngamma\r\n"), 0o644))
+
+	read, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"crlf.txt","start_line":2,"end_line":3}`))
+	require.NoError(t, err)
+	lines := strings.Split(read, "\n")
+	oldText := strings.TrimPrefix(lines[0], "2: ") + "\n" + strings.TrimPrefix(lines[1], "3: ") + "\n"
+	require.NotContains(t, oldText, "\r")
+
+	args, err := json.Marshal(map[string]string{"path": "crlf.txt", "old_text": oldText, "new_text": "delta\n"})
+	require.NoError(t, err)
+	_, err = registry.Call(context.Background(), "fs_replace", args)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "alpha\r\ndelta\r\n", string(content))
+}
+
 func TestFilesystemApplyPatchRecountsHunkHeaders(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

@@ -15,6 +15,7 @@ import (
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/textutil"
 )
 
 func filesystemWriteFileTool(root string, safeDirs []string) Tool {
@@ -60,7 +61,7 @@ func filesystemReplaceTool(root string, safeDirs []string) Tool {
 		IntentExtractor: pathParentIntent(root, false),
 		Spec: proto.ToolSpec{
 			Name:        "fs_replace",
-			Description: "Replace exactly one occurrence of old_text in an existing UTF-8 text file. Prefer this for small targeted edits after reading the file; use fs_apply_patch for multi-file or git-style diffs. old_text must match the current file contents exactly and should include enough surrounding context to be unique.",
+			Description: "Replace exactly one occurrence of old_text in an existing UTF-8 text file. Prefer this for small targeted edits after reading the file; use fs_apply_patch for multi-file or git-style diffs. old_text must match the current file contents exactly and should include enough surrounding context to be unique. Line endings are matched tolerantly: LF old_text matches CRLF files and new_text adopts the file's existing line endings.",
 			InputSchema: objectSchema(map[string]any{
 				"path":     stringProp("Path to edit, relative to the cwd, absolute, or using the current user's home directory."),
 				"old_text": stringProp("Exact text to replace. Must appear exactly once in the current file; include surrounding context to make it unique."),
@@ -97,13 +98,11 @@ func filesystemReplaceTool(root string, safeDirs []string) Tool {
 			if err != nil {
 				return "", err
 			}
-			content := string(contentBytes)
-			matches := strings.Count(content, args.OldText)
+			updated, matches := replaceUniqueText(string(contentBytes), args.OldText, *args.NewText)
 			switch matches {
 			case 0:
 				return "", fmt.Errorf("old_text was not found in %s; re-read the file and use exact current content", displayPath(root, path))
 			case 1:
-				updated := strings.Replace(content, args.OldText, *args.NewText, 1)
 				if err := os.WriteFile(path, []byte(updated), info.Mode().Perm()); err != nil {
 					return "", err
 				}
@@ -113,6 +112,38 @@ func filesystemReplaceTool(root string, safeDirs []string) Tool {
 			}
 		},
 	}
+}
+
+// replaceUniqueText replaces the single occurrence of oldText in content,
+// tolerating line-ending differences between content and oldText: an LF
+// oldText matches a CRLF file and vice versa. The result adopts the file's
+// line-ending convention. matches reports the occurrences found; when it is
+// not 1 the returned content is empty and the file must not be written.
+func replaceUniqueText(content, oldText, newText string) (string, int) {
+	if matches := strings.Count(content, oldText); matches != 0 {
+		if matches != 1 {
+			return "", matches
+		}
+		return strings.Replace(content, oldText, adaptLineEndings(newText, detectLineEnding(content)), 1), 1
+	}
+	normalized := textutil.NormalizeLineEndings(content)
+	normalizedOld := textutil.NormalizeLineEndings(oldText)
+	matches := strings.Count(normalized, normalizedOld)
+	if matches != 1 {
+		return "", matches
+	}
+	updated := strings.Replace(normalized, normalizedOld, newText, 1)
+	return adaptLineEndings(updated, detectLineEnding(content)), 1
+}
+
+// adaptLineEndings rewrites every line break in s to the ending used by the
+// target file. Existing CRLF and bare CR breaks are normalized to LF first so
+// the conversion is idempotent.
+func adaptLineEndings(s, ending string) string {
+	if ending == "" {
+		ending = "\n"
+	}
+	return strings.ReplaceAll(textutil.NormalizeLineEndings(s), "\n", ending)
 }
 
 func filesystemDeleteFileTool(root string, safeDirs []string) Tool {

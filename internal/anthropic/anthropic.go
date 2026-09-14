@@ -117,6 +117,7 @@ type Config struct {
 	AuthToken          string
 	BaseURL            string
 	HTTPClient         *http.Client
+	Headers            map[string]string
 	EmptyMessagesLimit uint
 	ThinkingBudget     int
 	ThinkingType       string
@@ -140,6 +141,9 @@ func New(config Config) *Client {
 	}
 	if config.BaseURL != "" {
 		opts = append(opts, option.WithBaseURL(NormalizeBaseURL(config.BaseURL)))
+	}
+	for key, value := range config.Headers {
+		opts = append(opts, option.WithHeader(key, value))
 	}
 	client := anthropic.NewClient(opts...)
 	return &Client{

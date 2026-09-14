@@ -12,6 +12,7 @@ import (
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/providerinfo"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/stream"
 )
 
@@ -160,6 +161,21 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			ExtraParams:      cloneAnyMap(mod.ExtraParams),
 			ThoughtFields:    mod.ThinkFields,
 			ThinkTag:         mod.ThinkTag,
+		}
+	}
+	// Match the endpoint rather than the configurable provider alias.
+	if u, err := url.Parse(resolved.BaseURL); err == nil && strings.EqualFold(u.Hostname(), "opencode.ai") {
+		id := m.Config.SessionWriteToID
+		if id == "" {
+			m.providerSessionOnce.Do(func() { m.providerSessionID = session.NewID() })
+			id = m.providerSessionID
+		}
+		headers := map[string]string{"x-opencode-session": id, "User-Agent": "mods/1.0"}
+		switch resolved.Protocol {
+		case "openai":
+			cfgs.OpenAI.Headers = headers
+		case "anthropic":
+			cfgs.Anthropic.Headers = headers
 		}
 	}
 	return cfgs, nil

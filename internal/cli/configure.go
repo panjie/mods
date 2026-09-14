@@ -278,6 +278,9 @@ func resolveEnvVar(apiName string) string {
 			break
 		}
 	}
+	if descriptor, ok := providerinfo.Lookup(apiName); ok && descriptor.APIKeyEnv != "" {
+		return descriptor.APIKeyEnv
+	}
 	return strings.ToUpper(strings.ReplaceAll(apiName, "-", "_")) + "_API_KEY"
 }
 

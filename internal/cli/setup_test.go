@@ -35,6 +35,33 @@ func setupPress(m *setupModel, code rune, mod tea.KeyMod) tea.Cmd {
 	return cmd
 }
 
+func TestSetupOpenCodeGoProviders(t *testing.T) {
+	for _, tc := range []struct{ name, protocol, endpoint, model string }{
+		{"opencode-go", "openai", "https://opencode.ai/zen/go/v1", "kimi-k2.7-code"},
+		{"opencode-go-anthropic", "anthropic", "https://opencode.ai/zen/go/v1/messages", "minimax-m3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupFixture(t, func(m *setupModel) {
+				require.Contains(t, providerOptionLabel(t, m.apis, tc.name), "OpenCode Go")
+				m.provider = tc.name
+				require.Equal(t, tc.protocol, m.protocol())
+				require.Equal(t, tc.endpoint, m.endpoint())
+				require.Equal(t, "OPENCODE_GO_API_KEY", resolveEnvVar(tc.name))
+				m.draft().manual = tc.model
+				m.draft().defaultModel = tc.model
+				data, err := m.saveData()
+				require.NoError(t, err)
+				require.Equal(t, tc.name, data.apiName)
+				require.Equal(t, tc.endpoint, data.baseURLInput)
+				require.Equal(t, "OPENCODE_GO_API_KEY", data.envVarName)
+				config.APIs = append(config.APIs, API{Name: tc.name, APIKeyEnv: "MY_GO_KEY", APIType: "openai"})
+				require.Equal(t, "MY_GO_KEY", resolveEnvVar(tc.name))
+				require.Equal(t, "openai", m.protocol())
+			})
+		})
+	}
+}
+
 func TestSetupTerminalOptionsIgnoreRawOutput(t *testing.T) {
 	oldInput, oldError := IsInputTTY, IsErrorTTY
 	t.Cleanup(func() { IsInputTTY, IsErrorTTY = oldInput, oldError })

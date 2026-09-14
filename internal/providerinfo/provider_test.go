@@ -35,18 +35,20 @@ func TestSharedProviderMetadata(t *testing.T) {
 
 func TestProviderDescriptionsIdentifyProviders(t *testing.T) {
 	expected := map[string]string{
-		"anthropic":      "Anthropic API",
-		"azure":          "Azure OpenAI",
-		"deepseek":       "DeepSeek API",
-		"github-copilot": "GitHub Copilot",
-		"glm":            "Zhipu AI",
-		"google":         "Google AI",
-		"kimi":           "Moonshot AI",
-		"minimax":        "MiniMax API",
-		"ollama":         "Local model runtime (no API key needed)",
-		"openai":         "OpenAI API",
-		"openrouter":     "Multi-provider API gateway",
-		"qwen":           "Alibaba Cloud",
+		"anthropic":             "Anthropic API",
+		"azure":                 "Azure OpenAI",
+		"deepseek":              "DeepSeek API",
+		"github-copilot":        "GitHub Copilot",
+		"glm":                   "Zhipu AI",
+		"google":                "Google AI",
+		"kimi":                  "Moonshot AI",
+		"minimax":               "MiniMax API",
+		"ollama":                "Local model runtime (no API key needed)",
+		"openai":                "OpenAI API",
+		"opencode-go":           "OpenCode Go (OpenAI-compatible models)",
+		"opencode-go-anthropic": "OpenCode Go (Anthropic models: MiniMax, Qwen)",
+		"openrouter":            "Multi-provider API gateway",
+		"qwen":                  "Alibaba Cloud",
 	}
 
 	require.Len(t, Descriptors(), len(expected))

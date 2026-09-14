@@ -353,3 +353,32 @@ func TestApplyHTTPProxyNoopWhenUnset(t *testing.T) {
 	require.Nil(t, occfg.HTTPClient)
 	require.Nil(t, ccfg.HTTPClient)
 }
+
+func TestBuildProviderConfigsOpenCodeSessionHeaders(t *testing.T) {
+	for _, protocol := range []string{"openai", "anthropic"} {
+		for _, id := range []string{"saved-conversation", ""} {
+			t.Run(protocol+"/"+id, func(t *testing.T) {
+				m := &Mods{Styles: makeStyles(true), Config: &Config{SessionWriteToID: id}}
+				model := Model{Name: "model", API: "custom-alias", Protocol: protocol}
+				api := API{Name: "custom-alias", APIKey: "test-key", BaseURL: "https://opencode.ai/zen/go/v1"}
+				getHeaders := func() map[string]string {
+					cfg, err := m.buildProviderConfigs(model, api)
+					require.NoError(t, err)
+					if protocol == "anthropic" {
+						return cfg.Anthropic.Headers
+					}
+					return cfg.OpenAI.Headers
+				}
+				headers := getHeaders()
+				require.NotEmpty(t, headers["x-opencode-session"])
+				if id != "" {
+					require.Equal(t, id, headers["x-opencode-session"])
+				}
+				require.Equal(t, "mods/1.0", headers["User-Agent"])
+				require.Equal(t, headers, getHeaders(), "auxiliary clients must reuse the conversation ID")
+				api.BaseURL = "https://opencode.ai.example.com/v1"
+				require.Empty(t, getHeaders(), "do not send session identity to unrelated endpoints")
+			})
+		}
+	}
+}

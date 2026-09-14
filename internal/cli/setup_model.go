@@ -15,6 +15,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -227,7 +228,7 @@ func (m *setupModel) protocol() string {
 	if p := findAPIType(m.api()); p != "" {
 		return p
 	}
-	return m.api()
+	return providerinfo.Protocol(m.api(), "")
 }
 func (m *setupModel) endpoint() string {
 	if value := strings.TrimSpace(m.draft().endpoint); value != "" {

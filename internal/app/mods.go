@@ -117,8 +117,10 @@ type Mods struct {
 	// startCompletionCmd can cancel the stream's context and release HTTP/SSE
 	// + MCP resources rather than waiting for the provider goroutine to
 	// finish on its own.
-	sessionMu    sync.Mutex
-	activeRunner *streamRunner
+	sessionMu           sync.Mutex
+	providerSessionOnce sync.Once
+	providerSessionID   string
+	activeRunner        *streamRunner
 
 	stdinImageData []byte
 

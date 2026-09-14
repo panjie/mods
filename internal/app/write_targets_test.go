@@ -145,6 +145,19 @@ func TestWriteTargetsFallbackAndPartialResult(t *testing.T) {
 	require.Empty(t, client.requests)
 }
 
+// TestParseWriteTargetsDropsPowerShellSwitchDirs pins the Windows dialect on
+// inferred write targets: the inference model can echo native-program switches
+// (/d, /f) as write_dirs, but they must never become session DirAllow rules.
+func TestParseWriteTargetsDropsPowerShellSwitchDirs(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows uses the PowerShell dialect where leading-slash tokens are native-program switches")
+	}
+	rules, err := parseWriteTargets(`{"write_dirs":["/d","/f","C:\\out"],"write_urls":[]}`, testApprovalScope)
+	require.NoError(t, err)
+	require.Len(t, rules, 1)
+	require.Equal(t, []string{`C:\out`}, rules[0].Paths)
+}
+
 func TestWriteTargetsReviewModesAndRetry(t *testing.T) {
 	for _, mode := range []ReviewMode{ReviewAuto, ReviewAlways, ReviewNever} {
 		t.Run(string(mode), func(t *testing.T) {

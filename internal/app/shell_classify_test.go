@@ -565,6 +565,35 @@ func TestNormalizeLiteralProcessPathDoesNotExpandShellSyntax(t *testing.T) {
 	require.Equal(t, filepath.Join(cwd, "~", "out.txt"), normalizeLiteralProcessPath("~/out.txt", cwd, pathutil.FlavorPOSIX))
 }
 
+// TestLiteralArgLooksPathLikeDialect pins the dialect split for literal argv
+// tokens: in POSIX a leading slash is an absolute path, while in the
+// PowerShell/Windows dialect it is a native-program switch (reg.exe /d,
+// csc /out) or division. Only a forward-slash UNC path keeps path meaning.
+func TestLiteralArgLooksPathLikeDialect(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		arg    string
+		flavor pathutil.Flavor
+		want   bool
+	}{
+		{"POSIX absolute path", "/etc/passwd", pathutil.FlavorPOSIX, true},
+		{"POSIX single-segment path", "/d", pathutil.FlavorPOSIX, true},
+		{"PowerShell switch", "/d", pathutil.FlavorPowerShell, false},
+		{"PowerShell compiler switch with value", `/out:C:\out\a.exe`, pathutil.FlavorPowerShell, false},
+		{"PowerShell Unix-looking switch", "/etc/passwd", pathutil.FlavorPowerShell, false},
+		{"PowerShell UNC with forward slashes", "//server/share", pathutil.FlavorPowerShell, true},
+		{"PowerShell drive-absolute literal", `C:\tools\emacs\bin\emacs.exe,0`, pathutil.FlavorPowerShell, true},
+		{"PowerShell parent traversal", `..\outside.txt`, pathutil.FlavorPowerShell, true},
+		{"PowerShell home expansion", `~/notes.txt`, pathutil.FlavorPowerShell, true},
+		{"PowerShell bare name", "Icon", pathutil.FlavorPowerShell, false},
+		{"POSIX relative slash", "sub/file", pathutil.FlavorPOSIX, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, literalArgLooksPathLike(tc.arg, tc.flavor))
+		})
+	}
+}
+
 func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")

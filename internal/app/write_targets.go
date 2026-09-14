@@ -148,6 +148,12 @@ func parseWriteTargets(raw string, scope Scope) ([]Rule, error) {
 		if dir == "" || strings.ContainsAny(dir, "\x00\r\n*?") || strings.Contains(dir, "://") || approval.IsUnresolvedShellPathExpression(dir, runtime.GOOS != "windows") {
 			continue
 		}
+		if runtime.GOOS == "windows" && strings.HasPrefix(dir, "/") && !approval.IsExplicitPowerShellPathArg(dir) {
+			// Windows uses the PowerShell dialect: a leading slash is a
+			// native-program switch, never path syntax. Forward-slash UNC
+			// paths (//server/share) stay eligible.
+			continue
+		}
 		dirs = append(dirs, dir)
 	}
 	rules := RulesForDirs(dirs, scope, AccessWrite)

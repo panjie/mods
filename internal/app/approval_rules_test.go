@@ -863,6 +863,12 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 	})
 
 	t.Run("saved rule allows matching LLM dirs", func(t *testing.T) {
+		cacheDir, cacheSubdir := "/tmp/cache", "/tmp/cache/subdir"
+		if runtime.GOOS == "windows" {
+			// shell_run uses the PowerShell dialect on Windows, where a
+			// leading-slash token is a native-program switch, not a path.
+			cacheDir, cacheSubdir = `C:\tmp\cache`, `C:\tmp\cache\subdir`
+		}
 		mods := &Mods{
 			ctx:                 context.Background(),
 			Config:              &Config{},
@@ -870,12 +876,12 @@ func TestShellReviewFlowUsesLLMAnalysis(t *testing.T) {
 			shellAnalyzer: func(string, string) approval.CommandAssessment {
 				return approval.CommandAssessment{
 					Effect:    approval.EffectWrite,
-					KnownDirs: []string{"/tmp/cache/subdir"},
+					KnownDirs: []string{cacheSubdir},
 				}
 			},
 		}
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"/tmp/cache"}, Mode: AccessWrite}))
+		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{cacheDir}, Mode: AccessWrite}))
 		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
 		require.NoError(t, err)
 	})

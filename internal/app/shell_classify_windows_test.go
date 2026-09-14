@@ -803,6 +803,58 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 	))
 }
 
+// TestAssessProcessInvocationPowerShellFlagsAreNotPathFacts pins the reported
+// Windows bug: reg.exe switches (/v, /d, /f) share leading-slash syntax with
+// POSIX absolute paths and used to become "write dirs" in the review panel and
+// its "Always allow" candidate rule. Only genuine literal paths survive.
+func TestAssessProcessInvocationPowerShellFlagsAreNotPathFacts(t *testing.T) {
+	m := &Mods{
+		Config: testConfigForWorkingDir(t.TempDir()),
+		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
+			require.Equal(t, "process_run", tool)
+			return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "writes a registry value"}
+		},
+	}
+	invoke := `{"program":"reg.exe","args":["add","HKCU\\Software\\Classes\\*\\shell\\EditWithEmacs","/v","Icon","/d","C:\\tools\\emacs\\bin\\emacs.exe,0","/f"]}`
+
+	assessment := m.assessCommand("process_run", invoke)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	for _, flag := range []string{"/v", "/d", "/f"} {
+		require.NotContains(t, assessment.KnownDirs, flag,
+			"a native-program switch must not become a review target")
+	}
+	require.Contains(t, assessment.KnownDirs, `C:\tools\emacs\bin\emacs.exe,0`,
+		"a genuine literal path argument stays a path fact")
+}
+
+// TestAssessShellCommandPowerShellDropsLeadingSlashClassifierDirs pins the
+// dialect policy for classifier-supplied directories, which bypass
+// shellExternalPathFacts: leading-slash guesses are native-program switches,
+// while a forward-slash UNC path remains a directory.
+func TestAssessShellCommandPowerShellDropsLeadingSlashClassifierDirs(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	m := &Mods{
+		Config: testConfigForWorkingDir(t.TempDir()),
+		shellAnalyzer: func(string, string) approval.CommandAssessment {
+			return approval.CommandAssessment{
+				Effect:    approval.EffectWrite,
+				KnownDirs: []string{"/out", "/d", "//server/share", `C:\real`},
+				Reason:    "classifier said write",
+			}
+		},
+	}
+
+	got := m.assessCommand("powershell_run", `custom-writer /out src.cs`)
+
+	require.Equal(t, approval.EffectWrite, got.Effect)
+	require.NotContains(t, got.KnownDirs, "/out")
+	require.NotContains(t, got.KnownDirs, "/d")
+	require.Contains(t, got.KnownDirs, "//server/share")
+	require.Contains(t, got.KnownDirs, `C:\real`)
+}
+
 func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 

@@ -99,6 +99,12 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 			// guesses and must not replace or broaden that deterministic scope.
 			completion.KnownDirs = nil
 		}
+		if flavor == pathutil.FlavorPowerShell {
+			// Classifier dirs bypass shellExternalPathFacts, so the PowerShell
+			// dialect policy has to be applied here: a leading-slash token is a
+			// native-program switch or division, never a path.
+			completion.KnownDirs = filterPowerShellDialectDirs(completion.KnownDirs)
+		}
 		result = mergeCommandAssessment(result, completion)
 	}
 	// Path-shaped references to inherited environment variables resolve
@@ -137,6 +143,28 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 		result.KnownDirs = []string{ws}
 	}
 	return finalizeCommandAssessment(result, flavor)
+}
+
+// filterPowerShellDialectDirs drops heuristic directory facts that use
+// leading-slash path syntax. In the PowerShell/Windows dialect such tokens are
+// native-program switches (/out, /d) or division, never filesystem paths;
+// forward-slash UNC paths (//server/share) remain paths. It complements
+// shellExternalPathFacts, which applies the same policy to approval's static
+// facts only: classifier-supplied and literal argv directories never pass
+// through that gate.
+func filterPowerShellDialectDirs(dirs []string) []string {
+	if len(dirs) == 0 {
+		return nil
+	}
+	kept := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		trimmed := strings.TrimSpace(dir)
+		if strings.HasPrefix(trimmed, "/") && !approval.IsExplicitPowerShellPathArg(trimmed) {
+			continue
+		}
+		kept = append(kept, dir)
+	}
+	return kept
 }
 
 // shellExternalPathFacts keeps the directories approval reported whose location
@@ -375,6 +403,13 @@ func filterLiteralArgPaths(args []string, cwd string, flavor pathutil.Flavor) []
 
 func literalArgLooksPathLike(arg string, flavor pathutil.Flavor) bool {
 	if arg == "" {
+		return false
+	}
+	if flavor == pathutil.FlavorPowerShell && strings.HasPrefix(arg, "/") && !approval.IsExplicitPowerShellPathArg(arg) {
+		// pathutil.IsAbs treats any leading slash as an absolute path (POSIX
+		// semantics). In the PowerShell dialect that syntax belongs to
+		// native-program switches such as reg.exe /d or csc /out; only a
+		// forward-slash UNC path (//server/share) is an explicit path.
 		return false
 	}
 	if pathutil.IsAbs(arg) || strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || strings.HasPrefix(arg, `.\`) || strings.HasPrefix(arg, `..\`) {

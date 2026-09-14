@@ -168,6 +168,35 @@ func TestAssessPowerShellIRProfileAndEnvironmentReads(t *testing.T) {
 	}
 }
 
+func TestAssessPowerShellIRSkipsScriptBlockArguments(t *testing.T) {
+	scriptBlock := `{ & "C:\tools\emacs\bin\emacs.exe" --batch --eval "(progn (load \"C:/init.el\"))" 2>$null | Out-Null }`
+
+	assessment := assessPowerShellIR("", &psBridgeIR{
+		Commands:       []string{"measure-command", "select-object"},
+		Variables:      []string{"null"},
+		HasScriptBlock: true,
+		Invocations: []psCommandInvocation{
+			{Name: "measure-command", Args: []string{scriptBlock}},
+			{Name: "select-object", Args: []string{"-ExpandProperty", "TotalSeconds"}},
+		},
+	}, ReadOnlyCommandPolicy{}, "")
+	require.Empty(t, assessment.DynamicTargets,
+		"a script block argument is code, not a runtime path target")
+	require.Equal(t, EffectUnknown, assessment.Effect)
+
+	dynamic := assessPowerShellIR("", &psBridgeIR{
+		Invocations: []psCommandInvocation{{Name: "frobnicate", Args: []string{`$target`}}},
+	}, ReadOnlyCommandPolicy{}, "")
+	require.Equal(t, []string{`$target`}, dynamic.DynamicTargets,
+		"an unquoted variable argument of an unknown command stays dynamic")
+
+	quoted := assessPowerShellIR("", &psBridgeIR{
+		Invocations: []psCommandInvocation{{Name: "frobnicate", Args: []string{`"{ literal $text }"`}}},
+	}, ReadOnlyCommandPolicy{}, "")
+	require.Equal(t, []string{`{ literal $text }`}, quoted.DynamicTargets,
+		"a quoted brace literal interpolating a variable stays dynamic")
+}
+
 func TestAssessPowerShellIRRejectsUnsafeDynamicExpressions(t *testing.T) {
 	tests := []struct {
 		name    string

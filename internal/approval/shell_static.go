@@ -138,6 +138,12 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 			}
 			for _, arg := range args {
 				trimmed := strings.TrimSpace(arg)
+				if strings.HasPrefix(trimmed, "{") {
+					// A script block argument is code, not a path expression.
+					// Its inner invocations are separate IR entries, so real
+					// runtime targets inside it are still surfaced.
+					continue
+				}
 				single, double := powerShellArgQuoting(trimmed)
 				value := trimPowerShellLiteral(trimmed)
 				if shellPathExpressionUnresolvedQuoted(value, single, double) {

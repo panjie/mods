@@ -33,44 +33,56 @@ func buildProviderOptions() []setupOption {
 	seen := map[string]struct{}{}
 	builtins := providerinfo.Descriptors()
 	opts := make([]setupOption, 0, len(config.APIs)+len(builtins)+1)
+	// Size the name column to the longest provider name so the description
+	// column stays aligned even for names longer than any fixed width.
+	nameWidth := 0
+	for _, api := range config.APIs {
+		nameWidth = max(nameWidth, len(api.Name))
+	}
+	for _, provider := range builtins {
+		nameWidth = max(nameWidth, len(provider.Name))
+	}
 	for _, api := range config.APIs {
 		if len(api.Models) == 0 {
 			if _, builtIn := providerinfo.Lookup(api.Name); !builtIn {
 				seen[api.Name] = struct{}{}
-				opts = append(opts, newSetupOption(incompleteProviderLabel(api), api.Name))
+				opts = append(opts, newSetupOption(incompleteProviderLabel(api, nameWidth), api.Name))
 			}
 			continue
 		}
 		seen[api.Name] = struct{}{}
-		opts = append(opts, newSetupOption(configuredProviderLabel(api), api.Name))
+		opts = append(opts, newSetupOption(configuredProviderLabel(api, nameWidth), api.Name))
 	}
 	for _, provider := range builtins {
 		if _, ok := seen[provider.Name]; ok {
 			continue
 		}
-		opts = append(opts, newSetupOption(availableProviderLabel(provider), provider.Name))
+		opts = append(opts, newSetupOption(availableProviderLabel(provider, nameWidth), provider.Name))
 	}
 	opts = append(opts, newSetupOption("+ Add new provider", addProviderOption))
 	return opts
 }
 
-func configuredProviderLabel(api API) string {
+// providerColumnGap separates the provider name column from its description.
+const providerColumnGap = "    "
+
+func configuredProviderLabel(api API, nameWidth int) string {
 	checkMark := "✓"
 	if config.NerdFontGlyphs {
 		checkMark = ui.NerdMark
 	}
-	return fmt.Sprintf("%s %-12s  %s", checkMark, api.Name, configuredProviderModelsSummary(api))
+	return fmt.Sprintf("%s %-*s%s%s", checkMark, nameWidth, api.Name, providerColumnGap, configuredProviderModelsSummary(api))
 }
 
-func incompleteProviderLabel(api API) string {
-	return fmt.Sprintf("+ %-12s  %s", api.Name, configuredProviderModelsSummary(api))
+func incompleteProviderLabel(api API, nameWidth int) string {
+	return fmt.Sprintf("+ %-*s%s%s", nameWidth, api.Name, providerColumnGap, configuredProviderModelsSummary(api))
 }
 
-func availableProviderLabel(provider providerinfo.NamedDescriptor) string {
+func availableProviderLabel(provider providerinfo.NamedDescriptor, nameWidth int) string {
 	if provider.Description == "" {
-		return fmt.Sprintf("+ %-12s", provider.Name)
+		return fmt.Sprintf("+ %-*s", nameWidth, provider.Name)
 	}
-	return fmt.Sprintf("+ %-12s  %s", provider.Name, provider.Description)
+	return fmt.Sprintf("+ %-*s%s%s", nameWidth, provider.Name, providerColumnGap, provider.Description)
 }
 
 func configuredProviderModelsSummary(api API) string {

@@ -146,6 +146,147 @@ func TestPowerShellWritableTargetAnalysisSeparatesPathFromContent(t *testing.T) 
 	require.Empty(t, concrete.Unresolved, "content variables are not path targets")
 }
 
+func TestPowerShellWritableTargetAnalysisSeparatesProviderTargets(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{name: "registry drive", target: `HKCU:\Software\Classes\Neovide`},
+		{name: "registry drive-relative", target: `HKCU:Software\Classes\Neovide`},
+		{name: "registry provider", target: `Registry::HKEY_CURRENT_USER\Software\Classes\Neovide`},
+		{name: "module-qualified registry provider", target: `Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Classes\Neovide`},
+		{name: "certificate drive", target: `Cert:\CurrentUser\My`},
+		{name: "unknown named drive", target: `Work:\project`},
+		{name: "unknown drive-relative", target: `Work:project`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := analyzeWritableTargetsFromTokens([]string{"Set-ItemProperty", "-Path", tc.target, "-Name", "x", "-Value", "y"}, false)
+			require.True(t, got.Known)
+			require.Empty(t, got.Dirs, "a PowerShell provider target must not become a filesystem directory")
+			require.Empty(t, got.Unresolved)
+			require.Equal(t, []string{tc.target}, got.ProviderTargets)
+		})
+	}
+
+	for _, target := range []string{`C:\Users\Test\out.txt`, `C:\Users\Test\out.txt:stream`, `\\server\share\out.txt`} {
+		got := analyzeWritableTargetsFromTokens([]string{"Set-Content", "-Path", target, "-Value", "x"}, false)
+		require.NotEmpty(t, got.Dirs, target)
+		require.Empty(t, got.ProviderTargets, target)
+	}
+
+	filesystemProvider := analyzeWritableTargetsFromTokens([]string{"Set-Content", "-Path", `FileSystem::C:\Users\Test\out.txt`, "-Value", "x"}, false)
+	require.Equal(t, []string{`C:\Users\Test`}, filesystemProvider.Dirs)
+	require.Empty(t, filesystemProvider.ProviderTargets)
+}
+
+func TestPowerShellProviderPathRecognizerFailsClosedForAmbiguousDrives(t *testing.T) {
+	for _, target := range []string{
+		`HKCU:\Software\Classes\Neovide`,
+		`HKCU:Software\Classes\Neovide`,
+		"HK`CU:\\Software\\Classes\\Neovide",
+		`Registry::HKEY_CURRENT_USER\Software\Classes\Neovide`,
+		`Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software`,
+		`Work:\project`,
+		`Work:project`,
+		`Work://project`,
+	} {
+		require.True(t, IsPowerShellProviderPath(target), target)
+	}
+	for _, target := range []string{`C:\Users\Test\out.txt`, `C:\Users\Test\out.txt:stream`, `\\server\share\out.txt`} {
+		require.False(t, IsPowerShellProviderPath(target), target)
+	}
+	path, ok := PowerShellFilesystemProviderPath(`FileSystem::C:\Users\Test\out.txt`)
+	require.True(t, ok)
+	require.Equal(t, `C:\Users\Test\out.txt`, path)
+}
+
+func TestPowerShellWritableTargetAnalysisRecognizesPathAndCommandAliases(t *testing.T) {
+	for _, parameter := range []string{"-PSPath", "-PS", "-LP", "-LiteralP"} {
+		got := analyzeWritableTargetsFromTokens([]string{"Set-ItemProperty", parameter, `HKCU:\Software\Classes\Neovide`, "-Name", "x", "-Value", "y"}, false)
+		require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, got.ProviderTargets, parameter)
+		require.Empty(t, got.Dirs, parameter)
+	}
+
+	for alias, canonical := range map[string]string{
+		"ni":  "New-Item",
+		"md":  "New-Item",
+		"si":  "Set-Item",
+		"sp":  "Set-ItemProperty",
+		"sc":  "Set-Content",
+		"ri":  "Remove-Item",
+		"rp":  "Remove-ItemProperty",
+		"rni": "Rename-Item",
+		"cli": "Clear-Item",
+		"clp": "Clear-ItemProperty",
+		"ac":  "Add-Content",
+		"clc": "Clear-Content",
+		"cpi": "Copy-Item",
+		"cpp": "Copy-ItemProperty",
+		"mi":  "Move-Item",
+		"mp":  "Move-ItemProperty",
+	} {
+		t.Run(alias+" aliases "+canonical, func(t *testing.T) {
+			got := analyzeWritableTargetsFromTokens([]string{alias, "-Path", `HKCU:\Software\Classes\Neovide`}, false)
+			require.True(t, got.Known)
+			require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, got.ProviderTargets)
+		})
+	}
+
+	for _, command := range []string{"Copy-ItemProperty", "Move-ItemProperty"} {
+		got := analyzeWritableTargetsFromTokens([]string{command, "-Path", `HKCU:\Software\Source`, "-Name", "x", `-Dest:HKCU:\Software\Destination`}, false)
+		require.Equal(t, []string{`HKCU:\Software\Destination`}, got.ProviderTargets, command)
+	}
+
+	acl := analyzeWritableTargetsFromTokens([]string{"Set-Acl", "-Path", `HKCU:\Software\Classes\Neovide`, "-AclObject", "$acl"}, false)
+	require.True(t, acl.Known)
+	require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, acl.ProviderTargets)
+}
+
+func TestAssessPowerShellIRPathContextMutationMakesWriteTargetNonReusable(t *testing.T) {
+	tests := []struct {
+		name        string
+		invocations []psCommandInvocation
+	}{
+		{
+			name: "drive cmdlets",
+			invocations: []psCommandInvocation{
+				{Name: "remove-psdrive", Args: []string{"C"}},
+				{Name: "new-psdrive", Args: []string{"-Name", "C", "-PSProvider", "Registry", "-Root", `HKCU:\Software`}},
+				{Name: "set-content", Args: []string{"-Path", `C:\Users\marker.txt`, "-Value", "x"}},
+			},
+		},
+		{
+			name: "drive aliases",
+			invocations: []psCommandInvocation{
+				{Name: "rdr", Args: []string{"C"}},
+				{Name: "ndr", Args: []string{"C", "Registry", `HKCU:\Software`}},
+				{Name: "set-content", Args: []string{"-Path", `C:\Users\marker.txt`, "-Value", "x"}},
+			},
+		},
+		{
+			name: "provider location",
+			invocations: []psCommandInvocation{
+				{Name: "set-location", Args: []string{"Env:"}},
+				{Name: "set-item", Args: []string{"-Path", `.\MODS_REVIEW_PROBE`, "-Value", "x"}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assessment := assessPowerShellIR("", &psBridgeIR{
+				Invocations:            tc.invocations,
+				TopLevelStatementCount: len(tc.invocations),
+				PipelineCount:          len(tc.invocations),
+			}, ReadOnlyCommandPolicy{}, `C:\Users`)
+
+			require.Equal(t, EffectWrite, assessment.Effect)
+			require.Empty(t, assessment.KnownDirs)
+			require.Equal(t, []string{"PowerShell path context"}, assessment.DynamicTargets)
+		})
+	}
+}
+
 func TestPowerShellWritableTargetsIgnoreCommonParameterValues(t *testing.T) {
 	space := analyzeWritableTargetsFromTokens([]string{"Remove-Item", `C:\ws\a.wav`, "-ErrorAction", "SilentlyContinue"}, false)
 	require.True(t, space.Known)

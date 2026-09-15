@@ -79,7 +79,11 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 	// omitted external literal must never silently collapse to the cwd
 	// approval scope.
 	externalPaths := shellExternalPathFacts(result.KnownDirs, ws, flavor)
-	extractedPaths, hasBareHome := approval.ExternalShellPathFacts(command, ws, flavor, policy)
+	var extractedPaths []string
+	var hasBareHome bool
+	if !result.PowerShellPathContextMutation {
+		extractedPaths, hasBareHome = approval.ExternalShellPathFacts(command, ws, flavor, policy)
+	}
 	externalPaths = appendMissingShellDirs(externalPaths, extractedPaths)
 	if result.Effect == approval.EffectWrite {
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, externalPaths)
@@ -131,7 +135,11 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 			// Variables assigned a literal value in the same command resolve to a
 			// concrete path as well, so a target such as $p in `$p="C:\x"; Set-Content $p`
 			// becomes a reviewable, rule-saveable directory instead of a dynamic target.
-			result.KnownDirs, result.DynamicTargets = propagateLiteralTargets(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws)
+			var literalProviders []string
+			result.KnownDirs, result.DynamicTargets, literalProviders = propagateLiteralTargets(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws)
+			if result.Effect == approval.EffectWrite {
+				result.ProviderWriteTargets = appendMissingShellDirs(result.ProviderWriteTargets, literalProviders)
+			}
 		} else if flavor == pathutil.FlavorPOSIX && !commandMutatesPOSIXEnvironment(command) {
 			result.KnownDirs, result.DynamicTargets = resolvePOSIXEnvTargets(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs)
 		}
@@ -224,12 +232,35 @@ func mergeCommandAssessment(static, completion approval.CommandAssessment) appro
 }
 
 func finalizeCommandAssessment(result approval.CommandAssessment, flavor pathutil.Flavor) approval.CommandAssessment {
+	if flavor == pathutil.FlavorPowerShell {
+		var providers []string
+		result.KnownDirs, providers = partitionPowerShellProviderTargets(result.KnownDirs)
+		if result.Effect != approval.EffectRead {
+			result.ProviderWriteTargets = appendMissingShellDirs(result.ProviderWriteTargets, providers)
+		}
+	}
 	result.KnownDirs, result.DynamicTargets = partitionShellAnalysisPaths(
 		result.KnownDirs,
 		result.DynamicTargets,
 		flavor,
 	)
 	return finalizeAssessmentReviewability(result)
+}
+
+func partitionPowerShellProviderTargets(targets []string) ([]string, []string) {
+	var filesystem, providers []string
+	for _, target := range targets {
+		if filesystemPath, ok := approval.PowerShellFilesystemProviderPath(target); ok {
+			filesystem = appendMissingShellDirs(filesystem, []string{filesystemPath})
+			continue
+		}
+		if approval.IsPowerShellProviderPath(target) {
+			providers = appendMissingShellDirs(providers, []string{strings.TrimSpace(target)})
+			continue
+		}
+		filesystem = appendMissingShellDirs(filesystem, []string{target})
+	}
+	return filesystem, providers
 }
 
 // finalizeProcessAssessment deliberately skips shell-expression partitioning:
@@ -389,6 +420,14 @@ func filterLiteralArgPaths(args []string, cwd string, flavor pathutil.Flavor) []
 		arg = strings.Trim(strings.TrimSpace(arg), `"'`)
 		if _, value, ok := strings.Cut(arg, "="); ok && approval.IsExplicitShellPathArg(value) {
 			arg = value
+		}
+		if flavor == pathutil.FlavorPowerShell && approval.IsPowerShellProviderPath(arg) {
+			continue
+		}
+		if flavor == pathutil.FlavorPowerShell {
+			if filesystemPath, ok := approval.PowerShellFilesystemProviderPath(arg); ok {
+				arg = filesystemPath
+			}
 		}
 		if !literalArgLooksPathLike(arg, flavor) {
 			continue

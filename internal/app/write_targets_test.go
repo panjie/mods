@@ -152,7 +152,7 @@ func TestParseWriteTargetsDropsPowerShellSwitchDirs(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows uses the PowerShell dialect where leading-slash tokens are native-program switches")
 	}
-	rules, err := parseWriteTargets(`{"write_dirs":["/d","/f","C:\\out"],"write_urls":[]}`, testApprovalScope)
+	rules, err := parseWriteTargets(`{"write_dirs":["/d","/f","HKCU:\\Software\\Classes\\Neovide","C:\\out"],"write_urls":[]}`, testApprovalScope)
 	require.NoError(t, err)
 	require.Len(t, rules, 1)
 	require.Equal(t, []string{`C:\out`}, rules[0].Paths)

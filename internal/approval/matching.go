@@ -159,7 +159,7 @@ func RulesAllowRemoteOrigins(rules []Rule, origins []string) bool {
 // still requires approval under the current policy. Groups already allowed by
 // the matrix (for example a temp-directory write in auto mode) need no rule.
 func RulesAllowIntent(rules []Rule, intent AccessIntent, scope Scope, safeDirs []string, reviewMode ReviewMode) bool {
-	if reviewMode != ReviewAuto || intent.HasUnresolvedWriteTargets() {
+	if reviewMode != ReviewAuto || intent.HasNonReusableWriteTargets() {
 		return false
 	}
 	covered := false
@@ -350,6 +350,16 @@ func matchShellPrefix(pattern, command string) bool {
 // against saved DirAllow rules. Only explicit write-mode rules participate;
 // legacy empty-mode and read rules cannot authorize writes.
 func dirAllowForCommand(tool string, command string, rules []Rule, cwd string, posix bool) bool {
+	if !posix {
+		ir, err := parseWithBridge(command)
+		if err != nil || len(ir.ParseErrors) > 0 {
+			return false
+		}
+		_, unresolved, providers, known := analyzePowerShellWritablePathsIR(ir, ReadOnlyCommandPolicy{}, cwd)
+		if !known || len(unresolved) > 0 || len(providers) > 0 {
+			return false
+		}
+	}
 	targetDirs := normalizeShellDirsForWorkingDirWithMode(ExtractWritableDirsWithCwd(command, posix, cwd), cwd, posix)
 	if len(targetDirs) == 0 {
 		return false

@@ -143,6 +143,12 @@ func TestRuleSetScopeAndDedupe(t *testing.T) {
 	rules.Add(scoped(Rule{Type: DirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite}))
 	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), scope))
 	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Windows\\old.txt"}`), scope))
+	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Set-ItemProperty -Path HKCU:\\Software\\Classes\\Neovide -Name x -Value y"}`), scope),
+		"filesystem directory rules must never authorize PowerShell provider writes")
+	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Set-Content C:\\Users\\marker.txt x; Set-ItemProperty -Path HKCU:\\Software\\Classes\\Neovide -Name x -Value y"}`), scope),
+		"a covered filesystem write must not hide a PowerShell provider write")
+	require.False(t, rules.Allows("powershell_run", []byte(`{"command":"Set-Content C:\\Users\\marker.txt x & Set-ItemProperty -Path HKCU:\\Software\\Classes\\Neovide -Name x -Value y"}`), scope),
+		"a call-operator compound command must not hide a PowerShell provider write")
 	require.True(t, rules.Allows("powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`), WorkingDirScope("/other")))
 
 	rules.Add(scoped(Rule{Type: ToolAll, Tool: "mcp_tool"}))

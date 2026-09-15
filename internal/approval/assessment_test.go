@@ -24,6 +24,8 @@ func TestCommandAssessmentAccessIntent(t *testing.T) {
 	dynamicWrite := CommandAssessment{Effect: EffectWrite, DynamicTargets: []string{"$PROFILE"}}
 	require.Equal(t, AccessWrite, dynamicWrite.AccessIntent().Class)
 	require.Equal(t, []string{"$PROFILE"}, dynamicWrite.AccessIntent().UnresolvedPaths)
+	providerWrite := CommandAssessment{Effect: EffectWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}
+	require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, providerWrite.AccessIntent().ProviderWriteTargets)
 	require.Equal(t, AccessWrite, CommandAssessment{Effect: EffectUnknown}.AccessIntent().Class)
 }
 
@@ -195,6 +197,39 @@ func TestAssessPowerShellIRSkipsScriptBlockArguments(t *testing.T) {
 	}, ReadOnlyCommandPolicy{}, "")
 	require.Equal(t, []string{`{ literal $text }`}, quoted.DynamicTargets,
 		"a quoted brace literal interpolating a variable stays dynamic")
+}
+
+func TestAssessPowerShellIRKeepsReadTargetsOutOfKnownWriteTargets(t *testing.T) {
+	assessment := assessPowerShellIR("", &psBridgeIR{
+		Commands: []string{"set-content", "get-itemproperty"},
+		Invocations: []psCommandInvocation{
+			{Name: "set-content", Args: []string{"-Path", `$p`, "-Value", "x"}},
+			{Name: "get-itemproperty", Args: []string{`"HKCU:\Software\Classes\$_\OpenWithProgids"`}},
+		},
+		TopLevelStatementCount: 2,
+		PipelineCount:          2,
+	}, ReadOnlyCommandPolicy{}, "")
+
+	require.Equal(t, EffectWrite, assessment.Effect)
+	require.Equal(t, []string{`$p`}, assessment.DynamicTargets)
+	require.Empty(t, assessment.ProviderWriteTargets,
+		"a dynamic path used only by a proven reader is not a provider write target")
+}
+
+func TestAssessPowerShellIRPipelineBoundWriterKeepsTargetUnresolved(t *testing.T) {
+	assessment := assessPowerShellIR("", &psBridgeIR{
+		Commands: []string{"get-item", "set-itemproperty"},
+		Invocations: []psCommandInvocation{
+			{Name: "get-item", Args: []string{`HKCU:\Software\Classes\Neovide`}},
+			{Name: "set-itemproperty", Args: []string{"-Name", "x", "-Value", "y"}},
+		},
+		TopLevelStatementCount: 1,
+		PipelineCount:          1,
+	}, ReadOnlyCommandPolicy{}, "")
+
+	require.Equal(t, EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Equal(t, []string{"PowerShell pipeline target"}, assessment.DynamicTargets)
 }
 
 func TestAssessPowerShellIRRejectsUnsafeDynamicExpressions(t *testing.T) {

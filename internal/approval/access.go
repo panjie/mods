@@ -36,6 +36,10 @@ type AccessIntent struct {
 	ReadOrigins     []string
 	WriteOrigins    []string
 	UnresolvedPaths []string
+	// ProviderWriteTargets records exact PowerShell provider paths that cannot
+	// be authorized by filesystem directory rules. They always require one-time
+	// approval unless review is explicitly disabled.
+	ProviderWriteTargets []string
 	// UnresolvedRemoteTargets records network destinations whose origin is
 	// selected at runtime. A write with an unresolved remote target can be
 	// approved once, but can never produce a reusable allow rule.
@@ -85,6 +89,10 @@ func (intent AccessIntent) HasUnresolvedRemoteTargets() bool {
 	return len(intent.UnresolvedRemoteTargets) > 0
 }
 
+func (intent AccessIntent) HasProviderWriteTargets() bool {
+	return len(intent.ProviderWriteTargets) > 0
+}
+
 // Effect uncertainty alone does not make a concrete target unresolved.
 // Concrete targets follow the ordinary location rules: safe temporary
 // directories are exempt, others require review and explicit target rules may
@@ -92,6 +100,13 @@ func (intent AccessIntent) HasUnresolvedRemoteTargets() bool {
 func (intent AccessIntent) HasUnresolvedWriteTargets() bool {
 	return intent.DominantClass() == AccessWrite &&
 		(intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets())
+}
+
+// HasNonReusableWriteTargets reports write targets that cannot be represented
+// by a persistent directory or remote-origin rule.
+func (intent AccessIntent) HasNonReusableWriteTargets() bool {
+	return intent.DominantClass() == AccessWrite &&
+		(intent.HasUnresolvedWriteTargets() || intent.HasProviderWriteTargets())
 }
 
 func (intent AccessIntent) DominantClass() AccessClass {
@@ -179,6 +194,9 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode ReviewMode) Decision {
 	if mode == ReviewNever {
 		return DecisionAllow
+	}
+	if intent.DominantClass() == AccessWrite && intent.HasProviderWriteTargets() {
+		return DecisionAsk
 	}
 	groups := intent.Groups()
 	if len(groups) == 0 {

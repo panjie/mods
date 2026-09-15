@@ -134,6 +134,24 @@ func TestDynamicShellTargetPresentation(t *testing.T) {
 	require.Empty(t, rules, "runtime-resolved targets must never offer a persistent directory rule")
 }
 
+func TestPowerShellProviderWritePresentation(t *testing.T) {
+	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
+	target := `HKCU:\Software\Classes\Neovide`
+	analysis := approval.CommandAssessment{
+		Effect:               approval.EffectWrite,
+		ProviderWriteTargets: []string{target},
+		Reason:               "writes a PowerShell provider target",
+	}
+	args := []byte(`{"command":"Set-ItemProperty -Path HKCU:\\Software\\Classes\\Neovide -Name x -Value y"}`)
+	intent := analysis.AccessIntent()
+
+	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
+	require.Equal(t, "Modify a PowerShell provider target", presentation.headline)
+	require.Equal(t, interactionToneWarning, presentation.tone)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: target})
+	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+}
+
 func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
 	analysis := approval.CommandAssessment{

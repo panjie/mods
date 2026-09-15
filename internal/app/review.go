@@ -456,11 +456,14 @@ func accessIntentSummary(intent AccessIntent) string {
 		}
 		parts = append(parts, part)
 	}
+	if len(intent.ProviderWriteTargets) > 0 {
+		parts = append(parts, "provider write · "+strings.Join(intent.ProviderWriteTargets, ", "))
+	}
 	return strings.Join(parts, " · ")
 }
 
 func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode) []Rule {
-	if reviewMode != ApprovalReviewMode(ReviewAuto) || intent.HasUnresolvedWriteTargets() {
+	if reviewMode != ApprovalReviewMode(ReviewAuto) || intent.HasNonReusableWriteTargets() {
 		return nil
 	}
 	var rules []Rule

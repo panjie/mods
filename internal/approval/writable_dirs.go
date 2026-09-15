@@ -134,6 +134,7 @@ const (
 	writableTargetParent writableTargetMode = iota
 	writableTargetDirectory
 	writableTargetDestination
+	writableTargetRuntime
 )
 
 type writableTarget struct {
@@ -142,9 +143,10 @@ type writableTarget struct {
 }
 
 type writableTargetAnalysis struct {
-	Known      bool
-	Dirs       []string
-	Unresolved []string
+	Known           bool
+	Dirs            []string
+	Unresolved      []string
+	ProviderTargets []string
 }
 
 func analyzeWritableTargetsFromTokens(args []string, posix bool) writableTargetAnalysis {
@@ -164,9 +166,22 @@ func analyzeWritableTargets(targets []writableTarget, known, posix, expandShell 
 		if value == "" {
 			continue
 		}
+		if target.mode == writableTargetRuntime {
+			result.Unresolved = append(result.Unresolved, value)
+			continue
+		}
 		if expandShell && shellPathExpressionUnresolved(value, posix) {
 			result.Unresolved = append(result.Unresolved, value)
 			continue
+		}
+		if !posix && IsPowerShellProviderPath(value) {
+			result.ProviderTargets = append(result.ProviderTargets, value)
+			continue
+		}
+		if !posix {
+			if filesystemPath, ok := PowerShellFilesystemProviderPath(value); ok {
+				value = filesystemPath
+			}
 		}
 		switch target.mode {
 		case writableTargetDirectory:
@@ -179,7 +194,76 @@ func analyzeWritableTargets(targets []writableTarget, known, posix, expandShell 
 	}
 	result.Dirs = dedupeSorted(result.Dirs)
 	result.Unresolved = dedupeSorted(result.Unresolved)
+	result.ProviderTargets = dedupeSorted(result.ProviderTargets)
 	return result
+}
+
+// IsPowerShellProviderPath reports whether value names a PowerShell provider
+// path rather than a native filesystem path. Named drives cannot safely become
+// filesystem directory rules: their provider can be Registry, Certificate,
+// WSMan, or a custom provider selected by the PowerShell session.
+func IsPowerShellProviderPath(value string) bool {
+	value = normalizePowerShellProviderSyntax(value)
+	if value == "" {
+		return false
+	}
+	if qualifier, _, ok := strings.Cut(value, "::"); ok {
+		provider := powerShellProviderBaseName(qualifier)
+		return validPowerShellProviderName(provider) && !strings.EqualFold(provider, "filesystem")
+	}
+	colon := strings.IndexByte(value, ':')
+	if colon < 1 || !validPowerShellProviderName(value[:colon]) {
+		return false
+	}
+	if colon == 1 {
+		return false
+	}
+	drive := strings.ToLower(value[:colon])
+	switch drive {
+	case "alias", "cert", "env", "function", "hkcu", "hklm", "variable", "wsman":
+		return true
+	}
+	return true
+}
+
+// PowerShellFilesystemProviderPath removes an explicit FileSystem provider
+// qualifier so the remaining native path can use ordinary directory rules.
+func PowerShellFilesystemProviderPath(value string) (string, bool) {
+	value = normalizePowerShellProviderSyntax(value)
+	qualifier, target, ok := strings.Cut(value, "::")
+	if !ok || !strings.EqualFold(powerShellProviderBaseName(qualifier), "filesystem") || target == "" {
+		return "", false
+	}
+	return target, true
+}
+
+func normalizePowerShellProviderSyntax(value string) string {
+	value = trimPowerShellLiteral(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "`:", ":")
+	if colon := strings.IndexByte(value, ':'); colon > 0 {
+		value = strings.ReplaceAll(value[:colon], "`", "") + value[colon:]
+	}
+	return value
+}
+
+func powerShellProviderBaseName(value string) string {
+	if i := strings.LastIndexAny(value, `/\\`); i >= 0 {
+		return value[i+1:]
+	}
+	return value
+}
+
+func validPowerShellProviderName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func writableDirsFromTokens(args []string, posix bool) []string {
@@ -197,6 +281,7 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 	command := path.Base(args[0])
 	if !posix {
 		command = normalizePowerShellCommandName(command)
+		command = canonicalPowerShellWriteCommand(command)
 	}
 	parentTargets := func(paths []string) []writableTarget {
 		result := make([]writableTarget, 0, len(paths))
@@ -218,6 +303,9 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 			result = append(result, writableTarget{path: p, mode: writableTargetDestination})
 		}
 		return result
+	}
+	runtimeTarget := func(value string) []writableTarget {
+		return []writableTarget{{path: value, mode: writableTargetRuntime}}
 	}
 	operandsFor := func(values []string) []string {
 		if posix {
@@ -241,7 +329,7 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 		return writableTargetsFromTokens(nested, posix)
 	case "rm":
 		operands := operandsFor(args[1:])
-		if removeTargetsAreDirs(args[1:]) {
+		if removeTargetsAreDirs(args[1:], true) {
 			return dirTargets(operands), true
 		}
 		return parentTargets(operands), true
@@ -288,12 +376,16 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 			return nil, true
 		}
 		return parentTargets(operands[len(operands)-1:]), true
-	case "remove-item", "del", "erase", "rd":
-		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
-			return parentTargets(paths), true
+	case "remove-item":
+		mode := parentTargets
+		if removeTargetsAreDirs(args[1:], false) {
+			mode = dirTargets
 		}
-		return parentTargets(operandsFor(args[1:])), true
-	case "copy-item", "move-item":
+		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
+			return mode(paths), true
+		}
+		return mode(operandsFor(args[1:])), true
+	case "copy-item", "move-item", "copy-itemproperty", "move-itemproperty":
 		if destinations := powerShellParamValues(args, "destination"); len(destinations) > 0 {
 			return destinationTargets(destinations), true
 		}
@@ -310,11 +402,14 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 		return destinationTargets(operands[len(operands)-1:]), true
 	case "new-item", "set-content", "add-content", "clear-content",
 		"set-item", "clear-item", "set-itemproperty", "new-itemproperty",
-		"remove-itemproperty", "clear-itemproperty", "rename-item":
+		"remove-itemproperty", "clear-itemproperty", "rename-item", "rename-itemproperty", "set-acl":
 		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
 			return parentTargets(paths), true
 		}
-		return parentTargets(firstOperand(args[1:])), true
+		if paths := firstOperand(args[1:]); len(paths) > 0 {
+			return parentTargets(paths), true
+		}
+		return runtimeTarget("PowerShell pipeline target"), true
 	case "out-file":
 		if paths := powerShellParamValues(args, "filepath", "literalpath", "path"); len(paths) > 0 {
 			return parentTargets(paths), true
@@ -323,6 +418,57 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 	default:
 		return nil, false
 	}
+}
+
+var powerShellWriteAliases = map[string]string{
+	"ac":    "add-content",
+	"clc":   "clear-content",
+	"cli":   "clear-item",
+	"clp":   "clear-itemproperty",
+	"copy":  "copy-item",
+	"cp":    "copy-item",
+	"cpi":   "copy-item",
+	"cpp":   "copy-itemproperty",
+	"del":   "remove-item",
+	"erase": "remove-item",
+	"mi":    "move-item",
+	"mp":    "move-itemproperty",
+	"md":    "new-item",
+	"move":  "move-item",
+	"mv":    "move-item",
+	"ni":    "new-item",
+	"rd":    "remove-item",
+	"ren":   "rename-item",
+	"ri":    "remove-item",
+	"rm":    "remove-item",
+	"rmdir": "remove-item",
+	"rni":   "rename-item",
+	"rnp":   "rename-itemproperty",
+	"rp":    "remove-itemproperty",
+	"sc":    "set-content",
+	"si":    "set-item",
+	"sp":    "set-itemproperty",
+}
+
+func canonicalPowerShellWriteCommand(name string) string {
+	if canonical := powerShellWriteAliases[name]; canonical != "" {
+		return canonical
+	}
+	return name
+}
+
+func powerShellMutatesPathContext(ir *psBridgeIR) bool {
+	if ir == nil {
+		return false
+	}
+	for _, inv := range ir.Invocations {
+		switch normalizePowerShellCommandName(inv.Name) {
+		case "new-psdrive", "mount", "ndr", "remove-psdrive", "rdr",
+			"set-location", "cd", "chdir", "sl", "push-location", "pushd", "pop-location", "popd":
+			return true
+		}
+	}
+	return false
 }
 
 func targetDirectoryOption(args []string) string {
@@ -569,7 +715,7 @@ func powerShellParamValues(args []string, names ...string) []string {
 			key = before
 			inlineValue = after
 		}
-		if _, ok := nameSet[strings.ToLower(key)]; !ok {
+		if !powerShellParameterMatches(strings.ToLower(key), nameSet) {
 			continue
 		}
 		if inlineValue != "" {
@@ -582,6 +728,30 @@ func powerShellParamValues(args []string, names ...string) []string {
 		}
 	}
 	return values
+}
+
+func powerShellParameterMatches(key string, names map[string]struct{}) bool {
+	if key == "" {
+		return false
+	}
+	if _, ok := names[key]; ok {
+		return true
+	}
+	if _, ok := names["literalpath"]; ok {
+		if key == "lp" || strings.HasPrefix("literalpath", key) || len(key) >= 4 && strings.HasPrefix("pspath", key) {
+			return true
+		}
+	}
+	if _, ok := names["path"]; ok && len(key) >= 3 && strings.HasPrefix("path", key) {
+		return true
+	}
+	if _, ok := names["destination"]; ok && len(key) >= 1 && strings.HasPrefix("destination", key) {
+		return true
+	}
+	if _, ok := names["filepath"]; ok && len(key) >= 2 && strings.HasPrefix("filepath", key) {
+		return true
+	}
+	return false
 }
 
 func commandOperands(args []string) []string {
@@ -619,6 +789,19 @@ var powerShellCommonValueParameters = map[string]bool{
 	"outbuffer":           true,
 }
 
+var powerShellCommandValueParameters = map[string]bool{
+	"aclobject":    true,
+	"credential":   true,
+	"encoding":     true,
+	"filter":       true,
+	"include":      true,
+	"itemtype":     true,
+	"name":         true,
+	"newname":      true,
+	"propertytype": true,
+	"value":        true,
+}
+
 // powerShellCommandOperands extracts path operands the way commandOperands
 // does, additionally skipping the argument that follows a value-taking
 // common parameter (-ErrorAction SilentlyContinue): treating such a value as
@@ -641,7 +824,8 @@ func powerShellCommandOperands(args []string) []string {
 			if strings.Contains(arg, ":") {
 				continue // inline form such as -ErrorAction:SilentlyContinue
 			}
-			skipValue = powerShellCommonValueParameters[strings.TrimLeft(strings.ToLower(arg), "-")]
+			name := strings.TrimLeft(strings.ToLower(arg), "-")
+			skipValue = powerShellCommonValueParameters[name] || powerShellCommandValueParameters[name]
 			continue
 		}
 		operands = append(operands, arg)
@@ -649,10 +833,20 @@ func powerShellCommandOperands(args []string) []string {
 	return operands
 }
 
-func removeTargetsAreDirs(args []string) bool {
+func removeTargetsAreDirs(args []string, posix bool) bool {
 	for _, arg := range args {
 		if arg == "--" {
 			return false
+		}
+		if !posix {
+			if !strings.HasPrefix(arg, "-") {
+				continue
+			}
+			name := strings.TrimLeft(strings.ToLower(arg), "-")
+			if name == "rf" || len(name) >= 1 && strings.HasPrefix("recurse", name) {
+				return true
+			}
+			continue
 		}
 		if strings.HasPrefix(arg, "--recursive") || arg == "--dir" {
 			return true

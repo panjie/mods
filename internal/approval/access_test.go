@@ -41,6 +41,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"dynamic content read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
 		{"dynamic read with concrete dir", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
 		{"dynamic write target fails closed", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
+		{"provider write target fails closed", AccessIntent{Class: AccessWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}, DecisionAsk},
 		{"remote read", AccessIntent{Class: AccessRead, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAllow},
 		{"remote write", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAsk},
 		{"unresolved remote write", AccessIntent{Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}, DecisionAsk},
@@ -65,6 +66,13 @@ func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
 	intent := AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$PROFILE.CurrentUserCurrentHost"}}
 	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto),
 		"a dynamic write stays reviewable even when its concrete dirs are rule-covered")
+}
+
+func TestDirectoryRulesCannotAuthorizeProviderWrites(t *testing.T) {
+	ws := WorkingDirScope(t.TempDir())
+	rules := RulesForDirs([]string{ws.Value}, ws, AccessWrite)
+	intent := AccessIntent{Class: AccessWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}
+	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto))
 }
 
 func TestReadsNeverNeedSavedRules(t *testing.T) {

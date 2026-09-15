@@ -100,6 +100,7 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 	risk := shellRiskLevel(assessment, scope)
 	dirs := summarizeAffectedDirs(assessment.KnownDirs)
 	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
+	providers := summarizeAffectedDirs(assessment.ProviderWriteTargets)
 	origins := summarizeRemoteOrigins(assessment.RemoteOrigins)
 	remoteUnknown := len(assessment.UnresolvedRemoteTargets) > 0
 	reason := strings.TrimSpace(assessment.Reason)
@@ -112,6 +113,16 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 	}
 	if dynamic != "" {
 		s := fmt.Sprintf("Risk: %s - runtime target %s", risk, dynamic)
+		if dirs != "" {
+			s += "; known scope " + dirs
+		}
+		if reason != "" {
+			s += " (" + OneLinePreview(reason) + ")"
+		}
+		return s
+	}
+	if providers != "" {
+		s := fmt.Sprintf("Risk: %s - provider target %s", risk, providers)
 		if dirs != "" {
 			s += "; known scope " + dirs
 		}
@@ -164,6 +175,9 @@ func shellRiskLevel(assessment approval.CommandAssessment, _ Scope) string {
 		default:
 			return "unknown"
 		}
+	}
+	if len(assessment.ProviderWriteTargets) > 0 && assessment.Effect == approval.EffectWrite {
+		return "provider mutation"
 	}
 	if assessment.Effect == approval.EffectUnknown {
 		if len(assessment.KnownDirs) == 0 {

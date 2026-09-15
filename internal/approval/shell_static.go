@@ -109,20 +109,22 @@ func AssessArgvStaticWithContext(program string, args []string, posix bool, poli
 		gitResult.Reviewability = result.Reviewability
 		return gitResult
 	}
-	dirs := analyzeLiteralWritableTargetsFromTokens(tokens, posix).Dirs
-	if len(dirs) == 0 && !hasKnownRiskyInvocation(tokens, posix) {
+	analysis := analyzeLiteralWritableTargetsFromTokens(tokens, posix)
+	if len(analysis.Dirs) == 0 && len(analysis.ProviderTargets) == 0 && !hasKnownRiskyInvocation(tokens, posix) {
 		return result
 	}
 	result.Effect = EffectWrite
-	result.KnownDirs = dirs
+	result.KnownDirs = analysis.Dirs
+	result.ProviderWriteTargets = analysis.ProviderTargets
 	result.Reason = "write command (static argv analysis)"
 	return result
 }
 
-func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy, cwd string) (dirs, unresolved []string, known bool) {
+func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPolicy, cwd string) (dirs, unresolved, providerTargets []string, known bool) {
 	if ir == nil || len(ir.ParseErrors) > 0 {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
+	var readUnresolved []string
 	for _, inv := range ir.Invocations {
 		tokens := append([]string{inv.Name}, inv.Args...)
 		if gitResult, handled := assessGitArgvStatic(tokens, false, ArgvStaticContext{Cwd: cwd}); handled {
@@ -133,7 +135,8 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 		analysis := analyzeWritableTargetsFromTokens(tokens, false)
 		if !analysis.Known {
 			args := inv.Args
-			if readOnlyPowerShellInvocation(inv, policy) {
+			readOnly := readOnlyPowerShellInvocation(inv, policy)
+			if readOnly {
 				args = powerShellReadPathArguments(inv)
 			}
 			for _, arg := range args {
@@ -147,7 +150,11 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 				single, double := powerShellArgQuoting(trimmed)
 				value := trimPowerShellLiteral(trimmed)
 				if shellPathExpressionUnresolvedQuoted(value, single, double) {
-					unresolved = append(unresolved, value)
+					if readOnly {
+						readUnresolved = append(readUnresolved, value)
+					} else {
+						unresolved = append(unresolved, value)
+					}
 				}
 			}
 			continue
@@ -155,9 +162,16 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 		known = true
 		dirs = append(dirs, analysis.Dirs...)
 		unresolved = append(unresolved, analysis.Unresolved...)
+		providerTargets = append(providerTargets, analysis.ProviderTargets...)
+	}
+	if known && powerShellMutatesPathContext(ir) {
+		return nil, []string{"PowerShell path context"}, providerTargets, true
+	}
+	if !known {
+		unresolved = append(unresolved, readUnresolved...)
 	}
 	unresolved = append(unresolved, safePowerShellDynamicTargets(ir)...)
-	return dedupeSorted(dirs), dedupeSorted(unresolved), known
+	return dedupeSorted(dirs), dedupeSorted(unresolved), dedupeSorted(providerTargets), known
 }
 
 func safePowerShellDynamicTargets(ir *psBridgeIR) []string {

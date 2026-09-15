@@ -29,18 +29,22 @@ type CommandShape struct {
 // the assessment itself.
 type CommandAssessment struct {
 	// StaticRead is set only by deterministic analysis, never by the LLM.
-	StaticRead    bool
-	Effect        CommandEffect
-	KnownDirs     []string
-	RemoteOrigins []string
+	StaticRead bool
+	Effect     CommandEffect
+	KnownDirs  []string
+	// ProviderWriteTargets records non-filesystem PowerShell provider paths.
+	// They are exact review targets but never become filesystem DirAllow rules.
+	ProviderWriteTargets []string
+	RemoteOrigins        []string
 	// UnresolvedRemoteTargets records remote destinations that are known to
 	// exist but cannot be reduced to a deterministic origin.
-	UnresolvedRemoteTargets []string
-	DynamicTargets          []string
-	DynamicProbe            bool
-	Reason                  string
-	Shape                   CommandShape
-	Reviewability           CommandReviewability
+	UnresolvedRemoteTargets       []string
+	DynamicTargets                []string
+	DynamicProbe                  bool
+	PowerShellPathContextMutation bool
+	Reason                        string
+	Shape                         CommandShape
+	Reviewability                 CommandReviewability
 	// AssignedVariables lists lowercase normalized names of PowerShell
 	// variables assigned within the command (from the parser IR). The app
 	// layer uses it to skip probe resolution for targets whose value depends
@@ -71,6 +75,7 @@ func (assessment CommandAssessment) AccessIntent() AccessIntent {
 	return AccessIntent{
 		Class:                   class,
 		Dirs:                    append([]string(nil), assessment.KnownDirs...),
+		ProviderWriteTargets:    append([]string(nil), assessment.ProviderWriteTargets...),
 		RemoteOrigins:           append([]string(nil), assessment.RemoteOrigins...),
 		UnresolvedRemoteTargets: append([]string(nil), assessment.UnresolvedRemoteTargets...),
 		UnresolvedPaths:         append([]string(nil), assessment.DynamicTargets...),
@@ -226,16 +231,18 @@ func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy, cwd st
 }
 
 func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
-	dirs, dynamic, knownWrite := analyzePowerShellWritablePathsIR(ir, policy, cwd)
+	dirs, dynamic, providerTargets, knownWrite := analyzePowerShellWritablePathsIR(ir, policy, cwd)
 	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
 	result := CommandAssessment{
-		Effect:             EffectUnknown,
-		DynamicTargets:     dynamic,
-		Reason:             "effects could not be proven",
-		Shape:              shape,
-		Reviewability:      reviewability,
-		AssignedVariables:  assignedPowerShellVariables(ir),
-		LiteralAssignments: powerShellLiteralAssignments(ir),
+		Effect:                        EffectUnknown,
+		DynamicTargets:                dynamic,
+		ProviderWriteTargets:          providerTargets,
+		PowerShellPathContextMutation: powerShellMutatesPathContext(ir),
+		Reason:                        "effects could not be proven",
+		Shape:                         shape,
+		Reviewability:                 reviewability,
+		AssignedVariables:             assignedPowerShellVariables(ir),
+		LiteralAssignments:            powerShellLiteralAssignments(ir),
 	}
 	if readOnlyPowerShellIR(command, ir, policy) {
 		result.Effect = EffectRead

@@ -121,19 +121,28 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 
 func commandReviewTarget(assessment approval.CommandAssessment, risk string) string {
 	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
+	providers := summarizeAffectedDirs(assessment.ProviderWriteTargets)
 	known := summarizeAffectedDirs(assessment.KnownDirs)
-	switch {
-	case dynamic != "" && known != "":
-		return dynamic + " · known: " + known
-	case dynamic != "":
-		return dynamic
-	case known != "":
-		return known
-	case shellRiskLocationUnknown(risk):
-		return "Unknown"
-	default:
-		return ""
+	var targets []string
+	if dynamic != "" {
+		targets = append(targets, dynamic)
 	}
+	if providers != "" {
+		targets = append(targets, providers)
+	}
+	if known != "" {
+		if len(targets) > 0 {
+			known = "known: " + known
+		}
+		targets = append(targets, known)
+	}
+	if len(targets) > 0 {
+		return strings.Join(targets, " · ")
+	}
+	if shellRiskLocationUnknown(risk) {
+		return "Unknown"
+	}
+	return ""
 }
 
 // pathShapedDynamicTargets drops dynamic targets that cannot be a filesystem
@@ -180,7 +189,7 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 	if strings.Contains(command, "sudo") || risk == "dynamic mutation" {
 		return interactionToneDanger, "Danger"
 	}
-	if risk == "local mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
+	if risk == "local mutation" || risk == "provider mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
 		return interactionToneWarning, "Warning"
 	}
 	return interactionToneInfo, "Info"
@@ -192,6 +201,8 @@ func shellRiskHeadline(risk string) string {
 		return "Modify a dynamic target"
 	case "dynamic read":
 		return "Read a dynamic target"
+	case "provider mutation":
+		return "Modify a PowerShell provider target"
 	case "local mutation":
 		return "Modify local files"
 	case "remote mutation":

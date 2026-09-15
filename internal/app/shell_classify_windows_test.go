@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/pathutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -826,6 +827,153 @@ func TestAssessProcessInvocationPowerShellFlagsAreNotPathFacts(t *testing.T) {
 	}
 	require.Contains(t, assessment.KnownDirs, `C:\tools\emacs\bin\emacs.exe,0`,
 		"a genuine literal path argument stays a path fact")
+}
+
+func TestAssessCommandPowerShellRegistryWriteStaysOutOfFilesystemRules(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkingDir(cwd),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	cmd := `New-Item -Path "HKCU:\Software\Classes\Neovide" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\Neovide" -Name "(Default)" -Value "Neovide Text Editor"; Get-ItemProperty "HKCU:\Software\Classes\Neovide" | Select-Object -ExpandProperty "(Default)"`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+	intent := normalizeAccessIntentDirs(assessment.AccessIntent(), cwd, "powershell_run", true)
+	presentation := formatReviewPresentationWithIntent("powershell_run", []byte(`{"command":`+strconv.Quote(cmd)+`}`), assessment, WorkingDirScope(cwd), intent)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Empty(t, assessment.DynamicTargets)
+	require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, assessment.ProviderWriteTargets)
+	require.NotContains(t, strings.Join(intent.Dirs, "\n"), `HKCU:`)
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, "Modify a PowerShell provider target", presentation.headline)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: `HKCU:\Software\Classes\Neovide`})
+}
+
+func TestAssessCommandPowerShellRegistryAliasWriteStaysOutOfFilesystemRules(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
+	assessment := m.assessCommand("powershell_run", `sp -PSPath "HKCU:\Software\Classes\Neovide" -Name x -Value y`)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, assessment.ProviderWriteTargets)
+	require.Empty(t, candidateRulesForIntent(
+		assessment.AccessIntent(),
+		WorkingDirScope(cwd),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellDriveMutationCannotUseFilesystemRules(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
+	cmd := `Remove-PSDrive C; New-PSDrive -Name C -PSProvider Registry -Root HKCU:\Software; Set-Content -Path C:\Users\marker.txt -Value x`
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Equal(t, []string{"PowerShell path context"}, assessment.DynamicTargets)
+	require.Empty(t, candidateRulesForIntent(
+		assessment.AccessIntent(),
+		WorkingDirScope(cwd),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellProviderLocationCannotUseFilesystemRules(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
+	cmd := `Set-Location Env:; Set-Item .\MODS_REVIEW_PROBE value`
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Equal(t, []string{"PowerShell path context"}, assessment.DynamicTargets)
+	require.Empty(t, candidateRulesForIntent(
+		assessment.AccessIntent(),
+		WorkingDirScope(cwd),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellPipelineProviderWriteCannotUseFilesystemRules(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
+	cmd := `Get-Item HKCU:\Software\Classes\Neovide | Set-ItemProperty -Name x -Value y`
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.KnownDirs)
+	require.Equal(t, []string{"PowerShell pipeline target"}, assessment.DynamicTargets)
+	require.Empty(t, candidateRulesForIntent(
+		assessment.AccessIntent(),
+		WorkingDirScope(cwd),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestAssessCommandPowerShellRegistryLoopKeepsOnlyDynamicWriter(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
+	cmd := `$exts = @('.txt','.md','.json','.yaml','.yml','.ini','.conf','.log','.csv','.lua','.go','.js','.ts','.py','.c','.h','.cpp','.rs','.sh','.toml','.xml','.html','.css'); foreach ($e in $exts) { $p = "HKCU:\Software\Classes\$e\OpenWithProgids"; New-Item -Path $p -Force | Out-Null; New-ItemProperty -Path $p -Name "Neovide" -PropertyType None -Value ([byte[]]@()) -Force | Out-Null }; ($exts | ForEach-Object { if (Get-ItemProperty "HKCU:\Software\Classes\$_\OpenWithProgids" -Name Neovide -ErrorAction SilentlyContinue) { $_ } }).Count`
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, []string{`$p`}, assessment.DynamicTargets)
+	require.Empty(t, assessment.ProviderWriteTargets)
+	require.NotContains(t, strings.Join(assessment.DynamicTargets, "\n"), `$_`)
+}
+
+func TestAssessCommandPowerShellLiteralRegistryReadDoesNotBecomeWrite(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{Config: testConfigForWorkingDir(cwd)}
+	assessment := m.assessCommand("powershell_run", `$p = "HKCU:\Software\Classes\Neovide"; Get-ItemProperty -Path $p`)
+
+	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Empty(t, assessment.ProviderWriteTargets)
+	require.Empty(t, assessment.DynamicTargets)
+	require.Equal(t, DecisionAllow, ClassifyAccess(
+		assessment.AccessIntent(),
+		WorkingDirScope(cwd),
+		nil,
+		ApprovalReviewMode(ReviewAuto),
+	))
+}
+
+func TestProcessLiteralPathFilterDropsPowerShellProviderTargets(t *testing.T) {
+	cwd := t.TempDir()
+	dirs := filterLiteralArgPaths([]string{
+		"Set-ItemProperty",
+		`HKCU:\Software\Classes\Neovide`,
+		`C:\real\file.txt`,
+	}, cwd, pathutil.FlavorPowerShell)
+
+	require.Equal(t, []string{`C:\real\file.txt`}, dirs)
 }
 
 // TestAssessShellCommandPowerShellDropsLeadingSlashClassifierDirs pins the

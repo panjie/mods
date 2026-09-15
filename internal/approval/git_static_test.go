@@ -229,10 +229,10 @@ func TestAnalyzePowerShellWritablePathsIRGitCommitResolvesRepository(t *testing.
 		TopLevelStatementCount: 1,
 		PipelineCount:          1,
 	}
-	dirs, _, known := analyzePowerShellWritablePathsIR(ir, ReadOnlyCommandPolicy{}, root)
+	dirs, _, _, known := analyzePowerShellWritablePathsIR(ir, ReadOnlyCommandPolicy{}, root)
 	require.True(t, known)
 	require.Equal(t, dedupeSorted([]string{canonicalRoot, canonicalGitDir}), dirs)
 
-	_, _, knownWithoutCwd := analyzePowerShellWritablePathsIR(ir, ReadOnlyCommandPolicy{}, "")
+	_, _, _, knownWithoutCwd := analyzePowerShellWritablePathsIR(ir, ReadOnlyCommandPolicy{}, "")
 	require.False(t, knownWithoutCwd)
 }

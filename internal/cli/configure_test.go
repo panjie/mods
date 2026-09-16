@@ -112,6 +112,19 @@ func TestConfiguredProviderModelsSummarySortsAndTruncates(t *testing.T) {
 	require.Equal(t, "alpha, beta, delta, +1 more", configuredProviderModelsSummary(api))
 }
 
+func TestConfiguredProviderModelsSummaryFoldsLongNamesIntoMore(t *testing.T) {
+	api := API{
+		Name: "deepseek",
+		Models: map[string]Model{
+			"deepseek-flash":               {},
+			"deepseek-v4-flash":            {},
+			"deepseek-v4-flash-vision-exp": {},
+		},
+	}
+
+	require.Equal(t, "deepseek-flash, deepseek-v4-flash, +1 more", configuredProviderModelsSummary(api))
+}
+
 func providerOptionLabel(t *testing.T, options []setupOption, value string) string {
 	t.Helper()
 	for _, option := range options {

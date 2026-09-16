@@ -538,7 +538,7 @@ func TestSetupCleanupWarningDoesNotRepeatSuccessfulWrite(t *testing.T) {
 	})
 }
 
-func TestSetupOptionFocusKeepsLabelAndWrappingColumns(t *testing.T) {
+func TestSetupOptionFocusKeepsLabelColumns(t *testing.T) {
 	for _, theme := range []string{"charm", "dracula", "catppuccin", "base16"} {
 		for _, dark := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/%t", theme, dark), func(t *testing.T) {
@@ -549,9 +549,9 @@ func TestSetupOptionFocusKeepsLabelAndWrappingColumns(t *testing.T) {
 					for _, multi := range []bool{false, true} {
 						for _, width := range []int{23, 80} {
 							label := "kimi-k2.7-code-highspeed 中文-model"
-							normal := setupOptionLines(m.styles(), width, label, false, multi, false)
-							focused := setupOptionLines(m.styles(), width, label, true, multi, false)
-							checked := setupOptionLines(m.styles(), width, label, true, multi, true)
+							normal := setupOptionLines(m.styles(), width, label, false, multi, false, true)
+							focused := setupOptionLines(m.styles(), width, label, true, multi, false, true)
+							checked := setupOptionLines(m.styles(), width, label, true, multi, true, true)
 							require.Len(t, focused, len(normal))
 							require.Len(t, checked, len(normal))
 							gutter := 2
@@ -573,6 +573,23 @@ func TestSetupOptionFocusKeepsLabelAndWrappingColumns(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestSetupOptionLinesTruncateInsteadOfWrapping(t *testing.T) {
+	setupFixture(t, func(m *setupModel) {
+		label := "deepseek-flash, deepseek-v4-flash, deepseek-v4-flash-vision-exp"
+		for _, width := range []int{23, 80} {
+			for _, multi := range []bool{false, true} {
+				lines := setupOptionLines(m.styles(), width, label, false, multi, false, false)
+				require.Len(t, lines, 1, "no-wrap options must stay on a single line")
+				plain := ansi.Strip(lines[0])
+				require.LessOrEqual(t, lipgloss.Width(plain), width)
+				if lipgloss.Width(label)+2 > width || (multi && lipgloss.Width(label)+6 > width) {
+					require.Contains(t, plain, "…")
+				}
+			}
+		}
+	})
 }
 
 func TestSetupUsesCompactSharedPanelAndStableOptionColumns(t *testing.T) {

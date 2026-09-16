@@ -166,7 +166,10 @@ func (m *setupModel) View() tea.View {
 			if focused {
 				focusLine = len(lines)
 			}
-			lines = append(lines, setupOptionLines(s, w, o.Key, focused, m.page == setupDiscovery, slices.Contains(m.draft().selected, o.Value))...)
+			// Provider rows pair a name with an auxiliary description, so they
+			// truncate instead of wrapping; other pages wrap to keep values
+			// (paths, model names) fully visible.
+			lines = append(lines, setupOptionLines(s, w, o.Key, focused, m.page == setupDiscovery, slices.Contains(m.draft().selected, o.Value), m.page != setupProvider)...)
 			if focused {
 				focusEnd = len(lines) - 1
 			}
@@ -215,7 +218,9 @@ func setupStorageLabel(storage string) string {
 
 // Option geometry is independent of focus and selection. A fixed gutter keeps
 // the cursor, checkbox, label, and wrapped continuations in their own columns.
-func setupOptionLines(s ui.InteractionStyles, width int, label string, focused, multi, checked bool) []string {
+// When wrap is false, overlong labels are truncated with an ellipsis instead,
+// so an option always stays on a single line.
+func setupOptionLines(s ui.InteractionStyles, width int, label string, focused, multi, checked, wrap bool) []string {
 	prefix := "  "
 	if focused {
 		prefix = "> "
@@ -227,11 +232,15 @@ func setupOptionLines(s ui.InteractionStyles, width int, label string, focused, 
 			prefix += "[ ] "
 		}
 	}
-	indent := strings.Repeat(" ", lipgloss.Width(prefix))
 	style := s.Body
 	if focused {
 		style = s.Selected.Padding(0)
 	}
+	if !wrap {
+		line := ansi.Truncate(ansi.Strip(label), max(1, width-lipgloss.Width(prefix)), "…")
+		return []string{style.Render(prefix + line)}
+	}
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
 	wrapped := strings.Split(ansi.Wrap(ansi.Strip(label), max(1, width-lipgloss.Width(prefix)), ""), "\n")
 	lines := make([]string, 0, len(wrapped))
 	for i, line := range wrapped {

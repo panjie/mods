@@ -90,11 +90,24 @@ func configuredProviderModelsSummary(api API) string {
 	if len(names) == 0 {
 		return "no models configured"
 	}
-	const maxShown = 3
-	if len(names) <= maxShown {
-		return strings.Join(names, ", ")
+	const (
+		maxShown = 3
+		maxWidth = 48
+	)
+	// Keep the summary within maxWidth so the provider row fits the panel:
+	// show up to maxShown names, folding trailing ones into "+N more" when
+	// the joined text would exceed the budget.
+	shown := min(len(names), maxShown)
+	for {
+		summary := strings.Join(names[:shown], ", ")
+		if more := len(names) - shown; more > 0 {
+			summary = fmt.Sprintf("%s, +%d more", summary, more)
+		}
+		if len(summary) <= maxWidth || shown == 1 {
+			return summary
+		}
+		shown--
 	}
-	return fmt.Sprintf("%s, +%d more", strings.Join(names[:maxShown], ", "), len(names)-maxShown)
 }
 
 func configuredProviderModelNames(api API) []string {

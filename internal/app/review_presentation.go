@@ -63,7 +63,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
 		result.rows = commandReviewRows(command, assessment, risk)
-		if cwd := ArgString(parsed, "cwd"); cwd != "" {
+		if cwd := ArgString(parsed, "cwd"); cwd != "" && cwd != scope.Value {
 			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
 		}
 	case "process_run":

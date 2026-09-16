@@ -1,6 +1,8 @@
 package app
 
 import (
+	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
@@ -73,6 +75,35 @@ func TestReviewPresentationsStayConcise(t *testing.T) {
 			require.LessOrEqual(t, len(got.rows), tt.maxRows)
 			for _, row := range got.rows {
 				require.Falsef(t, internalLabels[row.Label], "internal or redundant row %q leaked into review", row.Label)
+			}
+		})
+	}
+}
+
+func TestReviewPresentationWorkingDirRow(t *testing.T) {
+	scope := WorkingDirScope("/cwd")
+	other := filepath.Join(scope.Value, "other")
+	for _, tt := range []struct {
+		name    string
+		cwd     string
+		wantRow bool
+	}{
+		{name: "cwd equals scope is redundant", cwd: scope.Value, wantRow: false},
+		{name: "cwd outside scope stays visible", cwd: other, wantRow: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []byte(`{"command":"touch out","cwd":` + strconv.Quote(tt.cwd) + `}`)
+			got := formatReviewPresentationWithIntent("shell_run", args, approval.CommandAssessment{}, scope, AccessIntent{})
+			row := -1
+			for i, r := range got.rows {
+				if r.Label == "Working dir" {
+					row = i
+				}
+			}
+			if tt.wantRow {
+				require.GreaterOrEqual(t, row, 0, "a distinct working dir is relevant review context")
+			} else {
+				require.Equal(t, -1, row, "the session working dir is already the approval scope")
 			}
 		})
 	}

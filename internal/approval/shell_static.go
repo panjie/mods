@@ -147,6 +147,13 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 					// runtime targets inside it are still surfaced.
 					continue
 				}
+				if isPowerShellAutomaticConstantExpression(trimmed) {
+					// $true / $false / $null evaluate to a boolean or null,
+					// never a path. Without this the encoding constructor in
+					// New-Object System.Text.UTF8Encoding($false) shows up as a
+					// resolved-attempt runtime target such as "($false)".
+					continue
+				}
 				single, double := powerShellArgQuoting(trimmed)
 				value := trimPowerShellLiteral(trimmed)
 				if shellPathExpressionUnresolvedQuoted(value, single, double) {
@@ -172,6 +179,23 @@ func analyzePowerShellWritablePathsIR(ir *psBridgeIR, policy ReadOnlyCommandPoli
 	}
 	unresolved = append(unresolved, safePowerShellDynamicTargets(ir)...)
 	return dedupeSorted(dirs), dedupeSorted(unresolved), dedupeSorted(providerTargets), known
+}
+
+// isPowerShellAutomaticConstantExpression reports whether an argument is a
+// PowerShell automatic constant such as $true, $false, or $null, or a
+// parenthesized one, for example the encoding constructor argument in
+// New-Object System.Text.UTF8Encoding($false). These evaluate to a boolean
+// or null, never a path, so they must not be presented as runtime targets.
+func isPowerShellAutomaticConstantExpression(value string) bool {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "(") && strings.HasSuffix(value, ")") {
+		value = value[1 : len(value)-1]
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "$true", "$false", "$null":
+		return true
+	}
+	return false
 }
 
 func safePowerShellDynamicTargets(ir *psBridgeIR) []string {

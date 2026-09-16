@@ -340,3 +340,26 @@ func TestAnalyzeShellStaticTargetDirectoryOptions(t *testing.T) {
 		require.Equal(t, []string{"/outside"}, got.AffectedDirs, command)
 	}
 }
+
+func TestPowerShellAutomaticConstantArgumentsAreNotDynamicTargets(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "boolean constant", args: []string{"System.Text.UTF8Encoding", "($false)"}},
+		{name: "bare constant", args: []string{"$true"}},
+		{name: "null constant", args: []string{"($null)"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, unresolved, _, _ := analyzePowerShellWritablePathsIR(&psBridgeIR{
+				Invocations: []psCommandInvocation{{Name: "new-object", Args: tc.args}},
+			}, ReadOnlyCommandPolicy{}, "")
+			require.Empty(t, unresolved, "automatic constants never reach the filesystem")
+		})
+	}
+
+	_, unresolved, _, _ := analyzePowerShellWritablePathsIR(&psBridgeIR{
+		Invocations: []psCommandInvocation{{Name: "new-object", Args: []string{"$p"}}},
+	}, ReadOnlyCommandPolicy{}, "")
+	require.Equal(t, []string{"$p"}, unresolved, "a genuine variable argument still surfaces as a runtime target")
+}

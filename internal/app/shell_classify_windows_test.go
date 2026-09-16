@@ -1026,3 +1026,25 @@ func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: scope}
 	require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "powershell_run", args))
 }
+
+func TestAssessCommandPowerShellEncodingConstructorIsNotADynamicTarget(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	cwd := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkingDir(cwd),
+		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
+			return approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{cwd}, Reason: "classifier said write"}
+		},
+	}
+	// Regression: New-Object System.Text.UTF8Encoding($false) parses the
+	// constructor argument as "($false)", which used to surface as a bogus
+	// dynamic target and turn an ordinary encoding argument into a
+	// DANGER "Modify a dynamic target" review.
+	cmd := "$c = Get-Content -Raw 'plugins\\what-size.yazi\\main.lua'; $c = $c.Replace(\"`r`n\", \"`n\"); [System.IO.File]::WriteAllText((Resolve-Path 'plugins\\what-size.yazi\\main.lua'), $c, (New-Object System.Text.UTF8Encoding($false)))"
+
+	assessment := m.assessCommand("powershell_run", cmd)
+
+	require.Empty(t, assessment.DynamicTargets, "a boolean constructor argument is never a runtime path")
+	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)))
+}

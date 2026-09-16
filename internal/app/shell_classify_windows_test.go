@@ -682,6 +682,43 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 		"a temp-dir write reaches the safe-dir allow cell instead of a dynamic-target review")
 }
 
+func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T) {
+	t.Cleanup(func() { approval.CloseBridge() })
+
+	temp := os.Getenv("TEMP")
+	require.NotEmpty(t, temp, "TEMP must be set on Windows")
+	cwd := t.TempDir()
+	m := &Mods{
+		Config: testConfigForWorkingDir(cwd),
+		shellAnalyzer: func(_, command string) approval.CommandAssessment {
+			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
+			return approval.UnknownCommandAssessment()
+		},
+	}
+	// Regression: the quoted env path inside ReadAllBytes("...") ends with
+	// `")`, which the use scanner used to treat as unbounded concatenation,
+	// keeping a bare $env:TEMP dynamic target and triggering a DANGER
+	// "Modify a dynamic target" review for a pure temp-dir write.
+	command := `git show HEAD:yazi/config/yazi.toml | Out-File -LiteralPath "$env:TEMP\yazi_head.toml" -Encoding utf8NoBOM; $a=[System.IO.File]::ReadAllBytes("$env:TEMP\yazi_head.toml"); $b=[System.IO.File]::ReadAllBytes("yazi.toml"); "headSize=$($a.Length) workSize=$($b.Length)"; for($i=0;$i -lt [Math]::Min($a.Length,$b.Length);$i++){ if($a[$i] -ne $b[$i]){ "firstDiff=$i headByte=$($a[$i]) workByte=$($b[$i])"; break } }`
+
+	assessment := m.assessCommand("powershell_run", command)
+
+	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Empty(t, assessment.DynamicTargets, "a quoted env path inside a .NET method call argument is bounded by its expanded path")
+	intent := assessment.AccessIntent()
+	require.False(t, intent.HasUnresolvedPaths())
+	dirs := intent.AllDirs()
+	require.NotEmpty(t, dirs)
+	for _, dir := range dirs {
+		lower := strings.ToLower(dir)
+		require.True(t, lower == strings.ToLower(temp) || strings.HasPrefix(lower, strings.ToLower(temp)+`\`),
+			"every affected path stays inside TEMP: %v", dirs)
+	}
+	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)))
+	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
+		"a temp-dir write whose every env reference expands to the safe directory matches the allow cell of the approval matrix")
+}
+
 func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 

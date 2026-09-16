@@ -278,6 +278,11 @@ func TestExpandEnvRefs(t *testing.T) {
 	require.True(t, ok, "a closing quote before whitespace terminates safely")
 	require.Equal(t, []string{`C:\Users\Test\x`}, uses.Paths)
 
+	uses, ok = ExpandEnvRefs(`[System.IO.File]::ReadAllBytes("$env:UP\x")`, "UP", ps)
+	require.True(t, ok, "a closing quote before a closing paren terminates safely in PowerShell")
+	require.Equal(t, 0, uses.Bare)
+	require.Equal(t, []string{`C:\Users\Test\x`}, uses.Paths)
+
 	_, ok = ExpandEnvRefs(`Get-Content $env:UP\x$env:UP\y`, "UP", ps)
 	require.False(t, ok, "adjacent expansions are compound")
 

@@ -804,7 +804,16 @@ func refTailContinuesCompound(command string, j int, ps bool) bool {
 		if k >= len(command) {
 			return false
 		}
-		return isEnvPathTailChar(command[k], ps) || isEnvNameWordChar(command[k], ps)
+		next := command[k]
+		if ps && (next == '(' || next == ')') {
+			// In PowerShell a closing quote followed by a parenthesis never
+			// continues the string token: ")" ends a grouping such as
+			// ReadAllBytes("$env:TEMP\x") and "(" begins a separate
+			// parenthesized argument. Parens only carry name meaning inside
+			// a variable name (${env:ProgramFiles(x86)}).
+			return false
+		}
+		return isEnvPathTailChar(next, ps) || isEnvNameWordChar(next, ps)
 	}
 	return !ps && command[j] == '\\'
 }

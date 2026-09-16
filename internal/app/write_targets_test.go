@@ -66,6 +66,8 @@ func writeTargetResponse(request proto.Request, content string, calls ...proto.T
 }
 
 func TestWriteTargetsOneReadBatch(t *testing.T) {
+	scope := testShellWorkingDirScope(t)
+	subdir := filepath.Join(scope.Value, "subdir")
 	for _, repeat := range []bool{false, true} {
 		t.Run(map[bool]string{false: "final decision", true: "second batch refused"}[repeat], func(t *testing.T) {
 			var reads int
@@ -92,13 +94,13 @@ func TestWriteTargetsOneReadBatch(t *testing.T) {
 				reads++
 				return "git@github.com:example/repo.git", nil
 			}}
-			rules, usage, err := inferWriteTargets(context.Background(), client, request, testApprovalScope)
+			rules, usage, err := inferWriteTargets(context.Background(), client, request, scope)
 			if repeat {
 				require.Error(t, err)
 				require.Empty(t, rules)
 			} else {
 				require.NoError(t, err)
-				require.True(t, RulesAllowDirs(rules, []string{"/cwd/subdir"}, testApprovalScope, AccessWrite))
+				require.True(t, RulesAllowDirs(rules, []string{subdir}, scope, AccessWrite))
 				require.True(t, RulesAllowRemoteOrigins(rules, []string{"ssh://github.com"}))
 			}
 			require.Equal(t, 2, reads)

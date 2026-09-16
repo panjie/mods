@@ -390,3 +390,55 @@ func TestAssessProcessInvocationExplicitWorkingDirProgramStaysReviewable(t *test
 		})
 	}
 }
+
+// TestAssessProcessInvocationExternalProgramPathIsNotATarget pins that a
+// program's own path is execution context, never an affected directory: an
+// external executable such as "C:\Program Files\Neovim\bin\nvim.exe" must not
+// turn its install directory into a review target or a "write dirs" approval
+// candidate. Literal argument paths remain path facts.
+func TestAssessProcessInvocationExternalProgramPathIsNotATarget(t *testing.T) {
+	cwd := t.TempDir()
+	scope := WorkingDirScope(cwd)
+	external := func(parts ...string) string {
+		if volume := filepath.VolumeName(cwd); volume != "" {
+			return filepath.Join(append([]string{volume + `\`}, parts...)...)
+		}
+		return "/" + filepath.Join(parts...)
+	}
+
+	t.Run("unknown effect fails closed without a program-dir write rule", func(t *testing.T) {
+		m := &Mods{
+			Config: testConfigForWorkingDir(cwd),
+			shellAnalyzer: func(tool, input string) approval.CommandAssessment {
+				return approval.UnknownCommandAssessment()
+			},
+		}
+		invoke := fmt.Sprintf(`{"program":%q,"args":["--headless","+luafile init.lua"]}`, external("external-pgm", "tool.exe"))
+		assessment := m.assessCommand("process_run", invoke)
+		require.Equal(t, approval.EffectUnknown, assessment.Effect)
+		require.Empty(t, assessment.KnownDirs)
+		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), cwd, "process_run", true)
+		require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+		require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	})
+
+	t.Run("classifier write keeps argument facts without the program dir", func(t *testing.T) {
+		m := &Mods{
+			Config: testConfigForWorkingDir(cwd),
+			shellAnalyzer: func(tool, input string) approval.CommandAssessment {
+				return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "writes its output file"}
+			},
+		}
+		target := external("external-out", "out.txt")
+		invoke := fmt.Sprintf(`{"program":%q,"args":["--out",%q]}`, external("external-pgm", "tool.exe"), target)
+		assessment := m.assessCommand("process_run", invoke)
+		require.Equal(t, approval.EffectWrite, assessment.Effect)
+		require.Equal(t, []string{target}, assessment.KnownDirs)
+		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), cwd, "process_run", true)
+		require.Equal(t, []string{target}, intent.Dirs)
+		require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+		rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
+		require.Len(t, rules, 1)
+		require.Equal(t, []string{target}, rules[0].Paths)
+	})
+}

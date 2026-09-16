@@ -316,8 +316,11 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	flavor := shellPathFlavor("process_run")
 	posix := !shellToolUsesPowerShell("process_run")
 	policy := m.readOnlyCommandPolicy()
-	pathArgs := append([]string{invocation.Program}, invocation.Args...)
-	explicitDirs := filterLiteralArgPaths(pathArgs, cwd, flavor)
+	// The program's own path is execution context, not an affected directory:
+	// an external executable's install location must never become a review
+	// target or a "write dirs" approval candidate. Only literal arguments
+	// are path facts.
+	explicitDirs := filterLiteralArgPaths(invocation.Args, cwd, flavor)
 	environmentKeys := make([]string, 0, len(invocation.SecretEnv))
 	for key := range invocation.SecretEnv {
 		environmentKeys = append(environmentKeys, key)

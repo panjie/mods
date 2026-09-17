@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/stretchr/testify/require"
 	"modernc.org/sqlite"
@@ -458,7 +459,9 @@ func TestMigratesLegacyApprovalRulesWithoutGrantingScope(t *testing.T) {
 
 	var ruleSet approvalRuleSet
 	ruleSet.Replace(rules)
-	require.False(t, ruleSet.Allows("fs_write_file", []byte(`{"path":"a.txt"}`), cwdScope("/cwd")))
+	require.False(t, approval.RulesAllowIntent(ruleSet.Snapshot(),
+		approval.AccessIntent{Class: accessWrite, Dirs: []string{"/cwd"}},
+		cwdScope("/cwd"), nil, approval.ReviewAuto))
 }
 
 // TestMigratesApprovalRulesToAddMode verifies that a DB persisted just before

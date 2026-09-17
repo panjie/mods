@@ -8,32 +8,11 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// POSIX shell parsing built on mvdan.cc/sh. Used (a) to derive stable
-// approval rules from a command (via ruleForShellLeaf/ruleFromTokens)
-// and (b) by the writable-directory extractor in writable_dirs.go.
-//
-// The simple tokenizer in simple_tokenize.go is the fallback path for
-// Windows / PowerShell commands.
+// POSIX shell syntax helpers shared by command assessment and path extraction.
 
+// shellLeaf is a simple command used by the structural reviewability analysis.
 type shellLeaf struct {
-	text  string
-	call  *syntax.CallExpr
-	exact bool
-}
-
-func parseShellLeaves(command string) ([]shellLeaf, bool) {
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return nil, false
-	}
-	var leaves []shellLeaf
-	for _, stmt := range file.Stmts {
-		if !collectShellLeaves(stmt, &leaves) {
-			return nil, false
-		}
-	}
-	return leaves, true
+	call *syntax.CallExpr
 }
 
 func collectShellLeaves(stmt *syntax.Stmt, leaves *[]shellLeaf) bool {
@@ -50,19 +29,10 @@ func collectShellLeaves(stmt *syntax.Stmt, leaves *[]shellLeaf) bool {
 	if !ok {
 		return false
 	}
-	text, ok := printShellNode(stmt)
-	if !ok || text == "" {
+	if text, ok := printShellNode(stmt); !ok || text == "" {
 		return false
 	}
-	exact := stmt.Negated || stmt.Background || len(stmt.Redirs) > 0 || len(call.Assigns) > 0
-	if shellNodeHasDynamicParts(stmt) {
-		exact = true
-	}
-	*leaves = append(*leaves, shellLeaf{
-		text:  text,
-		call:  call,
-		exact: exact,
-	})
+	*leaves = append(*leaves, shellLeaf{call: call})
 	return true
 }
 
@@ -107,55 +77,6 @@ func shellNodeHasDynamicParts(node syntax.Node) bool {
 	return dynamic
 }
 
-func ruleForShellLeaf(tool string, leaf shellLeaf) Rule {
-	if leaf.exact || leaf.call == nil || len(leaf.call.Args) == 0 {
-		return shellExactRule(tool, leaf.text)
-	}
-	args := shellLeafArgs(leaf)
-	if len(args) == 0 {
-		return shellExactRule(tool, leaf.text)
-	}
-	return ruleFromTokens(tool, args, leaf.exact, leaf.text)
-}
-
-func shellLeafArgs(leaf shellLeaf) []string {
-	if leaf.call == nil || len(leaf.call.Args) == 0 {
-		return nil
-	}
-	args := make([]string, 0, len(leaf.call.Args))
-	for _, word := range leaf.call.Args {
-		value, ok := staticShellWord(word)
-		if !ok {
-			return nil
-		}
-		args = append(args, value)
-	}
-	return args
-}
-
-func ruleFromTokens(tool string, args []string, exact bool, originalText string) Rule {
-	if exact || len(args) == 0 {
-		return shellExactRule(tool, originalText)
-	}
-	if exactShellCommands[args[0]] {
-		return shellExactRule(tool, originalText)
-	}
-	prefixLen := shellPrefixLength(args)
-	if prefixLen <= 0 {
-		return shellExactRule(tool, originalText)
-	}
-	if prefixLen >= len(args) &&
-		!subcommandShellCommands[args[0]] &&
-		!flagPrefixShellCommands[args[0]] {
-		return shellExactRule(tool, originalText)
-	}
-	return Rule{
-		Type:    ShellPrefix,
-		Tool:    tool,
-		Pattern: strings.Join(args[:prefixLen], " ") + " *",
-	}
-}
-
 func staticShellWord(word *syntax.Word) (string, bool) {
 	var result strings.Builder
 	for _, part := range word.Parts {
@@ -181,8 +102,7 @@ func staticShellWord(word *syntax.Word) (string, bool) {
 
 // accessShellWord resolves the narrow set of dynamic words whose value and
 // filesystem scope are known to the approval layer. It is deliberately
-// separate from staticShellWord: approval-rule parsing must continue treating
-// every expansion as dynamic and therefore exact.
+// separate from staticShellWord so literal-only consumers never accept expansions.
 func accessShellWord(word *syntax.Word) (string, bool) {
 	if word == nil {
 		return "", false

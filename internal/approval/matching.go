@@ -8,65 +8,8 @@ import (
 	"github.com/panjie/mods/internal/pathutil"
 )
 
-// Public matching predicates and the shell-rule bridge. These are the
-// entry points the rest of the codebase calls (RuleSet.Allows,
-// RulesFor, RulesForDirs, RulesAllowDirs, ShellRules*, ShellAllow*,
-// ExtractShellCommand). They depend on rules.go for the data model,
-// shell_parse.go for POSIX parsing, simple_tokenize.go for the
-// fallback tokenizer, and writable_dirs.go for directory extraction.
-
-func (s *RuleSet) Allows(name string, data []byte, scope Scope) bool {
-	allRules := s.Snapshot()
-	rules := rulesForScope(allRules, scope)
-	if isBuiltinFilesystemEditTool(name) {
-		return slices.ContainsFunc(rules, func(rule Rule) bool {
-			return rule.Type == EditAll
-		})
-	}
-	switch name {
-	case "shell_run", "powershell_run":
-		command := ExtractShellCommand(data)
-		if command == "" {
-			return false
-		}
-		return dirAllowForCommand(name, command, allRules, scope.Value, shellToolUsesPOSIX(name))
-	default:
-		return slices.ContainsFunc(rules, func(rule Rule) bool {
-			return rule.Type == ToolAll && rule.Tool == name
-		})
-	}
-}
-
-func RulesFor(name string, data []byte, scope Scope) []Rule {
-	return scopeRules(rulesForTool(name, data), scope)
-}
-
-func rulesForTool(name string, data []byte) []Rule {
-	if isBuiltinFilesystemEditTool(name) {
-		return []Rule{{
-			Type: EditAll,
-			Tool: "file_edit",
-		}}
-	}
-	switch name {
-	case "shell_run", "powershell_run":
-		return nil
-	default:
-		return []Rule{{
-			Type: ToolAll,
-			Tool: name,
-		}}
-	}
-}
-
-func isBuiltinFilesystemEditTool(name string) bool {
-	switch name {
-	case "fs_write_file", "fs_replace", "fs_apply_patch", "fs_delete_file", "fs_delete_dir", "fs_move", "fs_copy", "fs_mkdir":
-		return true
-	default:
-		return false
-	}
-}
+// Target-based saved-rule matching. The application review gate combines
+// ClassifyAccess with RulesAllowIntent; rule matching never reparses commands.
 
 // RulesForDirs builds the task-scoped candidate DirAllow rule offered by the
 // "Always allow" choice. The current working directory is used only to turn
@@ -198,60 +141,6 @@ func RulesLabel(rules []Rule) string {
 	return strings.Join(labels, ", ")
 }
 
-func ShellRulesWithMode(command string, posix bool) []Rule {
-	return ShellRulesForToolWithMode("shell_run", command, posix)
-}
-
-func ShellRulesForToolWithMode(tool, command string, posix bool) []Rule {
-	normalized := normalizeShellCommandWithMode(command, posix)
-	if normalized == "" {
-		return nil
-	}
-	if tool == "powershell_run" && commandHasPowerShellCompoundSyntax(normalized) {
-		return []Rule{shellExactRule(tool, normalized)}
-	}
-	if !posix {
-		return shellApprovalRulesSimple(tool, normalized)
-	}
-	leaves, ok := parseShellLeaves(command)
-	if !ok || len(leaves) == 0 || len(leaves) > 5 {
-		return []Rule{shellExactRule(tool, normalized)}
-	}
-	rules := make([]Rule, 0, len(leaves))
-	for _, leaf := range leaves {
-		rules = append(rules, ruleForShellLeaf(tool, leaf))
-	}
-	return Dedupe(rules)
-}
-
-func shellApprovalRulesSimple(tool, normalized string) []Rule {
-	parts := splitSimpleCompound(normalized)
-	if len(parts) == 0 || len(parts) > 5 {
-		return []Rule{shellExactRule(tool, normalized)}
-	}
-	var rules []Rule
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if hasShellRedirection(part) {
-			rules = append(rules, shellExactRule(tool, part))
-			continue
-		}
-		tokens := tokenizeSimple(part)
-		if len(tokens) == 0 {
-			continue
-		}
-		rules = append(rules, ruleFromTokens(tool, tokens, false, part))
-	}
-	return Dedupe(rules)
-}
-
-func ShellAllowWithMode(command string, rules []Rule, posix bool) bool {
-	return ShellAllowForToolWithMode("shell_run", command, rules, posix)
-}
-
 // ExtractShellCommand decodes the JSON arguments of a shell tool call
 // and returns the embedded "command" string. Returns "" on any parse
 // failure, which the callers treat as "do not allow".
@@ -263,127 +152,6 @@ func ExtractShellCommand(args []byte) string {
 		return ""
 	}
 	return parsed.Command
-}
-
-func ShellAllowForToolWithMode(tool, command string, rules []Rule, posix bool) bool {
-	normalized := normalizeShellCommandWithMode(command, posix)
-	if normalized == "" {
-		return false
-	}
-	if slices.ContainsFunc(rules, func(rule Rule) bool {
-		return rule.Type == ShellExact && rule.Tool == tool && rule.Pattern == normalized
-	}) {
-		return true
-	}
-	if tool == "powershell_run" && commandHasPowerShellCompoundSyntax(normalized) {
-		return false
-	}
-	if !posix {
-		return shellRulesAllowSimple(tool, normalized, rules)
-	}
-	leaves, ok := parseShellLeaves(command)
-	if !ok || len(leaves) == 0 {
-		return false
-	}
-	for _, leaf := range leaves {
-		if !slices.ContainsFunc(rules, func(rule Rule) bool {
-			if rule.Tool != tool {
-				return false
-			}
-			switch rule.Type {
-			case ShellExact:
-				return rule.Pattern == leaf.text
-			case ShellPrefix:
-				return matchShellPrefix(rule.Pattern, leaf.text)
-			default:
-				return false
-			}
-		}) {
-			return false
-		}
-	}
-	return true
-}
-
-func shellRulesAllowSimple(tool, normalized string, rules []Rule) bool {
-	parts := splitSimpleCompound(normalized)
-	for _, part := range parts {
-		commandText := strings.TrimSpace(part)
-		if commandText == "" {
-			return false
-		}
-		found := false
-		for _, rule := range rules {
-			if rule.Tool != tool {
-				continue
-			}
-			switch rule.Type {
-			case ShellExact:
-				if rule.Pattern == commandText {
-					found = true
-				}
-			case ShellPrefix:
-				if matchShellPrefix(rule.Pattern, commandText) {
-					found = true
-				}
-			}
-			if found {
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
-// matchShellPrefix reports whether command is exactly base or starts
-// with base+" ". The word-boundary check prevents a "ls *" rule from
-// matching "lsof".
-func matchShellPrefix(pattern, command string) bool {
-	base := strings.TrimSuffix(pattern, " *")
-	return command == base || strings.HasPrefix(command, base+" ")
-}
-
-// dirAllowForCommand matches a shell command's writable directories
-// against saved DirAllow rules. Only explicit write-mode rules participate;
-// legacy empty-mode and read rules cannot authorize writes.
-func dirAllowForCommand(tool string, command string, rules []Rule, cwd string, posix bool) bool {
-	if !posix {
-		ir, err := parseWithBridge(command)
-		if err != nil || len(ir.ParseErrors) > 0 {
-			return false
-		}
-		_, unresolved, providers, known := analyzePowerShellWritablePathsIR(ir, ReadOnlyCommandPolicy{}, cwd)
-		if !known || len(unresolved) > 0 || len(providers) > 0 {
-			return false
-		}
-	}
-	targetDirs := normalizeShellDirsForWorkingDirWithMode(ExtractWritableDirsWithCwd(command, posix, cwd), cwd, posix)
-	if len(targetDirs) == 0 {
-		return false
-	}
-	var allowedPaths []string
-	for _, rule := range rules {
-		if rule.Type != DirAllow {
-			continue
-		}
-		if rule.Mode != AccessWrite {
-			continue
-		}
-		base := cwd
-		if rule.ScopeValue != "" {
-			base = rule.ScopeValue
-		}
-		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkingDirWithMode(rule.Paths, base, posix)...)
-	}
-	for _, targetDir := range targetDirs {
-		if !dirWithinPaths(allowedPaths, targetDir) {
-			return false
-		}
-	}
-	return len(allowedPaths) > 0
 }
 
 // dirWithinPaths reports whether target falls inside any of the
@@ -417,12 +185,4 @@ func normalizeDirsForWorkingDir(dirs []string, cwd string) []string {
 
 func normalizeShellDirsForWorkingDir(dirs []string, cwd string) []string {
 	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX))
-}
-
-func normalizeShellDirsForWorkingDirWithMode(dirs []string, cwd string, posix bool) []string {
-	flavor := pathutil.FlavorPowerShell
-	if posix {
-		flavor = pathutil.FlavorPOSIX
-	}
-	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(cwd, flavor))
 }

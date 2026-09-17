@@ -14,6 +14,8 @@ import (
 type RuleType string
 type ScopeKind string
 
+// Legacy rule kinds remain decodable for saved sessions, but do not grant
+// permissions. Only explicit write-mode DirAllow and RemoteAllow rules do.
 const (
 	ShellPrefix RuleType = "shell_prefix"
 	ShellExact  RuleType = "shell_exact"
@@ -63,13 +65,6 @@ func (r Rule) key() string {
 	originsKey := strings.Join(r.Origins, "\x01")
 	return string(r.ScopeKind) + "\x00" + r.ScopeValue + "\x00" +
 		string(r.Type) + "\x00" + r.Tool + "\x00" + r.Pattern + "\x00" + pathsKey + "\x00" + originsKey + "\x00" + string(r.Mode)
-}
-
-func (r Rule) matchesScope(scope Scope) bool {
-	if scope.Kind == "" || scope.Value == "" {
-		return false
-	}
-	return r.ScopeKind == scope.Kind && r.ScopeValue == scope.Value
 }
 
 func (r Rule) String() string {
@@ -129,35 +124,4 @@ func Dedupe(rules []Rule) []Rule {
 		result = append(result, rule)
 	}
 	return result
-}
-
-func scopeRules(rules []Rule, scope Scope) []Rule {
-	if scope.Kind == "" || scope.Value == "" {
-		return nil
-	}
-	result := make([]Rule, 0, len(rules))
-	for _, rule := range rules {
-		rule.ScopeKind = scope.Kind
-		rule.ScopeValue = scope.Value
-		result = append(result, rule)
-	}
-	return result
-}
-
-func rulesForScope(rules []Rule, scope Scope) []Rule {
-	result := make([]Rule, 0, len(rules))
-	for _, rule := range rules {
-		if rule.matchesScope(scope) {
-			result = append(result, rule)
-		}
-	}
-	return result
-}
-
-func shellExactRule(tool, command string) Rule {
-	return Rule{
-		Type:    ShellExact,
-		Tool:    tool,
-		Pattern: command,
-	}
 }

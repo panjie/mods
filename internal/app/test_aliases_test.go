@@ -26,7 +26,6 @@ const (
 	defaultJSONFormatText     = prompts.JSONFormat
 )
 
-type approvalRuleSet = approval.RuleSet
 type ApprovalRule = approval.Rule
 type PersistentConfig = cfgpkg.PersistentConfig
 type PromptConfig = cfgpkg.PromptConfig

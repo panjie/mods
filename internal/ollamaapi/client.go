@@ -46,23 +46,31 @@ func (c *Client) Chat(ctx context.Context, req *ChatRequest, fn ChatResponseFunc
 
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxStreamBuffer)
-	for scanner.Scan() {
-		line := append([]byte(nil), scanner.Bytes()...)
+	if response.StatusCode >= http.StatusBadRequest {
+		// The HTTP status is authoritative even when the server sends no body.
 		var errorResponse struct {
 			Error     string `json:"error"`
 			SigninURL string `json:"signin_url"`
 		}
-		if err := json.Unmarshal(line, &errorResponse); err != nil {
-			if response.StatusCode >= http.StatusBadRequest {
-				return StatusError{StatusCode: response.StatusCode, Status: response.Status, ErrorMessage: string(line)}
+		if scanner.Scan() {
+			if err := json.Unmarshal(scanner.Bytes(), &errorResponse); err != nil {
+				errorResponse.Error = scanner.Text()
 			}
-			return err
+		} else if err := scanner.Err(); err != nil {
+			errorResponse.Error = err.Error()
 		}
 		if response.StatusCode == http.StatusUnauthorized {
 			return AuthorizationError{StatusCode: response.StatusCode, Status: response.Status, SigninURL: errorResponse.SigninURL}
 		}
-		if response.StatusCode >= http.StatusBadRequest {
-			return StatusError{StatusCode: response.StatusCode, Status: response.Status, ErrorMessage: errorResponse.Error}
+		return StatusError{StatusCode: response.StatusCode, Status: response.Status, ErrorMessage: errorResponse.Error}
+	}
+	for scanner.Scan() {
+		line := append([]byte(nil), scanner.Bytes()...)
+		var errorResponse struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(line, &errorResponse); err != nil {
+			return err
 		}
 		if errorResponse.Error != "" {
 			return errors.New(errorResponse.Error)

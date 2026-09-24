@@ -104,6 +104,22 @@ func TestCommandSimplificationMessageGuidesWithoutEchoingTargets(t *testing.T) {
 	require.Contains(t, commandSimplificationMessage(opaque), "cannot be analyzed")
 }
 
+// An opaque-execution nudge must name its reason instead of falling through to
+// the subject-less generic fallback.
+func TestCommandSimplificationMessageNamesOpaqueExecution(t *testing.T) {
+	assessment := approval.CommandAssessment{
+		Effect: approval.EffectRead,
+		Shape:  approval.CommandShape{Opaque: true},
+		Reviewability: approval.CommandReviewability{
+			Level:   approval.ReviewabilityOpaque,
+			Reasons: []approval.ReviewabilityReason{approval.ReviewabilityOpaqueExecution},
+		},
+	}
+	message := commandSimplificationMessage(assessment)
+	require.Contains(t, message, "uses syntax that static analysis cannot parse")
+	require.NotContains(t, message, "is harder to review than necessary")
+}
+
 // The nudge must not invite a rewrite of the operation itself: model rewrites of
 // pre-written scripts are exactly the failure this advice has to avoid.
 func TestCommandSimplificationMessageKeepsBehaviorStable(t *testing.T) {

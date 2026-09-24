@@ -77,6 +77,8 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 			reasons = append(reasons, "uses multiple runtime-resolved paths")
 		case approval.ReviewabilityDecorativeOutput:
 			reasons = append(reasons, "adds presentation-only output")
+		case approval.ReviewabilityOpaqueExecution:
+			reasons = append(reasons, "uses syntax that static analysis cannot parse")
 		case approval.ReviewabilityNestedShellHost:
 			reasons = append(reasons, "nests a shell host inside a shell tool")
 		case approval.ReviewabilityCommandPassedAsScript:

@@ -375,6 +375,40 @@ func TestStreamingTokenUsage(t *testing.T) {
 	require.Contains(t, string(captured), `"stream_options":{"include_usage":true}`)
 }
 
+// TestStreamToleratesKeepAliveComments pins the SSE decoder override: some
+// OpenAI-compatible gateways (e.g. MiMo's) emit comment-only keep-alive
+// events (": PROCESSING\n\n") while the model is thinking. The stock
+// openai-go ssestream dispatches those as events with empty data, which
+// fails JSON decoding with "unexpected end of JSON input" and cancels the
+// stream.
+func TestStreamToleratesKeepAliveComments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w,
+			": PROCESSING\n\n"+
+				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n"+
+				": PROCESSING\n\n"+
+				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"+
+				"data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k"})
+	st := client.Request(context.Background(), proto.Request{
+		Model:    "test",
+		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
+	})
+	var content string
+	for st.Next() {
+		chunk, err := st.Current()
+		if err == nil {
+			content += chunk.Content
+		}
+	}
+	require.NoError(t, st.Err())
+	require.Equal(t, "ok", content)
+}
+
 func TestDeepSeekChatReplaysReasoningContentAfterToolCall(t *testing.T) {
 	var requests [][]byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

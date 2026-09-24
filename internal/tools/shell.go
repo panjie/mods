@@ -310,8 +310,14 @@ func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
+// powerShellOutputEncodingPrefix forces the child PowerShell host to encode
+// its redirected stdout/stderr as UTF-8. Without it the host encodes output
+// with the console codepage (GBK on zh-CN, CP437 on en-US), which
+// decodeCommandOutput can only recover lossily, corrupting non-ASCII text.
+const powerShellOutputEncodingPrefix = `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); `
+
 func powerShellCommand(ctx context.Context, command string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, windowsPowerShellExe(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command)
+	cmd := exec.CommandContext(ctx, windowsPowerShellExe(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", powerShellOutputEncodingPrefix+command)
 	platform.HideCommandWindow(cmd)
 	return cmd
 }

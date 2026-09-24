@@ -1448,6 +1448,16 @@ func TestPowerShellRun(t *testing.T) {
 		}
 	})
 
+	t.Run("round-trips non-ASCII output", func(t *testing.T) {
+		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"Write-Output '项目-测试'"}`))
+		if err != nil {
+			t.Fatalf("call: %v", err)
+		}
+		if !strings.Contains(out, "项目-测试") {
+			t.Fatalf("non-ASCII output was corrupted: %q", out)
+		}
+	})
+
 	t.Run("runs variables and pipelines without nested quoting", func(t *testing.T) {
 		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"1,2,3 | Where-Object { $_ -gt 1 } | Measure-Object | Select-Object -ExpandProperty Count"}`))
 		if err != nil {
@@ -1544,7 +1554,7 @@ func TestShellCommandUsesPowerShellOnWindows(t *testing.T) {
 		if base != "pwsh.exe" && base != "powershell.exe" {
 			t.Fatalf("expected shell_run to use pwsh.exe or powershell.exe on Windows, got %q", cmd.Path)
 		}
-		wantArgs := []string{cmd.Path, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "Write-Output ok"}
+		wantArgs := []string{cmd.Path, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", powerShellOutputEncodingPrefix + "Write-Output ok"}
 		if strings.Join(cmd.Args, "\x00") != strings.Join(wantArgs, "\x00") {
 			t.Fatalf("unexpected PowerShell args: %#v", cmd.Args)
 		}

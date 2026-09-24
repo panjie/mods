@@ -100,3 +100,35 @@ func TestManagedSinkReceivesOneCursorFreeSection(t *testing.T) {
 	}, sections)
 	require.NotContains(t, sections[0], "\r")
 }
+
+// A relayed section taller than the terminal would make Bubble Tea's
+// insertAbove pre-scroll a screenful of blank rows into scrollback, so the
+// managed sink receives a clamped head/tail view. Direct (non-managed) output
+// keeps the full payload.
+func TestManagedSinkClampsOversizedSections(t *testing.T) {
+	buf := captureDebug(t)
+	lines := make([]string, 80)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line-%02d", i)
+	}
+	payload := strings.Join(lines, "\n")
+	var sections []string
+	restoreSink := SetManagedSink(func(section string) {
+		sections = append(sections, section)
+	})
+
+	Print(Section{Title: "tool · call", Blocks: []Block{{Label: "result", Value: payload}}})
+	restoreSink()
+
+	require.Empty(t, buf.String())
+	require.Len(t, sections, 1)
+	relayed := strings.Split(sections[0], "\n")
+	require.Len(t, relayed, managedSectionHead+managedSectionTail+1)
+	require.Contains(t, sections[0], "lines omitted")
+	require.Contains(t, sections[0], "line-00")
+	require.Contains(t, sections[0], "line-79")
+	require.NotContains(t, sections[0], "line-40")
+
+	Print(Section{Title: "tool · call", Blocks: []Block{{Label: "result", Value: payload}}})
+	require.Contains(t, buf.String(), "line-40")
+}

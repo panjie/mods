@@ -20,6 +20,15 @@ const (
 	argumentTail  = 1 * 1024
 	resultLimit   = 16 * 1024
 	resultTail    = 4 * 1024
+
+	// A relayed (managed) debug section is printed above the Bubble Tea frame
+	// via insertAbove, which pre-scrolls the terminal by the section's line
+	// count. A section taller than the terminal therefore pushes that many
+	// blank rows into scrollback ("screen looks cleared"), so the managed sink
+	// gets a clamped head/tail view instead. Direct output keeps full payloads.
+	managedSectionLimit = 24
+	managedSectionHead  = 16
+	managedSectionTail  = 6
 )
 
 var (
@@ -73,7 +82,7 @@ func Print(section Section) {
 	managed := managedSink != nil
 	lines := formatSection(section, styled, managed)
 	if managed {
-		managedSink(strings.Join(lines, "\n"))
+		managedSink(strings.Join(clampManagedLines(lines, styled), "\n"))
 		return
 	}
 	_, _ = fmt.Fprintln(output, strings.Join(lines, "\n"))
@@ -128,6 +137,20 @@ func formatDetail(value string, styled bool, prefix string) string {
 		value = ui.StderrStyles().DebugDetails.Render(value)
 	}
 	return prefix + value
+}
+
+// clampManagedLines bounds a relayed section to managedSectionLimit lines by
+// keeping the head and tail around a one-line omission marker.
+func clampManagedLines(lines []string, styled bool) []string {
+	if len(lines) <= managedSectionLimit {
+		return lines
+	}
+	omitted := len(lines) - managedSectionHead - managedSectionTail
+	marker := fmt.Sprintf("    ... (%d lines omitted; total %d lines; pipe stderr for the full payload) ...", omitted, len(lines))
+	clamped := make([]string, 0, managedSectionHead+managedSectionTail+1)
+	clamped = append(clamped, lines[:managedSectionHead]...)
+	clamped = append(clamped, formatDetail(marker, styled, ""))
+	return append(clamped, lines[len(lines)-managedSectionTail:]...)
 }
 
 // Arguments formats a tool argument payload. Small JSON documents are

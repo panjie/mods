@@ -369,6 +369,12 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			}
 		}()
 
+		// Unknown tools fail before intent computation or approval: a
+		// hallucinated tool name must never cost the user a review prompt
+		// for a call that cannot execute.
+		if _, ok := registry.Tool(name); !ok {
+			return "", toolregistry.UnknownToolError(name)
+		}
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
 		m.addCancel(cancel)
 		defer cancel()

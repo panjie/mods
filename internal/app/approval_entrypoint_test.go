@@ -193,3 +193,28 @@ func TestToolCallerUsesTargetApproval(t *testing.T) {
 		}
 	}
 }
+
+// A call naming a tool that is not registered must fail with the
+// unknown-tool error before the approval gate: a hallucinated tool name
+// (the registry advertises powershell_run, the call asks for powerRun)
+// must never cost the user a review prompt for a call that cannot execute.
+func TestToolCallerRejectsUnknownToolBeforeApproval(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	cfg := defaultConfig()
+	cfg.WorkingDir = cwd
+	cfg.ReviewMode = ReviewAuto
+	cfg.InteractiveTTYAvailable = false
+	m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
+	registry := toolregistry.NewRegistry()
+	require.NoError(t, registry.Register(toolregistry.Tool{
+		Spec:         proto.ToolSpec{Name: "powershell_run"},
+		Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true},
+		Call:         func(context.Context, json.RawMessage) (string, error) { return "ok", nil },
+	}))
+	_, err = m.toolCaller(registry, &cfg)(proto.ToolCallRequest{
+		ID: "call_powerRun", Index: 1, Total: 1, Name: "powerRun",
+		Arguments: []byte(`{"command":"Get-Date"}`),
+	})
+	require.ErrorContains(t, err, `unknown tool "powerRun"`)
+}

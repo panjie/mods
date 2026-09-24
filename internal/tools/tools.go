@@ -107,9 +107,15 @@ func (r *Registry) Specs() []proto.ToolSpec {
 func (r *Registry) Call(ctx context.Context, name string, data []byte) (string, error) {
 	tool, ok := r.tools[name]
 	if !ok {
-		return "", fmt.Errorf("tool: unknown tool %q", name)
+		return "", UnknownToolError(name)
 	}
 	return tool.Call(ctx, json.RawMessage(data))
+}
+
+// UnknownToolError returns the canonical error for a call naming a tool that
+// is not registered.
+func UnknownToolError(name string) error {
+	return fmt.Errorf("tool: unknown tool %q", name)
 }
 
 // UnwrapArguments reverses a lone "arguments"/"parameters" wrapper around a

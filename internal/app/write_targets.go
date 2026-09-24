@@ -118,7 +118,7 @@ func inferWriteTargets(ctx context.Context, client stream.Client, request proto.
 		calls := len(messages) > 0 && messages[len(messages)-1].Role == proto.RoleAssistant && len(messages[len(messages)-1].ToolCalls) > 0
 		if !calls {
 			rules, err := parseWriteTargets(output.String(), scope)
-			debug.Printf("Write target inference: round=%d duration=%s rules=%s parse_error=%v", round+1, time.Since(started), RulesLabel(rules), err)
+			debug.Printf("Write target inference: round=%d duration=%s rules=%s parse_error=%v", round+1, time.Since(started), rulesDebugLabel(rules), err)
 			return rules, usage, err
 		}
 		if round != 0 || len(request.Tools) == 0 {
@@ -132,6 +132,16 @@ func inferWriteTargets(ctx context.Context, client stream.Client, request proto.
 		request.ToolCaller = nil
 	}
 	return nil, usage, fmt.Errorf("write target inference did not produce a decision")
+}
+
+// rulesDebugLabel renders inferred rules for debug logs. Unlike RulesLabel,
+// whose empty value is the review-UI phrase "this operation", an empty
+// inference reads as a plain count-style label.
+func rulesDebugLabel(rules []Rule) string {
+	if len(rules) == 0 {
+		return "none"
+	}
+	return RulesLabel(rules)
 }
 
 func parseWriteTargets(raw string, scope Scope) ([]Rule, error) {

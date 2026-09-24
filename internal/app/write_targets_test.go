@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/panjie/mods/internal/approval"
+	debugpkg "github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/stream"
@@ -145,6 +147,30 @@ func TestWriteTargetsFallbackAndPartialResult(t *testing.T) {
 	_, _, err := inferWriteTargets(ctx, client, proto.Request{}, testApprovalScope)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, client.requests)
+}
+
+// The inference debug line reports rule counts, not the review-UI phrase for
+// a one-off approval: "rules=this operation" reads like prose that leaked
+// out of the response parser.
+func TestWriteTargetsDebugLabelsEmptyRulesAsNone(t *testing.T) {
+	var output bytes.Buffer
+	restore := debugpkg.SetOutputForTest(&output)
+	debugpkg.SetEnabled(true)
+	t.Cleanup(func() {
+		debugpkg.SetEnabled(false)
+		restore()
+	})
+
+	client := &writeTargetClient{respond: func(_ context.Context, request proto.Request, _ int) stream.Stream {
+		return writeTargetResponse(request, `{"write_dirs":[],"write_urls":[]}`)
+	}}
+	rules, _, err := inferWriteTargets(context.Background(), client, proto.Request{}, testApprovalScope)
+	require.NoError(t, err)
+	require.Empty(t, rules)
+
+	log := output.String()
+	require.Contains(t, log, "rules=none")
+	require.NotContains(t, log, "rules=this operation")
 }
 
 // TestParseWriteTargetsDropsPowerShellSwitchDirs pins the Windows dialect on

@@ -58,6 +58,11 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.responseBoundaryPending = false
 	m.Thought = ""
 	m.thoughtFlushed = false
+	m.outputBuilder.Reset()
+	m.Output = ""
+	m.displayOutputBuilder.Reset()
+	m.displayOutput = ""
+	m.glamOutput = ""
 	if !m.debugTurnActive {
 		m.debugTurn++
 		m.debugRound = 1

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,13 +41,21 @@ func (m *Mods) handleRequestError(err error, mod Model, content string) tea.Msg 
 		return modsError{Err: err, ReasonText: fmt.Sprintf("Invalid %s API key.", mod.API)}
 	}
 	debug.Printf("Request error (non-API): %v", err)
-	return modsError{
+	me := modsError{
 		Err: err,
 		ReasonText: fmt.Sprintf(
 			"There was a problem with the %s API request.",
 			mod.API,
 		),
 	}
+	if isTransientRequestError(err) {
+		return m.retry(content, me)
+	}
+	return me
+}
+
+func isTransientRequestError(err error) bool {
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
 // appAPIError is the SDK-agnostic shape of a provider API error. Each

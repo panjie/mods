@@ -112,3 +112,38 @@ func TestUpdateSchedulesRetryTick(t *testing.T) {
 	require.True(t, ok, "tick must produce completionInput, got %T", msg)
 	require.Equal(t, "x", ci.content)
 }
+
+// TestRetryBudgetResetsAfterSuccessfulTurn is defense-in-depth: Mods
+// instances are currently created anew for every chat turn (see
+// cli.runOneTurn -> app.New), so m.retries cannot actually accumulate across
+// turns today. If the model is ever reused across turns, this reset keeps one
+// turn's exhausted budget from poisoning later turns.
+func TestRetryBudgetResetsAfterSuccessfulTurn(t *testing.T) {
+	m := testMods(t)
+	m.Config.MaxRetries = 5
+	m.retries = 5
+	_, cmd := m.Update(streamEventMsg{kind: streamEventDone, runner: newStreamRunner(nil, nil, nil, nil)})
+	require.NotNil(t, cmd, "done turn schedules quit")
+	require.Equal(t, 0, m.retries, "retry budget must reset after a successful turn")
+}
+
+// TestStartCompletionCmdClearsPartialOutput pins the retry artifact: a
+// transient failure can strike mid-stream after chunks were already appended
+// (truncated provider body, connection reset). The retried turn regenerates
+// the response from scratch, so any partial output from the failed attempt
+// must be discarded — otherwise the final Output/RenderedOutput contains the
+// answer's beginning twice.
+func TestStartCompletionCmdClearsPartialOutput(t *testing.T) {
+	m := testMods(t)
+	m.outputBuilder.WriteString("partial answer")
+	m.Output = "partial answer"
+	m.displayOutputBuilder.WriteString("partial answer")
+	m.displayOutput = "partial answer"
+	m.glamOutput = "rendered partial output"
+	_ = m.startCompletionCmd("retry")
+	require.Empty(t, m.outputBuilder.String())
+	require.Empty(t, m.Output)
+	require.Empty(t, m.displayOutputBuilder.String())
+	require.Empty(t, m.displayOutput)
+	require.Empty(t, m.glamOutput)
+}

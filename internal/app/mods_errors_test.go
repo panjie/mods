@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -181,6 +183,8 @@ func TestHandleRequestError(t *testing.T) {
 
 	t.Run("non-openai error returns generic message", func(t *testing.T) {
 		m := testMods(t)
+		m.Config.MaxRetries = 1
+		m.retries = 1
 		otherErr := fmt.Errorf("network timeout")
 		mod := Model{Name: "gpt-4", API: "openai"}
 		msg := m.handleRequestError(otherErr, mod, "prompt")
@@ -214,6 +218,67 @@ func TestHandleRequestError(t *testing.T) {
 		merr, ok := msg.(modsError)
 		require.True(t, ok)
 		require.Contains(t, merr.ReasonText, "Invalid")
+	})
+}
+
+func TestHandleRequestErrorRetriesTransientNonAPIErrors(t *testing.T) {
+	mod := Model{Name: "mimo-v2.6-flash", API: "mi"}
+
+	t.Run("truncated JSON body retries", func(t *testing.T) {
+		m := testMods(t)
+		m.Config.MaxRetries = 5
+		m.retries = 0
+		msg := m.handleRequestError(errors.New("unexpected end of JSON input"), mod, "prompt")
+		rm, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg, got %T", msg)
+		require.Equal(t, "prompt", rm.content)
+	})
+
+	t.Run("connection reset retries", func(t *testing.T) {
+		m := testMods(t)
+		m.Config.MaxRetries = 5
+		m.retries = 0
+		msg := m.handleRequestError(fmt.Errorf(`Post "/v1/chat/completions": read tcp ...: connection reset by peer`), mod, "prompt")
+		_, ok := msg.(retryMsg)
+		require.True(t, ok, "expected retryMsg, got %T", msg)
+	})
+
+	t.Run("context canceled does not retry", func(t *testing.T) {
+		m := testMods(t)
+		m.Config.MaxRetries = 5
+		m.retries = 0
+		msg := m.handleRequestError(context.Canceled, mod, "prompt")
+		merr, ok := msg.(modsError)
+		require.True(t, ok, "expected modsError, got %T", msg)
+		require.Contains(t, merr.ReasonText, "mi API request")
+	})
+
+	t.Run("wrapped context cancel does not retry", func(t *testing.T) {
+		m := testMods(t)
+		m.Config.MaxRetries = 5
+		m.retries = 0
+		msg := m.handleRequestError(fmt.Errorf("stream: %w", context.Canceled), mod, "prompt")
+		_, ok := msg.(modsError)
+		require.True(t, ok, "expected modsError, got %T", msg)
+	})
+
+	t.Run("context deadline does not retry", func(t *testing.T) {
+		m := testMods(t)
+		m.Config.MaxRetries = 5
+		m.retries = 0
+		msg := m.handleRequestError(context.DeadlineExceeded, mod, "prompt")
+		_, ok := msg.(modsError)
+		require.True(t, ok, "expected modsError, got %T", msg)
+	})
+
+	t.Run("retries exhausted returns error", func(t *testing.T) {
+		m := testMods(t)
+		m.Config.MaxRetries = 2
+		m.retries = 2
+		msg := m.handleRequestError(errors.New("unexpected end of JSON input"), mod, "prompt")
+		merr, ok := msg.(modsError)
+		require.True(t, ok)
+		require.Contains(t, merr.ReasonText, "mi API request")
 	})
 }
 

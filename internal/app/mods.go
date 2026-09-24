@@ -385,6 +385,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case streamEventToolCalls:
 			return m, m.handleToolCallsDone(msg)
 		case streamEventDone:
+			m.retries = 0
 			usage := msg.runner.takeUsage()
 			usage.Add(m.writeTargetsUsage)
 			m.writeTargetsUsage = proto.TokenUsage{}

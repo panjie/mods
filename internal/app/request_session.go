@@ -373,7 +373,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		// hallucinated tool name must never cost the user a review prompt
 		// for a call that cannot execute.
 		if _, ok := registry.Tool(name); !ok {
-			return "", toolregistry.UnknownToolError(name)
+			return "", registry.UnknownToolError(name)
 		}
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
 		m.addCancel(cancel)

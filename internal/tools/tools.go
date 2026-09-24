@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
@@ -107,15 +108,80 @@ func (r *Registry) Specs() []proto.ToolSpec {
 func (r *Registry) Call(ctx context.Context, name string, data []byte) (string, error) {
 	tool, ok := r.tools[name]
 	if !ok {
-		return "", UnknownToolError(name)
+		return "", r.UnknownToolError(name)
 	}
 	return tool.Call(ctx, json.RawMessage(data))
 }
 
 // UnknownToolError returns the canonical error for a call naming a tool that
-// is not registered.
-func UnknownToolError(name string) error {
+// is not registered, suggesting the closest registered name when one is
+// similar enough to be the intended tool.
+func (r *Registry) UnknownToolError(name string) error {
+	if hint := r.unknownToolHint(name); hint != "" {
+		return fmt.Errorf("tool: unknown tool %q (did you mean %q?)", name, hint)
+	}
 	return fmt.Errorf("tool: unknown tool %q", name)
+}
+
+const (
+	unknownToolHintThreshold = 0.85
+	unknownToolHintMargin    = 0.1
+)
+
+// unknownToolHint returns the registered tool name closest to an unknown
+// call's name, or "" when nothing is similar enough or the two best
+// candidates are too close to disambiguate.
+func (r *Registry) unknownToolHint(name string) string {
+	query := normalizeToolName(name)
+	if query == "" {
+		return ""
+	}
+	best, bestScore, runnerUp := "", 0.0, 0.0
+	for _, spec := range r.Specs() {
+		candidate := normalizeToolName(spec.Name)
+		if candidate == "" {
+			continue
+		}
+		if candidate == query {
+			return spec.Name
+		}
+		score := float64(lcsLen(query, candidate)) / float64(len(query))
+		if score > bestScore {
+			best, bestScore, runnerUp = spec.Name, score, bestScore
+		} else if score > runnerUp {
+			runnerUp = score
+		}
+	}
+	if bestScore >= unknownToolHintThreshold && bestScore-runnerUp >= unknownToolHintMargin {
+		return best
+	}
+	return ""
+}
+
+// normalizeToolName lowercases a tool name and drops the separators tool
+// names use, so casing and underscore drift do not hide a match.
+func normalizeToolName(name string) string {
+	return strings.Join(strings.FieldsFunc(strings.ToLower(name), func(r rune) bool {
+		return r == '_' || r == '-'
+	}), "")
+}
+
+// lcsLen returns the length of the longest common subsequence of a and b.
+func lcsLen(a, b string) int {
+	dp := make([]int, len(b)+1)
+	for _, ra := range a {
+		diag := 0
+		for j, rb := range b {
+			stored := dp[j+1]
+			if ra == rb {
+				dp[j+1] = diag + 1
+			} else if dp[j] > dp[j+1] {
+				dp[j+1] = dp[j]
+			}
+			diag = stored
+		}
+	}
+	return dp[len(b)]
 }
 
 // UnwrapArguments reverses a lone "arguments"/"parameters" wrapper around a

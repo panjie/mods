@@ -217,4 +217,5 @@ func TestToolCallerRejectsUnknownToolBeforeApproval(t *testing.T) {
 		Arguments: []byte(`{"command":"Get-Date"}`),
 	})
 	require.ErrorContains(t, err, `unknown tool "powerRun"`)
+	require.ErrorContains(t, err, `did you mean "powershell_run"?`)
 }

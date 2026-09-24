@@ -229,6 +229,52 @@ func TestValidateRequiredArgs(t *testing.T) {
 	}
 }
 
+func TestUnknownToolErrorSuggestsCloseName(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{"powershell_run", "process_run", "web_search", "todo_write"} {
+		require.NoError(t, registry.Register(Tool{
+			Spec: proto.ToolSpec{Name: name},
+			Call: func(context.Context, json.RawMessage) (string, error) { return "", nil },
+		}))
+	}
+
+	t.Run("separator and case drift suggests the shell tool", func(t *testing.T) {
+		err := registry.UnknownToolError("powerRun")
+		require.ErrorContains(t, err, `unknown tool "powerRun"`)
+		require.ErrorContains(t, err, `did you mean "powershell_run"?`)
+	})
+
+	t.Run("normalized exact match suggests", func(t *testing.T) {
+		err := registry.UnknownToolError("PowerShell_Run")
+		require.ErrorContains(t, err, `did you mean "powershell_run"?`)
+	})
+
+	t.Run("prefix drift suggests process tool", func(t *testing.T) {
+		err := registry.UnknownToolError("proc")
+		require.ErrorContains(t, err, `did you mean "process_run"?`)
+	})
+
+	t.Run("distant name has no suggestion", func(t *testing.T) {
+		err := registry.UnknownToolError("zzzz")
+		require.EqualError(t, err, `tool: unknown tool "zzzz"`)
+	})
+
+	t.Run("ambiguous short name has no suggestion", func(t *testing.T) {
+		err := registry.UnknownToolError("run")
+		require.EqualError(t, err, `tool: unknown tool "run"`)
+	})
+
+	t.Run("empty registry has no suggestion", func(t *testing.T) {
+		err := NewRegistry().UnknownToolError("powerRun")
+		require.EqualError(t, err, `tool: unknown tool "powerRun"`)
+	})
+
+	t.Run("Call returns the same suggested error", func(t *testing.T) {
+		_, err := registry.Call(context.Background(), "powerRun", []byte(`{}`))
+		require.ErrorContains(t, err, `did you mean "powershell_run"?`)
+	})
+}
+
 func TestShellRunnerProgress(t *testing.T) {
 	runner := ShellRunner{
 		Root: t.TempDir(),

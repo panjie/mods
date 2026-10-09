@@ -33,6 +33,7 @@ type commandRunner struct {
 	Parent       context.Context
 	Timeout      time.Duration
 	BuildCommand func(context.Context) *exec.Cmd
+	Prepare      func(context.Context, *exec.Cmd) (func(), error)
 	Stdout       io.Writer
 	Stderr       io.Writer
 	Progress     func(time.Duration)
@@ -55,6 +56,13 @@ func (r commandRunner) Run() (commandRunResult, error) {
 	cmd := r.BuildCommand(runCtx)
 	if cmd == nil {
 		return commandRunResult{}, fmt.Errorf("command builder returned nil")
+	}
+	if r.Prepare != nil {
+		cleanup, err := r.Prepare(runCtx, cmd)
+		if err != nil {
+			return commandRunResult{}, err
+		}
+		defer cleanup()
 	}
 	cmd.Stdout = r.Stdout
 	cmd.Stderr = r.Stderr

@@ -29,9 +29,11 @@ type userInputResult struct {
 }
 
 type userInputItem struct {
-	req     toolregistry.UserInputRequest
-	display userInputDisplay
-	resp    chan userInputResult
+	req      toolregistry.UserInputRequest
+	display  userInputDisplay
+	resp     chan userInputResult
+	ctx      context.Context
+	finished chan struct{}
 }
 
 type userInputDisplay struct {
@@ -134,6 +136,8 @@ func (u *userInputManager) reset() {
 	u.checked = nil
 	u.formFields = nil
 	u.focus = 0
+	u.secret = textinput.Model{}
+	u.text = textarea.Model{}
 }
 
 func (u *userInputManager) isPending() bool { return u != nil && u.pending && u.item != nil }
@@ -152,7 +156,7 @@ func (u *userInputManager) requestWithDisplay(ctx context.Context, req toolregis
 	}
 	resp := make(chan userInputResult, 1)
 	select {
-	case ch <- userInputItem{req: req, display: display, resp: resp}:
+	case ch <- userInputItem{req: req, display: display, resp: resp, ctx: ctx, finished: make(chan struct{})}:
 	case <-done:
 		return toolregistry.UserInputResponse{}, errUserInputUnavailable
 	case <-ctx.Done():
@@ -187,7 +191,7 @@ func (u *userInputManager) requestForm(ctx context.Context, req toolregistry.Use
 	}
 	resp := make(chan userInputResult, 1)
 	select {
-	case ch <- userInputItem{req: req, resp: resp}:
+	case ch <- userInputItem{req: req, resp: resp, ctx: ctx, finished: make(chan struct{})}:
 	case <-done:
 		return nil, errUserInputUnavailable
 	case <-ctx.Done():
@@ -318,9 +322,41 @@ func (u *userInputManager) focusFormEditor(i int) {
 
 func (u *userInputManager) finish(result userInputResult) tea.Cmd {
 	u.item.resp <- result
+	if u.item.finished != nil {
+		close(u.item.finished)
+	}
 	u.pending = false
 	u.item = nil
+	u.secret = textinput.Model{}
+	u.text = textarea.Model{}
+	u.formFields = nil
 	return u.pollCmd()
+}
+
+// watchCancellation returns a message for this exact request. UI state is only
+// mutated by Update; a late cancellation cannot dismiss a newer request.
+func (u *userInputManager) watchCancellation() tea.Cmd {
+	if !u.isPending() || u.item.ctx == nil {
+		return nil
+	}
+	item := *u.item
+	_, done := u.snapshotSession()
+	return func() tea.Msg {
+		select {
+		case <-item.ctx.Done():
+			return userInputCancelMsg{resp: item.resp, err: item.ctx.Err()}
+		case <-item.finished:
+		case <-done:
+		}
+		return nil
+	}
+}
+
+func (u *userInputManager) handleCancelMsg(msg userInputCancelMsg) tea.Cmd {
+	if u.isPending() && u.item.resp == msg.resp {
+		return u.finish(userInputResult{err: msg.err})
+	}
+	return nil
 }
 
 func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {

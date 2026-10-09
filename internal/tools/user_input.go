@@ -83,6 +83,7 @@ type SecretPromptHandler func(context.Context, string, string) (string, error)
 type InteractionHandlers struct {
 	UserInput     UserInputHandler
 	SudoPrompt    SecretPromptHandler
+	GitAuth       GitAuthHandler
 	ShellProgress ShellProgressHandler
 	SelfHelp      selfhelp.Reference
 }

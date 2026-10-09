@@ -1,10 +1,31 @@
 package secrets
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestRuntimeCredentialRedaction(t *testing.T) {
+	store := New()
+	store.RememberForRedaction("")
+	store.RememberForRedaction("user")
+	secret := "user-token\\\"<&>"
+	store.RememberForRedaction(secret)
+	store.RememberForRedaction(secret)
+	require.Empty(t, store.entries, "runtime credentials must not create resolvable references")
+	require.Len(t, store.redactions, 2)
+	require.Equal(t, "[REDACTED]", store.Redact(secret))
+	encoded, err := json.Marshal(map[string]string{"stdout": secret})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"stdout":"[REDACTED]"}`, store.Redact(string(encoded)))
+	buf := store.redactions[1]
+	store.Clear()
+	require.Empty(t, store.redactions)
+	require.Equal(t, make([]byte, len(buf)), buf)
+	require.Equal(t, secret, store.Redact(secret))
+}
 
 func TestStoreResolveIsBoundAndRedacted(t *testing.T) {
 	store := New()

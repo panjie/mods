@@ -27,6 +27,9 @@ Use `sudo` only for required elevation; mods supplies secure askpass. Never use
 `sudo -S`, embed or pipe passwords, or ask for them yourself. Non-interactive
 sudo requires cached or passwordless authorization.
 
+mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or
+commands, script credential storage, or blindly retry Git writes.
+
 ## Tools and skills
 
 Follow current tool and execution guidance. Only tools supplied in this request

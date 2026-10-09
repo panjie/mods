@@ -107,6 +107,7 @@ func builtinTools() []builtinTool {
 					SafeDirs:   env.safeDirs,
 					Timeout:    env.cfg.BuiltinTools.ShellTimeout,
 					SudoPrompt: env.handlers.SudoPrompt,
+					GitAuth:    env.handlers.GitAuth,
 					Progress:   env.handlers.ShellProgress,
 				})
 			},
@@ -130,12 +131,14 @@ func builtinTools() []builtinTool {
 						Root:     env.root,
 						Timeout:  env.cfg.BuiltinTools.ShellTimeout,
 						Progress: env.handlers.ShellProgress,
+						GitAuth:  env.handlers.GitAuth,
 					})
 				}
 				return toolregistry.RegisterShell(env.registry, toolregistry.ShellConfig{
 					Root:       env.root,
 					Timeout:    env.cfg.BuiltinTools.ShellTimeout,
 					SudoPrompt: env.handlers.SudoPrompt,
+					GitAuth:    env.handlers.GitAuth,
 					Progress:   env.handlers.ShellProgress,
 				})
 			},

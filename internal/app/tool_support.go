@@ -53,6 +53,7 @@ func (m *Mods) buildToolRegistryForProvider(
 		if m.userInput != nil && m.userInput.available() {
 			handlers.UserInput = m.handleUserInput
 			handlers.SudoPrompt = m.handleSudoPrompt
+			handlers.GitAuth = m.handleGitAuthPrompt
 		}
 		return BuildRegistry(ctx, cfg, wscfg, prompt, m.skillCatalog, handlers)
 	}

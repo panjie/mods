@@ -414,8 +414,15 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reviewer.handleStartMsg(msg)
 		m.setActiveOperation("")
 	case userInputStartMsg:
+		if msg.item.ctx != nil && msg.item.ctx.Err() != nil {
+			cmds = append(cmds, m.userInput.pollCmd())
+			break
+		}
 		m.userInput.handleStartMsg(msg)
+		cmds = append(cmds, m.userInput.watchCancellation())
 		m.setActiveOperation("")
+	case userInputCancelMsg:
+		cmds = append(cmds, m.userInput.handleCancelMsg(msg))
 	case modsError:
 		m.debugEndTurn("failed", msg.Err)
 		m.Error = &msg

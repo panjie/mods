@@ -27,6 +27,7 @@ type ProcessConfig struct {
 	SafeDirs   []string
 	Timeout    time.Duration
 	SudoPrompt SecretPromptHandler
+	GitAuth    GitAuthHandler
 	Progress   ShellProgressHandler
 }
 
@@ -223,12 +224,12 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 			cmd := exec.CommandContext(runCtx, program, prepared.Args...) //nolint:gosec
 			cmd.Dir = cwd
 			if len(args.SecretEnv) > 0 {
-				cmd.Env = os.Environ()
-				for key, value := range args.SecretEnv {
-					cmd.Env = append(cmd.Env, key+"="+value)
-				}
+				cmd.Env = commandEnv(cmd.Environ(), args.SecretEnv)
 			}
 			return cmd
+		},
+		Prepare: func(runCtx context.Context, cmd *exec.Cmd) (func(), error) {
+			return prepareGitAuth(runCtx, cmd, display, cfg.GitAuth)
 		},
 		Stdout: stdout,
 		Stderr: stderr,

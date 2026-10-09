@@ -64,6 +64,11 @@ type userInputStartMsg struct {
 	item userInputItem
 }
 
+type userInputCancelMsg struct {
+	resp chan userInputResult
+	err  error
+}
+
 // quitMsg is returned by quit() after its goroutine-safe teardown so the
 // model-mutating parts (user input reset) happen in Update, never on a
 // command goroutine that races View.

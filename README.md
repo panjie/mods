@@ -382,6 +382,31 @@ before anything runs. This correction happens at most once per request and does
 not replace the normal safety review; a legitimate complex command can still
 proceed to review on the next attempt. Pipelines that represent one operation
 are not split automatically.
+### Git authentication
+
+When Git needs an HTTP(S) username or password/token during a tool call, Mods
+can prompt in the terminal and continue the same command. Existing credential
+helpers, `GIT_ASKPASS`, `core.askPass`, and `SSH_ASKPASS` retain priority. Mods
+installs its bridge only as the last askpass fallback; it does not change Git
+configuration or add an authentication tool.
+
+Passwords are masked and passed directly to Git through a local IPC connection,
+without going through the model. Mods does not save credentials, though your
+configured Git credential helper may do so. Prefer HTTPS and your existing
+credential manager for persistent authentication. Windows requires Git for
+Windows, including its bundled shell.
+
+Input counts toward the command timeout (60 seconds by default). Escape cancels
+authentication; timeout or task cancellation also closes the prompt. Mods does
+not automatically rerun the command. Raw/minimal mode, non-interactive sessions,
+and write-target discovery cannot open these prompts: configure credentials
+beforehand. Git's fallback terminal prompt is disabled; external helpers retain
+their own UI and remain subject to the command timeout.
+
+SSH private-key unlocking, host-key confirmation, and interactive `gh auth login`
+are not handled by this bridge. Existing SSH agents and external browser-based
+credential helpers continue using their own authentication setup.
+
 ### Debug output
 
 Use `-D` or `--debug` to write a human-readable execution trace to stderr.

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -47,6 +46,7 @@ type ShellConfig struct {
 	Root       string
 	Timeout    time.Duration
 	SudoPrompt SecretPromptHandler
+	GitAuth    GitAuthHandler
 	Progress   ShellProgressHandler
 }
 
@@ -186,6 +186,7 @@ type ShellRunner struct {
 	Timeout          time.Duration
 	BuildCommand     func(context.Context, string) *exec.Cmd
 	Env              map[string]string
+	GitAuth          GitAuthHandler
 	Progress         ShellProgressHandler
 	ProgressInterval time.Duration
 }
@@ -208,12 +209,12 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 			cmd := r.BuildCommand(runCtx, command)
 			cmd.Dir = r.Root
 			if len(r.Env) > 0 {
-				cmd.Env = os.Environ()
-				for key, value := range r.Env {
-					cmd.Env = append(cmd.Env, key+"="+value)
-				}
+				cmd.Env = commandEnv(cmd.Environ(), r.Env)
 			}
 			return cmd
+		},
+		Prepare: func(runCtx context.Context, cmd *exec.Cmd) (func(), error) {
+			return prepareGitAuth(runCtx, cmd, command, r.GitAuth)
 		},
 		Stdout: out,
 		Stderr: out,
@@ -270,6 +271,7 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, root, toolName, comma
 		Timeout:      cfg.Timeout,
 		BuildCommand: buildCmd,
 		Env:          env,
+		GitAuth:      cfg.GitAuth,
 		Progress:     cfg.Progress,
 	}.Run(ctx, prepared.Command)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -23,8 +24,9 @@ type entry struct {
 
 // Store is a task-scoped in-memory credential vault.
 type Store struct {
-	mu      sync.Mutex
-	entries map[string]*entry
+	mu         sync.Mutex
+	entries    map[string]*entry
+	redactions [][]byte
 }
 
 func New() *Store { return &Store{entries: map[string]*entry{}} }
@@ -112,15 +114,53 @@ func (s *Store) Resolve(tool string, data []byte) ([]byte, bool, error) {
 func (s *Store) Redact(value string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var values []string
 	for _, e := range s.entries {
-		value = strings.ReplaceAll(value, string(e.value), "[REDACTED]")
+		values = append(values, string(e.value))
 	}
-	return value
+	for _, secret := range s.redactions {
+		values = append(values, string(secret))
+	}
+	// process_run serializes stdout/stderr as JSON before the app redacts it.
+	// Match that representation too, and longer secrets first so a username
+	// that prefixes a password cannot expose the rest of the password.
+	for _, secret := range values {
+		encoded, _ := json.Marshal(secret)
+		if escaped := string(encoded[1 : len(encoded)-1]); escaped != secret {
+			values = append(values, escaped)
+		}
+	}
+	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
+	pairs := make([]string, 0, 2*len(values))
+	for _, secret := range values {
+		pairs = append(pairs, secret, "[REDACTED]")
+	}
+	return strings.NewReplacer(pairs...).Replace(value)
+}
+
+// RememberForRedaction protects runtime credentials without creating a tool
+// reference that could subsequently be resolved by a model-supplied call.
+func (s *Store) RememberForRedaction(value string) {
+	if value == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.redactions {
+		if string(existing) == value {
+			return
+		}
+	}
+	s.redactions = append(s.redactions, []byte(value))
 }
 
 func (s *Store) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, secret := range s.redactions {
+		clear(secret)
+	}
+	s.redactions = nil
 	for ref, e := range s.entries {
 		for i := range e.value {
 			e.value[i] = 0

@@ -268,6 +268,7 @@ func (m *Mods) writeTargetToolCaller(ctx context.Context, registry *toolregistry
 		intent = normalizeAccessIntentDirs(intent, cwd, name, registry.ShellExecution(name))
 		dirs := append(ExternalDirs(intent, m.reviewer.scope, m.safeDirs()), cwd)
 		callCtx = toolregistry.WithAuthorizedDirs(callCtx, dirs)
+		callCtx = toolregistry.WithoutGitAuthInput(callCtx)
 		output, err := registry.Call(callCtx, name, data)
 		if m.secrets != nil {
 			output = m.secrets.Redact(output)

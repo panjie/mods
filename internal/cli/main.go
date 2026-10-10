@@ -495,22 +495,22 @@ func removeLegacySessionFile(id string) error {
 	return nil
 }
 
-func listSessions(raw bool) error {
+func listSessions(raw bool) (string, error) {
 	sessions, err := db.List()
 	if err != nil {
-		return modsError{Err: err, ReasonText: "Couldn't list saves."}
+		return "", modsError{Err: err, ReasonText: "Couldn't list saves."}
 	}
 
 	if len(sessions) == 0 {
 		fmt.Fprintln(os.Stderr, "No sessions found.")
-		return nil
+		return "", nil
 	}
 
 	if IsInputTTY() && IsOutputTTY() && !raw {
 		return runSessionBrowser(sessions, config.NerdFontGlyphs)
 	}
 	printList(sessions)
-	return nil
+	return "", nil
 }
 
 func roleNames(prefix string) []string {

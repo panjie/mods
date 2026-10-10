@@ -108,17 +108,45 @@ func TestSessionBrowserConfirmPanelTruncatesWideTitles(t *testing.T) {
 	}
 }
 
-func TestSessionBrowserListFooterLabelsCopyID(t *testing.T) {
+func TestSessionBrowserListFooterLabelsContinue(t *testing.T) {
 	model := newBrowserModel([]Session{{
 		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
-		Title:     "copy label",
+		Title:     "continue label",
 		UpdatedAt: time.Now(),
 	}}, false)
 	_, _ = model.Update(tea.WindowSizeMsg{Width: 160, Height: 24})
 
 	footer := ansi.Strip(model.viewFooter())
 
-	require.Contains(t, footer, "copy id")
+	require.Contains(t, footer, "continue")
+}
+
+func TestSessionBrowserContinuesFocusedSession(t *testing.T) {
+	model := newBrowserModel([]Session{
+		{ID: "first-session", Title: "first"},
+		{ID: "second-session", Title: "second"},
+	}, false)
+	model.list.Select(1)
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	require.Equal(t, "second-session", model.continueID)
+	require.NotNil(t, cmd)
+	require.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+func TestSessionBrowserContinueWithoutSelection(t *testing.T) {
+	model := newBrowserModel(nil, false)
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	require.Empty(t, model.continueID)
+	require.Nil(t, cmd)
+}
+
+func TestSessionBrowserFilterCanTypeContinueKey(t *testing.T) {
+	model := newBrowserModel([]Session{{ID: "session-id", Title: "chat"}}, false)
+	_, _ = model.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	_, _ = model.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	require.Equal(t, "c", model.list.FilterInput.Value())
+	require.Equal(t, list.Filtering, model.list.FilterState())
+	require.Empty(t, model.continueID)
 }
 
 func TestSessionBrowserNerdGlyphs(t *testing.T) {

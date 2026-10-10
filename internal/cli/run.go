@@ -164,7 +164,15 @@ func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
 		return true, listSkills(config.ResolveSkillsDirs())
 	}
 	if config.List {
-		return true, listSessions(config.Raw)
+		id, err := listSessions(config.Raw)
+		if err != nil || id == "" {
+			return true, err
+		}
+		// Resume through the normal --continue prompt and model-turn path.
+		config.List = false
+		config.Continue = id
+		config.ContinueLast = false
+		return false, nil
 	}
 
 	if config.MCPList {

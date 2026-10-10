@@ -292,6 +292,7 @@ type browserModel struct {
 	nerdGlyphs bool
 
 	state          browserState
+	continueID     string
 	confirmTargets []convItem
 
 	statusMsg  string // transient feedback, cleared on the next key
@@ -325,10 +326,10 @@ func newBrowserModel(sessions []Session, nerdGlyphs bool) *browserModel {
 
 // configureList strips the bubbles/list chrome (we render our own) and
 // rebinds the keymap so single-letter navigation keys don't collide with the
-// browser's actions (notably "d" for delete and "c" for copy).
+// browser's actions (notably "d" for delete and "c" for continue).
 func configureList(l *list.Model) {
 	l.SetShowTitle(false)
-	l.SetShowFilter(true)
+	l.SetShowFilter(false)
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
 	l.SetShowHelp(false)
@@ -456,7 +457,7 @@ func (m *browserModel) updateBrowsing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "D":
 			return m.startConfirm(m.markedOrFocused())
 		case "c":
-			return m.copyFocused()
+			return m.continueFocused()
 		case " ", "space":
 			return m.toggleMark()
 		}
@@ -464,6 +465,8 @@ func (m *browserModel) updateBrowsing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	nl, cmd := m.list.Update(msg)
 	m.list = nl
+	// An enabled but inactive filter bar otherwise leaves an empty title row.
+	m.list.SetShowFilter(m.list.FilterState() == list.Filtering)
 	return m, cmd
 }
 
@@ -517,14 +520,13 @@ func (m *browserModel) toggleMark() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *browserModel) copyFocused() (tea.Model, tea.Cmd) {
+func (m *browserModel) continueFocused() (tea.Model, tea.Cmd) {
 	ci, ok := m.focused()
 	if !ok {
 		return m, nil
 	}
-	copyTextToClipboard(ci.conv.ID)
-	m.statusMsg = "copied " + ci.conv.ID
-	return m, nil
+	m.continueID = ci.conv.ID
+	return m, tea.Quit
 }
 
 func (m *browserModel) startConfirm(targets []convItem) (tea.Model, tea.Cmd) {
@@ -620,6 +622,9 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.toggleViewerWrap()
 		return m, nil
 	case "c":
+		m.continueID = m.viewing.conv.ID
+		return m, tea.Quit
+	case "C":
 		return m.copyViewedSession()
 	case "j", "down":
 		m.scrollViewer(1)
@@ -664,7 +669,7 @@ func (m *browserModel) copyViewedSession() (tea.Model, tea.Cmd) {
 	}
 	text := formatSessionDebug(m.viewing.conv, m.viewerMsgs)
 	copyTextToClipboard(text)
-	m.statusMsg = fmt.Sprintf("copied session debug (%d chars)", len([]rune(text)))
+	m.statusMsg = fmt.Sprintf("copied session (%d chars)", len([]rune(text)))
 	return m, nil
 }
 
@@ -887,7 +892,8 @@ func (m *browserModel) viewFooter() string {
 			{"↑↓/jk", "scroll"},
 			{"/", "find"},
 			{"n/N", "match"},
-			{"c", "copy debug"},
+			{"c", "continue"},
+			{"C", "copy"},
 			{"w", m.viewerWrapLabel()},
 			{"q / esc", "back"},
 		}
@@ -904,7 +910,7 @@ func (m *browserModel) viewFooter() string {
 			{"space", "mark"},
 			{"d", "delete"},
 			{"D", "delete marked"},
-			{"c", "copy id"},
+			{"c", "continue"},
 			{"q", "quit"},
 		}
 	}
@@ -1003,13 +1009,14 @@ func plural(n int) string {
 
 // runSessionBrowser starts the interactive browser over the supplied
 // sessions. It is only invoked on a fully interactive TTY.
-func runSessionBrowser(sessions []Session, nerdGlyphs bool) error {
+func runSessionBrowser(sessions []Session, nerdGlyphs bool) (string, error) {
 	program := tea.NewProgram(
 		newBrowserModel(sessions, nerdGlyphs),
 		tea.WithOutput(os.Stderr),
 	)
-	if _, err := program.Run(); err != nil {
-		return err
+	result, err := program.Run()
+	if err != nil {
+		return "", err
 	}
-	return nil
+	return result.(*browserModel).continueID, nil
 }

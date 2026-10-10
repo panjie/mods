@@ -122,7 +122,7 @@ func TestFormatSessionDebugIncludesMetadataAndTranscript(t *testing.T) {
 	require.Equal(t, debugText, ansi.Strip(debugText))
 }
 
-func TestViewerCopiesSessionDebugWithC(t *testing.T) {
+func TestViewerCopiesSessionWithUppercaseC(t *testing.T) {
 	savedCopy := copyTextToClipboard
 	t.Cleanup(func() { copyTextToClipboard = savedCopy })
 	var copied string
@@ -135,12 +135,25 @@ func TestViewerCopiesSessionDebugWithC(t *testing.T) {
 		UpdatedAt: time.Date(2026, 7, 25, 14, 30, 0, 0, time.UTC),
 	}}
 
-	sendViewerKey(m, 'c', "c")
+	sendViewerKey(m, 'C', "C")
 
 	require.Contains(t, copied, "mods session debug")
 	require.Contains(t, copied, "debug me")
-	require.Contains(t, m.statusMsg, "copied session debug")
-	require.Contains(t, ansi.Strip(m.viewFooter()), "copy debug")
+	require.Contains(t, m.statusMsg, "copied session (")
+	require.Empty(t, m.continueID)
+	footer := ansi.Strip(m.viewFooter())
+	require.Contains(t, footer, "C copy")
+	require.Contains(t, footer, "c continue")
+	require.NotContains(t, footer, "copy debug")
+}
+
+func TestViewerContinuesViewedSessionWithLowercaseC(t *testing.T) {
+	m := newLoadedViewer(t, 120, 12, []proto.Message{{Role: proto.RoleUser, Content: "hello"}})
+	m.viewing = convItem{conv: Session{ID: "viewed-session"}}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	require.Equal(t, "viewed-session", m.continueID)
+	require.NotNil(t, cmd)
+	require.IsType(t, tea.QuitMsg{}, cmd())
 }
 
 func TestViewerGutterShowsToolMarker(t *testing.T) {

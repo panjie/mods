@@ -168,19 +168,41 @@ type ToolSession struct {
 
 type toolServerSession struct {
 	client       *client.Client
+	cancel       context.CancelFunc
 	tools        []mcp.Tool
 	remoteOrigin string
 	mu           sync.Mutex
 }
 
 func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
+	// Bound discovery separately from the lifetime of connected transports.
+	// In particular SSE.Start retains its context for the event stream.
+	setupCtx, setupCancel := context.WithTimeout(ctx, cfg.MCPTimeout)
+	defer setupCancel()
 	var mu sync.Mutex
 	var wg errgroup.Group
 	session := &ToolSession{servers: map[string]*toolServerSession{}}
 	for sname, server := range EnabledServers(cfg) {
 		sname, server := sname, server
 		wg.Go(func() error {
-			cli, err := InitClient(ctx, server)
+			connectionCtx, cancel := context.WithCancel(ctx)
+			stopSetupCancellation := context.AfterFunc(setupCtx, cancel)
+			defer stopSetupCancellation()
+			retained := false
+			var cli *client.Client
+			defer func() {
+				if !retained {
+					cancel()
+					if cli != nil {
+						_ = cli.Close()
+					}
+				}
+			}()
+			var err error
+			cli, err = initClient(connectionCtx, setupCtx, server)
+			if err != nil && setupCtx.Err() != nil {
+				err = setupCtx.Err()
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				return modsError{
 					Err:        fmt.Errorf("timeout while listing tools for %q - make sure the configuration is correct. If your server requires a docker container, make sure it's running", sname),
@@ -193,21 +215,27 @@ func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
 					ReasonText: "Could not list tools",
 				}
 			}
-			tools, err := cli.ListTools(ctx, mcp.ListToolsRequest{})
+			tools, err := cli.ListTools(setupCtx, mcp.ListToolsRequest{})
 			if err != nil {
-				cli.Close() //nolint:errcheck
 				return modsError{
 					Err:        fmt.Errorf("could not setup %s: %w", sname, err),
 					ReasonText: "Could not list tools",
 				}
+			}
+			// Once discovery succeeds, the setup deadline must no longer cancel
+			// the connection. Check the race with deadline expiry before retaining it.
+			stopSetupCancellation()
+			if err := setupCtx.Err(); err != nil {
+				return modsError{Err: fmt.Errorf("could not setup %s: %w", sname, err), ReasonText: "Could not list tools"}
 			}
 			mu.Lock()
 			origin := ""
 			if server.Type == "http" || server.Type == "sse" {
 				origin, _ = approval.NormalizeRemoteOrigin(server.URL)
 			}
-			session.servers[sname] = &toolServerSession{client: cli, tools: tools.Tools, remoteOrigin: origin}
+			session.servers[sname] = &toolServerSession{client: cli, cancel: cancel, tools: tools.Tools, remoteOrigin: origin}
 			mu.Unlock()
+			retained = true
 			return nil
 		})
 	}
@@ -225,6 +253,10 @@ func (s *ToolSession) Close() error {
 	var errs []error
 	for name, server := range s.servers {
 		server.mu.Lock()
+		if server.cancel != nil {
+			server.cancel()
+			server.cancel = nil
+		}
 		if server.client != nil {
 			if err := server.client.Close(); err != nil {
 				errs = append(errs, fmt.Errorf("close MCP %s: %w", name, err))
@@ -284,6 +316,13 @@ func InputSchema(tool mcp.Tool) map[string]any {
 
 // InitClient creates and initializes an MCP client.
 func InitClient(ctx context.Context, server MCPServerConfig) (*client.Client, error) {
+	return initClient(ctx, ctx, server)
+}
+
+// initClient starts the transport with its lifetime context while using the
+// bounded setup context for protocol initialization. The caller must cancel
+// lifetimeCtx if setup expires while Start is waiting for an SSE endpoint.
+func initClient(lifetimeCtx, setupCtx context.Context, server MCPServerConfig) (*client.Client, error) {
 	var cli *client.Client
 	var err error
 
@@ -320,12 +359,12 @@ func InitClient(ctx context.Context, server MCPServerConfig) (*client.Client, er
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}
 
-	if err := cli.Start(ctx); err != nil {
+	if err := cli.Start(lifetimeCtx); err != nil {
 		cli.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("failed to start MCP client: %w", err)
 	}
 
-	if _, err := cli.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+	if _, err := cli.Initialize(setupCtx, mcp.InitializeRequest{}); err != nil {
 		cli.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("failed to initialize MCP client: %w", err)
 	}

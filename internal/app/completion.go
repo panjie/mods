@@ -63,6 +63,11 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	m.displayOutputBuilder.Reset()
 	m.displayOutput = ""
 	m.glamOutput = ""
+	if m.retries > 0 && m.retryCheckpoint != nil {
+		m.restoreCompletionOutput()
+	} else {
+		m.retryCheckpoint = nil
+	}
 	if !m.debugTurnActive {
 		m.debugTurn++
 		m.debugRound = 1

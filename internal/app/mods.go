@@ -61,6 +61,9 @@ type Mods struct {
 	// There is intentionally no per-field mutex; callers must not introduce
 	// new background goroutines that touch m.messages outside this pattern.
 	messages []proto.Message
+	// retryCheckpoint contains only completed model/tool rounds. Failed streams
+	// may append partial assistant messages, so their history is not resumable.
+	retryCheckpoint *completionCheckpoint
 	// Mods is created anew for each chat turn. Keep inference state across
 	// this turn's request retries, independently of debug/UI lifecycle flags.
 	writeTargetsDone        bool
@@ -398,6 +401,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = doneState
 			return m, m.quit
 		case streamEventError:
+			m.tokenUsage.Add(msg.runner.takeUsage())
 			m.debugEndModelRound("error", 0, msg.err)
 			return m, msgCmd(msg.runner.errh(msg.err))
 		}
@@ -666,5 +670,6 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.debugRound++
 	m.debugStartModelRound()
 	m.responseBoundaryPending = true
+	m.saveCompletionCheckpoint(msg.runner.messages())
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
 }

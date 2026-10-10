@@ -129,10 +129,9 @@ func TestRetryBudgetResetsAfterSuccessfulTurn(t *testing.T) {
 
 // TestStartCompletionCmdClearsPartialOutput pins the retry artifact: a
 // transient failure can strike mid-stream after chunks were already appended
-// (truncated provider body, connection reset). The retried turn regenerates
-// the response from scratch, so any partial output from the failed attempt
-// must be discarded — otherwise the final Output/RenderedOutput contains the
-// answer's beginning twice.
+// (truncated provider body, connection reset). With no completed tool round,
+// the retry regenerates the response from scratch, so the failed attempt's
+// partial output must be discarded to avoid duplicating the answer's beginning.
 func TestStartCompletionCmdClearsPartialOutput(t *testing.T) {
 	m := testMods(t)
 	m.outputBuilder.WriteString("partial answer")

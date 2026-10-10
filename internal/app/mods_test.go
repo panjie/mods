@@ -1439,6 +1439,23 @@ func TestStreamDoneAccumulatesUsageAcrossStreamsOnce(t *testing.T) {
 	}, m.TokenUsage())
 }
 
+func TestStreamRetryAccumulatesUsageOnce(t *testing.T) {
+	m := testMods(t)
+	failed := newStreamRunner(staticStream{usage: proto.TokenUsage{
+		InputTokens: 10, OutputTokens: 4, TotalTokens: 14,
+	}}, nil, nil, func(error) tea.Msg { return nil })
+	retried := newStreamRunner(staticStream{usage: proto.TokenUsage{
+		InputTokens: 20, OutputTokens: 6, TotalTokens: 26,
+	}}, nil, nil, func(error) tea.Msg { return nil })
+
+	_, _ = m.Update(streamEventMsg{kind: streamEventError, runner: failed})
+	_, _ = m.Update(streamEventMsg{kind: streamEventError, runner: failed})
+	_, _ = m.Update(retried.doneMsg())
+	require.Equal(t, proto.TokenUsage{
+		InputTokens: 30, OutputTokens: 10, TotalTokens: 40,
+	}, m.TokenUsage())
+}
+
 // TestQuitResetsUserInputViaUpdateOnly guards against the Ctrl+C-during-form
 // panic: Bubble Tea runs Cmds on their own goroutines while the event loop
 // renders, so quit() must not mutate userInput state (reset() nil'ing

@@ -91,13 +91,15 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	localWebSearch, providerWebSearch := resolveWebSearch(cfg, client.Capabilities())
 	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
 
-	err = m.setupStreamContext(content)
+	err = m.setupCompletionContext(content)
 	if err != nil {
 		return requestSession{}, err
 	}
 	m.sanitizeProviderContinuation(mod, ccfg.UseResponses)
 
-	registryCtx, cancel := context.WithTimeout(m.ctx, cfg.MCPTimeout)
+	// Registry connections live for the request; MCP discovery applies its own
+	// timeout without attaching that deadline to a persistent SSE transport.
+	registryCtx, cancel := context.WithCancel(m.ctx)
 	m.addCancel(cancel)
 	toolCfg := *cfg
 	toolCfg.WebSearch = localWebSearch
@@ -152,6 +154,9 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// waiting for it to finish on its own. The cancel is owned by the
 	// streamRunner and released by close().
 	streamCtx, streamCancel := context.WithCancel(m.ctx)
+	if m.retryCheckpoint == nil {
+		m.retryCheckpoint = &completionCheckpoint{messages: cloneCompletionMessages(m.messages)}
+	}
 	st := client.Request(streamCtx, request)
 	errh := func(err error) tea.Msg {
 		return m.handleRequestError(err, mod, m.Input)
@@ -169,7 +174,9 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 func (m *Mods) sanitizeProviderContinuation(mod Model, useResponses bool) {
 	allowed := allowedProviderDataKeys(mod, useResponses)
 	crossProvider := false
-	if m.db != nil && m.Config.SessionReadFromID != "" {
+	// A retry checkpoint can contain continuation state generated this turn by
+	// the current provider, even if the persisted conversation used another API.
+	if m.retryCheckpoint == nil && m.db != nil && m.Config.SessionReadFromID != "" {
 		if session, err := m.db.Find(m.Config.SessionReadFromID); err == nil && session != nil && session.API != nil {
 			crossProvider = !strings.EqualFold(strings.TrimSpace(*session.API), strings.TrimSpace(mod.API))
 			if crossProvider {

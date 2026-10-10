@@ -2,6 +2,7 @@
 package proto
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"time"
@@ -277,7 +278,7 @@ func toolCallTranscript(label string, call ToolCall, result string) string {
 		sb.WriteString("\n")
 		sb.WriteString(formatToolArguments(name, call.Function.Arguments))
 	}
-	if result != "" {
+	if label == "Tool result" {
 		status := "success"
 		if call.IsError {
 			status = "error"
@@ -287,20 +288,31 @@ func toolCallTranscript(label string, call ToolCall, result string) string {
 		sb.WriteString(status)
 		sb.WriteString("\n")
 		sb.WriteString("output:\n")
-		sb.WriteString(result)
+		if result == "" {
+			sb.WriteString("(no output)")
+		} else {
+			sb.WriteString(result)
+		}
 	}
 	return sb.String()
 }
 
 func formatToolArguments(name string, data []byte) string {
 	if command := shellCommandArgument(name, data); command != "" {
+		var args map[string]json.RawMessage
+		if err := json.Unmarshal(data, &args); err == nil {
+			delete(args, "command")
+			if len(args) > 0 {
+				if extra, err := json.MarshalIndent(args, "", "  "); err == nil {
+					return "command:\n" + command + "\narguments:\n" + string(extra)
+				}
+			}
+		}
 		return "command:\n" + command
 	}
-	var v any
-	if err := json.Unmarshal(data, &v); err == nil {
-		if formatted, err := json.MarshalIndent(v, "", "  "); err == nil {
-			return "arguments:\n" + string(formatted)
-		}
+	var formatted bytes.Buffer
+	if err := json.Indent(&formatted, data, "", "  "); err == nil {
+		return "arguments:\n" + formatted.String()
 	}
 	return "arguments:\n" + string(data)
 }

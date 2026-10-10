@@ -27,6 +27,9 @@ func newLoadedViewer(t *testing.T, width, height int, messages []proto.Message) 
 	m.resetViewerViewport(height - lipgloss.Height(m.viewerHeader) - browserFooterHeight)
 	_, cmd := m.handleLoaded(loadedContentMsg{messages: messages})
 	require.Nil(t, cmd)
+	// Layout tests use a fixed-height header independently of metadata wrapping.
+	m.viewerHeader = "session\nmetadata\nrule"
+	m.viewport.SetHeight(height - lipgloss.Height(m.viewerHeader) - browserFooterHeight)
 	return m
 }
 
@@ -58,7 +61,7 @@ func TestBuildTranscriptDocumentIsPlainRoleAwareContent(t *testing.T) {
 	require.Contains(t, doc.content, "secret tool result")
 	require.Contains(t, doc.content, "answer")
 	require.Equal(t, doc.content, ansi.Strip(doc.content))
-	require.Len(t, doc.lines, 12)
+	require.Len(t, doc.lines, 14)
 	require.Equal(t, transcriptLine{role: proto.RoleUser, start: true}, doc.lines[0])
 	require.Equal(t, transcriptLine{role: proto.RoleUser}, doc.lines[1])
 	require.Equal(t, transcriptLine{}, doc.lines[2])
@@ -67,10 +70,10 @@ func TestBuildTranscriptDocumentIsPlainRoleAwareContent(t *testing.T) {
 	require.Equal(t, transcriptLine{role: proto.RoleAssistant, start: true}, doc.lines[11])
 }
 
-func TestFormatSessionDebugIncludesMetadataAndTranscript(t *testing.T) {
+func TestFormatSessionCopyIncludesMetadataAndTranscript(t *testing.T) {
 	api := "deepseek"
 	model := "deepseek-v4-flash"
-	debugText := formatSessionDebug(Session{
+	debugText := formatSessionCopy(Session{
 		ID:        "df31ae23ab8b75b5643c2f846c570997edc71333",
 		Title:     "debug session",
 		UpdatedAt: time.Date(2026, 7, 25, 14, 30, 0, 0, time.UTC),
@@ -101,9 +104,9 @@ func TestFormatSessionDebugIncludesMetadataAndTranscript(t *testing.T) {
 				Function: proto.Function{Name: "powershell_run"},
 			}},
 		},
-	})
+	}, 0)
 
-	require.Contains(t, debugText, "mods session debug")
+	require.Contains(t, debugText, "mods session")
 	require.Contains(t, debugText, "id: df31ae23ab8b75b5643c2f846c570997edc71333")
 	require.Contains(t, debugText, "title: debug session")
 	require.Contains(t, debugText, "api: deepseek")
@@ -112,7 +115,7 @@ func TestFormatSessionDebugIncludesMetadataAndTranscript(t *testing.T) {
 	require.Contains(t, debugText, "--- message 1/3 role=user ---")
 	require.Contains(t, debugText, "- 1: image/png, 3 bytes")
 	require.Contains(t, debugText, "hello")
-	require.Contains(t, debugText, "provider_data: omitted (1 keys)")
+	require.Contains(t, debugText, "Internal continuation data: 1 fields (not expanded)")
 	require.Contains(t, debugText, "Tool call: powershell_run (call-1)")
 	require.Contains(t, debugText, "command:\nGet-ChildItem")
 	require.Contains(t, debugText, "Tool result: powershell_run (call-1)")
@@ -137,7 +140,7 @@ func TestViewerCopiesSessionWithUppercaseC(t *testing.T) {
 
 	sendViewerKey(m, 'C', "C")
 
-	require.Contains(t, copied, "mods session debug")
+	require.Contains(t, copied, "mods session")
 	require.Contains(t, copied, "debug me")
 	require.Contains(t, m.statusMsg, "copied session (")
 	require.Empty(t, m.continueID)

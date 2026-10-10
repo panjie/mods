@@ -38,16 +38,12 @@ func buildTranscriptDocument(messages []proto.Message) transcriptDocument {
 	var contentLines []string
 	var lineInfo []transcriptLine
 	for _, msg := range messages {
-		content := proto.TranscriptContent(msg)
-		if content == "" {
-			continue
-		}
+		content := readableMessageContent(msg)
 		if len(contentLines) > 0 {
 			contentLines = append(contentLines, "")
 			lineInfo = append(lineInfo, transcriptLine{})
 		}
 
-		content = plainTranscriptContent(content)
 		parts := strings.Split(content, "\n")
 		for i, line := range parts {
 			contentLines = append(contentLines, line)
@@ -57,16 +53,17 @@ func buildTranscriptDocument(messages []proto.Message) transcriptDocument {
 	return transcriptDocument{content: strings.Join(contentLines, "\n"), lines: lineInfo}
 }
 
-func formatSessionDebug(session Session, messages []proto.Message) string {
+func formatSessionCopy(session Session, messages []proto.Message, approvalCount int) string {
 	var sb strings.Builder
-	sb.WriteString("mods session debug\n")
-	sb.WriteString("==================\n")
-	writeDebugField(&sb, "id", session.ID)
-	writeDebugField(&sb, "title", session.Title)
-	writeDebugField(&sb, "api", stringPtrValue(session.API))
-	writeDebugField(&sb, "model", stringPtrValue(session.Model))
-	writeDebugField(&sb, "updated_at", session.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
-	writeDebugField(&sb, "messages", stringInt(len(messages)))
+	sb.WriteString("mods session\n")
+	sb.WriteString("============\n")
+	writeSessionField(&sb, "id", session.ID)
+	writeSessionField(&sb, "title", session.Title)
+	writeSessionField(&sb, "api", stringPtrValue(session.API))
+	writeSessionField(&sb, "model", stringPtrValue(session.Model))
+	writeSessionField(&sb, "updated_at", session.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"))
+	writeSessionField(&sb, "messages", stringInt(len(messages)))
+	writeSessionField(&sb, "approval_rules", stringInt(approvalCount)+" (not expanded)")
 
 	sb.WriteString("\ntranscript\n")
 	sb.WriteString("----------\n")
@@ -91,45 +88,47 @@ func formatSessionDebug(session Session, messages []proto.Message) string {
 		sb.WriteString(role)
 		sb.WriteString(" ---\n")
 
-		if len(msg.Images) > 0 {
-			sb.WriteString("images:\n")
-			for imageIndex, img := range msg.Images {
-				sb.WriteString("- ")
-				sb.WriteString(stringInt(imageIndex + 1))
-				sb.WriteString(": ")
-				mime := img.MimeType
-				if mime == "" {
-					mime = "unknown"
-				}
-				sb.WriteString(mime)
-				sb.WriteString(", ")
-				sb.WriteString(stringInt(len(img.Data)))
-				sb.WriteString(" bytes\n")
-			}
-		}
-
-		content := plainTranscriptContent(proto.TranscriptContent(msg))
-		if len(msg.ProviderData) > 0 {
-			if content != "" {
-				content += "\n\n"
-			}
-			content += "provider_data: omitted (" + stringInt(len(msg.ProviderData)) + " keys)"
-		}
-		if content == "" && len(msg.Images) == 0 {
-			sb.WriteString("(empty)\n")
-			continue
-		}
-		if content != "" {
-			sb.WriteString(content)
-			if !strings.HasSuffix(content, "\n") {
-				sb.WriteString("\n")
-			}
-		}
+		sb.WriteString(readableMessageContent(msg))
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
 
-func writeDebugField(sb *strings.Builder, name, value string) {
+// readableMessageContent is shared by the viewer and clipboard export. Opaque
+// provider state and image bytes stay private, but their presence is visible.
+func readableMessageContent(msg proto.Message) string {
+	var parts []string
+	if content := plainTranscriptContent(proto.TranscriptContent(msg)); content != "" {
+		parts = append(parts, content)
+	}
+	if len(msg.Images) > 0 {
+		var images strings.Builder
+		images.WriteString("images (" + stringInt(len(msg.Images)) + "):")
+		for i, img := range msg.Images {
+			mime := img.MimeType
+			if mime == "" {
+				mime = "unknown"
+			}
+			images.WriteString("\n- " + stringInt(i+1) + ": " + mime + ", " + stringInt(len(img.Data)) + " bytes (not displayed)")
+		}
+		parts = append(parts, plainTranscriptContent(images.String()))
+	}
+	internalFields := len(msg.ProviderData)
+	for _, call := range msg.ToolCalls {
+		if call.Function.ThoughtSignature != "" {
+			internalFields++
+		}
+	}
+	if internalFields > 0 {
+		parts = append(parts, "Internal continuation data: "+stringInt(internalFields)+" fields (not expanded)")
+	}
+	if len(parts) == 0 {
+		return "(empty message)"
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func writeSessionField(sb *strings.Builder, name, value string) {
 	if value == "" {
 		value = "(empty)"
 	}

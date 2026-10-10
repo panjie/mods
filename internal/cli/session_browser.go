@@ -256,9 +256,11 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 // --- async messages ------------------------------------------------------
 
 type loadedContentMsg struct {
-	id       string
-	messages []proto.Message
-	err      error
+	id            string
+	request       uint64
+	approvalCount int
+	messages      []proto.Message
+	err           error
 }
 
 type deletedMsg struct {
@@ -277,15 +279,17 @@ type browserModel struct {
 	list     list.Model
 	delegate *convDelegate
 
-	viewport     viewport.Model
-	viewing      convItem
-	viewerHeader string
-	viewerDoc    transcriptDocument
-	viewerLayout transcriptLayout
-	viewerSearch viewerSearch
-	viewerMsgs   []proto.Message
-	viewerLoaded bool
-	viewErr      string
+	viewport            viewport.Model
+	viewing             convItem
+	viewerHeader        string
+	viewerDoc           transcriptDocument
+	viewerLayout        transcriptLayout
+	viewerSearch        viewerSearch
+	viewerMsgs          []proto.Message
+	viewerLoaded        bool
+	viewerRequest       uint64
+	viewerApprovalCount int
+	viewErr             string
 
 	marks map[string]bool
 
@@ -366,6 +370,9 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		anchor := m.captureViewerAnchor()
 		m.width, m.height = msg.Width, msg.Height
 		m.list.SetSize(m.width, m.bodyHeight())
+		if m.state == stateViewing && m.viewing.conv.ID != "" {
+			m.viewerHeader = m.buildViewerHeader(m.viewing)
+		}
 		headerH := lipgloss.Height(m.viewerHeader)
 		m.viewport.SetWidth(m.width)
 		m.viewport.SetHeight(max(1, m.height-headerH-browserFooterHeight))
@@ -554,10 +561,12 @@ func (m *browserModel) openViewer() (tea.Model, tea.Cmd) {
 	m.viewerSearch = newViewerSearch(m.width)
 	m.viewerMsgs = nil
 	m.viewerLoaded = false
+	m.viewerRequest++
+	m.viewerApprovalCount = 0
 	m.viewerHeader = m.buildViewerHeader(ci)
 	headerH := lipgloss.Height(m.viewerHeader)
 	m.resetViewerViewport(m.height - headerH - browserFooterHeight)
-	return m, m.loadContent(ci.conv.ID)
+	return m, m.loadContent(ci.conv.ID, m.viewerRequest)
 }
 
 func (m *browserModel) closeViewer() {
@@ -569,20 +578,30 @@ func (m *browserModel) closeViewer() {
 	m.viewerSearch = viewerSearch{}
 	m.viewerMsgs = nil
 	m.viewerLoaded = false
+	m.viewerApprovalCount = 0
 	m.viewErr = ""
 }
 
-func (m *browserModel) loadContent(id string) tea.Cmd {
+func (m *browserModel) loadContent(id string, request uint64) tea.Cmd {
 	return func() tea.Msg {
+		result := loadedContentMsg{id: id, request: request}
 		var msgs []proto.Message
 		if err := m.db.ReadMessages(id, &msgs); err != nil {
-			return loadedContentMsg{id: id, err: err}
+			result.err = err
+			return result
 		}
-		return loadedContentMsg{id: id, messages: msgs}
+		rules, err := m.db.ApprovalRules(id)
+		result.messages = msgs
+		result.approvalCount = len(rules)
+		result.err = err
+		return result
 	}
 }
 
 func (m *browserModel) handleLoaded(msg loadedContentMsg) (tea.Model, tea.Cmd) {
+	if m.state != stateViewing || msg.id != m.viewing.conv.ID || msg.request != m.viewerRequest {
+		return m, nil
+	}
 	m.viewerLoaded = true
 	if msg.err != nil {
 		m.viewErr = msg.err.Error()
@@ -591,11 +610,14 @@ func (m *browserModel) handleLoaded(msg loadedContentMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.viewerMsgs = append([]proto.Message(nil), msg.messages...)
+	m.viewerApprovalCount = msg.approvalCount
+	m.viewErr = ""
+	m.viewerHeader = m.buildViewerHeader(m.viewing)
+	m.viewport.SetHeight(max(1, m.height-lipgloss.Height(m.viewerHeader)-browserFooterHeight))
 	m.viewerDoc = buildTranscriptDocument(msg.messages)
 	m.viewport.SetContent(m.viewerDoc.content)
 	m.rebuildViewerLayout()
 	m.viewport.SetYOffset(0)
-	m.viewErr = ""
 	return m, nil
 }
 
@@ -667,7 +689,7 @@ func (m *browserModel) copyViewedSession() (tea.Model, tea.Cmd) {
 		m.statusMsg = "copy failed: session did not load"
 		return m, nil
 	}
-	text := formatSessionDebug(m.viewing.conv, m.viewerMsgs)
+	text := formatSessionCopy(m.viewing.conv, m.viewerMsgs, m.viewerApprovalCount)
 	copyTextToClipboard(text)
 	m.statusMsg = fmt.Sprintf("copied session (%d chars)", len([]rune(text)))
 	return m, nil
@@ -686,11 +708,14 @@ func (m *browserModel) buildViewerHeader(ci convItem) string {
 		parts = append(parts, *ci.conv.API)
 	}
 	parts = append(parts, ci.conv.UpdatedAt.Format("2006-01-02 15:04"))
+	if m.viewerLoaded && m.viewErr == "" {
+		parts = append(parts, fmt.Sprintf("%d messages · %d saved approval rules (not expanded)", len(m.viewerMsgs), m.viewerApprovalCount))
+	}
 	meta := styles.Comment.Render(strings.Join(parts, "  ·  "))
 
 	line1 := title + "  " + id
 	rule := m.styles.viewerRule.Render(strings.Repeat("─", m.width))
-	return lipgloss.JoinVertical(lipgloss.Left, line1, meta, rule)
+	return lipgloss.NewStyle().Width(max(1, m.width)).Render(lipgloss.JoinVertical(lipgloss.Left, line1, meta, rule))
 }
 
 // --- confirm / delete ----------------------------------------------------

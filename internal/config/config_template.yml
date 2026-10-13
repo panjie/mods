@@ -352,12 +352,15 @@ apis:
   #       provider-profile: deepseek
   #       endpoint: responses
 
-  # Example: a service that splits models across TWO protocols. OpenCode's
-  # zen gateway serves some models only via its OpenAI-compatible endpoint
-  # (/v1/chat/completions) and others only via its Anthropic endpoint
-  # (/v1/messages). mods models one provider = one protocol, so configure
-  # TWO providers sharing the same key, one per endpoint. (OpenRouter, by
-  # contrast, serves every model through a single OpenAI-compatible
+  # Example: a service that splits models across protocols. OpenCode's
+  # zen gateway serves some models only via its OpenAI-compatible
+  # endpoints (/v1/chat/completions for GLM, Kimi, DeepSeek, MiMo and
+  # /v1/responses for GPT Luna, Grok, Muse Spark) and others only via
+  # its Anthropic endpoint (/v1/messages for MiniMax, Qwen). mods models
+  # one provider = one protocol, so configure TWO providers sharing the
+  # same key, one per endpoint; Responses-only models set
+  # endpoint: responses on the OpenAI-compatible provider. (OpenRouter,
+  # by contrast, serves every model through a single OpenAI-compatible
   # endpoint, so it needs only one provider.)
   #
   # opencode:            # Anthropic-protocol models (MiniMax, Qwen3.7)
@@ -380,3 +383,7 @@ apis:
   #       aliases: ["glm"]
   #     kimi-k2.7-code:
   #       aliases: ["kimi"]
+  #     # Responses-only models (GPT Luna, Grok, Muse Spark) are served
+  #     # on the same provider via the Responses API:
+  #     gpt-6-luna:
+  #       endpoint: responses

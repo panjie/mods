@@ -11,3 +11,6 @@ manpages/
 .DS_Store
 
 buildtask
+
+# AI
+.opencode/

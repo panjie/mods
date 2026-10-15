@@ -20,9 +20,9 @@ var errResponsesStreamEnded = errors.New("OpenAI Responses stream ended before a
 
 func (c *Client) requestResponses(ctx context.Context, request proto.Request) stream.Stream {
 	profile := c.profile()
-	if profile == ProviderProfileDeepSeek && messagesContainImages(request.Messages) {
+	if profile == ProviderProfileDeepSeek && !deepSeekImageModel(request.Model) && messagesContainImages(request.Messages) {
 		return &responseStream{
-			requestErr: fmt.Errorf("DeepSeek Responses API does not support image or file input; use endpoint: chat-completions or remove the attachment"),
+			requestErr: fmt.Errorf("selected DeepSeek model does not support image input; use deepseek-flash"),
 			messages:   request.Messages,
 		}
 	}
@@ -71,15 +71,23 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 	}
 
 	opts := responsesRequestOptions(c.config.ExtraParams, profile)
+	if err := stream.ValidateImageWireRequest(request.Messages, body); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
 	s := &responseStream{
 		stream:     c.Responses.NewStreaming(ctx, body, opts...),
 		request:    body,
 		toolCall:   request.ToolCaller,
+		resultCall: request.ResultCaller,
 		messages:   request.Messages,
 		trackUsage: request.TrackUsage,
 		profile:    profile,
 	}
 	s.factory = func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
+		if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+			s.requestErr = err
+			return nil
+		}
 		return c.Responses.NewStreaming(ctx, s.request, opts...)
 	}
 	return s
@@ -151,6 +159,7 @@ type responseStream struct {
 	request    responses.ResponseNewParams
 	messages   []proto.Message
 	toolCall   proto.ToolCaller
+	resultCall proto.ToolResultCaller
 	trackUsage bool
 	profile    ResponsesProfile
 
@@ -206,7 +215,7 @@ func (s *responseStream) CallTools() []proto.ToolCallStatus {
 	for i, call := range calls {
 		msg, status := stream.CallTool(
 			proto.ToolCallRequest{ID: call.id, Index: i + 1, Total: len(calls), Name: call.name, Arguments: call.arguments},
-			s.toolCall,
+			s.toolCall, s.resultCall,
 		)
 		if call.custom && len(msg.ToolCalls) > 0 {
 			msg.ToolCalls[0].Type = "custom"
@@ -429,6 +438,9 @@ func (s *responseStream) startFollowup() error {
 	}
 	s.request.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: input}
 	s.stream = s.factory()
+	if s.requestErr != nil {
+		return s.requestErr
+	}
 	s.terminal = nil
 	s.terminalSeen = false
 	s.incomplete = false

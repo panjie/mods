@@ -236,3 +236,16 @@ func TestToProtoMessage(t *testing.T) {
 		require.Equal(t, "tool_1", replayed[0].Content[3].OfToolUse.ID)
 	})
 }
+
+func TestToolResultImagesStayInsideParallelResults(t *testing.T) {
+	input := []proto.Message{{Role: proto.RoleTool, Content: "first", Images: []proto.Image{{Data: []byte("pixels"), MimeType: "image/png", Source: "a.png"}}, ToolCalls: []proto.ToolCall{{ID: "one"}}}, {Role: proto.RoleTool, Content: "second", ToolCalls: []proto.ToolCall{{ID: "two"}}}}
+	_, messages, err := fromProtoMessages(input)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Len(t, messages[0].Content, 2)
+	block := messages[0].Content[0].OfToolResult
+	require.Equal(t, "one", block.ToolUseID)
+	require.Len(t, block.Content, 3)
+	require.NotNil(t, block.Content[2].OfImage)
+	require.Equal(t, "Source: a.png", block.Content[1].OfText.Text)
+}

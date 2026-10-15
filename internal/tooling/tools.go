@@ -78,6 +78,13 @@ func builtinTools() []builtinTool {
 			},
 		},
 		{
+			group:   "images",
+			enabled: func(env builtinEnv) bool { return ShouldEnableFilesystemTools(env.cfg, env.prompt) },
+			register: func(env builtinEnv) error {
+				return toolregistry.RegisterImages(env.registry, toolregistry.FilesystemConfig{Root: env.root, SafeDirs: env.safeDirs})
+			},
+		},
+		{
 			group: "http_download",
 			// A shell-only runtime still needs downloads: the shell group does
 			// not provide them.
@@ -243,6 +250,7 @@ func PromptLooksFileRelated(prompt string) bool {
 		"codebase", "source", "write", "edit", "modify", "patch",
 		"grep", "rg",
 		"文件", "目录", "代码", "仓库", "项目",
+		"图片", "照片", "截图", "image", "photo", "screenshot", ".png", ".jpg", ".jpeg", ".webp", ".gif",
 		"修改", "编辑", "修复",
 	}
 	for _, keyword := range keywords {

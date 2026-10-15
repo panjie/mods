@@ -159,6 +159,7 @@ func TestBuildProviderConfigsDeepSeekResponsesRouting(t *testing.T) {
 		responses bool
 		profile   openai.ResponsesProfile
 	}{
+		{name: "official current flash", model: Model{Name: "deepseek-flash", API: "deepseek"}, baseURL: "https://api.deepseek.com/", responses: true, profile: openai.ResponsesProfileDeepSeek},
 		{name: "official flash", model: Model{Name: "deepseek-v4-flash", API: "deepseek"}, baseURL: "https://api.deepseek.com/", responses: true, profile: openai.ResponsesProfileDeepSeek},
 		{name: "official pro", model: Model{Name: "deepseek-v4-pro", API: "deepseek"}, baseURL: "https://api.deepseek.com/", responses: true, profile: openai.ResponsesProfileDeepSeek},
 		{name: "official pro explicit chat wins", model: Model{Name: "deepseek-v4-pro", API: "deepseek", Endpoint: "chat-completions"}, baseURL: "https://api.deepseek.com/", profile: openai.ResponsesProfileDeepSeek},

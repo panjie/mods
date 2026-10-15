@@ -78,6 +78,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// instead of an app-layer string switch keyed on the API name. The
 	// client has no side effects until Request is called, so creating it
 	// here (rather than after the registry) does not change behavior.
+	ccfg.Model = mod.Name
 	client, err := newStreamClient(modelProtocol(mod), accfg, gccfg, occfg, ccfg)
 	if err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
@@ -115,6 +116,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		return requestSession{}, err
 	}
 
+	registry.ConfigureImages(client.Capabilities().Images && client.Capabilities().ToolImages, m.messages)
 	tools := registry.Specs()
 	if client.Capabilities().CustomApplyPatch {
 		for i := range tools {
@@ -130,13 +132,13 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	debugTools(tools, registry.Len())
 
 	request := proto.Request{
-		Messages:   m.messages,
-		API:        mod.API,
-		Model:      mod.Name,
-		User:       requestUser,
-		Tools:      tools,
-		TrackUsage: cfg.ShowTokenUsage,
-		ToolCaller: m.toolCaller(registry, cfg),
+		Messages:     m.messages,
+		API:          mod.API,
+		Model:        mod.Name,
+		User:         requestUser,
+		Tools:        tools,
+		TrackUsage:   cfg.ShowTokenUsage,
+		ResultCaller: m.toolResultCaller(registry, cfg),
 	}
 	if err := m.prepareWriteTargets(client, registry, request); err != nil {
 		_ = registry.Close()
@@ -316,8 +318,16 @@ func debugTools(tools []proto.ToolSpec, total int) {
 }
 
 func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolCaller {
+	caller := m.toolResultCaller(registry, cfg)
+	return func(call proto.ToolCallRequest) (string, error) {
+		result, err := caller(call)
+		return result.Text, err
+	}
+}
+
+func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolResultCaller {
 	preflight := newCommandPreflightGate(cfg)
-	return func(call proto.ToolCallRequest) (output string, returnErr error) {
+	return func(call proto.ToolCallRequest) (output proto.ToolResult, returnErr error) {
 		name := call.Name
 		data := registry.UnwrapArguments(call.Name, call.Arguments)
 		unwrappedArgs := !bytes.Equal(data, call.Arguments)
@@ -341,7 +351,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		})
 		defer func() {
 			duration := time.Since(started)
-			redactedOutput := output
+			redactedOutput := output.Text
 			if m.secrets != nil {
 				redactedOutput = m.secrets.Redact(redactedOutput)
 			}
@@ -380,7 +390,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		// hallucinated tool name must never cost the user a review prompt
 		// for a call that cannot execute.
 		if _, ok := registry.Tool(name); !ok {
-			return "", registry.UnknownToolError(name)
+			return proto.ToolResult{}, registry.UnknownToolError(name)
 		}
 		ctx, cancel := m.toolCallContext(registry, name, cfg)
 		m.addCancel(cancel)
@@ -390,29 +400,29 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 		// a required path renders a misleading "unknown target" review prompt
 		// for an operation that would fail in Call anyway.
 		if err := registry.ValidateRequiredArgs(name, data); err != nil {
-			return "", err
+			return proto.ToolResult{}, err
 		}
 		if registry.Interactive(name) {
 			approvalRecord = approvalTrace{Source: "interactive", Detail: "tool-managed"}
 			m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
-			return registry.Call(ctx, name, data)
+			return registry.CallResult(ctx, name, data)
 		}
 		var processBinding toolregistry.ProcessProgramBinding
 		cwd := cfg.ResolveWorkingDir().Canonical
 		if name == "shell_run" || name == "powershell_run" || name == "process_run" {
 			var parsed map[string]json.RawMessage
 			if err := json.Unmarshal(data, &parsed); err != nil {
-				return "", err
+				return proto.ToolResult{}, err
 			}
 			if raw, ok := parsed["cwd"]; ok {
 				var input string
 				if err := json.Unmarshal(raw, &input); err != nil {
-					return "", err
+					return proto.ToolResult{}, err
 				}
 				var err error
 				cwd, err = toolregistry.NormalizeExecutionCwd(cwd, input)
 				if err != nil {
-					return "", err
+					return proto.ToolResult{}, err
 				}
 				parsed["cwd"], _ = json.Marshal(cwd)
 				data, _ = json.Marshal(parsed)
@@ -422,7 +432,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			var prepareErr error
 			processBinding, prepareErr = toolregistry.PrepareProcessProgram(data)
 			if prepareErr != nil {
-				return "", prepareErr
+				return proto.ToolResult{}, prepareErr
 			}
 			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
 		}
@@ -441,7 +451,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			}
 			assessment = &assessed
 			if err := preflight.check(name, assessed); err != nil {
-				return "", err
+				return proto.ToolResult{}, err
 			}
 		}
 		intent := buildAccessIntent(name, data, registry, assessment)
@@ -471,7 +481,7 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 				approvalRecord = trace
 			},
 		}, name, data); err != nil {
-			return "", err
+			return proto.ToolResult{}, err
 		}
 		callData := data
 		// cwd is read-only execution context, separately authorized from writes.
@@ -482,12 +492,15 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 			var err error
 			callData, _, err = m.secrets.Resolve(name, data)
 			if err != nil {
-				return "", err
+				return proto.ToolResult{}, err
 			}
 		}
-		output, err := registry.Call(ctx, name, callData)
+		output, err := registry.CallResult(ctx, name, callData)
 		if m.secrets != nil {
-			output = m.secrets.Redact(output)
+			output.Text = m.secrets.Redact(output.Text)
+			for i := range output.Images {
+				output.Images[i].Source = m.secrets.Redact(output.Images[i].Source)
+			}
 		}
 		if err != nil && m.secrets != nil {
 			redacted := m.secrets.Redact(err.Error())

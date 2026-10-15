@@ -294,3 +294,9 @@ func TestBuiltinTableEntriesRegisterSomething(t *testing.T) {
 		})
 	}
 }
+
+func TestImageIntentEnablesFilesystem(t *testing.T) {
+	for _, prompt := range []string{"找出包含目标文字的图片", "检查照片", "read screenshot", "inspect a.webp"} {
+		require.True(t, PromptLooksFileRelated(prompt), prompt)
+	}
+}

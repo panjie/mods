@@ -312,7 +312,7 @@ func useOfficialDeepSeekResponses(mod Model, baseURL string) bool {
 
 func isOfficialDeepSeekResponsesModel(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "deepseek-v4-flash", "deepseek-v4-pro":
+	case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro":
 		return true
 	}
 	return false

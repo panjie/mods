@@ -25,11 +25,14 @@ type Client struct {
 // Capabilities reports Anthropic backend features. The Anthropic
 // adapter supports tool/function calling via CallTools.
 func (c *Client) Capabilities() stream.Capabilities {
-	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, Reasoning: true, ReasoningReplay: true}
+	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, ToolImages: true, Reasoning: true, ReasoningReplay: true}
 }
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	if err := stream.ValidateImages(request.Messages); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
 	system, messages, err := fromProtoMessages(request.Messages)
 	if err != nil {
 		return &Stream{requestErr: err, messages: request.Messages}
@@ -98,10 +101,14 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		body.OutputConfig.Effort = anthropic.OutputConfigEffort(c.config.ReasoningEffort)
 	}
 
+	if err := stream.ValidateImageWireRequest(request.Messages, body); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
 	s := &Stream{
 		stream:     c.Messages.NewStreaming(ctx, body),
 		request:    body,
 		toolCall:   request.ToolCaller,
+		resultCall: request.ResultCaller,
 		messages:   request.Messages,
 		trackUsage: request.TrackUsage,
 	}
@@ -178,6 +185,7 @@ type Stream struct {
 	factory    func() *ssestream.Stream[anthropic.MessageStreamEventUnion]
 	message    anthropic.Message
 	toolCall   proto.ToolCaller
+	resultCall proto.ToolResultCaller
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
@@ -199,11 +207,11 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 		case anthropic.ToolUseBlock:
 			msg, status := stream.CallTool(
 				proto.ToolCallRequest{ID: call.ID, Index: len(statuses) + 1, Total: total, Name: call.Name, Arguments: []byte(call.JSON.Input.Raw())},
-				s.toolCall,
+				s.toolCall, s.resultCall,
 			)
 			results = append(
 				results,
-				newToolResultBlock(call.ID, msg.Content, status.Err != nil),
+				newToolResultBlock(call.ID, msg.Content, status.Err != nil, msg.Images...),
 			)
 			s.messages = append(s.messages, msg)
 			statuses = append(statuses, status)
@@ -282,6 +290,10 @@ func (s *Stream) Next() bool {
 	}
 	if s.done {
 		s.done = false
+		if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+			s.requestErr = err
+			return false
+		}
 		s.stream = s.factory()
 		s.message = anthropic.Message{}
 	}

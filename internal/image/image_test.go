@@ -1,6 +1,9 @@
 package image
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -94,4 +97,11 @@ func gifHeader() []byte {
 
 func webpHeader() []byte {
 	return []byte{0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20}
+}
+
+func TestValidateImageRejectsTruncatedPixels(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))))
+	require.NoError(t, ValidateImage(buf.Bytes()))
+	require.Error(t, ValidateImage(buf.Bytes()[:33]))
 }

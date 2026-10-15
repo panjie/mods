@@ -124,6 +124,23 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 			}
 		case proto.RoleTool:
 			for _, call := range msg.ToolCalls {
+				if len(msg.Images) > 0 {
+					parts := []map[string]any{{"type": "input_text", "text": msg.Content}}
+					for _, img := range msg.Images {
+						parts = append(parts, map[string]any{"type": "input_text", "text": "Source: " + img.Source}, map[string]any{"type": "input_image", "image_url": fmt.Sprintf("data:%s;base64,%s", img.MimeType, base64.StdEncoding.EncodeToString(img.Data))})
+					}
+					kind := "function_call_output"
+					if call.Type == "custom" {
+						kind = "custom_tool_call_output"
+					}
+					raw, err := json.Marshal(map[string]any{"type": kind, "call_id": call.ID, "output": parts})
+					if err != nil {
+						return nil, err
+					}
+					items = append(items, param.Override[responses.ResponseInputItemUnionParam](json.RawMessage(raw)))
+					break
+				}
+
 				if call.Type == "custom" {
 					raw, marshalErr := json.Marshal(map[string]any{
 						"type":    "custom_tool_call_output",

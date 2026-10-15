@@ -203,15 +203,17 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 	}
 
 	args := map[string][]byte{
-		"fs_read_file": []byte(`{"path":"README.md"}`),
-		"fs_list_dir":  []byte(`{"path":"."}`),
-		"fs_stat":      []byte(`{"path":"README.md"}`),
-		"fs_search":    []byte(`{"path":".","query":"mods"}`),
-		"fs_largest":   []byte(`{"path":".","kind":"file"}`),
-		"mods_help":    []byte(`{"topic":"overview"}`),
-		"runtime_info": []byte(`{"commands":["go"]}`),
-		"todo_write":   []byte(`{"todos":[{"content":"step","status":"pending"}]}`),
-		"web_search":   []byte(`{"query":"mods v2.5.0"}`),
+		"fs_find_images": []byte(`{"path":"."}`),
+		"fs_read_images": []byte(`{"paths":["a.png"]}`),
+		"fs_read_file":   []byte(`{"path":"README.md"}`),
+		"fs_list_dir":    []byte(`{"path":"."}`),
+		"fs_stat":        []byte(`{"path":"README.md"}`),
+		"fs_search":      []byte(`{"path":".","query":"mods"}`),
+		"fs_largest":     []byte(`{"path":".","kind":"file"}`),
+		"mods_help":      []byte(`{"topic":"overview"}`),
+		"runtime_info":   []byte(`{"commands":["go"]}`),
+		"todo_write":     []byte(`{"todos":[{"content":"step","status":"pending"}]}`),
+		"web_search":     []byte(`{"query":"mods v2.5.0"}`),
 	}
 	seen := map[string]bool{}
 	for _, spec := range registry.Specs() {

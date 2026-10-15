@@ -4,6 +4,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -36,6 +37,14 @@ const (
 
 type ResponsesProfile = ProviderProfile
 
+func deepSeekImageModel(model string) bool {
+	switch model {
+	case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
+		return true
+	}
+	return false
+}
+
 var _ stream.Client = &Client{}
 
 // Client is the openai client.
@@ -48,6 +57,8 @@ type Client struct {
 type Config struct {
 	AuthToken string
 	BaseURL   string
+	// Model is used for model-specific capability checks.
+	Model string
 	// UseResponses selects the Responses API.
 	UseResponses    bool
 	ProviderProfile ProviderProfile
@@ -117,16 +128,16 @@ func New(config Config) *Client {
 func (c *Client) Capabilities() stream.Capabilities {
 	capabilities := stream.Capabilities{
 		Tools: true, FunctionTools: true, JSONResponseFormat: true,
-		Images: true, Reasoning: true, ReasoningReplay: c.config.UseResponses,
+		Images: true, ToolImages: true, Reasoning: true, ReasoningReplay: c.config.UseResponses,
 	}
 	if c.profile() == ProviderProfileDeepSeek {
+		capabilities.Images = c.config.Model == "" || deepSeekImageModel(c.config.Model)
 		capabilities.ReasoningReplay = true
 	}
 	if c.config.UseResponses && c.profile() == ProviderProfileDeepSeek {
 		capabilities.NativeWebSearch = true
 		capabilities.CustomApplyPatch = true
 		capabilities.CustomTools = true
-		capabilities.Images = false
 		capabilities.ReasoningReplay = true
 	}
 	return capabilities
@@ -144,6 +155,12 @@ func (c *Client) profile() ProviderProfile {
 
 // Request makes a new request and returns a stream.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	if err := stream.ValidateImages(request.Messages); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
+	if c.profile() == ProviderProfileDeepSeek && !deepSeekImageModel(request.Model) && messagesContainImages(request.Messages) {
+		return stream.Failed(fmt.Errorf("selected DeepSeek model does not support image input; use deepseek-flash"), request.Messages)
+	}
 	if c.config.UseResponses {
 		return c.requestResponses(ctx, request)
 	}
@@ -187,10 +204,14 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		tag = defaultThinkTag
 	}
 
+	if err := stream.ValidateImageWireRequest(request.Messages, body); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
 	s := &Stream{
 		stream:        c.Chat.Completions.NewStreaming(ctx, body, opts...),
 		request:       body,
 		toolCall:      request.ToolCaller,
+		resultCall:    request.ResultCaller,
 		messages:      request.Messages,
 		trackUsage:    request.TrackUsage,
 		parseThink:    c.config.ThinkTags,
@@ -209,6 +230,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 
 // Stream openai stream.
 type Stream struct {
+	requestErr     error
 	done           bool
 	request        openai.ChatCompletionNewParams
 	stream         *ssestream.Stream[openai.ChatCompletionChunk]
@@ -216,6 +238,7 @@ type Stream struct {
 	message        openai.ChatCompletionAccumulator
 	messages       []proto.Message
 	toolCall       proto.ToolCaller
+	resultCall     proto.ToolResultCaller
 	parseThink     bool
 	think          thinkParser
 	thoughtFields  []string
@@ -240,18 +263,18 @@ func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	calls := s.pendingToolCalls()
 	statuses := make([]proto.ToolCallStatus, 0, len(calls))
+	var results []proto.Message
 	for i, call := range calls {
 		msg, status := stream.CallTool(
 			proto.ToolCallRequest{ID: call.ID, Index: i + 1, Total: len(calls), Name: call.Function.Name, Arguments: []byte(call.Function.Arguments)},
-			s.toolCall,
+			s.toolCall, s.resultCall,
 		)
-		resp := openai.ToolMessage(
-			msg.Content,
-			call.ID,
-		)
-		s.request.Messages = append(s.request.Messages, resp)
 		s.messages = append(s.messages, msg)
+		results = append(results, msg)
 		statuses = append(statuses, status)
+	}
+	if len(statuses) > 0 {
+		s.request.Messages = append(s.request.Messages, fromProtoMessagesForProfile(results, s.profile)...)
 	}
 	return statuses
 }
@@ -433,6 +456,9 @@ func partialTagSuffixLen(s, tag string) int {
 
 // Err implements stream.Stream.
 func (s *Stream) Err() error {
+	if s.requestErr != nil {
+		return s.requestErr
+	}
 	if s.stream == nil {
 		return nil
 	}
@@ -447,6 +473,9 @@ func (s *Stream) Usage() proto.TokenUsage { return s.usage }
 
 // Next implements stream.Stream.
 func (s *Stream) Next() bool {
+	if s.requestErr != nil {
+		return false
+	}
 	if s.finalChunk != nil {
 		if !s.finalDelivered {
 			return true
@@ -456,6 +485,10 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
+		if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+			s.requestErr = err
+			return false
+		}
 		s.done = false
 		s.stream = s.factory()
 		s.message = openai.ChatCompletionAccumulator{}

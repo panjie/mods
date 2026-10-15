@@ -46,6 +46,7 @@ type Tool struct {
 	Validate        func(json.RawMessage) error
 	Spec            proto.ToolSpec
 	Call            Caller
+	CallResult      func(context.Context, json.RawMessage) (proto.ToolResult, error)
 	Kind            ToolKind
 	TimeoutPolicy   TimeoutPolicy
 	Capabilities    ToolCapabilities
@@ -54,6 +55,7 @@ type Tool struct {
 
 // Registry stores tools by name and exposes a provider-neutral call router.
 type Registry struct {
+	images  *imageSearchState
 	tools   map[string]Tool
 	closers []func() error
 }
@@ -70,7 +72,7 @@ func (r *Registry) Register(tool Tool) error {
 	if tool.Spec.Name == "" {
 		return fmt.Errorf("tool: name is required")
 	}
-	if tool.Call == nil {
+	if tool.Call == nil && tool.CallResult == nil {
 		return fmt.Errorf("tool %q: caller is required", tool.Spec.Name)
 	}
 	if _, ok := r.tools[tool.Spec.Name]; ok {
@@ -109,6 +111,9 @@ func (r *Registry) Call(ctx context.Context, name string, data []byte) (string, 
 	tool, ok := r.tools[name]
 	if !ok {
 		return "", r.UnknownToolError(name)
+	}
+	if tool.Call == nil {
+		return "", fmt.Errorf("tool %q requires a multimodal caller", name)
 	}
 	return tool.Call(ctx, json.RawMessage(data))
 }
@@ -339,4 +344,17 @@ func (r *Registry) Close() error {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// CallResult executes a tool preserving native attachments.
+func (r *Registry) CallResult(ctx context.Context, name string, data []byte) (proto.ToolResult, error) {
+	tool, ok := r.tools[name]
+	if !ok {
+		return proto.ToolResult{}, r.UnknownToolError(name)
+	}
+	if tool.CallResult != nil {
+		return tool.CallResult(ctx, json.RawMessage(data))
+	}
+	text, err := tool.Call(ctx, json.RawMessage(data))
+	return proto.ToolResult{Text: text}, err
 }

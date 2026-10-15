@@ -654,8 +654,14 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		}
 	}
 	if len(msg.results) == 0 {
+		warning := msg.runner.cleanup.ImageSearchWarning()
 		msg.runner.close()
 		m.messages = msg.runner.messages()
+		if warning != "" {
+			note := "\n\n[mods] " + warning + "\n"
+			m.appendToOutput(note)
+			m.messages = append(m.messages, proto.Message{Role: proto.RoleAssistant, Content: note})
+		}
 		// The next generation round renders the spinner animation on its
 		// own; mirroring a status line here would produce a duplicate row
 		// while waiting for the model to respond.

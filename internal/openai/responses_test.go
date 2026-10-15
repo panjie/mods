@@ -334,13 +334,13 @@ func TestDeepSeekResponsesCustomApplyPatchRound(t *testing.T) {
 	require.Equal(t, "Patch applied", input[3].(map[string]any)["output"])
 }
 
-func TestDeepSeekResponsesRejectsImagesBeforeHTTP(t *testing.T) {
+func TestDeepSeekProRejectsImagesBeforeHTTP(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 	defer server.Close()
 	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: true, ResponsesProfile: ResponsesProfileDeepSeek})
 	st := client.Request(context.Background(), proto.Request{
-		Model:    "deepseek-v4-flash",
+		Model:    "deepseek-v4-pro",
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "see", Images: []proto.Image{{Data: []byte("x"), MimeType: "image/png"}}}},
 	})
 	require.False(t, st.Next())

@@ -238,6 +238,9 @@ mods --web-search "what changed in the latest Go release? update go.mod if relev
 mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
 
+# Let a vision model find and inspect local images automatically
+mods -a deepseek -m deepseek-flash "Find images containing 'invoice' in this directory and its subdirectories. Return matching paths and the text you read."
+
 # Save and resume sessions
 mods "draft v1.1 release notes from CHANGELOG.md"
 mods --continue-last "turn those into a Twitter thread"
@@ -476,14 +479,15 @@ for stateless reasoning and tool continuation in its local session data. Azure
 OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
 Chat Completions.
 
-Official `deepseek-v4-flash` and `deepseek-v4-pro` requests to
+Official `deepseek-flash`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`, and `deepseek-v4-pro` requests to
 `api.deepseek.com` also use the
 [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
 automatically. Mods uses its plaintext reasoning events, hosted web search, and
 Codex-compatible free-form `apply_patch` tool. DeepSeek Responses is stateless,
 so complete response items and tool outputs remain in the local session and are
-replayed on the next turn. It does not currently accept image or file input;
-mods rejects such requests before sending them. To opt out for this model, set
+replayed on the next turn. DeepSeek Flash accepts image attachments and images
+returned by tools on both Responses and Chat Completions. DeepSeek Pro does not
+accept image input. To opt out of Responses for a model, set
 `endpoint: chat-completions` in `mods.yml`:
 
 ```yaml
@@ -653,3 +657,27 @@ MODS_BLACKBOX_PROVIDER=qwen MODS_BLACKBOX_MODEL=qwen-plus \
 ## License
 
 [MIT](https://github.com/panjie/mods/raw/main/LICENSE)
+
+### Searching image contents
+
+With a model that supports vision and tool calls, describe the search in natural
+language. Mods exposes `fs_find_images` to enumerate PNG, JPEG, GIF, and WebP
+candidates and `fs_read_images` to return labelled image attachments directly to
+the current model. No OCR installation or nested mods process is required.
+Filesystem tools must be enabled (`auto`, the default, recognizes image requests;
+`never` disables this workflow).
+
+Discovery includes hidden files and supports recursive pagination. Directory
+symlinks are not followed. The reader checks file content, preserves original
+pixels, and accepts up to eight images per call. Animated-image interpretation
+depends on the provider. Unsupported formats require conversion before reading.
+
+Each conversation request is bounded to 64 images and 20 MiB of raw image data,
+including saved history and earlier tool rounds; image request bodies are also
+bounded to 40 MiB before provider-specific overrides. Splitting reads into batches
+does not remove cumulative context costs. Failed reads and unfinished scans are
+reported as incomplete, not as non-matches. For large collections, use smaller
+scopes in fresh conversations. Continuing a saved conversation preserves tool
+images and source labels; discovery cursors expire with the request, so resume
+by enumerating again. Visual recognition can be uncertain, especially for small
+or blurred text; ask for supporting text snippets and uncertain cases.

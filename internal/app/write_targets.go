@@ -32,6 +32,7 @@ func (m *Mods) prepareWriteTargets(client stream.Client, registry *toolregistry.
 	m.sendToolOperationStatus("Inferring write targets")
 	request.Messages = writeTargetMessages(m.messages, m.reviewer.scope.Value)
 	request.Tools = writeTargetTools(registry)
+	request.ResultCaller = nil
 	request.ToolCaller = m.writeTargetToolCaller(ctx, registry)
 	request.ResponseFormat = nil
 	rules, usage, err := inferWriteTargets(ctx, client, request, m.reviewer.scope)
@@ -179,7 +180,7 @@ func parseWriteTargets(raw string, scope Scope) ([]Rule, error) {
 }
 
 func writeTargetToolAllowed(registry *toolregistry.Registry, name string) bool {
-	if registry.Interactive(name) || name == "todo_write" {
+	if registry.Interactive(name) || name == "todo_write" || name == "fs_find_images" || name == "fs_read_images" {
 		return false
 	}
 	return registry.ReadOnly(name) && !registry.Mutable(name) || name == "process_run" || name == "shell_run" || name == "powershell_run"

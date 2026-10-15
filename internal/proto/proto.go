@@ -67,6 +67,7 @@ const (
 // Image represents an image attachment in a message.
 type Image struct {
 	Data     []byte // raw image bytes
+	Source   string // source path or attachment label
 	MimeType string // e.g., "image/png", "image/jpeg"
 }
 
@@ -128,6 +129,15 @@ type ToolCallRequest struct {
 	Name      string
 	Arguments []byte
 }
+
+// ToolResult carries text and native image attachments from a tool.
+type ToolResult struct {
+	Text   string
+	Images []Image
+}
+
+// ToolResultCaller executes a tool without flattening its attachments.
+type ToolResultCaller func(ToolCallRequest) (ToolResult, error)
 
 // ToolCaller executes one provider-requested tool invocation.
 type ToolCaller func(ToolCallRequest) (string, error)
@@ -204,6 +214,7 @@ type Request struct {
 	ResponseFormat *string
 	TrackUsage     bool
 	ToolCaller     ToolCaller
+	ResultCaller   ToolResultCaller
 }
 
 // Session is a session.

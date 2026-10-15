@@ -110,6 +110,9 @@ func readableMessageContent(msg proto.Message) string {
 				mime = "unknown"
 			}
 			images.WriteString("\n- " + stringInt(i+1) + ": " + mime + ", " + stringInt(len(img.Data)) + " bytes (not displayed)")
+			if img.Source != "" {
+				images.WriteString("\n  source: " + img.Source)
+			}
 		}
 		parts = append(parts, plainTranscriptContent(images.String()))
 	}

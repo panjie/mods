@@ -38,7 +38,7 @@ func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 }
 
 func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile) []openai.ChatCompletionMessageParamUnion {
-	input = proto.NormalizeSystemMessages(input)
+	input = proto.ProjectToolImages(proto.NormalizeSystemMessages(input))
 	var messages []openai.ChatCompletionMessageParamUnion
 	for _, msg := range input {
 		switch msg.Role {
@@ -53,6 +53,9 @@ func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile)
 			if len(msg.Images) > 0 {
 				var parts []openai.ChatCompletionContentPartUnionParam
 				for _, img := range msg.Images {
+					if img.Source != "" {
+						parts = append(parts, openai.TextContentPart("Source: "+img.Source))
+					}
 					b64 := base64.StdEncoding.EncodeToString(img.Data)
 					dataURL := fmt.Sprintf("data:%s;base64,%s", img.MimeType, b64)
 					parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{

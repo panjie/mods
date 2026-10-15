@@ -54,13 +54,17 @@ func New(config Config) (*Client, error) {
 // Capabilities reports Ollama backend features. The Ollama adapter
 // supports tool/function calling via CallTools.
 func (c *Client) Capabilities() stream.Capabilities {
-	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, Reasoning: true}
+	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, ToolImages: true, Reasoning: true}
 }
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	if err := stream.ValidateImages(request.Messages); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
 	s := &Stream{
 		toolCall:   request.ToolCaller,
+		resultCall: request.ResultCaller,
 		trackUsage: request.TrackUsage,
 	}
 	body := newChatRequest(request, c.config.Think)
@@ -77,6 +81,10 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		ch := s.respCh
 		s.mu.Unlock()
 		go func() {
+			if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+				s.finish(run, ch, err)
+				return
+			}
 			s.finish(run, ch, c.Chat(ctx, &s.request, func(resp api.ChatResponse) error {
 				return s.fn(run, ch, resp)
 			}))
@@ -124,6 +132,7 @@ type Stream struct {
 	content    strings.Builder
 	thinking   strings.Builder
 	toolCall   proto.ToolCaller
+	resultCall proto.ToolResultCaller
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
@@ -160,16 +169,18 @@ func (s *Stream) finish(run uint64, ch chan api.ChatResponse, err error) {
 // CallTools implements stream.Stream.
 func (s *Stream) CallTools() []proto.ToolCallStatus {
 	statuses := make([]proto.ToolCallStatus, 0, len(s.message.ToolCalls))
+	var results []proto.Message
 	for i, call := range s.message.ToolCalls {
 		msg, status := stream.CallTool(
 			proto.ToolCallRequest{ID: strconv.Itoa(call.Function.Index), Index: i + 1, Total: len(s.message.ToolCalls), Name: call.Function.Name, Arguments: []byte(call.Function.Arguments.String())},
-			s.toolCall,
+			s.toolCall, s.resultCall,
 		)
-		s.request.Messages = append(s.request.Messages, fromProtoMessage(msg))
 		s.messages = append(s.messages, msg)
+		results = append(results, msg)
 		statuses = append(statuses, status)
 	}
 	if len(statuses) > 0 {
+		s.request.Messages = append(s.request.Messages, fromProtoMessages(results)...)
 		s.message = api.Message{}
 		s.content.Reset()
 		s.thinking.Reset()

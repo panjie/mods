@@ -49,6 +49,8 @@ type Capabilities struct {
 	CustomApplyPatch bool
 	// Images reports whether image input is accepted by the selected endpoint.
 	Images bool
+	// ToolImages reports that the adapter preserves image attachments across tool rounds.
+	ToolImages bool
 	// Reasoning reports provider-native reasoning support; ReasoningReplay
 	// means opaque or plaintext reasoning state can be continued after tools.
 	Reasoning       bool
@@ -84,9 +86,16 @@ type Stream interface {
 
 // CallTool calls a tool using the provided data and caller, and returns the
 // resulting [proto.Message] and [proto.ToolCallStatus].
-func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller) (proto.Message, proto.ToolCallStatus) {
+func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller, rich ...proto.ToolResultCaller) (proto.Message, proto.ToolCallStatus) {
 	started := time.Now()
-	content, err := caller(call)
+	var result proto.ToolResult
+	var err error
+	if len(rich) > 0 && rich[0] != nil {
+		result, err = rich[0](call)
+	} else {
+		result.Text, err = caller(call)
+	}
+	content := result.Text
 	duration := time.Since(started)
 	if content == "" && err != nil {
 		content = err.Error()
@@ -94,6 +103,7 @@ func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller) (proto.Messag
 	return proto.Message{
 			Role:    proto.RoleTool,
 			Content: content,
+			Images:  result.Images,
 			ToolCalls: []proto.ToolCall{
 				{
 					ID:      call.ID,

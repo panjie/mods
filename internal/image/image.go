@@ -2,10 +2,17 @@
 package image
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"os"
+
+	_ "golang.org/x/image/webp"
 )
 
 // MaxTotalImageBytes is the maximum total size of all images in a single request.
@@ -33,6 +40,13 @@ func DetectMimeType(data []byte) (string, error) {
 
 // ReadImage reads an image file from disk and returns its raw bytes and MIME type.
 func ReadImage(path string) ([]byte, string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("image file not found or inaccessible: %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, "", fmt.Errorf("image is not a regular file: %s", path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -53,4 +67,22 @@ func ReadImage(path string) ([]byte, string, error) {
 		return nil, "", err
 	}
 	return data, mime, nil
+}
+
+// MaxImageCount bounds cumulative image inputs, including conversation history.
+const MaxImageCount = 64
+
+// ValidateImage rejects malformed images and unreasonable decoded dimensions.
+func ValidateImage(data []byte) error {
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("invalid image: %w", err)
+	}
+	if config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > 40_000_000 {
+		return fmt.Errorf("image dimensions exceed 40 million pixels")
+	}
+	if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
+		return fmt.Errorf("invalid image pixels: %w", err)
+	}
+	return nil
 }

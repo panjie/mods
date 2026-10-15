@@ -188,3 +188,13 @@ func TestFromProtoMessages(t *testing.T) {
 		require.Equal(t, "assistant", msgs[2].Role)
 	})
 }
+
+func TestToolImagesFollowParallelToolResults(t *testing.T) {
+	input := []proto.Message{{Role: proto.RoleTool, Content: "first", Images: []proto.Image{{Data: []byte("pixels"), MimeType: "image/png", Source: "a.png"}}, ToolCalls: []proto.ToolCall{{ID: "0"}}}, {Role: proto.RoleTool, Content: "second", ToolCalls: []proto.ToolCall{{ID: "1"}}}}
+	messages := fromProtoMessages(input)
+	require.Len(t, messages, 3)
+	require.Equal(t, proto.RoleTool, messages[1].Role)
+	require.Equal(t, proto.RoleUser, messages[2].Role)
+	require.Len(t, messages[2].Images, 1)
+	require.Contains(t, messages[2].Content, "a.png")
+}

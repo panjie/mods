@@ -28,7 +28,7 @@ func fromToolSpecs(specs []proto.ToolSpec) []api.Tool {
 }
 
 func fromProtoMessages(input []proto.Message) []api.Message {
-	input = proto.NormalizeSystemMessages(input)
+	input = proto.ProjectToolImages(proto.NormalizeSystemMessages(input))
 	messages := make([]api.Message, 0, len(input))
 	for _, msg := range input {
 		messages = append(messages, fromProtoMessage(msg))
@@ -48,6 +48,9 @@ func fromProtoMessage(input proto.Message) api.Message {
 		return m
 	}
 	for _, img := range input.Images {
+		if img.Source != "" {
+			m.Content += "\nSource (image order): " + img.Source
+		}
 		b64 := base64.StdEncoding.EncodeToString(img.Data)
 		m.Images = append(m.Images, api.ImageData(b64))
 	}

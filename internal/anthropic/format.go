@@ -72,7 +72,7 @@ func fromProtoMessages(input []proto.Message) (
 			for i < len(input) && input[i].Role == proto.RoleTool {
 				toolMsg := input[i]
 				for _, call := range toolMsg.ToolCalls {
-					blocks = append(blocks, newToolResultBlock(call.ID, toolMsg.Content, call.IsError))
+					blocks = append(blocks, newToolResultBlock(call.ID, toolMsg.Content, call.IsError, toolMsg.Images...))
 				}
 				i++
 			}
@@ -185,13 +185,16 @@ func toProtoMessage(in anthropic.Message) (proto.Message, error) {
 
 // anthropic v1.5 removed this method, copied it back here so we don't need to
 // refactor too much.
-func newToolResultBlock(toolUseID string, content string, isError bool) anthropic.ContentBlockParamUnion {
+func newToolResultBlock(toolUseID string, content string, isError bool, images ...proto.Image) anthropic.ContentBlockParamUnion {
 	toolBlock := anthropic.ToolResultBlockParam{
 		ToolUseID: toolUseID,
 		Content: []anthropic.ToolResultBlockParamContentUnion{
 			{OfText: &anthropic.TextBlockParam{Text: content}},
 		},
 		IsError: anthropic.Bool(isError),
+	}
+	for _, img := range images {
+		toolBlock.Content = append(toolBlock.Content, anthropic.ToolResultBlockParamContentUnion{OfText: &anthropic.TextBlockParam{Text: "Source: " + img.Source}}, anthropic.ToolResultBlockParamContentUnion{OfImage: anthropic.NewImageBlockBase64(img.MimeType, base64.StdEncoding.EncodeToString(img.Data)).OfImage})
 	}
 	return anthropic.ContentBlockParamUnion{OfToolResult: &toolBlock}
 }

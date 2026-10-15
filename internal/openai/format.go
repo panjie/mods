@@ -12,6 +12,14 @@ import (
 )
 
 const deepSeekChatProviderDataKey = "deepseek.chat.assistant.v1"
+const qwenChatProviderDataKey = "qwen.chat.assistant.v1"
+
+func chatStateKey(profile ProviderProfile) string {
+	if profile == providerProfileQwen {
+		return qwenChatProviderDataKey
+	}
+	return deepSeekChatProviderDataKey
+}
 
 type deepSeekChatAssistantState struct {
 	ReasoningContent string `json:"reasoning_content"`
@@ -38,7 +46,7 @@ func fromToolSpecs(specs []proto.ToolSpec) []openai.ChatCompletionToolParam {
 }
 
 func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile) []openai.ChatCompletionMessageParamUnion {
-	input = proto.ProjectToolImages(proto.NormalizeSystemMessages(input))
+	input = proto.ProjectToolMedia(proto.NormalizeSystemMessages(input))
 	var messages []openai.ChatCompletionMessageParamUnion
 	for _, msg := range input {
 		switch msg.Role {
@@ -50,14 +58,27 @@ func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile)
 				break
 			}
 		case proto.RoleUser:
-			if len(msg.Images) > 0 {
+			if len(msg.Attachments()) > 0 {
 				var parts []openai.ChatCompletionContentPartUnionParam
-				for _, img := range msg.Images {
-					if img.Source != "" {
-						parts = append(parts, openai.TextContentPart("Source: "+img.Source))
+				for _, img := range msg.Attachments() {
+					if img.Source != "" || img.Kind == "video" {
+						parts = append(parts, openai.TextContentPart(img.InputLabel()))
 					}
 					b64 := base64.StdEncoding.EncodeToString(img.Data)
 					dataURL := fmt.Sprintf("data:%s;base64,%s", img.MimeType, b64)
+					if img.Kind == "video" {
+						raw, _ := json.Marshal(map[string]any{"type": "video_url", "video_url": map[string]any{"url": dataURL}, "fps": img.Video.SamplingFPS})
+						parts = append(parts, param.Override[openai.ChatCompletionContentPartUnionParam](json.RawMessage(raw)))
+						continue
+					}
+					if img.Kind == "audio" {
+						raw, _ := json.Marshal(map[string]any{"type": "input_audio", "input_audio": map[string]any{"data": dataURL, "format": img.Audio.Container}})
+						parts = append(parts, param.Override[openai.ChatCompletionContentPartUnionParam](json.RawMessage(raw)))
+						continue
+					}
+					if img.Kind != "image" {
+						continue
+					} // capability/budget validation rejects unknown kinds before I/O
 					parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
 						URL: dataURL,
 					}))
@@ -80,8 +101,8 @@ func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile)
 					},
 				})
 			}
-			if profile == ProviderProfileDeepSeek {
-				m = deepSeekAssistantMessage(m, msg.ProviderData[deepSeekChatProviderDataKey])
+			if profile == ProviderProfileDeepSeek || profile == providerProfileQwen {
+				m = deepSeekAssistantMessage(m, msg.ProviderData[chatStateKey(profile)])
 			}
 			messages = append(messages, m)
 		}
@@ -116,7 +137,11 @@ func deepSeekAssistantMessage(
 	return param.Override[openai.ChatCompletionMessageParamUnion](json.RawMessage(raw))
 }
 
-func attachDeepSeekChatState(msg *proto.Message, reasoning string) {
+func attachDeepSeekChatState(msg *proto.Message, reasoning string, profiles ...ProviderProfile) {
+	profile := ProviderProfileDeepSeek
+	if len(profiles) > 0 {
+		profile = profiles[0]
+	}
 	if msg == nil || reasoning == "" {
 		return
 	}
@@ -127,7 +152,7 @@ func attachDeepSeekChatState(msg *proto.Message, reasoning string) {
 	if msg.ProviderData == nil {
 		msg.ProviderData = map[string]json.RawMessage{}
 	}
-	msg.ProviderData[deepSeekChatProviderDataKey] = state
+	msg.ProviderData[chatStateKey(profile)] = state
 }
 
 func toProtoMessage(in openai.ChatCompletionMessageParamUnion) proto.Message {

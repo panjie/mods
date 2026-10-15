@@ -681,3 +681,76 @@ scopes in fresh conversations. Continuing a saved conversation preserves tool
 images and source labels; discovery cursors expire with the request, so resume
 by enumerating again. Visual recognition can be uncertain, especially for small
 or blurred text; ask for supporting text snippets and uncertain cases.
+
+### Audio and mixed media
+
+With `qwen3.8-omni-flash`, ask mods to find recordings by their contents:
+
+```sh
+mods -a qwen -m qwen3.8-omni-flash "Find recordings mentioning refunds in this directory and its subdirectories. Return paths and supporting quotes."
+mods -a qwen -m qwen3.8-omni-flash --audio meeting.wav --image slide.png "Compare the amounts in the recording and slide."
+```
+
+`--audio` is repeatable and accepts PCM WAV and MP3. Audio is sent directly to
+Qwen as native model input; no Python, ASR service, ffmpeg, or recursive mods
+invocation is needed. Both Chat Completions (the default for Qwen) and an
+explicit `endpoint: responses` are supported for this model. Output is text;
+microphone recording and speech generation are not included. Other models fail
+explicitly on audio input until their audio dialect is implemented.
+
+`fs_find_media` discovers image/audio/video candidates with pagination and recursive
+scanning; `fs_read_media` returns ordered, labelled attachments. Existing image
+tools use the same scanning, reading, authorization and budget engine. Automatic
+filesystem activation recognizes audio requests; `filesystem: never` disables
+directory discovery and reading tools. Discovery includes common unsupported
+audio extensions (M4A/AAC/FLAC/OGG/Opus) so they can be reported as unread instead
+of silently omitted. File contents determine the actual supported format.
+
+Each recording is limited to 6 MiB and 10 minutes; a tool read accepts at most
+four recordings (prefer one or two), within eight total media files. All input
+and saved history share 20 MiB of raw media, 15 minutes of audio, and a 40 MiB
+serialized-request budget. Image count/pixel limits still apply. The file size
+limit often applies before the duration limit. Long-audio slicing and automatic
+context compaction are not implemented: use smaller scopes in fresh sessions.
+Original audio bytes and channels are preserved, and saved sessions retain
+attachments even if the source file changes. Logs/transcripts show source and
+audio metadata, never Base64. In JSON mode, incomplete-scan diagnostics go to
+stderr separately from the model answer. Recognition and timestamps may be
+uncertain; silence or failed reads are not evidence of a non-match.
+
+### Video and mixed media
+
+With `qwen3.8-omni-flash`, video uses the same directory tools, source labels,
+authorization, attachment storage and budgets as images and audio:
+
+```sh
+mods -a qwen -m qwen3.8-omni-flash "Find videos mentioning refunds in this directory and its subdirectories. Check both speech and visible text; return paths and evidence."
+mods -a qwen -m qwen3.8-omni-flash --video meeting.mp4 --image slide.png "Compare the spoken and visible amounts with the slide."
+```
+
+`--video` is repeatable and can be combined with `--audio` and `--image`.
+Chat Completions and Responses send the original local MP4 as native video,
+including its audio track. No runtime ffmpeg, frame extraction, ASR service or
+recursive model invocation is required. Other model/endpoint combinations fail
+explicitly until their video dialect is implemented.
+
+The first version accepts non-fragmented MP4 with one H.264 (`avc1`) video track
+and optionally one AAC-LC audio track. Each file must be at most **6 MiB,
+2 minutes and 1080p**. Pure-Go container checks validate timing, dimensions,
+rotation, sample tables and local data references; they do not fully decode
+compressed media. Encrypted files, complex edit timelines, other codecs and
+containers are rejected. Discovery includes MOV/MKV/WebM/AVI/M4V candidates so
+unsupported files can be reported as unread. No automatic transcoding occurs.
+
+A tool read attaches at most one video. The full conversation may contain up to
+5 minutes of video, with a requested sampling rate of 2 fps and a conservative
+1200-frame budget. The shared 20 MiB raw / 40 MiB request limits still apply;
+video with sound also consumes the 15-minute audio budget, without counting its
+bytes twice. Saved sessions keep the original video, so continuation does not
+need the source file. Transcripts display metadata instead of encoded bytes.
+
+Recognition remains model-dependent, especially across multiple videos or
+mixed inputs. A successful read proves delivery, not correct recognition.
+Check quoted evidence for important searches. Sampling can miss brief events;
+timestamps are approximate and results are not an exhaustive frame-by-frame
+inspection. Long-video splitting and automatic context compaction are deferred.

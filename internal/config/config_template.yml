@@ -352,6 +352,9 @@ apis:
   #       provider-profile: deepseek
   #       endpoint: responses
 
+  # Qwen qwen3.8-omni-flash supports native WAV/MP3 and image input.
+  # Keep its default Chat endpoint or explicitly select endpoint: responses.
+
   # Example: a service that splits models across protocols. OpenCode's
   # zen gateway serves some models only via its OpenAI-compatible
   # endpoints (/v1/chat/completions for GLM, Kimi, DeepSeek, MiMo and

@@ -72,7 +72,7 @@ func fromProtoMessages(input []proto.Message) (
 			for i < len(input) && input[i].Role == proto.RoleTool {
 				toolMsg := input[i]
 				for _, call := range toolMsg.ToolCalls {
-					blocks = append(blocks, newToolResultBlock(call.ID, toolMsg.Content, call.IsError, toolMsg.Images...))
+					blocks = append(blocks, newToolResultBlock(call.ID, toolMsg.Content, call.IsError, toolMsg.ImageAttachments()...))
 				}
 				i++
 			}
@@ -81,9 +81,9 @@ func fromProtoMessages(input []proto.Message) (
 				messages = append(messages, anthropic.NewUserMessage(blocks...))
 			}
 		case proto.RoleUser:
-			if len(msg.Images) > 0 {
+			if len(msg.ImageAttachments()) > 0 {
 				var blocks []anthropic.ContentBlockParamUnion
-				for _, img := range msg.Images {
+				for _, img := range msg.ImageAttachments() {
 					b64 := base64.StdEncoding.EncodeToString(img.Data)
 					blocks = append(blocks, anthropic.NewImageBlockBase64(img.MimeType, b64))
 				}

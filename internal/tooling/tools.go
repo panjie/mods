@@ -81,7 +81,11 @@ func builtinTools() []builtinTool {
 			group:   "images",
 			enabled: func(env builtinEnv) bool { return ShouldEnableFilesystemTools(env.cfg, env.prompt) },
 			register: func(env builtinEnv) error {
-				return toolregistry.RegisterImages(env.registry, toolregistry.FilesystemConfig{Root: env.root, SafeDirs: env.safeDirs})
+				cfg := toolregistry.FilesystemConfig{Root: env.root, SafeDirs: env.safeDirs}
+				if err := toolregistry.RegisterImages(env.registry, cfg); err != nil {
+					return err
+				}
+				return toolregistry.RegisterMedia(env.registry, cfg)
 			},
 		},
 		{
@@ -250,7 +254,7 @@ func PromptLooksFileRelated(prompt string) bool {
 		"codebase", "source", "write", "edit", "modify", "patch",
 		"grep", "rg",
 		"文件", "目录", "代码", "仓库", "项目",
-		"图片", "照片", "截图", "image", "photo", "screenshot", ".png", ".jpg", ".jpeg", ".webp", ".gif",
+		"视频", "录像", "录屏", "video", "clip", ".mp4", ".mov", ".mkv", ".webm", "音频", "录音", "语音", "audio", "recording", ".wav", ".mp3", "图片", "照片", "截图", "image", "photo", "screenshot", ".png", ".jpg", ".jpeg", ".webp", ".gif",
 		"修改", "编辑", "修复",
 	}
 	for _, keyword := range keywords {

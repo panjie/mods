@@ -203,6 +203,8 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 	}
 
 	args := map[string][]byte{
+		"fs_find_media":  []byte(`{"path":".","kinds":["audio"]}`),
+		"fs_read_media":  []byte(`{"paths":["a.wav"]}`),
 		"fs_find_images": []byte(`{"path":"."}`),
 		"fs_read_images": []byte(`{"paths":["a.png"]}`),
 		"fs_read_file":   []byte(`{"path":"README.md"}`),

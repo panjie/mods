@@ -64,7 +64,7 @@ func resolveProvider(mod Model, api API) (resolvedProvider, error) {
 		resolved.Endpoint = resolved.Protocol
 	}
 	if resolved.Endpoint == copilot.EndpointResponses &&
-		resolved.Profile != openai.ProviderProfileOpenAI && resolved.Profile != openai.ProviderProfileDeepSeek {
+		resolved.Profile != openai.ProviderProfileOpenAI && resolved.Profile != openai.ProviderProfileDeepSeek && !(resolved.Profile == "qwen" && mod.Name == "qwen3.8-omni-flash") {
 		return resolved, fmt.Errorf("endpoint responses is not implemented for provider-profile %s", resolved.Profile)
 	}
 	return resolved, nil

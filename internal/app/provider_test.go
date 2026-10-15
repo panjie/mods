@@ -383,3 +383,15 @@ func TestBuildProviderConfigsOpenCodeSessionHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestQwenOmniResponsesRouting(t *testing.T) {
+	mod := Model{API: "qwen", Name: "qwen3.8-omni-flash", Endpoint: "responses"}
+	route, err := resolveProvider(mod, API{Name: "qwen", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1"})
+	require.NoError(t, err)
+	require.Equal(t, "responses", route.Endpoint)
+	require.Contains(t, allowedProviderDataKeys(mod, true), "qwen.responses.output.v1")
+	require.Contains(t, allowedProviderDataKeys(mod, false), "qwen.chat.assistant.v1")
+	mod.Name = "qwen-other"
+	_, err = resolveProvider(mod, API{Name: "qwen"})
+	require.Error(t, err)
+}

@@ -101,7 +101,7 @@ func TestNativeDirectoryImageToolLoop(t *testing.T) {
 			require.Empty(t, registry.ImageSearchWarning())
 			imageCount := 0
 			for _, msg := range st.Messages() {
-				for _, img := range msg.Images {
+				for _, img := range msg.ImageAttachments() {
 					imageCount++
 					require.Equal(t, pixels.Bytes(), img.Data)
 					require.NotEmpty(t, img.Source)

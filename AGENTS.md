@@ -45,3 +45,13 @@
 - `review_pages.go` paginates shell, process, and download reviews and gates approval until all pages are displayed. There is no general script execution tool: multi-step work belongs in a script file, which runs as written.
 - `http_download` is a bounded structured batch tool using `netutil.SafeTransport` and ordinary filesystem path authorization. It uses the existing private-network opt-in, stops on failure, and preserves completed results.
 - Shell `cwd` is literal read-only execution context, normalized before assessment; it must never be inferred as a write target without evidence.
+
+## Native media inputs
+- `proto.MediaAttachment` is the canonical ordered attachment model; legacy `Images` remains readable through `Attachments`/`NormalizeMedia`. New messages and tools write `Media`. Preserve source labels and deep-copy bytes in checkpoints.
+- `fs_find_media`/`fs_read_media` and the image aliases share the scanner, reader and history budget in `internal/tools`. `ConfigureMedia` gates input kinds; external reads use the ordinary approval/path context. Media tools are excluded from write-target inference discovery.
+- `internal/audio` validates bounded PCM WAV/MP3 without external executables. `stream.ValidateMedia` enforces shared raw bytes, image count, audio duration and per-audio inline limits; `ValidateMediaWireRequest` also bounds encoded request size.
+- Qwen `qwen3.8-omni-flash` uses native audio in Chat and Responses. Both project tool media to a user message after the complete tool-result group. Chat uses `input_audio.data`; Responses uses `input_audio.audio_url`. Keep Qwen continuation state distinct from DeepSeek/OpenAI state. Other adapters must reject audio explicitly until implemented.
+- `--audio` is a non-persistent input flag, repeatable with `--image`. `internal/testutil/mediafixture` supplies synthetic parser fixtures, not speech-recognition evidence. Real-provider validation must use generated non-private speech and record results separately from mock protocol tests.
+
+- `internal/video` validates bounded, non-fragmented H.264/AAC-LC MP4 using pure-Go `go-mp4`; no runtime transcoder. `internal/media` owns shared byte/duration/frame accounting; audio-bearing videos consume audio duration but bytes only once. Revalidate saved metadata against original bytes before transmission.
+- `--video` and `fs_read_media` use the same `MediaAttachment` as images/audio. Qwen Chat sends `video_url.url`, Responses sends `input_video.video_url`, both with `fps: 2`. Capability checks include video audio; never turn unknown media into image blocks or drop sound. Label audio presence and sampled coverage; delivery is not proof of recognition.

@@ -4,6 +4,7 @@ package proto
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -134,6 +135,7 @@ type ToolCallRequest struct {
 type ToolResult struct {
 	Text   string
 	Images []Image
+	Media  []MediaAttachment
 }
 
 // ToolResultCaller executes a tool without flattening its attachments.
@@ -147,6 +149,7 @@ type Message struct {
 	Role      string
 	Content   string
 	Images    []Image
+	Media     []MediaAttachment
 	ToolCalls []ToolCall
 	// ProviderData carries opaque, provider-tagged state required to continue a
 	// conversation. Provider adapters must ignore keys they do not own. The
@@ -266,6 +269,14 @@ func TranscriptContent(msg Message) string {
 		}
 		if len(msg.ToolCalls) == 0 && msg.Content != "" {
 			parts = append(parts, "Tool result:\n"+msg.Content)
+		}
+	}
+	for _, a := range msg.Media {
+		if a.Kind == "video" {
+			parts = append(parts, fmt.Sprintf("Video: %s (%s, %.2fs, %dx%d, rotation %d, audio %t, requested sampling %d fps, %d bytes; timestamps are estimates)", a.Source, a.MimeType, float64(a.Video.DurationMillis)/1000, a.Video.Width, a.Video.Height, a.Video.Rotation, a.Video.HasAudio, a.Video.SamplingFPS, len(a.Data)))
+		}
+		if a.Kind == "audio" {
+			parts = append(parts, fmt.Sprintf("Audio: %s (%s, %.2fs, %d Hz, %d channels, %d bytes)", a.Source, a.MimeType, float64(a.Audio.DurationMillis)/1000, a.Audio.SampleRate, a.Audio.Channels, len(a.Data)))
 		}
 	}
 	return strings.Join(parts, "\n\n")

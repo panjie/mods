@@ -659,7 +659,11 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		m.messages = msg.runner.messages()
 		if warning != "" {
 			note := "\n\n[mods] " + warning + "\n"
-			m.appendToOutput(note)
+			if m.Config.Format == "json" {
+				fmt.Fprint(os.Stderr, note)
+			} else {
+				m.appendToOutput(note)
+			}
 			m.messages = append(m.messages, proto.Message{Role: proto.RoleAssistant, Content: note})
 		}
 		// The next generation round renders the spinner animation on its

@@ -62,7 +62,7 @@ func fromProtoMessageOK(input proto.Message) (Content, bool) {
 	switch input.Role {
 	case proto.RoleUser:
 		c := Content{Role: geminiRoleUser}
-		for _, img := range input.Images {
+		for _, img := range input.ImageAttachments() {
 			b64 := base64.StdEncoding.EncodeToString(img.Data)
 			c.Parts = append(c.Parts, Part{
 				InlineData: &Blob{MimeType: img.MimeType, Data: b64},

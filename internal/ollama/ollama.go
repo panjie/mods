@@ -59,7 +59,10 @@ func (c *Client) Capabilities() stream.Capabilities {
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
-	if err := stream.ValidateImages(request.Messages); err != nil {
+	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
+	if err := stream.ValidateMedia(request.Messages); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	s := &Stream{
@@ -81,7 +84,11 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		ch := s.respCh
 		s.mu.Unlock()
 		go func() {
-			if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+			if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true}); err != nil {
+				s.finish(run, ch, err)
+				return
+			}
+			if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
 				s.finish(run, ch, err)
 				return
 			}

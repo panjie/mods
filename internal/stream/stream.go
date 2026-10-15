@@ -4,6 +4,7 @@ package stream
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/panjie/mods/internal/proto"
@@ -51,6 +52,11 @@ type Capabilities struct {
 	Images bool
 	// ToolImages reports that the adapter preserves image attachments across tool rounds.
 	ToolImages bool
+	Audio      bool
+	ToolAudio  bool
+	Video      bool
+	ToolVideo  bool
+	VideoAudio bool
 	// Reasoning reports provider-native reasoning support; ReasoningReplay
 	// means opaque or plaintext reasoning state can be continued after tools.
 	Reasoning       bool
@@ -103,7 +109,7 @@ func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller, rich ...proto
 	return proto.Message{
 			Role:    proto.RoleTool,
 			Content: content,
-			Images:  result.Images,
+			Media:   (proto.Message{Images: result.Images, Media: result.Media}).Attachments(),
 			ToolCalls: []proto.ToolCall{
 				{
 					ID:      call.ID,
@@ -125,4 +131,26 @@ func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller, rich ...proto
 			Err:       err,
 			Duration:  duration,
 		}
+}
+
+// ValidateMediaCapabilities rejects unsupported and unknown inputs instead of
+// letting provider formatters silently discard or reinterpret them.
+func ValidateMediaCapabilities(messages []proto.Message, c Capabilities) error {
+	for _, m := range messages {
+		for _, a := range m.Attachments() {
+			supported := false
+			switch a.Kind {
+			case "image":
+				supported = c.Images
+			case "audio":
+				supported = c.Audio
+			case "video":
+				supported = c.Video && (!a.Video.HasAudio || c.VideoAudio)
+			}
+			if !supported {
+				return fmt.Errorf("selected model/endpoint does not support native %s input (including its audio track, if present)", a.Kind)
+			}
+		}
+	}
+	return nil
 }

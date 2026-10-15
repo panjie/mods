@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -11,8 +12,6 @@ import (
 	"text/template"
 	"time"
 	"unicode"
-
-	_ "embed"
 
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
@@ -100,6 +99,8 @@ var Help = map[string]string{
 	"web-search-provider":    "Web search provider: tavily (default) or custom",
 	"web-search-api-key":     "API key for the web search provider (required for tavily)",
 	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + ")",
+	"video":                  "Attach a short H.264 MP4 video with optional AAC audio (repeatable); requires a supported video model",
+	"audio":                  "Attach a WAV or MP3 recording (repeatable); requires a supported audio model",
 	"image":                  "Attach one or more images to the prompt (supports png, jpg, gif, webp). Can be specified multiple times or as comma-separated paths",
 	"stdin-image":            "Treat piped stdin input as raw image data instead of text",
 	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
@@ -305,6 +306,8 @@ type Config struct {
 	ListSkills     bool
 	MCPList        bool
 	MCPListTools   bool
+	Video          []string `yaml:"-" env:"-"`
+	Audio          []string `yaml:"-" env:"-"`
 	Images         []string `yaml:"-" env:"-"`
 	StdinImage     bool     `yaml:"-" env:"-"`
 	ClipboardImage bool     `yaml:"-" env:"-"`

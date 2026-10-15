@@ -107,6 +107,8 @@ var flagCategorySpecs = []flagCategorySpec{
 			{Name: "role", Short: "r"},
 			{Name: "list-roles", Set: func() bool { return config.ListRoles }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: "image", Short: "i"},
+			{Name: "audio"},
+			{Name: "video"},
 			{Name: "stdin-image", Advanced: true},
 			{Name: "clipboard-image", Short: "I", Advanced: true},
 			{Name: "no-instructions", Advanced: true},

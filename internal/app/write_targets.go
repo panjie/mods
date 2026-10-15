@@ -180,7 +180,7 @@ func parseWriteTargets(raw string, scope Scope) ([]Rule, error) {
 }
 
 func writeTargetToolAllowed(registry *toolregistry.Registry, name string) bool {
-	if registry.Interactive(name) || name == "todo_write" || name == "fs_find_images" || name == "fs_read_images" {
+	if registry.Interactive(name) || name == "todo_write" || name == "fs_find_images" || name == "fs_read_images" || name == "fs_find_media" || name == "fs_read_media" {
 		return false
 	}
 	return registry.ReadOnly(name) && !registry.Mutable(name) || name == "process_run" || name == "shell_run" || name == "powershell_run"

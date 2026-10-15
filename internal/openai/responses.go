@@ -44,8 +44,10 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 	}
 	if profile != ProviderProfileDeepSeek {
 		body.Store = openai.Bool(false)
-		body.Include = []responses.ResponseIncludable{
-			responses.ResponseIncludableReasoningEncryptedContent,
+		if profile != providerProfileQwen {
+			body.Include = []responses.ResponseIncludable{
+				responses.ResponseIncludableReasoningEncryptedContent,
+			}
 		}
 	}
 	if request.Temperature != nil {
@@ -71,7 +73,7 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 	}
 
 	opts := responsesRequestOptions(c.config.ExtraParams, profile)
-	if err := stream.ValidateImageWireRequest(request.Messages, body); err != nil {
+	if err := stream.ValidateMediaWireRequest(request.Messages, body); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	s := &responseStream{
@@ -84,7 +86,11 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		profile:    profile,
 	}
 	s.factory = func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
-		if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == providerProfileQwen, Video: s.profile == providerProfileQwen, VideoAudio: s.profile == providerProfileQwen}); err != nil {
+			s.requestErr = err
+			return nil
+		}
+		if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
 			s.requestErr = err
 			return nil
 		}
@@ -95,7 +101,7 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 
 func messagesContainImages(messages []proto.Message) bool {
 	for _, msg := range messages {
-		if len(msg.Images) > 0 {
+		if len(msg.ImageAttachments()) > 0 {
 			return true
 		}
 	}

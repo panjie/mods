@@ -4,38 +4,26 @@ import (
 	"encoding/json"
 	"fmt"
 
-	imageutil "github.com/panjie/mods/internal/image"
+	"github.com/panjie/mods/internal/media"
 	"github.com/panjie/mods/internal/proto"
 )
 
-// ValidateImages bounds cumulative images, including replayed conversation data.
-func ValidateImages(messages []proto.Message) error {
-	count, bytes := 0, 0
-	for _, m := range messages {
-		for _, img := range m.Images {
-			count++
-			bytes += len(img.Data)
-		}
-	}
-	if count > imageutil.MaxImageCount || bytes > imageutil.MaxTotalImageBytes {
-		return fmt.Errorf("image context budget exceeded (%d images, %d bytes); start a smaller image batch", count, bytes)
-	}
-	return nil
-}
+// ValidateMedia bounds cumulative media, including replayed conversation data.
+func ValidateMedia(messages []proto.Message) error { return media.Validate(messages) }
 
-// ValidateImageWireRequest reserves headroom under provider request limits.
-func ValidateImageWireRequest(messages []proto.Message, request any) error {
-	if err := ValidateImages(messages); err != nil {
+// ValidateMediaWireRequest reserves headroom under provider request limits.
+func ValidateMediaWireRequest(messages []proto.Message, request any) error {
+	if err := ValidateMedia(messages); err != nil {
 		return err
 	}
-	hasImages := false
+	hasMedia := false
 	for _, m := range messages {
-		if len(m.Images) > 0 {
-			hasImages = true
+		if len(m.Attachments()) > 0 {
+			hasMedia = true
 			break
 		}
 	}
-	if !hasImages {
+	if !hasMedia {
 		return nil
 	}
 	data, err := json.Marshal(request)
@@ -43,7 +31,7 @@ func ValidateImageWireRequest(messages []proto.Message, request any) error {
 		return err
 	}
 	if len(data) > 40*1024*1024 {
-		return fmt.Errorf("image request exceeds 40 MiB wire budget; image search is incomplete")
+		return fmt.Errorf("media request exceeds 40 MiB wire budget; media search is incomplete")
 	}
 	return nil
 }
@@ -65,3 +53,11 @@ func (s *failedStream) Err() error                        { return s.err }
 func (s *failedStream) Messages() []proto.Message         { return s.messages }
 func (s *failedStream) Usage() proto.TokenUsage           { return proto.TokenUsage{} }
 func (s *failedStream) CallTools() []proto.ToolCallStatus { return nil }
+
+// ValidateImages is retained for image-only callers; it validates all media.
+func ValidateImages(messages []proto.Message) error { return ValidateMedia(messages) }
+
+// ValidateImageWireRequest is the legacy name for the shared request guard.
+func ValidateImageWireRequest(messages []proto.Message, request any) error {
+	return ValidateMediaWireRequest(messages, request)
+}

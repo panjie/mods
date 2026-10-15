@@ -78,9 +78,9 @@ func TestReadImagesPreservesSourcesAndPartialFailure(t *testing.T) {
 	require.Len(t, page.Paths, 2)
 	result, err := r.CallResult(context.Background(), "fs_read_images", []byte(`{"paths":["bad.png","a.jpg"]}`))
 	require.NoError(t, err)
-	require.Len(t, result.Images, 1)
-	require.Equal(t, "a.jpg", result.Images[0].Source)
-	require.Equal(t, "image/png", result.Images[0].MimeType)
+	require.Len(t, (proto.Message{Images: result.Images, Media: result.Media}).ImageAttachments(), 1)
+	require.Equal(t, "a.jpg", (proto.Message{Images: result.Images, Media: result.Media}).ImageAttachments()[0].Source)
+	require.Equal(t, "image/png", (proto.Message{Images: result.Images, Media: result.Media}).ImageAttachments()[0].MimeType)
 	require.Contains(t, result.Text, "bad.png\": unread")
 	require.Contains(t, r.ImageSearchWarning(), "1 discovered")
 	_, err = r.Call(context.Background(), "fs_read_images", []byte(`{"paths":["a.jpg"]}`))
@@ -92,7 +92,7 @@ func TestImageBudgetIncludesHistory(t *testing.T) {
 	r.ConfigureImages(true, []proto.Message{{Images: []proto.Image{{Data: make([]byte, imageutil.MaxTotalImageBytes)}}}})
 	result, err := r.CallResult(context.Background(), "fs_read_images", []byte(`{"paths":["a.png"]}`))
 	require.Error(t, err)
-	require.Empty(t, result.Images)
+	require.Empty(t, (proto.Message{Images: result.Images, Media: result.Media}).ImageAttachments())
 	require.Contains(t, result.Text, "budget exhausted")
 }
 func TestImageScanReadCompletionAndGate(t *testing.T) {
@@ -143,7 +143,7 @@ func TestImageScanSymlinkAndOutsideRead(t *testing.T) {
 	require.Error(t, err)
 	result, err := r.CallResult(WithAuthorizedDirs(context.Background(), []string{outside}), "fs_read_images", data)
 	require.NoError(t, err)
-	require.Len(t, result.Images, 1)
+	require.Len(t, (proto.Message{Images: result.Images, Media: result.Media}).ImageAttachments(), 1)
 }
 
 func TestImageScanDirectoryChangeRequiresRestart(t *testing.T) {

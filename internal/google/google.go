@@ -183,6 +183,9 @@ func (c *Client) Capabilities() stream.Capabilities {
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
 	stream := new(Stream)
 	sysInstr, contents := fromProtoMessages(request.Messages)
 	body := MessageCompletionRequest{

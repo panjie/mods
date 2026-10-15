@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/panjie/mods/internal/approval"
-	imageutil "github.com/panjie/mods/internal/image"
+	"github.com/panjie/mods/internal/media"
 	"github.com/panjie/mods/internal/proto"
 )
 
@@ -30,7 +30,10 @@ func RegisterImages(r *Registry, cfg FilesystemConfig) error {
 	if err != nil {
 		return err
 	}
-	state := &imageSearchState{scans: map[string]*imageScan{}, loaded: map[string]bool{}}
+	state := r.images
+	if state == nil {
+		state = &imageSearchState{scans: map[string]*imageScan{}, loaded: map[string]bool{}, allowImages: true}
+	}
 	r.images = state
 	r.AddCloser(func() error {
 		state.mu.Lock()
@@ -49,6 +52,13 @@ func RegisterImages(r *Registry, cfg FilesystemConfig) error {
 			"limit":     integerProp("Maximum candidates per page, default 100, maximum 500."),
 		}, "path")},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(data, &fields); err != nil {
+				return "", err
+			}
+			if _, ok := fields["kinds"]; ok {
+				return "", fmt.Errorf("fs_find_images does not accept kinds; use fs_find_media")
+			}
 			return state.find(ctx, root, cfg.SafeDirs, data)
 		},
 	}
@@ -75,49 +85,7 @@ func RegisterImages(r *Registry, cfg FilesystemConfig) error {
 		}, "paths")},
 		Validate: func(data json.RawMessage) error { _, err := decodeImagePaths(data); return err },
 		CallResult: func(ctx context.Context, data json.RawMessage) (proto.ToolResult, error) {
-			paths, err := decodeImagePaths(data)
-			if err != nil {
-				return proto.ToolResult{}, err
-			}
-			state.mu.Lock()
-			defer state.mu.Unlock()
-			result := proto.ToolResult{}
-			var lines []string
-			for _, input := range paths {
-				if err := ctx.Err(); err != nil {
-					result.Text = strings.Join(lines, "\n")
-					return result, err
-				}
-				path, err := resolveAuthorizedPath(ctx, root, input, cfg.SafeDirs)
-				var data []byte
-				var mime string
-				if err == nil {
-					data, mime, err = imageutil.ReadImage(path)
-				}
-				if err == nil {
-					err = imageutil.ValidateImage(data)
-				}
-				if err == nil {
-					err = ctx.Err()
-				}
-				if err == nil && (state.bytes+len(data) > imageutil.MaxTotalImageBytes || state.count >= imageutil.MaxImageCount) {
-					err = fmt.Errorf("image context budget exhausted; this file remains unread. Stop and report incomplete results")
-				}
-				if err != nil {
-					lines = append(lines, fmt.Sprintf("%q: unread: %v", input, err))
-					continue
-				}
-				state.bytes += len(data)
-				state.count++
-				state.loaded[path] = true
-				result.Images = append(result.Images, proto.Image{Data: data, MimeType: mime, Source: input})
-				lines = append(lines, fmt.Sprintf("%q: attached image %d", input, len(result.Images)))
-			}
-			result.Text = strings.Join(lines, "\n")
-			if len(result.Images) == 0 {
-				return result, fmt.Errorf("no images could be attached; see per-file errors")
-			}
-			return result, nil
+			return state.readMedia(ctx, root, cfg.SafeDirs, data, true)
 		},
 	})
 }
@@ -141,10 +109,12 @@ func decodeImagePaths(data json.RawMessage) ([]string, error) {
 }
 
 type imageSearchState struct {
-	mu           sync.Mutex
-	scans        map[string]*imageScan
-	loaded       map[string]bool
-	bytes, count int
+	mu                                  sync.Mutex
+	scans                               map[string]*imageScan
+	loaded                              map[string]bool
+	usage                               media.Usage
+	allowImages, allowAudio, allowVideo bool
+	mediaUsed                           bool
 }
 
 // ConfigureImages gates native vision tools and reserves space for history.
@@ -159,10 +129,10 @@ func (r *Registry) ConfigureImages(enabled bool, messages []proto.Message) {
 	}
 	r.images.mu.Lock()
 	defer r.images.mu.Unlock()
+	r.images.usage = media.Usage{}
 	for _, m := range messages {
-		for _, img := range m.Images {
-			r.images.bytes += len(img.Data)
-			r.images.count++
+		for _, a := range m.Attachments() {
+			r.images.usage.Add(a)
 		}
 	}
 }
@@ -192,5 +162,9 @@ func (r *Registry) ImageSearchWarning() string {
 	if unread == 0 && issues == 0 && unfinished == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Image search incomplete: %d scan(s) not finished, %d discovered image(s) not delivered to the model, %d scan issue(s). These files must not be counted as non-matches.", unfinished, unread, issues)
+	label, noun := "Image", "image"
+	if s.mediaUsed {
+		label, noun = "Media", "file"
+	}
+	return fmt.Sprintf("%s search incomplete: %d scan(s) not finished, %d discovered %s(s) not delivered to the model, %d scan issue(s). These files must not be counted as non-matches.", label, unfinished, unread, noun, issues)
 }

@@ -21,6 +21,9 @@ const (
 )
 
 func responsesProviderDataKeyForProfile(profile ProviderProfile) string {
+	if profile == providerProfileQwen {
+		return "qwen.responses.output.v1"
+	}
 	if profile == ProviderProfileDeepSeek {
 		return deepSeekResponsesProviderDataKey
 	}
@@ -61,6 +64,9 @@ func fromResponseToolSpecs(specs []proto.ToolSpec) []responses.ToolUnionParam {
 
 func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (responses.ResponseInputParam, error) {
 	input = proto.NormalizeSystemMessages(input)
+	if profile == providerProfileQwen {
+		input = proto.ProjectToolMedia(input)
+	}
 	var items responses.ResponseInputParam
 	providerDataKey := responsesProviderDataKeyForProfile(profile)
 	for _, msg := range input {
@@ -84,7 +90,29 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 				responses.EasyInputMessageRoleSystem,
 			))
 		case proto.RoleUser:
-			if len(msg.Images) == 0 {
+			if profile == providerProfileQwen && len(msg.Attachments()) > 0 {
+				var parts []map[string]any
+				for _, a := range msg.Attachments() {
+					if a.Source != "" || a.Kind == "video" {
+						parts = append(parts, map[string]any{"type": "input_text", "text": a.InputLabel()})
+					}
+					dataURL := fmt.Sprintf("data:%s;base64,%s", a.MimeType, base64.StdEncoding.EncodeToString(a.Data))
+					if a.Kind == "video" {
+						parts = append(parts, map[string]any{"type": "input_video", "video_url": dataURL, "fps": a.Video.SamplingFPS})
+					} else if a.Kind == "audio" {
+						parts = append(parts, map[string]any{"type": "input_audio", "audio_url": dataURL, "format": a.Audio.Container})
+					} else if a.Kind == "image" {
+						parts = append(parts, map[string]any{"type": "input_image", "image_url": dataURL})
+					}
+				}
+				if msg.Content != "" {
+					parts = append(parts, map[string]any{"type": "input_text", "text": msg.Content})
+				}
+				raw, _ := json.Marshal(map[string]any{"type": "message", "role": "user", "content": parts})
+				items = append(items, param.Override[responses.ResponseInputItemUnionParam](json.RawMessage(raw)))
+				continue
+			}
+			if len(msg.ImageAttachments()) == 0 {
 				items = append(items, responses.ResponseInputItemParamOfMessage(
 					msg.Content,
 					responses.EasyInputMessageRoleUser,
@@ -92,7 +120,7 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 				continue
 			}
 			var content responses.ResponseInputMessageContentListParam
-			for _, img := range msg.Images {
+			for _, img := range msg.ImageAttachments() {
 				b64 := base64.StdEncoding.EncodeToString(img.Data)
 				dataURL := fmt.Sprintf("data:%s;base64,%s", img.MimeType, b64)
 				part := responses.ResponseInputContentParamOfInputImage(
@@ -124,9 +152,9 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 			}
 		case proto.RoleTool:
 			for _, call := range msg.ToolCalls {
-				if len(msg.Images) > 0 {
+				if len(msg.ImageAttachments()) > 0 {
 					parts := []map[string]any{{"type": "input_text", "text": msg.Content}}
-					for _, img := range msg.Images {
+					for _, img := range msg.ImageAttachments() {
 						parts = append(parts, map[string]any{"type": "input_text", "text": "Source: " + img.Source}, map[string]any{"type": "input_image", "image_url": fmt.Sprintf("data:%s;base64,%s", img.MimeType, base64.StdEncoding.EncodeToString(img.Data))})
 					}
 					kind := "function_call_output"

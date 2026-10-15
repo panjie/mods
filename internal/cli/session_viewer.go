@@ -101,10 +101,10 @@ func readableMessageContent(msg proto.Message) string {
 	if content := plainTranscriptContent(proto.TranscriptContent(msg)); content != "" {
 		parts = append(parts, content)
 	}
-	if len(msg.Images) > 0 {
+	if len(msg.ImageAttachments()) > 0 {
 		var images strings.Builder
-		images.WriteString("images (" + stringInt(len(msg.Images)) + "):")
-		for i, img := range msg.Images {
+		images.WriteString("images (" + stringInt(len(msg.ImageAttachments())) + "):")
+		for i, img := range msg.ImageAttachments() {
 			mime := img.MimeType
 			if mime == "" {
 				mime = "unknown"

@@ -175,6 +175,8 @@ func registerFlags(flags *pflag.FlagSet, c *Config, memprofileFlag *bool) {
 	regBool(flags, &c.MCPListTools, "list-tools", "", false)
 
 	regBool(flags, &c.WebSearch, "web-search", "", c.WebSearch)
+	regStrArr(flags, &c.Video, "video", "", c.Video)
+	regStrArr(flags, &c.Audio, "audio", "", c.Audio)
 	regStrArr(flags, &c.Images, "image", "i", c.Images)
 	regBool(flags, &c.StdinImage, "stdin-image", "", c.StdinImage)
 	regBool(flags, &c.ClipboardImage, "clipboard-image", "I", c.ClipboardImage)

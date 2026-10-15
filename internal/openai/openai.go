@@ -28,6 +28,7 @@ type ProviderProfile string
 const (
 	ProviderProfileOpenAI   ProviderProfile = "openai"
 	ProviderProfileDeepSeek ProviderProfile = "deepseek"
+	providerProfileQwen     ProviderProfile = "qwen-omni"
 
 	// Backward-compatible names retained for packages that constructed Config
 	// before provider profiles also applied to Chat Completions.
@@ -140,10 +141,25 @@ func (c *Client) Capabilities() stream.Capabilities {
 		capabilities.CustomTools = true
 		capabilities.ReasoningReplay = true
 	}
+	capabilities.Audio = c.qwenAudio()
+	capabilities.ToolAudio = capabilities.Audio
+	capabilities.Video = c.qwenAudio()
+	capabilities.ToolVideo = capabilities.Video
+	capabilities.VideoAudio = capabilities.Video
+	if capabilities.Audio {
+		capabilities.ReasoningReplay = true
+	}
 	return capabilities
 }
 
+func (c *Client) qwenAudio() bool {
+	return c.config.Model == "qwen3.8-omni-flash"
+}
+
 func (c *Client) profile() ProviderProfile {
+	if c.qwenAudio() {
+		return providerProfileQwen
+	}
 	if c.config.ProviderProfile != "" {
 		return c.config.ProviderProfile
 	}
@@ -155,7 +171,10 @@ func (c *Client) profile() ProviderProfile {
 
 // Request makes a new request and returns a stream.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
-	if err := stream.ValidateImages(request.Messages); err != nil {
+	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
+	if err := stream.ValidateMedia(request.Messages); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	if c.profile() == ProviderProfileDeepSeek && !deepSeekImageModel(request.Model) && messagesContainImages(request.Messages) {
@@ -204,7 +223,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		tag = defaultThinkTag
 	}
 
-	if err := stream.ValidateImageWireRequest(request.Messages, body); err != nil {
+	if err := stream.ValidateMediaWireRequest(request.Messages, body); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	s := &Stream{
@@ -322,7 +341,7 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	choice := event.Choices[0]
 	content := choice.Delta.Content
 	thought := s.extractThought(choice.Delta)
-	if s.profile == ProviderProfileDeepSeek && thought != "" {
+	if (s.profile == ProviderProfileDeepSeek || s.profile == providerProfileQwen) && thought != "" {
 		s.reasoning.WriteString(thought)
 	}
 	if s.parseThink {
@@ -485,7 +504,11 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
-		if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == providerProfileQwen, Video: s.profile == providerProfileQwen, VideoAudio: s.profile == providerProfileQwen}); err != nil {
+			s.requestErr = err
+			return false
+		}
+		if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
 			s.requestErr = err
 			return false
 		}
@@ -516,8 +539,8 @@ func (s *Stream) Next() bool {
 		if s.parseThink {
 			protoMsg.Content = s.visible.String()
 		}
-		if s.profile == ProviderProfileDeepSeek {
-			attachDeepSeekChatState(&protoMsg, s.reasoning.String())
+		if s.profile == ProviderProfileDeepSeek || s.profile == providerProfileQwen {
+			attachDeepSeekChatState(&protoMsg, s.reasoning.String(), s.profile)
 		}
 		s.messages = append(s.messages, protoMsg)
 		formatted := fromProtoMessagesForProfile([]proto.Message{protoMsg}, s.profile)

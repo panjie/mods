@@ -75,6 +75,10 @@ func cloneCompletionMessages(messages []proto.Message) []proto.Message {
 	cloned := slices.Clone(messages)
 	for i := range cloned {
 		message := &cloned[i]
+		message.Media = slices.Clone(message.Media)
+		for j := range message.Media {
+			message.Media[j].Data = slices.Clone(message.Media[j].Data)
+		}
 		message.Images = slices.Clone(message.Images)
 		for j := range message.Images {
 			message.Images[j].Data = slices.Clone(message.Images[j].Data)

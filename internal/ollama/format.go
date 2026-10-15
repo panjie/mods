@@ -47,7 +47,7 @@ func fromProtoMessage(input proto.Message) api.Message {
 		}
 		return m
 	}
-	for _, img := range input.Images {
+	for _, img := range input.ImageAttachments() {
 		if img.Source != "" {
 			m.Content += "\nSource (image order): " + img.Source
 		}

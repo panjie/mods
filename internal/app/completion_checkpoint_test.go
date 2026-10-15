@@ -125,17 +125,20 @@ func TestCompletionCheckpointIsolatesProviderState(t *testing.T) {
 	messages := []proto.Message{system, {
 		Role:         proto.RoleAssistant,
 		Images:       []proto.Image{{Data: []byte("image")}},
+		Media:        []proto.MediaAttachment{{Kind: "audio", Data: []byte("audio")}},
 		ToolCalls:    []proto.ToolCall{{Function: proto.Function{Arguments: []byte("{}")}}},
 		ProviderData: map[string]json.RawMessage{"anthropic.messages.content": []byte(`[]`)},
 	}}
 	m.saveCompletionCheckpoint(messages)
 	messages[1].Images[0].Data[0] = 'X'
+	messages[1].Media[0].Data[0] = 'X'
 	messages[1].ToolCalls[0].Function.Arguments[0] = 'X'
 	messages[1].ProviderData["anthropic.messages.content"][0] = 'X'
 	m.retries = 1
 	require.NoError(t, m.setupCompletionContext("original user"))
 	require.Len(t, m.messages, 1)
 	require.Equal(t, "image", string(m.messages[0].Images[0].Data))
+	require.Equal(t, "audio", string(m.messages[0].Media[0].Data))
 	require.Equal(t, "{}", string(m.messages[0].ToolCalls[0].Function.Arguments))
 	require.Equal(t, "[]", string(m.messages[0].ProviderData["anthropic.messages.content"]))
 	// A subsequent attempt must not mutate the checkpoint either.

@@ -83,6 +83,9 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
+	if len(cfg.Video) > 0 && !client.Capabilities().Video {
+		return requestSession{}, modsError{Err: fmt.Errorf("use a supported video model/endpoint, such as qwen3.8-omni-flash"), ReasonText: "Video input is unavailable"}
+	}
 	if len(cfg.Images) > 0 && !client.Capabilities().Images {
 		return requestSession{}, modsError{
 			Err:        fmt.Errorf("%s/%s does not accept image or file input on endpoint %s", mod.API, mod.Name, normalizedEndpointName(ccfg.UseResponses)),
@@ -95,6 +98,9 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	err = m.setupCompletionContext(content)
 	if err != nil {
 		return requestSession{}, err
+	}
+	if err := stream.ValidateMediaCapabilities(m.messages, client.Capabilities()); err != nil {
+		return requestSession{}, modsError{Err: err, ReasonText: "Media input is unavailable"}
 	}
 	m.sanitizeProviderContinuation(mod, ccfg.UseResponses)
 
@@ -116,8 +122,11 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		return requestSession{}, err
 	}
 
-	registry.ConfigureImages(client.Capabilities().Images && client.Capabilities().ToolImages, m.messages)
+	registry.ConfigureMedia(client.Capabilities().Images && client.Capabilities().ToolImages, client.Capabilities().Audio && client.Capabilities().ToolAudio, m.messages, client.Capabilities().Video && client.Capabilities().ToolVideo && client.Capabilities().VideoAudio)
 	tools := registry.Specs()
+	if client.Capabilities().Video {
+		m.messages = append(m.messages, structuredSystemMessage("Native video inputs preserve the soundtrack. When searching video contents, inspect both the sampled visuals and any audio track, including spoken translations of the search concept. Keep each file and modality separate; report matching, non-matching or uncertain with observed evidence. An attached or successfully read file only proves delivery, not successful perception. If a relevant modality cannot be inspected, report uncertain. Never invent quotes, subtitles or identifiers. Visual sampling can miss brief events; never claim exhaustive frame coverage. Time ranges are approximate.", proto.SystemSectionExecutionContext))
+	}
 	if client.Capabilities().CustomApplyPatch {
 		for i := range tools {
 			if tools[i].Name == "fs_apply_patch" {
@@ -212,6 +221,12 @@ func (m *Mods) sanitizeProviderContinuation(mod Model, useResponses bool) {
 }
 
 func allowedProviderDataKeys(mod Model, useResponses bool) map[string]struct{} {
+	if mod.Name == "qwen3.8-omni-flash" {
+		if useResponses {
+			return map[string]struct{}{"qwen.responses.output.v1": {}}
+		}
+		return map[string]struct{}{"qwen.chat.assistant.v1": {}}
+	}
 	switch modelProtocol(mod) {
 	case "anthropic":
 		return map[string]struct{}{"anthropic.messages.content": {}}
@@ -498,6 +513,9 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 		output, err := registry.CallResult(ctx, name, callData)
 		if m.secrets != nil {
 			output.Text = m.secrets.Redact(output.Text)
+			for i := range output.Media {
+				output.Media[i].Source = m.secrets.Redact(output.Media[i].Source)
+			}
 			for i := range output.Images {
 				output.Images[i].Source = m.secrets.Redact(output.Images[i].Source)
 			}

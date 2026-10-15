@@ -30,7 +30,10 @@ func (c *Client) Capabilities() stream.Capabilities {
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
-	if err := stream.ValidateImages(request.Messages); err != nil {
+	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
+		return stream.Failed(err, request.Messages)
+	}
+	if err := stream.ValidateMedia(request.Messages); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	system, messages, err := fromProtoMessages(request.Messages)
@@ -101,7 +104,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		body.OutputConfig.Effort = anthropic.OutputConfigEffort(c.config.ReasoningEffort)
 	}
 
-	if err := stream.ValidateImageWireRequest(request.Messages, body); err != nil {
+	if err := stream.ValidateMediaWireRequest(request.Messages, body); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	s := &Stream{
@@ -211,7 +214,7 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 			)
 			results = append(
 				results,
-				newToolResultBlock(call.ID, msg.Content, status.Err != nil, msg.Images...),
+				newToolResultBlock(call.ID, msg.Content, status.Err != nil, msg.ImageAttachments()...),
 			)
 			s.messages = append(s.messages, msg)
 			statuses = append(statuses, status)
@@ -289,8 +292,12 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
+		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true}); err != nil {
+			s.requestErr = err
+			return false
+		}
 		s.done = false
-		if err := stream.ValidateImageWireRequest(s.messages, s.request); err != nil {
+		if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
 			s.requestErr = err
 			return false
 		}

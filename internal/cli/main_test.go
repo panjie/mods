@@ -1114,11 +1114,11 @@ func TestReadmeDescribesPromptWorkflow(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
 	require.NoError(t, err)
 
-	readme := string(content)
+	readme := strings.Join(strings.Fields(string(content)), " ")
 	require.Contains(t, readme, "[PROMPT...]")
 	require.Contains(t, readme, "grouped by purpose")
-	require.Contains(t, readme, "edit your files")
-	require.Contains(t, readme, "run shell")
+	require.Contains(t, readme, "reads and edits files")
+	require.Contains(t, readme, "runs shell commands")
 	require.Contains(t, readme, "review step")
 }
 

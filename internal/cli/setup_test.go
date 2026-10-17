@@ -599,8 +599,8 @@ func TestSetupUsesCompactSharedPanelAndStableOptionColumns(t *testing.T) {
 		m.draft().models = []string{"kimi-k2.6", "kimi-k2.7-code", "kimi-k3"}
 		m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		before := ansi.Strip(m.View().Content)
-		require.Contains(t, before, "DISCOVER MODELS")
-		require.Contains(t, before, "┃")
+		require.Contains(t, before, "Discover models")
+		require.Contains(t, before, "│")
 		require.NotContains(t, before, "╭")
 		require.Less(t, lipgloss.Height(before), 20, "short pages must not fill the terminal with empty space")
 		columns := func(view string) map[string]int {

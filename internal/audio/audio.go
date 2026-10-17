@@ -151,7 +151,6 @@ func parseMP3(b []byte) (proto.AudioMetadata, error) {
 	frames := 0
 	for p < len(b) {
 		if len(b)-p == 128 && string(b[p:p+3]) == "TAG" {
-			p = len(b)
 			break
 		}
 		if len(b)-p < 4 {

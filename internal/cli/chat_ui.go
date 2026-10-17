@@ -67,23 +67,22 @@ func renderChatBanner(width int) string {
 		}
 		meta += role
 	}
-	lines := []string{styles.interaction.Info.Render("╭─") + " " + styles.interaction.Title.Render("MODS CHAT")}
+	title := styles.interaction.Title.Render("mods")
 	if meta != "" {
-		wrapped := strings.Split(ansi.Hardwrap(styles.interaction.Meta.Render(meta), max(1, width-3), false), "\n")
-		for i, line := range wrapped {
-			prefix := "   "
-			if i == 0 {
-				prefix = styles.interaction.Info.Render("╰─") + " "
-			}
-			lines = append(lines, prefix+line)
+		if lipgloss.Width(title)+3+lipgloss.Width(meta) > width {
+			return title + "\n" + ansi.Wrap(styles.interaction.Meta.Render(meta), width, "")
 		}
+		title += styles.interaction.Meta.Render(" · " + meta)
 	}
-	return strings.Join(lines, "\n")
+	return ansi.Wrap(title, width, "")
 }
 
 func normalizedChatWidth(width int) int {
 	if width <= 0 {
 		width = chatDefaultWidth
+	}
+	if config.WordWrap > 0 {
+		return min(width, config.WordWrap)
 	}
 	return min(width, chatMaxWidth)
 }
@@ -96,7 +95,7 @@ func renderChatUser(prompt string) {
 	width := normalizedChatWidth(chatTerminalWidth())
 	bodyWidth := max(1, width-styles.userRail.GetHorizontalFrameSize())
 	body := styles.userRail.Render(ansi.Hardwrap(prompt, bodyWidth, false))
-	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Info.Render("YOU")+"\n"+body)
+	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Info.Render("You")+"\n"+body)
 }
 
 func renderChatAssistant() {
@@ -104,7 +103,7 @@ func renderChatAssistant() {
 		return
 	}
 	styles := makeChatStyles()
-	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Success.Render("MODS"))
+	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Title.Render("mods"))
 }
 
 func renderChatSaved(id string) {
@@ -116,7 +115,7 @@ func renderChatSaved(id string) {
 	if config.NerdFontGlyphs {
 		marker = ui.NerdMark
 	}
-	_, _ = lipgloss.Fprintln(chatOutput, styles.interaction.Success.Render(marker+" SAVED")+"  "+styles.interaction.Meta.Render(id[:ShortIDLength]))
+	_, _ = lipgloss.Fprintln(chatOutput, styles.interaction.Meta.Render(marker+" Saved")+"  "+styles.interaction.Meta.Render(id[:ShortIDLength]))
 }
 
 type chatPromptModel struct {
@@ -298,10 +297,8 @@ func (m *chatPromptModel) resize(width int) {
 	if width <= 0 {
 		width = chatDefaultWidth
 	}
-	// The composer follows the terminal width. Conversation content keeps its
-	// readability cap, but the active input surface should use all available
-	// space and react immediately to WindowSizeMsg changes.
-	m.width = width
+	// Use the same reading column for messages and the composer.
+	m.width = normalizedChatWidth(width)
 	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	innerWidth := ui.InteractionPanelInnerWidth(styles.interaction, m.width)
 	m.textarea.SetWidth(innerWidth)

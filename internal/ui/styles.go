@@ -11,7 +11,6 @@ type Styles struct {
 	AppName,
 	CliArgs,
 	Comment,
-	CyclingChars,
 	DebugHeader,
 	DebugDetails,
 	ErrorHeader,
@@ -64,27 +63,27 @@ func MakeStyles(isDark bool) (s Styles) {
 
 func MakeStylesWithTheme(theme string, isDark bool) (s Styles) {
 	const horizontalEdgePadding = 2
-	lightDark := lipgloss.LightDark(isDark)
-	s.AppName = lipgloss.NewStyle().Bold(true)
-	s.CliArgs = lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
-	s.Comment = lipgloss.NewStyle().Foreground(lipgloss.Color("#757575"))
-	s.CyclingChars = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF87D7"))
-	s.DebugHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#FFD700")).Bold(true).Padding(0, 1).SetString("DEBUG")
-	s.DebugDetails = lipgloss.NewStyle().Foreground(lipgloss.Color("#B8860B"))
-	s.ErrorHeader = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1F1F1")).Background(lipgloss.Color("#FF5F87")).Bold(true).Padding(0, 1).SetString("ERROR")
-	s.ErrorDetails = s.Comment
-	s.ErrPadding = lipgloss.NewStyle().Padding(0, horizontalEdgePadding)
-	s.Flag = lipgloss.NewStyle().Foreground(lightDark(lipgloss.Color("#00B594"), lipgloss.Color("#3EEFCF"))).Bold(true)
-	s.FlagComma = lipgloss.NewStyle().Foreground(lightDark(lipgloss.Color("#5DD6C0"), lipgloss.Color("#427C72"))).SetString(",")
-	s.FlagDesc = s.Comment
-	s.InlineCode = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Background(lipgloss.Color("#3A3A3A")).Padding(0, 1)
-	s.Link = lipgloss.NewStyle().Foreground(lipgloss.Color("#00AF87")).Underline(true)
-	s.Quote = lipgloss.NewStyle().Foreground(lightDark(lipgloss.Color("#FF71D0"), lipgloss.Color("#FF78D2")))
-	s.Pipe = lipgloss.NewStyle().Foreground(lightDark(lipgloss.Color("#8470FF"), lipgloss.Color("#745CFF")))
-	s.SessionList = lipgloss.NewStyle().Padding(0, 1)
-	s.ShaHash = s.Flag
-	s.Timeago = lipgloss.NewStyle().Foreground(lightDark(lipgloss.Color("#999"), lipgloss.Color("#555")))
 	s.Interaction = makeInteractionStyles(interactionPalette(theme, isDark))
+	i := s.Interaction
+	s.AppName = i.Title
+	s.CliArgs = i.Muted
+	s.Comment = i.Muted
+	s.DebugHeader = i.Muted.Bold(true).SetString("Debug")
+	s.DebugDetails = i.Muted
+	s.ErrorHeader = i.Danger.SetString("Error")
+	s.ErrorDetails = i.Body
+	s.ErrPadding = lipgloss.NewStyle().Padding(0, horizontalEdgePadding)
+	s.Flag = i.Info
+	s.FlagComma = i.Muted.SetString(",")
+	s.FlagDesc = i.Body
+	s.InlineCode = i.Info
+	s.Link = i.Info.Underline(true)
+	s.Quote = i.Body
+	s.Pipe = i.Muted
+	s.SessionList = lipgloss.NewStyle().Padding(0, 1)
+	s.ShaHash = i.Muted
+	s.Timeago = i.Muted
+
 	return s
 }
 
@@ -142,23 +141,23 @@ func makeInteractionStyles(p InteractionPalette) InteractionStyles {
 	return InteractionStyles{
 		Palette: p,
 		Panel: lipgloss.NewStyle().
-			BorderStyle(lipgloss.ThickBorder()).
+			BorderStyle(lipgloss.NormalBorder()).
 			BorderLeft(true).
 			BorderForeground(p.Accent).
 			PaddingLeft(1),
-		Title:    lipgloss.NewStyle().Foreground(p.Accent).Bold(true),
+		Title:    lipgloss.NewStyle().Bold(true),
 		Meta:     lipgloss.NewStyle().Foreground(p.Muted),
-		Body:     lipgloss.NewStyle().Foreground(p.Text),
-		Label:    lipgloss.NewStyle().Foreground(p.Muted).Bold(true),
+		Body:     lipgloss.NewStyle(),
+		Label:    lipgloss.NewStyle().Foreground(p.Muted),
 		Muted:    lipgloss.NewStyle().Foreground(p.Muted),
-		Input:    lipgloss.NewStyle().Foreground(p.Text).Background(p.Surface).Padding(0, 1),
-		Key:      lipgloss.NewStyle().Foreground(contrastForeground(p.Surface)).Background(p.Surface).Bold(true).Padding(0, 1),
-		Action:   lipgloss.NewStyle().Foreground(p.Text),
+		Input:    lipgloss.NewStyle().Padding(0, 1),
+		Key:      lipgloss.NewStyle().Bold(true).Padding(0, 1),
+		Action:   lipgloss.NewStyle().Foreground(p.Muted),
 		Selected: lipgloss.NewStyle().Foreground(contrastForeground(p.Accent)).Background(p.Accent).Bold(true).Padding(0, 1),
 		Danger:   lipgloss.NewStyle().Foreground(p.Danger).Bold(true),
-		Warning:  lipgloss.NewStyle().Foreground(p.Warning).Bold(true),
-		Info:     lipgloss.NewStyle().Foreground(p.Accent).Bold(true),
-		Success:  lipgloss.NewStyle().Foreground(p.Success).Bold(true),
+		Warning:  lipgloss.NewStyle().Foreground(p.Warning),
+		Info:     lipgloss.NewStyle().Foreground(p.Accent),
+		Success:  lipgloss.NewStyle().Foreground(p.Success),
 	}
 }
 

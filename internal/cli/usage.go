@@ -19,7 +19,7 @@ const (
 func useLine() string {
 	appName := filepath.Base(os.Args[0])
 
-	appName = ui.MakeGradientText(ui.StdoutStyles().AppName, appName)
+	appName = ui.StdoutStyles().AppName.Render(appName)
 
 	return fmt.Sprintf(
 		"%s %s",

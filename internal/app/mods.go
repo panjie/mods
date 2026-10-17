@@ -34,7 +34,6 @@ const (
 )
 
 const (
-	defaultFanciness     = 10
 	renderFrameInterval  = time.Second / 30
 	terminalProbeTimeout = 250 * time.Millisecond
 )
@@ -312,7 +311,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.SessionReadFromID = msg.ReadID
 		m.reviewer.rules.Replace(msg.Rules)
 
-		m.anim = NewAnim(defaultFanciness, m.Styles)
+		m.anim = NewAnim(m.Styles)
 		cmds = append(cmds, m.anim.Init())
 		m.state = configLoadedState
 		cmds = append(cmds, m.readStdinCmd)

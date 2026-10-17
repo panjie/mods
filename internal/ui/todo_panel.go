@@ -173,7 +173,7 @@ func TodoFooterLine(styles Styles, items []TodoItem, width int) string {
 	if text == "" {
 		text = progress + " done"
 	}
-	badge := styles.Interaction.Info.Render(fmt.Sprintf("%-4s", "PLAN"))
+	badge := styles.Interaction.Info.Render(fmt.Sprintf("%-4s", "Plan"))
 	textWidth := width - 5
 	if textWidth <= 0 || textWidth > 120 {
 		textWidth = 120

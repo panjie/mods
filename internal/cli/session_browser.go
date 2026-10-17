@@ -48,13 +48,8 @@ const (
 
 // --- styles ---------------------------------------------------------------
 //
-// The data semantics (ID / muted meta / relative time) use a model-owned copy
-// of the standard styles so the browser reads as part of mods. Do not call the
-// standalone StdoutStyles helper while Bubble Tea is running: it performs its
-// own terminal background query and would race Bubble Tea's input reader. The
-// chrome (title bar, footer, overlay) uses a dedicated palette anchored on the
-// mods brand purple (#6C50FF) with a pink accent for marks and a warm red for
-// destructive actions.
+// Model-owned styles share the configured theme with chat and interaction
+// panels. Background updates come from Bubble Tea, with no extra terminal I/O.
 
 type browserStyles struct {
 	titleBg, countBadge, markedBadge, status, markGlyph, selectedRow, markedRow,
@@ -63,74 +58,26 @@ type browserStyles struct {
 }
 
 func makeBrowserStyles(isDark bool) browserStyles {
-	lightDark := lipgloss.LightDark(isDark)
+	s := ui.MakeStylesWithTheme(config.Theme, isDark).Interaction
 	return browserStyles{
-		titleBg: lipgloss.NewStyle().
-			Background(lipgloss.Color("#6C50FF")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true),
-
-		countBadge: lipgloss.NewStyle().
-			Background(lipgloss.Color("#4A3B9F")).
-			Foreground(lipgloss.Color("#E0DDFF")).
-			Bold(true),
-
-		markedBadge: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#C0268E"), lipgloss.Color("#FF87D7"))).
-			Bold(true),
-
-		status: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#00B594"), lipgloss.Color("#3EECF0"))).
-			Bold(true),
-
-		markGlyph: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#C0268E"), lipgloss.Color("#FF87D7"))).
-			Bold(true),
-
-		selectedRow: lipgloss.NewStyle().
-			Background(lightDark(lipgloss.Color("#EFEBFE"), lipgloss.Color("#241F3D"))),
-
-		markedRow: lipgloss.NewStyle().
-			Background(lightDark(lipgloss.Color("#FBF0F8"), lipgloss.Color("#2A1E29"))),
-
-		cursor: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#6C50FF"), lipgloss.Color("#9D86FF"))).
-			Bold(true),
-
-		dangerTitle: lipgloss.NewStyle().
-			Background(lipgloss.Color("#FF5F87")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true),
-
-		confirmBox: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lightDark(lipgloss.Color("#C0268E"), lipgloss.Color("#FF5F87"))).
-			Padding(0, 2),
-
-		empty: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#757575"), lipgloss.Color("#8A8A8A"))).
-			Italic(true),
-
-		viewerTitle: lipgloss.NewStyle().Bold(true),
-		viewerRule: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#E0E0E0"), lipgloss.Color("#333333"))),
-
-		roleUser: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#6C50FF"), lipgloss.Color("#9D86FF"))).
-			Bold(true),
-		roleAssistant: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#00B594"), lipgloss.Color("#3EECF0"))).
-			Bold(true),
-		roleSystem: lipgloss.NewStyle().
-			Foreground(lightDark(lipgloss.Color("#757575"), lipgloss.Color("#8A8A8A"))).
-			Italic(true),
-		highlight: lipgloss.NewStyle().
-			Background(lightDark(lipgloss.Color("#FFE58F"), lipgloss.Color("#665C00"))).
-			Foreground(lightDark(lipgloss.Color("#1F1F1F"), lipgloss.Color("#FFF8C5"))),
-		selectedHighlight: lipgloss.NewStyle().
-			Background(lipgloss.Color("#6C50FF")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true),
+		titleBg:           s.Title,
+		countBadge:        s.Muted,
+		markedBadge:       s.Info,
+		status:            s.Muted,
+		markGlyph:         s.Info,
+		selectedRow:       lipgloss.NewStyle().Foreground(s.Palette.Text).Background(s.Palette.Surface),
+		markedRow:         lipgloss.NewStyle(),
+		cursor:            s.Info.Bold(true),
+		dangerTitle:       s.Danger,
+		confirmBox:        s.Panel.BorderForeground(s.Palette.Danger),
+		empty:             s.Muted,
+		viewerTitle:       s.Title,
+		viewerRule:        s.Muted,
+		roleUser:          s.Info.Bold(true),
+		roleAssistant:     s.Title,
+		roleSystem:        s.Muted,
+		highlight:         s.Info.Underline(true),
+		selectedHighlight: s.Selected.Padding(0),
 	}
 }
 
@@ -318,7 +265,7 @@ func newBrowserModel(sessions []Session, nerdGlyphs bool) *browserModel {
 		state:      stateBrowsing,
 		width:      80, height: 24,
 		styles:     makeBrowserStyles(isDark),
-		textStyles: ui.MakeStyles(isDark),
+		textStyles: ui.MakeStylesWithTheme(config.Theme, isDark),
 	}
 	delegate := &convDelegate{b: m}
 	m.delegate = delegate
@@ -361,7 +308,7 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		m.styles = makeBrowserStyles(msg.IsDark())
-		m.textStyles = ui.MakeStyles(msg.IsDark())
+		m.textStyles = ui.MakeStylesWithTheme(config.Theme, msg.IsDark())
 		m.list.Styles = list.DefaultStyles(msg.IsDark())
 		m.list.FilterInput.SetVirtualCursor(false)
 		m.applyViewerStyles()

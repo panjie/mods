@@ -105,7 +105,7 @@ func renderInteractionTitle(styles InteractionStyles, width int, tone Interactio
 	if tone == InteractionToneSuccess {
 		titleStyle = styles.Success
 	}
-	left := titleStyle.Render(strings.ToUpper(title))
+	left := titleStyle.Render(title)
 	if meta == "" {
 		return left
 	}
@@ -120,7 +120,7 @@ func renderInteractionTitle(styles InteractionStyles, width int, tone Interactio
 func renderInteractionHeadline(styles InteractionStyles, width int, tone InteractionTone, toneText, headline string) []string {
 	var prefix string
 	if toneText != "" {
-		prefix = interactionToneStyle(styles, tone).Render(strings.ToUpper(toneText))
+		prefix = interactionToneStyle(styles, tone).Render(toneText)
 	}
 	line := prefix
 	if line != "" && headline != "" {

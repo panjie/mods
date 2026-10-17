@@ -258,7 +258,7 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 	require.Less(t, narrowMergeLine+1, len(narrow))
 	continuation := narrow[narrowMergeLine+1]
 	require.Contains(t, continuation, "commit", "long labels must wrap onto a continuation line")
-	require.True(t, strings.HasPrefix(continuation, "┃      "),
+	require.True(t, strings.HasPrefix(continuation, "│      "),
 		"continuation must align under the label start: %q", continuation)
 }
 
@@ -428,7 +428,7 @@ func TestSecretInputRenderKeepsAlignmentAndHelpStable(t *testing.T) {
 	styles := makeStyles(true).Interaction
 
 	before := strings.Split(manager.render(80, styles), "\n")
-	require.Contains(t, before[0], "AUTHENTICATION REQUIRED")
+	require.Contains(t, before[0], "Authentication required")
 	require.Contains(t, strings.Join(before, "\n"), "Command")
 	require.Contains(t, strings.Join(before, "\n"), "sudo rm /usr/local/bin/mods")
 	helpBefore := lineContaining(before, "Submit")
@@ -1004,7 +1004,7 @@ func TestUserInputTitlesAndHints(t *testing.T) {
 
 	// Single-line text: INPUT title, no Ctrl+J hint.
 	plain := ansi.Strip(newManager(toolregistry.UserInputRequest{Question: "Branch?", Kind: "text"}).render(80, styles))
-	require.Contains(t, plain, "INPUT")
+	require.Contains(t, plain, "Input")
 	require.NotContains(t, plain, "Ctrl+J")
 
 	// Multiline text advertises Ctrl+J.
@@ -1016,7 +1016,7 @@ func TestUserInputTitlesAndHints(t *testing.T) {
 		Question: "Token?", Kind: "secret",
 		Target: toolregistry.UserInputTarget{Tool: "shell_run", Path: "/secret_env/TOKEN"},
 	}).render(80, styles))
-	require.Contains(t, plain, "CREDENTIALS")
+	require.Contains(t, plain, "Credentials")
 
 	// Form containing a secret field also gets the CREDENTIALS title.
 	plain = ansi.Strip(newManager(toolregistry.UserInputRequest{
@@ -1026,7 +1026,7 @@ func TestUserInputTitlesAndHints(t *testing.T) {
 			{Key: "p", Label: "Pass", Kind: "secret", Target: toolregistry.UserInputTarget{Tool: "shell_run", Path: "/secret_env/PASS"}},
 		},
 	}).render(80, styles))
-	require.Contains(t, plain, "CREDENTIALS")
+	require.Contains(t, plain, "Credentials")
 }
 
 func TestUserInputHeadlineClamped(t *testing.T) {

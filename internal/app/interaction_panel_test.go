@@ -30,7 +30,7 @@ func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
 				require.LessOrEqual(t, lipgloss.Width(line), width, line)
 			}
 			plain := ansi.Strip(rendered)
-			normalized := strings.ReplaceAll(strings.Join(strings.Fields(plain), ""), "┃", "")
+			normalized := strings.ReplaceAll(strings.Join(strings.Fields(plain), ""), "│", "")
 			require.Contains(t, normalized, strings.Join(strings.Fields(command), ""))
 			assertTextOrder(t, plain, "Y", "Allow once", "N", "Deny", "A", "Always allow", "Ctrl+C", "Cancel")
 		})
@@ -44,9 +44,9 @@ func TestInteractionPanelNoColorKeepsSemanticLabels(t *testing.T) {
 		Headline: "Delete a file", Rows: []interactionRow{{Label: "Target", Value: "/tmp/file"}},
 		Actions: []interactionAction{{Key: "Y", Label: "Allow"}, {Key: "N", Label: "Deny"}},
 	})
-	require.Contains(t, rendered, "┃")
-	require.Contains(t, rendered, "REVIEW REQUIRED")
-	require.Contains(t, rendered, "DANGER")
+	require.Contains(t, rendered, "│")
+	require.Contains(t, rendered, "Review required")
+	require.Contains(t, rendered, "Danger")
 	require.Contains(t, rendered, "Target")
 	require.Contains(t, rendered, "Y")
 	require.Contains(t, rendered, "Allow")

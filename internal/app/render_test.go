@@ -79,8 +79,8 @@ func TestThoughtDisplayBlock(t *testing.T) {
 		got := thoughtDisplayBlock(makeStyles(true).Interaction, 60, "The user is asking about X.\nI should consider Y.")
 		plain := ansi.Strip(got)
 
-		require.Contains(t, got, "┃")
-		require.Contains(t, plain, "THINKING")
+		require.Contains(t, got, "│")
+		require.Contains(t, plain, "Thinking")
 		require.NotContains(t, plain, "-t")
 		require.Contains(t, plain, "The user is asking about X.")
 		require.Contains(t, plain, "I should consider Y.")
@@ -172,8 +172,8 @@ func TestFlushThought(t *testing.T) {
 		require.NotContains(t, m.displayOutput, "**")
 		require.NotContains(t, m.displayOutput, "\n---\n")
 		plain := ansi.Strip(m.glamOutput)
-		require.Contains(t, m.glamOutput, "┃")
-		require.Contains(t, plain, "THINKING")
+		require.Contains(t, m.glamOutput, "│")
+		require.Contains(t, plain, "Thinking")
 		require.Contains(t, plain, "deep thought")
 		require.NotContains(t, plain, "MODS_DISPLAY_BLOCK_")
 		require.NotContains(t, m.glamOutput, "💭")
@@ -182,11 +182,11 @@ func TestFlushThought(t *testing.T) {
 
 func TestReplaceDisplayBlocks(t *testing.T) {
 	m := &Mods{}
-	marker := m.nextDisplayBlockMarker("┃ THINKING\n┃ body")
+	marker := m.nextDisplayBlockMarker("│ THINKING\n│ body")
 
 	got := m.replaceDisplayBlocks("before\n" + marker + "\nafter")
 
-	require.Equal(t, "before\n┃ THINKING\n┃ body\nafter", got)
+	require.Equal(t, "before\n│ THINKING\n│ body\nafter", got)
 }
 
 func TestCompletionOutputThoughtField(t *testing.T) {
@@ -377,14 +377,14 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		m.responseOutputStarted = false
 		got := m.renderWithOperation("")
 		require.NotContains(t, got, "animating", "spinner must not appear above the approval prompt")
-		require.Contains(t, got, "REVIEW")
+		require.Contains(t, got, "Review")
 	})
 
 	t.Run("model output present: output kept above the review prompt", func(t *testing.T) {
 		m.responseOutputStarted = true
 		got := m.renderWithOperation("partial answer so far")
 		require.Contains(t, got, "partial answer so far")
-		require.Contains(t, got, "REVIEW")
+		require.Contains(t, got, "Review")
 		require.NotContains(t, got, "animating", "spinner stays paused while approval is pending")
 	})
 
@@ -393,7 +393,7 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		lines := strings.Split(ansi.Strip(m.renderWithOperation("partial answer so far")), "\n")
 		contentRow := lineIndexContaining(lines, "partial answer so far")
 		require.Empty(t, strings.TrimSpace(lines[contentRow+1]))
-		require.Contains(t, lines[contentRow+2], "REVIEW")
+		require.Contains(t, lines[contentRow+2], "Review")
 	})
 }
 
@@ -450,7 +450,7 @@ func TestOperationStatusLineShowsRunningShellBadge(t *testing.T) {
 
 	got := m.operationStatusLine()
 
-	require.Equal(t, "RUNNING Shell - go test ./... - last: ok", strings.Join(strings.Fields(ansi.Strip(got)), " "))
+	require.Equal(t, "Running Shell - go test ./... - last: ok", strings.Join(strings.Fields(ansi.Strip(got)), " "))
 	require.Contains(t, got, "\x1b[")
 }
 
@@ -463,7 +463,7 @@ func TestOperationStatusLineStylesShellCompletion(t *testing.T) {
 	m.setActiveOperation("✗ Shell - npm test (exit 1)")
 
 	got := m.operationStatusLine()
-	require.Equal(t, "FAILED Shell - npm test (exit 1)", strings.Join(strings.Fields(ansi.Strip(got)), " "))
+	require.Equal(t, "Failed Shell - npm test (exit 1)", strings.Join(strings.Fields(ansi.Strip(got)), " "))
 	require.Contains(t, got, "\x1b[")
 }
 
@@ -794,7 +794,7 @@ func TestViewShowsReviewBannerWhenStdoutIsNotTTYButReviewInputIsAvailable(t *tes
 	stdout := captureStdout(t, func() { view = m.View().Content })
 
 	require.Equal(t, "partial answer", stdout)
-	require.Contains(t, view, "REVIEW")
+	require.Contains(t, view, "Review")
 }
 
 func captureStdout(tb testing.TB, fn func()) string {
@@ -827,4 +827,28 @@ func captureStderr(tb testing.TB, fn func()) string {
 	out, err := io.ReadAll(r)
 	require.NoError(tb, err)
 	return string(out)
+}
+
+func TestActivityFooterUsesOneIndicatorAndFitsTerminal(t *testing.T) {
+	oldTTY := IsOutputTTY
+	IsOutputTTY = func() bool { return true }
+	t.Cleanup(func() { IsOutputTTY = oldTTY })
+	m := newAnimatingMods()
+	m.Styles = makeStyles(true)
+	m.anim = NewAnim(m.Styles)
+	m.width = 80
+	require.Contains(t, ansi.Strip(m.statusFooterView()), "Connecting")
+	m.responseOutputStarted = true
+	require.Contains(t, ansi.Strip(m.statusFooterView()), "Generating")
+	m.setActiveOperation("Shell: go test ./...")
+	footer := ansi.Strip(m.statusFooterView())
+	require.Contains(t, footer, "Shell: go test ./...")
+	require.NotContains(t, footer, "Working", "a detailed operation replaces the generic phase label")
+	require.Equal(t, 1, strings.Count(footer, "⠋"))
+	m.width = 24
+	require.LessOrEqual(t, lipgloss.Width(m.statusFooterView()), 24)
+	m.Config.HideToolStatus = true
+	footer = ansi.Strip(m.statusFooterView())
+	require.NotContains(t, footer, "go test")
+	require.Contains(t, footer, "Working")
 }

@@ -66,10 +66,10 @@ func TestTodoWriteUpdatesPanelWithoutAppendingOutput(t *testing.T) {
 	require.Equal(t, original, m.Output)
 	require.Empty(t, m.displayBlocks)
 	view := ansi.Strip(m.View().Content)
-	require.Contains(t, view, "PLAN")
+	require.Contains(t, view, "Plan")
 	require.Contains(t, view, "[~] analyze init.el")
-	require.NotContains(t, m.glamOutput, "PLAN")
-	require.Equal(t, 1, strings.Count(view, "PLAN"))
+	require.NotContains(t, m.glamOutput, "Plan")
+	require.Equal(t, 1, strings.Count(view, "Plan"))
 	require.Nil(t, m.toolResultOutputCmd("todo_write", completedTodoArgs(), nil))
 	view = ansi.Strip(m.View().Content)
 	require.Contains(t, view, "2/2 completed")
@@ -87,14 +87,14 @@ func TestTodoDockLayoutAndResize(t *testing.T) {
 	view := m.View().Content
 	require.LessOrEqual(t, lipgloss.Width(view), m.width)
 	require.Equal(t, m.height, lipgloss.Height(view))
-	require.Contains(t, ansi.Strip(view), "PLAN")
-	require.Contains(t, m.footerView(), "PLAN")
+	require.Contains(t, ansi.Strip(view), "Plan")
+	require.Contains(t, m.footerView(), "Plan")
 	require.Equal(t, 120, m.glamViewport.Width())
 	// The plan keeps its row when the answer scrolls.
-	planRow := lineIndexContaining(strings.Split(view, "\n"), "PLAN")
+	planRow := lineIndexContaining(strings.Split(view, "\n"), "Plan")
 	m.glamViewport.GotoTop()
 	view = ansi.Strip(m.View().Content)
-	require.Equal(t, planRow, lineIndexContaining(strings.Split(view, "\n"), "PLAN"))
+	require.Equal(t, planRow, lineIndexContaining(strings.Split(view, "\n"), "Plan"))
 	require.Greater(t, planRow, 0)
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view = ansi.Strip(m.View().Content)
@@ -209,12 +209,12 @@ func TestTodoFooterLineInFooter(t *testing.T) {
 		m.setActiveOperation("Shell: go test ./...")
 		footer := m.footerView()
 		stripped := ansi.Strip(footer)
-		require.Contains(t, stripped, "PLAN")
+		require.Contains(t, stripped, "Plan")
 		require.Contains(t, stripped, "▸ analyze init.el")
-		require.Contains(t, stripped, "RUNNING")
+		require.Contains(t, stripped, "Running")
 		require.Contains(t, stripped, "Shell: go test ./...")
-		planIdx := strings.Index(stripped, "PLAN")
-		opIdx := strings.Index(stripped, "RUNNING")
+		planIdx := strings.Index(stripped, "Plan")
+		opIdx := strings.Index(stripped, "Running")
 		require.Less(t, planIdx, opIdx, "plan line must render above the operation line")
 	})
 
@@ -222,7 +222,7 @@ func TestTodoFooterLineInFooter(t *testing.T) {
 		m := newAnimatingMods()
 		m.todoItems = ui.TodoItemsFromArgs(todoWriteArgs())
 		footer := m.footerView()
-		require.Contains(t, ansi.Strip(footer), "PLAN")
+		require.Contains(t, ansi.Strip(footer), "Plan")
 	})
 
 	t.Run("hide-tool-status suppresses plan line", func(t *testing.T) {
@@ -230,7 +230,7 @@ func TestTodoFooterLineInFooter(t *testing.T) {
 		m.Config.HideToolStatus = true
 		m.todoItems = ui.TodoItemsFromArgs(todoWriteArgs())
 		m.setActiveOperation("Shell: go test ./...")
-		require.NotContains(t, ansi.Strip(m.footerView()), "PLAN")
+		require.NotContains(t, ansi.Strip(m.footerView()), "Plan")
 	})
 
 	t.Run("completed plan reports done", func(t *testing.T) {
@@ -334,7 +334,7 @@ func TestTodoDockPreservesInputCursor(t *testing.T) {
 	require.NotNil(t, view.Cursor)
 	require.Equal(t, 24, lipgloss.Height(view.Content))
 	require.Equal(t, lineIndexContaining(strings.Split(view.Content, "\n"), "Username"), view.Cursor.Y)
-	require.Contains(t, ansi.Strip(view.Content), "PLAN")
+	require.Contains(t, ansi.Strip(view.Content), "Plan")
 	require.True(t, strings.HasSuffix(m.footerView(), "\n\n"+m.statusFooterView()))
 }
 
@@ -347,11 +347,11 @@ func TestTodoDockAboveStatus(t *testing.T) {
 	m.setActiveOperation("Shell: go test ./...")
 	m.appendToOutput("Answer text")
 	view := ansi.Strip(m.View().Content)
-	planRow := lineIndexContaining(strings.Split(view, "\n"), "PLAN")
+	planRow := lineIndexContaining(strings.Split(view, "\n"), "Plan")
 	require.Greater(t, planRow, 1)
 	require.Empty(t, strings.TrimSpace(strings.Split(view, "\n")[planRow-1]))
-	require.Less(t, strings.Index(view, "Answer text"), strings.Index(view, "PLAN"))
-	require.Less(t, strings.Index(view, "apply lazy-loading"), strings.Index(view, "RUNNING"))
+	require.Less(t, strings.Index(view, "Answer text"), strings.Index(view, "Plan"))
+	require.Less(t, strings.Index(view, "apply lazy-loading"), strings.Index(view, "Running"))
 	require.Less(t, lipgloss.Height(view), m.height)
 }
 
@@ -364,7 +364,7 @@ func TestTodoDockGapAboveContent(t *testing.T) {
 	require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
 	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
 	contentRow := lineIndexContaining(lines, "Answer text")
-	planRow := lineIndexContaining(lines, "PLAN")
+	planRow := lineIndexContaining(lines, "Plan")
 	require.Equal(t, contentRow+2, planRow, "exactly one blank row must separate content from the plan")
 	require.Empty(t, strings.TrimSpace(lines[contentRow+1]))
 }
@@ -418,7 +418,7 @@ func TestTodoDockSeparatesApprovalPanel(t *testing.T) {
 		}
 		footer := m.footerView()
 		approval := m.statusFooterView()
-		require.Contains(t, ansi.Strip(footer), "PLAN")
+		require.Contains(t, ansi.Strip(footer), "Plan")
 		require.True(t, strings.HasSuffix(footer, "\n\n"+approval))
 		require.LessOrEqual(t, lipgloss.Height(m.View().Content), height)
 		m.todoItems = nil

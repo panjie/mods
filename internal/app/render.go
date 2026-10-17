@@ -191,6 +191,9 @@ func (m *Mods) statusFooterView() string {
 		}
 	}
 
+	if m.width > 0 {
+		footer = ansi.Truncate(footer, m.width, "…")
+	}
 	return footer
 }
 
@@ -205,11 +208,7 @@ func (m *Mods) todoPlanLine() string {
 	return ui.TodoFooterLine(m.Styles, m.todoItems, m.width)
 }
 
-// spinnerPhase derives the animation palette from the current runtime state.
-// The three phases are mutually exclusive in time: a tool/search operation is
-// only "active" while the model is paused waiting for its result, and
-// responseOutputStarted flips true once the first token of an answer streams.
-// Thinking (-t) is treated as Streaming since the model is producing tokens.
+// spinnerPhase derives the activity label from the current runtime state.
 func (m *Mods) spinnerPhase() SpinnerPhase {
 	op := strings.TrimSpace(m.getActiveOperation())
 	if op != "" && !isShellCompletionStatus(op) {
@@ -239,16 +238,17 @@ func (m *Mods) spinnerVisible() bool {
 	}
 }
 
-// spinnerLine renders the phase-colored spinner, pushing the derived phase into
-// the Anim so its ramp uses the right palette. The Anim is stored as tea.Model
-// (to allow test fakes), so this type-asserts to the concrete Anim; test fakes
-// fall through and render via their own View. The reassigment persists the
-// rebuilt ramp so the color-cycling rotation in Update keeps the new colors.
+// spinnerLine uses a single indicator beside an operation, or a phase label
+// when no detailed operation is visible. Test models retain their own View.
 func (m *Mods) spinnerLine() string {
 	phase := m.spinnerPhase()
 	if a, ok := m.anim.(Anim); ok {
+		a.Styles = m.Styles
 		a.SetPhase(phase)
 		m.anim = a
+		if m.showOperationStatus && !m.Config.HideToolStatus && strings.TrimSpace(m.getActiveOperation()) != "" {
+			return a.Indicator()
+		}
 	}
 	return m.anim.View().Content
 }
@@ -262,15 +262,15 @@ func (m *Mods) operationStatusLine() string {
 	if line := m.runningShellStatusLine(text); line != "" {
 		return line
 	}
-	return statusBadge("RUNNING", m.Styles.Interaction.Warning) + m.Styles.Comment.Render(" "+text)
+	return statusBadge("Running", m.Styles.Interaction.Muted) + m.Styles.Comment.Render(" "+text)
 }
 
 func (m *Mods) shellCompletionStatusLine(text string) string {
 	switch {
 	case strings.HasPrefix(text, "✓ "):
-		return statusBadge("DONE", m.Styles.Interaction.Success) + m.Styles.Comment.Render(" "+strings.TrimPrefix(text, "✓ "))
+		return statusBadge("Done", m.Styles.Interaction.Success) + m.Styles.Comment.Render(" "+strings.TrimPrefix(text, "✓ "))
 	case strings.HasPrefix(text, "✗ "):
-		return statusBadge("FAILED", m.Styles.Interaction.Danger) + m.Styles.Comment.Render(" "+strings.TrimPrefix(text, "✗ "))
+		return statusBadge("Failed", m.Styles.Interaction.Danger) + m.Styles.Comment.Render(" "+strings.TrimPrefix(text, "✗ "))
 	default:
 		return ""
 	}
@@ -284,7 +284,7 @@ func (m *Mods) runningShellStatusLine(text string) string {
 	if _, _, _, ok := runningShellStatus(text); !ok {
 		return ""
 	}
-	return statusBadge("RUNNING", m.Styles.Interaction.Warning) + m.Styles.Comment.Render(" "+text)
+	return statusBadge("Running", m.Styles.Interaction.Muted) + m.Styles.Comment.Render(" "+text)
 }
 
 func statusBadge(label string, style lipgloss.Style) string {

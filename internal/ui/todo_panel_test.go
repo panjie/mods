@@ -25,7 +25,7 @@ func TestRenderTodoPanel(t *testing.T) {
 
 	panel := RenderTodoPanel(styles, 80, items)
 	stripped := ansi.Strip(panel)
-	require.Contains(t, stripped, "PLAN")
+	require.Contains(t, stripped, "Plan")
 	require.Contains(t, stripped, "1/3 completed")
 	require.Contains(t, stripped, "1 in progress")
 	require.Contains(t, stripped, "1. [✓] measure startup time")
@@ -90,10 +90,10 @@ func TestTodoFooterLine(t *testing.T) {
 	t.Run("in-progress plan shows current step", func(t *testing.T) {
 		line := TodoFooterLine(styles, TodoItemsFromArgs(todoArgs()), 80)
 		stripped := ansi.Strip(line)
-		require.Contains(t, stripped, "PLAN")
+		require.Contains(t, stripped, "Plan")
 		require.Contains(t, stripped, "1/3")
 		require.Contains(t, stripped, "▸ analyze init.el")
-		require.True(t, strings.HasPrefix(stripped, "PLAN"), "badge leads the line: %q", stripped)
+		require.True(t, strings.HasPrefix(stripped, "Plan"), "badge leads the line: %q", stripped)
 	})
 
 	t.Run("no in-progress falls back to first pending", func(t *testing.T) {

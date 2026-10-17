@@ -78,7 +78,7 @@ func TestInteractionSuccessStateUsesThemeSuccessColor(t *testing.T) {
 		Tone:  InteractionToneSuccess,
 	})
 	require.Contains(t, rendered, "\x1b[")
-	require.Contains(t, ansi.Strip(rendered), "SAVED")
+	require.Contains(t, ansi.Strip(rendered), "Saved")
 }
 
 func TestInteractionContrastPairs(t *testing.T) {
@@ -96,7 +96,7 @@ func TestInteractionContrastPairs(t *testing.T) {
 					require.GreaterOrEqual(t, contrastRatio(fg, p.Surface), 4.5, name+" on surface")
 				}
 				require.GreaterOrEqual(t, contrastRatio(s.Selected.GetForeground(), s.Selected.GetBackground()), 4.5, "selected")
-				require.GreaterOrEqual(t, contrastRatio(s.Key.GetForeground(), s.Key.GetBackground()), 4.5, "key label")
+				require.Equal(t, lipgloss.NewStyle().GetBackground(), s.Key.GetBackground(), "shortcut keys use the terminal background")
 			})
 		}
 	}

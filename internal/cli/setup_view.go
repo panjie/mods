@@ -118,7 +118,7 @@ func (m *setupModel) View() tea.View {
 	}
 	title, description := m.heading()
 	description = m.redact(description)
-	panel := ui.InteractionPanel{Title: ansi.Truncate(strings.ToUpper(title), w, "…"), Actions: m.actions()}
+	panel := ui.InteractionPanel{Title: ansi.Truncate(title, w, "…"), Actions: m.actions()}
 	if m.filtering {
 		panel.Body = []string{m.filter.View()}
 	}

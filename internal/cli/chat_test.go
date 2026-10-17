@@ -200,13 +200,13 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 		require.Empty(t, stdout)
 		require.Equal(t, []string{"hello"}, *calls)
 		got := ansi.Strip(chatOutput.(*bytes.Buffer).String())
-		require.Contains(t, got, "MODS CHAT")
+		require.Contains(t, got, "mods")
 		require.Contains(t, got, "openai / gpt-5")
 		require.Contains(t, got, "reviewer")
-		require.Contains(t, got, "YOU")
+		require.Contains(t, got, "You")
 		require.Contains(t, got, "hello")
-		require.Contains(t, got, "MODS")
-		require.Contains(t, got, "SAVED")
+		require.Contains(t, got, "mods")
+		require.Contains(t, got, "Saved")
 		require.Contains(t, got, "df31ae2")
 		require.NotContains(t, got, "Session saved:")
 	})
@@ -247,7 +247,7 @@ func TestChatBannerWrapsMetadataWithoutRepeatingActions(t *testing.T) {
 			require.LessOrEqual(t, lipgloss.Width(line), width, line)
 		}
 		plain := ansi.Strip(rendered)
-		require.Contains(t, plain, "MODS CHAT")
+		require.Contains(t, plain, "mods")
 		require.Contains(t, strings.Join(strings.Fields(plain), " "), "anthropic / claude-sonnet")
 		require.NotContains(t, plain, "Ctrl+Enter")
 		require.NotContains(t, plain, "/exit")
@@ -507,11 +507,11 @@ func TestChatPromptEnterInsertsNewlineAfterLargePaste(t *testing.T) {
 	require.Equal(t, content+"\n", model.textarea.Value())
 }
 
-func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
+func TestChatPromptTracksReadingWidth(t *testing.T) {
 	model := newChatPromptModel(nil)
 	for _, width := range []int{60, 120, 180, 72} {
 		model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: width, Height: 30})
-		require.Equal(t, width, model.width)
+		require.Equal(t, normalizedChatWidth(width), model.width)
 
 		widest := 0
 		for _, line := range strings.Split(model.View().Content, "\n") {
@@ -519,7 +519,7 @@ func TestChatPromptTracksFullTerminalWidth(t *testing.T) {
 			require.LessOrEqual(t, lineWidth, width, line)
 			widest = max(widest, lineWidth)
 		}
-		require.Equal(t, width, widest, "message input should fill the terminal width")
+		require.Equal(t, normalizedChatWidth(width), widest, "message input should match the reading column")
 	}
 }
 
@@ -680,6 +680,6 @@ func TestRenderChatSavedNerdGlyphs(t *testing.T) {
 	renderChatSaved("df31ae23ab8b75b5643c2f846c570997edc71333")
 
 	got := ansi.Strip(chatOutput.(*bytes.Buffer).String())
-	require.Contains(t, got, ui.NerdMark+" SAVED")
+	require.Contains(t, got, ui.NerdMark+" Saved")
 	require.NotContains(t, got, "✓")
 }

@@ -40,6 +40,7 @@ func renderToolSelectionPrompt(registry *toolregistry.Registry, goos string) str
 		parts = append(parts, prompts.ToolSelectionProcess)
 	}
 	if hasShell {
+		parts = append(parts, prompts.DiagnosticSnapshotGuidance)
 		if goos == "windows" {
 			if hasProcess {
 				parts = append(parts, prompts.ToolSelectionShellWindows)

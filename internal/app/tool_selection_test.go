@@ -53,6 +53,7 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	fsPrompt := renderToolSelectionPrompt(fsOnly, "linux")
 	require.Contains(t, fsPrompt, prompts.ToolSelectionFilesystem)
 	require.NotContains(t, fsPrompt, "Use shell tools")
+	require.NotContains(t, fsPrompt, prompts.DiagnosticSnapshotGuidance)
 
 	shellOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterShell(shellOnly, toolregistry.ShellConfig{Root: t.TempDir()}))
@@ -66,11 +67,17 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	require.Contains(t, windowsPrompt, "Get-ChildItem")
 	require.Contains(t, windowsPrompt, "Select-String")
 	require.Contains(t, windowsPrompt, "Return inspection output directly")
+	for _, prompt := range []string{posixPrompt, windowsPrompt} {
+		require.Equal(t, 1, strings.Count(prompt, prompts.DiagnosticSnapshotGuidance))
+		require.NotContains(t, prompt, "instead of writing temporary files")
+		require.NotContains(t, prompt, "do not write temporary files")
+	}
 
 	processOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterProcess(processOnly, toolregistry.ProcessConfig{Root: t.TempDir()}))
 	processPrompt := renderToolSelectionPrompt(processOnly, "linux")
 	require.Contains(t, processPrompt, prompts.ToolSelectionProcess)
+	require.Equal(t, 1, strings.Count(processPrompt, prompts.DiagnosticSnapshotGuidance))
 	require.Contains(t, processPrompt, prompts.ToolSelectionShellPOSIX)
 	require.NotContains(t, processPrompt, "Use shell tools for repository-wide searches, tests, builds, git, package managers")
 	require.Contains(t, processPrompt, "including git, tests, builds, package managers and installers")

@@ -97,10 +97,10 @@ func TestIdentityHasPlanningPolicy(t *testing.T) {
 
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	// Budget includes the form input kind, the todo planning and turn
-	// discipline policies, and the process_run literal-argv guidance; bump
+	// discipline and diagnostic reuse policies, and process_run guidance; bump
 	// if a new tool capability legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 7680,
-		"default identity and tool-selection prompts must stay within ~7.5 KiB")
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 9216,
+		"default identity and tool-selection prompts must stay within 9 KiB")
 }
 
 func TestIdentityHandlesUnavailableCapabilities(t *testing.T) {

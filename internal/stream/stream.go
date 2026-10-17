@@ -24,7 +24,8 @@ type Client interface {
 	Capabilities() Capabilities
 }
 
-// Capabilities describes what a provider backend supports. The zero
+// Capabilities describes implemented protocol features, not model understanding.
+// The server decides whether the selected model accepts these inputs. The zero
 // value is the safest fallback (no tools, no images), so unsupported
 // features fail closed.
 type Capabilities struct {
@@ -148,7 +149,7 @@ func ValidateMediaCapabilities(messages []proto.Message, c Capabilities) error {
 				supported = c.Video && (!a.Video.HasAudio || c.VideoAudio)
 			}
 			if !supported {
-				return fmt.Errorf("selected model/endpoint does not support native %s input (including its audio track, if present)", a.Kind)
+				return fmt.Errorf("selected adapter does not support native %s input (including its audio track, if present)", a.Kind)
 			}
 		}
 	}

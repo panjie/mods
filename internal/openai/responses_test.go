@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -334,18 +335,34 @@ func TestDeepSeekResponsesCustomApplyPatchRound(t *testing.T) {
 	require.Equal(t, "Patch applied", input[3].(map[string]any)["output"])
 }
 
-func TestDeepSeekProRejectsImagesBeforeHTTP(t *testing.T) {
-	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
-	defer server.Close()
-	client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: true, ResponsesProfile: ResponsesProfileDeepSeek})
-	st := client.Request(context.Background(), proto.Request{
-		Model:    "deepseek-v4-pro",
-		Messages: []proto.Message{{Role: proto.RoleUser, Content: "see", Images: []proto.Image{{Data: []byte("x"), MimeType: "image/png"}}}},
-	})
-	require.False(t, st.Next())
-	require.ErrorContains(t, st.Err(), "does not support image")
-	require.Zero(t, requests)
+func TestDeepSeekImageSupportIsDecidedByServer(t *testing.T) {
+	for _, responsesAPI := range []bool{false, true} {
+		t.Run(fmt.Sprint(responsesAPI), func(t *testing.T) {
+			requests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				body, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				require.Contains(t, string(body), "image")
+				require.Contains(t, string(body), "deepseek-v4-pro")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprint(w, `{"error":{"message":"server rejected image input for this model","type":"invalid_request_error"}}`)
+			}))
+			defer server.Close()
+			client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: responsesAPI, ProviderProfile: ProviderProfileDeepSeek})
+			st := client.Request(context.Background(), proto.Request{
+				Model:    "deepseek-v4-pro",
+				Messages: []proto.Message{{Role: proto.RoleUser, Content: "see", Images: []proto.Image{{Data: []byte("x"), MimeType: "image/png"}}}},
+			})
+			for st.Next() {
+				_, _ = st.Current()
+			}
+			require.ErrorContains(t, st.Err(), "server rejected image input")
+			require.Equal(t, 1, requests)
+			require.NoError(t, st.Close())
+		})
+	}
 }
 
 func TestResponsesToolRoundReplaysEncryptedReasoning(t *testing.T) {

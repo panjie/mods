@@ -74,8 +74,8 @@ func TestNativeDirectoryImageToolLoop(t *testing.T) {
 				_, _ = fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
 			}))
 			defer server.Close()
-			client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", Model: "deepseek-flash", UseResponses: responsesAPI, ProviderProfile: ProviderProfileDeepSeek})
-			st := client.Request(context.Background(), proto.Request{Model: "deepseek-flash", Messages: []proto.Message{{Role: proto.RoleUser, Content: "Find images containing target text in this directory and its subdirectories."}}, Tools: registry.Specs(), ResultCaller: func(call proto.ToolCallRequest) (proto.ToolResult, error) {
+			client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", UseResponses: responsesAPI, ProviderProfile: ProviderProfileDeepSeek})
+			st := client.Request(context.Background(), proto.Request{Model: "custom-vision-model", Messages: []proto.Message{{Role: proto.RoleUser, Content: "Find images containing target text in this directory and its subdirectories."}}, Tools: registry.Specs(), ResultCaller: func(call proto.ToolCallRequest) (proto.ToolResult, error) {
 				return registry.CallResult(context.Background(), call.Name, call.Arguments)
 			}})
 			for round := 0; round < 3; round++ {
@@ -139,11 +139,16 @@ func TestNativeDirectoryImageToolLoop(t *testing.T) {
 	}
 }
 
-func TestDeepSeekVisionCapabilities(t *testing.T) {
-	for _, endpoint := range []bool{false, true} {
-		for _, model := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"} {
-			c := New(Config{Model: model, UseResponses: endpoint, ProviderProfile: ProviderProfileDeepSeek})
-			require.Equal(t, model != "deepseek-v4-pro", c.Capabilities().Images)
+func TestMediaCapabilitiesFollowProfile(t *testing.T) {
+	for _, responsesAPI := range []bool{false, true} {
+		for _, profile := range []ProviderProfile{ProviderProfileOpenAI, ProviderProfileDeepSeek, ProviderProfileQwen} {
+			c := New(Config{UseResponses: responsesAPI, ProviderProfile: profile})
+			caps := c.Capabilities()
+			require.True(t, caps.Images)
+			require.True(t, caps.ToolImages)
+			for _, enabled := range []bool{caps.Audio, caps.ToolAudio, caps.Video, caps.ToolVideo, caps.VideoAudio} {
+				require.Equal(t, profile == ProviderProfileQwen, enabled)
+			}
 		}
 	}
 }
@@ -156,7 +161,7 @@ func TestDeepSeekResponsesAcceptsUserImage(t *testing.T) {
 	}))
 	defer server.Close()
 	c := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), AuthToken: "k", ProviderProfile: ProviderProfileDeepSeek, UseResponses: true})
-	st := c.Request(context.Background(), proto.Request{Model: "deepseek-flash", Messages: []proto.Message{{Role: proto.RoleUser, Content: "read", Images: []proto.Image{{Data: []byte("pixels"), MimeType: "image/png"}}}}})
+	st := c.Request(context.Background(), proto.Request{Model: "custom-vision-model", Messages: []proto.Message{{Role: proto.RoleUser, Content: "read", Images: []proto.Image{{Data: []byte("pixels"), MimeType: "image/png"}}}}})
 	for st.Next() {
 		_, err := st.Current()
 		if !errors.Is(err, stream.ErrNoContent) {

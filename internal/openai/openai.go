@@ -4,7 +4,6 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -28,7 +27,7 @@ type ProviderProfile string
 const (
 	ProviderProfileOpenAI   ProviderProfile = "openai"
 	ProviderProfileDeepSeek ProviderProfile = "deepseek"
-	providerProfileQwen     ProviderProfile = "qwen-omni"
+	ProviderProfileQwen     ProviderProfile = "qwen"
 
 	// Backward-compatible names retained for packages that constructed Config
 	// before provider profiles also applied to Chat Completions.
@@ -37,14 +36,6 @@ const (
 )
 
 type ResponsesProfile = ProviderProfile
-
-func deepSeekImageModel(model string) bool {
-	switch model {
-	case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
-		return true
-	}
-	return false
-}
 
 var _ stream.Client = &Client{}
 
@@ -58,8 +49,6 @@ type Client struct {
 type Config struct {
 	AuthToken string
 	BaseURL   string
-	// Model is used for model-specific capability checks.
-	Model string
 	// UseResponses selects the Responses API.
 	UseResponses    bool
 	ProviderProfile ProviderProfile
@@ -132,7 +121,6 @@ func (c *Client) Capabilities() stream.Capabilities {
 		Images: true, ToolImages: true, Reasoning: true, ReasoningReplay: c.config.UseResponses,
 	}
 	if c.profile() == ProviderProfileDeepSeek {
-		capabilities.Images = c.config.Model == "" || deepSeekImageModel(c.config.Model)
 		capabilities.ReasoningReplay = true
 	}
 	if c.config.UseResponses && c.profile() == ProviderProfileDeepSeek {
@@ -141,9 +129,9 @@ func (c *Client) Capabilities() stream.Capabilities {
 		capabilities.CustomTools = true
 		capabilities.ReasoningReplay = true
 	}
-	capabilities.Audio = c.qwenAudio()
+	capabilities.Audio = c.profile() == ProviderProfileQwen
 	capabilities.ToolAudio = capabilities.Audio
-	capabilities.Video = c.qwenAudio()
+	capabilities.Video = c.profile() == ProviderProfileQwen
 	capabilities.ToolVideo = capabilities.Video
 	capabilities.VideoAudio = capabilities.Video
 	if capabilities.Audio {
@@ -152,14 +140,7 @@ func (c *Client) Capabilities() stream.Capabilities {
 	return capabilities
 }
 
-func (c *Client) qwenAudio() bool {
-	return c.config.Model == "qwen3.8-omni-flash"
-}
-
 func (c *Client) profile() ProviderProfile {
-	if c.qwenAudio() {
-		return providerProfileQwen
-	}
 	if c.config.ProviderProfile != "" {
 		return c.config.ProviderProfile
 	}
@@ -176,9 +157,6 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	}
 	if err := stream.ValidateMedia(request.Messages); err != nil {
 		return stream.Failed(err, request.Messages)
-	}
-	if c.profile() == ProviderProfileDeepSeek && !deepSeekImageModel(request.Model) && messagesContainImages(request.Messages) {
-		return stream.Failed(fmt.Errorf("selected DeepSeek model does not support image input; use deepseek-flash"), request.Messages)
 	}
 	if c.config.UseResponses {
 		return c.requestResponses(ctx, request)
@@ -341,7 +319,7 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	choice := event.Choices[0]
 	content := choice.Delta.Content
 	thought := s.extractThought(choice.Delta)
-	if (s.profile == ProviderProfileDeepSeek || s.profile == providerProfileQwen) && thought != "" {
+	if (s.profile == ProviderProfileDeepSeek || s.profile == ProviderProfileQwen) && thought != "" {
 		s.reasoning.WriteString(thought)
 	}
 	if s.parseThink {
@@ -504,7 +482,7 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
-		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == providerProfileQwen, Video: s.profile == providerProfileQwen, VideoAudio: s.profile == providerProfileQwen}); err != nil {
+		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == ProviderProfileQwen, Video: s.profile == ProviderProfileQwen, VideoAudio: s.profile == ProviderProfileQwen}); err != nil {
 			s.requestErr = err
 			return false
 		}
@@ -539,7 +517,7 @@ func (s *Stream) Next() bool {
 		if s.parseThink {
 			protoMsg.Content = s.visible.String()
 		}
-		if s.profile == ProviderProfileDeepSeek || s.profile == providerProfileQwen {
+		if s.profile == ProviderProfileDeepSeek || s.profile == ProviderProfileQwen {
 			attachDeepSeekChatState(&protoMsg, s.reasoning.String(), s.profile)
 		}
 		s.messages = append(s.messages, protoMsg)

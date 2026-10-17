@@ -21,7 +21,7 @@ const (
 )
 
 func responsesProviderDataKeyForProfile(profile ProviderProfile) string {
-	if profile == providerProfileQwen {
+	if profile == ProviderProfileQwen {
 		return "qwen.responses.output.v1"
 	}
 	if profile == ProviderProfileDeepSeek {
@@ -64,7 +64,7 @@ func fromResponseToolSpecs(specs []proto.ToolSpec) []responses.ToolUnionParam {
 
 func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (responses.ResponseInputParam, error) {
 	input = proto.NormalizeSystemMessages(input)
-	if profile == providerProfileQwen {
+	if profile == ProviderProfileQwen {
 		input = proto.ProjectToolMedia(input)
 	}
 	var items responses.ResponseInputParam
@@ -90,7 +90,7 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 				responses.EasyInputMessageRoleSystem,
 			))
 		case proto.RoleUser:
-			if profile == providerProfileQwen && len(msg.Attachments()) > 0 {
+			if profile == ProviderProfileQwen && len(msg.Attachments()) > 0 {
 				var parts []map[string]any
 				for _, a := range msg.Attachments() {
 					if a.Source != "" || a.Kind == "video" {

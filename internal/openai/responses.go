@@ -20,12 +20,6 @@ var errResponsesStreamEnded = errors.New("OpenAI Responses stream ended before a
 
 func (c *Client) requestResponses(ctx context.Context, request proto.Request) stream.Stream {
 	profile := c.profile()
-	if profile == ProviderProfileDeepSeek && !deepSeekImageModel(request.Model) && messagesContainImages(request.Messages) {
-		return &responseStream{
-			requestErr: fmt.Errorf("selected DeepSeek model does not support image input; use deepseek-flash"),
-			messages:   request.Messages,
-		}
-	}
 	input, err := fromProtoResponseInput(request.Messages, profile)
 	if err != nil {
 		return &responseStream{requestErr: err, messages: request.Messages}
@@ -44,7 +38,7 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 	}
 	if profile != ProviderProfileDeepSeek {
 		body.Store = openai.Bool(false)
-		if profile != providerProfileQwen {
+		if profile != ProviderProfileQwen {
 			body.Include = []responses.ResponseIncludable{
 				responses.ResponseIncludableReasoningEncryptedContent,
 			}
@@ -86,7 +80,7 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		profile:    profile,
 	}
 	s.factory = func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
-		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == providerProfileQwen, Video: s.profile == providerProfileQwen, VideoAudio: s.profile == providerProfileQwen}); err != nil {
+		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == ProviderProfileQwen, Video: s.profile == ProviderProfileQwen, VideoAudio: s.profile == ProviderProfileQwen}); err != nil {
 			s.requestErr = err
 			return nil
 		}
@@ -97,15 +91,6 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		return c.Responses.NewStreaming(ctx, s.request, opts...)
 	}
 	return s
-}
-
-func messagesContainImages(messages []proto.Message) bool {
-	for _, msg := range messages {
-		if len(msg.ImageAttachments()) > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func deepSeekReasoningEffort(effort string) (string, error) {

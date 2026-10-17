@@ -78,13 +78,12 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// instead of an app-layer string switch keyed on the API name. The
 	// client has no side effects until Request is called, so creating it
 	// here (rather than after the registry) does not change behavior.
-	ccfg.Model = mod.Name
 	client, err := newStreamClient(modelProtocol(mod), accfg, gccfg, occfg, ccfg)
 	if err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Could not setup client"}
 	}
 	if len(cfg.Video) > 0 && !client.Capabilities().Video {
-		return requestSession{}, modsError{Err: fmt.Errorf("use a supported video model/endpoint, such as qwen3.8-omni-flash"), ReasonText: "Video input is unavailable"}
+		return requestSession{}, modsError{Err: fmt.Errorf("the selected adapter does not implement native video input; use a compatible provider protocol such as provider-profile: qwen"), ReasonText: "Video input is unavailable"}
 	}
 	if len(cfg.Images) > 0 && !client.Capabilities().Images {
 		return requestSession{}, modsError{
@@ -221,7 +220,7 @@ func (m *Mods) sanitizeProviderContinuation(mod Model, useResponses bool) {
 }
 
 func allowedProviderDataKeys(mod Model, useResponses bool) map[string]struct{} {
-	if mod.Name == "qwen3.8-omni-flash" {
+	if modelProtocol(mod) == "openai" && modelProviderProfile(mod) == openai.ProviderProfileQwen {
 		if useResponses {
 			return map[string]struct{}{"qwen.responses.output.v1": {}}
 		}

@@ -384,14 +384,28 @@ func TestBuildProviderConfigsOpenCodeSessionHeaders(t *testing.T) {
 	}
 }
 
-func TestQwenOmniResponsesRouting(t *testing.T) {
-	mod := Model{API: "qwen", Name: "qwen3.8-omni-flash", Endpoint: "responses"}
-	route, err := resolveProvider(mod, API{Name: "qwen", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1"})
-	require.NoError(t, err)
-	require.Equal(t, "responses", route.Endpoint)
-	require.Contains(t, allowedProviderDataKeys(mod, true), "qwen.responses.output.v1")
-	require.Contains(t, allowedProviderDataKeys(mod, false), "qwen.chat.assistant.v1")
-	mod.Name = "qwen-other"
-	_, err = resolveProvider(mod, API{Name: "qwen"})
-	require.Error(t, err)
+func TestQwenMediaRoutingDoesNotDependOnModelName(t *testing.T) {
+	for _, mod := range []Model{
+		{API: "qwen", Name: "qwen3.8-omni-flash", Endpoint: "responses"},
+		{API: "qwen", Name: "custom-media-model", Endpoint: "responses"},
+		{API: "gateway", Name: "custom-media-model", ProviderProfile: "qwen", Endpoint: "responses"},
+	} {
+		route, err := resolveProvider(mod, API{Name: mod.API, BaseURL: "https://gateway.example/v1"})
+		require.NoError(t, err)
+		require.Equal(t, "responses", route.Endpoint)
+		require.Equal(t, openai.ProviderProfileQwen, route.Profile)
+		require.Contains(t, allowedProviderDataKeys(mod, true), "qwen.responses.output.v1")
+		require.Contains(t, allowedProviderDataKeys(mod, false), "qwen.chat.assistant.v1")
+	}
+	mod := Model{API: "qwen", Name: "qwen3.8-omni-flash", ProviderProfile: "openai"}
+	require.NotContains(t, allowedProviderDataKeys(mod, true), "qwen.responses.output.v1")
+	m := &Mods{Config: &Config{}, messages: []proto.Message{{Role: proto.RoleAssistant, ProviderData: map[string]json.RawMessage{
+		"qwen.responses.output.v1":   json.RawMessage(`[]`),
+		"qwen.chat.assistant.v1":     json.RawMessage(`{}`),
+		"openai.responses.output.v1": json.RawMessage(`[]`),
+	}}}}
+	m.sanitizeProviderContinuation(Model{API: "qwen", Name: "custom-media-model"}, true)
+	require.Equal(t, map[string]json.RawMessage{"qwen.responses.output.v1": json.RawMessage(`[]`)}, m.messages[0].ProviderData)
+	m.sanitizeProviderContinuation(mod, true)
+	require.Empty(t, m.messages[0].ProviderData)
 }

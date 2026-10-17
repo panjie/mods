@@ -352,8 +352,11 @@ apis:
   #       provider-profile: deepseek
   #       endpoint: responses
 
-  # Qwen qwen3.8-omni-flash supports native WAV/MP3 and image input.
-  # Keep its default Chat endpoint or explicitly select endpoint: responses.
+  # The built-in qwen provider uses native image/audio/video encoding.
+  # Custom gateways using that dialect can set provider-profile: qwen.
+  # Keep the default Chat endpoint or explicitly select endpoint: responses.
+  # The service decides whether the selected model accepts those media inputs;
+  # no per-model media capability setting is required.
 
   # Example: a service that splits models across protocols. OpenCode's
   # zen gateway serves some models only via its OpenAI-compatible

@@ -52,13 +52,13 @@ func TestQwenNativeVideoToolLoop(t *testing.T) {
 				} else {
 					delta["content"] = "done"
 				}
-				chunk, _ := json.Marshal(map[string]any{"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen3.8-omni-flash", "choices": []map[string]any{{"index": 0, "delta": delta, "finish_reason": finish}}})
+				chunk, _ := json.Marshal(map[string]any{"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "custom-media-model", "choices": []map[string]any{{"index": 0, "delta": delta, "finish_reason": finish}}})
 				w.Header().Set("Content-Type", "text/event-stream")
 				fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
 			}))
 			defer server.Close()
-			client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), Model: "qwen3.8-omni-flash", UseResponses: responsesAPI})
-			st := client.Request(context.Background(), proto.Request{Model: "qwen3.8-omni-flash", Messages: []proto.Message{{Role: proto.RoleUser, Content: "Find recordings mentioning refunds."}}, Tools: registry.Specs(), ResultCaller: func(call proto.ToolCallRequest) (proto.ToolResult, error) {
+			client := New(Config{BaseURL: server.URL, HTTPClient: server.Client(), ProviderProfile: ProviderProfileQwen, UseResponses: responsesAPI})
+			st := client.Request(context.Background(), proto.Request{Model: "custom-media-model", Messages: []proto.Message{{Role: proto.RoleUser, Content: "Find recordings mentioning refunds."}}, Tools: registry.Specs(), ResultCaller: func(call proto.ToolCallRequest) (proto.ToolResult, error) {
 				return registry.CallResult(context.Background(), call.Name, call.Arguments)
 			}})
 			for round := 0; round < 2; round++ {

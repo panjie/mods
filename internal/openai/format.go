@@ -15,7 +15,7 @@ const deepSeekChatProviderDataKey = "deepseek.chat.assistant.v1"
 const qwenChatProviderDataKey = "qwen.chat.assistant.v1"
 
 func chatStateKey(profile ProviderProfile) string {
-	if profile == providerProfileQwen {
+	if profile == ProviderProfileQwen {
 		return qwenChatProviderDataKey
 	}
 	return deepSeekChatProviderDataKey
@@ -101,7 +101,7 @@ func fromProtoMessagesForProfile(input []proto.Message, profile ProviderProfile)
 					},
 				})
 			}
-			if profile == ProviderProfileDeepSeek || profile == providerProfileQwen {
+			if profile == ProviderProfileDeepSeek || profile == ProviderProfileQwen {
 				m = deepSeekAssistantMessage(m, msg.ProviderData[chatStateKey(profile)])
 			}
 			messages = append(messages, m)

@@ -682,6 +682,12 @@ images and source labels; discovery cursors expire with the request, so resume
 by enumerating again. Visual recognition can be uncertain, especially for small
 or blurred text; ask for supporting text snippets and uncertain cases.
 
+Mods exposes media inputs and reading tools according to the selected adapter's
+implemented protocol, without a model-name capability list or per-model media
+settings. Choose a model that understands the inputs you send; if it does not,
+the service may reject the request. Mods preserves that error rather than
+silently removing attachments. File validation and cumulative budgets still apply.
+
 ### Audio and mixed media
 
 With `qwen3.8-omni-flash`, ask mods to find recordings by their contents:
@@ -694,9 +700,15 @@ mods -a qwen -m qwen3.8-omni-flash --audio meeting.wav --image slide.png "Compar
 `--audio` is repeatable and accepts PCM WAV and MP3. Audio is sent directly to
 Qwen as native model input; no Python, ASR service, ffmpeg, or recursive mods
 invocation is needed. Both Chat Completions (the default for Qwen) and an
-explicit `endpoint: responses` are supported for this model. Output is text;
-microphone recording and speech generation are not included. Other models fail
-explicitly on audio input until their audio dialect is implemented.
+explicit `endpoint: responses` use the existing `qwen` protocol profile. The
+built-in Qwen provider selects it automatically, independently of the model name.
+For a custom OpenAI-compatible gateway using this dialect, set the existing
+`provider-profile: qwen` at provider or model level. This is also required for
+older gateway configurations that relied on the model name to select Qwen media
+encoding. An explicit different profile is never overridden by the model name.
+Output is text; microphone recording and speech generation are not included.
+Adapters without an implemented audio dialect reject audio before sending it;
+the service decides whether a model accepts input in an implemented dialect.
 
 `fs_find_media` discovers image/audio/video candidates with pagination and recursive
 scanning; `fs_read_media` returns ordered, labelled attachments. Existing image
@@ -731,8 +743,9 @@ mods -a qwen -m qwen3.8-omni-flash --video meeting.mp4 --image slide.png "Compar
 `--video` is repeatable and can be combined with `--audio` and `--image`.
 Chat Completions and Responses send the original local MP4 as native video,
 including its audio track. No runtime ffmpeg, frame extraction, ASR service or
-recursive model invocation is required. Other model/endpoint combinations fail
-explicitly until their video dialect is implemented.
+recursive model invocation is required. As with audio, the `qwen` profile
+selects this encoding for any model name; the service decides model support.
+Adapters without an implemented video dialect reject video before sending it.
 
 The first version accepts non-fragmented MP4 with one H.264 (`avc1`) video track
 and optionally one AAC-LC audio track. Each file must be at most **6 MiB,

@@ -12,14 +12,36 @@
     <a href="https://github.com/panjie/mods/actions"><img src="https://github.com/panjie/mods/workflows/build/badge.svg" alt="Build Status"></a>
 </p>
 
-An AI agent for your terminal. Mods doesn't just answer questions — it can read
-and edit your files, run shell commands, search the web, and iterate across many
-tool calls to actually finish a task. A built-in review step keeps you in charge
-of anything risky before it happens.
+An AI agent for your terminal. Mods reads and edits files, runs shell commands,
+searches the web, and chains tool calls until the job is done — with a review
+step before anything risky.
 
-It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
-[DeepSeek], [GLM], [Qwen], [Kimi], [MiniMax], [OpenRouter], and local
-[Ollama] models. Any OpenAI-compatible endpoint can be added in `mods.yml`.
+**Self-contained by design.** Mods is one Go binary. Its built-in tools run
+in-process: no Python, OCR or ASR service, ffmpeg, or nested `mods`/model process
+is required to read and edit files, run commands, or work with native image,
+audio, and video input. Network access is explicit: the model provider, prompts
+loaded from a URL, opt-in web search, `http_download`, and MCP servers you
+configure. Portable mode can keep the binary, config, and sessions in a single
+folder you can copy anywhere.
+
+**Ask Mods how to use Mods.** Questions about Mods itself are answered from
+version-matched self-help generated from the running binary's real flags and
+settings, not from stale docs:
+
+```sh
+mods "how do I add a custom OpenAI-compatible provider?"
+mods "what is the difference between review-mode auto and always?"
+mods "where are my sessions stored, and how do I make this install portable?"
+```
+
+With a tool-capable provider and tools enabled (the default setup), Mods calls
+its `mods_help` tool, so it can check what your version actually supports
+instead of inventing options. Prefer local references? Run `mods --help`,
+`mods --list-tools`, or `mods --dirs`.
+
+Mods works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI], [DeepSeek],
+[GLM], [Qwen], [Kimi], [MiniMax], [OpenRouter], and local [Ollama] models. Any
+OpenAI-compatible endpoint can be added in `mods.yml`.
 
 [OpenAI]: https://platform.openai.com/account/api-keys
 [Anthropic]: https://console.anthropic.com/settings/keys
@@ -35,26 +57,6 @@ It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
 
 <p><img src="assets/demo.gif" width="900" alt="a GIF of mods demonstrating pipelines, web search, image input, and minimal output"></p>
 
-## What Mods Can Do
-
-- **Act, don't just talk.** With built-in tools enabled, Mods inspects and edits
-  files, runs shell commands, and chains multiple tool calls together to complete
-  a task end-to-end.
-- **Safety first.** Every file write and shell command passes through a review
-  prompt. Approve once, deny, or save a per-session rule.
-- **Stays in your pipeline.** Pipe command output in, get structured answers out.
-  `--minimal` prints one item per line — perfect for `| gum choose` and friends.
-- **Knows the live web.** Web search is opt-in; `--web-search` uses a supported
-  provider's hosted search when available, otherwise Tavily or a custom backend.
-- **Sees images.** Attach pictures via `--image`, `--clipboard-image`, or piped
-  stdin for any vision-capable model.
-- **Remembers.** Every session is saved locally with a title and a SHA-1 —
-  list, resume, show, or delete with simple flags.
-- **Plays well with others.** Connect external capabilities through [MCP] servers,
-  or define reusable system prompts as [custom roles].
-
-[MCP]: https://modelcontextprotocol.io
-
 ## Quick Start
 
 ### Install
@@ -63,11 +65,14 @@ It works with [OpenAI], [Anthropic], [Gemini], [Azure OpenAI],
 brew install panjie/tap/mods
 ```
 
-Or, with Go 1.25+:
+Or, with Go 1.25.8+:
 
 ```sh
 go install github.com/panjie/mods@latest
 ```
+
+Release builds are static Go binaries; the built-in toolset needs no extra
+runtime.
 
 <details>
 <summary>Other ways to install</summary>
@@ -110,29 +115,28 @@ mods --config
 ```
 
 The wizard walks you through provider and model selection, API key entry,
-built-in tools, and review mode — then saves everything to `mods.yml`
+built-in tools, and review mode, then saves everything to `mods.yml`
 automatically.
 
 The standard config path is `$XDG_CONFIG_HOME/mods/mods.yml`, or
-`$HOME/.config/mods/mods.yml` when `XDG_CONFIG_HOME` is unset. If a `mods.yml`
-file exists next to the executable, portable mode uses that file instead.
-Sessions are stored in `$XDG_DATA_HOME/mods/sessions`, or
-`$HOME/.local/share/mods/sessions` when `XDG_DATA_HOME` is unset.
+`$HOME/.config/mods/mods.yml` when `XDG_CONFIG_HOME` is unset. Sessions are
+stored in `$XDG_DATA_HOME/mods/sessions`, or `$HOME/.local/share/mods/sessions`
+when `XDG_DATA_HOME` is unset. If a `mods.yml` exists next to the executable,
+[portable mode](#portable-mode) uses that file instead.
 
 On first real use, if `mods.yml` does not exist and there are no saved
-sessions, Mods starts this setup wizard automatically. Help, version,
-completion, directory, settings, config, list, show, delete, role listing, and
-MCP listing commands do not trigger first-run setup.
+sessions, Mods starts this wizard automatically. Help, version, completion,
+directory, settings, config, and list commands do not trigger first-run setup.
 
-Prefer to edit the raw YAML? Open it in your `$EDITOR`:
+Prefer to edit the raw YAML? Open it in `$EDITOR`:
 
 ```sh
 mods --settings
 ```
 
-You can also recursively merge a YAML mapping into `mods.yml` directly from
-the command line. Existing values at the same path are overwritten, while
-unmentioned settings are preserved:
+You can also recursively merge a YAML mapping into `mods.yml` from the command
+line. Existing values at the same path are overwritten, while unmentioned
+settings are preserved:
 
 ```sh
 mods --settings 'default-api: openai'
@@ -150,7 +154,7 @@ The `--settings='<yaml>'` spelling is also supported. Avoid passing `api-key`
 values directly because command arguments may be recorded in shell history or
 visible to other local processes; prefer `api-key-env`.
 
-Set a provider and model with the interactive wizard, or edit the YAML directly:
+A minimal provider configuration looks like this:
 
 ```yaml
 default-api: openai
@@ -166,7 +170,10 @@ apis:
 export OPENAI_API_KEY=sk-...
 ```
 
-### First run
+See [Provider details](docs/providers.md) for custom endpoints, routing, and
+provider-specific reasoning options.
+
+### First Run
 
 ```sh
 # Summarize piped output
@@ -176,20 +183,30 @@ git log --oneline -20 | mods -f "group these commits by theme"
 mods "read README.md and suggest three improvements"
 ```
 
-## See It In Action
+## What Mods Can Do
 
-### Review code
+- **Act, don't just talk.** With tools enabled, Mods inspects and edits files,
+  runs shell commands, and chains tool calls to complete a task end-to-end.
+- **Review before risk.** Reads run without review. Mutating writes and commands
+  follow the review policy: approve once, deny, or save a per-session rule.
+- **Fit your pipeline.** `--minimal` prints only the final answer, with no
+  formatting — ready for `| gum choose`, `jq`, or another script.
+- **Search the live web.** Web search is opt-in. `--web-search` uses a supported
+  provider's hosted search when available, otherwise Tavily or a custom backend.
+- **See and hear media.** Pass images, audio, or video with `--image`, `--audio`,
+  or `--video`; Mods reads local files directly into a capable model.
+- **Remember everything.** Sessions are saved locally with a title and a short
+  ID, then listed, resumed, or deleted from a browser.
+- **Extend without rebuilding.** Use [MCP](#mcp) servers, [custom roles](#custom-roles),
+  prompt overrides, and [skills](#skills).
+
+## Examples
+
+### Review and Refactor
 
 ```sh
 # Review uncommitted changes before pushing
 git diff | mods -f "review this diff — flag bugs, security issues, and naming problems"
-```
-
-### Modernize & refactor
-
-```sh
-# Bring your vim config in line with current community best practices
-mods "modernize ~/.vimrc to the most popular 2026 setup, but preserve my keybindings"
 
 # Migrate a codebase from one library to another
 mods "replace all requests usage with httpx, keep behavior identical"
@@ -198,7 +215,7 @@ mods "replace all requests usage with httpx, keep behavior identical"
 mods "find every console.log and replace it with the structured logger"
 ```
 
-### Debug & understand
+### Debug and Understand
 
 ```sh
 # Diagnose why tests are failing
@@ -211,7 +228,7 @@ journalctl -u myapp --since "1h ago" | mods "what went wrong in the last hour?"
 mods "read internal/tools and explain how a tool call flows end-to-end"
 ```
 
-### Generate & scaffold
+### Generate and Automate
 
 ```sh
 # Draft a changelog from recent commits
@@ -224,7 +241,7 @@ mods "find Go functions without tests and add table-driven tests for the top 5"
 mods "scan for TODO/FIXME comments and write prioritized TODO-report.md"
 ```
 
-### Pipelines & quick answers
+### Pipelines and Sessions
 
 ```sh
 # Pick from a list using pipeline-friendly output
@@ -234,49 +251,33 @@ find . -maxdepth 1 -type f | sort | mods --minimal "pick the five most important
 export TAVILY_API_KEY="tvly-..."
 mods --web-search "what changed in the latest Go release? update go.mod if relevant"
 
-# Ask a vision-capable model about an image
-mods --image assets/mods-product.png "suggest alt text for this image"
-mods -I "describe the image on my clipboard"
-
-# Let a vision model find and inspect local images automatically
-mods -a deepseek -m deepseek-flash "Find images containing 'invoice' in this directory and its subdirectories. Return matching paths and the text you read."
-
-# Save and resume sessions
+# Save, resume, and continue in a chat
 mods "draft v1.1 release notes from CHANGELOG.md"
 mods --continue-last "turn those into a Twitter thread"
 mods --list-sessions
-
-# Start a continuous session
 mods --chat
-mods --chat --continue-last
 ```
-
-The session browser supports transcript search: open a session, press `/` to
-find text, use `n`/`N` to move between matches, and press `w` to toggle wrapping
-for code, logs, and tables.
-
-Use `--chat` for a terminal-native conversation when one prompt is not enough.
-The inline composer supports multi-line prompts: press `Enter` to send and
-`Ctrl+J` to add a new line. Press `Ctrl+C` while composing to leave. Each turn
-is saved to the same session so you can resume it later with `--continue`.
 
 ## Safety & Review
 
-Mods runs read-only operations without review, including reads from any local
-directory and reads whose path is resolved only at runtime. In the default
-`auto` mode, Mods first asks the current model which directories and remote
-destinations your request reasonably requires writing to. It may run one batch
-of read-only discovery tools, then saves the inferred write permissions in the
-current session. For example, "commit and push the current code" can authorize
-the repository directory and its discovered push origin before execution.
+Reads are free: Mods runs read-only operations without review, including reads
+from any local directory and reads whose path is resolved only at runtime.
+Writes are reviewed by target by default.
+
+In the default `auto` mode, Mods first asks the current model which directories
+and remote destinations your request reasonably requires writing to. It may run
+one batch of read-only discovery tools, then saves the inferred write
+permissions in the current session. For example, "commit and push the current
+code" can authorize the repository directory and its discovered push origin
+before execution.
 
 This happens automatically, including with `--minimal`. It takes one model
 request, or two when discovery is needed, with a 30-second overall timeout.
 If inference fails or identifies only some targets, uncovered writes use normal
-review. These permissions work like `Always allow`: directory subtrees and
-exact remote origins, restored with `--continue`, never shared with another
-session. With `--no-save`, they last only for the current run. `always` and
-`never` skip inference and retain their normal behavior.
+review. These permissions work like `Always allow`: directory subtrees and exact
+remote origins, restored with `--continue`, never shared with another session.
+With `--no-save`, they last only for the current run. `always` and `never` skip
+inference and retain their normal behavior.
 
 Writes not covered by the current review policy require confirmation. You see
 what will execute and which write targets the decision covers:
@@ -289,7 +290,8 @@ Always allows writes in /path/to/project
 
 - `Y` — approve this one call
 - `N` — deny; Mods gets the failure and can react
-- `A` — in `auto` mode, save per-session rules for every shown directory and remote origin so matching writes skip later prompts
+- `A` — in `auto` mode, save per-session rules for every shown directory and
+  remote origin so matching writes skip later prompts
 - `Ctrl+C` — cancel the whole run
 
 `Always allow` is available only when every write target can be identified.
@@ -299,61 +301,57 @@ saved. Remote rules use a credential-free origin such as
 credentials never appear in the saved rule. Writes confined to Mods' safe
 temporary directories do not require review.
 
-Pick the mode that fits the task with `-V` / `--review-mode` (or `review-mode` in
-`mods.yml`, or the `MODS_REVIEW_MODE` env var). Use `-N` / `--no-review` as a
-shortcut for `--review-mode=never`:
+Write targets that still depend on runtime expansion (for example PowerShell's
+`$PROFILE` or a URL stored in a variable) are shown as dynamic and can only be
+approved once. For a reusable approval, resolve the target first and use its
+literal value in the mutation command. Dynamic reads do not require review.
 
-| Mode       | Behavior                                                                    |
-|------------|-----------------------------------------------------------------------------|
-| `auto`     | Default. Infers session write permissions from your request; reviews uncovered non-temporary writes. |
-| `always`   | Reviews every non-temporary write and ignores saved rules. Reads stay free.  |
-| `never`    | Disables review entirely. Use only for trusted, automated runs.             |
+Pick the mode that fits the task with `-V` / `--review-mode` (or `review-mode`
+in `mods.yml`, or the `MODS_REVIEW_MODE` env var). Use `-N` / `--no-review` as
+a shortcut for `--review-mode=never`:
+
+| Mode     | Behavior |
+|----------|----------|
+| `auto`   | Default. Infers session write permissions from your request; reviews uncovered non-temporary writes. |
+| `always` | Reviews every non-temporary write and ignores saved rules. Reads stay free. |
+| `never`  | Disables review entirely. Use only for trusted, automated runs. |
 
 ```sh
 mods --review-mode always "rename the fn to calculateTotal across the repo"
 ```
 
-## Built-in Tools & MCP
+Review is an approval policy, not an execution sandbox. Use a container or VM
+for untrusted code.
 
-Mods ships with native tools that auto-activate when your prompt needs them:
+## Tools & MCP
 
-| Tool                 | What it does                                              |
-|----------------------|-----------------------------------------------------------|
-| `fs_read_file`       | Read UTF-8 files (with offset/limit for large files).     |
-| `fs_write_file`      | Create or overwrite files.                          |
-| `fs_replace`         | Replace exact text in an existing file.                   |
-| `fs_search`          | Search file contents under a path.                   |
-| `fs_apply_patch`     | Atomically apply unified or Codex-format multi-file edits. |
-| `process_run`        | Execute one program with literal argv and structured output. |
-| `http_download`      | Download an explicit URL/file list, preserving existing files by default. |
-| `shell_run`          | Execute shell commands (POSIX; Windows uses `powershell_run` only). |
-| `runtime_info`       | Inspect the selected shell and resolve command availability. |
+Mods ships its complete toolset in the binary. Filesystem tools auto-activate
+when a request needs them; shell tools are enabled by default.
 
-Compound and opaque command text gets advisory simplification feedback before
-approval: mods nudges the model at most twice per request toward shapes whose
-effects and targets can be reviewed, and `--minimal` keeps that advice. The
-advice never blocks anything. Once the two nudges are used, or whenever the
-command is already the right one, the call goes to ordinary approval and you
-decide; no command is ever rejected on structural grounds.
+| Built-in | What it does |
+|----------|--------------|
+| `fs_*` | Read, search, write, replace, patch, move, copy, and delete files. |
+| `process_run` | Run one executable with a literal argv and structured output. |
+| `shell_run` / `powershell_run` | Run shell syntax: pipelines, redirection, compound commands. |
+| `runtime_info` | Report the OS, cwd, selected shell, and command availability. |
+| `http_download` | Download up to 32 explicit URLs without a shell. |
+| `web_search` | Search the web (requires `--web-search`). |
+| `fs_find_images` / `fs_find_media` | Find image, audio, and video candidates recursively. |
+| `fs_read_images` / `fs_read_media` | Read original media into the current model. |
+| `todo_write` | Keep a visible plan for multi-step work. |
+| `request_user_input` | Ask a necessary question with a compact local dialog. |
+| `load_skill` / `search_skills` | Load installed [skills](#skills). |
+| `mods_help` | Version-matched help for Mods itself. |
 
-Commands whose payload is a pre-written script file are exempt from the nudges
-entirely: `bash scripts/build.sh`, `python tools/check.py`, and `pwsh -File
-build.ps1` run exactly as written, because a skill's own scripts must not be
-rewritten to satisfy review. Ad-hoc inline source (`-c`, `-e`, `-Command`,
-encoded payloads) still gets the advice. There is no general script execution
-tool: put multi-step work in a script file instead of hiding it in interpreter
-flags or encoded arguments. Explicit `--review-mode never` bypasses review.
+Run `mods --list-tools` for the full catalogue, including any MCP tools.
 
-Long command reviews use Up/Down to page; approval becomes available after all
-pages have been displayed. This is not an execution sandbox.
-
-`http_download` accepts up to 32 URL/path pairs (16 MiB per file), stops on the
-first failure and reports completed/failed/skipped entries. It requires existing
-parent directories and preserves existing files unless `overwrite` is explicit.
-Downloads use the web-search private-network opt-in and never execute content.
-Publishing uses a same-directory rename for overwrite or a hard link for
-no-overwrite; filesystems without the required operation fail without falling
-back to a partial destination write. Batch completion is not transactional.
+Filesystem paths resolve from the process current working directory. Shell and
+process tools start there by default and accept a per-call `cwd` argument. The
+status line shows what Mods is doing between tool calls ("Reading file: ...",
+"Running command: ...", "Searching web: ..."). Hide it with
+`--hide-tool-status`, which also suppresses the compact one-line record each
+completed tool call leaves in normal output (for example
+`> ✓ shell_run: ls -la · exit 0`).
 
 Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
 `mods.yml`:
@@ -365,75 +363,25 @@ builtin-tools:
   shell-timeout: 60s        # default timeout; per-call timeout_ms may override
 ```
 
-Filesystem paths resolve from the process current working directory. Shell and
-process tools start there by default and accept a per-call `cwd` argument.
-The status line at the bottom shows what Mods is doing between tool calls
-("Reading file: ...", "Running command: ...", "Searching web: ..."). Hide it
-with `--hide-tool-status`, which also suppresses the compact one-line record
-each completed tool call leaves in normal output (for example
-`> ✓ shell_run: ls -la · exit 0`).
-Write targets that still depend on runtime expansion (for example PowerShell's
-`$PROFILE` or a URL stored in a variable) are shown as dynamic targets and can
-only be approved once; they are never saved as directory or remote rules. For
-a reusable approval, resolve the target first and use its literal value
-in the mutation command. Dynamic reads do not require review.
-Mods also performs a bounded reviewability preflight for model-generated shell
-calls. When a call unnecessarily wraps one executable in a shell, mixes
-inspection and mutation, writes through a runtime path, or combines several
-independent actions, the model receives one request to retry with smaller calls
-before anything runs. This correction happens at most once per request and does
-not replace the normal safety review; a legitimate complex command can still
-proceed to review on the next attempt. Pipelines that represent one operation
-are not split automatically.
-### Git authentication
+Compound and opaque command text gets advisory simplification feedback before
+approval: Mods nudges the model at most twice per request toward reviewable
+shapes, and `--minimal` keeps that advice. The advice never blocks anything; the
+call then goes to ordinary approval. Commands whose payload is a pre-written
+script file (`bash scripts/build.sh`, `pwsh -File build.ps1`) are exempt and run
+exactly as written. There is no general script execution tool: put multi-step
+work in a script file. Explicit `--review-mode never` bypasses review.
 
-When Git needs an HTTP(S) username or password/token during a tool call, Mods
-can prompt in the terminal and continue the same command. Existing credential
-helpers, `GIT_ASKPASS`, `core.askPass`, and `SSH_ASKPASS` retain priority. Mods
-installs its bridge only as the last askpass fallback; it does not change Git
-configuration or add an authentication tool.
-
-Passwords are masked and passed directly to Git through a local IPC connection,
-without going through the model. Mods does not save credentials, though your
-configured Git credential helper may do so. Prefer HTTPS and your existing
-credential manager for persistent authentication. Windows requires Git for
-Windows, including its bundled shell.
-
-Input counts toward the command timeout (60 seconds by default). Escape cancels
-authentication; timeout or task cancellation also closes the prompt. Mods does
-not automatically rerun the command. Raw/minimal mode, non-interactive sessions,
-and write-target discovery cannot open these prompts: configure credentials
-beforehand. Git's fallback terminal prompt is disabled; external helpers retain
-their own UI and remain subject to the command timeout.
-
-SSH private-key unlocking, host-key confirmation, and interactive `gh auth login`
-are not handled by this bridge. Existing SSH agents and external browser-based
-credential helpers continue using their own authentication setup.
-
-### Debug output
-
-Use `-D` or `--debug` to write a human-readable execution trace to stderr.
-The trace groups startup settings, each user turn, model rounds, tool calls,
-approval decisions, results, timing, token usage, and the final turn summary.
-Provider call IDs and `call N/total` labels connect every tool request to its
-result, including validation failures, denied reviews, cancellations, and
-non-zero command exits.
-
-Tool arguments are pretty-printed as JSON up to 4 KiB. Tool results are shown
-up to 16 KiB. Larger payloads retain both the beginning and end and report the
-number of omitted bytes. Empty results are shown explicitly as `<empty>`.
-Known protected credentials are redacted before formatting or truncation, and
-resolved credential values are never sent to the debug renderer. Terminal
-output uses color; redirected debug output contains the same labels without
-ANSI styling.
-
-Use `--show-token-usage` (or `-s`) to print the input, output, and total token count for
-an interaction to stderr without mixing it into the model response on stdout.
+Git HTTP(S) authentication can prompt in the terminal and continue the same
+command when needed; passwords are masked, passed over local IPC, and never sent
+to the model or saved by Mods. Debug traces (`-D`/`--debug`) and token counts
+(`-s`/`--show-token-usage`) go to stderr. See [Tool details](docs/tools.md) for
+reviewability, `http_download`, Git authentication, and debug output.
 
 ### MCP
 
-Connect external tools and data sources through Model Context Protocol servers
-configured under `mcp-servers` in `mods.yml`:
+Connect external tools and data sources through
+[Model Context Protocol](https://modelcontextprotocol.io) servers configured
+under `mcp-servers` in `mods.yml`:
 
 ```yaml
 mcp-servers:
@@ -450,14 +398,30 @@ mcp-servers:
       - "ghcr.io/github/github-mcp-server"
 ```
 
-Inspect what's available with `mods --list-mcps` and `mods --list-tools`.
+Inspect what's available with `mods --list-mcps` and `mods --list-tools`. MCP is
+optional: everything built into Mods works without it.
+
+### Skills
+
+Skills are folders with a `SKILL.md` that teach Mods a workflow. They load on
+demand, so only matching instructions enter the context. Mods ships with
+built-ins such as `cross-platform-command-execution` and
+`diagnose-not-reproducing`; user-installed skills can override them by name.
+
+```sh
+mods --list-skills
+mods --skills-dirs ~/.agents/skills --list-skills
+```
+
+Install skills under `~/.agents/skills`, or add directories with `--skills-dirs`.
+Later directories override same-name skills. Portable installs also read a
+`skills/` directory beside the executable.
 
 ## Supported Providers
 
 Mods is configured for the providers below out of the box. The easiest way to
-get started is `mods --config` — it walks you through picking a provider, model,
-and API key interactively. You can also set the matching environment variable
-manually and select a model with `--api` and `--model`.
+get started is `mods --config`; you can also set the matching environment
+variable and select a model with `--api` and `--model`.
 
 | Provider     | `--api` value  | Env var                      | Get a key                                     |
 |--------------|----------------|------------------------------|-----------------------------------------------|
@@ -473,76 +437,42 @@ manually and select a model with `--api` and `--model`.
 | Kimi         | `kimi`         | `MOONSHOT_API_KEY`           | [platform.moonshot.cn][Kimi]                  |
 | MiniMax      | `minimax`      | `MINIMAX_API_KEY`            | [www.minimaxi.com][MiniMax]                   |
 
-Direct requests to `api.openai.com` use the Responses API for every model and
-feature. Mods sends `store: false` and keeps the encrypted response items needed
-for stateless reasoning and tool continuation in its local session data. Azure
+Direct requests to `api.openai.com` use the Responses API by default for every
+model and feature; set `endpoint: chat-completions` on a model to override.
+Mods sends `store: false` and keeps the encrypted response items needed for
+stateless reasoning and tool continuation in its local session data. Azure
 OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
 Chat Completions.
 
-Official `deepseek-flash`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`, and `deepseek-v4-pro` requests to
-`api.deepseek.com` also use the
+Official `deepseek-flash`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`,
+and `deepseek-v4-pro` requests to `api.deepseek.com` also use the
 [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
-automatically. Mods uses its plaintext reasoning events, hosted web search, and
-Codex-compatible free-form `apply_patch` tool. DeepSeek Responses is stateless,
-so complete response items and tool outputs remain in the local session and are
-replayed on the next turn. DeepSeek Flash accepts image attachments and images
-returned by tools on both Responses and Chat Completions. DeepSeek Pro does not
-accept image input. To opt out of Responses for a model, set
-`endpoint: chat-completions` in `mods.yml`:
+automatically. DeepSeek Responses is stateless, so complete response items and
+tool outputs remain in the local session and are replayed on the next turn.
+DeepSeek Flash accepts image attachments and images returned by tools on both
+Responses and Chat Completions; DeepSeek Pro does not accept image input. Set
+`endpoint: chat-completions` on the model to opt out.
 
-```yaml
-apis:
-  deepseek:
-    base-url: https://api.deepseek.com/
-    models:
-      deepseek-v4-flash:
-        endpoint: chat-completions # optional explicit fallback
-        reasoning-effort: high     # low, high, or max with --think
-```
-
-`api-type`, `provider-profile`, and `endpoint` are intentionally separate:
+Three independent settings control routing:
 
 - `api-type` chooses the transport adapter (`openai`, `anthropic`, `google`,
   `ollama`, or `azure`).
-- `provider-profile` chooses provider-specific semantics on an
-  OpenAI-compatible transport (`openai`, `deepseek`, `qwen`, `glm`, `kimi`, or
-  `minimax`). A model-level value overrides the provider default.
-- `endpoint` chooses `responses` or `chat-completions` for a model.
-
-An arbitrarily named gateway can therefore use DeepSeek Responses explicitly:
-
-```yaml
-apis:
-  company-router:
-    api-type: openai
-    base-url: https://gateway.example.com/v1
-    api-key-env: COMPANY_ROUTER_KEY
-    models:
-      deepseek-v4-flash:
-        provider-profile: deepseek
-        endpoint: responses
-```
+- `provider-profile` chooses provider-specific semantics on an OpenAI-compatible
+  transport (`openai`, `deepseek`, `qwen`, `glm`, `kimi`, or `minimax`). A
+  model-level value overrides the provider default.
+- `endpoint` chooses `responses` or `chat-completions` for a model on an
+  OpenAI-compatible transport.
 
 Unknown enum values are rejected instead of silently falling back. Custom
 providers must configure `base-url`; only built-in providers with a known
-official endpoint may omit it.
+official endpoint may omit it. When web search is enabled, an endpoint with
+hosted search capability uses it automatically; other endpoints keep the
+existing local search behavior.
 
-When web search is enabled, an endpoint with hosted search capability uses that
-capability automatically. DeepSeek Responses therefore searches without a
-Tavily key; other endpoints keep the existing local search behavior.
-
-Anthropic requests continue to use the Messages API. With `-t`, mods chooses
-adaptive or manual extended thinking for recognized Claude models. During tool
-use it keeps complete thinking, signature, redacted-thinking, and tool-use
-blocks in local session state and sends them back unchanged with tool results.
-For an opaque model on a custom `api-type: anthropic` endpoint, configure
-`thinking-type` explicitly instead of relying on model-name inference.
-
-Gemini 2.5 uses `thinkingBudget` (`-1` requests a dynamic budget), while Gemini
-3 maps `reasoning-effort` to `thinkingLevel`. Ollama sends its native `think`
-field and renders `message.thinking` separately from the final answer. Exact
-effort values remain model/provider dependent; unsupported configured values
-fail before the HTTP request.
+`-t` / `--think` enables reasoning where supported. Exact effort values remain
+model- and provider-dependent, and unsupported configured values fail before the
+HTTP request. See [Provider details](docs/providers.md) for custom gateways,
+thinking controls, and per-provider behavior.
 
 ```sh
 mods --api anthropic --model claude-sonnet-4-6 "explain this error"
@@ -550,44 +480,53 @@ mods --api glm --model glm-5.2 "把这个日志总结成中文要点"
 mods --api ollama --model llama4 "summarize this log"
 ```
 
-Any other OpenAI-compatible endpoint can be added as a custom profile:
-
-`mods --config` can discover models for providers that expose a model-list
-endpoint. If discovery is unavailable, enter the model name in the wizard or add
-it manually:
-
-```yaml
-apis:
-  groq:
-    base-url: https://api.groq.com/openai/v1
-    api-key-env: GROQ_API_KEY
-    models:
-      llama-3.3-70b-versatile:
-        aliases: ["groq-llama"]
-```
-
 ## CLI & Configuration
 
 ```sh
 mods [OPTIONS] [PROMPT...]
 
-mods --help      # all options, grouped by purpose
-mods --config    # interactive setup wizard (recommended for new users)
-mods --settings              # open mods.yml in $EDITOR
-mods --settings '<yaml>'     # recursively merge YAML into mods.yml
-mods --dirs      # show where mods stores its data
+mods --help                 # all options, grouped by purpose
+mods --config               # interactive setup wizard
+mods --settings             # open mods.yml in $EDITOR
+mods --settings '<yaml>'    # recursively merge YAML into mods.yml
+mods --dirs                 # show config and session paths
+
+mods --list-sessions        # browse saved sessions
+mods --list-tools           # built-in and MCP tools
+mods --list-skills          # installed skills
+mods --list-roles           # custom roles
+mods --list-prompts         # built-in prompts and overrides
+mods --list-mcps            # configured MCP servers
 ```
 
 The setup wizard keeps edits when you go back or switch providers, and saves
 only after you confirm the final summary. Use Enter to continue, Esc to go back,
-and Ctrl+C to cancel. Outside text inputs and filters, `j`/`k` move down/up
-and `q` cancels without saving. In model lists, Space selects, `/` filters, `r` retries
-discovery, and `m` switches to manual entry. Use Ctrl+J for a new line in manual
-model input and Page Up/Page Down to scroll long content.
+and Ctrl+C to cancel. Outside text inputs and filters, `j`/`k` move down/up and
+`q` cancels without saving. In model lists, Space selects, `/` filters, `r`
+retries discovery, and `m` switches to manual entry. Use Ctrl+J for a new line in
+manual model input and Page Up/Page Down to scroll long content.
 
-Most advanced defaults (model parameters, themes, MCP, debug, format hints)
-live in `mods.yml` and are documented inline. Run `mods --reset-settings` to
-back up the current file and restore the defaults.
+Most advanced defaults (model parameters, themes, MCP, debug, format hints) live
+in `mods.yml` and are documented inline. Run `mods --reset-settings` to back up
+the current file and restore the defaults.
+
+### Sessions & Chat
+
+Every session is saved locally with a title and a short ID. `--continue` resumes
+a session by ID or title; `--continue-last` resumes the most recent one.
+`--list-sessions` opens the browser: press `/` to search the transcript, `n`/`N`
+to move between matches, and `w` to toggle wrapping.
+
+`--chat` starts a continuous conversation. Press `Enter` to send, `Ctrl+J` to
+add a newline, and `Ctrl+C` while composing to leave. Each turn is saved to the
+same session so you can resume it later with `--continue`.
+
+### Portable Mode
+
+Put a `mods.yml` next to the `mods` executable. Config and sessions then live in
+that folder instead of the XDG locations, and a `skills/` directory beside the
+executable is loaded as well. The folder can be copied as a self-contained
+install. Run `mods --dirs` to see the active paths.
 
 ### Custom Roles
 
@@ -609,6 +548,8 @@ mods --role shell "list the largest files in the current directory"
 mods --list-roles
 ```
 
+### Prompt Overrides
+
 Built-in runtime prompts can also be overridden in `mods.yml`. Run
 `mods --list-prompts` to print the available keys and their default text, then
 copy the one you want to customize:
@@ -620,150 +561,53 @@ prompts:
     Return only strict JSON.
 ```
 
+## Images, Audio, and Video
+
+Mods reads media natively and sends it straight to the model — no OCR, ASR,
+ffmpeg, or nested `mods` process:
+
+```sh
+mods --image assets/mods-product.png "suggest alt text for this image"
+mods -I "describe the image on my clipboard"
+mods --audio meeting.wav "summarize the decisions in this recording"
+mods --video meeting.mp4 "list the action items and who owns each one"
+```
+
+`--image`, `--audio`, and `--video` are repeatable and can be combined. Direct
+attachments do not need filesystem tools. Automatic discovery and reading
+through `fs_find_images`/`fs_read_images` and `fs_find_media`/`fs_read_media`
+do; `auto` is the default and recognizes media requests, while
+`builtin-tools.filesystem: false` disables them. Describe what you are looking
+for and Mods enumerates candidates, reads the originals, and reports matches,
+non-matches, and uncertain cases.
+
+- Up to 8 files per media read.
+- Images: up to 64 per request and 20 MiB of raw image data.
+- Audio: WAV/MP3, 6 MiB and 10 minutes per file, 4 per read, 15 minutes total.
+- Video: non-fragmented H.264/AAC-LC MP4, 6 MiB, 2 minutes, and 1080p per file,
+  1 per read, 5 minutes total.
+- Saved and current input share 20 MiB of raw media and a 40 MiB serialized
+  request budget.
+
+Adapters expose media according to their implemented protocol, without a
+model-name allowlist or per-model media settings. If a model cannot understand
+an attachment, the service rejects it; Mods preserves that error instead of
+silently dropping the file. For formats, sampling, pagination, and uncertainty
+details, see [Media details](docs/media.md).
+
 ## Contributing
 
-Issues and pull requests are welcome on this fork. Use `go run github.com/go-task/task/v3/cmd/task@v3.51.1 check` to verify
-the project compiles and `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` to run the test suite before opening a PR.
-
-Windows contributors can also run the layered [real-machine reliability suite](docs/windows-reliability.md),
-which validates PowerShell 5.1/7, Job Object process-tree cleanup, Windows path
-boundaries, command shims, and output encodings while producing an auditable report.
-
-Real-AI CLI black-box tests are kept behind the `integration` build tag and
-are not part of the default CI suite. They build and execute the `mods` binary
-with isolated config, data, cache, home, and working directories. To run the
-real-AI scenarios:
+Issues and pull requests are welcome on this fork. Before opening a PR, run:
 
 ```sh
-export DEEPSEEK_API_KEY=...
-go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-blackbox-ai
+go run github.com/go-task/task/v3/cmd/task@v3.51.1 check   # compile everything
+go run github.com/go-task/task/v3/cmd/task@v3.51.1 test    # run the test suite
 ```
 
-These scenarios make paid network requests and cover structured pipe input,
-session continuation across processes, complex read-only shell pipelines,
-filesystem tool use, and absolute-path reads outside the current directory. The
-runner uses the first available key in this provider order: DeepSeek, Qwen,
-OpenAI, Anthropic, GLM, then Google. Google runs the non-tool scenarios because
-its adapter does not expose built-in filesystem or shell tools.
-
-Set `MODS_BLACKBOX_PROVIDER` to select a provider explicitly and
-`MODS_BLACKBOX_MODEL` to override its default model:
-
-```sh
-MODS_BLACKBOX_PROVIDER=qwen MODS_BLACKBOX_MODEL=qwen-plus \
-  go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-blackbox-ai
-```
+CI runs the same build and test baseline on Linux, macOS, and Windows. See
+[Development](docs/development.md) for linting, focused tests, real-AI black-box
+scenarios, and the Windows reliability suite.
 
 ## License
 
 [MIT](https://github.com/panjie/mods/raw/main/LICENSE)
-
-### Searching image contents
-
-With a model that supports vision and tool calls, describe the search in natural
-language. Mods exposes `fs_find_images` to enumerate PNG, JPEG, GIF, and WebP
-candidates and `fs_read_images` to return labelled image attachments directly to
-the current model. No OCR installation or nested mods process is required.
-Filesystem tools must be enabled (`auto`, the default, recognizes image requests;
-`never` disables this workflow).
-
-Discovery includes hidden files and supports recursive pagination. Directory
-symlinks are not followed. The reader checks file content, preserves original
-pixels, and accepts up to eight images per call. Animated-image interpretation
-depends on the provider. Unsupported formats require conversion before reading.
-
-Each conversation request is bounded to 64 images and 20 MiB of raw image data,
-including saved history and earlier tool rounds; image request bodies are also
-bounded to 40 MiB before provider-specific overrides. Splitting reads into batches
-does not remove cumulative context costs. Failed reads and unfinished scans are
-reported as incomplete, not as non-matches. For large collections, use smaller
-scopes in fresh conversations. Continuing a saved conversation preserves tool
-images and source labels; discovery cursors expire with the request, so resume
-by enumerating again. Visual recognition can be uncertain, especially for small
-or blurred text; ask for supporting text snippets and uncertain cases.
-
-Mods exposes media inputs and reading tools according to the selected adapter's
-implemented protocol, without a model-name capability list or per-model media
-settings. Choose a model that understands the inputs you send; if it does not,
-the service may reject the request. Mods preserves that error rather than
-silently removing attachments. File validation and cumulative budgets still apply.
-
-### Audio and mixed media
-
-With `qwen3.8-omni-flash`, ask mods to find recordings by their contents:
-
-```sh
-mods -a qwen -m qwen3.8-omni-flash "Find recordings mentioning refunds in this directory and its subdirectories. Return paths and supporting quotes."
-mods -a qwen -m qwen3.8-omni-flash --audio meeting.wav --image slide.png "Compare the amounts in the recording and slide."
-```
-
-`--audio` is repeatable and accepts PCM WAV and MP3. Audio is sent directly to
-Qwen as native model input; no Python, ASR service, ffmpeg, or recursive mods
-invocation is needed. Both Chat Completions (the default for Qwen) and an
-explicit `endpoint: responses` use the existing `qwen` protocol profile. The
-built-in Qwen provider selects it automatically, independently of the model name.
-For a custom OpenAI-compatible gateway using this dialect, set the existing
-`provider-profile: qwen` at provider or model level. This is also required for
-older gateway configurations that relied on the model name to select Qwen media
-encoding. An explicit different profile is never overridden by the model name.
-Output is text; microphone recording and speech generation are not included.
-Adapters without an implemented audio dialect reject audio before sending it;
-the service decides whether a model accepts input in an implemented dialect.
-
-`fs_find_media` discovers image/audio/video candidates with pagination and recursive
-scanning; `fs_read_media` returns ordered, labelled attachments. Existing image
-tools use the same scanning, reading, authorization and budget engine. Automatic
-filesystem activation recognizes audio requests; `filesystem: never` disables
-directory discovery and reading tools. Discovery includes common unsupported
-audio extensions (M4A/AAC/FLAC/OGG/Opus) so they can be reported as unread instead
-of silently omitted. File contents determine the actual supported format.
-
-Each recording is limited to 6 MiB and 10 minutes; a tool read accepts at most
-four recordings (prefer one or two), within eight total media files. All input
-and saved history share 20 MiB of raw media, 15 minutes of audio, and a 40 MiB
-serialized-request budget. Image count/pixel limits still apply. The file size
-limit often applies before the duration limit. Long-audio slicing and automatic
-context compaction are not implemented: use smaller scopes in fresh sessions.
-Original audio bytes and channels are preserved, and saved sessions retain
-attachments even if the source file changes. Logs/transcripts show source and
-audio metadata, never Base64. In JSON mode, incomplete-scan diagnostics go to
-stderr separately from the model answer. Recognition and timestamps may be
-uncertain; silence or failed reads are not evidence of a non-match.
-
-### Video and mixed media
-
-With `qwen3.8-omni-flash`, video uses the same directory tools, source labels,
-authorization, attachment storage and budgets as images and audio:
-
-```sh
-mods -a qwen -m qwen3.8-omni-flash "Find videos mentioning refunds in this directory and its subdirectories. Check both speech and visible text; return paths and evidence."
-mods -a qwen -m qwen3.8-omni-flash --video meeting.mp4 --image slide.png "Compare the spoken and visible amounts with the slide."
-```
-
-`--video` is repeatable and can be combined with `--audio` and `--image`.
-Chat Completions and Responses send the original local MP4 as native video,
-including its audio track. No runtime ffmpeg, frame extraction, ASR service or
-recursive model invocation is required. As with audio, the `qwen` profile
-selects this encoding for any model name; the service decides model support.
-Adapters without an implemented video dialect reject video before sending it.
-
-The first version accepts non-fragmented MP4 with one H.264 (`avc1`) video track
-and optionally one AAC-LC audio track. Each file must be at most **6 MiB,
-2 minutes and 1080p**. Pure-Go container checks validate timing, dimensions,
-rotation, sample tables and local data references; they do not fully decode
-compressed media. Encrypted files, complex edit timelines, other codecs and
-containers are rejected. Discovery includes MOV/MKV/WebM/AVI/M4V candidates so
-unsupported files can be reported as unread. No automatic transcoding occurs.
-
-A tool read attaches at most one video. The full conversation may contain up to
-5 minutes of video, with a requested sampling rate of 2 fps and a conservative
-1200-frame budget. The shared 20 MiB raw / 40 MiB request limits still apply;
-video with sound also consumes the 15-minute audio budget, without counting its
-bytes twice. Saved sessions keep the original video, so continuation does not
-need the source file. Transcripts display metadata instead of encoded bytes.
-
-Recognition remains model-dependent, especially across multiple videos or
-mixed inputs. A successful read proves delivery, not correct recognition.
-Check quoted evidence for important searches. Sampling can miss brief events;
-timestamps are approximate and results are not an exhaustive frame-by-frame
-inspection. Long-video splitting and automatic context compaction are deferred.

@@ -224,7 +224,7 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Always allow")
+	require.Contains(t, rendered, "Allow for session")
 }
 
 func TestReviewBannerAlwaysAllowRemoteWrite(t *testing.T) {
@@ -242,7 +242,7 @@ func TestReviewBannerAlwaysAllowRemoteWrite(t *testing.T) {
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Always allow")
+	require.Contains(t, rendered, "Allow for session")
 	require.Contains(t, rendered, "https://api.github.com")
 }
 
@@ -258,7 +258,7 @@ func TestReviewBannerDoesNotOfferLegacyRule(t *testing.T) {
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.NotContains(t, rendered, "Always allow")
+	require.NotContains(t, rendered, "Allow for session")
 }
 
 func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
@@ -272,7 +272,7 @@ func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.NotContains(t, rendered, "Always allow")
+	require.NotContains(t, rendered, "Allow for session")
 }
 
 func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
@@ -1451,7 +1451,7 @@ func TestUnknownEffectAlwaysAllowKnownTargets(t *testing.T) {
 			require.NotEmpty(t, item.candidateRules)
 			r.handleStartMsg(toolReviewStartMsg{item: item})
 			banner := r.renderBanner(160, makeStyles(true).Interaction, 40)
-			require.Contains(t, banner, "Always allow")
+			require.Contains(t, banner, "Allow for session")
 			require.NotContains(t, banner, "FULL REVIEW")
 			require.NotContains(t, banner, "REVIEW REQUIRED")
 			r.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})

@@ -115,7 +115,7 @@ type convDelegate struct {
 	b *browserModel
 }
 
-func (d *convDelegate) Height() int                             { return 1 }
+func (d *convDelegate) Height() int                             { return 2 }
 func (d *convDelegate) Spacing() int                            { return 0 }
 func (d *convDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
@@ -147,57 +147,34 @@ func (d *convDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		}
 	}
 
-	id := styles.ShaHash.Render(ci.conv.ID[:ShortIDLength])
-
-	// Secondary meta: model · api.
-	var metaParts []string
-	if ci.conv.Model != nil && *ci.conv.Model != "" {
-		metaParts = append(metaParts, *ci.conv.Model)
-	}
-	if ci.conv.API != nil && *ci.conv.API != "" {
-		metaParts = append(metaParts, *ci.conv.API)
-	}
-	meta := ""
-	if len(metaParts) > 0 {
-		meta = styles.Comment.Render("  · " + strings.Join(metaParts, " · "))
-	}
-
-	timeStr := styles.Timeago.Render(timeago.Of(ci.conv.UpdatedAt))
-
-	// Layout:  cursor glyph id  TITLE  meta   <pad>   timeago
-	// Reserve room for the title, truncating it so the row never wraps.
-	titleStyle := styles.SessionList
-	if selected {
-		titleStyle = titleStyle.Bold(true)
-	}
-	fixedLeft := lipgloss.Width(cursor) + 1 + lipgloss.Width(glyph) + 1 +
-		lipgloss.Width(id) + 2
-	fixedRight := lipgloss.Width(meta) + lipgloss.Width(timeStr) + 1
-	titleMax := width - fixedLeft - fixedRight - titleStyle.GetHorizontalFrameSize()
 	title := ci.conv.Title
 	if title == "" {
 		title = "(untitled)"
 	}
-	if titleMax < 1 {
-		titleMax = 1
+	title = plainTranscriptContent(title)
+	title = strings.Join(strings.Fields(title), " ")
+	titleStyle := styles.AppName
+	if !selected {
+		titleStyle = titleStyle.Bold(false)
 	}
-	title = truncateDisplay(title, titleMax)
-	titleRendered := titleStyle.Render(title)
-
-	left := cursor + glyph + " " + id + "  " + titleRendered + meta
-	pad := width - lipgloss.Width(left) - lipgloss.Width(timeStr)
-	if pad < 1 {
-		pad = 1
+	first := cursor + glyph + " " + titleStyle.Render(ansi.Truncate(title, max(1, width-3), "…"))
+	meta := timeago.Of(ci.conv.UpdatedAt)
+	if ci.conv.Model != nil && *ci.conv.Model != "" {
+		meta += " · " + *ci.conv.Model
 	}
-	line := left + strings.Repeat(" ", pad) + timeStr
-
-	switch {
-	case selected:
-		line = d.b.styles.selectedRow.Render(line)
-	case marked:
-		line = d.b.styles.markedRow.Render(line)
+	if width >= 70 {
+		meta += " · " + ci.conv.ID[:min(ShortIDLength, len(ci.conv.ID))]
 	}
-	_, _ = io.WriteString(w, line)
+	second := "   " + styles.Comment.Render(ansi.Truncate(strings.Join(strings.Fields(plainTranscriptContent(meta)), " "), max(1, width-3), "…"))
+	lines := []string{first, second}
+	for i, line := range lines {
+		line = ansi.Truncate(line, width, "…")
+		if selected {
+			line = d.b.styles.selectedRow.Width(width).Render(line)
+		}
+		lines[i] = line
+	}
+	_, _ = io.WriteString(w, strings.Join(lines, "\n"))
 }
 
 // --- async messages ------------------------------------------------------
@@ -219,9 +196,15 @@ type deletedMsg struct {
 // --- model ---------------------------------------------------------------
 
 type browserModel struct {
-	db     *DB
-	width  int
-	height int
+	helpOpen                bool
+	helpOffset              int
+	previewID               string
+	previewRequest          uint64
+	previewText, previewErr string
+	previewLoaded           bool
+	db                      *DB
+	width                   int
+	height                  int
 
 	list     list.Model
 	delegate *convDelegate
@@ -328,13 +311,17 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildViewerLayout()
 			m.restoreViewerAnchor(anchor)
 		}
-		return m, nil
+		return m, m.refreshPreview()
 
+	case previewLoadedMsg:
+		m.receivePreview(msg)
+		return m, nil
 	case loadedContentMsg:
 		return m.handleLoaded(msg)
 
 	case deletedMsg:
-		return m.handleDeleted(msg)
+		model, cmd := m.handleDeleted(msg)
+		return model, tea.Batch(cmd, m.refreshPreview())
 
 	case tea.MouseWheelMsg:
 		if m.state == stateViewing {
@@ -347,6 +334,21 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		if m.helpOpen {
+			switch msg.String() {
+			case "esc", "q", "?":
+				m.helpOpen = false
+			case "down", "j":
+				m.helpOffset++
+			case "up", "k":
+				m.helpOffset = max(0, m.helpOffset-1)
+			}
+			return m, nil
+		}
+		if msg.String() == "?" && m.state != stateConfirm && m.list.FilterState() != list.Filtering && !m.viewerSearch.active {
+			m.helpOpen, m.helpOffset = true, 0
+			return m, nil
+		}
 		// Any key dismisses a transient status message.
 		if m.statusMsg != "" {
 			m.statusMsg = ""
@@ -355,9 +357,11 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case stateConfirm:
 			return m.updateConfirm(msg)
 		case stateViewing:
-			return m.updateViewer(msg)
+			model, cmd := m.updateViewer(msg)
+			return model, tea.Batch(cmd, m.refreshPreview())
 		default:
-			return m.updateBrowsing(msg)
+			model, cmd := m.updateBrowsing(msg)
+			return model, tea.Batch(cmd, m.refreshPreview())
 		}
 	}
 
@@ -366,7 +370,7 @@ func (m *browserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.state == stateBrowsing {
 		nl, cmd := m.list.Update(msg)
 		m.list = nl
-		return m, cmd
+		return m, tea.Batch(cmd, m.refreshPreview())
 	}
 	return m, nil
 }
@@ -402,6 +406,9 @@ func (m *browserModel) updateBrowsing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Browser actions are only available when not typing into the filter.
 	if !filtering {
 		switch s {
+		case "r":
+			m.previewID = ""
+			return m, m.refreshPreview()
 		case "enter":
 			return m.openViewer()
 		case "d":
@@ -517,6 +524,7 @@ func (m *browserModel) openViewer() (tea.Model, tea.Cmd) {
 }
 
 func (m *browserModel) closeViewer() {
+	m.previewID = ""
 	m.state = stateBrowsing
 	m.viewing = convItem{}
 	m.viewerHeader = ""
@@ -573,6 +581,11 @@ func (m *browserModel) updateViewer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.updateViewerSearch(msg)
 	}
 	switch msg.String() {
+	case "r":
+		if m.viewErr != "" {
+			return m.openViewer()
+		}
+		return m, nil
 	case "q", "esc":
 		m.closeViewer()
 		return m, nil
@@ -644,7 +657,7 @@ func (m *browserModel) copyViewedSession() (tea.Model, tea.Cmd) {
 
 func (m *browserModel) buildViewerHeader(ci convItem) string {
 	styles := m.textStyles
-	title := m.styles.viewerTitle.Render(ci.conv.Title)
+	title := m.styles.viewerTitle.Render(ansi.Truncate(strings.Join(strings.Fields(plainTranscriptContent(ci.conv.Title)), " "), max(1, m.width), "…"))
 	id := styles.ShaHash.Render(ci.conv.ID)
 
 	var parts []string
@@ -660,9 +673,9 @@ func (m *browserModel) buildViewerHeader(ci convItem) string {
 	}
 	meta := styles.Comment.Render(strings.Join(parts, "  ·  "))
 
-	line1 := title + "  " + id
+	line1 := title + "\n" + ansi.Truncate(id, max(1, m.width), "…")
 	rule := m.styles.viewerRule.Render(strings.Repeat("─", m.width))
-	return lipgloss.NewStyle().Width(max(1, m.width)).Render(lipgloss.JoinVertical(lipgloss.Left, line1, meta, rule))
+	return lipgloss.NewStyle().Width(max(1, m.width)).Render(lipgloss.JoinVertical(lipgloss.Left, line1, ansi.Truncate(meta, max(1, m.width), "…"), rule))
 }
 
 // --- confirm / delete ----------------------------------------------------
@@ -744,8 +757,14 @@ func (m *browserModel) View() tea.View {
 	default:
 		content = m.viewList()
 	}
+	if m.helpOpen {
+		content = m.viewKeyboardHelp()
+	}
 	view := tea.NewView(content)
 	view.AltScreen = true
+	if m.helpOpen {
+		return view
+	}
 	if m.state == stateBrowsing && m.list.FilterState() == list.Filtering {
 		if cursor := m.list.FilterInput.Cursor(); cursor != nil {
 			copy := *cursor
@@ -771,10 +790,16 @@ func (m *browserModel) View() tea.View {
 func (m *browserModel) viewList() string {
 	title := m.viewTitle()
 	footer := m.viewFooter()
-	m.list.SetSize(m.width, m.bodyHeight())
+	m.list.SetSize(m.listWidth(), m.bodyHeight())
 	body := m.list.View()
 	if len(m.list.Items()) == 0 {
 		body = m.emptyState(m.width, m.bodyHeight())
+	}
+	if m.splitPreview() && len(m.list.Items()) > 0 {
+		left := lipgloss.NewStyle().Width(m.listWidth()).Height(m.bodyHeight()).Render(body)
+		divider := m.styles.viewerRule.Render(strings.TrimSuffix(strings.Repeat("│\n", m.bodyHeight()), "\n"))
+		right := m.viewPreview(max(1, m.width-m.listWidth()-3), m.bodyHeight())
+		body = lipgloss.JoinHorizontal(lipgloss.Top, left, lipgloss.NewStyle().Padding(0, 1).Render(divider), right)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, title, body, footer)
 }
@@ -808,8 +833,8 @@ func (m *browserModel) viewViewer() string {
 	case m.viewErr != "":
 		hint := m.styles.dangerTitle.Render(" couldn't load session ") + "\n\n" +
 			m.styles.empty.Render(m.viewErr) + "\n\n" +
-			m.textStyles.Comment.Render("press esc to go back")
-		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center, hint)
+			m.textStyles.Comment.Render("press r to retry · esc to go back")
+		body = lipgloss.NewStyle().Width(m.width).MaxHeight(viewportH).Render(ansi.Wrap(hint, m.width, ""))
 	case !m.viewerLoaded:
 		body = lipgloss.Place(m.width, viewportH, lipgloss.Center, lipgloss.Center,
 			m.styles.empty.Render("Loading…"))
@@ -846,7 +871,7 @@ func (m *browserModel) viewTitle() string {
 		}
 		bar = left + strings.Repeat(" ", gap) + right
 	}
-	return m.styles.titleBg.Width(m.width).Render(bar)
+	return m.styles.titleBg.Width(m.width).Render(ansi.Truncate(bar, m.width, "…"))
 }
 
 func (m *browserModel) viewFooter() string {
@@ -861,6 +886,8 @@ func (m *browserModel) viewFooter() string {
 		pos := fmt.Sprintf("%d%% of %d lines", pct, total)
 		pairs = [][2]string{
 			{m.viewerSearch.summary(pos), ""},
+			{"?", "keys"},
+			{"esc", "back"},
 			{"↑↓/jk", "scroll"},
 			{"/", "find"},
 			{"n/N", "match"},
@@ -876,6 +903,8 @@ func (m *browserModel) viewFooter() string {
 		}
 	default:
 		pairs = [][2]string{
+			{"?", "keys"},
+			{"q", "quit"},
 			{"↑↓/jk", "move"},
 			{"/", "filter"},
 			{"enter", "view"},
@@ -883,7 +912,6 @@ func (m *browserModel) viewFooter() string {
 			{"d", "delete"},
 			{"D", "delete marked"},
 			{"c", "continue"},
-			{"q", "quit"},
 		}
 	}
 	return m.renderHelp(pairs)

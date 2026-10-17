@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/ui"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
+	"golang.org/x/term"
 )
 
 const (
@@ -29,11 +32,12 @@ func useLine() string {
 }
 
 func usageFunc(cmd *cobra.Command) error {
-	_, _ = lipgloss.Fprintf(os.Stdout, "%s\n%s\n\n", helpIntroSummary, helpIntroDetail)
+	_, _ = lipgloss.Fprintf(os.Stdout, "%s\n%s\n\n", ansi.Wrap(helpIntroSummary, helpWidth(), ""), ansi.Wrap(helpIntroDetail, helpWidth(), ""))
 	_, _ = lipgloss.Fprintf(os.Stdout,
 		"Usage:\n  %s\n\n",
 		useLine(),
 	)
+	_, _ = lipgloss.Fprintln(os.Stdout, ansi.Wrap("Quick start:\n  mods --config          Configure a provider\n  mods --chat            Start a conversation\n  mods \"Explain this code\"\n  cat main.go | mods \"Review this file\"\n  mods --list-sessions   Browse saved sessions\n", helpWidth(), ""))
 	_, _ = lipgloss.Fprintln(os.Stdout, "Options:")
 	printGroupedFlags(cmd)
 	if cmd.HasExample() {
@@ -49,46 +53,64 @@ func usageFunc(cmd *cobra.Command) error {
 
 func printGroupedFlags(cmd *cobra.Command) {
 	groups := groupedUsageFlags(cmd.Flags())
-	first := true
-	categoryOrder := make([]string, 0, len(flagCategorySpecs)+1)
+	categories := make([]string, 0, len(flagCategorySpecs)+1)
 	for _, category := range flagCategorySpecs {
-		categoryOrder = append(categoryOrder, category.Name)
+		categories = append(categories, category.Name)
 	}
-	categoryOrder = append(categoryOrder, flagCategoryOther)
-	for _, category := range categoryOrder {
-		flags := groups[category]
-		if len(flags) == 0 {
-			continue
+	categories = append(categories, flagCategoryOther)
+	for _, advanced := range []bool{false, true} {
+		if advanced {
+			_, _ = lipgloss.Fprintln(os.Stdout, "\nAdvanced options:")
 		}
-		if !first {
-			_, _ = lipgloss.Fprintln(os.Stdout)
-		}
-		first = false
-		_, _ = lipgloss.Fprintln(os.Stdout, ui.StdoutStyles().Flag.Render(category))
-		for _, f := range flags {
-			printFlag(f)
+		for _, category := range categories {
+			heading := false
+			for _, f := range groups[category] {
+				if flagIsAdvanced(f) != advanced {
+					continue
+				}
+				if !heading {
+					_, _ = lipgloss.Fprintln(os.Stdout, "\n"+ui.StdoutStyles().AppName.Render(category))
+					heading = true
+				}
+				printFlag(f)
+			}
 		}
 	}
 }
 
+var helpWidth = func() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width < 1 {
+		return 96
+	}
+	return width
+}
+
 func printFlag(f *flag.Flag) {
-	description := ui.StdoutStyles().FlagDesc.Render(f.Usage)
+	_, _ = lipgloss.Fprintln(os.Stdout, renderFlag(f, helpWidth()))
+}
+
+func renderFlag(f *flag.Flag, width int) string {
+	styles := ui.StdoutStyles()
+	name := "--" + f.Name
+	if f.Shorthand != "" {
+		name = "-" + f.Shorthand + ", " + name
+	}
+	description := f.Usage
 	if flagIsAdvanced(f) {
-		description += " " + ui.StdoutStyles().Comment.Render("[advanced]")
+		description += " [advanced]"
 	}
-	if f.Shorthand == "" {
-		_, _ = lipgloss.Fprintf(os.Stdout,
-			"  %-44s %s\n",
-			ui.StdoutStyles().Flag.Render("--"+f.Name),
-			description,
-		)
-		return
+	width = max(8, width)
+	labelWidth := 28
+	if width < 70 || ansi.StringWidth(name) > labelWidth {
+		return ansi.Wrap("  "+styles.Flag.Render(name), width, "") + "\n" +
+			indentHelp(ansi.Wrap(styles.FlagDesc.Render(description), max(1, width-4), ""), 4)
 	}
-	_, _ = lipgloss.Fprintf(os.Stdout,
-		"  %s%s %-40s %s\n",
-		ui.StdoutStyles().Flag.Render("-"+f.Shorthand),
-		ui.StdoutStyles().FlagComma,
-		ui.StdoutStyles().Flag.Render("--"+f.Name),
-		description,
-	)
+	return "  " + styles.Flag.Render(name) + strings.Repeat(" ", labelWidth-ansi.StringWidth(name)+2) +
+		strings.ReplaceAll(ansi.Wrap(styles.FlagDesc.Render(description), max(1, width-labelWidth-4), ""), "\n", "\n"+strings.Repeat(" ", labelWidth+4))
+}
+
+func indentHelp(text string, spaces int) string {
+	indent := strings.Repeat(" ", spaces)
+	return indent + strings.ReplaceAll(text, "\n", "\n"+indent)
 }

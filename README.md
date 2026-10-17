@@ -284,8 +284,8 @@ what will execute and which write targets the decision covers:
 
 ```
 Review: Run: rm -f /path/to/project/demo.gif
-[Y] Approve  [N] Deny  [A] Always allow  [Ctrl+C] Cancel
-Always allows writes in /path/to/project
+[Y] Approve  [N] Deny  [A] Allow for session  [Ctrl+C] Cancel
+Session: this conversation only; writes in /path/to/project and subdirectories
 ```
 
 - `Y` — approve this one call
@@ -294,7 +294,7 @@ Always allows writes in /path/to/project
   remote origin so matching writes skip later prompts
 - `Ctrl+C` — cancel the whole run
 
-`Always allow` is available only when every write target can be identified.
+`Allow for session` is available only when every write target can be identified.
 Dynamic or otherwise unknown write targets can be allowed once, but cannot be
 saved. Remote rules use a credential-free origin such as
 `https://api.example.com` or `ssh://github.com`; paths, queries, fragments, and
@@ -504,7 +504,12 @@ only after you confirm the final summary. Use Enter to continue, Esc to go back,
 and Ctrl+C to cancel. Outside text inputs and filters, `j`/`k` move down/up and
 `q` cancels without saving. In model lists, Space selects, `/` filters, `r`
 retries discovery, and `m` switches to manual entry. Use Ctrl+J for a new line in
-manual model input and Page Up/Page Down to scroll long content.
+manual model input and Page Up/Page Down to scroll long content. The heading
+shows the current step, and the action row stays in place while discovery runs.
+Discovery failures include retry and manual-entry guidance.
+
+Help starts with common examples and groups advanced flags after everyday
+options. Descriptions wrap to the terminal width; all public flags remain listed.
 
 Most advanced defaults (model parameters, themes, MCP, debug, format hints) live
 in `mods.yml` and are documented inline. Run `mods --reset-settings` to back up
@@ -514,11 +519,22 @@ the current file and restore the defaults.
 
 Every session is saved locally with a title and a short ID. `--continue` resumes
 a session by ID or title; `--continue-last` resumes the most recent one.
-`--list-sessions` opens the browser: press `/` to search the transcript, `n`/`N`
-to move between matches, and `w` to toggle wrapping.
+`--list-sessions` opens the browser. Titles lead each row, with model and time
+below. Terminals at least 110 columns wide show a preview beside the list.
+Press `/` to filter sessions, `Enter` to open the full transcript, and `?` for
+all shortcuts. Inside a transcript, `/` searches text, `n`/`N` moves between
+matches, `w` toggles wrapping, and `Esc` returns to the list. Press `r` to retry
+a failed preview or transcript load.
 
-`--chat` starts a continuous conversation. Press `Enter` to send, `Ctrl+J` to
-add a newline, and `Ctrl+C` while composing to leave. Each turn is saved to the
+During a response, consecutive successful file reads collapse into a summary.
+`Ctrl+O` toggles tool arguments and output previews; failures show a short
+preview automatically. Live previews are bounded; saved sessions retain the
+complete tool results. `Ctrl+P` expands the plan, where Up/Down scrolls through
+steps. Press `Ctrl+P` again to return to the compact current-step view. These
+shortcuts yield to approval dialogs and input forms.
+
+`--chat` starts a continuous conversation. Press `Enter` for a newline,
+`Ctrl+Enter` or `Ctrl+S` to send, and `Ctrl+C` while composing to leave. Each turn is saved to the
 same session so you can resume it later with `--continue`.
 
 ### Portable Mode

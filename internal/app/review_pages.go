@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/ui"
 )
@@ -49,15 +50,23 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 	}
 	inner := max(1, interactionPanelInnerWidth(styles, width))
 	var lines []string
-	rows := append([]interactionRow(nil), p.rows...)
+	rows := reviewOrderedRows(p.rows)
 	if len(r.reviewItem.candidateRules) > 0 {
-		rows = append(rows, interactionRow{Label: "Always", Value: RulesLabel(r.reviewItem.candidateRules)})
+		rows = append(rows, interactionRow{Label: "Session", Value: sessionRuleLabel(r.reviewItem.candidateRules)})
 	}
 	for _, row := range rows {
 		text := row.Label + ": " + reviewLiteral(row.Value)
 		lines = append(lines, strings.Split(ansi.Hardwrap(text, inner, false), "\n")...)
 	}
-	pageSize := max(1, height-12)
+	// Reserve the actual wrapped header and controls before allocating pages.
+	reservedActions := []interactionAction{{Key: "↑/↓", Label: "Pages"}}
+	for _, option := range r.reviewOptions() {
+		reservedActions = append(reservedActions, interactionAction{Key: option.key, Label: option.label, Selected: true})
+	}
+	overhead := lipgloss.Height(renderInteractionPanel(styles, width, interactionPanel{
+		Title: "Review", Meta: "1/1", Tone: p.tone, ToneText: p.toneText, Headline: p.headline, Actions: reservedActions,
+	}))
+	pageSize := max(1, height-overhead)
 	layout := fmt.Sprintf("%d/%d/%d", width, height, len(lines))
 	if r.reviewLayout != layout {
 		r.reviewPage, r.reviewSeen = 0, -1

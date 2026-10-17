@@ -15,7 +15,7 @@ type TodoItem struct {
 
 // RenderTodoDock bounds both dimensions. On short terminals a window of
 // steps follows the active item, with counts indicating hidden steps.
-func RenderTodoDock(styles InteractionStyles, width, height int, items []TodoItem) string {
+func RenderTodoDock(styles InteractionStyles, width, height int, items []TodoItem, offsets ...int) string {
 	if len(items) == 0 || height <= styles.Panel.GetVerticalFrameSize()+1 {
 		return ""
 	}
@@ -35,6 +35,9 @@ func RenderTodoDock(styles InteractionStyles, width, height int, items []TodoIte
 			}
 		}
 		start = max(0, min(focus-visible/2, len(items)-visible))
+		if len(offsets) > 0 {
+			start = max(0, min(offsets[0], len(items)-visible))
+		}
 		end = min(len(items), start+visible)
 	}
 	body := make([]string, 0, rows)

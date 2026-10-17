@@ -255,7 +255,7 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 		{key: "N", label: "Deny", action: reviewOptionDeny},
 	}
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
-		options = append(options, reviewOption{key: "A", label: "Always allow", action: reviewOptionAlwaysAllow})
+		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
 	}
 	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel", action: reviewOptionCancel})
 }
@@ -535,9 +535,9 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heig
 			tone: interactionToneWarning, toneText: "Warning", headline: r.reviewItem.summary,
 		}
 	}
-	rows := append([]interactionRow(nil), presentation.rows...)
+	rows := reviewOrderedRows(presentation.rows)
 	if len(r.reviewItem.candidateRules) > 0 {
-		rows = append(rows, interactionRow{Label: "Always", Value: RulesLabel(r.reviewItem.candidateRules)})
+		rows = append(rows, interactionRow{Label: "Session", Value: sessionRuleLabel(r.reviewItem.candidateRules)})
 	}
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title:    "Review",

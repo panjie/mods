@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
@@ -218,4 +219,47 @@ func shellRiskHeadline(risk string) string {
 	default:
 		return "Run with unknown effects"
 	}
+}
+
+// Keep affected resources ahead of executable details without dropping any row.
+func reviewOrderedRows(rows []interactionRow) []interactionRow {
+	out := slices.Clone(rows)
+	// Batch downloads pair each File N with its following Source. Keep those
+	// pairs adjacent so a source cannot appear to belong to another target.
+	for _, row := range rows {
+		if strings.HasPrefix(row.Label, "File ") {
+			return out
+		}
+	}
+	priority := func(label string) int {
+		switch label {
+		case "Target", "Remote":
+			return 0
+		case "Source", "Working dir", "Overwrite":
+			return 1
+		case "Command", "Patch", "Details":
+			return 3
+		default:
+			return 2
+		}
+	}
+	slices.SortStableFunc(out, func(a, b interactionRow) int { return priority(a.Label) - priority(b.Label) })
+	return out
+}
+
+func sessionRuleLabel(rules []Rule) string {
+	label := "This conversation only: " + RulesLabel(rules)
+	for _, rule := range rules {
+		if rule.Type == approval.DirAllow {
+			label += "; includes subdirectories"
+			break
+		}
+	}
+	for _, rule := range rules {
+		if rule.Type == approval.RemoteAllow {
+			label += "; exact remote origins"
+			break
+		}
+	}
+	return label
 }

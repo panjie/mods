@@ -67,6 +67,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		m.restoreCompletionOutput()
 	} else {
 		m.retryCheckpoint = nil
+		m.activityBlocks = nil
 	}
 	if !m.debugTurnActive {
 		m.debugTurn++

@@ -118,7 +118,21 @@ func (m *setupModel) View() tea.View {
 	}
 	title, description := m.heading()
 	description = m.redact(description)
-	panel := ui.InteractionPanel{Title: ansi.Truncate(title, w, "…"), Actions: m.actions()}
+	pages := m.pages()
+	step := slices.Index(pages, m.page) + 1
+	if m.page == setupConnectionFailed {
+		step = len(pages)
+	}
+	progress := fmt.Sprintf("%d/%d", max(1, step), len(pages))
+	if w >= 40 {
+		progress = "Step " + progress
+	}
+	panel := ui.InteractionPanel{Title: ansi.Truncate(title, max(1, w-lipgloss.Width(progress)-1), "…"), Meta: progress, Actions: m.actions()}
+	if m.err != nil {
+		panel.Tone = ui.InteractionToneWarning
+		panel.ToneText = "Error"
+		panel.Headline = ansi.Truncate(m.redact(m.err.Error()), max(1, w-7), "…")
+	}
 	if m.filtering {
 		panel.Body = []string{m.filter.View()}
 	}
@@ -126,13 +140,14 @@ func (m *setupModel) View() tea.View {
 	// A short terminal still needs room for content. Keep the essential keys;
 	// the full keyboard map remains active regardless of available space.
 	if fixedHeight > m.height-3 {
-		panel.Actions = []ui.InteractionAction{{Key: "enter", Label: "next"}, {Key: "esc", Label: "back"}}
+		panel.Actions = []ui.InteractionAction{{Key: "enter", Label: "next"}, {Key: "esc", Label: "back"}, {Key: "ctrl+c", Label: "cancel"}}
 		fixedHeight = lipgloss.Height(ui.RenderInteractionPanel(s, m.panelWidth(), panel))
 	}
-	visible := max(1, m.height-1-fixedHeight)
+	visible := max(1, min(m.height-1, 18)-fixedHeight)
 	// Keep headings and help fixed. Long descriptions and bodies scroll together.
 	lines := strings.Split(ansi.Wrap(s.Muted.Render(description), w, ""), "\n")
 	lines = append(lines, "")
+	lines = append(lines, m.statusLines(s, w)...)
 	focusLine := -1
 	focusEnd := -1
 	switch {
@@ -158,8 +173,8 @@ func (m *setupModel) View() tea.View {
 		}
 	default:
 		opts := m.filtered()
-		if len(opts) == 0 && m.busy == "" {
-			lines = append(lines, "No matching options.")
+		if len(opts) == 0 && m.busy == "" && m.err == nil && m.filtering {
+			lines = append(lines, "No matches. Clear the filter to see all options.")
 		}
 		for i, o := range opts {
 			focused := i == m.cursor
@@ -173,18 +188,6 @@ func (m *setupModel) View() tea.View {
 			if focused {
 				focusEnd = len(lines) - 1
 			}
-		}
-	}
-	if m.busy != "" {
-		lines = append(lines, s.Muted.Render(m.busy+"…"))
-	}
-	if m.err != nil {
-		if len(m.options()) == 0 {
-			focusLine = len(lines)
-		}
-		lines = append(lines, strings.Split(ansi.Wrap(s.Danger.Render("Error: "+m.redact(m.err.Error())), w, ""), "\n")...)
-		if len(m.options()) == 0 {
-			focusEnd = len(lines) - 1
 		}
 	}
 	offset := min(m.scroll, max(0, len(lines)-visible))
@@ -204,6 +207,10 @@ func (m *setupModel) View() tea.View {
 	// The body can contain Bubbles-generated ANSI, so truncate by display cells.
 	for i, line := range body {
 		body[i] = ansi.Truncate(line, w, "")
+	}
+	// Keep actions at a stable screen row as results and errors arrive.
+	for len(body) < visible {
+		body = append(body, "")
 	}
 	panel.Body = append(panel.Body, body...)
 	return tea.NewView(ui.RenderInteractionPanel(s, m.panelWidth(), panel))
@@ -284,4 +291,33 @@ func (m *setupModel) actions() []ui.InteractionAction {
 		quitKey = "ctrl+c"
 	}
 	return append(actions, ui.InteractionAction{Key: quitKey, Label: "cancel"})
+}
+
+func (m *setupModel) statusLines(s ui.InteractionStyles, width int) []string {
+	text := ""
+	style := s.Muted
+	switch {
+	case m.busy != "":
+		text = m.busy + "…"
+	case m.err != nil:
+		style = s.Danger
+		text = "Error: " + m.redact(m.err.Error())
+		switch m.page {
+		case setupDiscovery:
+			text += "\nPress r to retry, m to enter models manually, or Esc to check endpoint and credentials."
+		case setupAuth:
+			text += "\nPress Enter to retry sign in, or Esc to go back."
+		case setupConnectionFailed:
+			text += "\nChoose whether to save anyway, or Esc to review the connection settings."
+		default:
+			text += "\nCorrect the value and press Enter, or Esc to go back."
+		}
+	case m.page == setupDiscovery && m.draft().discovered:
+		style = s.Success
+		text = fmt.Sprintf("Found %d models · %d selected", len(m.draft().models), len(m.draft().selected))
+	}
+	if text == "" {
+		return nil
+	}
+	return append(strings.Split(ansi.Wrap(style.Render(text), width, ""), "\n"), "")
 }

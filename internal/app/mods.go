@@ -449,7 +449,27 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if handled, cmd := m.reviewer.handleKey(msg); handled {
 			return m, cmd
 		}
+		if m.planExpanded && m.todoPanelVisible() {
+			switch msg.String() {
+			case "down", "pgdown":
+				m.planOffset = min(len(m.todoItems)-1, m.planOffset+1)
+				return m, nil
+			case "up", "pgup":
+				m.planOffset = max(0, m.planOffset-1)
+				return m, nil
+			}
+		}
 		switch msg.String() {
+		case "ctrl+o":
+			m.activityExpanded = !m.activityExpanded
+			m.renderDirty = true
+			m.flushRender()
+			return m, nil
+		case "ctrl+p":
+			m.planExpanded = !m.planExpanded
+			m.planOffset = 0
+			m.renderDirty = true
+			return m, nil
 		case "q", "ctrl+c":
 			m.debugEndTurn("cancelled", context.Canceled)
 			m.state = doneState
@@ -631,7 +651,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			}
 		}
 		if !errors.Is(call.Err, errReviewUnavailable) {
-			outputCmds = append(outputCmds, m.toolResultOutputCmd(call.Name, call.Arguments, call.Err))
+			outputCmds = append(outputCmds, m.toolResultOutputCmd(call.Name, call.Arguments, call.Err, call.Output))
 			if status := toolCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
 				completionStatus = status
 			}

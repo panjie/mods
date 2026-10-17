@@ -108,3 +108,13 @@ func TestReviewPresentationWorkingDirRow(t *testing.T) {
 		})
 	}
 }
+
+func TestReviewOrdersTargetsWithoutBreakingDownloadPairs(t *testing.T) {
+	rows := []interactionRow{{Label: "Command", Value: "write"}, {Label: "Target", Value: "/tmp/project"}, {Label: "Remote", Value: "https://example.com"}}
+	ordered := reviewOrderedRows(rows)
+	require.Equal(t, "Target", ordered[0].Label)
+	require.Equal(t, "Command", ordered[2].Label)
+	require.Equal(t, "Command", rows[0].Label, "presentation must not mutate the original")
+	downloads := []interactionRow{{Label: "File 1", Value: "a"}, {Label: "Source", Value: "https://a.example"}, {Label: "File 2", Value: "b"}, {Label: "Source", Value: "https://b.example"}}
+	require.Equal(t, downloads, reviewOrderedRows(downloads))
+}

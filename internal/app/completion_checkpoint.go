@@ -12,6 +12,7 @@ import (
 // batch. Retrying resumes the next model round, preserving tool results (including
 // errors and denials) rather than asking the model to repeat side effects.
 type completionCheckpoint struct {
+	activityBlocks          map[string][]activityRecord
 	messages                []proto.Message
 	output                  string
 	displayOutput           string
@@ -43,6 +44,7 @@ func (m *Mods) setupCompletionContext(content string) error {
 func (m *Mods) saveCompletionCheckpoint(messages []proto.Message) {
 	m.retryCheckpoint = &completionCheckpoint{
 		messages:                cloneCompletionMessages(messages),
+		activityBlocks:          cloneActivityBlocks(m.activityBlocks),
 		output:                  m.Output,
 		displayOutput:           m.displayOutput,
 		displayBlocks:           maps.Clone(m.displayBlocks),
@@ -62,6 +64,7 @@ func (m *Mods) restoreCompletionOutput() {
 	m.displayOutput = c.displayOutput
 	m.displayOutputBuilder.WriteString(c.displayOutput)
 	m.displayBlocks = maps.Clone(c.displayBlocks)
+	m.activityBlocks = cloneActivityBlocks(c.activityBlocks)
 	m.toolResultBlocks = maps.Clone(c.toolResultBlocks)
 	m.displayBlockSeq = c.displayBlockSeq
 	m.renderDirty = true

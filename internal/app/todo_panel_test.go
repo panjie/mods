@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -72,7 +73,7 @@ func TestTodoWriteUpdatesPanelWithoutAppendingOutput(t *testing.T) {
 	require.Equal(t, 1, strings.Count(view, "Plan"))
 	require.Nil(t, m.toolResultOutputCmd("todo_write", completedTodoArgs(), nil))
 	view = ansi.Strip(m.View().Content)
-	require.Contains(t, view, "2/2 completed")
+	require.Contains(t, view, "2/2 done")
 	require.NotContains(t, view, "analyze init.el")
 	require.Equal(t, original, m.Output)
 }
@@ -424,4 +425,27 @@ func TestTodoDockSeparatesApprovalPanel(t *testing.T) {
 		m.todoItems = nil
 		require.Equal(t, approval, m.footerView(), "no leading blank row without a plan")
 	}
+}
+
+func TestExpandedPlanCanBrowseEarlierAndLaterSteps(t *testing.T) {
+	withOutputTTY(t, true)
+	m := newTodoTestMods(t)
+	m.width, m.height = 80, 30
+	for i := 0; i < 20; i++ {
+		status := "completed"
+		if i == 19 {
+			status = "in_progress"
+		}
+		m.todoItems = append(m.todoItems, ui.TodoItem{Content: fmt.Sprintf("step-%02d", i), Status: status})
+	}
+	require.Contains(t, ansi.Strip(m.footerView()), "step-19")
+	require.NotContains(t, ansi.Strip(m.footerView()), "step-00")
+	m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	require.Contains(t, ansi.Strip(m.footerView()), "step-00")
+	for i := 0; i < 20; i++ {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+	require.Contains(t, ansi.Strip(m.footerView()), "step-19")
+	m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	require.False(t, m.planExpanded)
 }

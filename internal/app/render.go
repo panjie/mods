@@ -17,6 +17,10 @@ import (
 const tabWidth = 4
 
 type outputRenderer struct {
+	planOffset           int
+	activityBlocks       map[string][]activityRecord
+	activityExpanded     bool
+	planExpanded         bool
 	Output               string
 	glamOutput           string
 	displayOutput        string
@@ -148,8 +152,15 @@ func (m *Mods) footerView() string {
 			footerHeight = lipgloss.Height(footer) + gap
 		}
 		height := min(8, m.height/3, m.height-footerHeight-3)
-		if height >= 4 {
-			plan = ui.RenderTodoDock(m.Styles.Interaction, m.width, height, m.todoItems)
+		if !m.planExpanded {
+			height = min(4, height)
+		}
+		if height >= 4 && (!todoItemsAllCompleted(m.todoItems) || m.planExpanded) {
+			if m.planExpanded {
+				plan = ui.RenderTodoDock(m.Styles.Interaction, m.width, height, m.todoItems, m.planOffset)
+			} else {
+				plan = ui.RenderTodoDock(m.Styles.Interaction, m.width, height, m.todoItems)
+			}
 		} else if m.height-footerHeight > 1 {
 			plan = ui.TodoFooterLine(m.Styles, m.todoItems, m.width)
 		}
@@ -194,7 +205,10 @@ func (m *Mods) statusFooterView() string {
 	if m.width > 0 {
 		footer = ansi.Truncate(footer, m.width, "…")
 	}
-	return footer
+	if hint := m.activityHelp(); hint != "" {
+		footer += "\n" + hint
+	}
+	return strings.TrimPrefix(footer, "\n")
 }
 
 // todoPlanLine renders the persistent plan progress line shown above the
@@ -328,7 +342,7 @@ func (m *Mods) appendResponseBoundary() {
 // HideToolStatus suppresses these records too: the flag's name promises to hide
 // tool status, and the completed-call summary is part of that surface (the
 // footer's running label is gated separately via showOperationStatus).
-func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd {
+func (m *Mods) toolResultOutputCmd(name string, data []byte, err error, output ...string) tea.Cmd {
 	if m.Config.Raw || m.Config.Minimal || m.Config.HideToolStatus {
 		return nil
 	}
@@ -344,6 +358,9 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error) tea.Cmd 
 	}
 	if m.Config.InteractiveTTYAvailable && IsErrorTTY() {
 		m.appendToolResultDisplayBlock(m.toolResultDisplayLine(status))
+		if len(output) > 0 {
+			m.recordActivity(name, ToolResultStatus(name, data, err, activityPreviewLimit), "Tool: "+name+"\nArguments: "+string(data)+"\n"+output[0], err)
+		}
 		return nil
 	}
 	_, _ = fmt.Fprintln(os.Stderr, status)
@@ -538,6 +555,9 @@ func (m *Mods) replaceDisplayBlocks(rendered string) string {
 		block, ok := m.displayBlocks[marker]
 		if !ok {
 			continue
+		}
+		if records, exists := m.activityBlocks[marker]; exists {
+			block = m.renderActivity(records)
 		}
 		lines[i] = block
 		changed = true

@@ -384,27 +384,24 @@ func handleError(err error) {
 	if errors.As(err, &ferr) {
 		format += "%s\n\n"
 		args = []any{
-			fmt.Sprintf(
-				"Check out %s %s",
-				StderrStyles().InlineCode.Render("mods -h"),
-				StderrStyles().Comment.Render("for help."),
-			),
-			fmt.Sprintf(
-				ferr.ReasonFormat(),
-				StderrStyles().InlineCode.Render(ferr.Flag()),
-			),
+			fmt.Sprintf(ferr.ReasonFormat(), StderrStyles().InlineCode.Render(ferr.Flag())),
+			"Next: run " + StderrStyles().InlineCode.Render("mods -h") + " to check available flags and examples.",
 		}
 	} else if errors.As(err, &merr) {
 		args = []any{
 			StderrStyles().ErrPadding.Render(StderrStyles().ErrorHeader.String(), merr.ReasonText),
 		}
 
+		if hint := errorRecoveryHint(merr); hint != "" {
+			format += "%s\n\n"
+			args = append(args, StderrStyles().ErrPadding.Render("Next: "+hint))
+		}
 		// Skip the error details if the user simply canceled an interactive prompt.
 		// Render only the inner err message so the ReasonText (already
 		// shown in the header above) is not repeated by Error.Error().
 		if merr.Err != nil && !errors.Is(merr.Err, errSetupCanceled) {
 			format += "%s\n\n"
-			args = append(args, StderrStyles().ErrPadding.Render(StderrStyles().ErrorDetails.Render(merr.Err.Error())))
+			args = append(args, StderrStyles().ErrPadding.Render(StderrStyles().Comment.Render("Details: "+merr.Err.Error())))
 		}
 	} else {
 		args = []any{

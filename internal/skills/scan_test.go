@@ -259,19 +259,38 @@ func TestCatalogPromptEmptyReturnsEmpty(t *testing.T) {
 	require.Equal(t, "", CatalogPrompt([]Skill{}))
 }
 
-func TestBuiltinSkillAndUserOverride(t *testing.T) {
+func TestBuiltinSkillsAndUserOverride(t *testing.T) {
 	builtin := Builtin()
-	require.Len(t, builtin, 1)
-	require.Equal(t, "cross-platform-command-execution", builtin[0].Name)
-	require.Contains(t, builtin[0].Body, "process_run")
-	require.Contains(t, builtin[0].Body, "runtime_info")
-	require.Contains(t, builtin[0].Body, "one independently reviewable purpose")
-	require.Contains(t, builtin[0].Body, "$PROFILE.CurrentUserCurrentHost")
+	require.Len(t, builtin, 2)
+	byName := make(map[string]Skill, len(builtin))
+	for _, skill := range builtin {
+		byName[skill.Name] = skill
+	}
 
-	user := Skill{Name: builtin[0].Name, Description: "User override", Body: "custom", Dir: "/user/skill"}
+	crossPlatform, ok := byName["cross-platform-command-execution"]
+	require.True(t, ok)
+	require.Contains(t, crossPlatform.Body, "process_run")
+	require.Contains(t, crossPlatform.Body, "runtime_info")
+	require.Contains(t, crossPlatform.Body, "one independently reviewable purpose")
+	require.Contains(t, crossPlatform.Body, "$PROFILE.CurrentUserCurrentHost")
+
+	diagnose, ok := byName["diagnose-not-reproducing"]
+	require.True(t, ok)
+	require.Contains(t, diagnose.Description, "does not take effect")
+	require.Contains(t, diagnose.Description, "改动没体现")
+	require.LessOrEqual(t, len(diagnose.Description), MaxDescriptionBytes)
+	require.Contains(t, diagnose.Body, "positive control")
+	require.Contains(t, diagnose.Body, "Observed")
+	require.Contains(t, diagnose.Body, "not reproduced")
+
+	user := Skill{Name: crossPlatform.Name, Description: "User override", Body: "custom", Dir: "/user/skill"}
 	merged := MergeCatalog(builtin, []Skill{user})
-	require.Len(t, merged, 1)
-	require.Equal(t, user, merged[0])
+	require.Len(t, merged, 2)
+	mergedByName := make(map[string]Skill, len(merged))
+	for _, skill := range merged {
+		mergedByName[skill.Name] = skill
+	}
+	require.Equal(t, user, mergedByName[crossPlatform.Name])
 }
 
 func TestCatalogPromptFormat(t *testing.T) {

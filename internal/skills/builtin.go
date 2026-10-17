@@ -8,16 +8,30 @@ import (
 //go:embed builtin/cross-platform-command-execution/SKILL.md
 var crossPlatformCommandExecution string
 
+//go:embed builtin/diagnose-not-reproducing/SKILL.md
+var diagnoseNotReproducing string
+
 // Builtin returns the skills shipped in the mods binary. Built-ins are the
 // lowest-precedence catalog layer; user-installed skills may override them by
 // name without modifying the executable.
 func Builtin() []Skill {
-	skill, err := parseSkill(crossPlatformCommandExecution, "builtin/cross-platform-command-execution")
-	if err != nil {
-		return nil
+	builtinSources := []struct {
+		dir  string
+		body string
+	}{
+		{"builtin/cross-platform-command-execution", crossPlatformCommandExecution},
+		{"builtin/diagnose-not-reproducing", diagnoseNotReproducing},
 	}
-	skill.Dir = ""
-	return []Skill{skill}
+	skills := make([]Skill, 0, len(builtinSources))
+	for _, source := range builtinSources {
+		skill, err := parseSkill(source.body, source.dir)
+		if err != nil {
+			continue
+		}
+		skill.Dir = ""
+		skills = append(skills, skill)
+	}
+	return skills
 }
 
 // MergeCatalog overlays catalogs from left to right by skill name and returns

@@ -28,6 +28,7 @@ const (
 
 const userInputToolDescription = "Pause and ask the local terminal user one necessary question or a short form of related fields. " +
 	"Call this tool, not assistant text, when a tool workflow needs missing user input. " +
+	"Use it early when the user reports a symptom without the screen, action, or expected result; ask before investigating. " +
 	"Keep it compact: most questions are one short single-line sentence with no preamble; select and multiselect may use a multi-line question when an enumerated list must be shown in full, such as an approval checklist with one item per line. Field labels are 1-3 words, and examples or hints belong in the placeholder instead of the question or labels. " +
 	"Use kind=text, select, multiselect, secret, or form. Use kind=multiselect when one or more choices may be selected. " +
 	"Prefer select or multiselect with 2-10 concise options over free text whenever the choices are enumerable. " +

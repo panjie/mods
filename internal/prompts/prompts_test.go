@@ -95,12 +95,21 @@ func TestIdentityHasPlanningPolicy(t *testing.T) {
 	require.Contains(t, Identity, "Never mark unverified work completed")
 }
 
+func TestIdentityHasSymptomDiagnosisPolicy(t *testing.T) {
+	require.Contains(t, Identity, "Pin the symptom before inspecting")
+	require.Contains(t, Identity, "ask with `request_user_input` first")
+	require.Contains(t, Identity, "after ten without one")
+	require.Contains(t, Identity, "different failure signature")
+	require.Contains(t, Identity, "print the expected value")
+	require.Contains(t, Identity, "never present a sandbox result")
+}
+
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	// Budget includes the form input kind, the todo planning and turn
-	// discipline and diagnostic reuse policies, and process_run guidance; bump
-	// if a new tool capability legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 9216,
-		"default identity and tool-selection prompts must stay within 9 KiB")
+	// discipline and reported-symptom diagnosis policies, and process_run
+	// guidance; bump if a new capability legitimately grows the runtime prompts.
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 9472,
+		"default identity and tool-selection prompts must stay within 9.25 KiB")
 }
 
 func TestIdentityHandlesUnavailableCapabilities(t *testing.T) {

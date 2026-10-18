@@ -519,12 +519,13 @@ the current file and restore the defaults.
 
 Every session is saved locally with a title and a short ID. `--continue` resumes
 a session by ID or title; `--continue-last` resumes the most recent one.
-`--list-sessions` opens the browser. Titles lead each row, with model and time
-below. Terminals at least 110 columns wide show a preview beside the list.
-Press `/` to filter sessions, `Enter` to open the full transcript, and `?` for
-all shortcuts. Inside a transcript, `/` searches text, `n`/`N` moves between
-matches, `w` toggles wrapping, and `Esc` returns to the list. Press `r` to retry
-a failed preview or transcript load.
+`--list-sessions` opens a full-width, single-column browser. Each session occupies
+one row with its short ID, title, model, provider, and update time.
+Press `/` to filter sessions, `Enter` to open the full transcript, and `c` to
+continue the selected conversation. Space marks sessions; `d` deletes the focused
+session and `D` deletes marked sessions after confirmation. Inside a transcript,
+`/` searches text, `n`/`N` moves between matches, `w` toggles wrapping, and `Esc`
+returns to the list.
 
 During a response, consecutive successful file reads collapse into a summary.
 `Ctrl+O` toggles tool arguments and output previews; failures show a short

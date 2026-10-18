@@ -72,7 +72,7 @@ func TestSessionBrowserDoesNotQueryTerminalOutsideBubbleTea(t *testing.T) {
 	require.NotEmpty(t, model.View().Content)
 }
 
-func TestSessionBrowserRowKeepsTitleAndMetadataWithinWidth(t *testing.T) {
+func TestSessionBrowserRowTruncatesWideTitlesToOneLine(t *testing.T) {
 	api := "deepseek"
 	modelName := "deepseek-v4-flash"
 	model := newBrowserModel([]Session{{
@@ -88,13 +88,8 @@ func TestSessionBrowserRowKeepsTitleAndMetadataWithinWidth(t *testing.T) {
 	model.delegate.Render(&row, model.list, 0, model.list.Items()[0])
 	plain := ansi.Strip(row.String())
 
-	lines := strings.Split(plain, "\n")
-	require.Len(t, lines, 2)
-	require.NotContains(t, lines[0], modelName)
-	require.Contains(t, lines[1], modelName)
-	for _, line := range lines {
-		require.LessOrEqual(t, ansi.StringWidth(line), model.list.Width())
-	}
+	require.NotContains(t, plain, "\n")
+	require.LessOrEqual(t, ansi.StringWidth(plain), model.list.Width())
 }
 
 func TestSessionBrowserConfirmPanelTruncatesWideTitles(t *testing.T) {

@@ -41,12 +41,12 @@ errors and recovery guidance appear beside the current choices; errors also have
 a pinned short headline. Network work continues to deliver versioned messages and
 does not mutate provider drafts.
 
-Session rows give the title its own line, with model/time metadata below. At 110
-columns and 12 rows the browser adds a read-only preview beside the list. Preview
-requests use a separate sequence number from the full viewer, and stale replies
-are discarded. Resizing, filtering and deleting refresh the focused preview.
-Enter opens the full existing transcript viewer, including search, wrapping and
-copy. The question-mark key opens scrollable keyboard help; r retries failed loads.
+The session browser uses the single-column layout from before the split-preview
+change. Each session occupies one full-width row with its short ID, title, model,
+provider and update time. The compact title bar and shortcut footer are restored;
+there is no automatic preview loading. Enter opens the full transcript viewer,
+including search, wrapping and copy. Filtering, continuation, marking and deletion
+retain their existing controls.
 
 CLI help starts with common examples and lists everyday flags before advanced
 flags while preserving the complete public catalogue. Descriptions wrap by display
@@ -57,5 +57,5 @@ technical detail. README documents the new controls.
 
 Regression coverage includes activity expansion/redaction and checkpoint isolation,
 raw output preservation, plan navigation, review pagination at 40 and 80 columns,
-preview selection races and deletion, narrow/wide session layouts, setup progress
+session row truncation and continuation, setup progress
 and stable action rows, Unicode wrapping, and help completeness.

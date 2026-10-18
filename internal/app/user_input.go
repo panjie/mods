@@ -61,6 +61,7 @@ type userInputManager struct {
 	text        textarea.Model
 	secret      textinput.Model
 	selected    int
+	customInput bool
 	checked     []bool
 	formFields  []userFormFieldState
 	focus       int
@@ -218,6 +219,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 	item := msg.item
 	u.item = &item
 	u.selected = 0
+	u.customInput = false
 	u.checked = nil
 	u.focus = 0
 	u.missingKey = ""
@@ -364,6 +366,11 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	req := u.item.req
+	if msg.String() == "esc" && u.customInput {
+		u.customInput = false
+		u.text.Blur()
+		return true, nil
+	}
 	if msg.String() == "esc" {
 		return true, u.finish(userInputResult{err: fmt.Errorf("user canceled input")})
 	}
@@ -374,24 +381,34 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return u.handleFormKey(msg)
 	}
 	if req.Kind == "select" {
-		n := len(req.Options)
+		if u.customInput {
+			if msg.String() == "enter" {
+				if value := strings.TrimSpace(u.text.Value()); value != "" {
+					return true, u.finish(userInputResult{value: value})
+				}
+				return true, nil
+			}
+			var cmd tea.Cmd
+			u.text, cmd = u.text.Update(msg)
+			return true, cmd
+		}
+		n := len(req.Options) + 1
 		switch msg.String() {
-		case "up":
+		case "up", "shift+tab":
 			u.selected = (u.selected - 1 + n) % n
 		case "down", "tab":
 			u.selected = (u.selected + 1) % n
-		case " ", "space":
-			if len(u.checked) == n {
-				for i := range u.checked {
-					u.checked[i] = i == u.selected
-				}
-			}
 		case "enter":
-			for i, checked := range u.checked {
-				if checked {
-					return true, u.finish(userInputResult{value: req.Options[i]})
-				}
+			if u.selected < len(req.Options) {
+				return true, u.finish(userInputResult{value: req.Options[u.selected]})
 			}
+			u.customInput = true
+			u.text = newTextareaSingleLine(false)
+			u.text.Placeholder = "Type your answer"
+			return true, u.text.Focus()
+		}
+		for i := range u.checked {
+			u.checked[i] = i == u.selected
 		}
 		return true, nil
 	}
@@ -477,12 +494,7 @@ func (u *userInputManager) selectedValues(options []string) []string {
 	return values
 }
 
-// choiceRows renders the option list as one row per line. Radio rows use
-// "(•)"/"( )" markers (single choice); checkbox rows use "[x]"/"[ ]". When
-// includeSelectAll is set, a virtual "Select all" row is prepended and
-// u.selected is offset accordingly (multiselect only). With the
-// nerd-font-glyphs setting enabled, radio and checkbox rows use single-cell
-// Nerd Font glyphs instead.
+// choiceRows renders single choices with a focus arrow and multiple choices with checkboxes.
 func (u *userInputManager) choiceRows(includeSelectAll, radio bool) []interactionAction {
 	nerd := u.cfg != nil && u.cfg.NerdFontGlyphs
 	offset := 0
@@ -510,22 +522,25 @@ func (u *userInputManager) choiceRows(includeSelectAll, radio bool) []interactio
 		options = append(options, interactionAction{Key: selectAllCheckbox, Label: "Select all", Selected: u.selected == 0})
 	}
 	for i, option := range u.item.req.Options {
-		on, off := "(•)", "( )"
+		on, off := "›", " "
 		if !radio {
 			on, off = "[x]", "[ ]"
 		}
-		if nerd {
-			if radio {
-				on, off = ui.NerdRadioOn, ui.NerdRadioOff
-			} else {
-				on, off = ui.NerdCheckOn, ui.NerdCheckOff
-			}
+		if nerd && !radio {
+			on, off = ui.NerdCheckOn, ui.NerdCheckOff
 		}
 		marker := off
-		if i < len(u.checked) && u.checked[i] {
+		if (radio && i == u.selected) || (!radio && i < len(u.checked) && u.checked[i]) {
 			marker = on
 		}
 		options = append(options, interactionAction{Key: marker, Label: option, Selected: i+offset == u.selected})
+	}
+	if radio {
+		marker := " "
+		if u.selected == len(u.item.req.Options) {
+			marker = "›"
+		}
+		options = append(options, interactionAction{Key: marker, Label: "自行输入…", Selected: u.selected == len(u.item.req.Options)})
 	}
 	return options
 }
@@ -648,6 +663,14 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 	panel.Headline = clampInteractionHeadline(panel.Headline, innerWidth, maxHeadlineLines)
 	if req.Kind == "form" {
 		return u.renderFormBody(panel, innerWidth, styles, width)
+	}
+	if req.Kind == "select" && u.customInput {
+		u.text.SetWidth(max(1, innerWidth-styles.Input.GetHorizontalFrameSize()-2))
+		input := ui.NewCursorView("› "+u.text.View(), u.text.Cursor()).Translate(2, 0).InStyle(styles.Input)
+		panel.Body = []string{input.Content}
+		panel.Cursor = input.Cursor
+		panel.Actions = []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Back"}}
+		return ui.RenderInteractionPanelView(styles, width, panel)
 	}
 	switch req.Kind {
 	case "select":

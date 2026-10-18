@@ -32,6 +32,7 @@ const userInputToolDescription = "Pause and ask the local terminal user one nece
 	"Keep it compact: most questions are one short single-line sentence with no preamble; select and multiselect may use a multi-line question when an enumerated list must be shown in full, such as an approval checklist with one item per line. Field labels are 1-3 words; only form fields have a placeholder for examples or hints. " +
 	"Use kind=text, select, multiselect, secret, or form. Use kind=multiselect when one or more choices may be selected. " +
 	"Prefer select or multiselect with 2-10 concise options over free text whenever the choices are enumerable. " +
+	"Single select always includes a local custom-answer entry; do not add an Other option yourself. " +
 	"Never enumerate numbered options inside the question; pass them as an options array with kind=select. " +
 	"Use kind=secret for passwords, tokens, cookies, or other credentials; never request a secret as ordinary text. " +
 	"Use kind=form only when related fields belong together, such as a username plus password; otherwise ask the single most important field. " +

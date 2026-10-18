@@ -241,8 +241,8 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 		}
 	}
 	plain := ansi.Strip(manager.render(100, styles))
-	require.Contains(t, plain, "(•) git pull (merge) - create a merge commit")
-	require.Contains(t, plain, "( ) git rebase - replay my commit on top of remote")
+	require.Contains(t, plain, "› git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "git rebase - replay my commit on top of remote")
 	require.Contains(t, plain, "Confirm")
 	require.NotContains(t, plain, "Space", "radio select must not advertise the multiselect toggle key")
 	lines := strings.Split(plain, "\n")
@@ -258,7 +258,7 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 	require.Less(t, narrowMergeLine+1, len(narrow))
 	continuation := narrow[narrowMergeLine+1]
 	require.Contains(t, continuation, "commit", "long labels must wrap onto a continuation line")
-	require.True(t, strings.HasPrefix(continuation, "│      "),
+	require.True(t, strings.HasPrefix(continuation, "│    "),
 		"continuation must align under the label start: %q", continuation)
 }
 
@@ -284,8 +284,8 @@ func TestUserInputSelectRendersNerdGlyphs(t *testing.T) {
 		}
 	}
 	plain := ansi.Strip(manager.render(100, styles))
-	require.Contains(t, plain, ui.NerdRadioOn+" git pull (merge) - create a merge commit")
-	require.Contains(t, plain, ui.NerdRadioOff+" git rebase - replay my commit on top of remote")
+	require.Contains(t, plain, "› git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "git rebase - replay my commit on top of remote")
 	require.NotContains(t, plain, "(•)")
 	require.NotContains(t, plain, "[x]")
 }
@@ -1215,4 +1215,27 @@ func visualColumn(line, value string) int {
 		return -1
 	}
 	return lipgloss.Width(line[:idx])
+}
+
+func TestUserInputSelectCustomAnswer(t *testing.T) {
+	manager := newUserInputManager(&Config{})
+	response := make(chan userInputResult, 1)
+	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
+		req:  toolregistry.UserInputRequest{Question: "Choose", Kind: "select", Options: []string{"one", "two"}},
+		resp: response,
+	}})
+	press := func(code rune) { manager.handleKey(tea.KeyPressMsg{Code: code}) }
+	press(tea.KeyUp)
+	require.Equal(t, 2, manager.selected)
+	press(tea.KeyEnter)
+	require.True(t, manager.customInput)
+	require.NotNil(t, manager.renderView(40, makeStyles(true).Interaction).Cursor)
+	press(tea.KeyEnter)
+	require.True(t, manager.isPending(), "empty custom answers must not submit")
+	press(tea.KeyEscape)
+	require.False(t, manager.customInput)
+	press(tea.KeyEnter)
+	manager.text.SetValue("我的方案")
+	press(tea.KeyEnter)
+	require.Equal(t, "我的方案", (<-response).value)
 }

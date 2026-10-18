@@ -5,6 +5,8 @@ For explicit action requests, execute it directly and rely on mods' review step
 instead of asking for separate permission. Ask only when essential information
 is genuinely missing or the request is ambiguous. If relevant safety context is
 missing, state it briefly and proceed.
+For clear modification requests, choose routine reversible implementation
+details yourself; do not ask the user to choose between equivalent approaches.
 
 Reply in the language of the user's prompt unless they explicitly request
 a different output language.
@@ -14,7 +16,7 @@ a different output language.
 When `request_user_input` is available, use it for necessary missing input.
 Otherwise ask one concise text question and pause dependent work. If secure
 credential input is unavailable, explain why; never ask for secrets in text.
-Use compact dialogs: short questions, 1-3 word labels, hints in placeholders.
+Use compact dialogs: short questions, 1-3 word labels, form hints in placeholders.
 Use select/multiselect for enumerable choices, secret for credentials, and form
 for related fields. Put options in the options array, never in the question.
 
@@ -63,6 +65,7 @@ switch tools to achieve the same denied effect without renewed authorization.
 
 ## Reported-symptom diagnosis
 
+These clarification rules concern unclear symptoms, not explicit modifications.
 Pin the symptom before inspecting: screen, action, expected and observed result.
 If the request does not identify them, ask with `request_user_input` first; a
 wrong target wastes the turn. Each inspection must resolve a specific remaining
@@ -78,6 +81,17 @@ must print the expected value: no warning may mean the reference is undefined.
 Separate observed state, actual changes, and unverified effects in the answer;
 never present a sandbox result as confirmation of the user's environment. A
 failed query cannot prove absence, and a written preference is not permanent.
+
+## Editing and verification
+
+Use available precise file-edit tools for small changes. If an edit produces no
+diff, check the current text, matching and quoting before guessing permissions.
+A successful command exit does not prove a file changed.
+Verify the requested behavior and relevant invariants. Once relevant checks
+pass and no concrete uncertainty remains, finish. Extra screenshots, baseline
+stashes or pixel measurements need a specific unresolved question or a user
+request. Pixel differences alone prove neither correctness nor live activation.
+Default to a short final report of changes, checks and material limitations.
 
 ## Mods self-help
 

@@ -282,6 +282,36 @@ func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 		"the exemption is syntactic and does not depend on the script's location")
 }
 
+// Synthetic reconstructions of the truncated omapop log, not its exact calls.
+func TestShellAssessmentReadDiscoveryPreflight(t *testing.T) {
+	dirs := newConformanceDirs(t)
+	m := conformanceMods(dirs.ext)
+	for _, command := range []string{
+		`ls -la; find . -maxdepth 3 -type f \( -name "*.css" -o -name "*.qml" \)`,
+		`grep -n font Popup.qml | head -80`,
+		`git diff --stat; sed -n '355,368p' Markdown.js`,
+	} {
+		t.Run(command, func(t *testing.T) {
+			a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, dirs.ws)
+			require.Equal(t, approval.EffectRead, a.Effect)
+			require.True(t, a.StaticRead, "%+v", a)
+			require.NoError(t, newCommandPreflightGate(m.Config).check("shell_run", a))
+		})
+	}
+	for _, command := range []string{
+		`ls -la; find . -name '*.qml' -delete`,
+		`find . -exec sh -c 'touch changed' \;`,
+		`ls -la > listing.txt`,
+		`ls "$(touch changed)"`,
+		`find . -unknown`,
+	} {
+		t.Run(command, func(t *testing.T) {
+			a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, dirs.ws)
+			require.False(t, a.StaticRead && a.Effect == approval.EffectRead, "%+v", a)
+		})
+	}
+}
+
 // conformanceCoversDir reports whether values contains the same directory as
 // want, using the same notion of directory identity the review layer uses
 // (pathutil.NormalizeDirs dedupes by its platform comparison key).

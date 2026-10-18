@@ -85,6 +85,12 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 
 		// --- Option-sensitive read-only commands ---
 		{"find print0", `find "$HOME/Downloads" -type f -print0`, true},
+		{"find escaped grouping", `find . -type f \( -name '*.css' -o -name '*.qml' \)`, true},
+		{"find quoted grouping", `find . '(' -name '*.css' -o -name '*.qml' ')'`, true},
+		{"find quoted backslashes stay literal", `find . '\(' -name '*.css' '\)'`, false},
+		{"find grouped delete", `find . \( -name '*.qml' -o -name '*.css' \) -delete`, false},
+		{"find grouped exec write", `find . \( -name '*.qml' \) -exec touch {} +`, false},
+		{"find dynamic primary", `find . \( "$PRIMARY" '*.qml' \)`, false},
 		{"find exec reader", `find . -name '*.go' -exec cat {} +`, true},
 		{"find exec reader pipeline", `find . -name '*.go' -exec cat {} + | wc -l`, true},
 		{"sort numeric", "sort -n", true},

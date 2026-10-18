@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/panjie/mods/internal/evals"
 	"github.com/panjie/mods/internal/proto"
@@ -33,7 +34,11 @@ func main() {
 func run() error {
 	dbPath := flag.String("db", "", "path to the mods session database (required)")
 	sessionRef := flag.String("session", "", "session id prefix or exact title (required)")
-	caseID := flag.String("case", evals.CaseAmbiguousSymptom, "case id: ambiguous-symptom, specific-artifact, or expected-probe-value")
+	var caseNames []string
+	for _, c := range evals.Cases() {
+		caseNames = append(caseNames, c.ID)
+	}
+	caseID := flag.String("case", evals.CaseAmbiguousSymptom, "case id: "+strings.Join(caseNames, ", "))
 	target := flag.String("target", "", "live artifact path for specific-artifact")
 	token := flag.String("expect-token", "", "expected probe value for expected-probe-value")
 	asJSON := flag.Bool("json", false, "print the report as JSON")
@@ -103,6 +108,9 @@ func writeText(w io.Writer, found *session.Session, caseDef evals.Case, report e
 	fmt.Fprintf(w, "session: %s %q\n", found.ID, found.Title)
 	fmt.Fprintf(w, "case:    %s - %s\n", caseDef.ID, caseDef.Description)
 	fmt.Fprintf(w, "run:     %d user turn(s), %d tool call(s), first tool %s\n", report.UserTurns, report.ToolCalls, firstTool)
+	fmt.Fprintf(w, "metrics: %d input call(s), %d failed result(s), %d failed input result(s), %d simplification suggestion(s), %d final-answer character(s)\n",
+		report.Metrics.UserInputCalls, report.Metrics.FailedToolResults, report.Metrics.FailedUserInputResults,
+		report.Metrics.SimplificationSuggestions, report.Metrics.FinalAnswerCharacters)
 	for _, dimension := range report.Dimensions {
 		status := "PASS"
 		if !dimension.Passed {

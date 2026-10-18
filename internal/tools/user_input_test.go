@@ -179,6 +179,33 @@ func TestUserInputFormValidation(t *testing.T) {
 	require.Error(t, validateUserInputRequest(UserInputRequest{Question: "Q", Kind: "form", Fields: tooMany}))
 }
 
+func TestUserInputQuestionLengthContract(t *testing.T) {
+	for _, kind := range []string{"text", "select", "multiselect", "secret", "form"} {
+		t.Run(kind, func(t *testing.T) {
+			require.NoError(t, validateUserInputQuestion(kind, strings.Repeat("字", 160)))
+			err := validateUserInputQuestion(kind, strings.Repeat("字", 161))
+			require.ErrorContains(t, err, "160 characters")
+			require.NotContains(t, err.Error(), "placeholder")
+		})
+	}
+	for _, kind := range []string{"select", "multiselect"} {
+		require.NoError(t, validateUserInputQuestion(kind, "清单\n"+strings.Repeat("字", 2997)))
+		err := validateUserInputQuestion(kind, "清单\n"+strings.Repeat("字", 2998))
+		require.ErrorContains(t, err, "3000 characters")
+		require.NotContains(t, err.Error(), "placeholder")
+	}
+	err := validateSingleLine("field 1 (name) placeholder", strings.Repeat("字", 49), 48)
+	require.ErrorContains(t, err, "shorten this field")
+
+	registry := NewRegistry()
+	require.NoError(t, RegisterUserInput(registry, nil))
+	properties := registry.Specs()[0].InputSchema["properties"].(map[string]any)
+	question := properties["question"].(map[string]any)
+	require.Equal(t, maxUserInputMultiLineQuestionRunes, question["maxLength"])
+	require.Contains(t, question["description"], "160 Unicode characters")
+	require.Contains(t, question["description"], "3000 characters")
+}
+
 func TestRegisterUserInputForm(t *testing.T) {
 	registry := NewRegistry()
 	var got UserInputRequest

@@ -29,7 +29,7 @@ const (
 const userInputToolDescription = "Pause and ask the local terminal user one necessary question or a short form of related fields. " +
 	"Call this tool, not assistant text, when a tool workflow needs missing user input. " +
 	"Use it early when the user reports a symptom without the screen, action, or expected result; ask before investigating. " +
-	"Keep it compact: most questions are one short single-line sentence with no preamble; select and multiselect may use a multi-line question when an enumerated list must be shown in full, such as an approval checklist with one item per line. Field labels are 1-3 words, and examples or hints belong in the placeholder instead of the question or labels. " +
+	"Keep it compact: most questions are one short single-line sentence with no preamble; select and multiselect may use a multi-line question when an enumerated list must be shown in full, such as an approval checklist with one item per line. Field labels are 1-3 words; only form fields have a placeholder for examples or hints. " +
 	"Use kind=text, select, multiselect, secret, or form. Use kind=multiselect when one or more choices may be selected. " +
 	"Prefer select or multiselect with 2-10 concise options over free text whenever the choices are enumerable. " +
 	"Never enumerate numbered options inside the question; pass them as an options array with kind=select. " +
@@ -111,7 +111,7 @@ func RegisterUserInput(registry *Registry, handler UserInputHandler) error {
 			InputSchema: objectSchema(map[string]any{
 				"question": map[string]any{
 					"type": "string", "maxLength": maxUserInputMultiLineQuestionRunes,
-					"description": "One short single-line question or prompt shown verbatim to the user; no preamble. select and multiselect may use a multi-line question with one item per line. Do not list options here; use kind=select with an options array.",
+					"description": fmt.Sprintf("Single-line questions: at most %d Unicode characters, for every kind. Only select and multiselect questions containing newlines may use up to %d characters for an itemized checklist. No preamble; put selectable answers in options. There is no top-level placeholder.", maxUserInputQuestionRunes, maxUserInputMultiLineQuestionRunes),
 				},
 				"kind": map[string]any{
 					"type": "string", "enum": []string{"text", "select", "multiselect", "secret", "form"},
@@ -230,7 +230,7 @@ func validateUserInputQuestion(kind, question string) error {
 		return fmt.Errorf("question must be a single line")
 	}
 	if utf8.RuneCountInString(question) > maxUserInputMultiLineQuestionRunes {
-		return fmt.Errorf("question must be at most %d characters; shorten it and move hints or examples to the placeholder", maxUserInputMultiLineQuestionRunes)
+		return fmt.Errorf("question must be at most %d characters; shorten the checklist and put selectable answers in options", maxUserInputMultiLineQuestionRunes)
 	}
 	return nil
 }
@@ -243,7 +243,10 @@ func validateSingleLine(what, value string, maxRunes int) error {
 		return fmt.Errorf("%s must be a single line", what)
 	}
 	if utf8.RuneCountInString(value) > maxRunes {
-		return fmt.Errorf("%s must be at most %d characters; shorten it and move hints or examples to the placeholder", what, maxRunes)
+		if what == "question" {
+			return fmt.Errorf("question must be at most %d characters; shorten the question and put selectable answers in options", maxRunes)
+		}
+		return fmt.Errorf("%s must be at most %d characters; shorten this field", what, maxRunes)
 	}
 	return nil
 }

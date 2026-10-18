@@ -90,7 +90,7 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 	}
 	message := "command needs simplification: " + strings.Join(reasons, "; ") + ". "
 	if assessment.Shape.Opaque || reviewability.Level == approval.ReviewabilityOpaque {
-		message += "Its payload cannot be analyzed, so approval is requested for exactly this command. "
+		message += "Its payload cannot be analyzed. "
 	}
 	if reviewability.RecommendedTool == "process_run" {
 		return message + "Prefer process_run with literal argv instead of wrapping the executable in shell syntax."
@@ -107,7 +107,7 @@ func commandSimplificationMessage(assessment approval.CommandAssessment) string 
 	if len(assessment.DynamicTargets) > 0 {
 		return message + "Resolving runtime paths in one short read-only call and then using the literal paths keeps the effect reviewable."
 	}
-	return message + "Splitting capability discovery, mutation, and verification into separate calls, and dropping decorative echo/printf separators, makes effects and targets reviewable; keep necessary pipelines intact. This is advice only: keep the operation's behavior identical, never rewrite an existing script file to satisfy review, and re-send the same command if it is already the right one."
+	return message + "Separate independent actions; keep necessary pipelines intact. Advice only: keep the operation's behavior identical, never rewrite an existing script file, and re-send unchanged if appropriate."
 }
 
 func containsReviewabilityReason(reasons []approval.ReviewabilityReason, target approval.ReviewabilityReason) bool {

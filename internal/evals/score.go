@@ -22,9 +22,14 @@ import (
 const DefaultMaxToolCalls = 20
 
 const (
-	CaseAmbiguousSymptom = "ambiguous-symptom"
-	CaseSpecificArtifact = "specific-artifact"
-	CaseExpectedProbe    = "expected-probe-value"
+	CaseAmbiguousSymptom           = "ambiguous-symptom"
+	CaseSpecificArtifact           = "specific-artifact"
+	CaseExpectedProbe              = "expected-probe-value"
+	CaseClearModification          = "clear-modification"
+	CaseMissingModificationContext = "missing-modification-context"
+	CaseEditRecovery               = "edit-recovery"
+	CaseCheckRecovery              = "check-recovery"
+	CaseVisualVerification         = "visual-verification"
 )
 
 // Case is one rubric scenario. Empty optional fields disable their dimension,
@@ -37,6 +42,7 @@ type Case struct {
 	TargetPath             string `json:"target_path,omitempty"`
 	ExpectedProbeToken     string `json:"expected_probe_token,omitempty"`
 	RequiresEvidenceLabels bool   `json:"requires_evidence_labels"`
+	ForbidsClarification   bool   `json:"forbids_clarification,omitempty"`
 }
 
 // Budget returns the effective tool-call budget for the case.
@@ -56,12 +62,13 @@ type Dimension struct {
 
 // Report is the deterministic score of one transcript for one case.
 type Report struct {
-	CaseID     string      `json:"case_id"`
-	UserTurns  int         `json:"user_turns"`
-	ToolCalls  int         `json:"tool_calls"`
-	FirstTool  string      `json:"first_tool,omitempty"`
-	Dimensions []Dimension `json:"dimensions"`
-	Notes      []string    `json:"notes,omitempty"`
+	CaseID     string           `json:"case_id"`
+	UserTurns  int              `json:"user_turns"`
+	ToolCalls  int              `json:"tool_calls"`
+	FirstTool  string           `json:"first_tool,omitempty"`
+	Dimensions []Dimension      `json:"dimensions"`
+	Notes      []string         `json:"notes,omitempty"`
+	Metrics    ExecutionMetrics `json:"metrics"`
 }
 
 // Passed reports whether every dimension passed.
@@ -93,6 +100,11 @@ func (r Report) Total() int { return len(r.Dimensions) }
 // ExpectedProbeToken; the score command enforces that.
 func Cases() []Case {
 	return []Case{
+		{ID: CaseClearModification, Description: "An explicit small edit with enough context; choose routine details without asking.", ForbidsClarification: true},
+		{ID: CaseMissingModificationContext, Description: "A modification with a missing target; clarify before inspection.", RequiresClarification: true},
+		{ID: CaseEditRecovery, Description: "A stale edit context requires re-reading and correcting the edit."},
+		{ID: CaseCheckRecovery, Description: "A failing relevant check requires further diagnosis and correction."},
+		{ID: CaseVisualVerification, Description: "The user explicitly requests a screenshot; visual verification is appropriate."},
 		{
 			ID:                     CaseAmbiguousSymptom,
 			Description:            "A vague report that a change does not show up; ask before probing.",
@@ -141,6 +153,7 @@ var writeTools = map[string]bool{
 // Score evaluates one transcript against one case.
 func Score(messages []proto.Message, c Case) Report {
 	report := Report{CaseID: c.ID}
+	report.Metrics = MeasureExecution(messages)
 	var toolNames []string
 	var firstProbe string
 	probingStarted := false
@@ -184,6 +197,11 @@ func Score(messages []proto.Message, c Case) Report {
 				clarified = true
 			}
 		}
+		// Tool results repeat the original call metadata; only assistant
+		// messages represent new invocations.
+		if message.Role != proto.RoleAssistant {
+			continue
+		}
 		for _, call := range message.ToolCalls {
 			name := call.Function.Name
 			arguments := string(call.Function.Arguments)
@@ -222,6 +240,15 @@ func Score(messages []proto.Message, c Case) Report {
 			Passed:   clarified,
 			Evidence: clarifyEvidence(clarified, firstProbe),
 		})
+	}
+	if c.ForbidsClarification {
+		report.Dimensions = append(report.Dimensions, Dimension{
+			Name: "no-unneeded-input", Passed: report.Metrics.UserInputCalls == 0,
+			Evidence: fmt.Sprintf("%d user-input call(s); manually review any text questions", report.Metrics.UserInputCalls),
+		})
+	}
+	if strings.Contains(c.ID, "modification") || c.ID == CaseEditRecovery || c.ID == CaseCheckRecovery || c.ID == CaseVisualVerification {
+		report.Notes = append(report.Notes, "Transcript metrics do not establish task correctness; verify the final artifact and manually review clarification, recovery, evidence and stopping decisions.")
 	}
 	report.Dimensions = append(report.Dimensions, Dimension{
 		Name:     "tool-budget",

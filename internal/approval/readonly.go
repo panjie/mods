@@ -99,6 +99,18 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 	if len(args) > 0 {
 		args[0] = name
 	}
+	if name == "find" {
+		// mvdan preserves backslashes in unquoted Lit nodes. Decode only
+		// find's grouping tokens here, not quoted data or general path facts.
+		for i, word := range call.Args {
+			if i >= len(args) || len(word.Parts) != 1 {
+				continue
+			}
+			if lit, ok := word.Parts[0].(*syntax.Lit); ok && (lit.Value == `\(` || lit.Value == `\)`) {
+				args[i] = lit.Value[1:]
+			}
+		}
+	}
 	if readOnly, reason := invocationTokensReadOnly(args, policy); readOnly {
 		return true, reason
 	}

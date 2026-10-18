@@ -65,6 +65,19 @@ func TestIdentityHasLanguagePolicy(t *testing.T) {
 	require.Contains(t, Identity, "unless they explicitly request")
 }
 
+func TestIdentityHasProportionateExecutionPolicy(t *testing.T) {
+	for _, want := range []string{
+		"choose routine reversible implementation",
+		"not explicit modifications",
+		"matching and quoting before guessing permissions",
+		"no concrete uncertainty remains, finish",
+		"Pixel differences alone prove neither correctness nor live activation",
+		"short final report",
+	} {
+		require.Contains(t, Identity, want)
+	}
+}
+
 func TestIdentityHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Identity, "call `mods_help`")
 	require.Contains(t, Identity, "instead of inventing one")
@@ -107,9 +120,9 @@ func TestIdentityHasSymptomDiagnosisPolicy(t *testing.T) {
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
 	// Budget includes the form input kind, the todo planning and turn
 	// discipline and reported-symptom diagnosis policies, and process_run
-	// guidance; bump if a new capability legitimately grows the runtime prompts.
-	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 9472,
-		"default identity and tool-selection prompts must stay within 9.25 KiB")
+	// guidance, plus proportionate editing and verification policy.
+	require.LessOrEqual(t, len(Identity)+len(ToolSelection), 10496,
+		"default identity and tool-selection prompts must stay within 10.25 KiB")
 }
 
 func TestIdentityHandlesUnavailableCapabilities(t *testing.T) {

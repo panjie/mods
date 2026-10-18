@@ -103,6 +103,9 @@ func filesystemReplaceTool(root string, safeDirs []string) Tool {
 			case 0:
 				return "", fmt.Errorf("old_text was not found in %s; re-read the file and use exact current content", displayPath(root, path))
 			case 1:
+				if updated == string(contentBytes) {
+					return fmt.Sprintf("No changes to %s: matched 1 occurrence, but replacement content is already identical", displayPath(root, path)), nil
+				}
 				if err := os.WriteFile(path, []byte(updated), info.Mode().Perm()); err != nil {
 					return "", err
 				}

@@ -1074,6 +1074,32 @@ func TestFilesystemReplaceAllowsEmptyNewText(t *testing.T) {
 	}
 }
 
+func TestFilesystemReplaceReportsUnchangedWithoutWriting(t *testing.T) {
+	for _, content := range []string{"alpha\n", "alpha\r\n"} {
+		t.Run(fmt.Sprintf("%q", content), func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "a.txt")
+			require.NoError(t, os.WriteFile(path, []byte(content), 0600))
+			oldTime := time.Unix(1000000000, 0)
+			require.NoError(t, os.Chtimes(path, oldTime, oldTime))
+			before, err := os.Stat(path)
+			require.NoError(t, err)
+			registry := NewRegistry()
+			require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+			out, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"alpha\n","new_text":"alpha\n"}`))
+			require.NoError(t, err)
+			require.Contains(t, out, "No changes")
+			require.Contains(t, out, "matched 1 occurrence")
+			after, err := os.Stat(path)
+			require.NoError(t, err)
+			require.Equal(t, before.ModTime(), after.ModTime(), "no-op must not rewrite the file")
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, content, string(data))
+		})
+	}
+}
+
 func TestFilesystemReplaceRequiresUniqueOldText(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

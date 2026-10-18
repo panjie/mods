@@ -56,6 +56,7 @@ type toolReviewer struct {
 	reviewSessionDone          chan struct{}
 	reviewMode                 ReviewMode
 	reviewPending              bool
+	cancelRequested            bool
 	reviewItem                 *toolReviewItem
 	rules                      RuleSet
 	scope                      Scope
@@ -147,6 +148,7 @@ func (r *toolReviewer) startSession() tea.Cmd {
 
 func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
 	r.reviewPending = true
+	r.cancelRequested = false
 	item := msg.item
 	r.reviewItem = &item
 	r.selected = 0
@@ -159,6 +161,7 @@ func (r *toolReviewer) reset() {
 	r.stopSessionLocked()
 	r.mu.Unlock()
 	r.reviewPending = false
+	r.cancelRequested = false
 	r.reviewItem = nil
 	r.selected = 0
 }
@@ -170,10 +173,11 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	if !r.isPending() {
 		return false, nil
 	}
-	options := r.reviewOptions()
-	if r.selected >= len(options) {
-		r.selected = 0
+	if r.cancelRequested {
+		return true, nil
 	}
+	options := r.reviewOptions()
+	r.normalizeReviewSelection(options)
 	switch msg.String() {
 	case "pgdown", "down":
 		if r.reviewPage+1 < r.reviewPages {
@@ -211,21 +215,13 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
 	case "ctrl+c":
-		r.reviewItem.resp <- reviewResponse{}
-		r.reviewPending = false
-		r.reviewItem = nil
-		return true, r.pollReviewCmd()
+		r.cancelRequested = true
+		return true, msgCmd(reviewCancelMsg{})
 	case "left":
-		r.selected--
-		if r.selected < 0 {
-			r.selected = len(options) - 1
-		}
+		r.moveReviewSelection(options, -1)
 		return true, nil
 	case "right":
-		r.selected++
-		if r.selected >= len(options) {
-			r.selected = 0
-		}
+		r.moveReviewSelection(options, 1)
 		return true, nil
 	case "enter":
 		if (options[r.selected].action == reviewOptionApprove || options[r.selected].action == reviewOptionAlwaysAllow) && !r.canApprovePages() {
@@ -240,7 +236,8 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			r.rules.Add(r.reviewItem.candidateRules...)
 			r.reviewItem.resp <- reviewResponse{approved: true}
 		case reviewOptionCancel:
-			r.reviewItem.resp <- reviewResponse{}
+			r.cancelRequested = true
+			return true, msgCmd(reviewCancelMsg{})
 		}
 		r.reviewPending = false
 		r.reviewItem = nil
@@ -257,7 +254,41 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
 		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
 	}
-	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel", action: reviewOptionCancel})
+	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel task", action: reviewOptionCancel})
+}
+
+func (r *toolReviewer) reviewOptionEnabled(option reviewOption) bool {
+	return option.action != reviewOptionApprove && option.action != reviewOptionAlwaysAllow || r.canApprovePages()
+}
+
+func (r *toolReviewer) normalizeReviewSelection(options []reviewOption) {
+	if r.selected < 0 || r.selected >= len(options) {
+		r.selected = 0
+	}
+	if !r.reviewOptionEnabled(options[r.selected]) {
+		r.moveReviewSelection(options, 1)
+	}
+}
+
+func (r *toolReviewer) moveReviewSelection(options []reviewOption, direction int) {
+	for range len(options) {
+		r.selected = (r.selected + direction + len(options)) % len(options)
+		if r.reviewOptionEnabled(options[r.selected]) {
+			return
+		}
+	}
+}
+
+func (r *toolReviewer) reviewActions() []interactionAction {
+	options := r.reviewOptions()
+	r.normalizeReviewSelection(options)
+	var actions []interactionAction
+	for i, option := range options {
+		if r.reviewOptionEnabled(option) {
+			actions = append(actions, interactionAction{Key: option.key, Label: option.label, Selected: i == r.selected})
+		}
+	}
+	return actions
 }
 
 // buildAccessIntent derives the unified AccessIntent for a tool call. Shell
@@ -520,15 +551,7 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heig
 		}
 		return r.renderPagedReview(width, height, styles)
 	}
-	options := r.reviewOptions()
-	selected := r.selected
-	if selected >= len(options) {
-		selected = 0
-	}
-	actions := make([]interactionAction, 0, len(options))
-	for i, opt := range options {
-		actions = append(actions, interactionAction{Key: opt.key, Label: opt.label, Selected: i == selected})
-	}
+	actions := r.reviewActions()
 	presentation := r.reviewItem.presentation
 	if presentation.headline == "" && r.reviewItem.summary != "" {
 		presentation = reviewPresentation{
@@ -537,7 +560,7 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heig
 	}
 	rows := reviewOrderedRows(presentation.rows)
 	if len(r.reviewItem.candidateRules) > 0 {
-		rows = append(rows, interactionRow{Label: "Session", Value: sessionRuleLabel(r.reviewItem.candidateRules)})
+		rows = append(rows, interactionRow{Label: "If A", Value: sessionRuleLabel(r.reviewItem.candidateRules, rows)})
 	}
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title:    "Review",

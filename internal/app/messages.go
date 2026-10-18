@@ -83,6 +83,10 @@ type reviewResponse struct {
 	approved bool
 }
 
+// reviewCancelMsg asks the model to cancel the whole task, without first
+// releasing the waiting tool as an ordinary denial that could trigger a retry.
+type reviewCancelMsg struct{}
+
 type stdinImageInput struct {
 	data []byte
 }

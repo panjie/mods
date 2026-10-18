@@ -14,6 +14,7 @@ import (
 )
 
 var (
+	reviewURLStartRe = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://`)
 	remoteURIRe      = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s'"<>]+`)
 	scpTargetRe      = regexp.MustCompile(`(?:[^\s@:/]+@)?(?:\[[0-9a-fA-F:]+\]|[a-zA-Z0-9._-]+):[^\s'"<>]+`)
 	gitPushRe        = regexp.MustCompile(`(?i)(?:^|[;&|]\s*)git(?:\s+-C\s+("[^"]+"|'[^']+'|[^\s]+))?\s+push(?:\s+([^;&|]+))?`)
@@ -38,18 +39,80 @@ func extractLiteralRemoteOrigins(command string) []string {
 	return approval.NormalizeRemoteOrigins(candidates)
 }
 
-// redactRemoteURLsForDisplay replaces literal URLs with their normalized
-// origins before they reach approval UI text. This removes URL credentials,
-// paths, queries, and fragments while preserving the destination boundary the
-// user is being asked to authorize.
+// redactRemoteURLsForDisplay preserves executable text and URL paths. Unlike
+// origin extraction, display redaction must not consume an adjacent shell
+// operator, substitution, or command as part of a URL.
 func redactRemoteURLsForDisplay(value string) string {
-	return remoteURIRe.ReplaceAllStringFunc(value, func(match string) string {
-		origin, ok := approval.NormalizeRemoteOrigin(trimRemoteToken(match))
-		if !ok {
-			return "[REDACTED URL]"
+	var out strings.Builder
+	last := 0
+	quote, quoteStart, scanned := byte(0), -1, 0
+	for _, start := range reviewURLStartRe.FindAllStringIndex(value, -1) {
+		if start[0] < last {
+			continue
 		}
-		return origin
-	})
+		// Track actual opening quotes, not just the preceding character:
+		// ''https://host/?q=x&command has an executable '&'. Escaped quotes
+		// and quotes inside another string do not open a literal URL either.
+		for scanned < start[0] {
+			c := value[scanned]
+			if (c == '\\' || c == '`') && quote != '\'' {
+				scanned += 2
+				continue
+			}
+			if quote == 0 && (c == '\'' || c == '"') {
+				quote, quoteStart = c, scanned
+			} else if c == quote {
+				quote = 0
+			}
+			scanned++
+		}
+		quotedURL := quote != 0 && quoteStart == start[0]-1
+		end := start[1]
+		for end < len(value) {
+			c := value[end]
+			if strings.ContainsRune(" \t\r\n\"'<>;|()`$\\", rune(c)) ||
+				c == '&' && (!quotedURL || end+1 < len(value) && value[end+1] == '&') {
+				break
+			}
+			end++
+		}
+		out.WriteString(value[last:start[0]])
+		out.WriteString(redactReviewURL(value[start[0]:end]))
+		last = end
+	}
+	out.WriteString(value[last:])
+	return out.String()
+}
+
+// Redact literal URL components without re-serializing the URL: case, port,
+// escaped path bytes, and trailing punctuation must stay as supplied.
+func redactReviewURL(raw string) string {
+	scheme := strings.Index(raw, "://")
+	if scheme < 0 {
+		return raw
+	}
+	authorityEnd := len(raw)
+	if i := strings.IndexAny(raw[scheme+3:], "/?#"); i >= 0 {
+		authorityEnd = scheme + 3 + i
+	}
+	if at := strings.LastIndex(raw[scheme+3:authorityEnd], "@"); at >= 0 {
+		raw = raw[:scheme+3] + "[redacted]@" + raw[scheme+3+at+1:]
+	}
+	base, fragment, hasFragment := strings.Cut(raw, "#")
+	path, query, hasQuery := strings.Cut(base, "?")
+	if hasQuery {
+		base = path + "?"
+		if query != "" {
+			base += "[redacted]"
+		}
+	}
+	if hasFragment {
+		base += "#"
+		if fragment != "" {
+			base += "[redacted]"
+		}
+	}
+	return base
 }
 
 func trimRemoteToken(value string) string {

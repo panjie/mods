@@ -22,6 +22,7 @@ func TestReviewPresentationSemanticTones(t *testing.T) {
 		{name: "delete", tool: "fs_delete_file", args: `{"path":"/cwd/file"}`, intent: AccessIntent{Class: AccessWrite}, want: interactionToneDanger},
 		{name: "external read", tool: "fs_read_file", args: `{"path":"/etc/hosts"}`, intent: AccessIntent{Class: AccessRead, Dirs: []string{"/etc"}}, want: interactionToneInfo},
 		{name: "cwd write", tool: "shell_run", args: `{"command":"touch file"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/cwd"}}, intent: AccessIntent{Class: AccessWrite, Dirs: []string{"/cwd"}}, want: interactionToneWarning},
+		{name: "remote write", tool: "shell_run", args: `{"command":"curl -X DELETE https://example.com/item"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, RemoteOrigins: []string{"https://example.com"}}, intent: AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://example.com"}}, want: interactionToneWarning},
 		{name: "sudo", tool: "shell_run", args: `{"command":"sudo rm /usr/local/bin/mods"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/usr/local/bin"}}, intent: AccessIntent{Class: AccessWrite, Dirs: []string{"/usr/local/bin"}}, want: interactionToneDanger},
 	}
 	for _, tt := range tests {

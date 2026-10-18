@@ -7,6 +7,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestProcessCommandPreviewPreservesArgumentContents(t *testing.T) {
+	for _, tc := range []struct{ arg, want string }{
+		{"a  b", `program "a  b"`},
+		{" leading and trailing ", `program " leading and trailing "`},
+		{"", `program ""`},
+		{"line\nnext\tcolumn", `program "line\nnext\tcolumn"`},
+		{"中文  文件", `program "中文  文件"`},
+	} {
+		t.Run(tc.arg, func(t *testing.T) {
+			require.Equal(t, tc.want, ProcessCommandPreview(map[string]any{"program": "program", "args": []any{tc.arg}}))
+		})
+	}
+}
+
 func TestShellCommandPreview(t *testing.T) {
 	tests := []struct {
 		name    string

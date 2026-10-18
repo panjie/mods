@@ -82,7 +82,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 			result.rows = []interactionRow{{Label: "Details", Value: summary}}
 		}
 	}
-	if origins := summarizeRemoteOrigins(intent.AllRemoteOrigins()); origins != "" && name != "shell_run" && name != "powershell_run" && name != "process_run" {
+	if origins := strings.Join(approval.NormalizeRemoteOrigins(intent.AllRemoteOrigins()), ", "); origins != "" && name != "shell_run" && name != "powershell_run" && name != "process_run" {
 		result.rows = append(result.rows, interactionRow{Label: "Remote", Value: origins})
 	}
 	if result.headline == "" {
@@ -111,7 +111,7 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 	if target := commandReviewTarget(assessment, risk); target != "" {
 		rows = append(rows, interactionRow{Label: "Target", Value: target})
 	}
-	if origins := summarizeRemoteOrigins(assessment.RemoteOrigins); origins != "" {
+	if origins := strings.Join(approval.NormalizeRemoteOrigins(assessment.RemoteOrigins), ", "); origins != "" {
 		rows = append(rows, interactionRow{Label: "Remote", Value: origins})
 	}
 	if len(assessment.UnresolvedRemoteTargets) > 0 {
@@ -121,9 +121,11 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 }
 
 func commandReviewTarget(assessment approval.CommandAssessment, risk string) string {
-	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
-	providers := summarizeAffectedDirs(assessment.ProviderWriteTargets)
-	known := summarizeAffectedDirs(assessment.KnownDirs)
+	// Approval content must be complete. Compact summaries are only for status
+	// output; the review panel paginates these full target lists.
+	dynamic := strings.Join(pathShapedDynamicTargets(assessment.DynamicTargets), ", ")
+	providers := strings.Join(assessment.ProviderWriteTargets, ", ")
+	known := strings.Join(assessment.KnownDirs, ", ")
 	var targets []string
 	if dynamic != "" {
 		targets = append(targets, dynamic)
@@ -190,7 +192,7 @@ func toneForShellRisk(risk, command string) (interactionTone, string) {
 	if strings.Contains(command, "sudo") || risk == "dynamic mutation" {
 		return interactionToneDanger, "Danger"
 	}
-	if risk == "local mutation" || risk == "provider mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
+	if risk == "local mutation" || risk == "remote mutation" || risk == "provider mutation" || risk == "unknown" || shellRiskLocationUnknown(risk) {
 		return interactionToneWarning, "Warning"
 	}
 	return interactionToneInfo, "Info"
@@ -247,19 +249,25 @@ func reviewOrderedRows(rows []interactionRow) []interactionRow {
 	return out
 }
 
-func sessionRuleLabel(rules []Rule) string {
-	label := "This conversation only: " + RulesLabel(rules)
+// Only reuse a displayed target when its full text exactly matches the grant.
+// A file target or a narrower directory must never hide a broader session grant.
+func sessionRuleLabel(rules []Rule, rows []interactionRow) string {
+	var parts []string
 	for _, rule := range rules {
-		if rule.Type == approval.DirAllow {
-			label += "; includes subdirectories"
-			break
+		label := rule.String()
+		if rule.Type == approval.DirAllow && rule.Mode == AccessWrite {
+			target := strings.Join(rule.Paths, ", ")
+			label = "Write dirs: " + target + " (including subdirectories)"
+			for _, row := range rows {
+				if row.Label == "Target" && row.Value == target && target != "" {
+					label = "Write above directories and subdirectories"
+					break
+				}
+			}
+		} else if rule.Type == approval.RemoteAllow {
+			label += " (exact origins)"
 		}
+		parts = append(parts, label)
 	}
-	for _, rule := range rules {
-		if rule.Type == approval.RemoteAllow {
-			label += "; exact remote origins"
-			break
-		}
-	}
-	return label
+	return strings.Join(parts, "; ") + "; this conversation only"
 }

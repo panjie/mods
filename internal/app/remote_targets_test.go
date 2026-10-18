@@ -49,10 +49,30 @@ func TestRemoteCredentialsAreRedactedFromReviewText(t *testing.T) {
 	require.NotContains(t, summary, "user")
 	require.NotContains(t, summary, "secret")
 	require.NotContains(t, summary, "token=hidden")
-	require.Contains(t, presentation.rows[0].Value, "https://api.example.com")
+	require.Contains(t, presentation.rows[0].Value, "https://[redacted]@API.Example.com:443/v1/items?[redacted]#[redacted]")
 	require.NotContains(t, presentation.rows[0].Value, "user")
 	require.NotContains(t, presentation.rows[0].Value, "secret")
 	require.NotContains(t, presentation.rows[0].Value, "hidden")
+}
+
+func TestReviewURLRedactionPreservesCommandSyntax(t *testing.T) {
+	for _, tc := range []struct{ command, want string }{
+		{`curl https://example.com/x;touch${IFS}/tmp/marker`, `curl https://example.com/x;touch${IFS}/tmp/marker`},
+		{`curl https://example.com/x|sh`, `curl https://example.com/x|sh`},
+		{`curl https://example.com/x&&reboot`, `curl https://example.com/x&&reboot`},
+		{`curl https://example.com/x?token=secret;reboot`, `curl https://example.com/x?[redacted];reboot`},
+		{`curl 'https://user:secret@EXAMPLE.com:443/a%20b?token=hidden&key=private#secret' && echo done`, `curl 'https://[redacted]@EXAMPLE.com:443/a%20b?[redacted]#[redacted]' && echo done`},
+		{`curl "https://example.com/x?token=secret$(touch /tmp/marker)"`, `curl "https://example.com/x?[redacted]$(touch /tmp/marker)"`},
+		{`sh -c 'curl https://example.com/x?token=secret&&reboot'`, `sh -c 'curl https://example.com/x?[redacted]&&reboot'`},
+		{`Invoke-WebRequest 'https://example.com/path?q=secret'; Remove-Item file`, `Invoke-WebRequest 'https://example.com/path?[redacted]'; Remove-Item file`},
+		{`curl https://example.com/path?token=secret&echo done`, `curl https://example.com/path?[redacted]&echo done`},
+		{`curl ''https://example.com/x?token=secret&reboot`, `curl ''https://example.com/x?[redacted]&reboot`},
+		{`sh -c "curl 'https://example.com/x?token=secret&reboot'"`, `sh -c "curl 'https://example.com/x?[redacted]&reboot'"`},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			require.Equal(t, tc.want, redactRemoteURLsForDisplay(tc.command))
+		})
+	}
 }
 
 func TestResolveGitPushOrigin(t *testing.T) {

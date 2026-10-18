@@ -243,7 +243,9 @@ func ProcessCommandPreview(args map[string]any) string {
 			parts = append(parts, quoteProcessPreviewArg(arg))
 		}
 	}
-	return OneLinePreview(strings.Join(parts, " "))
+	// Arguments are already quoted; collapsing whitespace here changes their
+	// meaning (including spaces inside filenames and script payloads).
+	return strings.Join(parts, " ")
 }
 
 func quoteProcessPreviewArg(arg string) string {

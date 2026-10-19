@@ -394,10 +394,8 @@ optional: everything built into Mods works without it.
 ### Skills
 
 Skills are folders with a `SKILL.md` that teach Mods a workflow. They load on
-demand, so only matching instructions enter the context. Mods ships with
-built-ins such as `cross-platform-command-execution`, `code-metrics`,
-`configure-mods`, and `diagnose-not-reproducing`; user-installed skills can
-override them by name.
+demand, so only matching instructions enter the context. Mods loads skills
+from the configured directories and does not ship built-in skills.
 
 ```sh
 mods --list-skills

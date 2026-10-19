@@ -2,13 +2,13 @@
 
 **日期：** 2026-10-17
 **状态：** 已实现（对应改进清单 ⑤）
-**范围：** `internal/evals`（评分逻辑 + 案例）、`internal/evals/cmd/score`（会话评分命令）、`internal/prompts`（提示词契约测试）、`internal/skills`（诊断 skill）
+**范围：** `internal/evals`（评分逻辑 + 案例）、`internal/evals/cmd/score`（会话评分命令）、`internal/prompts`（提示词契约测试）
 
 ## 1 背景与问题
 
 一次排查 omapop「改了没生效」的会话（session `4a82704`）跑了 **228 次工具调用**，第一步是 `fs_list_dir` 而不是先确认症状；随后在一个改写过的 `/tmp` 副本上做实验，并据此提出修改用户代码的建议。事后核对发现：真实文件在正确的 `import QtQuick 6.11` 下 `Color.popups` 是 Omarchy 单例，而副本里解析成了 Qt 6.12 的 `QQuickColor`——副本的失败签名和真实进程不一致，结论却按「已确认」给出了。
 
-提示词已经补了规则（`identity.md` 的 `## Reported-symptom diagnosis`）和一个内置 skill（`diagnose-not-reproducing`），但提示词只能"希望"模型遵守；CI 目前也只断言提示词里包含某句话，测不了行为。需要一层**可重复、可对比的评测**。
+提示词已经补了规则（`internal/prompts/workflow.md` 的 `Reported-symptom diagnosis`），但提示词只能"希望"模型遵守；仅断言提示词里包含某句话，测不了行为。需要一层**可重复、可对比的评测**。2026-10-19 起已移除内置诊断 skill，专项流程可由用户自行安装，诊断评测继续保留。
 
 ## 2 目标与非目标
 

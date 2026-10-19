@@ -40,7 +40,6 @@ func TestBuiltinPrompts(t *testing.T) {
 
 	require.Contains(t, Identity, "execute it directly and rely on mods' review step")
 	require.Contains(t, Identity, "state it briefly and proceed")
-	require.Contains(t, Workflow, "configure-mods")
 	require.Contains(t, ToolSelection, "fs_replace")
 	require.Contains(t, ToolSelection, "process_run")
 	require.Contains(t, ToolSelection, "runtime_info")
@@ -134,7 +133,6 @@ func TestWorkflowHasProportionateExecutionPolicy(t *testing.T) {
 func TestWorkflowHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Workflow, "call `mods_help`")
 	require.Contains(t, Workflow, "instead of guessing")
-	require.Contains(t, Workflow, "configure-mods")
 	// Provider knowledge belongs in version-matched self-help, not runtime policy.
 	for _, fact := range []string{"reasoning-effort", "thinking-budget", "output_config", "api.openai.com", "store: false", "Chat Completions"} {
 		require.NotContains(t, Workflow, fact)
@@ -176,10 +174,9 @@ func TestReviewPolicyLivesOnlyInIdentity(t *testing.T) {
 	require.NotContains(t, Workflow, "rm -rf")
 }
 
-// TestAlwaysOnPromptsLeaveTaskProceduresToSkills guards the prompt diet:
-// task-specific counting conventions belong to the code-metrics skill, not to
-// every request.
-func TestAlwaysOnPromptsLeaveTaskProceduresToSkills(t *testing.T) {
+// TestAlwaysOnPromptsOmitCodeCountingProcedures keeps ordinary code-counting
+// tasks from adding specialized procedures to every request.
+func TestAlwaysOnPromptsOmitCodeCountingProcedures(t *testing.T) {
 	for name, text := range map[string]string{KeyIdentity: Identity, KeyWorkflow: Workflow} {
 		require.NotContains(t, text, "comment-excluded", name)
 		require.NotContains(t, text, "code-size", name)

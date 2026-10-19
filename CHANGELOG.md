@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `request_user_input` accepts up to 10 options, longer option labels, and multi-line `select`/`multiselect` questions, so multi-item approval checklists render completely in one dialog.
 
 ### Removed
+- Removed all bundled skills. Skills are now loaded only from installed skill directories.
 - Removed the DuckDuckGo web search provider.
 - Removed plan mode, including the `--plan` / `-p` flags and the `prompts.plan` override.
 - Removed the `max-input-chars`, `max-tokens`, `no-limit`, and `builtin-tools.shell-max-output` settings and their related input, response, and tool-output truncation behavior.

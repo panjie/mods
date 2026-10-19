@@ -73,6 +73,37 @@ func (s staticStream) Usage() proto.TokenUsage { return s.usage }
 
 func (staticStream) CallTools() []proto.ToolCallStatus { return nil }
 
+func TestNewUsesInstalledSkillsOnly(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "")
+	for _, installed := range []bool{false, true} {
+		name := "empty directory"
+		if installed {
+			name = "installed skill"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			if installed {
+				path := filepath.Join(root, "demo", "SKILL.md")
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+				require.NoError(t, os.WriteFile(path, []byte("---\nname: demo\ndescription: Demo skill.\n---\n\nInstalled instructions.\n"), 0o600))
+			}
+			cfg := defaultConfig()
+			cfg.SkillsDirs = []string{root}
+			m, err := New(context.Background(), &cfg, nil)
+			require.NoError(t, err)
+			t.Cleanup(m.ctxCancel)
+			if !installed {
+				require.Empty(t, m.skillCatalog)
+				return
+			}
+			require.Len(t, m.skillCatalog, 1)
+			require.Equal(t, "demo", m.skillCatalog[0].Name)
+			require.Equal(t, "Installed instructions.", m.skillCatalog[0].Body)
+			require.Equal(t, filepath.Join(root, "demo"), m.skillCatalog[0].Dir)
+		})
+	}
+}
+
 func TestInitQueriesBackgroundColorOnlyWithInteractiveTerminal(t *testing.T) {
 	nonInteractive := &Mods{Config: &Config{}}
 	require.IsType(t, sessionDetailsMsg{}, nonInteractive.Init()())

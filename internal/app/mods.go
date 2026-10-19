@@ -136,9 +136,8 @@ type Mods struct {
 
 	shellAnalyzer func(tool, command string) approval.CommandAssessment
 
-	// skillCatalog merges binary-embedded skills with the result of
-	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time. User skills have
-	// precedence over same-name built-ins.
+	// skillCatalog contains installed skills from
+	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time.
 	skillCatalog []skills.Skill
 }
 
@@ -160,11 +159,10 @@ func New(
 	vp := viewport.New()
 	vp.GotoBottom()
 	skillDirs := cfg.ResolveSkillsDirs()
-	userSkillCatalog, scanErr := skills.ScanDirs(skillDirs)
+	skillCatalog, scanErr := skills.ScanDirs(skillDirs)
 	if scanErr != nil {
-		debug.Printf("skills: scan %v failed: %v (proceeding with built-in catalog)", skillDirs, scanErr)
+		debug.Printf("skills: scan %v failed: %v (proceeding without skills)", skillDirs, scanErr)
 	}
-	skillCatalog := skills.MergeCatalog(skills.Builtin(), userSkillCatalog)
 	debug.Printf("Skills: loaded %d skill(s) from %v", len(skillCatalog), skillDirs)
 	selfHelpReference, err := buildSelfHelpReference(newOptions.selfHelpFlags)
 	if err != nil {

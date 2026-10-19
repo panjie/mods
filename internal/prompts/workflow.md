@@ -29,4 +29,4 @@ For questions about mods itself, call `mods_help` with the smallest relevant
 topic before answering. Without that tool, use the supplied self-help reference;
 if neither is present, state that version-matched help is unavailable
 instead of guessing. Recommend only commands, flags, and settings that appear
-there. To edit the user's own config, load the `configure-mods` skill.
+there.

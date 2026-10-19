@@ -178,14 +178,13 @@ func TestDefaultPromptText(t *testing.T) {
 
 func TestToolSelectionRulesCoverCoreChoices(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Prefer fs_* tools")
-	require.Contains(t, ToolSelectionRules, "Use process_run for one executable")
-	require.Contains(t, ToolSelectionRules, "Use shell_run for commands that require POSIX shell syntax")
-	require.Contains(t, ToolSelectionRules, "review step")
+	require.Contains(t, ToolSelectionRules, "Prefer process_run for one executable")
+	require.Contains(t, ToolSelectionRules, "Use shell_run for pipelines")
 	require.Contains(t, ToolSelectionRules, "reported PowerShell host")
-	require.Contains(t, ToolSelectionRules, "Get-ChildItem")
-	require.Contains(t, ToolSelectionRules, "Select-String")
-	require.Contains(t, ToolSelectionRules, "Return inspection output directly")
 	require.Contains(t, ToolSelectionRules, "Do not retry blindly")
+	// Tool mechanics belong to the tool descriptions, not this prompt.
+	require.NotContains(t, ToolSelectionRules, "Get-ChildItem")
+	require.NotContains(t, ToolSelectionRules, "Script execution still follows")
 }
 
 func TestWorkingDirectoryIsNotPersistentSetting(t *testing.T) {

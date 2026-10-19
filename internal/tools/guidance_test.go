@@ -17,7 +17,6 @@ func TestScriptGuidanceIsSharedAndConsistent(t *testing.T) {
 		"shell_run (posix)":   PosixShellRunDescription,
 		"shell_run (windows)": WindowsShellRunDescription,
 		"powershell_run":      PowerShellRunDescription,
-		"tool-selection":      prompts.ToolSelection,
 	}
 	contradictions := []string{
 		"Do not hide code",
@@ -35,4 +34,23 @@ func TestScriptGuidanceIsSharedAndConsistent(t *testing.T) {
 
 	// The temporary directory is the place the shared policy sends that script.
 	require.Contains(t, prompts.TemporaryDirectoryTemplate, "temporary scripts")
+	// The system prompt no longer restates script mechanics; the descriptions
+	// are the single place the model reads them.
+	require.NotContains(t, prompts.ToolSelection, prompts.ScriptPolicy)
+}
+
+// TestToolDescriptionsCarryMechanicsThatLeftTheSystemPrompt guards the dedupe:
+// detail removed from tool-selection guidance must still reach the model through
+// the description of the tool it applies to.
+func TestToolDescriptionsCarryMechanicsThatLeftTheSystemPrompt(t *testing.T) {
+	for name, desc := range map[string]string{
+		"powershell_run":      PowerShellRunDescription,
+		"shell_run (windows)": WindowsShellRunDescription,
+	} {
+		for _, cmdlet := range []string{"Get-ChildItem", "Select-String", "Where-Object", "Measure-Object"} {
+			require.Contains(t, desc, cmdlet, "%s must document %s", name, cmdlet)
+		}
+	}
+	require.Contains(t, PosixShellRunDescription, prompts.POSIXIntentGuidance)
+	require.Contains(t, PowerShellRunDescription, prompts.PowerShellIntentGuidance)
 }

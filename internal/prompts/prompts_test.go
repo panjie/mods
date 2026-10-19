@@ -40,30 +40,37 @@ func TestBuiltinPrompts(t *testing.T) {
 
 	require.Contains(t, Identity, "execute it directly and rely on mods' review step")
 	require.Contains(t, Identity, "state it briefly and proceed")
-	require.Contains(t, Workflow, "fs_replace")
-	require.Contains(t, ToolSelection, "call the appropriate tool")
+	require.Contains(t, Workflow, "configure-mods")
 	require.Contains(t, ToolSelection, "fs_replace")
 	require.Contains(t, ToolSelection, "process_run")
 	require.Contains(t, ToolSelection, "runtime_info")
 	require.Contains(t, ToolSelection, "reported PowerShell host")
-	require.Contains(t, ToolSelection, "Get-ChildItem")
-	require.Contains(t, ToolSelection, "Select-String")
-	require.Contains(t, ToolSelection, "Where-Object")
-	require.Contains(t, ToolSelection, "Measure-Object")
 	require.Contains(t, ToolSelection, "git ls-files -z | xargs -0")
-	require.Contains(t, ToolSelection, "do not add 2>&1")
-	require.Contains(t, ToolSelection, "without sh -c or bash -c wrapping")
-	require.Contains(t, ToolSelectionShellPOSIXFallback, "without sh -c or bash -c wrapping")
-	require.Contains(t, ToolSelection, "Recognized read-only commands run without review")
-	require.Contains(t, ToolSelectionShellWindows, "one clear purpose")
-	require.Contains(t, ToolSelectionShellWindows, "keep necessary pipelines intact")
-	// Snapshot guidance is a list item so it cannot read as a continuation of
-	// the process_run bullet.
-	require.Contains(t, ToolSelection, "- Return inspection output directly")
+	require.Contains(t, ToolSelection, "without sh -c or bash -c")
+	require.Contains(t, ToolSelectionShellPOSIXFallback, "without sh -c or bash -c")
+	require.Contains(t, Identity, "Recognized reads run without review")
+	require.NotContains(t, ToolSelection, "Recognized read-only commands run without review")
+	require.Contains(t, ToolSelectionShellWindows, "prefer native cmdlets")
 	require.Contains(t, ToolSelection, "Do not retry blindly")
-	require.Contains(t, ToolSelection, ScriptPolicy)
+	require.NotContains(t, ToolSelection, ScriptPolicy)
 	require.Contains(t, ShellClassifier, "authoritative WorkingDir and Home")
 	require.Contains(t, ShellClassifier, "Never guess a home directory")
+}
+
+// TestInteractiveCredentialsStayOutOfIdentity keeps sudo/Git credential policy
+// in its conditional fragment: without a terminal those flows cannot prompt.
+func TestInteractiveCredentialsStayOutOfIdentity(t *testing.T) {
+	for _, secretFlow := range []string{"sudo", "Git HTTP(S)"} {
+		require.NotContains(t, Identity, secretFlow, "identity must not describe %q", secretFlow)
+		require.Contains(t, InteractiveCredentials, secretFlow)
+	}
+	byName := make(map[string]Definition)
+	for _, def := range Builtin() {
+		byName[def.Name] = def
+	}
+	require.Contains(t, byName, KeyInteractiveCredentials)
+	require.False(t, byName[KeyInteractiveCredentials].Configurable)
+	require.Equal(t, InteractiveCredentials, byName[KeyInteractiveCredentials].Default)
 }
 
 // TestIdentityStaysRuntimeSafetyOnly guards the layer split: identity is the
@@ -73,10 +80,8 @@ func TestIdentityStaysRuntimeSafetyOnly(t *testing.T) {
 	for _, workflowMarker := range []string{
 		"todo_write",
 		"Pin the symptom",
-		"load_skill",
 		"mods_help",
-		"Pixel differences",
-		"Inspection and aggregation",
+		"Editing and verification",
 		"Planning multi-step work",
 	} {
 		require.NotContains(t, Identity, workflowMarker,
@@ -117,9 +122,9 @@ func TestIdentityHasProportionateExecutionPolicy(t *testing.T) {
 func TestWorkflowHasProportionateExecutionPolicy(t *testing.T) {
 	for _, want := range []string{
 		"not explicit modifications",
-		"matching and quoting before guessing permissions",
+		"matching and quoting",
+		"guessing permissions",
 		"no concrete uncertainty remains, finish",
-		"Pixel differences alone prove neither correctness nor live activation",
 		"short final report",
 	} {
 		require.Contains(t, Workflow, want)
@@ -128,9 +133,8 @@ func TestWorkflowHasProportionateExecutionPolicy(t *testing.T) {
 
 func TestWorkflowHasSelfHelpPolicy(t *testing.T) {
 	require.Contains(t, Workflow, "call `mods_help`")
-	require.Contains(t, Workflow, "instead of inventing one")
-	require.Contains(t, Workflow, "exact active config path")
-	require.Contains(t, Workflow, "next mods invocation")
+	require.Contains(t, Workflow, "instead of guessing")
+	require.Contains(t, Workflow, "configure-mods")
 	// Provider knowledge belongs in version-matched self-help, not runtime policy.
 	for _, fact := range []string{"reasoning-effort", "thinking-budget", "output_config", "api.openai.com", "store: false", "Chat Completions"} {
 		require.NotContains(t, Workflow, fact)
@@ -147,39 +151,64 @@ func TestIdentityHasTurnDisciplinePolicy(t *testing.T) {
 
 func TestWorkflowHasPlanningPolicy(t *testing.T) {
 	require.Contains(t, Workflow, "`todo_write`")
-	require.Contains(t, Workflow, "multiple substantive")
-	require.Contains(t, Workflow, "exactly one")
-	require.Contains(t, Workflow, "full list of steps")
 	require.Contains(t, Workflow, "When `todo_write` is available")
-	require.Contains(t, Workflow, "none when done")
-	require.Contains(t, Workflow, "If blocked, leave unfinished steps")
+	// A plan is opt-in for genuinely multi-stage work, never a default.
+	require.Contains(t, Workflow, "at least three")
+	require.Contains(t, Workflow, "dependent steps")
+	require.Contains(t, Workflow, "do not plan a single question")
+	require.Contains(t, Workflow, "single-file change")
 	require.Contains(t, Workflow, "Never mark unverified work completed")
+	// Step mechanics belong to the todo_write schema, not the always-on prompt.
+	require.NotContains(t, Workflow, "full list of steps")
+	require.NotContains(t, Workflow, "none when done")
+}
+
+// TestReviewPolicyLivesOnlyInIdentity keeps the review/permission policy in one
+// place. Tool-selection guidance must not restate it, and identity must not
+// carry ad-hoc shell prohibitions such as the old rm -rf rule.
+func TestReviewPolicyLivesOnlyInIdentity(t *testing.T) {
+	require.Contains(t, Identity, "rely on mods' review step")
+	require.Contains(t, Identity, "Recognized reads run without review")
+	require.NotContains(t, ToolSelection, "review step")
+	require.NotContains(t, ToolSelection, "Use only tools available")
+	require.NotContains(t, ToolSelection, "User denial")
+	require.NotContains(t, Identity, "rm -rf")
+	require.NotContains(t, Workflow, "rm -rf")
+}
+
+// TestAlwaysOnPromptsLeaveTaskProceduresToSkills guards the prompt diet:
+// task-specific counting conventions belong to the code-metrics skill, not to
+// every request.
+func TestAlwaysOnPromptsLeaveTaskProceduresToSkills(t *testing.T) {
+	for name, text := range map[string]string{KeyIdentity: Identity, KeyWorkflow: Workflow} {
+		require.NotContains(t, text, "comment-excluded", name)
+		require.NotContains(t, text, "code-size", name)
+		require.NotContains(t, text, "language-aware", name)
+	}
 }
 
 func TestWorkflowHasSymptomDiagnosisPolicy(t *testing.T) {
 	require.Contains(t, Workflow, "Pin the symptom before inspecting")
 	require.Contains(t, Workflow, "ask with `request_user_input` first")
 	require.Contains(t, Workflow, "after ten without one")
-	require.Contains(t, Workflow, "different failure signature")
-	require.Contains(t, Workflow, "print the expected value")
-	require.Contains(t, Workflow, "never present a sandbox result")
 }
 
 func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
-	// Budget covers the runtime-safety identity, the execution-layer workflow
-	// (skills, planning, diagnosis, inspection, verification, self-help), the
-	// response-language rule, and the capability-filtered tool-selection prompt.
-	require.LessOrEqual(t, len(Identity)+len(Workflow)+len(LanguagePolicy)+len(ToolSelection), 10496,
-		"default runtime prompts must stay within 10.25 KiB")
+	// Budget covers the runtime-safety identity, the execution-layer workflow,
+	// the response-language rule, the capability-filtered tool-selection
+	// prompt, and the interactive-credential fragment. Tool mechanics live in
+	// the tool descriptions; task procedures live in skills.
+	require.LessOrEqual(t,
+		len(Identity)+len(Workflow)+len(LanguagePolicy)+len(ToolSelection)+len(InteractiveCredentials),
+		5376, "default runtime prompts must stay within 5.25 KiB")
 }
 
 func TestIdentityHandlesUnavailableCapabilities(t *testing.T) {
 	require.Contains(t, Identity, "Only tools supplied in this request")
 	require.Contains(t, Identity, "When `request_user_input` is available")
 	require.Contains(t, Identity, "Otherwise ask one concise text question")
-	require.Contains(t, Identity, "never ask for secrets in text")
-	require.Contains(t, Workflow, "When skill tools are available")
-	require.Contains(t, Workflow, "call `mods_help` when available")
+	require.Contains(t, Identity, "ask for secrets in text")
+	require.Contains(t, Workflow, "call `mods_help`")
 	require.Contains(t, Workflow, "Without that tool, use the supplied self-help reference")
 	require.Contains(t, Workflow, "version-matched help is unavailable")
 }

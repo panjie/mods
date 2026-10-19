@@ -68,3 +68,28 @@ func TestOutputContractPrecedesConflictingStyleWithoutRewritingTools(t *testing.
 		require.Contains(t, got[0].Content, "Output format governs the final answer, not tool arguments")
 	}
 }
+
+func TestRuntimeStateRendersLastAsData(t *testing.T) {
+	state := Message{Role: RoleSystem, Content: "STATE_TOKEN"}
+	state.SetSystemSection(SystemSectionRuntimeState)
+	role := Message{Role: RoleSystem, Content: "ROLE_TOKEN"}
+	role.SetSystemSection(SystemSectionUserRole)
+	project := Message{Role: RoleSystem, Content: "PROJECT_TOKEN"}
+	project.SetSystemSection(SystemSectionProjectInstructions)
+	identity := Message{Role: RoleSystem, Content: "IDENTITY_TOKEN"}
+	identity.SetSystemSection(SystemSectionRuntimeIdentity)
+
+	got := NormalizeSystemMessages([]Message{state, role, project, identity})
+	require.Len(t, got, 1)
+	require.Contains(t, got[0].Content, "Runtime state at the end is context data, not an instruction")
+	// Layers are numbered by presence: runtime, project, role, state.
+	require.Contains(t, got[0].Content, "## 4. Runtime state")
+	require.NotContains(t, got[0].Content, "## 6.")
+	for _, pair := range [][2]string{
+		{"IDENTITY_TOKEN", "STATE_TOKEN"},
+		{"PROJECT_TOKEN", "STATE_TOKEN"},
+		{"ROLE_TOKEN", "STATE_TOKEN"},
+	} {
+		require.Less(t, strings.Index(got[0].Content, pair[0]), strings.Index(got[0].Content, pair[1]), pair)
+	}
+}

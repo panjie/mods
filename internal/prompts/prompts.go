@@ -10,6 +10,7 @@ const (
 
 const (
 	KeyLanguagePolicy             = "language-policy"
+	KeyInteractiveCredentials     = "interactive-credentials"
 	KeyMinimal                    = "minimal"
 	KeyFormatMarkdown             = "format.markdown"
 	KeyFormatJSON                 = "format.json"
@@ -25,35 +26,44 @@ const (
 	// injected in the output-format layer rather than the identity prompt.
 	LanguagePolicy = "Reply in the language of the user's prompt unless they explicitly request a different output language."
 
+	// InteractiveCredentials joins the runtime-safety layer only when secure
+	// interactive input is available. Without a terminal there is no askpass or
+	// Git credential prompt, so the guidance would describe unavailable flows.
+	InteractiveCredentials = "Use `sudo` only for required elevation; mods supplies secure askpass. Never use `sudo -S`, embed or pipe passwords, or ask for them yourself. Non-interactive sudo requires cached or passwordless authorization.\n\n" +
+		"mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or commands, script credential storage, or blindly retry Git writes."
+
 	// ScriptPolicy is the single source of truth for multi-step work. The
 	// tool-selection prompt and every tool description that recommends a script
 	// share it, so the guidance cannot drift into contradictory advice such as
 	// "run a script" versus "never use temporary scripts".
 	ScriptPolicy = "For multi-step or aggregation work, write a readable script in the supplied temporary directory and run it by its interpreter and path. Script execution still follows ordinary effect and target review; its location grants no execution permission."
 
+	// ToolSelectionGeneral carries only tool-choice guidance. Tool
+	// availability, review/permission policy, and denial handling live in the
+	// identity prompt and are deliberately not restated here.
 	ToolSelectionGeneral = `Tool selection:
-- Use only tools available in this request. Combine related reads and aggregations that share inputs; use structured batches when available. Split calls for result dependencies or separate authorization. Compute totals and breakdowns in tools from the same data, not mental arithmetic. Finish when the requested result is supported and no concrete uncertainty remains.
-- Mutations are routed through mods' review step. When the user requested the action, call the appropriate tool without asking for separate permission.
-- If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly. User denial or cancellation is not a repairable tool error; stop that operation.`
+- Combine related reads and aggregations that share inputs; use structured batches when available. Split calls for result dependencies or separate authorization. Compute totals and breakdowns in tools from the same data, not mental arithmetic. Finish when the requested result is supported and no concrete uncertainty remains.
+- If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly.`
 
 	ToolSelectionFilesystem = `- When http_download is available, use its explicit URL/path list for downloads instead of shell loops.
 - Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
 
-	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers and installers, with literal args/cwd. Pass each argument as one argv item; stdout and stderr return separately, so do not add 2>&1. Windows .bat/.cmd require powershell_run. Use shell tools for shell source. ` + ScriptPolicy + ` Never rewrite an existing script for review. Inspect results; use runtime_info for unknown availability.`
+	// Tool mechanics (arguments, shell source, script policy, platform rules)
+	// live in the tool descriptions, which are sent whenever the tool exists.
+	// These blocks carry only the choice between available tools.
+	ToolSelectionProcess = `- Prefer process_run for one executable; use shell tools for shell source and runtime_info for unknown availability.`
 
-	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax: pipelines, redirection, expansion, globs, and builtins. It runs in reported cwd; do not prefix cd and pass only the command without sh -c or bash -c wrapping. Prefer portable sh and pass file lists through NUL pipelines rather than command substitution (git ls-files -z | xargs -0 ...). ` + POSIXIntentGuidance
+	ToolSelectionShellPOSIX = `- Use shell_run for pipelines, redirection, expansion, globs, and builtins; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (git ls-files -z | xargs -0 ...).`
 
-	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and POSIX shell features. It runs in the reported cwd; do not prefix cd and pass only the command without sh -c or bash -c wrapping. Prefer portable sh and pass file lists through NUL-delimited pipelines rather than command substitution (git ls-files -z | xargs -0 ...). ` + POSIXIntentGuidance
+	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and shell syntax; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (git ls-files -z | xargs -0 ...).`
 
-	DiagnosticSnapshotGuidance = `- Return inspection output directly for small, cheap queries. For large, costly, or authorization-triggering diagnostics, capture once in a private, unique snapshot under the supplied temporary directory. Preserve the producer's exit status and distinguish stderr from data; a successful pipeline tail does not prove the producer succeeded. Search, page, and count that snapshot, not repeated producer runs. Read it in bounded chunks. After unexpected truncation, capture once unless authorization was denied. Refresh only after a relevant state change or a concrete query failure; do not treat a snapshot as live state. If capture is unavailable, narrow the query or report the evidence limit.`
-
-	POSIXIntentGuidance = `Group related reads around one clear purpose. Keep necessary pipelines intact and omit decorative separators. Resolve unknown write targets before mutation. Recognized read-only commands run without review; authorization depends on effects and targets, not command length. Never rewrite an existing script file for review.`
+	POSIXIntentGuidance = `Group related reads around one clear purpose. Keep necessary pipelines intact and omit decorative separators. Resolve unknown write targets before mutation. Authorization depends on effects and targets, not command length. Never rewrite an existing script file for review.`
 
 	PowerShellIntentGuidance = `Group related reads around one clear purpose. Resolve unknown write targets such as $PROFILE before mutation. Do not change execution policy or unrelated settings unless requested. Avoid decorative formatting and encoded commands; keep necessary pipelines intact. Never rewrite an existing script file for review.`
 
-	ToolSelectionShellWindows = `- Use powershell_run, the only Windows shell tool, for cmdlets, object pipelines, runtime variables, and shell syntax. Keep cwd, pass only the command, and match the reported PowerShell host. Prefer native cmdlets (Get-ChildItem, Select-String, Where-Object, Test-Path, Get-Content, Measure-Object) over POSIX utilities. ` + PowerShellIntentGuidance
+	ToolSelectionShellWindows = `- Use powershell_run, the only Windows shell tool, matching the reported PowerShell host; prefer native cmdlets over POSIX utilities.`
 
-	ToolSelectionShellWindowsFallback = `- Use powershell_run for executable invocations and commands that require PowerShell cmdlets, object pipelines, runtime variables, or other PowerShell syntax. Commands run in cwd; do not prefix Set-Location, cd, or Push-Location. Use syntax compatible with the reported PowerShell host and pass only the command without powershell/pwsh -Command. Prefer native cmdlets such as Get-ChildItem and Select-String over POSIX-only utilities. ` + PowerShellIntentGuidance
+	ToolSelectionShellWindowsFallback = `- Use powershell_run for cmdlets, object pipelines, and runtime variables; do not prefix Set-Location, cd, or Push-Location.`
 
 	// ToolSelection is the complete normal-mode reference shown by
 	// --list-prompts. Runtime requests select only the capability blocks for
@@ -61,7 +71,6 @@ const (
 	ToolSelection = ToolSelectionGeneral + "\n" +
 		ToolSelectionFilesystem + "\n" +
 		ToolSelectionProcess + "\n" +
-		DiagnosticSnapshotGuidance + "\n" +
 		ToolSelectionShellPOSIX + "\n" +
 		ToolSelectionShellWindows
 
@@ -101,6 +110,7 @@ func Builtin() []Definition {
 		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
 		{Name: KeyLanguagePolicy, Description: "Response-language rule injected in the output-format layer.", Default: LanguagePolicy},
+		{Name: KeyInteractiveCredentials, Description: "Sudo and Git credential guidance, injected only when interactive secure input is available.", Default: InteractiveCredentials},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},
 		{Name: KeyFormatJSON, Description: "Formatting prompt used by --format --format-as json.", Default: JSONFormat},

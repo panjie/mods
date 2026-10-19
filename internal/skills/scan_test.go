@@ -261,7 +261,7 @@ func TestCatalogPromptEmptyReturnsEmpty(t *testing.T) {
 
 func TestBuiltinSkillsAndUserOverride(t *testing.T) {
 	builtin := Builtin()
-	require.Len(t, builtin, 2)
+	require.Len(t, builtin, 4)
 	byName := make(map[string]Skill, len(builtin))
 	for _, skill := range builtin {
 		byName[skill.Name] = skill
@@ -282,10 +282,31 @@ func TestBuiltinSkillsAndUserOverride(t *testing.T) {
 	require.Contains(t, diagnose.Body, "positive control")
 	require.Contains(t, diagnose.Body, "Observed")
 	require.Contains(t, diagnose.Body, "not reproduced")
+	// The deep-dive procedure lives here, not in the always-on prompt.
+	require.Contains(t, diagnose.Body, "Prefer the live system")
+	require.Contains(t, diagnose.Body, "different failure signature")
+	require.Contains(t, diagnose.Body, "print the value you expect")
+
+	// Task-specific counting procedure lives here, not in the always-on prompt.
+	codeMetrics, ok := byName["code-metrics"]
+	require.True(t, ok)
+	require.Contains(t, codeMetrics.Description, "代码量")
+	require.Contains(t, codeMetrics.Description, "LOC")
+	require.LessOrEqual(t, len(codeMetrics.Description), MaxDescriptionBytes)
+	require.Contains(t, codeMetrics.Body, "git ls-files -z | xargs -0 wc -l | tail -1")
+	require.Contains(t, codeMetrics.Body, "go/scanner")
+	require.Contains(t, codeMetrics.Body, "comment")
+
+	configureMods, ok := byName["configure-mods"]
+	require.True(t, ok)
+	require.Contains(t, configureMods.Body, "active config path")
+	require.Contains(t, configureMods.Body, "fs_replace")
+	require.Contains(t, configureMods.Body, "next mods invocation")
+	require.LessOrEqual(t, len(configureMods.Description), MaxDescriptionBytes)
 
 	user := Skill{Name: crossPlatform.Name, Description: "User override", Body: "custom", Dir: "/user/skill"}
 	merged := MergeCatalog(builtin, []Skill{user})
-	require.Len(t, merged, 2)
+	require.Len(t, merged, 4)
 	mergedByName := make(map[string]Skill, len(merged))
 	for _, skill := range merged {
 		mergedByName[skill.Name] = skill
@@ -304,6 +325,7 @@ func TestCatalogPromptFormat(t *testing.T) {
 	require.NotContains(t, got, "## Available skills")
 	require.Contains(t, got, "load_skill")
 	require.Contains(t, got, "search_skills")
+	require.Contains(t, got, "Do not reload a skill already loaded")
 	require.Contains(t, got, "- alpha: Alpha skill.")
 	require.Contains(t, got, "- bravo: Bravo skill.")
 	// Rendering is stable even when the caller's catalog is not sorted.

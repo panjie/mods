@@ -39,7 +39,9 @@ func TestListSkillsIncludesBuiltins(t *testing.T) {
 
 	require.Contains(t, output, "cross-platform-command-execution")
 	require.Contains(t, output, "diagnose-not-reproducing")
-	require.Contains(t, output, "2 skills")
+	require.Contains(t, output, "code-metrics")
+	require.Contains(t, output, "configure-mods")
+	require.Contains(t, output, "4 skills")
 }
 
 func TestFirstSentenceHandlesExtensionsAbbreviationsAndChinese(t *testing.T) {

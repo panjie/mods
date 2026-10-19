@@ -546,6 +546,8 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		require.NotEmpty(t, m.messages)
 		require.Contains(t, m.messages[0].Content, "cwd=")
 		require.NotContains(t, m.messages[0].Content, "cwd_root=")
+		// Volatile state renders last so the instruction prefix stays stable.
+		require.Equal(t, proto.SystemSectionRuntimeState, m.messages[0].SystemSection())
 	})
 
 	t.Run("system info includes timezone with utc offset", func(t *testing.T) {
@@ -609,6 +611,38 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		require.NoError(t, m.setupStreamContext("hello"))
 		require.Contains(t, systemContents(m.messages), "identity from file")
 	})
+}
+
+func TestSetupStreamContextInjectsInteractiveCredentials(t *testing.T) {
+	oldTTY := IsInputTTY
+	t.Cleanup(func() { IsInputTTY = oldTTY })
+
+	newMods := func() *Mods {
+		cfg := defaultConfig()
+		cfg.FormatText = defaultConfig().FormatText
+		return &Mods{
+			Config:    &cfg,
+			Styles:    makeStyles(true),
+			ctx:       context.Background(),
+			userInput: newUserInputManager(&cfg),
+		}
+	}
+
+	IsInputTTY = func() bool { return false }
+	pipe := newMods()
+	require.NoError(t, pipe.setupStreamContext("hello"))
+	require.NotContains(t, systemContents(pipe.messages), prompts.InteractiveCredentials)
+
+	IsInputTTY = func() bool { return true }
+	interactive := newMods()
+	require.NoError(t, interactive.setupStreamContext("hello"))
+	require.Contains(t, systemContents(interactive.messages), prompts.InteractiveCredentials)
+
+	minimalCfg := defaultConfig()
+	minimalCfg.Minimal = true
+	minimal := &Mods{Config: &minimalCfg, Styles: makeStyles(true), ctx: context.Background(), userInput: newUserInputManager(&minimalCfg)}
+	require.NoError(t, minimal.setupStreamContext("hello"))
+	require.NotContains(t, systemContents(minimal.messages), prompts.InteractiveCredentials)
 }
 
 func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {

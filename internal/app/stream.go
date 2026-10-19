@@ -62,13 +62,16 @@ func (m *Mods) setupStreamContext(content string) error {
 		fmt.Sprintf("timezone=%s", formatTimezone(now)),
 	)
 	sysInfo := "System info: " + strings.Join(sysParts, ", ")
-	m.messages = append(m.messages, structuredSystemMessage(sysInfo, proto.SystemSectionExecutionContext))
+	m.messages = append(m.messages, structuredSystemMessage(sysInfo, proto.SystemSectionRuntimeState))
 	if !cfg.Minimal {
 		identityPrompt, err := m.resolvePrompt(prompts.KeyIdentity, modsIdentityPrompt)
 		if err != nil {
 			return err
 		}
 		m.messages = append(m.messages, structuredSystemMessage(identityPrompt, proto.SystemSectionRuntimeIdentity))
+		if m.interactiveInputAvailable() {
+			m.messages = append(m.messages, structuredSystemMessage(prompts.InteractiveCredentials, proto.SystemSectionRuntimeIdentity))
+		}
 		workflowPrompt, err := m.resolvePrompt(prompts.KeyWorkflow, prompts.Workflow)
 		if err != nil {
 			return err

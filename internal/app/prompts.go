@@ -36,3 +36,10 @@ func (m *Mods) resolvePrompt(key, fallback string) (string, error) {
 func formatTemporaryDirectoryPrompt(path string) string {
 	return strings.ReplaceAll(prompts.TemporaryDirectoryTemplate, "{temporary_directory}", path)
 }
+
+// interactiveInputAvailable reports whether mods can prompt for secrets in this
+// terminal. Sudo askpass and Git credential prompts share that capability, so
+// their guidance is injected only when it describes a reachable flow.
+func (m *Mods) interactiveInputAvailable() bool {
+	return m.userInput != nil && m.userInput.available()
+}

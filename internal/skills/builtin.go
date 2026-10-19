@@ -11,6 +11,12 @@ var crossPlatformCommandExecution string
 //go:embed builtin/diagnose-not-reproducing/SKILL.md
 var diagnoseNotReproducing string
 
+//go:embed builtin/code-metrics/SKILL.md
+var codeMetrics string
+
+//go:embed builtin/configure-mods/SKILL.md
+var configureMods string
+
 // Builtin returns the skills shipped in the mods binary. Built-ins are the
 // lowest-precedence catalog layer; user-installed skills may override them by
 // name without modifying the executable.
@@ -21,6 +27,8 @@ func Builtin() []Skill {
 	}{
 		{"builtin/cross-platform-command-execution", crossPlatformCommandExecution},
 		{"builtin/diagnose-not-reproducing", diagnoseNotReproducing},
+		{"builtin/code-metrics", codeMetrics},
+		{"builtin/configure-mods", configureMods},
 	}
 	skills := make([]Skill, 0, len(builtinSources))
 	for _, source := range builtinSources {

@@ -53,7 +53,6 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	fsPrompt := renderToolSelectionPrompt(fsOnly, "linux")
 	require.Contains(t, fsPrompt, prompts.ToolSelectionFilesystem)
 	require.NotContains(t, fsPrompt, "Use shell tools")
-	require.NotContains(t, fsPrompt, prompts.DiagnosticSnapshotGuidance)
 
 	shellOnly := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterShell(shellOnly, toolregistry.ShellConfig{Root: t.TempDir()}))
@@ -64,11 +63,8 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	windowsPrompt := renderToolSelectionPrompt(shellOnly, "windows")
 	require.Contains(t, windowsPrompt, prompts.ToolSelectionShellWindowsFallback)
 	require.NotContains(t, windowsPrompt, prompts.ToolSelectionShellPOSIX)
-	require.Contains(t, windowsPrompt, "Get-ChildItem")
-	require.Contains(t, windowsPrompt, "Select-String")
-	require.Contains(t, windowsPrompt, "Return inspection output directly")
+	require.Contains(t, windowsPrompt, "do not prefix Set-Location")
 	for _, prompt := range []string{posixPrompt, windowsPrompt} {
-		require.Equal(t, 1, strings.Count(prompt, prompts.DiagnosticSnapshotGuidance))
 		require.NotContains(t, prompt, "instead of writing temporary files")
 		require.NotContains(t, prompt, "do not write temporary files")
 	}
@@ -77,11 +73,11 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	require.NoError(t, toolregistry.RegisterProcess(processOnly, toolregistry.ProcessConfig{Root: t.TempDir()}))
 	processPrompt := renderToolSelectionPrompt(processOnly, "linux")
 	require.Contains(t, processPrompt, prompts.ToolSelectionProcess)
-	require.Equal(t, 1, strings.Count(processPrompt, prompts.DiagnosticSnapshotGuidance))
+	require.Contains(t, processPrompt, "Prefer process_run for one executable")
 	require.Contains(t, processPrompt, prompts.ToolSelectionShellPOSIX)
-	require.NotContains(t, processPrompt, "Use shell tools for repository-wide searches, tests, builds, git, package managers")
-	require.Contains(t, processPrompt, "including git, tests, builds, package managers and installers")
-	require.Contains(t, processPrompt, "Script execution still follows ordinary effect and target review")
+	// Tool mechanics stay in the tool descriptions, not the system prompt.
+	require.NotContains(t, processPrompt, prompts.ScriptPolicy)
+	require.NotContains(t, processPrompt, "Get-ChildItem")
 
 	both := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(both, toolregistry.FilesystemConfig{Root: t.TempDir()}))
@@ -123,7 +119,7 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	contents := systemContents(m.messages)
 	for _, needle := range []string{
 		modsIdentityPrompt,
-		"Loading skills",
+		"Planning multi-step work",
 		"Tool selection:",
 		"Temporary directory:",
 		"Project instructions",
@@ -133,8 +129,8 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	} {
 		require.NotEqual(t, -1, indexContaining(contents, needle), needle)
 	}
-	require.Less(t, indexContaining(contents, modsIdentityPrompt), indexContaining(contents, "Loading skills"))
-	require.Less(t, indexContaining(contents, "Loading skills"), indexContaining(contents, "Tool selection:"))
+	require.Less(t, indexContaining(contents, modsIdentityPrompt), indexContaining(contents, "Planning multi-step work"))
+	require.Less(t, indexContaining(contents, "Planning multi-step work"), indexContaining(contents, "Tool selection:"))
 	require.Less(t, indexContaining(contents, "Tool selection:"), indexContaining(contents, "Temporary directory:"))
 	require.Less(t, indexContaining(contents, "Temporary directory:"), indexContaining(contents, "Project instructions"))
 	require.Less(t, indexContaining(contents, "Project instructions"), indexContaining(contents, "demo skill"))
@@ -153,10 +149,11 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	for _, pair := range [][2]string{
 		{modsIdentityPrompt, "Tool selection:"},
 		{"Tool selection:", "Available skills"},
-		{"Available skills", "Loading skills"},
-		{"Loading skills", "FORMAT_TOKEN"},
+		{"Available skills", "Planning multi-step work"},
+		{"Planning multi-step work", "FORMAT_TOKEN"},
 		{"FORMAT_TOKEN", "PROJECT_TOKEN"},
 		{"PROJECT_TOKEN", "ROLE_TOKEN"},
+		{"ROLE_TOKEN", "cwd="},
 	} {
 		require.Less(t, strings.Index(wire, pair[0]), strings.Index(wire, pair[1]), pair)
 	}

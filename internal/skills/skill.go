@@ -360,7 +360,7 @@ func CatalogPromptBudget(catalog []Skill, maxBytes int) CatalogRender {
 
 	// The surrounding system section already titles this catalogue, so the
 	// header carries only the operating instruction and never its own heading.
-	const header = "Load a skill by name with load_skill(<name>); use search_skills when the name is unknown or omitted.\n"
+	const header = "Load a skill by name with load_skill(<name>); use search_skills when the name is unknown or omitted. Do not reload a skill already loaded.\n"
 	if len(header) > maxBytes {
 		return CatalogRender{Omitted: len(sorted)}
 	}

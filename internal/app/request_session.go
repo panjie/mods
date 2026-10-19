@@ -335,7 +335,6 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 }
 
 func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolResultCaller {
-	preflight := newCommandPreflightGate(cfg)
 	return func(call proto.ToolCallRequest) (output proto.ToolResult, returnErr error) {
 		name := call.Name
 		data := registry.UnwrapArguments(call.Name, call.Arguments)
@@ -386,8 +385,6 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				m.debugToolExited++
 			case status == "denied":
 				m.debugToolDenied++
-			case status == "correction":
-				m.debugToolCorrected++
 			case status == "cancelled":
 				m.debugToolCancelled++
 			default:
@@ -463,8 +460,11 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				assessed = m.constrainResolvedProcessAssessment(assessed, processBinding)
 			}
 			assessment = &assessed
-			if err := preflight.check(name, assessed); err != nil {
-				return proto.ToolResult{}, err
+			// Complexity is diagnostic metadata, never a failed tool result or
+			// a reason to ask the model to resubmit. Authorization below uses
+			// the original effect and target facts for this exact invocation.
+			if assessed.HasReviewabilityConcerns() {
+				debug.Printf("command reviewability: tool=%s level=%s actions=%d pipelines=%d opaque=%t script_file=%t reasons=%v", name, assessed.Reviewability.Level, assessed.Shape.TopLevelActions, assessed.Shape.Pipelines, assessed.Shape.Opaque, assessed.Reviewability.ScriptFilePayload, assessed.Reviewability.Reasons)
 			}
 		}
 		intent := buildAccessIntent(name, data, registry, assessment)
@@ -547,10 +547,6 @@ func approvalDebugValue(trace approvalTrace) string {
 func toolDebugStatus(err error) (status, symbol string) {
 	if err == nil {
 		return "success", "✓"
-	}
-	var correction correctionSuggester
-	if errors.As(err, &correction) && correction.CorrectionSuggested() {
-		return "correction", "!"
 	}
 	var exitErr shellExitCoder
 	if errors.As(err, &exitErr) {

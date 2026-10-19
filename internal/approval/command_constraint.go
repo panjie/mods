@@ -5,9 +5,10 @@ import (
 	"strings"
 )
 
-// RequiresSimplification is independent of effect inference and approval rules.
-// In particular, a classifier's read verdict cannot clear opaque syntax.
-func (a CommandAssessment) RequiresSimplification() bool {
+// HasReviewabilityConcerns selects structural diagnostics, never authorization
+// or retry decisions. A classifier's read verdict does not clear opaque syntax;
+// it can still authorize a read through the ordinary access policy.
+func (a CommandAssessment) HasReviewabilityConcerns() bool {
 	if a.StaticRead && a.Effect == EffectRead {
 		return false
 	}

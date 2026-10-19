@@ -251,10 +251,7 @@ func TestShellAssessmentKeepsAuthoritativePathFacts(t *testing.T) {
 	}
 }
 
-// TestShellAssessmentScriptFilePayloadConformance pins the one exemption the
-// advisory preflight grants: a command whose payload is a pre-written script
-// file is never nudged, because rewriting it is how skill scripts break. The
-// structural facts are unchanged; only the nudge is skipped.
+// Script-file metadata never converts an unknown effect into a known read.
 func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := &Mods{
@@ -269,21 +266,19 @@ func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 	require.Equal(t, approval.EffectUnknown, script.Effect)
 	require.Empty(t, slashSet(script.KnownDirs))
 	require.Empty(t, slashSet(script.DynamicTargets))
-	require.NoError(t, newCommandPreflightGate(m.Config).check("shell_run", script),
-		"a pre-written script is executed as written")
+	require.True(t, script.HasReviewabilityConcerns())
 
 	inline := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 -c 'print(1)'", nil, dirs.ws)
 	require.False(t, inline.Reviewability.ScriptFilePayload)
-	require.Error(t, newCommandPreflightGate(m.Config).check("shell_run", inline),
-		"ad-hoc inline source still gets advisory feedback")
+	require.Equal(t, approval.EffectUnknown, inline.Effect)
 
 	external := "python3 " + filepath.ToSlash(filepath.Join(dirs.ext, "check.py"))
 	require.True(t, m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, external, nil, dirs.ws).Reviewability.ScriptFilePayload,
-		"the exemption is syntactic and does not depend on the script's location")
+		"the metadata is syntactic and does not depend on the script's location")
 }
 
 // Synthetic reconstructions of the truncated omapop log, not its exact calls.
-func TestShellAssessmentReadDiscoveryPreflight(t *testing.T) {
+func TestShellAssessmentReadDiscovery(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := conformanceMods(dirs.ext)
 	for _, command := range []string{
@@ -295,7 +290,7 @@ func TestShellAssessmentReadDiscoveryPreflight(t *testing.T) {
 			a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, dirs.ws)
 			require.Equal(t, approval.EffectRead, a.Effect)
 			require.True(t, a.StaticRead, "%+v", a)
-			require.NoError(t, newCommandPreflightGate(m.Config).check("shell_run", a))
+			require.False(t, a.HasReviewabilityConcerns())
 		})
 	}
 	for _, command := range []string{

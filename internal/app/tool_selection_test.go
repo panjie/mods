@@ -81,7 +81,7 @@ func TestRenderToolSelectionPromptCapabilityMatrix(t *testing.T) {
 	require.Contains(t, processPrompt, prompts.ToolSelectionShellPOSIX)
 	require.NotContains(t, processPrompt, "Use shell tools for repository-wide searches, tests, builds, git, package managers")
 	require.Contains(t, processPrompt, "including git, tests, builds, package managers and installers")
-	require.Contains(t, processPrompt, "there is no script execution tool")
+	require.Contains(t, processPrompt, "Script execution still follows ordinary effect and target review")
 
 	both := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(both, toolregistry.FilesystemConfig{Root: t.TempDir()}))

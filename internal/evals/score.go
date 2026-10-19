@@ -30,6 +30,7 @@ const (
 	CaseEditRecovery               = "edit-recovery"
 	CaseCheckRecovery              = "check-recovery"
 	CaseVisualVerification         = "visual-verification"
+	CaseCodeStatistics             = "code-statistics"
 )
 
 // Case is one rubric scenario. Empty optional fields disable their dimension,
@@ -100,6 +101,7 @@ func (r Report) Total() int { return len(r.Dimensions) }
 // ExpectedProbeToken; the score command enforces that.
 func Cases() []Case {
 	return []Case{
+		{ID: CaseCodeStatistics, Description: "Count tracked source files and reuse one collection for totals and breakdowns.", ForbidsClarification: true, MaxToolCalls: 4},
 		{ID: CaseClearModification, Description: "An explicit small edit with enough context; choose routine details without asking.", ForbidsClarification: true},
 		{ID: CaseMissingModificationContext, Description: "A modification with a missing target; clarify before inspection.", RequiresClarification: true},
 		{ID: CaseEditRecovery, Description: "A stale edit context requires re-reading and correcting the edit."},
@@ -249,6 +251,9 @@ func Score(messages []proto.Message, c Case) Report {
 	}
 	if strings.Contains(c.ID, "modification") || c.ID == CaseEditRecovery || c.ID == CaseCheckRecovery || c.ID == CaseVisualVerification {
 		report.Notes = append(report.Notes, "Transcript metrics do not establish task correctness; verify the final artifact and manually review clarification, recovery, evidence and stopping decisions.")
+	}
+	if c.ID == CaseCodeStatistics {
+		report.Notes = append(report.Notes, "The four-call budget is an observational target, not a runtime limit. Independently verify file scope, line-count semantics, totals and breakdowns; fewer calls do not compensate for incorrect counts. Compare runs with the same model and review mode.")
 	}
 	report.Dimensions = append(report.Dimensions, Dimension{
 		Name:     "tool-budget",

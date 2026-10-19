@@ -57,7 +57,7 @@ func (m *Mods) debugEndTurn(status string, err error) {
 		{Label: "status", Value: status},
 		{Label: "duration", Value: formatDebugDuration(time.Since(m.debugTurnStarted))},
 		{Label: "rounds", Value: fmt.Sprintf("model %d · tool %d", m.debugRound, m.debugToolRounds)},
-		{Label: "tools", Value: fmt.Sprintf("%d total · %d success · %d non-zero · %d failed · %d denied · %d corrected · %d cancelled", m.debugToolTotal, m.debugToolSucceeded, m.debugToolExited, m.debugToolFailed, m.debugToolDenied, m.debugToolCorrected, m.debugToolCancelled)},
+		{Label: "tools", Value: fmt.Sprintf("%d total · %d success · %d non-zero · %d failed · %d denied · %d cancelled", m.debugToolTotal, m.debugToolSucceeded, m.debugToolExited, m.debugToolFailed, m.debugToolDenied, m.debugToolCancelled)},
 	}
 	if m.tokenUsage.Available() {
 		fields = append(fields, DebugField{Label: "tokens", Value: fmt.Sprintf("input=%d · cached=%d · output=%d · reasoning=%d · total=%d", m.tokenUsage.InputTokens, m.tokenUsage.CachedInputTokens, m.tokenUsage.OutputTokens, m.tokenUsage.ReasoningOutputTokens, m.tokenUsage.TotalTokens)})

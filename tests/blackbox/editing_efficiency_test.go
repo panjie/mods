@@ -52,7 +52,7 @@ func TestRealAIBlackBoxSmallEdit(t *testing.T) {
 				prompt += " Also capture a screenshot if a compatible renderer is available. Otherwise state that no screenshot was captured. Do not install dependencies or present generated placeholder graphics as a screenshot."
 			}
 			stdout, _ := h.run(t, "", prompt)
-			logEditingScore(t, h, scenario)
+			logExecutionScore(t, h, scenario)
 			// Check with the trusted original, independent of any model edits.
 			checker, err := os.ReadFile(filepath.Join("testdata", "editing", "check.mjs"))
 			if err != nil {
@@ -80,7 +80,7 @@ func TestRealAIBlackBoxMissingEditTarget(t *testing.T) {
 		}
 	}
 	h.run(t, "", "Reduce the font size in one of the two QML screens in this fixture. I have not specified which screen; ask me which one before inspecting or editing. Do not choose for me.")
-	logEditingScore(t, h, evals.CaseMissingModificationContext)
+	logExecutionScore(t, h, evals.CaseMissingModificationContext)
 	for _, name := range []string{"Popup.qml", "Settings.qml"} {
 		data, err := os.ReadFile(filepath.Join(h.cwd, name))
 		if err != nil {
@@ -92,7 +92,7 @@ func TestRealAIBlackBoxMissingEditTarget(t *testing.T) {
 	}
 }
 
-func logEditingScore(t *testing.T, h *realAIHarness, caseID string) {
+func logExecutionScore(t *testing.T, h *realAIHarness, caseID string) evals.Report {
 	t.Helper()
 	var dataHome string
 	for _, entry := range h.env {
@@ -134,4 +134,16 @@ func logEditingScore(t *testing.T, h *realAIHarness, caseID string) {
 			t.Errorf("%s: %s", dimension.Name, dimension.Evidence)
 		}
 	}
+	if t.Failed() {
+		for _, message := range messages {
+			if message.Role == proto.RoleAssistant {
+				for _, call := range message.ToolCalls {
+					t.Logf("fixture call %s: %.2000s", call.Function.Name, call.Function.Arguments)
+				}
+			} else if message.Role == proto.RoleTool {
+				t.Logf("fixture result: %.2000s", message.Content)
+			}
+		}
+	}
+	return report
 }

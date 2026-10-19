@@ -18,14 +18,14 @@ func TestCommandConstraintPOSIX(t *testing.T) {
 	} {
 		t.Run(command, func(t *testing.T) {
 			a := AssessShellStaticWithPolicy(command, true, ReadOnlyCommandPolicy{})
-			require.True(t, a.RequiresSimplification())
-			a.Effect = EffectRead // model fallback cannot lift structural rejection
-			require.True(t, a.RequiresSimplification())
+			require.True(t, a.HasReviewabilityConcerns())
+			a.Effect = EffectRead // model fallback does not erase structural diagnostics
+			require.True(t, a.HasReviewabilityConcerns())
 		})
 	}
 	for _, command := range []string{`git status`, `ls -la | head -n 5`, `printf '%s\n' 'literal;semicolon'`, `go test ./...`, `mkdir output`} {
 		t.Run(command, func(t *testing.T) {
-			require.False(t, AssessShellStaticWithPolicy(command, true, ReadOnlyCommandPolicy{}).RequiresSimplification())
+			require.False(t, AssessShellStaticWithPolicy(command, true, ReadOnlyCommandPolicy{}).HasReviewabilityConcerns())
 		})
 	}
 }
@@ -42,7 +42,7 @@ func TestCommandConstraintInterpreterArgv(t *testing.T) {
 			{"script.py", nil}, {"env", []string{"X=y", "python3", "script.py"}},
 		} {
 			a := AssessArgvStaticWithPolicy(tc.program, tc.args, posix, ReadOnlyCommandPolicy{})
-			require.True(t, a.RequiresSimplification(), "%s %v posix=%v", tc.program, tc.args, posix)
+			require.True(t, a.HasReviewabilityConcerns(), "%s %v posix=%v", tc.program, tc.args, posix)
 		}
 	}
 }
@@ -54,6 +54,6 @@ func TestCommandConstraintPowerShellIR(t *testing.T) {
 		{TopLevelStatementCount: 3, Invocations: []psCommandInvocation{{Name: "New-Item"}, {Name: "Invoke-WebRequest"}, {Name: "Get-ChildItem"}}},
 	} {
 		a := assessPowerShellIR("", ir, ReadOnlyCommandPolicy{}, "")
-		require.True(t, a.RequiresSimplification())
+		require.True(t, a.HasReviewabilityConcerns())
 	}
 }

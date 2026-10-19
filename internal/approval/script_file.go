@@ -7,21 +7,14 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// Pre-written script payloads are exempt from the advisory simplification
-// nudges. A command whose payload is a file — one interpreter or shell host with
-// a literal script path, or the path to a script itself — runs unchanged: the
-// reviewer can inspect the file, and rewriting it is exactly how pre-written
-// skill scripts break.
-//
-// Ad-hoc generated source (inline `-c`/`-e`, encoded payloads, compound
-// one-liners) keeps the nudges, because its text is the only thing there is to
-// review. This is deliberately a syntactic test with no filesystem access: it
-// must behave identically for scripts the app cannot resolve (a skill directory
-// outside the cwd), and it must never become a path-authorization
-// decision.
+// Script-file detection is syntactic metadata with no filesystem access. It
+// identifies one interpreter or shell host with a literal script path, or a
+// script path itself, even when the app cannot resolve that file. It never
+// authorizes execution or rewrites the script; ordinary effect and target
+// assessment still governs the call.
 
-// scriptFileSuffixes are the file extensions that identify a program operand as
-// a script file rather than an executable or a data argument.
+// scriptFileSuffixes identify a program operand as a script file rather than
+// an executable or a data argument.
 var scriptFileSuffixes = []string{
 	".sh", ".bash", ".zsh", ".ksh", ".fish",
 	".ps1", ".psm1",
@@ -40,7 +33,7 @@ func hasScriptFileSuffix(name string) bool {
 }
 
 // inlinePayloadFlags mark arguments that carry source in the invocation itself
-// instead of naming a file. Their presence disqualifies the payload exemption.
+// instead of naming a file. Their presence identifies inline source instead of a file payload.
 var inlinePayloadFlags = map[string]bool{
 	"-c": true, "-e": true, "-r": true, "-m": true,
 	"-command": true, "-encodedcommand": true,
@@ -75,7 +68,7 @@ func programBaseName(program string) string {
 // literalScriptPath reports whether a value can only denote a file path at
 // execution time. Dynamic expansions, globs, quoting artifacts, and control
 // characters disqualify it; the fact that the file exists is not required,
-// because this flag only decides whether the model is nudged.
+// because this flag is metadata only, never an authorization decision.
 func literalScriptPath(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" || strings.HasPrefix(value, "-") {

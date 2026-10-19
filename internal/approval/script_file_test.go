@@ -6,10 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Pre-written script payloads must be exempt from the advisory nudges: asking
-// the model to restructure them is what breaks a skill's own scripts. Ad-hoc
-// generated source keeps the nudges, because its text is all there is to review.
-func TestScriptFilePayloadExemptsPreWrittenScripts(t *testing.T) {
+// File payloads and inline source remain distinct diagnostic metadata.
+func TestScriptFilePayloadIdentifiesPreWrittenScripts(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		command string
@@ -31,7 +29,7 @@ func TestScriptFilePayloadExemptsPreWrittenScripts(t *testing.T) {
 	}
 }
 
-func TestScriptFilePayloadKeepsAdHocSourceNudged(t *testing.T) {
+func TestScriptFilePayloadExcludesAdHocSource(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		command string

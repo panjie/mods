@@ -18,7 +18,7 @@ const (
 	ReviewabilityOpaque   ReviewabilityLevel = "opaque"
 )
 
-// ReviewabilityReason is a stable reason code used by correction feedback and
+// ReviewabilityReason is a stable reason code used by diagnostic logging and
 // the review UI.
 type ReviewabilityReason string
 
@@ -35,18 +35,16 @@ const (
 )
 
 // CommandReviewability contains deterministic structural facts about shell
-// source. It is advisory metadata: the preflight uses it to nudge the model
-// toward reviewable shapes, and the review panel shows it to the human. It never
-// blocks a call by itself.
+// source. It is diagnostic metadata only; authorization uses effects and targets.
+// Complex commands execute unchanged once the ordinary approval policy allows them.
 type CommandReviewability struct {
 	Level           ReviewabilityLevel
 	Reasons         []ReviewabilityReason
 	RecommendedTool string
 	// ScriptFilePayload marks a command whose payload is a pre-written script
 	// file rather than ad-hoc generated source: one interpreter or shell host
-	// with a literal script path, or the path to a script itself. The advisory
-	// nudges skip these calls, because the reviewer can inspect the file and
-	// rewriting it is how pre-written skill scripts break.
+	// with a literal script path, or the path to a script itself. This fact
+	// never grants permission to execute the script.
 	ScriptFilePayload bool
 }
 
@@ -355,7 +353,7 @@ func analyzePowerShellReviewability(ir *psBridgeIR, policy ReadOnlyCommandPolicy
 
 // powerShellIROpaque reports whether the PowerShell IR is opaque and, when it
 // is, the reviewability reason. A nested shell host invocation gets its own
-// reason so correction feedback can name the wrapping explicitly.
+// reason so diagnostic logging can name the wrapping explicitly.
 func powerShellIROpaque(ir *psBridgeIR) (ReviewabilityReason, bool) {
 	if ir == nil || ir.HasStopParsing || ir.HasControlFlow || ir.HasBackground {
 		return ReviewabilityOpaqueExecution, true

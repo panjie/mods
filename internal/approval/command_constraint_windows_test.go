@@ -29,11 +29,11 @@ func TestWindowsReliabilityCommandConstraint(t *testing.T) {
 		`& $command`,
 		`python -c 'print(1)'`,
 	} {
-		require.True(t, AssessShellStaticWithPolicy(command, false, ReadOnlyCommandPolicy{}).RequiresSimplification(), command)
+		require.True(t, AssessShellStaticWithPolicy(command, false, ReadOnlyCommandPolicy{}).HasReviewabilityConcerns(), command)
 	}
 	for _, command := range []string{`Get-ChildItem | Select-Object -First 5`, `Get-Content 'a;b.txt'`, `git status`} {
 		a := AssessShellStaticWithPolicy(command, false, ReadOnlyCommandPolicy{})
 		require.Equal(t, EffectRead, a.Effect, command)
-		require.False(t, a.RequiresSimplification(), command)
+		require.False(t, a.HasReviewabilityConcerns(), command)
 	}
 }

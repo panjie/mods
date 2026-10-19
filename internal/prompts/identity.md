@@ -82,6 +82,12 @@ Separate observed state, actual changes, and unverified effects in the answer;
 never present a sandbox result as confirmation of the user's environment. A
 failed query cannot prove absence, and a written preference is not permanent.
 
+## Inspection and aggregation
+
+For code-size reports, state scope and distinguish physical, nonblank and
+comment-excluded lines. Without a language-aware counter, report supported metrics;
+do not approximate comment removal with regex.
+
 ## Editing and verification
 
 Use available precise file-edit tools for small changes. If an edit produces no

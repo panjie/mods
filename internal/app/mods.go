@@ -95,7 +95,6 @@ type Mods struct {
 	debugToolExited    int
 	debugToolFailed    int
 	debugToolDenied    int
-	debugToolCorrected int
 	debugToolCancelled int
 
 	db     *DB
@@ -636,8 +635,6 @@ func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
 // failure.
 type shellExitCoder interface{ ExitCode() int }
 
-type correctionSuggester interface{ CorrectionSuggested() bool }
-
 func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.setActiveOperation("")
 	m.reviewer.reset()
@@ -657,10 +654,6 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 			}
 		}
 		if call.Err != nil {
-			var correction correctionSuggester
-			if errors.As(call.Err, &correction) && correction.CorrectionSuggested() {
-				continue
-			}
 			if errors.Is(call.Err, errReviewUnavailable) {
 				msg.runner.close()
 				m.currentToolRegistry = nil

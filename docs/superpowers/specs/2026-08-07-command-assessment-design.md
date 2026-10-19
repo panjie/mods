@@ -100,7 +100,7 @@ diagnostic details are debug-only.
 After argument validation, `toolCaller` creates the assessment exactly once
 and passes it forward to:
 
-1. the one-shot simplification preflight;
+1. non-blocking structural diagnostic logging;
 2. `AccessIntent()` and external-directory authorization;
 3. saved-rule and review-mode policy evaluation; and
 4. review summary and presentation rendering.
@@ -108,7 +108,7 @@ and passes it forward to:
 `requestApproval` consumes the completed assessment and intent. It never calls
 a command analyzer. The UI derives its risk tone and concise target row from
 the completed assessment; shape, classifier reasons, and reviewability remain
-internal preflight/debug facts. When affected locations are unknown,
+internal debug facts. When affected locations are unknown,
 classifier-generated reason text remains available to debug logging but is
 hidden from approval presentation and summaries because it cannot serve as
 verified scope evidence.
@@ -123,6 +123,6 @@ verified scope evidence.
   `ReviewAuto`; `ReviewAlways` retains its explicit always-review semantics.
 - Dynamic content reads and all dynamic writes never match or produce reusable
   directory rules.
-- At most one command-simplification correction occurs per user request; later
-  compound calls enter normal approval.
+- Complexity never causes a failed result or resubmission; every compound call
+  enters normal approval on its first invocation.
 - No persistent configuration or approval database migration is required.

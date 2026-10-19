@@ -271,7 +271,7 @@ func TestBuiltinSkillsAndUserOverride(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, crossPlatform.Body, "process_run")
 	require.Contains(t, crossPlatform.Body, "runtime_info")
-	require.Contains(t, crossPlatform.Body, "one independently reviewable purpose")
+	require.Contains(t, crossPlatform.Body, "one clear purpose")
 	require.Contains(t, crossPlatform.Body, "$PROFILE.CurrentUserCurrentHost")
 
 	diagnose, ok := byName["diagnose-not-reproducing"]

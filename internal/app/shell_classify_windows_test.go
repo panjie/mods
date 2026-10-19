@@ -286,8 +286,7 @@ func TestAnalyzeShellCommandPowerShellProfileProbeIsCompound(t *testing.T) {
 	require.Equal(t, approval.ReviewabilityCompound, got.Reviewability.Level)
 	require.Equal(t, 4, got.Shape.TopLevelActions)
 	require.Contains(t, got.Reviewability.Reasons, approval.ReviewabilityMultipleIndependent)
-	require.NoError(t, newCommandPreflightGate(m.Config).check("powershell_run", got),
-		"a proven static read is exempt from the advisory nudge")
+	require.False(t, got.HasReviewabilityConcerns(), "a proven static read needs no complexity diagnostic")
 }
 
 func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {

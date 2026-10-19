@@ -354,13 +354,13 @@ builtin-tools:
   shell-timeout: 60s        # default timeout; per-call timeout_ms may override
 ```
 
-Compound and opaque command text gets advisory simplification feedback before
-approval: Mods nudges the model at most twice per request toward reviewable
-shapes, and `--minimal` keeps that advice. The advice never blocks anything; the
-call then goes to ordinary approval. Commands whose payload is a pre-written
-script file (`bash scripts/build.sh`, `pwsh -File build.ps1`) are exempt and run
-exactly as written. There is no general script execution tool: put multi-step
-work in a script file. Explicit `--review-mode never` bypasses review.
+Command complexity is diagnostic information, not a reason to retry or rewrite
+an invocation. Commands proceed directly to ordinary effect and target approval,
+including in minimal mode. Related reads and aggregations can share a pipeline
+or readable script; Mods encourages reusing results for totals and breakdowns.
+Existing scripts run unchanged once authorized. New multi-step scripts can live
+in the supplied temporary directory, but that location does not grant permission
+for their execution effects. Explicit `--review-mode never` bypasses review.
 
 Git HTTP(S) authentication can prompt in the terminal and continue the same
 command when needed; passwords are masked, passed over local IPC, and never sent

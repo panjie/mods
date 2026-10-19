@@ -10,9 +10,11 @@ import (
 // ExecutionMetrics counts observable transcript events, not semantic quality.
 // Missing usage/timing data is intentionally not estimated from text.
 type ExecutionMetrics struct {
-	UserInputCalls            int `json:"user_input_calls"`
-	FailedToolResults         int `json:"failed_tool_results"`
-	FailedUserInputResults    int `json:"failed_user_input_results"`
+	UserInputCalls         int `json:"user_input_calls"`
+	FailedToolResults      int `json:"failed_tool_results"`
+	FailedUserInputResults int `json:"failed_user_input_results"`
+	// Retained for scoring historical sessions from before complexity became
+	// diagnostic-only. New executions should not produce these failed results.
 	SimplificationSuggestions int `json:"simplification_suggestions"`
 	FinalAnswerCharacters     int `json:"final_answer_characters"`
 }

@@ -80,7 +80,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		m.debugToolExited = 0
 		m.debugToolFailed = 0
 		m.debugToolDenied = 0
-		m.debugToolCorrected = 0
 		m.debugToolCancelled = 0
 		debug.Print(DebugSection{Title: fmt.Sprintf("turn %d · start", m.debugTurn), Fields: []DebugField{
 			{Label: "input", Value: fmt.Sprintf("%d chars", len(m.Input)+len(content))},

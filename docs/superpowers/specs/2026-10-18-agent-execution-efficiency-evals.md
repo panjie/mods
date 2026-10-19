@@ -41,6 +41,32 @@ go run ./internal/evals/cmd/score -db /path/to/mods.db -session SESSION_PREFIX -
 
 历史会话没有错误标记或完整结果时，失败计数可能不完整。当前消息存储不提供可靠的逐调用耗时/usage，评分器不从文本估算。精确的非法参数分类同样需要结构化错误类别，本次不靠易误判的报错关键词推断。
 
+## 代码量统计与审查开启场景（2026-10-19）
+
+`TestRealAIBlackBoxCodeStatistics` 使用真实 provider 和生产工具分发入口，在
+`review-mode=auto` 与 `never` 两种模式分别运行。前者保留真实分类和审批：
+非交互 harness 遇到需要人工审批的未知行为会明确失败，不能静默降级成 never。
+交互允许/拒绝、saved rules 和 always 模式由 `internal/app/command_dispatch_test.go`
+的分发回归测试覆盖。
+
+夹具包含 12 个已跟踪 Go 文件、带空格的路径、测试文件、三个目录，以及未跟踪的
+Go 干扰文件和 Markdown 文件。任务明确统计物理行（含空行、注释）。期望值直接从
+可信夹具计算，逐项检查总量、生产/测试分类、目录分组及原文件未修改。
+
+```sh
+go test -tags integration ./tests/blackbox -run TestRealAIBlackBoxCodeStatistics -count=5 -v -timeout=15m
+go run ./internal/evals/cmd/score -db /path/to/mods.db -session SESSION_PREFIX -case code-statistics -json
+```
+
+`code-statistics` 的四次调用预算是离线观察目标，不限制实际执行，不用少调用抵消
+错误数字。harness 记录每轮总耗时；不是单次工具耗时或 token 用量。做修改前后
+比较时固定模型、参数和模式，各运行至少五次，先比较正确率，再比较调用数和耗时
+的中位数与范围。auto/never 对照本身不能证明版本改动的因果效果。
+
+2026-10-19 起复杂度不再返回失败工具结果。保留 `simplification_suggestions`
+用于读取旧会话；新评测要求此值为零。旧 Starship 模拟评测中的装饰格式仅记录，
+继续断言安装完成、配置写入、工具参数与无额外 execution-policy 修改。
+
 ## 修改前后对照方法
 
 先固定同一模型、采样参数、工具集和 fixture；在两个代码版本中各运行至少五次。每次记录提交、模型标识、配置、Go/Node 版本，以及 `execution report` JSON 和最终文件检查结果。对照测试使用的 harness 配置为 minimal=true、review-mode=never，专门观察执行策略；命令建议和审批通过独立 conformance/entrypoint 测试验证，不从该 harness 推断。
@@ -52,3 +78,28 @@ go run ./internal/evals/cmd/score -db /path/to/mods.db -session SESSION_PREFIX -
 ## 本次验证记录
 
 离线评分器、夹具、工具契约、提示及 shell conformance 定向测试通过。新增真实 provider 场景因当前环境没有匹配 API key 而跳过，尚无修改前后模型表现数据。完整根模块构建/测试结果见实施记录；跨平台行为仍由现有 CI 验证。
+
+### 2026-10-19 复杂度关卡移除的验证
+
+环境为 macOS arm64、Go 1.26.6；真实评测固定为 DeepSeek `deepseek-v4-flash`。
+`task check`、`task test`（根模块全量）通过，Windows amd64 的 app 测试交叉编译
+通过；未在本机执行 Windows 测试。提示仍符合原有 10.25 KiB 长度上限。
+
+两批均为本次修改中的候选版本，不是旧版与新版 A/B。第一批每种模式各五次：
+auto 正确 5/5、调用 2～5 次；never 正确 2/5、调用 3～6 次。随后补充在工具中
+完成汇总、避免心算的提示，第二批结果如下（末尾仅压缩了重复提示措辞）：
+
+| 模式 | 正确结果 | 工具调用中位数（范围） | 总耗时中位数（范围） | 简化重试 |
+| --- | --- | --- | --- | --- |
+| auto | 4/5 | 2（2～7） | 5.09 秒（3.35～12.64） | 0 |
+| never | 5/5 | 4（2～5） | 8.32 秒（4.57～9.24） | 0 |
+
+第二批 auto 的错误是工具返回逐文件行数后，最终答案把生产代码 144 行写成了
+145 行；独立检查据此失败，没有为了低调用数放宽断言。另一次 auto 有一个普通
+工具失败结果，但最终统计正确。所有运行均无复杂度简化重试。这验证了重试路径
+已移除，不能证明模型统计能力已稳定，或把模式间差异归因于审查策略。
+
+旧 `TestDeepSeekCommandSimplicityIntegration` 的最后一次运行未在十轮工具调用内
+结束，因此真实模型集成评测未全部通过。模拟 runtime_info 已与生产返回结构
+对齐，命令检查区分了 `Get-Command winget` 查询与实际安装；没有提高轮数预算或
+放松安装/配置完成要求来消除该失败。

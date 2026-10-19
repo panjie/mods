@@ -13,21 +13,18 @@ the compact one-line record each completed call leaves in normal output.
 
 ## Command Reviewability
 
-Compound and opaque command text gets advisory simplification feedback before
-approval. Mods nudges the model at most twice per request toward shapes whose
-effects and targets can be reviewed, and `--minimal` keeps that advice. The
-advice never blocks anything. Once the two nudges are used, or whenever the
-command is already reviewable, the call goes to ordinary approval and you
-decide; no command is ever rejected on structural grounds. Pipelines that
-represent one operation are left intact.
+Command complexity is recorded only in debug diagnostics. It never returns a
+failed tool result or asks the model to resubmit. Every command goes directly to
+ordinary effect and target approval, including in minimal mode. Unknown effects
+still require the existing approval checks, and denial prevents execution.
 
-Commands whose payload is a pre-written script file are exempt from the nudges
-entirely: `bash scripts/build.sh`, `python tools/check.py`, and `pwsh -File
-build.ps1` run exactly as written, because a skill's own scripts must not be
-rewritten to satisfy review. Ad-hoc inline source (`-c`, `-e`, `-Command`,
-encoded payloads) still gets the advice. There is no general script execution
-tool: put multi-step work in a script file instead of hiding it in interpreter
-flags or encoded arguments. Explicit `--review-mode never` bypasses review.
+Related reads and aggregations may share one pipeline or readable script. Reuse
+collected data for subtotals; split calls when a result must be inspected before
+the next step or authorization needs to be separate. Existing scripts such as
+`bash scripts/build.sh`, `python tools/check.py`, and `pwsh -File build.ps1` run
+unchanged once authorized. New multi-step scripts can use the supplied temporary
+directory; that location grants no permission for their execution effects.
+Explicit `--review-mode never` bypasses review.
 
 Long command reviews use Up/Down to page; approval becomes available after all
 pages have been displayed. Review is an approval policy, not an execution

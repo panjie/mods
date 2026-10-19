@@ -64,9 +64,7 @@ func TestShellAssessmentConformancePowerShell(t *testing.T) {
 	}
 }
 
-// TestShellAssessmentScriptFilePayloadConformancePowerShell pins the PowerShell
-// half of the script-payload exemption: a pre-written script runs as written
-// without advisory nudges, while inline source still gets them.
+// Script-file metadata never grants permission, including on PowerShell.
 func TestShellAssessmentScriptFilePayloadConformancePowerShell(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := &Mods{
@@ -79,13 +77,13 @@ func TestShellAssessmentScriptFilePayloadConformancePowerShell(t *testing.T) {
 	script := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python check.py", nil, dirs.ws)
 	require.True(t, script.Reviewability.ScriptFilePayload)
 	require.Equal(t, approval.EffectUnknown, script.Effect)
-	require.NoError(t, newCommandPreflightGate(m.Config).check("powershell_run", script))
+	require.True(t, script.HasReviewabilityConcerns())
 
 	inline := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python -c 'print(1)'", nil, dirs.ws)
 	require.False(t, inline.Reviewability.ScriptFilePayload)
-	require.Error(t, newCommandPreflightGate(m.Config).check("powershell_run", inline))
+	require.Equal(t, approval.EffectUnknown, inline.Effect)
 
 	file := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "pwsh -File build.ps1", nil, dirs.ws)
 	require.True(t, file.Reviewability.ScriptFilePayload)
-	require.NoError(t, newCommandPreflightGate(m.Config).check("powershell_run", file))
+	require.Equal(t, approval.EffectUnknown, file.Effect)
 }

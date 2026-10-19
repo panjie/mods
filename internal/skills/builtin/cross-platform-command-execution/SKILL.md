@@ -1,16 +1,16 @@
 ---
 name: cross-platform-command-execution
-description: Execute, install, configure, diagnose, or translate terminal commands reliably across Linux, macOS, and Windows with small reviewable tool calls, direct argv processes, and native shells. Use for terminal work, package managers, shell configuration, runtime paths, command failures, and cross-platform command translation.
+description: Execute, install, configure, diagnose, or translate terminal commands reliably across Linux, macOS, and Windows with cohesive reviewable tool calls, direct argv processes, and native shells. Use for terminal work, package managers, shell configuration, runtime paths, command failures, and cross-platform command translation.
 ---
 
 # Cross-platform command execution
 
 Use this procedure for command execution and troubleshooting.
 
-1. Keep every tool call to one independently reviewable purpose. Separate
-   capability discovery, path discovery, mutation, and verification. Do not
-   add headings, tables, or formatting commands merely to decorate inspection
-   output.
+1. Give each call one clear purpose. Combine related reads and aggregation
+   that share inputs, and reuse collected data for totals and breakdowns. Split
+   calls when the next action depends on inspecting a result or needs separate
+   authorization. Omit decorative output and finish when the result is supported.
 2. Prefer `process_run` for one executable, including git, tests, builds,
    package managers, and installers. Pass every argument as a separate literal
    `args` item. Do not invoke `sh`, `cmd`, `powershell`, or `pwsh` with `-c`,
@@ -48,9 +48,9 @@ Use this procedure for command execution and troubleshooting.
    `timed_out`, and truncation fields. A nonzero exit code is an outcome, not a
    tool failure. When output is truncated, narrow the command or selector.
 10. Use a concrete error to make one targeted repair. Check availability, cwd,
-    syntax, permissions, and platform before any further retry. If mods offers
-    simplification advice, treat it as advice: keep the operation's behavior
-    identical, and re-send the same command when it is already correct.
+    syntax, permissions, and platform before any further retry. Complexity is
+    diagnostic information, not a failed invocation. Never retry a successful
+    operation merely to simplify its syntax. User denial stops the operation.
 
 Use `http_download` when available for explicit URL/destination lists, after
 creating directories with `fs_mkdir`. Use a literal `cwd` instead of chaining
@@ -58,8 +58,8 @@ location changes.
 
 Run a script that already exists as a file exactly as written, with one
 interpreter or shell host and the literal path (`bash scripts/build.sh`,
-`python tools/check.py`, `pwsh -File build.ps1`). Those calls never get
-simplification advice, so never split, rewrite, or inline an existing script to
-make it "easier to review" — that only breaks it. Prefer putting multi-step work
-in a script file over inline `-c`/`-e` code or encoded payloads, which do get
-advice and always reach approval as written.
+`python tools/check.py`, `pwsh -File build.ps1`). Never split, rewrite, or inline
+an existing script merely for review. For multi-step processing, write a readable
+script in the supplied temporary directory and invoke it by path. Script execution
+still follows ordinary effect and target review; its location grants no execution
+permission. Prefer scripts over long inline code or encoded payloads.

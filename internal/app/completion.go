@@ -324,6 +324,9 @@ func (m *Mods) debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, 
 		{Label: "request", Value: fmt.Sprintf("%d bytes · messages %d · tools %d", messageBytes+toolBytes, messageBytes, toolBytes)},
 		{Label: "parameters", Value: fmt.Sprintf("temperature=%s · max_tokens=%s", tempStr, maxTokStr)},
 	}
+	if size, err := proto.MeasurePromptSize(*messages, request.Tools); err == nil {
+		fields = append(fields, DebugField{Label: "prompt bytes", Value: fmt.Sprintf("%d total · system %d · tool definitions %d (descriptions %d, schemas %d); provider-neutral, not tokens", size.TotalBytes(), size.SystemBytes, size.ToolDefinitionsBytes, size.ToolDescriptionBytes, size.ToolSchemaBytes)})
+	}
 	if cfg.HTTPProxy != "" {
 		fields = append(fields, DebugField{Label: "proxy", Value: cfg.HTTPProxy})
 	}

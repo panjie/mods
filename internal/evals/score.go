@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/panjie/mods/internal/proto"
 )
@@ -31,6 +30,9 @@ const (
 	CaseCheckRecovery              = "check-recovery"
 	CaseVisualVerification         = "visual-verification"
 	CaseCodeStatistics             = "code-statistics"
+	CaseSimpleAggregation          = "simple-aggregation"
+	CaseAmbiguousSymptomFirstTurn  = "ambiguous-symptom-first-turn"
+	CaseInstalledSkill             = "installed-skill"
 )
 
 // Case is one rubric scenario. Empty optional fields disable their dimension,
@@ -44,6 +46,7 @@ type Case struct {
 	ExpectedProbeToken     string `json:"expected_probe_token,omitempty"`
 	RequiresEvidenceLabels bool   `json:"requires_evidence_labels"`
 	ForbidsClarification   bool   `json:"forbids_clarification,omitempty"`
+	ForbidsProbing         bool   `json:"forbids_probing,omitempty"`
 }
 
 // Budget returns the effective tool-call budget for the case.
@@ -101,6 +104,9 @@ func (r Report) Total() int { return len(r.Dimensions) }
 // ExpectedProbeToken; the score command enforces that.
 func Cases() []Case {
 	return []Case{
+		{ID: CaseSimpleAggregation, Description: "Sum a fixture column with a simple command or pipeline.", ForbidsClarification: true, MaxToolCalls: 3},
+		{ID: CaseAmbiguousSymptomFirstTurn, Description: "Clarify an ambiguous symptom without starting inspection in the first turn.", RequiresClarification: true, ForbidsProbing: true, MaxToolCalls: 1},
+		{ID: CaseInstalledSkill, Description: "Load an installed fixture skill and independently verify its result.", ForbidsClarification: true, MaxToolCalls: 3},
 		{ID: CaseCodeStatistics, Description: "Count tracked source files and reuse one collection for totals and breakdowns.", ForbidsClarification: true, MaxToolCalls: 4},
 		{ID: CaseClearModification, Description: "An explicit small edit with enough context; choose routine details without asking.", ForbidsClarification: true},
 		{ID: CaseMissingModificationContext, Description: "A modification with a missing target; clarify before inspection.", RequiresClarification: true},
@@ -249,6 +255,12 @@ func Score(messages []proto.Message, c Case) Report {
 			Evidence: fmt.Sprintf("%d user-input call(s); manually review any text questions", report.Metrics.UserInputCalls),
 		})
 	}
+	if c.ForbidsProbing {
+		report.Dimensions = append(report.Dimensions, Dimension{
+			Name: "no-premature-probe", Passed: firstProbe == "",
+			Evidence: fmt.Sprintf("first inspection tool: %q", firstProbe),
+		})
+	}
 	if strings.Contains(c.ID, "modification") || c.ID == CaseEditRecovery || c.ID == CaseCheckRecovery || c.ID == CaseVisualVerification {
 		report.Notes = append(report.Notes, "Transcript metrics do not establish task correctness; verify the final artifact and manually review clarification, recovery, evidence and stopping decisions.")
 	}
@@ -344,8 +356,9 @@ func asksQuestion(text string) bool {
 	if text == "" {
 		return false
 	}
-	last, _ := utf8.DecodeLastRuneInString(text)
-	return last == '?' || last == '？'
+	// A clarification can be followed by an explanatory sentence. Checking
+	// only the final punctuation rejects ordinary multi-sentence questions.
+	return strings.ContainsAny(text, "?？")
 }
 
 // isTempPath reports whether a tool argument or message mentions the system

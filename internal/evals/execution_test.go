@@ -70,3 +70,15 @@ func TestMetricsDoNotInferFailuresFromSuccessfulOutput(t *testing.T) {
 	require.Zero(t, m.FailedToolResults)
 	require.Zero(t, m.SimplificationSuggestions)
 }
+
+func TestAmbiguousFirstTurnDoesNotProbeAfterAsking(t *testing.T) {
+	c, ok := CaseByID(CaseAmbiguousSymptomFirstTurn)
+	require.True(t, ok)
+	messages := []proto.Message{userMessage("The font looks wrong."), assistantText("Which screen and what did you expect?")}
+	report := Score(messages, c)
+	require.True(t, report.Passed(), "%+v", report.Dimensions)
+	messages = append(messages, assistantTool("fs_list_dir", `{}`))
+	report = Score(messages, c)
+	require.True(t, findDimension(t, report, "clarify-first").Passed)
+	require.False(t, findDimension(t, report, "no-premature-probe").Passed, "asking first does not authorize inspecting an assumed target")
+}

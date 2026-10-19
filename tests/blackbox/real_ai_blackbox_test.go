@@ -409,10 +409,14 @@ func supportedProviderKeyEnvs() string {
 }
 
 type realAIHarness struct {
-	binary  string
-	cwd     string
-	env     []string
-	profile providerProfile
+	binary     string
+	cwd        string
+	skillsDir  string
+	env        []string
+	profile    providerProfile
+	model      string
+	minimal    bool
+	reviewMode string
 }
 
 func newRealAIHarness(t *testing.T, filesystemTools bool) *realAIHarness {
@@ -420,6 +424,23 @@ func newRealAIHarness(t *testing.T, filesystemTools bool) *realAIHarness {
 }
 
 func newRealAIHarnessWithTools(t *testing.T, filesystemTools, shellTools bool, reviewMode string) *realAIHarness {
+	t.Helper()
+	return newRealAIHarnessWithPromptMode(t, filesystemTools, shellTools, reviewMode, false)
+}
+
+// Normal mode exercises production identity, workflow and tool-selection
+// prompts. Minimal remains an explicit control for paired behavior evaluations.
+func forEachPromptMode(t *testing.T, run func(t *testing.T, minimal bool)) {
+	t.Helper()
+	for _, mode := range []struct {
+		name    string
+		minimal bool
+	}{{"normal", false}, {"minimal", true}} {
+		t.Run(mode.name, func(t *testing.T) { run(t, mode.minimal) })
+	}
+}
+
+func newRealAIHarnessWithPromptMode(t *testing.T, filesystemTools, shellTools bool, reviewMode string, minimal bool) *realAIHarness {
 	t.Helper()
 
 	if selectedProfile == nil {
@@ -437,12 +458,14 @@ func newRealAIHarnessWithTools(t *testing.T, filesystemTools, shellTools bool, r
 	cacheHome := filepath.Join(root, "cache")
 	home := filepath.Join(root, "home")
 	cwd := filepath.Join(root, "cwd")
+	skillsDir := filepath.Join(home, ".agents", "skills")
 	for _, dir := range []string{
 		filepath.Join(configHome, "mods"),
 		dataHome,
 		cacheHome,
 		home,
 		cwd,
+		skillsDir,
 	} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("create isolated test directory: %v", err)
@@ -465,12 +488,19 @@ func newRealAIHarnessWithTools(t *testing.T, filesystemTools, shellTools bool, r
 	if profile.baseURL != "" {
 		baseURL = fmt.Sprintf("    base-url: %s\n", profile.baseURL)
 	}
+	skillsPath, err := json.Marshal(skillsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := fmt.Sprintf(`default-api: %s
 default-model: %s
+role: ""
 format: ""
 raw: true
-minimal: true
+minimal: %t
+skills-dirs: [%s]
 hide-tool-status: true
+show-token-usage: true
 max-retries: 2
 review-mode: %s
 mcp-servers: {}
@@ -482,7 +512,7 @@ apis:
 %s    api-key-env: %s
     models:
       %s: {}
-`, profile.name, model, reviewMode, filesystem, shell, profile.name, baseURL, profile.keyEnv, model)
+`, profile.name, model, minimal, skillsPath, reviewMode, filesystem, shell, profile.name, baseURL, profile.keyEnv, model)
 
 	configPath := filepath.Join(configHome, "mods", "mods.yml")
 	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
@@ -492,6 +522,7 @@ apis:
 	env := append(passthroughEnvironment(),
 		profile.keyEnv+"="+key,
 		"HOME="+home,
+		"USERPROFILE="+home,
 		"XDG_CONFIG_HOME="+configHome,
 		"XDG_DATA_HOME="+dataHome,
 		"XDG_CACHE_HOME="+cacheHome,
@@ -500,10 +531,8 @@ apis:
 	)
 
 	return &realAIHarness{
-		binary:  modsBinary,
-		cwd:     cwd,
-		env:     env,
-		profile: profile,
+		binary: modsBinary, cwd: cwd, skillsDir: skillsDir,
+		env: env, profile: profile, model: model, minimal: minimal, reviewMode: reviewMode,
 	}
 }
 
@@ -542,7 +571,14 @@ func (h *realAIHarness) execute(t *testing.T, stdin string, args ...string) (str
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	started := time.Now()
 	err := cmd.Run()
+	t.Logf("provider=%s model=%s minimal=%t review=%s elapsed=%s", h.profile.name, h.model, h.minimal, h.reviewMode, time.Since(started))
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if strings.HasPrefix(line, "Token usage:") {
+			t.Log(line)
+		}
+	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatalf("mods timed out after %s\nstdout:\n%s\nstderr:\n%s",
 			commandTimeout, stdout.String(), stderr.String())

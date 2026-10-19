@@ -27,6 +27,8 @@ func TestScriptGuidanceIsSharedAndConsistent(t *testing.T) {
 	}
 	for name, text := range texts {
 		require.Contains(t, text, prompts.ScriptPolicy, "%s must use the shared script policy", name)
+		require.Contains(t, text, "Run simple commands and clear aggregation pipelines directly")
+		require.NotContains(t, text, "For multi-step or aggregation work, write")
 		for _, phrase := range contradictions {
 			require.NotContains(t, text, phrase, "%s must not reintroduce %q", name, phrase)
 		}

@@ -93,13 +93,13 @@ result:  FAIL (0/3)
 ## 7 局限
 
 1. **评分的是过程记录，不是模型本身**。它回答"这次运行是否符合流程"，不回答"模型下次会不会这样"。
-2. **启发式**：文本问句只认结尾的 `?`/`？`；证据标签只认有限的中英文词；临时路径只认系统临时目录与 `/tmp/`。
+2. **启发式**：文本问句只认消息中的 `?`/`？`（允许问题后附解释，仍可能误判引用或反问）；证据标签只认有限的中英文词；临时路径只认系统临时目录与 `/tmp/`。
 3. **未覆盖的失败模式**：改写副本的 import/版本再测量（`live-target` 可能通过）、只读警告推断用户可见效果、单点修复建议与自身证据矛盾——这些仍需人工 review。
 4. **不是 CI 行为门禁**。CI 只跑 `internal/evals` 的单元测试和 `internal/prompts` 的契约测试；会话评分需要用户数据库，按需运行。
 
 ## 8 回归与后续
 
 - 单元测试：`go test ./internal/evals -count=1`，覆盖每个维度的通过与失败、证据标签中英文、临时路径 notes。
-- 提示词契约：`internal/prompts` 的 `TestIdentityHasSymptomDiagnosisPolicy` 与 `TestDefaultRuntimePromptsStayCompact`；skill 契约在 `internal/skills` 的 `TestBuiltinSkillsAndUserOverride`。
-- 改提示词/ skill 后：对同一批历史会话重跑 case，比较 `tool-budget` 和 `clarify-first` 是否改善。
-- 后续 live eval（需要 API key，`//go:build integration`）：用 mock 工具执行器跑一个模糊症状的首轮，断言第一个工具调用是 `request_user_input`。这会真正测模型，但成本和抖动更高，先不做。
+- 提示词契约：`internal/prompts` 的 `TestWorkflowHasSymptomDiagnosisPolicy` 与 `TestFixedPromptFragmentsStayCompact`；`internal/app` 的 `TestAssembledPromptBudgets` 覆盖完整 system 与工具定义的体积。
+- 改提示词后：使用相同模型、参数与夹具重新运行，再评分新会话。重评旧会话只能验证评分规则，不能证明新提示词改善了模型行为。
+- live eval（需要 API key，`//go:build integration`）：`TestDeepSeekClarificationFirstRoundIntegration` 使用生产提示词和工具定义运行 normal/minimal 首轮对照，断言先澄清且不开始检查。工具调用仅记录而不执行；真实提问工具的终端交互由独立测试覆盖。详见 `2026-10-18-agent-execution-efficiency-evals.md`。

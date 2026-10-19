@@ -18,9 +18,10 @@ failed tool result or asks the model to resubmit. Every command goes directly to
 ordinary effect and target approval, including in minimal mode. Unknown effects
 still require the existing approval checks, and denial prevents execution.
 
-Related reads and aggregations may share one pipeline or readable script. Reuse
-collected data for subtotals; split calls when a result must be inspected before
-the next step or authorization needs to be separate. Existing scripts such as
+Run simple commands and clear aggregation pipelines directly. Prefer a readable
+script for complex branching, loops, or reusable logic. Reuse collected data for
+subtotals; split calls when a result must be inspected before the next step or
+authorization needs to be separate. Existing scripts such as
 `bash scripts/build.sh`, `python tools/check.py`, and `pwsh -File build.ps1` run
 unchanged once authorized. New multi-step scripts can use the supplied temporary
 directory; that location grants no permission for their execution effects.
@@ -69,6 +70,13 @@ approval decisions, results, timing, token usage, and the final turn summary.
 Provider call IDs and `call N/total` labels connect every tool request to its
 result, including validation failures, denied reviews, cancellations, and
 non-zero command exits.
+
+The request's `prompt bytes` line measures the rendered system text and complete
+provider-neutral tool definitions, with tool descriptions and schema JSON shown
+as breakdowns. Schema property descriptions count too. The total is system text
+plus tool-definition JSON; do not add the breakdowns again. These byte counts
+exclude conversation content and media and are not token estimates or exact
+provider wire sizes. The separate request-size line includes message history.
 
 Tool arguments are pretty-printed as JSON up to 4 KiB. Tool results are shown up
 to 16 KiB. Larger payloads retain both the beginning and end and report the

@@ -115,6 +115,8 @@ func TestLanguagePolicyMatchesPromptLanguage(t *testing.T) {
 
 func TestIdentityHasProportionateExecutionPolicy(t *testing.T) {
 	require.Contains(t, Identity, "choose routine reversible implementation")
+	require.Contains(t, Identity, "clear target and outcome")
+	require.Contains(t, Identity, "ask before inspecting or changing an assumed target")
 	require.NotContains(t, Identity, "not explicit modifications")
 }
 
@@ -190,11 +192,9 @@ func TestWorkflowHasSymptomDiagnosisPolicy(t *testing.T) {
 	require.Contains(t, Workflow, "after ten without one")
 }
 
-func TestDefaultRuntimePromptsStayCompact(t *testing.T) {
-	// Budget covers the runtime-safety identity, the execution-layer workflow,
-	// the response-language rule, the capability-filtered tool-selection
-	// prompt, and the interactive-credential fragment. Tool mechanics live in
-	// the tool descriptions; task procedures live in skills.
+func TestFixedPromptFragmentsStayCompact(t *testing.T) {
+	// This local budget covers only fixed prompt fragments. App-level request
+	// budgets measure rendered system sections and registered tool definitions.
 	require.LessOrEqual(t,
 		len(Identity)+len(Workflow)+len(LanguagePolicy)+len(ToolSelection)+len(InteractiveCredentials),
 		5376, "default runtime prompts must stay within 5.25 KiB")

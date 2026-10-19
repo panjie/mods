@@ -32,11 +32,9 @@ const (
 	InteractiveCredentials = "Use `sudo` only for required elevation; mods supplies secure askpass. Never use `sudo -S`, embed or pipe passwords, or ask for them yourself. Non-interactive sudo requires cached or passwordless authorization.\n\n" +
 		"mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or commands, script credential storage, or blindly retry Git writes."
 
-	// ScriptPolicy is the single source of truth for multi-step work. The
-	// tool-selection prompt and every tool description that recommends a script
-	// share it, so the guidance cannot drift into contradictory advice such as
-	// "run a script" versus "never use temporary scripts".
-	ScriptPolicy = "For multi-step or aggregation work, write a readable script in the supplied temporary directory and run it by its interpreter and path. Script execution still follows ordinary effect and target review; its location grants no execution permission."
+	// ScriptPolicy is shared by tool descriptions. Simple commands and pipelines
+	// stay inline; a script is a preference for complex or reusable logic.
+	ScriptPolicy = "Run simple commands and clear aggregation pipelines directly. Prefer a readable script for complex branching, loops, or reusable logic; put temporary scripts in the supplied temporary directory and invoke their interpreter and path. Script execution follows ordinary effect and target review; its location grants no execution permission."
 
 	// ToolSelectionGeneral carries only tool-choice guidance. Tool
 	// availability, review/permission policy, and denial handling live in the

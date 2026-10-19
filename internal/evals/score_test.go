@@ -62,6 +62,14 @@ func TestScoreClarifyFirst(t *testing.T) {
 		require.True(t, report.Passed(), "dimensions: %+v", report.Dimensions)
 	})
 
+	t.Run("question followed by explanation passes", func(t *testing.T) {
+		report := Score([]proto.Message{
+			userMessage("Reduce one screen's font size."),
+			assistantText("Which screen should I change? I have not inspected any files yet."),
+		}, Case{RequiresClarification: true, ForbidsProbing: true})
+		require.True(t, report.Passed(), "dimensions: %+v", report.Dimensions)
+	})
+
 	t.Run("probing first fails", func(t *testing.T) {
 		report := Score([]proto.Message{
 			userMessage("改了没生效"),

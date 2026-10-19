@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 	"github.com/panjie/mods/internal/anthropic"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/copilot"
+	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/ui"
 )
@@ -448,7 +448,7 @@ type configWizardSaveData struct {
 	webSearchAPIKeyEnv                              string
 	keyStorage, apiKey, envVarName, baseURLInput    string
 	addedModelNames                                 []string
-	copilotModelEndpoints                           map[string]string
+	modelEndpoints                                  map[string]string
 	shellOn, webSearchOn, portable                  bool
 }
 
@@ -506,10 +506,8 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 	// Previously curated model entries are left untouched.
 	for _, modelName := range configWizardNewModelNames(d.apiName, d.addedModelNames) {
 		value := configWizardNewModelSettings(d.apiName, modelName, d.baseURLInput)
-		if d.apiName == "github-copilot" {
-			if endpoint := d.copilotModelEndpoints[modelName]; endpoint != "" {
-				value["endpoint"] = endpoint
-			}
+		if endpoint := d.modelEndpoints[modelName]; endpoint != "" {
+			value["endpoint"] = endpoint
 		}
 		updates = append(updates, FieldUpdate{
 			Path:  []string{"apis", d.apiName, "models", modelName},
@@ -517,11 +515,29 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		})
 	}
 
+	// Only fill the routing field on selected existing Go models, preserving
+	// curated settings and explicit endpoint overrides.
+	if providerinfo.IsOpenCodeGoURL(d.baseURLInput) {
+		seen := map[string]bool{}
+		for _, name := range d.addedModelNames {
+			model, exists := configWizardConfiguredModel(d.apiName, name)
+			if seen[name] || !exists || strings.TrimSpace(model.Endpoint) != "" {
+				continue
+			}
+			seen[name] = true
+			if route, ok := providerinfo.OpenCodeGoRoute(d.baseURLInput, name); ok && route.Protocol == "openai" {
+				updates = append(updates, FieldUpdate{Path: []string{"apis", d.apiName, "models", name, "endpoint"}, Value: route.Endpoint})
+			}
+		}
+	}
 	return updates
 }
 
 func configWizardNewModelSettings(apiName, modelName, baseURL string) map[string]any {
 	settings := map[string]any{}
+	if route, ok := providerinfo.OpenCodeGoRoute(baseURL, modelName); ok && route.Protocol == "openai" {
+		settings["endpoint"] = route.Endpoint
+	}
 	if strings.EqualFold(strings.TrimSpace(apiName), "deepseek") &&
 		configWizardIsOfficialDeepSeekResponsesModel(modelName) &&
 		configWizardIsOfficialDeepSeekURL(baseURL) {
@@ -536,6 +552,16 @@ func configWizardIsOfficialDeepSeekResponsesModel(modelName string) bool {
 		return true
 	}
 	return false
+}
+
+func configWizardConfiguredModel(apiName, modelName string) (Model, bool) {
+	for _, api := range config.APIs {
+		if api.Name == apiName {
+			model, ok := api.Models[modelName]
+			return model, ok
+		}
+	}
+	return Model{}, false
 }
 
 func configWizardIsOfficialDeepSeekURL(baseURL string) bool {
@@ -569,53 +595,28 @@ func isHTTPURL(value string) bool {
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
-// isOpenAICompatible reports whether the provider uses the standard
-// OpenAI-compatible /chat/completions endpoint.
+// isOpenAICompatible reports whether the provider uses the OpenAI adapter
+// (Chat Completions or Responses).
 func isOpenAICompatible(apiName string) bool {
 	return providerinfo.IsOpenAICompatible(apiName)
 }
 
-// testConnection makes a minimal chat completion request to verify the
-// API key and endpoint work. Only meaningful for OpenAI-compatible providers.
-func testConnection(model, baseURL, apiKey string) error {
-	return testConnectionContext(context.Background(), model, baseURL, apiKey)
-}
-
-func testConnectionContext(ctx context.Context, model, baseURL, apiKey string) error {
-	body := map[string]any{
-		"model":      model,
-		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
-		"max_tokens": 5,
-		"stream":     false,
+func testConnectionContext(ctx context.Context, model string, cfg openai.Config) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if err := openai.CheckConnection(ctx, cfg, model); err != nil {
+		// SDK errors contain arbitrary provider messages; bound and redact
+		// before retaining them in the UI, including on save-anyway.
+		message := err.Error()
+		if cfg.AuthToken != "" {
+			message = strings.ReplaceAll(message, cfg.AuthToken, "[redacted]")
+		}
+		if len([]rune(message)) > 512 {
+			message = string([]rune(message)[:512]) + "…"
+		}
+		return fmt.Errorf("connection test: %s", message)
 	}
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return fmt.Errorf("build request: %w", err)
-	}
-
-	url := strings.TrimRight(baseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("network error: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	switch {
-	case resp.StatusCode == 401 || resp.StatusCode == 403:
-		return fmt.Errorf("invalid API key (HTTP %d)", resp.StatusCode)
-	case resp.StatusCode >= 400:
-		return fmt.Errorf("API error (HTTP %d)", resp.StatusCode)
-	default:
-		return nil
-	}
+	return nil
 }
 
 // discoverModels queries a provider's list-models endpoint and returns the
@@ -628,6 +629,10 @@ func discoverModels(apiType, baseURL, apiKey string) ([]string, error) {
 
 func discoverModelsContext(ctx context.Context, apiType, baseURL, apiKey string) ([]string, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if providerinfo.IsOpenCodeGoURL(baseURL) && (apiType == "openai" || apiType == "anthropic") {
+		ids, _, _, err := discoverOpenCodeGoModelsContext(ctx, apiType, baseURL, apiKey, "")
+		return ids, err
+	}
 	switch apiType {
 	case "ollama":
 		return fetchModelIDsContext(ctx, baseURL+"/api/tags", "", "", nil)
@@ -677,6 +682,10 @@ func discoverCopilotModelsContext(ctx context.Context, baseURL, apiKey string) (
 // either an OpenAI/Anthropic-shaped response ({"data":[{"id":"..."}]}) or an
 // Ollama-shaped one ({"models":[{"name":"..."}]}).
 func fetchModelIDsContext(ctx context.Context, url, authHeader, authValue string, extraHeaders map[string]string) ([]string, error) {
+	return fetchModelIDsWithClientContext(ctx, &http.Client{Timeout: 15 * time.Second}, url, authHeader, authValue, extraHeaders)
+}
+
+func fetchModelIDsWithClientContext(ctx context.Context, client *http.Client, url, authHeader, authValue string, extraHeaders map[string]string) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil) //nolint:gosec,noctx
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -689,7 +698,6 @@ func fetchModelIDsContext(ctx context.Context, url, authHeader, authValue string
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("network error: %w", err)

@@ -359,31 +359,32 @@ apis:
   # no per-model media capability setting is required.
 
   # Example: a service that splits models across protocols. OpenCode's
-  # zen gateway serves some models only via its OpenAI-compatible
+  # Go gateway serves some models only via its OpenAI-compatible
   # endpoints (/v1/chat/completions for GLM, Kimi, DeepSeek, MiMo and
   # /v1/responses for GPT Luna, Grok, Muse Spark) and others only via
   # its Anthropic endpoint (/v1/messages for MiniMax, Qwen). mods models
   # one provider = one protocol, so configure TWO providers sharing the
-  # same key, one per endpoint; Responses-only models set
-  # endpoint: responses on the OpenAI-compatible provider. (OpenRouter,
+  # same key, one per protocol; confirmed Responses models select
+  # endpoint: responses automatically on official Go URLs. An explicit
+  # endpoint always wins. (OpenRouter,
   # by contrast, serves every model through a single OpenAI-compatible
   # endpoint, so it needs only one provider.)
   #
-  # opencode:            # Anthropic-protocol models (MiniMax, Qwen3.7)
+  # opencode-go-anthropic: # Anthropic-protocol models (MiniMax, Qwen)
   #   api-type: anthropic
-  #   base-url: https://opencode.ai/zen/go/v1/messages
+  #   base-url: https://opencode.ai/inference/go/anthropic/v1/messages
   #   api-key:
-  #   api-key-env: OPENCODE_API_KEY
+  #   api-key-env: OPENCODE_GO_API_KEY
   #   models:
   #     qwen3.7-plus:
   #       aliases: ["qwen-plus"]
   #     minimax-m3:
-  #       aliases: ["mimo"]
+  #       aliases: ["minimax"]
   #
-  # opencode-openai:     # OpenAI-protocol models (GLM, Kimi, DeepSeek, MiMo)
-  #   base-url: https://opencode.ai/zen/go/v1
+  # opencode-go:         # OpenAI Chat + Responses models
+  #   base-url: https://opencode.ai/inference/go/openai/v1
   #   api-key:
-  #   api-key-env: OPENCODE_API_KEY
+  #   api-key-env: OPENCODE_GO_API_KEY
   #   models:
   #     glm-5.2:
   #       aliases: ["glm"]
@@ -392,4 +393,4 @@ apis:
   #     # Responses-only models (GPT Luna, Grok, Muse Spark) are served
   #     # on the same provider via the Responses API:
   #     gpt-6-luna:
-  #       endpoint: responses
+  #       endpoint: responses # optional: selected automatically

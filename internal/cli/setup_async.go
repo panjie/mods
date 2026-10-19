@@ -9,6 +9,8 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/panjie/mods/internal/openai"
+	"github.com/panjie/mods/internal/providerinfo"
 )
 
 type setupResult struct {
@@ -16,6 +18,7 @@ type setupResult struct {
 	provider, kind string
 	models         []string
 	endpoints      map[string]string
+	unconfirmed    []string
 	device         copilotDeviceCode
 	token          string
 	err            error
@@ -33,9 +36,12 @@ func (m *setupModel) discover() tea.Cmd {
 	ctx, result := m.begin("Discovering models")
 	d := m.draft()
 	protocol, endpoint, credential := m.protocol(), m.endpoint(), resolveKeyForDiscovery(m.api(), d.key)
+	sessionID := m.sessionID
 	return func() tea.Msg {
 		if protocol == "github-copilot" {
 			result.models, result.endpoints, result.err = discoverCopilotModelsContext(ctx, endpoint, credential)
+		} else if providerinfo.IsOpenCodeGoURL(endpoint) && (protocol == "openai" || protocol == "anthropic") {
+			result.models, result.endpoints, result.unconfirmed, result.err = discoverOpenCodeGoModelsContext(ctx, protocol, endpoint, credential, sessionID)
 		} else {
 			result.models, result.err = discoverModelsContext(ctx, protocol, endpoint, credential)
 		}
@@ -50,18 +56,32 @@ func (m *setupModel) authenticate() tea.Cmd {
 	return func() tea.Msg { result.device, result.err = startCopilotDeviceFlow(ctx); return result }
 }
 func (m *setupModel) checkConnection() tea.Cmd {
-	if _, err := m.saveData(); err != nil {
+	data, err := m.saveData()
+	if err != nil {
 		m.err = err
 		return nil
 	}
 	d := m.draft()
-	// Preserve the existing eligibility rules for the optional connection check.
-	if d.key == "" || m.endpoint() == "" || !isOpenAICompatible(m.protocol()) {
+	credential := resolveKeyForDiscovery(m.api(), d.key)
+	if credential == "" || m.endpoint() == "" || !isOpenAICompatible(m.protocol()) {
 		return m.commit()
 	}
 	ctx, result := m.begin("Testing connection")
-	model, endpoint, credential := d.defaultModel, m.endpoint(), d.key
-	return func() tea.Msg { result.err = testConnectionContext(ctx, model, endpoint, credential); return result }
+	model, _ := configWizardConfiguredModel(m.api(), d.defaultModel)
+	profile := ""
+	for _, api := range config.APIs {
+		if api.Name == m.api() {
+			profile = api.ProviderProfile
+		}
+	}
+	endpoint := providerinfo.OpenAIEndpoint(m.api(), d.defaultModel, m.endpoint(), data.modelEndpoints[d.defaultModel])
+	cfg := openai.Config{
+		BaseURL: m.endpoint(), AuthToken: credential, UseResponses: endpoint == "responses",
+		ProviderProfile: openai.ProviderProfile(providerinfo.Profile(m.api(), profile, model.ProviderProfile)),
+		ExtraParams:     model.ExtraParams, Headers: providerinfo.OpenCodeHeaders(m.endpoint(), m.sessionID),
+	}
+	modelName := d.defaultModel
+	return func() tea.Msg { result.err = testConnectionContext(ctx, modelName, cfg); return result }
 }
 func (m *setupModel) receive(result setupResult) tea.Cmd {
 	if result.request != m.request || result.provider != m.api() || m.canceled {
@@ -75,6 +95,7 @@ func (m *setupModel) receive(result setupResult) tea.Cmd {
 		d.discoveryErr = result.err
 		d.models = result.models
 		d.endpoints = result.endpoints
+		d.unconfirmed = result.unconfirmed
 		if result.err == nil {
 			if len(d.selected) == 0 {
 				d.selected = m.catalog.preselectedDiscoveredModels(m.api(), result.models)
@@ -135,7 +156,29 @@ func (m *setupModel) saveData() (configWizardSaveData, error) {
 	}
 	data.modelName = d.defaultModel
 	data.addedModelNames = names
-	data.copilotModelEndpoints = d.endpoints
+	data.modelEndpoints = make(map[string]string, len(names))
+	for _, name := range names {
+		model, exists := configWizardConfiguredModel(m.api(), name)
+		endpoint := d.endpoints[name]
+		if providerinfo.IsOpenCodeGoURL(m.endpoint()) {
+			route, known := providerinfo.OpenCodeGoRoute(m.endpoint(), name)
+			if known && route.Protocol != m.protocol() {
+				return data, fmt.Errorf("model %s uses %s; choose a provider with that API type", name, route.Protocol)
+			}
+			if !known && (!exists || (m.protocol() == "openai" && model.Endpoint == "")) {
+				return data, fmt.Errorf("protocol for %s is unconfirmed; configure this model and its endpoint manually in mods.yml", name)
+			}
+			if known && route.Protocol == "openai" {
+				endpoint = route.Endpoint
+			}
+		}
+		if model.Endpoint != "" {
+			endpoint = model.Endpoint
+		}
+		if endpoint != "" {
+			data.modelEndpoints[name] = endpoint
+		}
+	}
 	data.keyStorage = d.storage
 	data.apiKey = d.key
 	data.envVarName = resolveEnvVar(m.api())

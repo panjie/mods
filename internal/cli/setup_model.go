@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/providerinfo"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -57,6 +58,7 @@ type setupProviderDraft struct {
 	selected                         []string
 	manual, defaultModel             string
 	endpoints                        map[string]string
+	unconfirmed                      []string
 	discovered                       bool
 	discoveryErr                     error
 }
@@ -85,6 +87,7 @@ type setupModel struct {
 	apis                                     []setupOption
 	pickerModels                             map[string][]setupOption
 	warnings                                 []string
+	sessionID                                string
 	save                                     func(string, string, configWizardSaveData) error
 }
 
@@ -104,6 +107,8 @@ func newSetupModel() *setupModel {
 		m.data.webSearchKeyStorage = "config"
 		m.data.webSearchAPIKey = config.WebSearchAPIKey
 	}
+	// One identity for discovery and connection requests throughout setup.
+	m.sessionID = session.NewID()
 	m.input = textinput.New()
 	m.input.CharLimit = 0
 	m.filter = textinput.New()
@@ -346,6 +351,7 @@ func (m *setupModel) invalidate() {
 	d.discovered = false
 	d.models = nil
 	d.endpoints = nil
+	d.unconfirmed = nil
 	d.discoveryErr = nil
 }
 func (m *setupModel) prepare() tea.Cmd {
@@ -506,7 +512,11 @@ func (m *setupModel) options() []setupOption {
 	case setupDiscovery:
 		opts := make([]setupOption, 0, len(m.draft().models))
 		for _, v := range m.draft().models {
-			opts = append(opts, newSetupOption(configWizardModelOptionLabel(m.api(), v), v))
+			label := configWizardModelOptionLabel(m.api(), v)
+			if endpoint := m.draft().endpoints[v]; endpoint != "" && providerinfo.IsOpenCodeGoURL(m.endpoint()) {
+				label += " · " + endpoint
+			}
+			opts = append(opts, newSetupOption(label, v))
 		}
 		return opts
 	case setupDefault:

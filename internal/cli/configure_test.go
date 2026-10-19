@@ -315,7 +315,7 @@ func TestBuildConfigWizardUpdatesGitHubCopilotStoresDeviceTokenInConfig(t *testi
 		apiKey:                 "github-oauth-token",
 		baseURLInput:           "https://api.githubcopilot.com",
 		addedModelNames:        []string{"gpt-5", "claude-sonnet-4"},
-		copilotModelEndpoints:  map[string]string{"gpt-5": "responses", "claude-sonnet-4": "messages"},
+		modelEndpoints:         map[string]string{"gpt-5": "responses", "claude-sonnet-4": "messages"},
 	})
 
 	requireUpdateValue(t, updates, []string{"apis", "github-copilot", "api-key"}, "github-oauth-token")

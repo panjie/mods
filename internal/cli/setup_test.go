@@ -37,8 +37,8 @@ func setupPress(m *setupModel, code rune, mod tea.KeyMod) tea.Cmd {
 
 func TestSetupOpenCodeGoProviders(t *testing.T) {
 	for _, tc := range []struct{ name, protocol, endpoint, model string }{
-		{"opencode-go", "openai", "https://opencode.ai/zen/go/v1", "kimi-k2.7-code"},
-		{"opencode-go-anthropic", "anthropic", "https://opencode.ai/zen/go/v1/messages", "minimax-m3"},
+		{"opencode-go", "openai", "https://opencode.ai/inference/go/openai/v1", "kimi-k2.7-code"},
+		{"opencode-go-anthropic", "anthropic", "https://opencode.ai/inference/go/anthropic/v1/messages", "minimax-m3"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setupFixture(t, func(m *setupModel) {
@@ -218,11 +218,13 @@ func TestSetupDiscoveryErrorAndStaleResult(t *testing.T) {
 		_, old := m.begin("Discovering models")
 		old.models = []string{"wrong-model"}
 		old.endpoints = map[string]string{"wrong-model": "responses"}
+		old.unconfirmed = []string{"unconfirmed-model"}
 		m.enter(setupEndpoint)
 		m.setValue("http://different.example")
 		m.Update(old)
 		require.Empty(t, m.draft().models)
 		require.Empty(t, m.draft().endpoints)
+		require.Empty(t, m.draft().unconfirmed)
 		m.provider = "anthropic"
 		m.Update(old)
 		require.Empty(t, m.draft().models)

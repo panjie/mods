@@ -164,13 +164,13 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		}
 	}
 	// Match the endpoint rather than the configurable provider alias.
-	if u, err := url.Parse(resolved.BaseURL); err == nil && strings.EqualFold(u.Hostname(), "opencode.ai") {
+	if providerinfo.OpenCodeHeaders(resolved.BaseURL, "") != nil {
 		id := m.Config.SessionWriteToID
 		if id == "" {
 			m.providerSessionOnce.Do(func() { m.providerSessionID = session.NewID() })
 			id = m.providerSessionID
 		}
-		headers := map[string]string{"x-opencode-session": id, "User-Agent": "mods/1.0"}
+		headers := providerinfo.OpenCodeHeaders(resolved.BaseURL, id)
 		switch resolved.Protocol {
 		case "openai":
 			cfgs.OpenAI.Headers = headers
@@ -293,40 +293,7 @@ func useCopilotResponses(mod Model) bool {
 }
 
 func useResponsesEndpoint(mod Model, baseURL string) bool {
-	switch strings.ToLower(strings.TrimSpace(mod.Endpoint)) {
-	case copilot.EndpointResponses:
-		return true
-	case copilot.EndpointChatCompletions:
-		return false
-	}
-	if useOfficialOpenAIResponses(mod.API, baseURL) {
-		return true
-	}
-	return useOfficialDeepSeekResponses(mod, baseURL)
-}
-
-func useOfficialDeepSeekResponses(mod Model, baseURL string) bool {
-	return isOfficialDeepSeekResponsesModel(mod.Name) &&
-		useOfficialDeepSeekEndpoint(mod.API, baseURL)
-}
-
-func isOfficialDeepSeekResponsesModel(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro":
-		return true
-	}
-	return false
-}
-
-func useOfficialDeepSeekEndpoint(api, baseURL string) bool {
-	if !strings.EqualFold(strings.TrimSpace(api), "deepseek") {
-		return false
-	}
-	if strings.TrimSpace(baseURL) == "" {
-		return true
-	}
-	u, err := url.Parse(baseURL)
-	return err == nil && strings.EqualFold(u.Hostname(), "api.deepseek.com")
+	return providerinfo.OpenAIEndpoint(mod.API, mod.Name, baseURL, mod.Endpoint) == copilot.EndpointResponses
 }
 
 // newStreamClient creates the appropriate stream.Client for the given API
@@ -354,17 +321,6 @@ func newStreamClient(api string, accfg anthropic.Config, gccfg google.Config,
 		}
 		return openai.New(ccfg), nil
 	}
-}
-
-func useOfficialOpenAIResponses(api, baseURL string) bool {
-	if !strings.EqualFold(strings.TrimSpace(api), "openai") {
-		return false
-	}
-	if strings.TrimSpace(baseURL) == "" {
-		return true
-	}
-	u, err := url.Parse(baseURL)
-	return err == nil && strings.EqualFold(u.Hostname(), "api.openai.com")
 }
 
 // applyGoogleBaseURLOverride combines a user-supplied Google API URL with

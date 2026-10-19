@@ -51,7 +51,11 @@ func (m *setupModel) heading() (string, string) {
 	case setupAuth:
 		return "GitHub Copilot sign in", "Authorize mods using GitHub's device flow."
 	case setupDiscovery:
-		return "Discover models", "Choose models for " + m.api() + "."
+		description := "Choose models for " + m.api() + "."
+		if unknown := m.draft().unconfirmed; len(unknown) > 0 {
+			description += "\nUnconfirmed protocol (configure manually in mods.yml): " + strings.Join(unknown, ", ")
+		}
+		return "Discover models", description
 	case setupManual:
 		return "New models", configWizardManualModelsDescription(m.draft().discoveryErr)
 	case setupDefault:

@@ -10,6 +10,7 @@ import (
 	"github.com/panjie/mods/internal/ollama"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,7 +84,7 @@ func TestUseOfficialOpenAIResponses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, useOfficialOpenAIResponses(tt.api, tt.baseURL))
+			require.Equal(t, tt.want, providerinfo.OpenAIEndpoint(tt.api, "", tt.baseURL, "") == "responses")
 		})
 	}
 
@@ -381,6 +382,31 @@ func TestBuildProviderConfigsOpenCodeSessionHeaders(t *testing.T) {
 				require.Empty(t, getHeaders(), "do not send session identity to unrelated endpoints")
 			})
 		}
+	}
+}
+
+func TestBuildProviderConfigsOpenCodeGoResponsesRoutes(t *testing.T) {
+	mods := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	for _, name := range []string{"gpt-6-luna", "gpt-5.6-luna", "grok-4.7", "muse-spark-1.2-contributor", "muse-spark-1.3-contributor"} {
+		cfgs, err := mods.buildProviderConfigs(Model{API: "opencode-go", Name: name}, API{Name: "opencode-go", APIKey: "test-key"})
+		require.NoError(t, err)
+		require.True(t, cfgs.OpenAI.UseResponses, name)
+		require.Equal(t, openai.ProviderProfileOpenAI, cfgs.OpenAI.ProviderProfile)
+		require.NotEmpty(t, cfgs.OpenAI.Headers["x-opencode-session"])
+	}
+	for _, tc := range []struct {
+		model, endpoint, base string
+		want                  bool
+	}{
+		{"gpt-6-luna", "", "https://opencode.ai/zen/go/v1", true},
+		{"gpt-6-luna", "chat-completions", "https://opencode.ai/zen/go/v1", false},
+		{"deepseek-v4-pro", "", "https://opencode.ai/zen/go/v1", false},
+		{"future-model", "", "https://opencode.ai/zen/go/v1", false},
+		{"gpt-6-luna", "", "https://gateway.example/v1", false},
+	} {
+		cfgs, err := mods.buildProviderConfigs(Model{API: "custom-alias", Protocol: "openai", Name: tc.model, Endpoint: tc.endpoint}, API{Name: "custom-alias", BaseURL: tc.base, APIKey: "test-key"})
+		require.NoError(t, err)
+		require.Equal(t, tc.want, cfgs.OpenAI.UseResponses, "%+v", tc)
 	}
 }
 

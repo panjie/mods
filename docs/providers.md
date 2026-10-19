@@ -11,6 +11,7 @@ under `apis.<provider>` in `mods.yml`.
 | Google       | `google`       | `GOOGLE_API_KEY`             | [aistudio.google.com][Gemini]                 |
 | Azure OpenAI | `azure`        | `AZURE_OPENAI_KEY`           | [azure.microsoft.com][Azure OpenAI]           |
 | DeepSeek     | `deepseek`     | `DEEPSEEK_API_KEY`           | [platform.deepseek.com][DeepSeek]             |
+| OpenCode Go  | `opencode-go` / `opencode-go-anthropic` | `OPENCODE_GO_API_KEY` | [opencode.ai/auth][OpenCode Go] |
 | OpenRouter   | `openrouter`   | `OPENROUTER_API_KEY`         | [openrouter.ai][OpenRouter]                   |
 | Ollama       | `ollama`       | — (local)                    | [ollama.com][Ollama]                          |
 | GLM          | `glm`          | `ZAI_API_KEY`                | [open.bigmodel.cn][GLM]                       |
@@ -23,6 +24,7 @@ under `apis.<provider>` in `mods.yml`.
 [Gemini]: https://aistudio.google.com/apikey
 [Azure OpenAI]: https://azure.microsoft.com/en-us/products/cognitive-services/openai-service
 [DeepSeek]: https://platform.deepseek.com/api_keys
+[OpenCode Go]: https://opencode.ai/auth
 [OpenRouter]: https://openrouter.ai/settings/keys
 [Ollama]: https://ollama.com
 [GLM]: https://open.bigmodel.cn/
@@ -95,6 +97,58 @@ Tavily key; other endpoints keep the existing local search behavior.
 
 The Azure adapter uses Chat Completions and does not support
 `endpoint: responses`.
+
+## OpenCode Go
+
+OpenCode Go serves models through several protocols. Use `opencode-go` for
+OpenAI-compatible Chat Completions and Responses models, and
+`opencode-go-anthropic` for Anthropic Messages models. Both use
+`OPENCODE_GO_API_KEY`.
+
+On official Go endpoints, Mods automatically selects Responses for
+`gpt-6-luna`, `gpt-5.6-luna`, `grok-4.7`, `muse-spark-1.2-contributor`, and
+`muse-spark-1.3-contributor`. This also applies to existing models with no
+`endpoint` setting and custom provider names using the same official Go URL.
+An explicit model `endpoint` always takes precedence. Other gateway URLs do
+not inherit these defaults from the model name.
+
+```yaml
+apis:
+  opencode-go:
+    base-url: https://opencode.ai/inference/go/openai/v1
+    api-key-env: OPENCODE_GO_API_KEY
+    models:
+      gpt-6-luna:
+        endpoint: responses # optional: selected automatically
+      kimi-k2.7-code:
+        endpoint: chat-completions
+  opencode-go-anthropic:
+    base-url: https://opencode.ai/inference/go/anthropic/v1/messages
+    api-key-env: OPENCODE_GO_API_KEY
+    models:
+      minimax-m3: {}
+      qwen3.8-max: {}
+```
+
+The configuration wizard reads the shared `/inference/go/v1/models` catalog
+and offers models with a confirmed matching protocol. Unknown models are
+listed as unconfirmed; configure their protocol and endpoint manually in
+`mods.yml` after checking the [official endpoint table][OpenCode Go endpoints].
+Google-protocol Go models require separate configuration and are not offered
+under the OpenAI or Anthropic providers.
+
+New configurations use the URLs above. Existing `/zen/go/v1` and
+`/inference/go/v1` configurations keep their configured URL and receive the
+same model routing defaults. If a legacy URL is rejected by the service,
+update it to the current URL. The new OpenAI generation URL does not expose a
+`/models` endpoint; Mods uses the shared catalog instead.
+
+Runtime and setup requests identify Mods with its own User-Agent and a stable
+`x-opencode-session` ID. The OpenAI-compatible connection check uses the
+selected endpoint and requires a normally completed stream. Authentication,
+regional availability, and model access remain subject to the service.
+
+[OpenCode Go endpoints]: https://opencode.ai/v2/docs/console/go/#endpoints
 
 ## Reasoning Controls
 

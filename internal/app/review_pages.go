@@ -50,21 +50,10 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 	}
 	inner := max(1, interactionPanelInnerWidth(styles, width))
 	rows := reviewOrderedRows(p.rows)
-	wrapRows := func(compact bool) []string {
-		displayRows := append([]interactionRow(nil), rows...)
-		if len(r.reviewItem.candidateRules) > 0 {
-			var references []interactionRow
-			if compact {
-				references = rows
-			}
-			displayRows = append(displayRows, interactionRow{Label: "If A", Value: sessionRuleLabel(r.reviewItem.candidateRules, references)})
-		}
-		var lines []string
-		for _, row := range displayRows {
-			text := row.Label + ": " + reviewLiteral(row.Value)
-			lines = append(lines, strings.Split(ansi.Hardwrap(text, inner, false), "\n")...)
-		}
-		return lines
+	var lines []string
+	for _, row := range rows {
+		text := row.Label + ": " + reviewLiteral(row.Value)
+		lines = append(lines, strings.Split(ansi.Hardwrap(text, inner, false), "\n")...)
 	}
 	// Reserve the actual wrapped header and controls before allocating pages.
 	reservedActions := []interactionAction{{Key: "↑/↓", Label: "Pages"}}
@@ -75,13 +64,10 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 		Title: "Review", Meta: "1/1", Tone: p.tone, ToneText: p.toneText, Headline: p.headline, Actions: reservedActions,
 	}))
 	pageSize := max(1, height-overhead)
-	lines := wrapRows(true)
 	const hint = "Review all pages to enable approval."
 	if len(lines) > pageSize {
-		// Cross-page references are ambiguous. Repeat the exact grant when its
-		// target cannot be shown alongside it, and reserve the navigation hint
-		// on every page so enabling approval never shifts page boundaries.
-		lines = wrapRows(false)
+		// Reserve the navigation hint on every page so enabling approval never
+		// shifts page boundaries.
 		pageSize = max(1, pageSize-lipgloss.Height(ansi.Hardwrap(hint, inner, false)))
 	}
 	layout := fmt.Sprintf("%d/%d/%d", width, height, len(lines))

@@ -276,7 +276,6 @@ what will execute and which write targets the decision covers:
 ```
 Review: Run: rm -f /path/to/project/demo.gif
 [Y] Approve  [N] Deny  [A] Allow for session  [Ctrl+C] Cancel
-Session: this conversation only; writes in /path/to/project and subdirectories
 ```
 
 - `Y` — approve this one call

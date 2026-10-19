@@ -25,9 +25,11 @@ single-line fallback. No new configuration keys or session migrations are needed
 ## Review
 
 Affected targets precede commands and technical details. Download source/target
-pairs remain adjacent. Reusable permission is labelled “Allow for session” and
-identifies conversation lifetime, directory subtree coverage and exact remote
-origins. Authorization, persistence and key semantics do not change.
+pairs remain adjacent. Reusable permission is labelled “Allow for session”.
+Paged command and download reviews show the complete target rows and do not
+repeat the saved grant, which would restate the targets already on screen; other
+reviews also identify conversation lifetime, directory subtree coverage and exact
+remote origins. Authorization, persistence and key semantics do not change.
 
 Paged reviews reserve the measured height of wrapped headers and actions before
 allocating content rows. Every page must still be shown before approval; resizing

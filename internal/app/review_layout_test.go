@@ -41,7 +41,6 @@ func TestSessionReviewFitsAndRequiresEveryPageAfterResize(t *testing.T) {
 		}
 		require.True(t, r.canApprovePages())
 		require.Contains(t, strings.ReplaceAll(strings.Join(strings.Fields(all), ""), "│", ""), "FINAL_COMMAND")
-		require.Contains(t, compactReviewText(all), "thisconversationonly")
 		require.Contains(t, all, "Allow for session")
 	}
 }
@@ -62,22 +61,25 @@ func newPagedTestReviewer(command string) *toolReviewer {
 	return r
 }
 
-func TestReviewSessionReferenceOnlyOnSinglePage(t *testing.T) {
+func TestCommandReviewDoesNotRestateSessionGrant(t *testing.T) {
 	styles := makeStyles(true).Interaction
-	r := newPagedTestReviewer("touch file")
-	view := r.renderBanner(120, styles, 24)
-	require.Equal(t, 1, r.reviewPages)
-	require.Equal(t, 1, strings.Count(view, "/project"))
-	require.Contains(t, view, "above directories")
-
-	r = newPagedTestReviewer(strings.Repeat("echo long-command; ", 100))
-	r.renderBanner(60, styles, 16)
-	for r.reviewPage+1 < r.reviewPages {
-		r.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
-		view = r.renderBanner(60, styles, 16)
-		require.NotContains(t, view, "above directories")
+	r := newPagedTestReviewer("touch /project/file")
+	require.Contains(t, r.renderBanner(120, styles, 40), "Allow for session")
+	for _, size := range [][2]int{{120, 40}, {60, 16}} {
+		view := r.renderBanner(size[0], styles, size[1])
+		for {
+			// The target rows already show the grant targets, so repeating the
+			// saved rule ("If A: ...") only adds noise to command reviews.
+			text := compactReviewText(view)
+			require.NotContains(t, text, "IfA:")
+			require.NotContains(t, text, "thisconversationonly")
+			if r.reviewPage+1 == r.reviewPages {
+				break
+			}
+			r.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+			view = r.renderBanner(size[0], styles, size[1])
+		}
 	}
-	require.Contains(t, compactReviewText(view), "Writedirs:/project(includingsubdirectories)")
 }
 
 func TestReviewNavigationSkipsUnavailableActions(t *testing.T) {

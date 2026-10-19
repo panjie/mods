@@ -57,7 +57,7 @@ Git 的输入来源优先级为 `GIT_ASKPASS` → `core.askPass` → `SSH_ASKPAS
 ### 3.2 非交互与超时
 
 - mods 托管的 Git 执行环境设置 `GIT_TERMINAL_PROMPT=0`，禁止缺少凭据时回落到不可用的终端。
-- raw、minimal、非 TTY 和 write-target discovery 不注册认证 UI 回调。现成凭据仍可使用；需要 mods 输入时立即返回可识别错误。
+- raw、minimal 和非 TTY 不注册认证 UI 回调。现成凭据仍可使用；需要 mods 输入时立即返回可识别错误。
 - `GIT_TERMINAL_PROMPT=0` 不会禁止外部 credential helper 自己开浏览器或等待输入。此类程序仍受命令总超时约束，不宣称能统一接管其交互。
 - 首版保留现有超时含义：用户输入时间计入 `timeout_ms`/配置的命令总超时，默认 60 秒。面板说明剩余时间或超时约束；不引入暂停计时的隐藏行为。
 - 超时必须撤销排队或已显示的输入请求。用请求 ID 防止迟到消息关闭后续请求；取消当前认证后禁止同一次命令继续反复弹窗。
@@ -189,7 +189,7 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 test
 
 - T0：采用最低优先级 `SSH_ASKPASS` 回退，省去原先设想的配置查询/委托；显式已有 askpass（含空值）不覆盖。
 - T1：`internal/tools/git_auth*.go` 实现独立 broker、32 字节随机 token、消息大小限制、连接 deadline、取消锁止和幂等清理。Unix 使用私有目录 socket，Windows 使用仅当前用户 ACL 的 named pipe（`github.com/Microsoft/go-winio v0.6.2`）。helper 为无凭据的短脚本，进入 `main.go` 私有分派。
-- T2：`commandRunner.Prepare` 在实际执行上下文内准备认证环境。process/shell/PowerShell 经配置回调接入；环境按平台键规则合并。write-target discovery 通过上下文显式禁用认证 UI，避免复用正常 registry 时意外弹窗。
+- T2：`commandRunner.Prepare` 在实际执行上下文内准备认证环境。process/shell/PowerShell 经配置回调接入；环境按平台键规则合并。
 - T3：`app/git_auth.go` 复用现有编辑器；用户名普通输入，未知字段掩码输入。输入请求使用独立响应 channel 作身份标识，取消消息仅关闭对应请求。请求结束清空编辑器；`secrets.RememberForRedaction` 在返回子进程前登记输入，覆盖原文及 Go JSON 转义表示，不产生工具 secret_ref。
 - T4：真实 Git 测试覆盖认证优先级、路径空格/Unicode/单引号、取消锁止、超时清理、非交互。隔离的本地 TLS Git HTTP backend 跑通 push → clone → fetch，并覆盖平台脚本调用和 discovery 禁止输入。无真实账号或外部写入。
 - T5：README 和运行时引导已更新，不增加公开工具、配置或权限规则。

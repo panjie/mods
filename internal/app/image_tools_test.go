@@ -37,8 +37,6 @@ func TestImageToolCallerReadsExternalPixelsWithoutReview(t *testing.T) {
 	require.NoError(t, err, result.Text)
 	require.Len(t, result.Media, 1)
 	require.Equal(t, b.Bytes(), result.Media[0].Data)
-	require.False(t, writeTargetToolAllowed(registry, "fs_read_images"))
-	require.False(t, writeTargetToolAllowed(registry, "fs_find_images"))
 }
 
 func TestAudioToolCallerReadsExternalRecordingWithoutReview(t *testing.T) {
@@ -61,8 +59,6 @@ func TestAudioToolCallerReadsExternalRecordingWithoutReview(t *testing.T) {
 	require.NoError(t, err, result.Text)
 	require.Len(t, result.Media, 1)
 	require.Equal(t, "audio", result.Media[0].Kind)
-	require.False(t, writeTargetToolAllowed(registry, "fs_read_media"))
-	require.False(t, writeTargetToolAllowed(registry, "fs_find_media"))
 }
 
 func TestVideoToolCallerReadsExternalRecordingWithoutReview(t *testing.T) {
@@ -85,6 +81,4 @@ func TestVideoToolCallerReadsExternalRecordingWithoutReview(t *testing.T) {
 	require.NoError(t, err, result.Text)
 	require.Len(t, result.Media, 1)
 	require.Equal(t, "video", result.Media[0].Kind)
-	require.False(t, writeTargetToolAllowed(registry, "fs_read_media"))
-	require.False(t, writeTargetToolAllowed(registry, "fs_find_media"))
 }

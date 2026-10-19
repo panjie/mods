@@ -94,9 +94,4 @@ func TestGitAuthHTTPSCommands(t *testing.T) {
 	out, err := runShellCommand(context.Background(), ShellConfig{Root: root, Timeout: 15 * time.Second, GitAuth: handler}, root, tool, command, nil, nil, build)
 	require.NoError(t, err, out)
 	require.Contains(t, out, head)
-	// Discovery uses the very same configured registry but cannot open a UI.
-	before := prompts.Load()
-	_, err = runShellCommand(WithoutGitAuthInput(context.Background()), ShellConfig{Root: root, Timeout: 5 * time.Second, GitAuth: handler}, root, tool, command, nil, nil, build)
-	require.Error(t, err)
-	require.Equal(t, before, prompts.Load())
 }

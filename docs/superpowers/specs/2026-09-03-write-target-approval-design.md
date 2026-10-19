@@ -2,7 +2,7 @@
 
 **日期：** 2026-09-03  
 **状态：** 已实现  
-**取代：** `2026-07-02-unified-directory-approval-design.md` 中的读审批矩阵，以及 `2026-08-27-prompt-intent-approval-design.md`
+**取代：** `2026-07-02-unified-directory-approval-design.md` 中的读审批矩阵
 
 ## 目标
 
@@ -11,9 +11,9 @@
 `review-mode=always` 再次询问。无法判定读写性质时按未知写操作处理。
 
 写操作按确定性目标授权：本地文件系统使用目录子树，远程资源使用完整
-origin。在 `auto` 下，执行前的写目标预判可依据用户提示词生成普通 session
-写规则；执行时仍按实际工具调用的写目标匹配规则。详见
-`2026-09-11-write-target-inference-design.md`。
+origin。在 `auto` 下，执行时按实际工具调用的写目标匹配已保存的 session
+规则；未覆盖的非临时写入必须通过普通审批。用户选择 Allow for session 后
+保存本次审批覆盖的目录和远程 origin。
 
 ## 2026-09-10 补充：执行结构约束
 
@@ -74,8 +74,8 @@ allow。
 
 静态分析能证明 effect 时不调用 LLM。静态无法证明时 LLM 只返回 read、write
 或 unknown 以及本地目录提示；解析失败、调用失败或非法响应按 unknown/write
-进入单次审批。此处的 shell effect 分类器不生成远端授权；独立的执行前
-预判可以根据用户请求推断远端目标，并生成普通 session 规则。
+进入单次审批。此处的 shell effect 分类器不生成授权；session 写规则由
+用户在审批时选择 Allow for session 保存。
 
 ## 执行与展示
 
@@ -96,7 +96,7 @@ replace-table 模式，旧行的 `origins` 置为空数组语义。
 - 目录子树、origin 精确匹配、混合目标全覆盖和旧规则失效；
 - HTTP 默认端口、非默认端口、凭据脱敏、SSH/SCP、Git alias 与动态远端；
 - HTTP/SSE 与 stdio MCP 的 Always allow 差异；
-- 执行阶段的 LLM 作为 effect 回退且异常时 fail closed；预判失败回到普通审批；
+- 执行阶段的 LLM 作为 effect 回退且异常时 fail closed；
 - origins 数据库迁移、session 恢复、session 隔离，以及改变 cwd 后目录
   和远程规则仍有效；
 - POSIX、PowerShell 以及项目标准 `check`、`test`。

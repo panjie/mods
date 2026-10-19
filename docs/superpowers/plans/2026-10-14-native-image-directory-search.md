@@ -91,7 +91,7 @@
 ## 实施顺序与检查点
 
 - [x] **任务 1：建立能力与协议基线。** 为 DeepSeek Flash、旧别名、Pro、Chat/Responses 写能力矩阵测试；以官方协议构造多模态工具请求体样例。确定支持通道和 SDK 编码方案。
-- [x] **任务 2：贯通结构化工具结果。** 修改 internal/proto、internal/tools/tools.go、internal/stream、internal/app/request_session.go、write_targets.go 和各 provider 调用点。文本工具用适配器保持行为；写目标推断的发现工具集合排除新的视觉工具。MCP 先保留现有文本行为并适配类型，MCP 图片透传不作为本次依赖。
+- [x] **任务 2：贯通结构化工具结果。** 修改 internal/proto、internal/tools/tools.go、internal/stream、internal/app/request_session.go 和各 provider 调用点。文本工具用适配器保持行为。MCP 先保留现有文本行为并适配类型，MCP 图片透传不作为本次依赖。
 - [x] **任务 3：实现 provider 图片回传。** 修改 internal/openai/format.go、responses_format.go、responses.go、openai.go，以及支持通道的 Anthropic/Ollama 格式化和循环代码。先用模拟 API 验证连续两轮和同轮多个调用，再开放工具能力。
 - [x] **任务 4：实现枚举与读图工具。** 在 internal/tools 增加 image_tools.go、image_scan.go 及测试；复用 internal/image 的格式识别并补充有效图片校验；在 internal/tooling/tools.go 单点注册，更新 app/tool_support.go 的能力传递。
 - [x] **任务 5：完成目录检索体验与预算。** 修改文件意图识别、执行提示、进度及未完成状态；集中检查请求图片预算。不将工具清单写入 identity.md。

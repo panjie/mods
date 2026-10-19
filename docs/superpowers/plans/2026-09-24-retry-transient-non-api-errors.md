@@ -24,7 +24,6 @@
 - Mid-turn retry restarts the whole turn from the user input (`setupStreamContext` resets `m.messages`, internal/app/stream.go:24) — existing 429/503 semantics; tool calls re-run; session approval rules persist.
 - `m.retries` is never reset in production code (only tests set it to 0) — chat-mode budget accumulation quirk, also affects 429/503 today.
 - `debugTurnActive` is not reset when debug is disabled (debug_lifecycle.go:53 early return), so it cannot serve as a "new turn" detector; reset belongs at successful turn end (`streamEventDone`).
-- Write-target inference failures are already tolerated (write_targets.go:44-48) — out of scope.
 - Existing test `non-openai error returns generic message` (mods_errors_test.go:182-190) expects `modsError` for `network timeout`; it must be updated to an exhausted-budget setup because fresh-budget transient errors now retry.
 
 ## Review Focus

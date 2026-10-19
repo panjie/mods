@@ -148,11 +148,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		TrackUsage:   cfg.ShowTokenUsage,
 		ResultCaller: m.toolResultCaller(registry, cfg),
 	}
-	if err := m.prepareWriteTargets(client, registry, request); err != nil {
-		_ = registry.Close()
-		cancel()
-		return requestSession{}, err
-	}
 	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
 		request.ResponseFormat = &cfg.Format
 	}
@@ -406,7 +401,9 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 		if _, ok := registry.Tool(name); !ok {
 			return proto.ToolResult{}, registry.UnknownToolError(name)
 		}
-		ctx, cancel := m.toolCallContext(registry, name, cfg)
+		// Authorization may wait for the user.
+		// Start the execution timeout only after authorization completes.
+		ctx, cancel := context.WithCancel(m.ctx)
 		m.addCancel(cancel)
 		defer cancel()
 		// Reject malformed calls (missing/empty required args) before computing
@@ -417,6 +414,8 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 			return proto.ToolResult{}, err
 		}
 		if registry.Interactive(name) {
+			ctx, cancel := m.toolCallContext(registry, name, cfg)
+			defer cancel()
 			approvalRecord = approvalTrace{Source: "interactive", Detail: "tool-managed"}
 			m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
 			return registry.CallResult(ctx, name, data)
@@ -496,6 +495,11 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 			},
 		}, name, data); err != nil {
 			return proto.ToolResult{}, err
+		}
+		if registry.TimeoutPolicy(name) != toolregistry.TimeoutPolicySelf {
+			var executionCancel context.CancelFunc
+			ctx, executionCancel = context.WithTimeout(ctx, cfg.MCPTimeout)
+			defer executionCancel()
 		}
 		callData := data
 		// cwd is read-only execution context, separately authorized from writes.

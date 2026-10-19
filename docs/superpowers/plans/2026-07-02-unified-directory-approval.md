@@ -9,5 +9,4 @@
 - 写入按具体本地目录或远程 origin 授权；授权保存在当前会话中。
 - 临时目录写入例外仍需明确的写入目标和已知操作效果。
 
-参见 [写入目标审批设计](../specs/2026-09-03-write-target-approval-design.md)
-和 [写入目标推断设计](../specs/2026-09-11-write-target-inference-design.md)。
+参见 [写入目标审批设计](../specs/2026-09-03-write-target-approval-design.md)。

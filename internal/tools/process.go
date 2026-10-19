@@ -423,13 +423,8 @@ func SelectedShellInfo() RuntimeShellInfo {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()")
-		out, err := cmd.Output()
-		if err == nil {
-			version := strings.TrimSpace(string(out))
-			if version != "" {
-				selectedShellInfo.Version = &version
-			}
+		if version, err := PowerShellVersion(ctx, path); err == nil {
+			selectedShellInfo.Version = &version
 		}
 	})
 	return selectedShellInfo

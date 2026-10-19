@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the DuckDuckGo web search provider.
 - Removed plan mode, including the `--plan` / `-p` flags and the `prompts.plan` override.
 - Removed the `max-input-chars`, `max-tokens`, `no-limit`, and `builtin-tools.shell-max-output` settings and their related input, response, and tool-output truncation behavior.
-- Removed prompt-intent and write-scope authorization, including their settings and classifier prompts.
+- Removed prompt-intent, write-scope authorization, and model-based write-target inference, including runtime hooks, prompts, configuration remnants, and dedicated tests. Session write permissions now come from explicit review decisions.
 
 ## [3.3.0] - 2026-07-06
 

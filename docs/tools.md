@@ -60,9 +60,8 @@ Windows, including its bundled shell.
 
 Input counts toward the command timeout (60 seconds by default). Escape cancels
 authentication; timeout or task cancellation also closes the prompt. Mods does
-not automatically rerun the command. Raw/minimal mode, non-interactive sessions,
-and write-target discovery cannot open these prompts: configure credentials
-beforehand. SSH private-key unlocking, host-key confirmation, and interactive
+not automatically rerun the command. Raw/minimal mode and non-interactive
+sessions cannot open these prompts: configure credentials beforehand. SSH private-key unlocking, host-key confirmation, and interactive
 `gh auth login` are not handled by this bridge.
 
 ## Debug Output

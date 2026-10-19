@@ -286,20 +286,7 @@ func probeShellVersionStatus(probe shellVersionProbe, name string) string {
 }
 
 func defaultShellVersionProbe(ctx context.Context, name string) (string, error) {
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.CommandContext(ctx, path, "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	version := strings.TrimSpace(string(out))
-	if version == "" {
-		return "", fmt.Errorf("%s returned empty version output", name)
-	}
-	return version, nil
+	return toolregistry.PowerShellVersion(ctx, name)
 }
 
 func (m *Mods) appendImageWithMime(images []proto.Image, totalBytes *int, data []byte, mime string) ([]proto.Image, error) {

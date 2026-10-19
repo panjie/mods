@@ -37,13 +37,6 @@ type GitAuthRequest struct {
 
 type GitAuthHandler func(context.Context, GitAuthRequest) (string, error)
 
-type nonInteractiveGitAuthKey struct{}
-
-// WithoutGitAuthInput suppresses runtime credential prompts during discovery.
-func WithoutGitAuthInput(ctx context.Context) context.Context {
-	return context.WithValue(ctx, nonInteractiveGitAuthKey{}, true)
-}
-
 type gitAskpassRequest struct {
 	Token  string `json:"token"`
 	Prompt string `json:"prompt"`
@@ -95,9 +88,6 @@ func lookupCommandEnv(env []string, name string) (string, bool) {
 // precedence for credential helpers, GIT_ASKPASS and core.askPass. A user's
 // existing SSH_ASKPASS is left intact too. No Git config or command is rewritten.
 func prepareGitAuth(ctx context.Context, cmd *exec.Cmd, display string, prompt GitAuthHandler) (func(), error) {
-	if disabled, _ := ctx.Value(nonInteractiveGitAuthKey{}).(bool); disabled {
-		prompt = nil
-	}
 	env := cmd.Environ()
 	cmd.Env = commandEnv(env, map[string]string{"GIT_TERMINAL_PROMPT": "0"})
 	_, existingAskpass := lookupCommandEnv(env, "SSH_ASKPASS")

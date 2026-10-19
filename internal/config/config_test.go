@@ -80,7 +80,6 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	}
 	require.Equal(t, "80", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
-	require.NotContains(t, documented, "prompt-intent")
 	require.Equal(t, "false", documented["web-search"].Default)
 	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
 	require.Equal(t, DefaultWebSearchAPIKeyEnv, documented["web-search-api-key-env"].Default)
@@ -111,19 +110,6 @@ func TestPromptConfig(t *testing.T) {
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
-}
-
-func TestRemovedPromptIntentYAMLIsIgnored(t *testing.T) {
-	cfg := Default()
-	require.NoError(t, yaml.Unmarshal([]byte(`
-prompt-intent: true
-prompts:
-  prompt-intent-classifier: legacy intent prompt
-  write-scope-classifier: legacy scope prompt
-`), &cfg))
-	require.Empty(t, cfg.Prompts.Identity)
-	require.Empty(t, cfg.Prompts.ToolSelection)
-	require.Empty(t, cfg.Prompts.ShellClassifier)
 }
 
 func TestReasoningEffortOffYAML(t *testing.T) {

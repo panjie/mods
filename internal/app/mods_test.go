@@ -21,6 +21,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/prompts"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/skills"
@@ -512,6 +513,33 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		require.Contains(t, systemContents(m.messages), modsIdentityPrompt)
 	})
 
+	t.Run("normal mode injects workflow at the execution layer", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello"))
+		require.Contains(t, systemContents(m.messages), prompts.Workflow)
+		var found bool
+		for _, message := range m.messages {
+			if strings.TrimSpace(message.Content) == strings.TrimSpace(prompts.Workflow) {
+				require.Equal(t, proto.SystemSectionExecutionWorkflow, message.SystemSection())
+				found = true
+			}
+		}
+		require.True(t, found, "workflow prompt must be injected")
+	})
+
+	t.Run("language policy is injected in the output format layer", func(t *testing.T) {
+		m := newTestMods(Config{})
+		require.NoError(t, m.setupStreamContext("hello"))
+		var found bool
+		for _, message := range m.messages {
+			if message.Content == prompts.LanguagePolicy {
+				require.Equal(t, proto.SystemSectionOutputFormat, message.SystemSection())
+				found = true
+			}
+		}
+		require.True(t, found, "language policy must be injected")
+	})
+
 	t.Run("system info uses cwd field", func(t *testing.T) {
 		m := newTestMods(Config{})
 		require.NoError(t, m.setupStreamContext("hello"))
@@ -530,7 +558,10 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 	t.Run("minimal mode skips identity", func(t *testing.T) {
 		m := newTestMods(Config{PersistentConfig: PersistentConfig{Minimal: true}})
 		require.NoError(t, m.setupStreamContext("hello"))
-		require.NotContains(t, systemContents(m.messages), modsIdentityPrompt)
+		contents := systemContents(m.messages)
+		require.NotContains(t, contents, modsIdentityPrompt)
+		require.NotContains(t, contents, prompts.Workflow)
+		require.NotContains(t, contents, prompts.LanguagePolicy)
 	})
 
 	t.Run("identity prompt override", func(t *testing.T) {
@@ -541,6 +572,19 @@ func TestSetupStreamContextIdentityPrompt(t *testing.T) {
 		contents := systemContents(m.messages)
 		require.Contains(t, contents, "custom identity")
 		require.NotContains(t, contents, modsIdentityPrompt)
+		// Overriding runtime safety does not remove execution-layer guidance.
+		require.Contains(t, contents, prompts.Workflow)
+	})
+
+	t.Run("workflow prompt override", func(t *testing.T) {
+		m := newTestMods(Config{PersistentConfig: PersistentConfig{
+			Prompts: PromptConfig{Workflow: "custom workflow"},
+		}})
+		require.NoError(t, m.setupStreamContext("hello"))
+		contents := systemContents(m.messages)
+		require.Contains(t, contents, "custom workflow")
+		require.NotContains(t, contents, prompts.Workflow)
+		require.Contains(t, contents, modsIdentityPrompt)
 	})
 
 	t.Run("tool selection prompt override", func(t *testing.T) {
@@ -594,7 +638,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		m.skillCatalog = catalog
 		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
-		require.Contains(t, joined, "## Available skills")
+		require.Contains(t, joined, "Load a skill by name with load_skill")
 		require.Contains(t, joined, "demo: Demo skill.")
 		require.NotContains(t, joined, "Skill safe directories:")
 		require.NotContains(t, joined, filepath.Dir(skillDir))
@@ -604,7 +648,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		m := newTestMods(Config{})
 		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
-		require.NotContains(t, joined, "Available skills")
+		require.NotContains(t, joined, "Load a skill by name with load_skill")
 		require.NotContains(t, joined, "Skill safe directories:")
 	})
 
@@ -621,7 +665,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		m.skillCatalog = catalog
 		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
-		require.NotContains(t, joined, "Available skills")
+		require.NotContains(t, joined, "Load a skill by name with load_skill")
 		require.NotContains(t, joined, "Skill safe directories:")
 	})
 }

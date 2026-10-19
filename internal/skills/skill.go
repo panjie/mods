@@ -358,8 +358,9 @@ func CatalogPromptBudget(catalog []Skill, maxBytes int) CatalogRender {
 	sorted := append([]Skill(nil), catalog...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 
-	const header = "## Available skills\n\n" +
-		"Call load_skill(<name>) to load full instructions. If the name is unknown or omitted below, call search_skills first.\n"
+	// The surrounding system section already titles this catalogue, so the
+	// header carries only the operating instruction and never its own heading.
+	const header = "Load a skill by name with load_skill(<name>); use search_skills when the name is unknown or omitted.\n"
 	if len(header) > maxBytes {
 		return CatalogRender{Omitted: len(sorted)}
 	}

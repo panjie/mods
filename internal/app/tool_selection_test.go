@@ -123,20 +123,22 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	contents := systemContents(m.messages)
 	for _, needle := range []string{
 		modsIdentityPrompt,
+		"Loading skills",
 		"Tool selection:",
 		"Temporary directory:",
 		"Project instructions",
-		"Available skills",
+		"demo skill",
 		"ROLE_TOKEN",
 		"FORMAT_TOKEN",
 	} {
 		require.NotEqual(t, -1, indexContaining(contents, needle), needle)
 	}
-	require.Less(t, indexContaining(contents, modsIdentityPrompt), indexContaining(contents, "Tool selection:"))
+	require.Less(t, indexContaining(contents, modsIdentityPrompt), indexContaining(contents, "Loading skills"))
+	require.Less(t, indexContaining(contents, "Loading skills"), indexContaining(contents, "Tool selection:"))
 	require.Less(t, indexContaining(contents, "Tool selection:"), indexContaining(contents, "Temporary directory:"))
 	require.Less(t, indexContaining(contents, "Temporary directory:"), indexContaining(contents, "Project instructions"))
-	require.Less(t, indexContaining(contents, "Project instructions"), indexContaining(contents, "Available skills"))
-	require.Less(t, indexContaining(contents, "Available skills"), indexContaining(contents, "ROLE_TOKEN"))
+	require.Less(t, indexContaining(contents, "Project instructions"), indexContaining(contents, "demo skill"))
+	require.Less(t, indexContaining(contents, "demo skill"), indexContaining(contents, "ROLE_TOKEN"))
 	require.Less(t, indexContaining(contents, "ROLE_TOKEN"), indexContaining(contents, "FORMAT_TOKEN"))
 
 	for _, message := range m.messages {
@@ -151,7 +153,8 @@ func TestInjectToolSelectionPromptOrdering(t *testing.T) {
 	for _, pair := range [][2]string{
 		{modsIdentityPrompt, "Tool selection:"},
 		{"Tool selection:", "Available skills"},
-		{"Available skills", "FORMAT_TOKEN"},
+		{"Available skills", "Loading skills"},
+		{"Loading skills", "FORMAT_TOKEN"},
 		{"FORMAT_TOKEN", "PROJECT_TOKEN"},
 		{"PROJECT_TOKEN", "ROLE_TOKEN"},
 	} {

@@ -299,7 +299,9 @@ func TestCatalogPromptFormat(t *testing.T) {
 		{Name: "alpha", Description: "Alpha skill."},
 	}
 	got := CatalogPrompt(skills)
-	require.Contains(t, got, "## Available skills")
+	// The injected system section already titles the catalog, so the render must
+	// not add its own heading that would compete with the precedence outline.
+	require.NotContains(t, got, "## Available skills")
 	require.Contains(t, got, "load_skill")
 	require.Contains(t, got, "search_skills")
 	require.Contains(t, got, "- alpha: Alpha skill.")
@@ -322,7 +324,14 @@ func TestCatalogPromptBoundsDescriptionsAndTotal(t *testing.T) {
 	require.Contains(t, got, "omitted")
 
 	render := CatalogPromptBudget(catalog[:1], MaxCatalogBytes)
-	line := strings.TrimPrefix(strings.Split(render.Prompt, "\n")[3], "- skill-00: ")
+	var line string
+	for _, candidate := range strings.Split(render.Prompt, "\n") {
+		if strings.HasPrefix(candidate, "- skill-00: ") {
+			line = strings.TrimPrefix(candidate, "- skill-00: ")
+			break
+		}
+	}
+	require.NotEmpty(t, line, "catalog must render the bounded entry")
 	require.LessOrEqual(t, len(line), MaxDescriptionBytes)
 }
 

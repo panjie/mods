@@ -40,6 +40,8 @@ role: "default"
 prompts:
   # {{ index .Help "prompts.identity" }}
   identity: ""
+  # {{ index .Help "prompts.workflow" }}
+  workflow: ""
   # {{ index .Help "prompts.tool-selection" }}
   tool-selection: ""
   # {{ index .Help "prompts.shell-classifier" }}

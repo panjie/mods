@@ -1,12 +1,15 @@
 package prompts
 
 const (
-	KeyIdentity        = "identity"
-	KeyToolSelection   = "tool-selection"
+	KeyIdentity      = "identity"
+	KeyWorkflow      = "workflow"
+	KeyToolSelection = "tool-selection"
+
 	KeyShellClassifier = "shell-classifier"
 )
 
 const (
+	KeyLanguagePolicy             = "language-policy"
 	KeyMinimal                    = "minimal"
 	KeyFormatMarkdown             = "format.markdown"
 	KeyFormatJSON                 = "format.json"
@@ -15,8 +18,18 @@ const (
 
 const (
 	MarkdownFormat = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
-	JSONFormat     = "Return exactly one valid JSON value as the final answer. No Markdown fences or text outside JSON. Put any requested explanation inside JSON fields. Role or project style preferences must not change this output encoding."
+	JSONFormat     = "Return exactly one valid JSON value as the final answer. No Markdown fences or text outside JSON. Put any requested explanation, summary, or report inside JSON fields. Role or project style preferences must not change this output encoding."
 	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested. Project or role style preferences do not override this format."
+
+	// LanguagePolicy is a response-format rule, not runtime safety, so it is
+	// injected in the output-format layer rather than the identity prompt.
+	LanguagePolicy = "Reply in the language of the user's prompt unless they explicitly request a different output language."
+
+	// ScriptPolicy is the single source of truth for multi-step work. The
+	// tool-selection prompt and every tool description that recommends a script
+	// share it, so the guidance cannot drift into contradictory advice such as
+	// "run a script" versus "never use temporary scripts".
+	ScriptPolicy = "For multi-step or aggregation work, write a readable script in the supplied temporary directory and run it by its interpreter and path. Script execution still follows ordinary effect and target review; its location grants no execution permission."
 
 	ToolSelectionGeneral = `Tool selection:
 - Use only tools available in this request. Combine related reads and aggregations that share inputs; use structured batches when available. Split calls for result dependencies or separate authorization. Compute totals and breakdowns in tools from the same data, not mental arithmetic. Finish when the requested result is supported and no concrete uncertainty remains.
@@ -26,13 +39,13 @@ const (
 	ToolSelectionFilesystem = `- When http_download is available, use its explicit URL/path list for downloads instead of shell loops.
 - Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
 
-	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers and installers, with literal args/cwd. Pass each argument as one argv item; stdout and stderr return separately, so do not add 2>&1. Windows .bat/.cmd require powershell_run. Use shell tools for shell source. For complex aggregation, consider a readable script in the supplied temporary directory, invoked by its interpreter and path. Script execution still follows ordinary effect and target review; its location grants no execution permission. Never rewrite an existing script for review. Inspect results; use runtime_info for unknown availability.`
+	ToolSelectionProcess = `- Use process_run for one executable, including git, tests, builds, package managers and installers, with literal args/cwd. Pass each argument as one argv item; stdout and stderr return separately, so do not add 2>&1. Windows .bat/.cmd require powershell_run. Use shell tools for shell source. ` + ScriptPolicy + ` Never rewrite an existing script for review. Inspect results; use runtime_info for unknown availability.`
 
 	ToolSelectionShellPOSIX = `- Use shell_run for commands that require POSIX shell syntax: pipelines, redirection, expansion, globs, and builtins. It runs in reported cwd; do not prefix cd and pass only the command without sh -c or bash -c wrapping. Prefer portable sh and pass file lists through NUL pipelines rather than command substitution (git ls-files -z | xargs -0 ...). ` + POSIXIntentGuidance
 
 	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and POSIX shell features. It runs in the reported cwd; do not prefix cd and pass only the command without sh -c or bash -c wrapping. Prefer portable sh and pass file lists through NUL-delimited pipelines rather than command substitution (git ls-files -z | xargs -0 ...). ` + POSIXIntentGuidance
 
-	DiagnosticSnapshotGuidance = `Return inspection output directly for small, cheap queries. For large, costly, or authorization-triggering diagnostics, capture once in a private, unique snapshot under the supplied temporary directory. Preserve the producer's exit status and distinguish stderr from data; a successful pipeline tail does not prove the producer succeeded. Search, page, and count that snapshot, not repeated producer runs. Read it in bounded chunks. After unexpected truncation, capture once unless authorization was denied. Refresh only after a relevant state change or a concrete query failure; do not treat a snapshot as live state. If capture is unavailable, narrow the query or report the evidence limit.`
+	DiagnosticSnapshotGuidance = `- Return inspection output directly for small, cheap queries. For large, costly, or authorization-triggering diagnostics, capture once in a private, unique snapshot under the supplied temporary directory. Preserve the producer's exit status and distinguish stderr from data; a successful pipeline tail does not prove the producer succeeded. Search, page, and count that snapshot, not repeated producer runs. Read it in bounded chunks. After unexpected truncation, capture once unless authorization was denied. Refresh only after a relevant state change or a concrete query failure; do not treat a snapshot as live state. If capture is unavailable, narrow the query or report the evidence limit.`
 
 	POSIXIntentGuidance = `Group related reads around one clear purpose. Keep necessary pipelines intact and omit decorative separators. Resolve unknown write targets before mutation. Recognized read-only commands run without review; authorization depends on effects and targets, not command length. Never rewrite an existing script file for review.`
 
@@ -83,9 +96,11 @@ type Definition struct {
 
 func Builtin() []Definition {
 	return []Definition{
-		{Name: KeyIdentity, Description: "Base Mods identity and behavior instructions.", Default: Identity, Configurable: true},
+		{Name: KeyIdentity, Description: "Runtime safety and authorization policy.", Default: Identity, Configurable: true},
+		{Name: KeyWorkflow, Description: "Execution-layer workflow: skills, planning, diagnosis, verification, and self-help.", Default: Workflow, Configurable: true},
 		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
+		{Name: KeyLanguagePolicy, Description: "Response-language rule injected in the output-format layer.", Default: LanguagePolicy},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},
 		{Name: KeyFormatJSON, Description: "Formatting prompt used by --format --format-as json.", Default: JSONFormat},

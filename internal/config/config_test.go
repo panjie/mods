@@ -64,6 +64,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	}
 	for _, path := range []string{
 		"prompts.identity",
+		"prompts.workflow",
 		"prompts.tool-selection",
 		"builtin-tools.filesystem",
 		"builtin-tools.shell-timeout",
@@ -87,6 +88,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 	for _, path := range []string{
 		"web-search-api-key",
 		"prompts.identity",
+		"prompts.workflow",
 		"prompts.shell-classifier",
 		"apis.<provider>.api-key",
 		"apis.<provider>.api-key-cmd",
@@ -101,14 +103,17 @@ func TestPromptConfig(t *testing.T) {
 	var cfg Config
 	require.NoError(t, yaml.Unmarshal([]byte(`prompts:
   identity: custom identity
+  workflow: custom workflow
   tool-selection: custom tools
   shell-classifier: custom shell
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
+	require.Equal(t, "custom workflow", cfg.Prompts.Workflow)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
 	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
+	require.Equal(t, "custom workflow", cfg.Prompts.Value(prompts.KeyWorkflow))
 	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
 }
 

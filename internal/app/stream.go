@@ -69,6 +69,11 @@ func (m *Mods) setupStreamContext(content string) error {
 			return err
 		}
 		m.messages = append(m.messages, structuredSystemMessage(identityPrompt, proto.SystemSectionRuntimeIdentity))
+		workflowPrompt, err := m.resolvePrompt(prompts.KeyWorkflow, prompts.Workflow)
+		if err != nil {
+			return err
+		}
+		m.messages = append(m.messages, structuredSystemMessage(workflowPrompt, proto.SystemSectionExecutionWorkflow))
 		m.toolSelectionInsertAt = len(m.messages)
 		safeDir := os.TempDir()
 		m.messages = append(m.messages, structuredSystemMessage(
@@ -111,17 +116,18 @@ func (m *Mods) setupStreamContext(content string) error {
 		}
 	}
 
-	if cfg.Format != "" && !cfg.Minimal {
-		txt := cfg.FormatText[cfg.Format]
-		if txt == "" {
-			txt = fallbackFormatText(cfg.Format)
+	if !cfg.Minimal {
+		m.messages = append(m.messages, structuredSystemMessage(prompts.LanguagePolicy, proto.SystemSectionOutputFormat))
+		if cfg.Format != "" {
+			txt := cfg.FormatText[cfg.Format]
+			if txt == "" {
+				txt = fallbackFormatText(cfg.Format)
+			}
+			if txt != "" {
+				m.messages = append(m.messages, structuredSystemMessage(txt, proto.SystemSectionOutputFormat))
+			}
 		}
-		if txt != "" {
-			m.messages = append(m.messages, structuredSystemMessage(txt, proto.SystemSectionOutputFormat))
-		}
-	}
-
-	if cfg.Minimal {
+	} else {
 		m.messages = append(m.messages, structuredSystemMessage(
 			MinimalSystemPrompt,
 			proto.SystemSectionOutputFormat,

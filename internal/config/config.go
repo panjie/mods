@@ -111,7 +111,8 @@ var Help = map[string]string{
 	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Pass the CLI flag without a directory to print the effective directories. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 
-	"prompts.identity":         "Override the built-in identity prompt; empty uses the built-in default",
+	"prompts.identity":         "Override the built-in runtime safety identity prompt; empty uses the built-in default",
+	"prompts.workflow":         "Override the built-in workflow prompt (skills, planning, diagnosis, verification, self-help); empty uses the built-in default",
 	"prompts.tool-selection":   "Override tool-selection guidance; empty uses capability-filtered defaults",
 	"prompts.shell-classifier": "Override the shell safety classifier prompt; empty uses the built-in default",
 
@@ -329,6 +330,7 @@ type Config struct {
 // PromptConfig holds user overrides for built-in runtime prompts.
 type PromptConfig struct {
 	Identity        string `yaml:"identity"`
+	Workflow        string `yaml:"workflow"`
 	ToolSelection   string `yaml:"tool-selection"`
 	ShellClassifier string `yaml:"shell-classifier"`
 }
@@ -337,6 +339,8 @@ func (p PromptConfig) Value(key string) string {
 	switch key {
 	case prompts.KeyIdentity:
 		return p.Identity
+	case prompts.KeyWorkflow:
+		return p.Workflow
 	case prompts.KeyToolSelection:
 		return p.ToolSelection
 	case prompts.KeyShellClassifier:

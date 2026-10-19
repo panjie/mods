@@ -21,6 +21,9 @@ const (
 	SystemSectionProjectInstructions
 	SystemSectionUserRole
 	SystemSectionOutputFormat
+	// Appended after the established values so earlier identifiers stay stable;
+	// the descriptor map still places it in the execution layer.
+	SystemSectionExecutionWorkflow
 )
 
 type systemLayer uint8
@@ -46,6 +49,7 @@ var systemSectionDescriptors = map[SystemSection]systemSectionDescriptor{
 	SystemSectionExecutionTemporaryDirectory: {layer: systemLayerExecution, title: "Temporary directory"},
 	SystemSectionExecutionSkills:             {layer: systemLayerExecution, title: "Available skills"},
 	SystemSectionExecutionSelfHelp:           {layer: systemLayerExecution, title: "Self-help reference"},
+	SystemSectionExecutionWorkflow:           {layer: systemLayerExecution, title: "Working method"},
 	SystemSectionProjectInstructions:         {layer: systemLayerProject, title: "Project instructions"},
 	SystemSectionUserRole:                    {layer: systemLayerRole, title: "User-selected role"},
 	SystemSectionOutputFormat:                {layer: systemLayerFormat, title: "Output format"},

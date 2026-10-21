@@ -23,7 +23,11 @@ func isolateGitAuth(t *testing.T) string {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	// Some Windows Git builds reject os.DevNull ("NUL") as a config path.
+	// An empty file isolates user configuration consistently across platforms.
+	globalConfig := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(globalConfig, nil, 0o600))
+	t.Setenv("GIT_CONFIG_GLOBAL", globalConfig)
 	for _, key := range []string{"GIT_ASKPASS", "SSH_ASKPASS", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_DIR", "GIT_WORK_TREE", "GIT_TRACE", "GIT_TRACE_CURL", "GIT_TRACE2", "GIT_TRACE2_EVENT", "GIT_TRACE2_PERF"} {
 		t.Setenv(key, "")
 		require.NoError(t, os.Unsetenv(key))

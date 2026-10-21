@@ -244,18 +244,6 @@ func inferScope(message string) string {
 	}
 }
 
-func PrintJSON(label string, v any) {
-	if !debugEnabled.Load() {
-		return
-	}
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		Printf("%s: <marshal error: %v>", label, err)
-		return
-	}
-	Print(Section{Title: "diagnostic", Blocks: []Block{payloadBlock(label, b, 2000, 500, false)}})
-}
-
 func Truncate(s string, max int) string {
 	if len(s) > max {
 		return textutil.TruncateUTF8Bytes(s, max) + fmt.Sprintf("... (truncated, total %d bytes)", len(s))

@@ -782,7 +782,6 @@ func TestHelpGroupsEveryPublicFlagInDeclaredOrder(t *testing.T) {
 		for _, f := range flags {
 			names = append(names, f.Name)
 			seen[f.Name]++
-			require.Equal(t, category.Name, flagCategory(f))
 		}
 		declared := make([]string, 0, len(category.Flags))
 		for _, spec := range category.Flags {
@@ -859,6 +858,12 @@ func TestOneShotRoleAssignments(t *testing.T) {
 }
 
 func TestSelfHelpCatalogMatchesEveryPublicFlag(t *testing.T) {
+	categories := make(map[string]string)
+	for _, category := range flagCategorySpecs {
+		for _, spec := range category.Flags {
+			categories[spec.Name] = category.Name
+		}
+	}
 	catalog := selfHelpFlagGroups(rootCmd.Flags())
 	documented := make(map[string]selfhelpFlagTestEntry)
 	for _, group := range catalog {
@@ -876,7 +881,7 @@ func TestSelfHelpCatalogMatchesEveryPublicFlag(t *testing.T) {
 			return
 		}
 		require.Equal(t, selfhelpFlagTestEntry{
-			category:    flagCategory(flag),
+			category:    categories[flag.Name],
 			shorthand:   flag.Shorthand,
 			description: flag.Usage,
 			advanced:    flagIsAdvanced(flag),

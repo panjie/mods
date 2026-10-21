@@ -101,10 +101,6 @@ func TestThoughtDisplayBlock(t *testing.T) {
 
 func TestFlushThought(t *testing.T) {
 	t.Run("non-empty thought is appended to output as a blockquote", func(t *testing.T) {
-		oldIsOutputTTY := isOutputTTY
-		isOutputTTY = func() bool { return false }
-		defer func() { isOutputTTY = oldIsOutputTTY }()
-
 		m := newRenderTestMods(t, "deep thought\nsecond line")
 		m.Config.Raw = true
 
@@ -117,10 +113,6 @@ func TestFlushThought(t *testing.T) {
 	})
 
 	t.Run("empty thought flushes nothing but marks flushed", func(t *testing.T) {
-		oldIsOutputTTY := isOutputTTY
-		isOutputTTY = func() bool { return false }
-		defer func() { isOutputTTY = oldIsOutputTTY }()
-
 		m := newRenderTestMods(t, "   \n\t ")
 		m.Config.Raw = true
 
@@ -131,10 +123,6 @@ func TestFlushThought(t *testing.T) {
 	})
 
 	t.Run("thought is trimmed before rendering", func(t *testing.T) {
-		oldIsOutputTTY := isOutputTTY
-		isOutputTTY = func() bool { return false }
-		defer func() { isOutputTTY = oldIsOutputTTY }()
-
 		m := newRenderTestMods(t, "\n\n  actual thought  \n\n")
 		m.Config.Raw = true
 
@@ -144,12 +132,9 @@ func TestFlushThought(t *testing.T) {
 	})
 
 	t.Run("tty display uses interaction panel while raw output stays stable", func(t *testing.T) {
-		oldIsOutputTTY := isOutputTTY
 		oldExportedIsOutputTTY := IsOutputTTY
-		isOutputTTY = func() bool { return true }
 		IsOutputTTY = func() bool { return true }
 		defer func() {
-			isOutputTTY = oldIsOutputTTY
 			IsOutputTTY = oldExportedIsOutputTTY
 		}()
 
@@ -192,9 +177,6 @@ func TestReplaceDisplayBlocks(t *testing.T) {
 func TestCompletionOutputThoughtField(t *testing.T) {
 	// Make sure the Update loop accumulates chunk.Thought into m.Thought and
 	// flushes it on the first content chunk.
-	oldIsOutputTTY := isOutputTTY
-	isOutputTTY = func() bool { return false }
-	defer func() { isOutputTTY = oldIsOutputTTY }()
 
 	m := &Mods{
 		Config:              &Config{},
@@ -231,10 +213,6 @@ func TestCompletionOutputThoughtField(t *testing.T) {
 }
 
 func TestCompletionOutputDiscardsThoughtFieldWhenThinkInactive(t *testing.T) {
-	oldIsOutputTTY := isOutputTTY
-	isOutputTTY = func() bool { return false }
-	defer func() { isOutputTTY = oldIsOutputTTY }()
-
 	m := &Mods{
 		Config:              &Config{},
 		Styles:              makeStyles(true),
@@ -264,10 +242,6 @@ func TestCompletionOutputDiscardsThoughtFieldWhenThinkInactive(t *testing.T) {
 }
 
 func TestCompletionOutputTrimsLeadingNewlineOfFirstAnswerChunk(t *testing.T) {
-	oldIsOutputTTY := isOutputTTY
-	isOutputTTY = func() bool { return false }
-	defer func() { isOutputTTY = oldIsOutputTTY }()
-
 	m := &Mods{
 		Config:              &Config{},
 		Styles:              makeStyles(true),

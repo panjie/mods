@@ -326,14 +326,6 @@ func debugTools(tools []proto.ToolSpec, total int) {
 	})
 }
 
-func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolCaller {
-	caller := m.toolResultCaller(registry, cfg)
-	return func(call proto.ToolCallRequest) (string, error) {
-		result, err := caller(call)
-		return result.Text, err
-	}
-}
-
 func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolResultCaller {
 	return func(call proto.ToolCallRequest) (output proto.ToolResult, returnErr error) {
 		name := call.Name

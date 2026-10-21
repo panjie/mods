@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -767,7 +768,7 @@ func TestDiscoverModelsOpenAI(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := discoverModels("openai", srv.URL+"/v1", "sk-test")
+	ids, err := discoverModelsContext(context.Background(), "openai", srv.URL+"/v1", "sk-test")
 	require.NoError(t, err)
 	require.Equal(t, []string{"gpt-4o", "gpt-4o-mini"}, ids)
 }
@@ -785,7 +786,7 @@ func TestDiscoverModelsAnthropic(t *testing.T) {
 	defer srv.Close()
 
 	// base-url with the full messages endpoint is normalized away.
-	ids, err := discoverModels("anthropic", srv.URL+"/v1/messages", "sk-test")
+	ids, err := discoverModelsContext(context.Background(), "anthropic", srv.URL+"/v1/messages", "sk-test")
 	require.NoError(t, err)
 	require.Equal(t, []string{"claude-haiku-4", "claude-sonnet-4"}, ids) // sorted
 }
@@ -807,7 +808,7 @@ func TestDiscoverModelsAnthropicFallsBackToOpenAIStyleModels(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := discoverModels("anthropic", srv.URL, "sk-test")
+	ids, err := discoverModelsContext(context.Background(), "anthropic", srv.URL, "sk-test")
 	require.NoError(t, err)
 	require.Equal(t, []string{"glm-4.6"}, ids)
 	require.Equal(t, 1, hits["/v1/models"])
@@ -825,7 +826,7 @@ func TestDiscoverModelsOllama(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := discoverModels("ollama", srv.URL, "")
+	ids, err := discoverModelsContext(context.Background(), "ollama", srv.URL, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"llama3.1:latest", "qwen2.5:7b"}, ids)
 }
@@ -858,7 +859,7 @@ func TestDiscoverModelsGoogle(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := discoverModels("google", srv.URL+"/v1beta", "test-key")
+	ids, err := discoverModelsContext(context.Background(), "google", srv.URL+"/v1beta", "test-key")
 	require.NoError(t, err)
 	require.Equal(t, []string{"gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"}, ids)
 }
@@ -889,7 +890,7 @@ func TestDiscoverModelsGitHubCopilot(t *testing.T) {
 	defer func() { copilotGitHubAPIBaseURL = oldGitHubAPIBaseURL }()
 	copilotGitHubAPIBaseURL = srv.URL
 
-	ids, err := discoverModels("github-copilot", srv.URL, "github-oauth-token")
+	ids, err := discoverModelsContext(context.Background(), "github-copilot", srv.URL, "github-oauth-token")
 	require.NoError(t, err)
 	require.Equal(t, []string{"claude-sonnet-4", "gpt-5"}, ids)
 }
@@ -912,7 +913,7 @@ func TestDiscoverModelsGoogleFiltersNonGenerative(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := discoverModels("google", srv.URL, "test-key")
+	_, err := discoverModelsContext(context.Background(), "google", srv.URL, "test-key")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no generative models")
 }
@@ -976,7 +977,7 @@ func TestDiscoverModelsAuthError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := discoverModels("openai", srv.URL+"/v1", "bad-key")
+	_, err := discoverModelsContext(context.Background(), "openai", srv.URL+"/v1", "bad-key")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid API key")
 }
@@ -988,7 +989,7 @@ func TestDiscoverModelsNoModelsReturned(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := discoverModels("openai", srv.URL+"/v1", "sk-test")
+	_, err := discoverModelsContext(context.Background(), "openai", srv.URL+"/v1", "sk-test")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no models")
 }

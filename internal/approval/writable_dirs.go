@@ -4,127 +4,12 @@ import (
 	"path"
 	"regexp"
 	"strings"
-
-	"mvdan.cc/sh/v3/syntax"
 )
 
-// Writable-directory extraction. For a given shell command, determine
-// which filesystem paths the command could create, modify, or delete,
-// so the reviewer can decide whether the operation falls inside an
-// approved directory. POSIX commands go through the mvdan parser;
-// PowerShell / Windows commands use the simple tokenizer.
+// Writable targets are extracted from literal operands supplied by the
+// POSIX AST, PowerShell bridge IR, or direct argv assessment.
 
-// ExtractWritableDirs returns filesystem directories that a shell command can
-// create, modify, or delete. The result is best-effort and may be empty when
-// the command is not statically understood.
-func ExtractWritableDirs(command string, posix bool) []string {
-	return extractWritableDirs(command, posix)
-}
-
-// ExtractWritableDirsWithCwd additionally resolves Git cwd-write
-// invocations against the deterministic working directory, mirroring the
-// assessment path. An empty cwd disables that resolution.
-func ExtractWritableDirsWithCwd(command string, posix bool, cwd string) []string {
-	if cwd == "" {
-		return extractWritableDirs(command, posix)
-	}
-	normalized := normalizeShellCommandWithMode(command, posix)
-	if normalized == "" {
-		return nil
-	}
-	if !posix {
-		return extractWritableDirsSimple(normalized)
-	}
-	return extractWritableDirsPOSIX(command, cwd)
-}
-
-func extractWritableDirs(command string, posix bool) []string {
-	normalized := normalizeShellCommandWithMode(command, posix)
-	if normalized == "" {
-		return nil
-	}
-	if !posix {
-		return extractWritableDirsSimple(normalized)
-	}
-	return extractWritableDirsPOSIX(command, "")
-}
-
-func extractWritableDirsPOSIX(command, cwd string) []string {
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return nil
-	}
-	confinementOK := posixFileAllowsScalarConfinement(file)
-	var dirs []string
-	for _, stmt := range file.Stmts {
-		collectWritableDirsFromStmt(stmt, &dirs, confinementOK, cwd)
-	}
-	if len(dirs) == 0 {
-		return nil
-	}
-	return dedupeSorted(dirs)
-}
-
-func collectWritableDirsFromStmt(stmt *syntax.Stmt, dirs *[]string, confinementOK bool, cwd string) {
-	if stmt == nil || stmt.Cmd == nil {
-		return
-	}
-	for _, redir := range stmt.Redirs {
-		if redir == nil || redir.Word == nil || !redirectionWritesPersistent(redir) {
-			continue
-		}
-		target, ok := accessShellWordConfined(redir.Word, confinementOK)
-		if !ok || target == "" {
-			continue
-		}
-		*dirs = append(*dirs, parentDir(target))
-	}
-	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
-		collectWritableDirsFromStmt(binary.X, dirs, confinementOK, cwd)
-		collectWritableDirsFromStmt(binary.Y, dirs, confinementOK, cwd)
-		return
-	}
-	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
-		return
-	}
-	args := shellWordsForAccessConfined(call.Args, confinementOK)
-	if len(args) == 0 {
-		return
-	}
-	if gitResult, handled := assessGitArgvStatic(args, true, ArgvStaticContext{Cwd: cwd}); handled {
-		*dirs = append(*dirs, gitResult.KnownDirs...)
-		return
-	}
-	*dirs = append(*dirs, writableDirsFromTokens(args, true)...)
-}
-
-func extractWritableDirsSimple(command string) []string {
-	parts := splitSimpleCompound(normalizeSimpleCommand(command))
-	if len(parts) == 0 {
-		return nil
-	}
-	var dirs []string
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		dirs = append(dirs, writableDirsFromRedirection(part)...)
-		tokens := tokenizeSimple(part)
-		if len(tokens) == 0 {
-			continue
-		}
-		dirs = append(dirs, writableDirsFromTokens(tokens, false)...)
-	}
-	if len(dirs) == 0 {
-		return nil
-	}
-	return dedupeSorted(dirs)
-}
-
-// writableDirsFromTokens maps a tokenized command (args[0] = program
+// Writable target analysis maps a tokenized command (args[0] = program
 // name) to the directories it could write. The dispatch is a hardcoded
 // table of common POSIX utilities and PowerShell cmdlets; anything not
 // recognized returns nil (fail-closed at the caller level).
@@ -264,10 +149,6 @@ func validPowerShellProviderName(value string) bool {
 		return false
 	}
 	return true
-}
-
-func writableDirsFromTokens(args []string, posix bool) []string {
-	return analyzeWritableTargetsFromTokens(args, posix).Dirs
 }
 
 // writableTargetsFromTokens identifies path-bearing operands before reducing
@@ -870,21 +751,6 @@ func targetDirs(paths []string) []string {
 			trimmed = path
 		}
 		dirs = append(dirs, trimmed)
-	}
-	return dirs
-}
-
-func writableDirsFromRedirection(command string) []string {
-	tokens := tokenizeSimple(command)
-	dirs := make([]string, 0)
-	for i, token := range tokens {
-		if !isRedirectionToken(token) || i+1 >= len(tokens) {
-			continue
-		}
-		if isNullRedirectionTarget(tokens[i+1]) {
-			continue
-		}
-		dirs = append(dirs, parentDir(tokens[i+1]))
 	}
 	return dirs
 }

@@ -201,21 +201,6 @@ func TestAssessShellStaticGitWorkingDirWrites(t *testing.T) {
 	})
 }
 
-func TestExtractWritableDirsWithCwdResolvesGitRepository(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
-	}
-	root := makeStaticGitRepo(t)
-	canonicalRoot, err := canonicalExistingDir(root)
-	require.NoError(t, err)
-	canonicalGitDir, err := canonicalExistingDir(filepath.Join(root, ".git"))
-	require.NoError(t, err)
-
-	require.Equal(t, dedupeSorted([]string{canonicalRoot, canonicalGitDir}),
-		ExtractWritableDirsWithCwd(`git commit -m "msg"`, true, root))
-	require.Empty(t, ExtractWritableDirsWithCwd(`git commit -m "msg"`, true, ""))
-}
-
 func TestAnalyzePowerShellWritablePathsIRGitCommitResolvesRepository(t *testing.T) {
 	root := makeStaticGitRepo(t)
 	canonicalRoot, err := canonicalExistingDir(root)

@@ -1,10 +1,10 @@
-//go:build windows
+//go:build windows && windowsreliability
 
 package tools
 
 import "testing"
 
-// Selected by the existing PowerShell 5.1/7 reliability lanes as well as the
-// ordinary Windows test suite. These tests execute real local tools.
+// Select the ordinary regression tests in the PowerShell 5.1/7 reliability
+// lanes without running them twice in the default Windows suite.
 func TestWindowsReliabilityLiteralShellCwd(t *testing.T)     { TestShellLiteralCwd(t) }
 func TestWindowsReliabilityStructuredDownloads(t *testing.T) { TestDownloadsBatchAndAuthorization(t) }

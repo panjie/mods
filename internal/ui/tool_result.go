@@ -14,24 +14,6 @@ type exitCoder interface {
 	ExitCode() int
 }
 
-// ToolResultLine returns a compact single-line markdown transcript block for a
-// completed tool call. It includes the tool name, a short argument summary, and
-// whether the call succeeded or failed.
-func ToolResultLine(name string, data []byte, err error) string {
-	return ToolResultLineWidth(name, data, err, 120)
-}
-
-// ToolResultLineWidth is ToolResultLine with a caller-provided display width
-// for the status text. The width should already account for any renderer prefix
-// such as a Markdown blockquote gutter.
-func ToolResultLineWidth(name string, data []byte, err error, width int) string {
-	status := ToolResultStatus(name, data, err, width)
-	if status == "" {
-		return ""
-	}
-	return "> " + status
-}
-
 // ToolResultStatus returns the unstyled one-line status text used by the live
 // operation footer. It starts with a success/failure marker so callers can
 // apply styling uniformly.

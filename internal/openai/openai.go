@@ -75,13 +75,6 @@ type Config struct {
 	ThinkTag string
 }
 
-// DefaultConfig returns the default configuration for the OpenAI API client.
-func DefaultConfig(authToken string) Config {
-	return Config{
-		AuthToken: authToken,
-	}
-}
-
 // New creates a new [Client] with the given [Config].
 func New(config Config) *Client {
 	opts := []option.RequestOption{}

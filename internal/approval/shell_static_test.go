@@ -7,121 +7,118 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAnalyzeShellStaticPOSIX(t *testing.T) {
+func TestAssessShellStaticPOSIX(t *testing.T) {
 	t.Run("read", func(t *testing.T) {
-		got := AnalyzeShellStatic("git status && git diff", true)
-		require.Equal(t, ShellStaticRead, got.Class)
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext("git status && git diff", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectRead, got.Effect)
+		require.True(t, got.StaticRead)
 		require.NotEmpty(t, got.Reason)
 	})
 
 	t.Run("write", func(t *testing.T) {
-		got := AnalyzeShellStatic("cat > /tmp/out <<'EOF'\nhello\nEOF", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Contains(t, got.AffectedDirs, "/tmp")
+		got := AssessShellStaticWithContext("cat > /tmp/out <<'EOF'\nhello\nEOF", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Contains(t, got.KnownDirs, "/tmp")
 		require.Contains(t, got.Reason, "static analysis")
 	})
 
 	t.Run("recursive remove targets directory", func(t *testing.T) {
-		got := AnalyzeShellStatic("rm -rf ~/.ssh", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"~/.ssh"}, got.AffectedDirs)
+		got := AssessShellStaticWithContext("rm -rf ~/.ssh", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"~/.ssh"}, got.KnownDirs)
 	})
 
 	t.Run("unknown", func(t *testing.T) {
-		got := AnalyzeShellStatic("some unsupported writer", true)
-		require.Equal(t, ShellStaticUnknown, got.Class)
-		require.Empty(t, got.AffectedDirs)
-		require.Empty(t, got.Reason)
+		got := AssessShellStaticWithContext("some unsupported writer", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectUnknown, got.Effect)
+		require.Empty(t, got.KnownDirs)
+		require.Equal(t, "effects could not be proven", got.Reason)
 	})
 
 	t.Run("env wrapped writer", func(t *testing.T) {
-		got := AnalyzeShellStatic("env touch owned.txt", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"."}, got.AffectedDirs)
+		got := AssessShellStaticWithContext("env touch owned.txt", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"."}, got.KnownDirs)
 	})
 
 	t.Run("git output flag", func(t *testing.T) {
-		got := AnalyzeShellStatic("git diff --output=owned.txt", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"."}, got.AffectedDirs)
+		got := AssessShellStaticWithContext("git diff --output=owned.txt", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"."}, got.KnownDirs)
 	})
 
 	t.Run("git external diff helper", func(t *testing.T) {
-		got := AnalyzeShellStatic("git diff --ext-diff", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
+		got := AssessShellStaticWithContext("git diff --ext-diff", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
 	})
 
 	t.Run("xxd reverse output", func(t *testing.T) {
-		got := AnalyzeShellStatic("xxd -r input.hex output.bin", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"."}, got.AffectedDirs)
+		got := AssessShellStaticWithContext("xxd -r input.hex output.bin", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"."}, got.KnownDirs)
 	})
 
 	t.Run("runtime-expanded read stays read-only", func(t *testing.T) {
-		got := AnalyzeShellStatic("cat ${FILE}", true)
-		require.Equal(t, ShellStaticRead, got.Class)
-		require.Contains(t, got.UnresolvedPaths, "$FILE")
+		got := AssessShellStaticWithContext("cat ${FILE}", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectRead, got.Effect)
+		require.Contains(t, got.DynamicTargets, "$FILE")
 	})
 
 	t.Run("oldest downloads pipeline is read-only", func(t *testing.T) {
-		got := AnalyzeShellStatic(
-			`find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`,
-			true,
-		)
-		require.Equal(t, ShellStaticRead, got.Class)
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectRead, got.Effect)
+		require.True(t, got.StaticRead)
 	})
 
 	t.Run("home-expanded write target remains deterministic", func(t *testing.T) {
-		got := AnalyzeShellStatic(`rm "$HOME/Downloads/old.txt"`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.NotEmpty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`rm "$HOME/Downloads/old.txt"`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.NotEmpty(t, got.KnownDirs)
 	})
 
 	t.Run("find delete is a write", func(t *testing.T) {
-		got := AnalyzeShellStatic(`find "$HOME/Downloads" -type f -delete`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
+		got := AssessShellStaticWithContext(`find "$HOME/Downloads" -type f -delete`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
 	})
 
 	t.Run("sort output is a write", func(t *testing.T) {
-		got := AnalyzeShellStatic("sort -o /tmp/output input", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"/tmp"}, got.AffectedDirs)
+		got := AssessShellStaticWithContext("sort -o /tmp/output input", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"/tmp"}, got.KnownDirs)
 	})
 
 	t.Run("xargs writer is not read-only", func(t *testing.T) {
-		got := AnalyzeShellStatic(`find . -print0 | xargs -0 touch`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
+		got := AssessShellStaticWithContext(`find . -print0 | xargs -0 touch`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
 	})
 
 	t.Run("dynamic target stays unresolved", func(t *testing.T) {
-		got := AnalyzeShellStatic(`rm "$TARGET"`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Contains(t, got.UnresolvedPaths, "$TARGET")
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`rm "$TARGET"`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Contains(t, got.DynamicTargets, "$TARGET")
+		require.Empty(t, got.KnownDirs)
 	})
 }
 
-func TestAnalyzeShellStaticPowerShell(t *testing.T) {
+func TestAssessShellStaticPowerShell(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell AST classifier requires Windows")
 	}
 	t.Run("single-quoted write path with spaces", func(t *testing.T) {
-		got := AnalyzeShellStatic(`Set-Content 'C:\Program Files\App\notes.txt' 'hello'`, false)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Contains(t, got.AffectedDirs, `C:\Program Files\App`)
-		require.NotContains(t, got.AffectedDirs, `'C:`)
-		require.NotContains(t, got.AffectedDirs, `Files\App`)
+		got := AssessShellStaticWithContext(`Set-Content 'C:\Program Files\App\notes.txt' 'hello'`, false, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Contains(t, got.KnownDirs, `C:\Program Files\App`)
+		require.NotContains(t, got.KnownDirs, `'C:`)
+		require.NotContains(t, got.KnownDirs, `Files\App`)
 	})
 
 	t.Run("single-quoted write path with escaped single quote", func(t *testing.T) {
-		got := AnalyzeShellStatic(`Set-Content 'C:\O''Reilly\App\notes.txt' 'hello'`, false)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Contains(t, got.AffectedDirs, `C:\O'Reilly\App`)
-		require.NotContains(t, got.AffectedDirs, `C:\`)
-		require.NotContains(t, got.AffectedDirs, `C:\O`)
-		require.NotContains(t, got.AffectedDirs, `Reilly\App`)
+		got := AssessShellStaticWithContext(`Set-Content 'C:\O''Reilly\App\notes.txt' 'hello'`, false, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Contains(t, got.KnownDirs, `C:\O'Reilly\App`)
+		require.NotContains(t, got.KnownDirs, `C:\`)
+		require.NotContains(t, got.KnownDirs, `C:\O`)
+		require.NotContains(t, got.KnownDirs, `Reilly\App`)
 	})
 }
 
@@ -305,39 +302,39 @@ func TestPowerShellWritableTargetsIgnoreCommonParameterValues(t *testing.T) {
 	require.Equal(t, []string{"."}, posix.Dirs, "POSIX operand semantics stay unchanged")
 }
 
-func TestAnalyzeArgvStatic(t *testing.T) {
+func TestAssessArgvStatic(t *testing.T) {
 	policy := ReadOnlyCommandPolicy{}
 	for _, tc := range []struct {
 		name    string
 		program string
 		args    []string
-		class   ShellStaticClass
+		class   CommandEffect
 	}{
-		{name: "read only", program: "git", args: []string{"status"}, class: ShellStaticRead},
-		{name: "literal shell syntax", program: "ls", args: []string{"; rm -rf out"}, class: ShellStaticRead},
-		{name: "known write", program: "rm", args: []string{"out.txt"}, class: ShellStaticWrite},
-		{name: "literal variable-looking write path", program: "rm", args: []string{"$HOME"}, class: ShellStaticWrite},
-		{name: "executable path not trusted", program: "./git", args: []string{"status"}, class: ShellStaticUnknown},
-		{name: "unknown command", program: "custom-tool", class: ShellStaticUnknown},
+		{name: "read only", program: "git", args: []string{"status"}, class: EffectRead},
+		{name: "literal shell syntax", program: "ls", args: []string{"; rm -rf out"}, class: EffectRead},
+		{name: "known write", program: "rm", args: []string{"out.txt"}, class: EffectWrite},
+		{name: "literal variable-looking write path", program: "rm", args: []string{"$HOME"}, class: EffectWrite},
+		{name: "executable path not trusted", program: "./git", args: []string{"status"}, class: EffectUnknown},
+		{name: "unknown command", program: "custom-tool", class: EffectUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := AnalyzeArgvStaticWithPolicy(tc.program, tc.args, true, policy)
-			require.Equal(t, tc.class, got.Class)
+			got := AssessArgvStaticWithContext(tc.program, tc.args, true, policy, ArgvStaticContext{})
+			require.Equal(t, tc.class, got.Effect)
 		})
 	}
-	require.Equal(t, ShellStaticRead, AnalyzeArgvStaticWithPolicy("Git.EXE", []string{"status"}, false, policy).Class)
-	require.Equal(t, []string{"."}, AnalyzeArgvStaticWithPolicy("rm", []string{"$HOME"}, true, policy).AffectedDirs)
+	require.Equal(t, EffectRead, AssessArgvStaticWithContext("Git.EXE", []string{"status"}, false, policy, ArgvStaticContext{}).Effect)
+	require.Equal(t, []string{"."}, AssessArgvStaticWithContext("rm", []string{"$HOME"}, true, policy, ArgvStaticContext{}).KnownDirs)
 }
 
-func TestAnalyzeShellStaticTargetDirectoryOptions(t *testing.T) {
+func TestAssessShellStaticTargetDirectoryOptions(t *testing.T) {
 	for _, command := range []string{
 		`cp -t /outside src.txt`,
 		`cp --target-directory=/outside src.txt`,
 		`mv -t/outside src.txt`,
 	} {
-		got := AnalyzeShellStatic(command, true)
-		require.Equal(t, ShellStaticWrite, got.Class, command)
-		require.Equal(t, []string{"/outside"}, got.AffectedDirs, command)
+		got := AssessShellStaticWithContext(command, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect, command)
+		require.Equal(t, []string{"/outside"}, got.KnownDirs, command)
 	}
 }
 

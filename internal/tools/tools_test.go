@@ -406,20 +406,45 @@ func TestProcessRunLiteralArgvAndStructuredResults(t *testing.T) {
 		require.Nil(t, result.ExitCode)
 	})
 
-	t.Run("timeout terminates descendants", func(t *testing.T) {
+	t.Run("cancellation terminates descendants", func(t *testing.T) {
 		pidFile := filepath.Join(root, "grandchild.pid")
-		ms := int64(250)
+		// Allow startup to finish before testing cancellation. The separate
+		// timeout case above verifies deadline reporting.
+		ms := int64(15000)
 		args := helperArgs("tree", pidFile)
 		args.TimeoutMS = &ms
-		out, err := runProcess(ctx, cfg, root, args)
-		require.NoError(t, err)
-		var result processRunResult
-		require.NoError(t, json.Unmarshal([]byte(out), &result))
-		require.True(t, result.TimedOut)
-		pidData, err := os.ReadFile(pidFile)
-		require.NoError(t, err)
-		pid, err := strconv.Atoi(string(pidData))
-		require.NoError(t, err)
+		runCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		done := make(chan error, 1)
+		go func() {
+			_, err := runProcess(runCtx, cfg, root, args)
+			done <- err
+		}()
+		pid := 0
+		t.Cleanup(func() {
+			if pid > 0 && testProcessExists(pid) {
+				if process, err := os.FindProcess(pid); err == nil {
+					_ = process.Kill()
+					_ = process.Release()
+				}
+			}
+		})
+		require.Eventually(t, func() bool {
+			data, err := os.ReadFile(pidFile)
+			if err != nil {
+				return false
+			}
+			pid, err = strconv.Atoi(string(data))
+			return err == nil && pid > 0
+		}, 10*time.Second, 20*time.Millisecond)
+		require.True(t, testProcessExists(pid), "descendant must be running before cancellation")
+		cancel()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, context.Canceled)
+		case <-time.After(3 * time.Second):
+			t.Fatal("process runner did not stop after cancellation")
+		}
 		require.Eventually(t, func() bool { return !testProcessExists(pid) }, 2*time.Second, 20*time.Millisecond)
 	})
 

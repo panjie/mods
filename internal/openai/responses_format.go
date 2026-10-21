@@ -15,9 +15,6 @@ const (
 	legacyResponsesProviderDataKey   = "openai.responses.output"
 	openAIResponsesProviderDataKey   = "openai.responses.output.v1"
 	deepSeekResponsesProviderDataKey = "deepseek.responses.output.v1"
-	// responsesProviderDataKey is retained for older package tests and saved
-	// sessions. New messages use a profile-specific versioned key.
-	responsesProviderDataKey = legacyResponsesProviderDataKey
 )
 
 func responsesProviderDataKeyForProfile(profile ProviderProfile) string {

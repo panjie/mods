@@ -102,7 +102,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("DeepSeek Responses maps requested thinking to high effort", func(t *testing.T) {
 		ccfg := openai.Config{UseResponses: true, ResponsesProfile: openai.ResponsesProfileDeepSeek}
 
-		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.True(t, ccfg.ThinkTags)
@@ -113,7 +113,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("DeepSeek Responses maps disabled thinking to none", func(t *testing.T) {
 		ccfg := openai.Config{UseResponses: true, ResponsesProfile: openai.ResponsesProfileDeepSeek}
 
-		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, &ccfg, false)
+		active := applyThinkConfigsWithOllama(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, nil, &ccfg, false)
 
 		require.False(t, active)
 		require.False(t, ccfg.ThinkTags)
@@ -124,7 +124,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("DeepSeek Responses preserves configured max effort", func(t *testing.T) {
 		ccfg := openai.Config{UseResponses: true, ResponsesProfile: openai.ResponsesProfileDeepSeek}
 
-		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash", ReasoningEffort: "max"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "deepseek", Name: "deepseek-v4-flash", ReasoningEffort: "max"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, "max", ccfg.ExtraParams["reasoning_effort"])
@@ -133,7 +133,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("DeepSeek without thinking-type sends enabled when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "deepseek", Name: "deepseek-v4-flash"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.True(t, ccfg.ThinkTags)
@@ -143,7 +143,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("DeepSeek with thinking-type sends enabled when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "deepseek", ThinkingType: "enabled"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "deepseek", ThinkingType: "enabled"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.True(t, ccfg.ThinkTags)
@@ -153,7 +153,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("DeepSeek with thinking-type still sends disabled when not requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "deepseek", ThinkingType: "enabled"}, nil, nil, &ccfg, false)
+		active := applyThinkConfigsWithOllama(Model{API: "deepseek", ThinkingType: "enabled"}, nil, nil, nil, &ccfg, false)
 
 		require.False(t, active)
 		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])
@@ -164,7 +164,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 			"thinking": map[string]any{"type": "disabled", "budget_tokens": 4096},
 		}}
 
-		active := applyThinkConfigs(Model{API: "minimax"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "minimax"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		thinking := ccfg.ExtraParams["thinking"].(map[string]any)
@@ -176,7 +176,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("MiniMax still parses inline thinking when not requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "minimax"}, nil, nil, &ccfg, false)
+		active := applyThinkConfigsWithOllama(Model{API: "minimax"}, nil, nil, nil, &ccfg, false)
 
 		require.False(t, active)
 		require.True(t, ccfg.ThinkTags)
@@ -188,7 +188,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 			"thinking": map[string]any{"type": "disabled", "budget_tokens": 4096},
 		}}
 
-		active := applyThinkConfigs(Model{API: "glm"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "glm"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		thinking := ccfg.ExtraParams["thinking"].(map[string]any)
@@ -199,7 +199,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Kimi defaults to enabled when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.True(t, ccfg.ThinkTags)
@@ -209,7 +209,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Google without thinking-type sends configured budget when requested", func(t *testing.T) {
 		gccfg := google.Config{ThinkingBudget: 2048}
 
-		active := applyThinkConfigs(Model{API: "google"}, &gccfg, nil, &openai.Config{}, true)
+		active := applyThinkConfigsWithOllama(Model{API: "google"}, &gccfg, nil, nil, &openai.Config{}, true)
 
 		require.True(t, active)
 		require.Equal(t, 2048, gccfg.ThinkingBudget)
@@ -219,7 +219,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Google with thinking-type sends configured budget", func(t *testing.T) {
 		gccfg := google.Config{}
 
-		active := applyThinkConfigs(Model{API: "google", ThinkingType: "enabled", ThinkingBudget: 4096}, &gccfg, nil, &openai.Config{}, true)
+		active := applyThinkConfigsWithOllama(Model{API: "google", ThinkingType: "enabled", ThinkingBudget: 4096}, &gccfg, nil, nil, &openai.Config{}, true)
 
 		require.True(t, active)
 		require.Equal(t, 4096, gccfg.ThinkingBudget)
@@ -229,13 +229,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic manual model sends budget when requested", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-sonnet-4-5-20250929"},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-sonnet-4-5-20250929"}, nil, &accfg, nil, nil, true)
 
 		require.True(t, active)
 		require.Equal(t, "enabled", accfg.ThinkingType)
@@ -245,13 +239,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic explicit enabled sends budget for opaque model", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "deployment-name", ThinkingType: "enabled"},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "deployment-name", ThinkingType: "enabled"}, nil, &accfg, nil, nil, true)
 
 		require.True(t, active)
 		require.Equal(t, "enabled", accfg.ThinkingType)
@@ -261,13 +249,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic adaptive model uses adaptive and explicit effort", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-opus-4-8", ReasoningEffort: "xhigh"},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-opus-4-8", ReasoningEffort: "xhigh"}, nil, &accfg, nil, nil, true)
 
 		require.True(t, active)
 		require.Equal(t, "adaptive", accfg.ThinkingType)
@@ -278,13 +260,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic adaptive model omits effort by default", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-sonnet-4-6"},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-sonnet-4-6"}, nil, &accfg, nil, nil, true)
 
 		require.True(t, active)
 		require.Equal(t, "adaptive", accfg.ThinkingType)
@@ -294,13 +270,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic always-adaptive model leaves thinking model-managed", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-fable-5", ReasoningEffort: "high"},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-fable-5", ReasoningEffort: "high"}, nil, &accfg, nil, nil, true)
 
 		require.True(t, active)
 		require.Empty(t, accfg.ThinkingType)
@@ -311,13 +281,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic Sonnet 5 is explicitly disabled without -t", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-sonnet-5"},
-			nil,
-			&accfg,
-			nil,
-			false,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-sonnet-5"}, nil, &accfg, nil, nil, false)
 
 		require.False(t, active)
 		require.Equal(t, "disabled", accfg.ThinkingType)
@@ -326,13 +290,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic always-adaptive model cannot be disabled", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-mythos-preview"},
-			nil,
-			&accfg,
-			nil,
-			false,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-mythos-preview"}, nil, &accfg, nil, nil, false)
 
 		require.False(t, active)
 		require.Empty(t, accfg.ThinkingType)
@@ -341,13 +299,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic opaque model omits thinking unless explicitly configured", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "deployment-name"},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "deployment-name"}, nil, &accfg, nil, nil, true)
 
 		require.False(t, active)
 		require.Empty(t, accfg.ThinkingType)
@@ -357,18 +309,12 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Anthropic explicit adaptive overrides opaque model inference", func(t *testing.T) {
 		accfg := anthropic.Config{}
 
-		active := applyThinkConfigs(
-			Model{
-				API:             "anthropic",
-				Name:            "deployment-name",
-				ThinkingType:    "adaptive",
-				ReasoningEffort: "medium",
-			},
-			nil,
-			&accfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{
+			API:             "anthropic",
+			Name:            "deployment-name",
+			ThinkingType:    "adaptive",
+			ReasoningEffort: "medium",
+		}, nil, &accfg, nil, nil, true)
 
 		require.True(t, active)
 		require.Equal(t, "adaptive", accfg.ThinkingType)
@@ -378,7 +324,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Qwen without thinking-type sends enable_thinking true when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "qwen"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "qwen"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, true, ccfg.ExtraParams["enable_thinking"])
@@ -387,7 +333,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("Qwen with thinking-type sends enable_thinking true", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "qwen", ThinkingType: "enabled"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "qwen", ThinkingType: "enabled"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, true, ccfg.ExtraParams["enable_thinking"])
@@ -396,7 +342,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("OpenAI without thinking-type sends reasoning effort when requested", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "openai", Name: "gpt-5.4-mini"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "openai", Name: "gpt-5.4-mini"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, openai.ReasoningEffortMedium, ccfg.ReasoningEffort)
@@ -406,7 +352,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("unknown OpenAI-compatible provider without thinking-type sends no provider-specific off field", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "groq", Name: "llama"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "groq", Name: "llama"}, nil, nil, nil, &ccfg, true)
 
 		require.False(t, active)
 		require.Empty(t, ccfg.ExtraParams)
@@ -415,7 +361,7 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("OpenAI with thinking-type sends reasoning effort", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{API: "openai", ThinkingType: "enabled", ReasoningEffort: "high"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "openai", ThinkingType: "enabled", ReasoningEffort: "high"}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, "high", string(ccfg.ReasoningEffort))
@@ -424,12 +370,12 @@ func TestApplyThinkConfigsDefaults(t *testing.T) {
 	t.Run("custom provider with off override preserves enabled effort", func(t *testing.T) {
 		ccfg := openai.Config{}
 
-		active := applyThinkConfigs(Model{
+		active := applyThinkConfigsWithOllama(Model{
 			API:                "custom",
 			Name:               "opaque-deployment",
 			ReasoningEffort:    "high",
 			ReasoningEffortOff: "none",
-		}, nil, nil, &ccfg, true)
+		}, nil, nil, nil, &ccfg, true)
 
 		require.True(t, active)
 		require.Equal(t, "high", string(ccfg.ReasoningEffort))
@@ -453,13 +399,7 @@ func TestAnthropicThinkingModelFamilies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := anthropic.Config{}
-			active := applyThinkConfigs(
-				Model{API: "anthropic", Name: tt.model},
-				nil,
-				&cfg,
-				nil,
-				true,
-			)
+			active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: tt.model}, nil, &cfg, nil, nil, true)
 			require.True(t, active)
 			require.Equal(t, tt.wantType, cfg.ThinkingType)
 		})
@@ -467,13 +407,7 @@ func TestAnthropicThinkingModelFamilies(t *testing.T) {
 
 	t.Run("known non-thinking Claude model stays off", func(t *testing.T) {
 		cfg := anthropic.Config{}
-		active := applyThinkConfigs(
-			Model{API: "anthropic", Name: "claude-3-5-haiku-20241022"},
-			nil,
-			&cfg,
-			nil,
-			true,
-		)
+		active := applyThinkConfigsWithOllama(Model{API: "anthropic", Name: "claude-3-5-haiku-20241022"}, nil, &cfg, nil, nil, true)
 		require.False(t, active)
 		require.Empty(t, cfg.ThinkingType)
 	})
@@ -547,7 +481,7 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ccfg := openai.Config{}
 
-			active := applyThinkConfigs(tt.model, nil, nil, &ccfg, false)
+			active := applyThinkConfigsWithOllama(tt.model, nil, nil, nil, &ccfg, false)
 
 			require.False(t, active)
 			if tt.effort == "" {
@@ -566,7 +500,7 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 		}
 		ccfg := openai.Config{ExtraParams: configuredExtraParams}
 
-		active := applyThinkConfigs(Model{API: "openai", Name: "gpt-4o"}, nil, nil, &ccfg, false)
+		active := applyThinkConfigsWithOllama(Model{API: "openai", Name: "gpt-4o"}, nil, nil, nil, &ccfg, false)
 
 		require.False(t, active)
 		require.NotContains(t, ccfg.ExtraParams, "reasoning_effort")
@@ -577,7 +511,7 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 	t.Run("Google off resets existing budget to zero", func(t *testing.T) {
 		gccfg := google.Config{ThinkingBudget: 8192}
 
-		active := applyThinkConfigs(Model{API: "google", ThinkingType: "enabled"}, &gccfg, nil, &openai.Config{}, false)
+		active := applyThinkConfigsWithOllama(Model{API: "google", ThinkingType: "enabled"}, &gccfg, nil, nil, &openai.Config{}, false)
 
 		require.False(t, active)
 		require.Equal(t, 0, gccfg.ThinkingBudget)
@@ -591,7 +525,7 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 		}
 		ccfg := openai.Config{ExtraParams: configuredExtraParams}
 
-		active := applyThinkConfigs(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, &ccfg, false)
+		active := applyThinkConfigsWithOllama(Model{API: "kimi", Name: "kimi-k2.7-code-highspeed"}, nil, nil, nil, &ccfg, false)
 
 		require.False(t, active)
 		require.NotContains(t, ccfg.ExtraParams, "thinking")
@@ -602,7 +536,7 @@ func TestApplyThinkConfigsDisable(t *testing.T) {
 	t.Run("Ollama skips thinking entirely", func(t *testing.T) {
 		ccfg := openai.Config{ExtraParams: map[string]any{"thinking": map[string]any{"type": "disabled"}}}
 
-		active := applyThinkConfigs(Model{API: "ollama", ThinkingType: "enabled"}, nil, nil, &ccfg, true)
+		active := applyThinkConfigsWithOllama(Model{API: "ollama", ThinkingType: "enabled"}, nil, nil, nil, &ccfg, true)
 
 		require.False(t, active)
 		require.Equal(t, "disabled", ccfg.ExtraParams["thinking"].(map[string]any)["type"])

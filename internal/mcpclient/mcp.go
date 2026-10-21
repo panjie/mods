@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"iter"
 	"maps"
-	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"sync"
 
-	"charm.land/lipgloss/v2"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -21,7 +19,6 @@ import (
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
-	"github.com/panjie/mods/internal/ui"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -35,27 +32,6 @@ func EnabledServers(cfg *Config) iter.Seq2[string, MCPServerConfig] {
 			}
 		}
 	}
-}
-
-func List(cfg *Config) {
-	for name := range cfg.MCPServers {
-		s := name + ui.StdoutStyles().Timeago.Render(" (enabled)")
-		_, _ = lipgloss.Fprintln(os.Stdout, s)
-	}
-}
-
-func ListTools(ctx context.Context, cfg *Config) error {
-	servers, err := Tools(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	for sname, tools := range servers {
-		for _, tool := range tools {
-			_, _ = lipgloss.Fprint(os.Stdout, ui.StdoutStyles().Timeago.Render(sname+" > "))
-			_, _ = lipgloss.Fprintln(os.Stdout, tool.Name)
-		}
-	}
-	return nil
 }
 
 func Tools(ctx context.Context, cfg *Config) (map[string][]mcp.Tool, error) {

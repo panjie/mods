@@ -628,14 +628,6 @@ func testConnectionContext(ctx context.Context, model string, cfg openai.Config)
 	return nil
 }
 
-// discoverModels queries a provider's list-models endpoint and returns the
-// available model IDs. Supports OpenAI-compatible, Anthropic, and Ollama
-// protocols. Best-effort: many Anthropic-compatible gateways do not implement
-// /v1/models, so callers must handle errors and fall back to manual entry.
-func discoverModels(apiType, baseURL, apiKey string) ([]string, error) {
-	return discoverModelsContext(context.Background(), apiType, baseURL, apiKey)
-}
-
 func discoverModelsContext(ctx context.Context, apiType, baseURL, apiKey string) ([]string, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if providerinfo.IsOpenCodeGoURL(baseURL) && (apiType == "openai" || apiType == "anthropic") {

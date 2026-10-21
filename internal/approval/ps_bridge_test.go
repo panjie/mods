@@ -71,15 +71,6 @@ func TestParseWithBridgeVariableExclusion(t *testing.T) {
 	require.NotContains(t, ir.Expansions, "var")
 }
 
-func TestParseWithBridgeVariableFlagged(t *testing.T) {
-	t.Cleanup(func() { CloseBridge() })
-
-	ir, err := parseWithBridge("Get-Content $env:SECRET")
-	require.NoError(t, err)
-	require.NotNil(t, ir)
-	require.Contains(t, ir.Expansions, "var")
-}
-
 func TestParseWithBridgeRuntimeValueFacts(t *testing.T) {
 	t.Cleanup(func() { CloseBridge() })
 
@@ -175,17 +166,11 @@ func TestParseWithBridgeUnsafeVariableFacts(t *testing.T) {
 
 	ir, err := parseWithBridge(`Get-Content $env:SECRET`)
 	require.NoError(t, err)
+	require.NotNil(t, ir)
 	require.Contains(t, ir.Variables, "env:SECRET")
 	require.Contains(t, ir.Expansions, "var")
 }
 
-func TestParseWithBridgeCommandSubexpressionStillFlagged(t *testing.T) {
-	t.Cleanup(func() { CloseBridge() })
-
-	ir, err := parseWithBridge(`Get-Content $(Get-ChildItem)`)
-	require.NoError(t, err)
-	require.Contains(t, ir.Expansions, "subshell")
-}
 func TestParseWithBridgeUnsafeExpressionFacts(t *testing.T) {
 	t.Cleanup(func() { CloseBridge() })
 

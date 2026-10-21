@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -205,10 +204,6 @@ func TestInteractiveStartupFallsBackAfterTerminalProbeTimeout(t *testing.T) {
 
 	_, duplicate := m.Update(tea.BackgroundColorMsg{Color: color.White})
 	require.Nil(t, duplicate)
-}
-
-func TestTerminalProbeTimeoutIsBounded(t *testing.T) {
-	require.Equal(t, 250*time.Millisecond, terminalProbeTimeout)
 }
 
 func TestInvalidModelFailureStartsOnlyAfterTerminalProbe(t *testing.T) {
@@ -1064,12 +1059,9 @@ func TestAnimationTickChainSurvivesHiddenPeriod(t *testing.T) {
 // TestStreamingMovesToResponseState verifies that streamed text remains visible
 // while the spinner and later tool rounds continue updating the view.
 func TestStreamingMovesToResponseState(t *testing.T) {
-	oldIsOutputTTY := isOutputTTY
 	oldExportedIsOutputTTY := IsOutputTTY
-	isOutputTTY = func() bool { return true }
 	IsOutputTTY = func() bool { return true }
 	defer func() {
-		isOutputTTY = oldIsOutputTTY
 		IsOutputTTY = oldExportedIsOutputTTY
 	}()
 

@@ -97,66 +97,58 @@ func TestAssessShellStaticScalarSubstitutionMaterializesWriteScope(t *testing.T)
 		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
 	}
 	t.Run("timestamped cp backup", func(t *testing.T) {
-		got := AnalyzeShellStatic(`cp ~/cfg/a.lua ~/cfg/a.lua.$(date +%s)`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"~/cfg"}, got.AffectedDirs)
-		require.Empty(t, got.UnresolvedPaths)
+		got := AssessShellStaticWithContext(`cp ~/cfg/a.lua ~/cfg/a.lua.$(date +%s)`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"~/cfg"}, got.KnownDirs)
+		require.Empty(t, got.DynamicTargets)
 	})
 
 	t.Run("double-quoted confined substitution", func(t *testing.T) {
-		got := AnalyzeShellStatic(`rm "f-$(uuidgen).tmp"`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"."}, got.AffectedDirs)
-		require.Empty(t, got.UnresolvedPaths)
+		got := AssessShellStaticWithContext(`rm "f-$(uuidgen).tmp"`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"."}, got.KnownDirs)
+		require.Empty(t, got.DynamicTargets)
 	})
 
 	t.Run("confined redirection target", func(t *testing.T) {
-		got := AnalyzeShellStatic(`echo hi > ~/log/entry-$(date +%s).log`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"~/log"}, got.AffectedDirs)
-		require.Empty(t, got.UnresolvedPaths)
+		got := AssessShellStaticWithContext(`echo hi > ~/log/entry-$(date +%s).log`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"~/log"}, got.KnownDirs)
+		require.Empty(t, got.DynamicTargets)
 	})
 
 	t.Run("relative destination", func(t *testing.T) {
-		got := AnalyzeShellStatic("cp a.conf a.conf.$(date +%s)", true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"."}, got.AffectedDirs)
-		require.Empty(t, got.UnresolvedPaths)
+		got := AssessShellStaticWithContext("cp a.conf a.conf.$(date +%s)", true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"."}, got.KnownDirs)
+		require.Empty(t, got.DynamicTargets)
 	})
 
 	t.Run("non-whitelisted substitution stays dynamic", func(t *testing.T) {
-		got := AnalyzeShellStatic(`cp a $(cat /tmp/list)`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"command substitution"}, got.UnresolvedPaths)
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`cp a $(cat /tmp/list)`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"command substitution"}, got.DynamicTargets)
+		require.Empty(t, got.KnownDirs)
 	})
 
 	t.Run("slash-bearing date format stays dynamic", func(t *testing.T) {
-		got := AnalyzeShellStatic(`cp a a.$(date +%Y/%m/%d)`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"command substitution"}, got.UnresolvedPaths)
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`cp a a.$(date +%Y/%m/%d)`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"command substitution"}, got.DynamicTargets)
+		require.Empty(t, got.KnownDirs)
 	})
 
 	t.Run("variable operand keeps command dynamic", func(t *testing.T) {
-		got := AnalyzeShellStatic(`cp $src b.$(date +%s)`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"$src"}, got.UnresolvedPaths)
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`cp $src b.$(date +%s)`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"$src"}, got.DynamicTargets)
+		require.Empty(t, got.KnownDirs)
 	})
 
 	t.Run("state binding disables confinement command-wide", func(t *testing.T) {
-		got := AnalyzeShellStatic(`export PATH=/tmp:$PATH; cp a b.$(date +%s)`, true)
-		require.Equal(t, ShellStaticWrite, got.Class)
-		require.Equal(t, []string{"$PATH", "command substitution"}, got.UnresolvedPaths)
-		require.Empty(t, got.AffectedDirs)
+		got := AssessShellStaticWithContext(`export PATH=/tmp:$PATH; cp a b.$(date +%s)`, true, ReadOnlyCommandPolicy{}, "")
+		require.Equal(t, EffectWrite, got.Effect)
+		require.Equal(t, []string{"$PATH", "command substitution"}, got.DynamicTargets)
+		require.Empty(t, got.KnownDirs)
 	})
-}
-
-func TestExtractWritableDirsScalarSubstitution(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX AST coverage applies to non-Windows shell_run")
-	}
-	require.Equal(t, []string{"~/cfg"}, ExtractWritableDirs(`cp ~/cfg/a.lua ~/cfg/a.lua.$(date +%s)`, true))
-	require.Empty(t, ExtractWritableDirs(`cp ~/cfg/a.lua ~/cfg/a.lua.$(cat /tmp/list)`, true))
 }

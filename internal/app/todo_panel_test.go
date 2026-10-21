@@ -47,12 +47,9 @@ func newTodoTestMods(t *testing.T) *Mods {
 func withOutputTTY(t *testing.T, tty bool) {
 	t.Helper()
 	oldExported := IsOutputTTY
-	oldUnexported := isOutputTTY
 	IsOutputTTY = func() bool { return tty }
-	isOutputTTY = func() bool { return tty }
 	t.Cleanup(func() {
 		IsOutputTTY = oldExported
-		isOutputTTY = oldUnexported
 	})
 }
 

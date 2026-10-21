@@ -45,23 +45,6 @@ func printShellNode(node syntax.Node) (string, bool) {
 	return strings.TrimSpace(buf.String()), true
 }
 
-func normalizeShellCommandWithMode(command string, posix bool) string {
-	command = strings.TrimSpace(command)
-	if command == "" || !posix {
-		return command
-	}
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil {
-		return command
-	}
-	normalized, ok := printShellNode(file)
-	if !ok {
-		return command
-	}
-	return normalized
-}
-
 func shellNodeHasDynamicParts(node syntax.Node) bool {
 	dynamic := false
 	syntax.Walk(node, func(child syntax.Node) bool {

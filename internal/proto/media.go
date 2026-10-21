@@ -75,19 +75,6 @@ func NormalizeMedia(input []Message) []Message {
 	return out
 }
 
-func HasAudio(input []Message) bool { return HasMediaKind(input, "audio") }
-
-func HasMediaKind(input []Message, kind string) bool {
-	for _, m := range input {
-		for _, a := range m.Media {
-			if a.Kind == kind {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // ProjectToolMedia preserves the complete group of tool results before adding
 // transport-only user media. It does not modify persisted conversation state.
 func ProjectToolMedia(input []Message) []Message {

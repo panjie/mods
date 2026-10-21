@@ -546,15 +546,6 @@ func (h *realAIHarness) run(t *testing.T, stdin string, args ...string) (string,
 	return stdout, stderr
 }
 
-func (h *realAIHarness) runExpectFailure(t *testing.T, stdin string, args ...string) (string, string) {
-	t.Helper()
-	stdout, stderr, err := h.execute(t, stdin, args...)
-	if err == nil {
-		t.Fatalf("mods unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
-	}
-	return stdout, stderr
-}
-
 func (h *realAIHarness) execute(t *testing.T, stdin string, args ...string) (string, string, error) {
 	t.Helper()
 

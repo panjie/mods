@@ -29,15 +29,15 @@ func loadAsMap(t *testing.T, path string) map[string]any {
 	return m
 }
 
-func TestSaveFields_TopLevel(t *testing.T) {
+func TestSaveFieldPaths_TopLevel(t *testing.T) {
 	path := writeTestConfig(t, `# my config
 default-api: openai
 default-model: gpt-5.4
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"default-api":   "deepseek",
-		"default-model": "deepseek-v4-flash",
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"default-api"}, Value: "deepseek"},
+		{Path: []string{"default-model"}, Value: "deepseek-v4-flash"},
 	}))
 
 	m := loadAsMap(t, path)
@@ -45,15 +45,15 @@ default-model: gpt-5.4
 	require.Equal(t, "deepseek-v4-flash", m["default-model"])
 }
 
-func TestSaveFields_PreservesComments(t *testing.T) {
+func TestSaveFieldPaths_PreservesComments(t *testing.T) {
 	path := writeTestConfig(t, `# top comment
 default-api: openai  # inline comment
 # section comment
 default-model: gpt-5.4
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"default-api": "anthropic",
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"default-api"}, Value: "anthropic"},
 	}))
 
 	// Comments must survive the round-trip.
@@ -65,15 +65,15 @@ default-model: gpt-5.4
 	require.Contains(t, s, "# section comment")
 }
 
-func TestSaveFields_NestedMapping(t *testing.T) {
+func TestSaveFieldPaths_NestedMapping(t *testing.T) {
 	path := writeTestConfig(t, `builtin-tools:
   filesystem: auto
   shell: false
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"builtin-tools.filesystem": "true",
-		"builtin-tools.shell":      true,
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"builtin-tools", "filesystem"}, Value: "true"},
+		{Path: []string{"builtin-tools", "shell"}, Value: true},
 	}))
 
 	m := loadAsMap(t, path)
@@ -82,16 +82,16 @@ func TestSaveFields_NestedMapping(t *testing.T) {
 	require.Equal(t, true, bt["shell"])
 }
 
-func TestSaveFields_DeeplyNested(t *testing.T) {
+func TestSaveFieldPaths_DeeplyNested(t *testing.T) {
 	path := writeTestConfig(t, `apis:
   openai:
     base-url: https://api.openai.com/v1
     api-key-env: OPENAI_API_KEY
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"apis.openai.api-key-env": "MY_CUSTOM_KEY",
-		"apis.openai.api-key":     "sk-test-123",
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"apis", "openai", "api-key-env"}, Value: "MY_CUSTOM_KEY"},
+		{Path: []string{"apis", "openai", "api-key"}, Value: "sk-test-123"},
 	}))
 
 	m := loadAsMap(t, path)
@@ -103,13 +103,13 @@ func TestSaveFields_DeeplyNested(t *testing.T) {
 	require.Equal(t, "https://api.openai.com/v1", openai["base-url"])
 }
 
-func TestSaveFields_CreatesMissingPath(t *testing.T) {
+func TestSaveFieldPaths_CreatesMissingPath(t *testing.T) {
 	path := writeTestConfig(t, `default-api: openai
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"builtin-tools.filesystem": "auto",
-		"builtin-tools.shell":      false,
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"builtin-tools", "filesystem"}, Value: "auto"},
+		{Path: []string{"builtin-tools", "shell"}, Value: false},
 	}))
 
 	m := loadAsMap(t, path)
@@ -118,13 +118,13 @@ func TestSaveFields_CreatesMissingPath(t *testing.T) {
 	require.Equal(t, false, bt["shell"])
 }
 
-func TestSaveFields_CreatesMissingDeepPath(t *testing.T) {
+func TestSaveFieldPaths_CreatesMissingDeepPath(t *testing.T) {
 	path := writeTestConfig(t, `default-api: openai
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"apis.groq.base-url":    "https://api.groq.com/openai/v1",
-		"apis.groq.api-key-env": "GROQ_API_KEY",
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"apis", "groq", "base-url"}, Value: "https://api.groq.com/openai/v1"},
+		{Path: []string{"apis", "groq", "api-key-env"}, Value: "GROQ_API_KEY"},
 	}))
 
 	m := loadAsMap(t, path)
@@ -134,15 +134,15 @@ func TestSaveFields_CreatesMissingDeepPath(t *testing.T) {
 	require.Equal(t, "GROQ_API_KEY", groq["api-key-env"])
 }
 
-func TestSaveFieldsWritesTwoSpaceIndent(t *testing.T) {
+func TestSaveFieldPathsWritesTwoSpaceIndent(t *testing.T) {
 	path := writeTestConfig(t, `apis:
   openai:
     models:
       existing: {}
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"apis.openai.models.gpt-5.thinking-budget": 2048,
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"apis", "openai", "models", "gpt-5", "thinking-budget"}, Value: 2048},
 	}))
 
 	data, err := os.ReadFile(path)
@@ -174,13 +174,13 @@ func TestSaveFieldPaths_ModelNameWithSeparators(t *testing.T) {
 	require.NotContains(t, models, "vendor/gpt-5")
 }
 
-func TestSaveFields_BoolSerialization(t *testing.T) {
+func TestSaveFieldPaths_BoolSerialization(t *testing.T) {
 	path := writeTestConfig(t, `builtin-tools:
   shell: false
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"builtin-tools.shell": true,
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"builtin-tools", "shell"}, Value: true},
 	}))
 
 	// The YAML should contain an unquoted bool, not a string.
@@ -235,14 +235,14 @@ apis: {}
 	require.Equal(t, "llama-3.1-8b-instant", model["fallback"])
 }
 
-func TestSaveFields_DeleteField(t *testing.T) {
+func TestSaveFieldPaths_DeleteField(t *testing.T) {
 	path := writeTestConfig(t, `web-search: true
 web-search-provider: tavily
 web-search-api-key: tvly-test
 `)
 
-	require.NoError(t, SaveFields(path, map[string]any{
-		"web-search-api-key": nil,
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{Path: []string{"web-search-api-key"}, Value: nil},
 	}))
 
 	m := loadAsMap(t, path)
@@ -355,10 +355,11 @@ func TestSaveFieldPathsInsertsNewTopLevelKeysInTemplateOrder(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mods.yml")
 	require.NoError(t, WriteDefaultFile(path))
 
-	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{{
-		Path:  []string{"default-model"},
-		Value: "deepseek-v4-flash",
-	}}))
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{
+			Path:  []string{"default-model"},
+			Value: "deepseek-v4-flash",
+		}}))
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -392,10 +393,11 @@ default-model: misplaced
 format-text: {}
 `)
 
-	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{{
-		Path:  []string{"default-model"},
-		Value: "deepseek-v4-flash",
-	}}))
+	require.NoError(t, SaveFieldPaths(path, []FieldUpdate{
+		{
+			Path:  []string{"default-model"},
+			Value: "deepseek-v4-flash",
+		}}))
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -502,10 +504,11 @@ func TestSaveFieldPathsValidatesBeforeReplacingFile(t *testing.T) {
 	original := []byte("# untouched\nreview-mode: auto\n")
 	path := writeTestConfig(t, string(original))
 
-	err := SaveFieldPaths(path, []FieldUpdate{{
-		Path:  []string{"review-mode"},
-		Value: "sometimes",
-	}})
+	err := SaveFieldPaths(path, []FieldUpdate{
+		{
+			Path:  []string{"review-mode"},
+			Value: "sometimes",
+		}})
 	require.ErrorContains(t, err, "invalid review mode")
 
 	after, readErr := os.ReadFile(path)
@@ -519,10 +522,11 @@ func TestSettingsWritersRejectInvalidFilesystemMode(t *testing.T) {
 			return MergeSettingsYAML(path, []byte("builtin-tools:\n  filesystem: sometimes\n"))
 		},
 		"field update": func(path string) error {
-			return SaveFieldPaths(path, []FieldUpdate{{
-				Path:  []string{"builtin-tools", "filesystem"},
-				Value: "sometimes",
-			}})
+			return SaveFieldPaths(path, []FieldUpdate{
+				{
+					Path:  []string{"builtin-tools", "filesystem"},
+					Value: "sometimes",
+				}})
 		},
 	}
 	for name, write := range tests {

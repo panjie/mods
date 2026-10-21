@@ -184,18 +184,6 @@ func ExchangeCopilotToken(ctx context.Context, client Client, githubToken string
 	return CopilotToken{Token: body.Token}, nil
 }
 
-func DiscoverModels(ctx context.Context, client Client, githubToken string) ([]string, error) {
-	infos, err := DiscoverModelInfos(ctx, client, githubToken)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(infos))
-	for _, info := range infos {
-		ids = append(ids, info.ID)
-	}
-	return ids, nil
-}
-
 func DiscoverModelInfos(ctx context.Context, client Client, githubToken string) ([]ModelInfo, error) {
 	token, err := ExchangeCopilotToken(ctx, client, githubToken)
 	if err != nil {

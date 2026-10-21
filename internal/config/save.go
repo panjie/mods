@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/panjie/mods/internal/textutil"
@@ -19,35 +17,6 @@ import (
 type FieldUpdate struct {
 	Path  []string
 	Value any
-}
-
-// SaveFields updates specific fields in the YAML config file at path,
-// preserving comments and formatting by round-tripping through yaml.Node.
-//
-// updates maps dotted key paths to values (string/bool/int). Nested paths
-// navigate mapping nodes; missing intermediate mappings are created. A nil
-// value deletes the field when present.
-//
-// Example:
-//
-//	SaveFields(path, map[string]any{
-//	    "default-api":               "deepseek",
-//	    "default-model":             "deepseek-v4-flash",
-//	    "review-mode":               "auto",
-//	    "builtin-tools.filesystem":  "auto",
-//	    "builtin-tools.shell":       false,
-//	    "apis.openai.api-key-env":   "OPENAI_API_KEY",
-//	})
-func SaveFields(path string, updates map[string]any) error {
-	keys := slices.Sorted(maps.Keys(updates))
-	pathUpdates := make([]FieldUpdate, 0, len(keys))
-	for _, keyPath := range keys {
-		pathUpdates = append(pathUpdates, FieldUpdate{
-			Path:  strings.Split(keyPath, "."),
-			Value: updates[keyPath],
-		})
-	}
-	return SaveFieldPaths(path, pathUpdates)
 }
 
 // SaveFieldPaths updates specific fields using explicit YAML path parts. Use

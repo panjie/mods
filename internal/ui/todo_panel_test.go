@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"charm.land/lipgloss/v2"
 	"fmt"
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
@@ -16,46 +17,6 @@ func todoArgs() []byte {
 		{"content":"analyze init.el","status":"in_progress"},
 		{"content":"apply lazy-loading","status":"pending"}
 	]}`)
-}
-
-func TestRenderTodoPanel(t *testing.T) {
-	styles := MakeStyles(true).Interaction
-	items := TodoItemsFromArgs(todoArgs())
-	require.Len(t, items, 3)
-
-	panel := RenderTodoPanel(styles, 80, items)
-	stripped := ansi.Strip(panel)
-	require.Contains(t, stripped, "Plan")
-	require.Contains(t, stripped, "1/3 completed")
-	require.Contains(t, stripped, "1 in progress")
-	require.Contains(t, stripped, "1. [✓] measure startup time")
-	require.Contains(t, stripped, "2. [~] analyze init.el")
-	require.Contains(t, stripped, "3. [ ] apply lazy-loading")
-}
-
-func TestRenderTodoPanelHardwrapsLongContent(t *testing.T) {
-	styles := MakeStyles(true).Interaction
-	long := ""
-	for i := 0; i < 40; i++ {
-		long += "verylongstep "
-	}
-	panel := RenderTodoPanel(styles, 40, []TodoItem{{Content: long, Status: "pending"}})
-	for _, line := range splitLines(panel) {
-		require.LessOrEqual(t, ansi.StringWidth(line), 40+2)
-	}
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	lines = append(lines, s[start:])
-	return lines
 }
 
 func TestTodoItemsFromArgs(t *testing.T) {

@@ -41,14 +41,6 @@ func (m *Mods) resolveThinkWithOllama(
 	return active, nil
 }
 
-// applyThinkConfigs applies the unified thinking policy and returns whether
-// thinking is actually active. For built-in providers, -t / --think enables the
-// provider's default thinking mechanism; thinking-type only overrides the
-// provider default or opts custom providers into a thinking.type request.
-func applyThinkConfigs(mod Model, gccfg *google.Config, accfg *anthropic.Config, ccfg *openai.Config, requested bool) bool {
-	return applyThinkConfigsWithOllama(mod, gccfg, accfg, nil, ccfg, requested)
-}
-
 type thinkingPlan struct {
 	Active    bool
 	Mechanism string

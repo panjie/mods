@@ -456,11 +456,8 @@ func TestRequestApprovalTTYInputWithoutReviewUIIsUnavailable(t *testing.T) {
 }
 
 func TestReviewPolicyNonTTY(t *testing.T) {
-	oldIsInputTTY := isInputTTY
 	oldInputTTY := IsInputTTY
-	isInputTTY = func() bool { return false }
 	IsInputTTY = func() bool { return false }
-	t.Cleanup(func() { isInputTTY = oldIsInputTTY })
 	t.Cleanup(func() { IsInputTTY = oldInputTTY })
 
 	scope := testShellWorkingDirScope(t)

@@ -106,7 +106,7 @@ func TestExchangeCopilotTokenIncludesForbiddenDetails(t *testing.T) {
 	require.Contains(t, err.Error(), "copilot_disabled")
 }
 
-func TestDiscoverModelsExchangesTokenAndSortsModelIDs(t *testing.T) {
+func TestDiscoverModelInfosExchangesTokenAndSortsModelIDs(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/copilot_internal/v2/token":
@@ -126,9 +126,9 @@ func TestDiscoverModelsExchangesTokenAndSortsModelIDs(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ids, err := DiscoverModels(context.Background(), Client{APIBaseURL: srv.URL, CopilotBaseURL: srv.URL, HTTPClient: srv.Client()}, "github-token")
+	infos, err := DiscoverModelInfos(context.Background(), Client{APIBaseURL: srv.URL, CopilotBaseURL: srv.URL, HTTPClient: srv.Client()}, "github-token")
 	require.NoError(t, err)
-	require.Equal(t, []string{"claude-sonnet-4", "gpt-5"}, ids)
+	require.Equal(t, []ModelInfo{{ID: "claude-sonnet-4"}, {ID: "gpt-5"}}, infos)
 }
 
 func TestDiscoverModelInfosPreservesSupportedEndpoints(t *testing.T) {

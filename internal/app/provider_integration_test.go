@@ -16,21 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type providerTest struct {
-	api     string
-	model   string
-	envKey  string
-	baseURL string
-}
-
-var providerTests = []providerTest{
-	{api: "openai", model: "gpt-4o-mini", envKey: "OPENAI_API_KEY", baseURL: "https://api.openai.com/v1"},
-	{api: "google", model: "gemini-2.5-flash", envKey: "GOOGLE_API_KEY"},
-	{api: "anthropic", model: "claude-3-5-haiku-20241022", envKey: "ANTHROPIC_API_KEY", baseURL: "https://api.anthropic.com/v1"},
-	{api: "deepseek", model: "deepseek-v4-flash", envKey: "DEEPSEEK_API_KEY", baseURL: "https://api.deepseek.com/"},
-	{api: "ollama", model: "llama3.1"},
-}
-
 func testIntegrationMods(t *testing.T, api, model string) *Mods {
 	t.Helper()
 	return testIntegrationModsWithBaseURL(t, api, model, "")

@@ -116,38 +116,6 @@ func todoCounts(items []TodoItem) (completed, inProgress int) {
 	return completed, inProgress
 }
 
-func RenderTodoPanel(styles InteractionStyles, width int, items []TodoItem) string {
-	if len(items) == 0 {
-		return ""
-	}
-	completed, inProgress := todoCounts(items)
-	meta := fmt.Sprintf("%d/%d completed", completed, len(items))
-	if inProgress > 0 {
-		meta += fmt.Sprintf(" · %d in progress", inProgress)
-	}
-	body := make([]string, 0, len(items))
-	for i, item := range items {
-		body = append(body, todoItemLine(styles, i+1, item))
-	}
-	return RenderInteractionPanel(styles, width, InteractionPanel{
-		Title: "Plan",
-		Meta:  meta,
-		Tone:  InteractionToneInfo,
-		Body:  body,
-	})
-}
-
-func todoMarker(status string) string {
-	switch status {
-	case "completed":
-		return "[✓]"
-	case "in_progress":
-		return "[~]"
-	default:
-		return "[ ]"
-	}
-}
-
 // TodoFooterLine renders the persistent one-line plan progress for the
 // footer: "PLAN 1/3 · ▸ current step" while work is in progress, the first
 // pending step when nothing is in progress, and "PLAN 3/3 done" once every
@@ -182,30 +150,6 @@ func TodoFooterLine(styles Styles, items []TodoItem, width int) string {
 		textWidth = 120
 	}
 	return badge + styles.Comment.Render(" "+TruncateOperationStatus(text, textWidth))
-}
-
-func TodoPlainText(items []TodoItem) string {
-	if len(items) == 0 {
-		return ""
-	}
-	completed, inProgress := todoCounts(items)
-	var b strings.Builder
-	fmt.Fprintf(&b, "Plan (%d items)", len(items))
-	var counts []string
-	if completed > 0 {
-		counts = append(counts, fmt.Sprintf("%d completed", completed))
-	}
-	if inProgress > 0 {
-		counts = append(counts, fmt.Sprintf("%d in progress", inProgress))
-	}
-	if len(counts) > 0 {
-		b.WriteString(" — ")
-		b.WriteString(strings.Join(counts, ", "))
-	}
-	for i, item := range items {
-		fmt.Fprintf(&b, "\n%d. %s %s", i+1, todoMarker(item.Status), item.Content)
-	}
-	return b.String()
 }
 
 func todoItemLine(styles InteractionStyles, index int, item TodoItem) string {

@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	flagTierAnnotation     = "mods/tier"
-	flagCategoryAnnotation = "mods/category"
-	flagTierAdvanced       = "advanced"
+	flagTierAnnotation = "mods/tier"
+	flagTierAdvanced   = "advanced"
 )
 
 const (
@@ -402,27 +401,6 @@ func applyFlagTiers(flags *pflag.FlagSet) {
 	}
 }
 
-func markCategory(flags *pflag.FlagSet, category string, names ...string) {
-	for _, name := range names {
-		flag := flags.Lookup(name)
-		if flag == nil {
-			continue
-		}
-		if flag.Annotations == nil {
-			flag.Annotations = map[string][]string{}
-		}
-		flag.Annotations[flagCategoryAnnotation] = []string{category}
-	}
-}
-
-func applyFlagCategories(flags *pflag.FlagSet) {
-	for _, category := range flagCategorySpecs {
-		for _, spec := range category.Flags {
-			markCategory(flags, category.Name, spec.Name)
-		}
-	}
-}
-
 func flagVisibleInUsage(f *pflag.Flag) bool {
 	return f != nil && !f.Hidden
 }
@@ -430,14 +408,6 @@ func flagVisibleInUsage(f *pflag.Flag) bool {
 func flagIsAdvanced(f *pflag.Flag) bool {
 	values := f.Annotations[flagTierAnnotation]
 	return len(values) > 0 && values[0] == flagTierAdvanced
-}
-
-func flagCategory(f *pflag.Flag) string {
-	values := f.Annotations[flagCategoryAnnotation]
-	if len(values) == 0 || values[0] == "" {
-		return flagCategoryOther
-	}
-	return values[0]
 }
 
 func groupedUsageFlags(flags *pflag.FlagSet) map[string][]*pflag.Flag {

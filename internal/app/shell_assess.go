@@ -31,21 +31,6 @@ func shellToolUsesPowerShell(tool string) bool {
 	return tool == "powershell_run" || ((tool == "shell_run" || tool == "process_run") && runtime.GOOS == "windows")
 }
 
-func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
-	return m.assessCommandWithEnv(tool, command, nil)
-}
-
-// assessCommandWithEnv additionally receives the environment names this
-// call injects as secrets; static environment path expansion skips them so
-// classification never substitutes a value the child shell will not see.
-func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string]bool) approval.CommandAssessment {
-	ws := ""
-	if m.Config != nil {
-		ws = m.Config.ResolveWorkingDir().Canonical
-	}
-	return m.assessCommandAtCwd(tool, command, shadowedEnv, ws)
-}
-
 func (m *Mods) assessCommandAtCwd(tool, command string, shadowedEnv map[string]bool, ws string) approval.CommandAssessment {
 	if tool == "process_run" {
 		return m.assessProcessInvocation(command)

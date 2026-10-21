@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -24,23 +22,6 @@ func (v CursorView) Translate(x, y int) CursorView {
 		v.Cursor.Y += y
 	}
 	return v
-}
-
-// StackVertical joins views with newlines and translates the first visible
-// cursor by the height of the content before it.
-func StackVertical(views ...CursorView) CursorView {
-	var content []string
-	var cursor *tea.Cursor
-	y := 0
-	for _, view := range views {
-		if cursor == nil && view.Cursor != nil {
-			cursor = cloneCursor(view.Cursor)
-			cursor.Y += y
-		}
-		content = append(content, view.Content)
-		y += lipgloss.Height(view.Content) + 1
-	}
-	return CursorView{Content: strings.Join(content, "\n"), Cursor: cursor}
 }
 
 // InStyle renders a view through a Lip Gloss style and accounts for the

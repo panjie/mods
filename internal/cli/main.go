@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	timeago "github.com/caarlos0/timea.go"
 	"github.com/charmbracelet/x/editor"
+	"github.com/panjie/mods/internal/approval"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -130,6 +131,8 @@ var (
 var memprofile bool
 
 func Run(version, commit string) int {
+	// The bridge is shared across turns, but owned by this CLI invocation.
+	defer approval.CloseBridge()
 	Version = version
 	CommitSHA = commit
 	buildVersion()
@@ -195,7 +198,6 @@ func initFlags() {
 	registerFlags(flags, &config, &memprofile)
 
 	applyFlagTiers(flags)
-	applyFlagCategories(flags)
 	registeredSelfHelpFlags = selfHelpFlagGroups(flags)
 
 	for _, name := range sessionCompleteFlags {

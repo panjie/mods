@@ -30,6 +30,7 @@ type commandRunResult struct {
 }
 
 type commandRunner struct {
+	Elevated     bool
 	Parent       context.Context
 	Timeout      time.Duration
 	BuildCommand func(context.Context) *exec.Cmd
@@ -49,6 +50,9 @@ func (r commandRunner) Run() (commandRunResult, error) {
 	}
 	if r.BuildCommand == nil {
 		return commandRunResult{}, fmt.Errorf("command builder is required")
+	}
+	if r.Elevated {
+		return r.runElevated()
 	}
 	runCtx, cancel := context.WithTimeout(r.Parent, r.Timeout)
 	defer cancel()

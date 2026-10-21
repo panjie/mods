@@ -657,18 +657,21 @@ func TestSetupStreamContextInjectsInteractiveCredentials(t *testing.T) {
 	IsInputTTY = func() bool { return false }
 	pipe := newMods()
 	require.NoError(t, pipe.setupStreamContext("hello"))
-	require.NotContains(t, systemContents(pipe.messages), prompts.InteractiveCredentials)
+	require.NotContains(t, systemContents(pipe.messages), prompts.InteractiveCredentialsForOS(runtime.GOOS))
 
 	IsInputTTY = func() bool { return true }
 	interactive := newMods()
 	require.NoError(t, interactive.setupStreamContext("hello"))
-	require.Contains(t, systemContents(interactive.messages), prompts.InteractiveCredentials)
+	require.Contains(t, systemContents(interactive.messages), prompts.InteractiveCredentialsForOS(runtime.GOOS))
+	if runtime.GOOS == "windows" {
+		require.NotContains(t, systemContents(interactive.messages), "mods supplies secure askpass")
+	}
 
 	minimalCfg := defaultConfig()
 	minimalCfg.Minimal = true
 	minimal := &Mods{Config: &minimalCfg, Styles: makeStyles(true), ctx: context.Background(), userInput: newUserInputManager(&minimalCfg)}
 	require.NoError(t, minimal.setupStreamContext("hello"))
-	require.NotContains(t, systemContents(minimal.messages), prompts.InteractiveCredentials)
+	require.NotContains(t, systemContents(minimal.messages), prompts.InteractiveCredentialsForOS(runtime.GOOS))
 }
 
 func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {

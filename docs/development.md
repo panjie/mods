@@ -108,6 +108,30 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-windows-reliability-quic
 go run github.com/go-task/task/v3/cmd/task@v3.51.1 test-windows-reliability-stress
 ```
 
+## Windows UAC
+
+Windows UAC tests run real named-pipe and helper subprocesses without displaying
+consent dialogs in the default suite:
+
+```sh
+go test ./internal/tools -run TestElevation -count=1
+go test ./internal/app -run 'TestElevat' -count=1
+```
+
+To verify the native UAC launch on a Windows desktop, run this from a
+non-administrator PowerShell and accept the Windows consent dialog:
+
+```powershell
+$env:MODS_TEST_UAC = '1'
+try { go test ./internal/tools -run '^TestUACIntegration$' -count=1 -v }
+finally { Remove-Item Env:MODS_TEST_UAC }
+```
+
+This opt-in test verifies the elevated token, Unicode stdout, stderr, and an
+intentional exit code of 7. It does not change system settings. UAC cancellation
+produces a test failure, not an automatic retry. Running it from an already
+elevated terminal tests inherited privileges instead of the UAC launch.
+
 ## Design Notes
 
 Major subsystem design documents live in `docs/superpowers/specs/` and

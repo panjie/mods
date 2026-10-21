@@ -32,6 +32,7 @@ type ProcessConfig struct {
 }
 
 type processRunArgs struct {
+	Elevated  bool              `json:"elevated"`
 	Program   string            `json:"program"`
 	Args      []string          `json:"args"`
 	Cwd       string            `json:"cwd"`
@@ -142,8 +143,8 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
 		Spec: proto.ToolSpec{
 			Name:        "process_run",
-			Description: ProcessRunDescription,
-			InputSchema: objectSchema(map[string]any{
+			Description: elevationDescription(ProcessRunDescription),
+			InputSchema: commandSchema(map[string]any{
 				"program":    stringProp("Executable name or path. Shell builtins, pipelines, redirection, globbing, and variable expansion are not supported."),
 				"args":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Literal argument vector. Each item is passed as one argument without shell parsing."},
 				"cwd":        stringProp("Optional working directory. Defaults to the current working directory; relative paths resolve from that cwd."),
@@ -218,8 +219,9 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 	stdout := newBoundedOutput(commandOutputLimit)
 	stderr := newBoundedOutput(commandOutputLimit)
 	runResult, err := (commandRunner{
-		Parent:  ctx,
-		Timeout: timeout,
+		Elevated: args.Elevated,
+		Parent:   ctx,
+		Timeout:  timeout,
 		BuildCommand: func(runCtx context.Context) *exec.Cmd {
 			cmd := exec.CommandContext(runCtx, program, prepared.Args...) //nolint:gosec
 			cmd.Dir = cwd

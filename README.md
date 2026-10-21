@@ -335,6 +335,21 @@ mods --review-mode always "rename the fn to calculateTotal across the repo"
 Review is an approval policy, not an execution sandbox. Use a container or VM
 for untrusted code.
 
+On Windows, command tools (`process_run`, `powershell_run`, and `shell_run`)
+accept `elevated: true` when one command needs administrator privileges. Mods
+reviews the original command and targets first, then requests Windows UAC
+consent or administrator credentials. Only that command runs elevated; output
+and exit status return to the conversation. Saved target rules still apply,
+and `--no-review` does not bypass UAC. Neither Windows sudo nor an elevated Mods
+session is required.
+
+UAC consent time counts toward the command timeout. Canceling or timing out
+disconnects the helper and stops its command tree. Windows may leave a pending
+consent dialog visible; accepting it after cancellation cannot start the command.
+Enter administrator credentials only into Windows' UAC dialog, never into chat.
+An already elevated Mods session uses its existing privileges without another
+UAC prompt.
+
 ## Tools & MCP
 
 Mods ships its complete toolset in the binary. Filesystem tools auto-activate

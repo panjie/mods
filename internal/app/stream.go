@@ -70,7 +70,7 @@ func (m *Mods) setupStreamContext(content string) error {
 		}
 		m.messages = append(m.messages, structuredSystemMessage(identityPrompt, proto.SystemSectionRuntimeIdentity))
 		if m.interactiveInputAvailable() {
-			m.messages = append(m.messages, structuredSystemMessage(prompts.InteractiveCredentials, proto.SystemSectionRuntimeIdentity))
+			m.messages = append(m.messages, structuredSystemMessage(prompts.InteractiveCredentialsForOS(runtime.GOOS), proto.SystemSectionRuntimeIdentity))
 		}
 		workflowPrompt, err := m.resolvePrompt(prompts.KeyWorkflow, prompts.Workflow)
 		if err != nil {

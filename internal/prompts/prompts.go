@@ -1,5 +1,7 @@
 package prompts
 
+import "runtime"
+
 const (
 	KeyIdentity      = "identity"
 	KeyWorkflow      = "workflow"
@@ -30,7 +32,9 @@ const (
 	// interactive input is available. Without a terminal there is no askpass or
 	// Git credential prompt, so the guidance would describe unavailable flows.
 	InteractiveCredentials = "Use `sudo` only for required elevation; mods supplies secure askpass. Never use `sudo -S`, embed or pipe passwords, or ask for them yourself. Non-interactive sudo requires cached or passwordless authorization.\n\n" +
-		"mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or commands, script credential storage, or blindly retry Git writes."
+		gitCredentials
+	WindowsInteractiveCredentials = "Windows elevation uses system UAC consent or administrator credentials. Never collect administrator passwords yourself or bypass a denied UAC request.\n\n" + gitCredentials
+	gitCredentials                = "mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or commands, script credential storage, or blindly retry Git writes."
 
 	// ScriptPolicy is shared by tool descriptions. Simple commands and pipelines
 	// stay inline; a script is a preference for complex or reusable logic.
@@ -108,7 +112,7 @@ func Builtin() []Definition {
 		{Name: KeyToolSelection, Description: "Capability-filtered guidance for choosing native filesystem and shell tools.", Default: ToolSelection, Configurable: true},
 		{Name: KeyShellClassifier, Description: "Classifier prompt used to decide whether shell commands need review.", Default: ShellClassifier, Configurable: true},
 		{Name: KeyLanguagePolicy, Description: "Response-language rule injected in the output-format layer.", Default: LanguagePolicy},
-		{Name: KeyInteractiveCredentials, Description: "Sudo and Git credential guidance, injected only when interactive secure input is available.", Default: InteractiveCredentials},
+		{Name: KeyInteractiveCredentials, Description: "Platform elevation and Git credential guidance, injected only when interactive secure input is available.", Default: InteractiveCredentialsForOS(runtime.GOOS)},
 		{Name: KeyMinimal, Description: "System prompt added by --minimal.", Default: Minimal},
 		{Name: KeyFormatMarkdown, Description: "Formatting prompt used by --format --format-as markdown.", Default: MarkdownFormat},
 		{Name: KeyFormatJSON, Description: "Formatting prompt used by --format --format-as json.", Default: JSONFormat},

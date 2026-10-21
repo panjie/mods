@@ -24,6 +24,13 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == ElevationHelperArg {
+		if err := RunElevationHelper(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if len(os.Args) > 1 && os.Args[1] == GitAskpassHelperArg {
 		if err := RunGitAskpassHelper(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)

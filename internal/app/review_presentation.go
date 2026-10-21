@@ -88,6 +88,9 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 	if result.headline == "" {
 		result.headline = "This operation requires approval"
 	}
+	if elevated, _ := parsed["elevated"].(bool); elevated && (name == "process_run" || name == "shell_run" || name == "powershell_run") {
+		result.rows = append(result.rows, interactionRow{Label: "Elevation", Value: "Windows UAC administrator privileges (this command only)"})
+	}
 	if intent.HasAccess() && intent.DominantClass() == AccessRead && result.tone == interactionToneWarning {
 		result.tone, result.toneText = interactionToneInfo, "Info"
 	}

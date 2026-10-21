@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -69,7 +70,19 @@ func TestInteractiveCredentialsStayOutOfIdentity(t *testing.T) {
 	}
 	require.Contains(t, byName, KeyInteractiveCredentials)
 	require.False(t, byName[KeyInteractiveCredentials].Configurable)
-	require.Equal(t, InteractiveCredentials, byName[KeyInteractiveCredentials].Default)
+	require.Equal(t, InteractiveCredentialsForOS(runtime.GOOS), byName[KeyInteractiveCredentials].Default)
+}
+
+func TestCredentialPolicyMatchesPlatform(t *testing.T) {
+	windows := InteractiveCredentialsForOS("windows")
+	require.Contains(t, windows, "system UAC")
+	require.Contains(t, windows, "Never collect administrator passwords")
+	require.Contains(t, windows, "Git HTTP(S)")
+	require.NotContains(t, windows, "sudo")
+	require.NotContains(t, windows, "askpass")
+	for _, goos := range []string{"linux", "darwin"} {
+		require.Contains(t, InteractiveCredentialsForOS(goos), "mods supplies secure askpass")
+	}
 }
 
 // TestIdentityStaysRuntimeSafetyOnly guards the layer split: identity is the

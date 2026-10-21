@@ -43,6 +43,7 @@ type ShellProgressHandler func(context.Context, ShellProgress)
 
 // ShellConfig configures the native shell tool.
 type ShellConfig struct {
+	Elevated   bool
 	Root       string
 	Timeout    time.Duration
 	SudoPrompt SecretPromptHandler
@@ -82,8 +83,8 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
 		Spec: proto.ToolSpec{
 			Name:        "shell_run",
-			Description: desc,
-			InputSchema: objectSchema(map[string]any{
+			Description: elevationDescription(desc),
+			InputSchema: commandSchema(map[string]any{
 				"cwd":        stringProp("Optional literal working directory; defaults to the cwd. Use instead of cd or Set-Location."),
 				"command":    stringProp("Shell command to run."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
@@ -92,6 +93,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
+				Elevated  bool              `json:"elevated"`
 				Command   string            `json:"command"`
 				Cwd       string            `json:"cwd"`
 				SecretEnv map[string]string `json:"secret_env"`
@@ -108,6 +110,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 				return "", cwdErr
 			}
 			callCfg := cfg
+			callCfg.Elevated = args.Elevated
 			callCfg.Timeout, err = resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
 			if err != nil {
 				return "", err
@@ -132,8 +135,8 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
 		Spec: proto.ToolSpec{
 			Name:        "powershell_run",
-			Description: PowerShellRunDescription,
-			InputSchema: objectSchema(map[string]any{
+			Description: elevationDescription(PowerShellRunDescription),
+			InputSchema: commandSchema(map[string]any{
 				"cwd":        stringProp("Optional literal working directory; defaults to the cwd. Use instead of cd or Set-Location."),
 				"command":    stringProp("PowerShell command to run directly."),
 				"secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Environment variable names mapped to secret references returned by request_user_input."},
@@ -142,6 +145,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) {
 			var args struct {
+				Elevated  bool              `json:"elevated"`
 				Command   string            `json:"command"`
 				Cwd       string            `json:"cwd"`
 				SecretEnv map[string]string `json:"secret_env"`
@@ -158,6 +162,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 				return "", cwdErr
 			}
 			callCfg := cfg
+			callCfg.Elevated = args.Elevated
 			callCfg.Timeout, err = resolveCallTimeout(cfg.Timeout, args.TimeoutMS)
 			if err != nil {
 				return "", err
@@ -181,6 +186,7 @@ func (e ShellExitError) ExitCode() int {
 }
 
 type ShellRunner struct {
+	Elevated         bool
 	Root             string
 	Tool             string
 	Timeout          time.Duration
@@ -203,8 +209,9 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	}
 	out := newShellOutput()
 	result, err := (commandRunner{
-		Parent:  ctx,
-		Timeout: r.Timeout,
+		Elevated: r.Elevated,
+		Parent:   ctx,
+		Timeout:  r.Timeout,
 		BuildCommand: func(runCtx context.Context) *exec.Cmd {
 			cmd := r.BuildCommand(runCtx, command)
 			cmd.Dir = r.Root
@@ -229,6 +236,9 @@ func (r ShellRunner) Run(ctx context.Context, command string) (string, error) {
 	}
 	if result.TimedOut {
 		return text, fmt.Errorf("command timed out after %s", r.Timeout)
+	}
+	if result.ExitCode != nil && *result.ExitCode != 0 {
+		return appendExitStatus(text, *result.ExitCode), ShellExitError{Code: *result.ExitCode}
 	}
 	if result.WaitError != nil {
 		var exitErr *exec.ExitError
@@ -266,6 +276,7 @@ func runShellCommand(ctx context.Context, cfg ShellConfig, root, toolName, comma
 		env[key] = value
 	}
 	return ShellRunner{
+		Elevated:     cfg.Elevated,
 		Root:         root,
 		Tool:         toolName,
 		Timeout:      cfg.Timeout,

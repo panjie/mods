@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/panjie/mods/internal/chatgpt"
 	"github.com/panjie/mods/internal/openai"
 	"github.com/panjie/mods/internal/providerinfo"
 )
@@ -22,6 +23,9 @@ type setupResult struct {
 	device         copilotDeviceCode
 	token          string
 	err            error
+	browserErr     error
+	authURL        string
+	authDone       <-chan error
 }
 
 func (m *setupModel) begin(kind string) (context.Context, setupResult) {
@@ -38,7 +42,9 @@ func (m *setupModel) discover() tea.Cmd {
 	protocol, endpoint, credential := m.protocol(), m.endpoint(), resolveKeyForDiscovery(m.api(), d.key)
 	sessionID := m.sessionID
 	return func() tea.Msg {
-		if protocol == "github-copilot" {
+		if result.provider == "chatgpt" {
+			result.models, result.err = chatgpt.NewClient().Models(ctx)
+		} else if protocol == "github-copilot" {
 			result.models, result.endpoints, result.err = discoverCopilotModelsContext(ctx, endpoint, credential)
 		} else if providerinfo.IsOpenCodeGoURL(endpoint) && (protocol == "openai" || protocol == "anthropic") {
 			result.models, result.endpoints, result.unconfirmed, result.err = discoverOpenCodeGoModelsContext(ctx, protocol, endpoint, credential, sessionID)
@@ -63,7 +69,7 @@ func (m *setupModel) checkConnection() tea.Cmd {
 	}
 	d := m.draft()
 	credential := resolveKeyForDiscovery(m.api(), d.key)
-	if credential == "" || m.endpoint() == "" || !isOpenAICompatible(m.protocol()) {
+	if m.api() != "chatgpt" && (credential == "" || m.endpoint() == "" || !isOpenAICompatible(m.protocol())) {
 		return m.commit()
 	}
 	ctx, result := m.begin("Testing connection")
@@ -80,6 +86,12 @@ func (m *setupModel) checkConnection() tea.Cmd {
 		ProviderProfile: openai.ProviderProfile(providerinfo.Profile(m.api(), profile, model.ProviderProfile)),
 		ExtraParams:     model.ExtraParams, Headers: providerinfo.OpenCodeHeaders(m.endpoint(), m.sessionID),
 	}
+	if m.api() == "chatgpt" {
+		cfg.BaseURL = chatgpt.BaseURL
+		cfg.HTTPClient = chatgpt.NewClient().HTTPClient()
+		cfg.ProviderProfile = openai.ProviderProfileChatGPT
+		cfg.UseResponses = true
+	}
 	modelName := d.defaultModel
 	return func() tea.Msg { result.err = testConnectionContext(ctx, modelName, cfg); return result }
 }
@@ -89,6 +101,23 @@ func (m *setupModel) receive(result setupResult) tea.Cmd {
 	}
 	m.busy = ""
 	switch result.kind {
+	case "Starting ChatGPT authorization":
+		if result.err != nil {
+			m.err = result.err
+			return nil
+		}
+		m.device.VerificationURI = result.authURL
+		m.browserErr = result.browserErr
+		m.busy = "Waiting for ChatGPT authorization"
+		next := setupResult{request: m.request, provider: m.api(), kind: m.busy}
+		return func() tea.Msg { next.err = <-result.authDone; return next }
+	case "Waiting for ChatGPT authorization":
+		if result.err != nil {
+			m.err = result.err
+			return nil
+		}
+		m.invalidate()
+		return m.move(false)
 	case "Discovering models":
 		d := m.draft()
 		d.discovered = true

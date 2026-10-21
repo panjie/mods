@@ -145,6 +145,7 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryConfigMaintenance,
 		Flags: []flagSpec{
+			{Name: "chatgpt-auth", Set: func() bool { return config.ChatGPTAuth != "" }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: flagConfig, Set: func() bool { return config.ConfigSetup }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
 			{Name: flagSettings, Set: func() bool { return config.Settings }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
 			{Name: "dirs", Set: func() bool { return config.Dirs }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},

@@ -703,3 +703,33 @@ func TestSetupVimLettersRemainEditable(t *testing.T) {
 		})
 	}
 }
+
+func TestChatGPTSetupUsesOAuthWithoutPersistingTokens(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	setupFixture(t, func(m *setupModel) {
+		m.provider = "chatgpt"
+		require.Contains(t, m.pages(), setupAuth)
+		require.NotContains(t, m.pages(), setupKey)
+		require.NotContains(t, m.pages(), setupCredentials)
+		require.NotContains(t, m.pages(), setupEndpoint)
+		require.Equal(t, "https://api.openai.com/v1", m.endpoint())
+		require.Contains(t, m.summary(), "Authentication: ChatGPT subscription")
+		require.NotContains(t, m.summary(), "API key:")
+		require.NotContains(t, m.summary(), "Key environment:")
+		m.draft().manual = "available-model"
+		m.draft().defaultModel = "available-model"
+		m.draft().key = "must-not-be-saved"
+		m.draft().storage = "config"
+		data, err := m.saveData()
+		require.NoError(t, err)
+		updates := buildConfigWizardUpdates(data)
+		for _, u := range updates {
+			require.NotContains(t, strings.Join(u.Path, "."), "api-key")
+		}
+		m.page = setupAuth
+		require.Contains(t, m.View().Content, "Continue with ChatGPT")
+		stale := setupResult{request: m.request + 1, provider: "chatgpt", kind: "Waiting for ChatGPT authorization"}
+		require.Nil(t, m.receive(stale))
+		require.Equal(t, setupAuth, m.page)
+	})
+}

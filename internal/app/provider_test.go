@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -434,4 +435,26 @@ func TestQwenMediaRoutingDoesNotDependOnModelName(t *testing.T) {
 	require.Equal(t, map[string]json.RawMessage{"qwen.responses.output.v1": json.RawMessage(`[]`)}, m.messages[0].ProviderData)
 	m.sanitizeProviderContinuation(mod, true)
 	require.Empty(t, m.messages[0].ProviderData)
+}
+
+func TestChatGPTProviderRoutingAndContinuation(t *testing.T) {
+	m := &Mods{Styles: makeStyles(true), Config: &Config{}}
+	cfgs, err := m.buildProviderConfigs(Model{API: "chatgpt", Name: "account-model"}, API{Name: "chatgpt"})
+	require.NoError(t, err)
+	require.True(t, cfgs.OpenAI.UseResponses)
+	require.Equal(t, openai.ProviderProfileChatGPT, cfgs.OpenAI.ProviderProfile)
+	require.NotNil(t, cfgs.OpenAI.HTTPClient)
+	require.Empty(t, cfgs.OpenAI.AuthToken)
+	for _, base := range []string{"https://proxy.example/v1", "http://api.openai.com/v1"} {
+		_, err = m.buildProviderConfigs(Model{API: "chatgpt", Name: "m"}, API{Name: "chatgpt", BaseURL: base})
+		require.Error(t, err)
+	}
+	m.messages = []proto.Message{{Role: proto.RoleAssistant, ProviderData: map[string]json.RawMessage{"chatgpt.responses.output.v1": json.RawMessage(`[]`), "openai.responses.output.v1": json.RawMessage(`[]`)}}}
+	m.sanitizeProviderContinuation(Model{API: "chatgpt"}, true)
+	require.Equal(t, map[string]json.RawMessage{"chatgpt.responses.output.v1": json.RawMessage(`[]`)}, m.messages[0].ProviderData)
+	require.NoError(t, applyHTTPProxy(&Config{PersistentConfig: PersistentConfig{HTTPProxy: "http://127.0.0.1:8888"}}, &cfgs.Anthropic, &cfgs.Google, &cfgs.Ollama, &cfgs.OpenAI))
+	// A proxy must never replace the origin-confined authentication transport.
+	req, _ := http.NewRequest("GET", "https://other.example/v1", nil)
+	_, err = cfgs.OpenAI.HTTPClient.Do(req)
+	require.ErrorContains(t, err, "only be sent")
 }

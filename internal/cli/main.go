@@ -87,6 +87,10 @@ var (
 				return cmd.Usage()
 			}
 
+			if config.ChatGPTAuth != "" {
+				return runChatGPTAuth(cmd.Context(), config.ChatGPTAuth, cmd.OutOrStdout())
+			}
+
 			if autoConfig, err := maybeRunAutoConfig(os.Args); autoConfig || err != nil {
 				return err
 			}
@@ -168,6 +172,7 @@ func registerFlags(flags *pflag.FlagSet, c *Config, memprofileFlag *bool) {
 	regBool(flags, &c.ResetSettings, "reset-settings", "", c.ResetSettings)
 	regSettingsFlag(flags, c)
 	regBool(flags, &c.ConfigSetup, "config", "", false)
+	flags.StringVar(&c.ChatGPTAuth, "chatgpt-auth", "", "Manage ChatGPT accounts: login, login:<client-id>, list, use:<client-id>, logout")
 	regBool(flags, &c.Dirs, "dirs", "", false)
 	regStr(flags, &c.Role, "role", "r", c.Role)
 	regBool(flags, &c.ListRoles, "list-roles", "", c.ListRoles)

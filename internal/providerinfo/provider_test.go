@@ -45,6 +45,7 @@ func TestProviderDescriptionsIdentifyProviders(t *testing.T) {
 		"minimax":               "MiniMax API",
 		"ollama":                "Local model runtime (no API key needed)",
 		"openai":                "OpenAI API",
+		"chatgpt":               "ChatGPT subscription (Continue with ChatGPT)",
 		"opencode-go":           "OpenCode Go (OpenAI-compatible models)",
 		"opencode-go-anthropic": "OpenCode Go (Anthropic models: MiniMax, Qwen)",
 		"openrouter":            "Multi-provider API gateway",

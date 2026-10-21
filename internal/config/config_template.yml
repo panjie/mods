@@ -168,6 +168,10 @@ apis:
     # {{ index .Help "apis.<provider>.api-key-cmd" }}
     # api-key-cmd: rbw get -f OPENAI_API_KEY chat.openai.com
 
+  # Sign in with mods --config; tokens are stored separately from this file.
+  chatgpt:
+    base-url: https://api.openai.com/v1
+
   google:
     # Optional override of the Gemini streaming endpoint. The default,
     # built by google.DefaultConfig, is the public

@@ -830,28 +830,28 @@ func TestFlagTableMatchesRegistration(t *testing.T) {
 // as "no arguments" or as a side-effect action. Make such a change here, on
 // purpose.
 func TestOneShotRoleAssignments(t *testing.T) {
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"settings", "list-sessions", "continue", "continue-last", "reset-settings",
 		"config", "list-mcps", "list-tools", "list-prompts", "list-skills",
 	}, sessionActionFlags, "mutually exclusive one-shot actions")
 	require.Equal(t, []string{"continue"}, sessionCompleteFlags, "flags taking a session id")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"help", "chat", "list-sessions", "list-roles", "list-prompts", "list-tools",
 		"list-skills", "list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleNoArgs), "flags that make the invocation non-empty")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
 		"list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleBlocksChat), "flags that cannot be combined with --chat")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
 		"list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleBlocksAutoConfig), "flags that skip first-run auto configuration")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
 		"list-mcps", "dirs",
 	}, flagNamesWithRole(roleBlocksPassiveAutoConfig), "flags that skip the auto-created config cleanup")

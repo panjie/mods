@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/chatgpt"
 	"github.com/panjie/mods/internal/ui"
 )
 
@@ -49,6 +50,9 @@ func (m *setupModel) heading() (string, string) {
 	case setupKey:
 		return "Saved API key", "The key is stored in plaintext in your config file."
 	case setupAuth:
+		if m.api() == "chatgpt" {
+			return "Continue with ChatGPT", "Authorize mods to use your ChatGPT plan. Manage accounts with --chatgpt-auth."
+		}
 		return "GitHub Copilot sign in", "Authorize mods using GitHub's device flow."
 	case setupDiscovery:
 		description := "Choose models for " + m.api() + "."
@@ -89,7 +93,14 @@ func (m *setupModel) summary() string {
 	d := m.draft()
 	names, _ := configWizardModelNames(m.api(), d.selected, d.manual)
 	rows := []string{"Provider: " + m.api(), "API type: " + m.protocol(), "Base URL: " + m.redact(m.endpoint()), "Default model: " + d.defaultModel, fmt.Sprintf("Models: %d", len(names)), "API key: " + setupStorageLabel(d.storage), "Filesystem: " + m.data.fsMode, "Shell: " + boolLabel(m.data.shellOn), "Web search: " + boolLabel(m.data.webSearchOn)}
-	if d.storage == "env" && m.api() != "ollama" {
+	if m.api() == "chatgpt" {
+		rows[5] = "Authentication: ChatGPT subscription"
+		st, _ := chatgpt.DefaultStore().Load()
+		if account, ok := st.Selected(); ok {
+			rows = append(rows, "Account: "+account.Email+" ("+account.ClientID+")")
+		}
+	}
+	if d.storage == "env" && m.api() != "ollama" && m.api() != "chatgpt" {
 		rows = append(rows, "Key environment: "+resolveEnvVar(m.api()))
 	}
 	if m.data.webSearchOn {
@@ -165,6 +176,26 @@ func (m *setupModel) View() tea.View {
 		focusEnd = len(lines) - 1
 	case m.page == setupSummary:
 		lines = append(lines, strings.Split(ansi.Wrap(s.Body.Render(m.summary()), w, ""), "\n")...)
+	case m.page == setupAuth && m.api() == "chatgpt":
+		if m.device.VerificationURI != "" {
+			if m.browserErr == nil {
+				lines = append(lines, "Browser opened. Complete ChatGPT authorization there.")
+			} else {
+				lines = append(lines, "Could not open your browser automatically.", "Open this URL in your browser:")
+				lines = append(lines, strings.Split(ansi.Wrap(m.device.VerificationURI, w, ""), "\n")...)
+			}
+		} else {
+			st, _ := chatgpt.DefaultStore().Load()
+			a, ok := st.Selected()
+			if ok {
+				lines = append(lines, "Account: "+a.Email+" ("+a.ClientID+")")
+			}
+			if chatgpt.DefaultStore().SignedIn() {
+				lines = append(lines, "[OK] Signed in. Enter continues.")
+			} else {
+				lines = append(lines, "Enter to continue with ChatGPT.")
+			}
+		}
 	case m.page == setupAuth:
 		if m.device.UserCode != "" {
 			lines = append(lines, "Open this URL in your browser:")

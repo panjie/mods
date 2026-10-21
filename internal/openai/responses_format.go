@@ -18,6 +18,9 @@ const (
 )
 
 func responsesProviderDataKeyForProfile(profile ProviderProfile) string {
+	if profile == ProviderProfileChatGPT {
+		return "chatgpt.responses.output.v1"
+	}
 	if profile == ProviderProfileQwen {
 		return "qwen.responses.output.v1"
 	}
@@ -68,7 +71,7 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 	providerDataKey := responsesProviderDataKeyForProfile(profile)
 	for _, msg := range input {
 		state := msg.ProviderData[providerDataKey]
-		if len(state) == 0 {
+		if len(state) == 0 && profile != ProviderProfileChatGPT {
 			state = msg.ProviderData[legacyResponsesProviderDataKey]
 		}
 		if len(state) > 0 {
@@ -82,6 +85,10 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 
 		switch msg.Role {
 		case proto.RoleSystem:
+			if profile == ProviderProfileChatGPT {
+				items = append(items, responses.ResponseInputItemParamOfMessage(msg.Content, responses.EasyInputMessageRoleDeveloper))
+				continue
+			}
 			items = append(items, responses.ResponseInputItemParamOfMessage(
 				msg.Content,
 				responses.EasyInputMessageRoleSystem,
@@ -141,6 +148,14 @@ func fromProtoResponseInput(input []proto.Message, profile ProviderProfile) (res
 				))
 			}
 			for _, call := range msg.ToolCalls {
+				if profile == ProviderProfileChatGPT {
+					raw, err := json.Marshal(map[string]any{"type": "function_call", "namespace": "mods", "name": call.Function.Name, "call_id": call.ID, "arguments": string(call.Function.Arguments)})
+					if err != nil {
+						return nil, err
+					}
+					items = append(items, param.Override[responses.ResponseInputItemUnionParam](json.RawMessage(raw)))
+					continue
+				}
 				items = append(items, responses.ResponseInputItemParamOfFunctionCall(
 					string(call.Function.Arguments),
 					call.ID,

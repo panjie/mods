@@ -233,6 +233,26 @@ func TestWebSearchDefaultsPreserveExplicitCustomProvider(t *testing.T) {
 	})
 }
 
+func TestDeepSeekWebSearchConfig(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "deepseek-env-key")
+	t.Setenv("TAVILY_API_KEY", "tavily-env-key")
+	for _, key := range []string{"", "explicit-search-key"} {
+		t.Run("key="+key, func(t *testing.T) {
+			cfg := Default()
+			require.NoError(t, yaml.Unmarshal([]byte("web-search: true\nweb-search-provider: deepseek\nweb-search-api-key-env: DEEPSEEK_API_KEY\n"), &cfg))
+			cfg.WebSearchAPIKey = key
+			cfg.ApplyDefaults()
+			require.True(t, cfg.WebSearch)
+			require.Equal(t, "deepseek", cfg.WebSearchProvider)
+			if key == "" {
+				require.Equal(t, "deepseek-env-key", cfg.WebSearchAPIKey)
+			} else {
+				require.Equal(t, key, cfg.WebSearchAPIKey)
+			}
+		})
+	}
+}
+
 func TestMinimalConfig(t *testing.T) {
 	t.Run("yaml", func(t *testing.T) {
 		var cfg Config

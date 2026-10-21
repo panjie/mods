@@ -109,6 +109,29 @@ func TestSetupConditionalPagesAndDefaults(t *testing.T) {
 		require.Equal(t, "off", m.options()[m.cursor].Value)
 	})
 }
+
+func TestSetupDeepSeekSearch(t *testing.T) {
+	setupFixture(t, func(m *setupModel) {
+		m.data.webSearchOn = true
+		m.data.webSearchProvider = "tavily"
+		m.data.webSearchAPIKeyEnv = "TAVILY_API_KEY"
+		m.data.webSearchAPIKey = "old-provider-key"
+		m.enter(setupSearchProvider)
+		require.Contains(t, m.options(), setupOption{"DeepSeek — API key required", "deepseek"})
+		m.setValue("deepseek")
+		require.Equal(t, "DEEPSEEK_API_KEY", m.data.webSearchAPIKeyEnv)
+		require.Empty(t, m.data.webSearchAPIKey)
+		require.Contains(t, m.pages(), setupSearchCredentials)
+		require.NotContains(t, m.pages(), setupSearchURL)
+		m.data.webSearchKeyStorage = "config"
+		require.Contains(t, m.pages(), setupSearchKey)
+		m.setValue("tavily")
+		require.Equal(t, "TAVILY_API_KEY", m.data.webSearchAPIKeyEnv)
+		m.data.webSearchAPIKeyEnv = "MY_SEARCH_KEY"
+		m.setValue("deepseek")
+		require.Equal(t, "MY_SEARCH_KEY", m.data.webSearchAPIKeyEnv)
+	})
+}
 func TestSetupBackNavigationAndDraftIsolation(t *testing.T) {
 	setupFixture(t, func(m *setupModel) {
 		m.enter(setupEndpoint)

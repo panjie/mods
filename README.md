@@ -192,7 +192,7 @@ mods "read README.md and suggest three improvements"
 - **Fit your pipeline.** `--minimal` prints only the final answer, with no
   formatting — ready for `| gum choose`, `jq`, or another script.
 - **Search the live web.** Web search is opt-in. `--web-search` uses a supported
-  provider's hosted search when available, otherwise Tavily or a custom backend.
+  provider's hosted search when available, otherwise Tavily, DeepSeek, or a custom backend.
 - **See and hear media.** Pass images, audio, or video with `--image`, `--audio`,
   or `--video`; Mods reads local files directly into a capable model.
 - **Remember everything.** Sessions are saved locally with a title and a short
@@ -257,6 +257,28 @@ mods --continue-last "turn those into a Twitter thread"
 mods --list-sessions
 mods --chat
 ```
+
+### DeepSeek Search
+
+Select DeepSeek in `mods --config`, or add these settings to `mods.yml`:
+
+```yaml
+web-search: true
+web-search-provider: deepseek
+web-search-api-key-env: DEEPSEEK_API_KEY
+```
+
+Set `DEEPSEEK_API_KEY` to your DeepSeek API key, or store the key in
+`web-search-api-key`. The search backend is independent of the chat model and
+uses the [DeepSeek Search API](https://api-docs.deepseek.com/api/search/).
+Results include titles, URLs, and model-oriented summaries. Queries support
+DeepSeek's search operators and must fit its 128 Unicode character limit.
+Provider-hosted search still takes precedence when the selected chat endpoint
+supports it (for example, DeepSeek Responses).
+
+To run a live search smoke test with `DEEPSEEK_API_KEY` set:
+`go test -tags integration ./internal/websearch -run TestDeepSeekSearchIntegration -count=1 -v`.
+This sends one real search request; ordinary tests do not call the service.
 
 ## Safety & Review
 

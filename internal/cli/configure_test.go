@@ -168,15 +168,36 @@ func TestConfigWizardUsesExistingCopilotToken(t *testing.T) {
 
 func TestNormalizeWebSearchProviderForWizard(t *testing.T) {
 	tests := map[string]string{
-		"":          "tavily",
-		"tavily":    "tavily",
-		"custom":    "custom",
-		"https://x": "custom",
-		"unknown":   "tavily",
+		"":           "tavily",
+		"tavily":     "tavily",
+		" DeepSeek ": "deepseek",
+		"custom":     "custom",
+		"https://x":  "custom",
+		"unknown":    "tavily",
 	}
 	for input, expected := range tests {
 		t.Run(input, func(t *testing.T) {
 			require.Equal(t, expected, normalizeWebSearchProviderForWizard(input))
+		})
+	}
+}
+
+func TestBuildConfigWizardUpdatesDeepSeekSearch(t *testing.T) {
+	for _, storage := range []string{"env", "config"} {
+		t.Run(storage, func(t *testing.T) {
+			updates := buildConfigWizardUpdates(configWizardSaveData{
+				apiName: "ollama", webSearchOn: true,
+				webSearchProvider: "deepseek", webSearchProviderValue: "deepseek",
+				webSearchKeyStorage: storage, webSearchAPIKey: " search-key ",
+				webSearchAPIKeyEnv: "DEEPSEEK_API_KEY",
+			})
+			requireUpdateValue(t, updates, []string{"web-search-provider"}, "deepseek")
+			if storage == "env" {
+				requireUpdateValue(t, updates, []string{"web-search-api-key-env"}, "DEEPSEEK_API_KEY")
+				requireUpdateValue(t, updates, []string{"web-search-api-key"}, nil)
+			} else {
+				requireUpdateValue(t, updates, []string{"web-search-api-key"}, "search-key")
+			}
 		})
 	}
 }

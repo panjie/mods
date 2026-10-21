@@ -26,8 +26,9 @@ const (
 type provider string
 
 const (
-	providerTavily provider = "tavily"
-	providerCustom provider = "custom"
+	providerTavily   provider = "tavily"
+	providerDeepSeek provider = "deepseek"
+	providerCustom   provider = "custom"
 )
 
 type Config struct {
@@ -90,6 +91,11 @@ func search(ctx context.Context, cfg Config, query string) ([]Result, error) {
 	}
 
 	switch provider {
+	case providerDeepSeek:
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return nil, fmt.Errorf("web search: deepseek provider requires an API key")
+		}
+		return searchDeepSeek(ctx, httpClient(), cfg.APIKey, query, maxResults)
 	case providerTavily:
 		if cfg.APIKey == "" {
 			return nil, fmt.Errorf("web search: tavily provider requires an API key")
@@ -111,6 +117,8 @@ func normalizeProvider(value string) provider {
 		return providerCustom
 	}
 	switch value {
+	case "deepseek":
+		return providerDeepSeek
 	case "custom":
 		return providerCustom
 	default:

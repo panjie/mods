@@ -25,11 +25,13 @@ func TestSearchResultFormat(t *testing.T) {
 
 func TestNormalizeProvider(t *testing.T) {
 	tests := map[string]provider{
-		"":          providerTavily,
-		"tavily":    providerTavily,
-		"custom":    providerCustom,
-		"https://x": providerCustom,
-		"unknown":   providerTavily,
+		"":           providerTavily,
+		"tavily":     providerTavily,
+		"deepseek":   providerDeepSeek,
+		" DeepSeek ": providerDeepSeek,
+		"custom":     providerCustom,
+		"https://x":  providerCustom,
+		"unknown":    providerTavily,
 	}
 	for input, expected := range tests {
 		t.Run(input, func(t *testing.T) {
@@ -54,6 +56,15 @@ func TestSearchProviderValidation(t *testing.T) {
 	t.Run("custom requires base url", func(t *testing.T) {
 		_, err := search(ctx, Config{Provider: "custom"}, "query")
 		require.EqualError(t, err, "web search: custom provider requires a base URL")
+	})
+
+	t.Run("deepseek requires api key", func(t *testing.T) {
+		_, err := Search(ctx, Config{Provider: " DeepSeek "}, "query")
+		require.EqualError(t, err, "web search: deepseek provider requires an API key")
+	})
+	t.Run("deepseek validates query through public entrypoint", func(t *testing.T) {
+		_, err := Search(ctx, Config{Provider: "deepseek", APIKey: "key"}, "   ")
+		require.ErrorContains(t, err, "searching DeepSeek: query must contain")
 	})
 }
 

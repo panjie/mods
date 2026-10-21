@@ -101,7 +101,7 @@ func newSetupModel() *setupModel {
 		m.data.reviewMode = "auto"
 	}
 	if m.data.webSearchAPIKeyEnv == "" {
-		m.data.webSearchAPIKeyEnv = cfgpkg.DefaultWebSearchAPIKeyEnv
+		m.data.webSearchAPIKeyEnv = webSearchDefaultKeyEnv(m.data.webSearchProvider)
 	}
 	if config.WebSearchAPIKey != "" && os.Getenv(m.data.webSearchAPIKeyEnv) == "" {
 		m.data.webSearchKeyStorage = "config"
@@ -481,6 +481,13 @@ func (m *setupModel) setValue(value string) {
 	case setupSearch:
 		m.data.webSearchOn = value == "on"
 	case setupSearchProvider:
+		if old != value {
+			if m.data.webSearchAPIKeyEnv == "" || m.data.webSearchAPIKeyEnv == webSearchDefaultKeyEnv(old) {
+				m.data.webSearchAPIKeyEnv = webSearchDefaultKeyEnv(value)
+			}
+			// A saved key belongs to the previous search provider.
+			m.data.webSearchAPIKey = ""
+		}
 		m.data.webSearchProvider = value
 	case setupSearchURL:
 		m.data.webSearchProviderValue = value
@@ -534,7 +541,7 @@ func (m *setupModel) options() []setupOption {
 	case setupShell, setupSearch:
 		return []setupOption{{"Yes", "on"}, {"No", "off"}}
 	case setupSearchProvider:
-		return []setupOption{{"Tavily — API key required", "tavily"}, {"Custom URL — JSON search endpoint", "custom"}}
+		return []setupOption{{"Tavily — API key required", "tavily"}, {"DeepSeek — API key required", "deepseek"}, {"Custom URL — JSON search endpoint", "custom"}}
 	case setupSearchCredentials:
 		return []setupOption{{"Use environment variable (" + m.data.webSearchAPIKeyEnv + ")", "env"}, {"Save in config file", "config"}}
 	case setupReview:

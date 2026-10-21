@@ -125,12 +125,14 @@ builtin-tools:
 # {{ index .Help "web-search" }}
 web-search: {{ .Config.WebSearch }}
 # {{ index .Help "web-search-provider" }}
-# Supported: tavily (default), custom
+# Supported: tavily (default), deepseek, custom (or a custom endpoint URL)
 web-search-provider: {{ .Config.WebSearchProvider }}
 # {{ index .Help "web-search-api-key" }}
 # web-search-api-key:
 # {{ index .Help "web-search-api-key-env" }}
 web-search-api-key-env: {{ .Config.WebSearchAPIKeyEnv }}
+# For DeepSeek, set web-search-provider: deepseek and
+# web-search-api-key-env: DEEPSEEK_API_KEY (or set web-search-api-key directly).
 
 # {{ index .Help "skills-dirs" }}
 # skills-dirs:

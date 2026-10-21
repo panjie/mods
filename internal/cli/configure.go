@@ -415,6 +415,8 @@ func normalizeWebSearchProviderForWizard(provider string) string {
 		return "custom"
 	}
 	switch provider {
+	case "deepseek":
+		return "deepseek"
 	case "custom":
 		return "custom"
 	default:
@@ -438,7 +440,14 @@ func webSearchProviderForConfig(provider, customURL string) string {
 }
 
 func webSearchProviderUsesKey(provider string) bool {
-	return provider == "tavily"
+	return provider == "tavily" || provider == "deepseek"
+}
+
+func webSearchDefaultKeyEnv(provider string) string {
+	if provider == "deepseek" {
+		return "DEEPSEEK_API_KEY"
+	}
+	return cfgpkg.DefaultWebSearchAPIKeyEnv
 }
 
 type configWizardSaveData struct {

@@ -64,7 +64,7 @@ func RegisterSkill(reg *Registry, catalog []skills.Skill) error {
 				return fmt.Sprintf("skill not found: %s. Available: %s", args.Name, strings.Join(names, ", ")), nil
 			}
 			if args.File == "" {
-				return skill.Body, nil
+				return skill.LoadBody()
 			}
 			content, err := readAuxFile(skill.Dir, args.File)
 			if err != nil {

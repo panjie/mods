@@ -55,9 +55,10 @@ type Tool struct {
 
 // Registry stores tools by name and exposes a provider-neutral call router.
 type Registry struct {
-	images  *imageSearchState
-	tools   map[string]Tool
-	closers []func() error
+	catalogueOnly bool
+	images        *imageSearchState
+	tools         map[string]Tool
+	closers       []func() error
 }
 
 // NewRegistry creates an empty tool registry.
@@ -65,6 +66,15 @@ func NewRegistry() *Registry {
 	return &Registry{
 		tools: map[string]Tool{},
 	}
+}
+
+// NewCatalogRegistry harvests specs without filesystem probing. Executable
+// callbacks are replaced with errors, so it cannot be used to bypass runtime
+// path validation or authorization.
+func NewCatalogRegistry() *Registry {
+	r := NewRegistry()
+	r.catalogueOnly = true
+	return r
 }
 
 // Register adds a tool to the registry.
@@ -83,6 +93,14 @@ func (r *Registry) Register(tool Tool) error {
 	}
 	if tool.TimeoutPolicy == "" {
 		tool.TimeoutPolicy = TimeoutPolicyCaller
+	}
+	if r.catalogueOnly {
+		tool.Call = func(context.Context, json.RawMessage) (string, error) {
+			return "", fmt.Errorf("catalogue tools cannot execute")
+		}
+		tool.CallResult = nil
+		tool.Validate = nil
+		tool.IntentExtractor = nil
 	}
 	r.tools[tool.Spec.Name] = tool
 	return nil

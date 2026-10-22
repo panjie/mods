@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 )
 
 //go:embed reference.md
@@ -93,6 +94,32 @@ type Catalog struct {
 // Reference is a version-matched, immutable view of mods self-help.
 type Reference struct {
 	catalog Catalog
+	lazy    *lazyReference
+}
+
+type lazyReference struct {
+	once    sync.Once
+	load    func() (Catalog, error)
+	catalog Catalog
+	err     error
+}
+
+// NewLazyReference defers catalog construction until self-help is requested.
+// Copies share the same once-protected immutable catalog.
+func NewLazyReference(load func() (Catalog, error)) Reference {
+	return Reference{lazy: &lazyReference{load: load}}
+}
+
+func (r Reference) resolve() (Reference, error) {
+	if r.lazy == nil {
+		return r, nil
+	}
+	r.lazy.once.Do(func() {
+		catalog, err := r.lazy.load()
+		r.lazy.catalog, r.lazy.err = cloneCatalog(catalog), err
+		r.lazy.load = nil
+	})
+	return Reference{catalog: r.lazy.catalog}, r.lazy.err
 }
 
 // NewReference constructs an immutable self-help reference.
@@ -102,7 +129,8 @@ func NewReference(catalog Catalog) Reference {
 
 // Catalog returns a defensive copy of the factual metadata in this reference.
 func (r Reference) Catalog() Catalog {
-	return cloneCatalog(r.catalog)
+	resolved, _ := r.resolve()
+	return cloneCatalog(resolved.catalog)
 }
 
 func cloneCatalog(catalog Catalog) Catalog {
@@ -138,6 +166,11 @@ func Topics() []string {
 
 // Lookup renders one topic or the complete reference.
 func (r Reference) Lookup(topic string) (string, error) {
+	var err error
+	r, err = r.resolve()
+	if err != nil {
+		return "", err
+	}
 	topic = strings.ToLower(strings.TrimSpace(topic))
 	if topic == TopicAll {
 		sections := make([]string, 0, len(topics)-1)

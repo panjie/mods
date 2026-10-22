@@ -11,6 +11,7 @@ import (
 	"runtime/pprof"
 	"slices"
 	"strings"
+	"time"
 
 	glamour "charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
@@ -81,6 +82,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			debug.SetEnabled(config.Debug)
 			debugStartup()
+			debug.Printf("Startup: configuration=%s", startupConfigDuration)
 			config.Prefix = RemoveWhitespace(strings.Join(args, " "))
 
 			if config.ShowHelp {
@@ -91,6 +93,11 @@ var (
 				return runChatGPTAuth(cmd.Context(), config.ChatGPTAuth, cmd.OutOrStdout())
 			}
 
+			if !config.SettingsExisted && !isAutoConfigSkippedAction() {
+				if err := ensureSessionDB(); err != nil {
+					return err
+				}
+			}
 			if autoConfig, err := maybeRunAutoConfig(os.Args); autoConfig || err != nil {
 				return err
 			}
@@ -110,6 +117,11 @@ var (
 				return err
 			}
 
+			if !config.NoSave || config.Continue != "" || config.ContinueLast {
+				if err := ensureSessionDB(); err != nil {
+					return err
+				}
+			}
 			if err := gatherInteractivePrompt(); err != nil {
 				return err
 			}
@@ -133,6 +145,7 @@ var (
 )
 
 var memprofile bool
+var startupConfigDuration time.Duration
 
 func Run(version, commit string) int {
 	// The bridge is shared across turns, but owned by this CLI invocation.
@@ -244,6 +257,9 @@ func sessionCompletions(toComplete string) []string {
 			return nil
 		}
 		var err error
+		if err := os.MkdirAll(config.SessionDir, 0o700); err != nil {
+			return nil
+		}
 		if err := MigrateDefaultStorage(config.SessionDir); err != nil {
 			return nil
 		}
@@ -284,7 +300,9 @@ func execute() (exitCode int) {
 		return 0
 	}
 	var err error
+	configStarted := time.Now()
 	config, err = Ensure()
+	startupConfigDuration = time.Since(configStarted)
 	if err != nil {
 		handleError(modsError{Err: err, ReasonText: "Could not load your configuration file."})
 		if !hasSettingsArg(os.Args) && !slices.Contains(os.Args, "--config") {
@@ -295,22 +313,12 @@ func execute() (exitCode int) {
 	// XXX: this must come after creating the config.
 	initFlags()
 
-	if !isCompletionCmd(os.Args) {
-		if err := MigrateDefaultStorage(config.SessionDir); err != nil {
-			handleError(modsError{Err: err, ReasonText: "Could not migrate session storage."})
-			return 1
+	defer func() {
+		if db != nil {
+			_ = db.Close()
+			db = nil
 		}
-		db, err = Open(filepath.Join(config.SessionDir, "mods.db"))
-		if err != nil {
-			handleError(modsError{Err: err, ReasonText: "Could not open database."})
-			return 1
-		}
-		defer db.Close() //nolint:errcheck
-		if err := db.MigrateLegacySessions(config.SessionDir); err != nil {
-			fmt.Fprintln(os.Stderr, "Warning: some legacy sessions were not migrated:")
-			fmt.Fprintln(os.Stderr, err)
-		}
-	}
+	}()
 
 	if isCompletionCmd(os.Args) {
 		// XXX: since mods doesn't have any sub-commands, Cobra won't create
@@ -334,6 +342,31 @@ func execute() (exitCode int) {
 		return 1
 	}
 	return 0
+}
+
+// ensureSessionDB is called only after parsing and selecting a database action.
+func ensureSessionDB() error {
+	if db != nil {
+		return nil
+	}
+	started := time.Now()
+	defer func() { debug.Printf("Startup: database=%s", time.Since(started)) }()
+	if err := os.MkdirAll(config.SessionDir, 0o700); err != nil {
+		return err
+	}
+	if err := MigrateDefaultStorage(config.SessionDir); err != nil {
+		return modsError{Err: err, ReasonText: "Could not migrate session storage."}
+	}
+	opened, err := Open(filepath.Join(config.SessionDir, "mods.db"))
+	if err != nil {
+		return modsError{Err: err, ReasonText: "Could not open database."}
+	}
+	db = opened
+	if err := db.MigrateLegacySessions(config.SessionDir); err != nil {
+		fmt.Fprintln(os.Stderr, "Warning: some legacy sessions were not migrated:")
+		fmt.Fprintln(os.Stderr, err)
+	}
+	return nil
 }
 
 func debugStartup() {

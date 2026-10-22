@@ -48,7 +48,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 	if err != nil {
 		return err
 	}
-	root, err = filepath.EvalSymlinks(root)
+	if !registry.catalogueOnly {
+		root, err = filepath.EvalSymlinks(root)
+	}
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			debug.Printf("RegisterFilesystem: cwd %q does not exist, skipping filesystem tools", root)

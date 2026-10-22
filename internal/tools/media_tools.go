@@ -56,7 +56,9 @@ func RegisterMedia(r *Registry, cfg FilesystemConfig) error {
 	if err != nil {
 		return err
 	}
-	root, err = filepath.EvalSymlinks(root)
+	if !r.catalogueOnly {
+		root, err = filepath.EvalSymlinks(root)
+	}
 	if err != nil {
 		return err
 	}

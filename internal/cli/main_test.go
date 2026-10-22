@@ -1201,3 +1201,59 @@ func TestNextBackupPathAvoidsOverwrite(t *testing.T) {
 		require.Equal(t, base+".2", third)
 	})
 }
+
+func TestNonSessionActionsDoNotOpenDatabase(t *testing.T) {
+	for _, action := range []string{"dirs", "roles", "prompts", "skills", "mcps", "tools", "no-save"} {
+		t.Run(action, func(t *testing.T) {
+			oldDB, oldRun := db, runOneTurnProgram
+			db = nil
+			t.Cleanup(func() {
+				if db != nil {
+					_ = db.Close()
+				}
+				db = oldDB
+				runOneTurnProgram = oldRun
+			})
+			cfg := Default()
+			cfg.SettingsExisted = true
+			cfg.SessionDir = filepath.Join(t.TempDir(), "absent-sessions")
+			cfg.SkillsDirs = []string{t.TempDir()}
+			switch action {
+			case "dirs":
+				cfg.Dirs = true
+			case "roles":
+				cfg.ListRoles = true
+			case "prompts":
+				cfg.ListPrompts = true
+			case "skills":
+				cfg.ListSkills = true
+			case "mcps":
+				cfg.MCPList = true
+			case "tools":
+				cfg.MCPListTools = true
+			case "no-save":
+				cfg.NoSave = true
+				cfg.Raw = true
+			}
+			runOneTurnProgram = func(context.Context, []tea.ProgramOption) (*Mods, error) {
+				require.Nil(t, db)
+				return &Mods{}, nil
+			}
+			withTestConfig(t, cfg, func() {
+				cmd := *rootCmd
+				cmd.SetContext(context.Background())
+				_ = captureStdout(t, func() {
+					_ = captureStderr(t, func() {
+						args := []string(nil)
+						if action == "no-save" {
+							args = []string{"hello"}
+						}
+						require.NoError(t, rootCmd.RunE(&cmd, args))
+					})
+				})
+				require.Nil(t, db)
+				require.NoDirExists(t, cfg.SessionDir)
+			})
+		})
+	}
+}

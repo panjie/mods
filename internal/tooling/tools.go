@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -295,12 +296,10 @@ func BuiltinSpecs() ([]BuiltinToolInfo, error) {
 }
 
 func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
-	root, err := os.MkdirTemp("", "mods-list-*")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(root)
-	registry := toolregistry.NewRegistry()
+	root := filepath.Join(os.TempDir(), "mods-catalogue")
+	registry := toolregistry.NewCatalogRegistry()
+	defer registry.Close() //nolint:errcheck
+
 	// Walk the same table the runtime registry uses, with the catalogue flag so
 	// every entry registers regardless of configuration. Stub dependencies are
 	// enough because the Call closures are never invoked; a zero Config keeps the

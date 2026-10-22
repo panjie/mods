@@ -164,6 +164,9 @@ func dispatchPreTurnAction(ctx context.Context, args []string) (bool, error) {
 		return true, listSkills(config.ResolveSkillsDirs())
 	}
 	if config.List {
+		if err := ensureSessionDB(); err != nil {
+			return true, err
+		}
 		id, err := listSessions(config.Raw)
 		if err != nil || id == "" {
 			return true, err

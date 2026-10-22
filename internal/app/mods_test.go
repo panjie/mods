@@ -97,7 +97,10 @@ func TestNewUsesInstalledSkillsOnly(t *testing.T) {
 			}
 			require.Len(t, m.skillCatalog, 1)
 			require.Equal(t, "demo", m.skillCatalog[0].Name)
-			require.Equal(t, "Installed instructions.", m.skillCatalog[0].Body)
+			require.Empty(t, m.skillCatalog[0].Body)
+			body, err := m.skillCatalog[0].LoadBody()
+			require.NoError(t, err)
+			require.Equal(t, "Installed instructions.", body)
 			require.Equal(t, filepath.Join(root, "demo"), m.skillCatalog[0].Dir)
 		})
 	}
@@ -118,7 +121,7 @@ func TestInitQueriesBackgroundColorOnlyWithInteractiveTerminal(t *testing.T) {
 	interactive := &Mods{Config: &Config{InteractiveTTYAvailable: true}}
 	batch, ok := interactive.Init()().(tea.BatchMsg)
 	require.True(t, ok)
-	require.Len(t, batch, 2)
+	require.Len(t, batch, 3)
 	require.False(t, interactive.terminalReady)
 }
 
@@ -126,7 +129,9 @@ func TestInteractiveStartupContinuesOnceAfterBackgroundReply(t *testing.T) {
 	m := testMods(t)
 	m.Config.InteractiveTTYAvailable = true
 
-	_ = m.Init()
+	batch := m.Init()().(tea.BatchMsg)
+	_, pending := m.Update(batch[0]())
+	require.Nil(t, pending)
 	_, cmd := m.Update(tea.BackgroundColorMsg{Color: color.White})
 	require.NotNil(t, cmd)
 	require.IsType(t, sessionDetailsMsg{}, cmd())
@@ -152,10 +157,14 @@ func TestBackgroundColorUpdatesMarkdownRenderer(t *testing.T) {
 			m.Config.InteractiveTTYAvailable = true
 			m.Config.WordWrap = 72
 			var err error
-			m.glam, err = newMarkdownRenderer(m.Config.WordWrap, test.style == "light")
+			m.rendererDark = test.style == "light"
+			m.rendererWidth = m.Config.WordWrap
+			m.glam, err = newMarkdownRenderer(m.Config.WordWrap, m.rendererDark)
 			require.NoError(t, err)
 
-			_ = m.Init()
+			batch := m.Init()().(tea.BatchMsg)
+			_, pending := m.Update(batch[0]())
+			require.Nil(t, pending)
 			_, cmd := m.Update(tea.BackgroundColorMsg{Color: test.background})
 			require.NotNil(t, cmd)
 
@@ -196,7 +205,9 @@ func TestInteractiveStartupFallsBackAfterTerminalProbeTimeout(t *testing.T) {
 	m := testMods(t)
 	m.Config.InteractiveTTYAvailable = true
 
-	_ = m.Init()
+	batch := m.Init()().(tea.BatchMsg)
+	_, pending := m.Update(batch[0]())
+	require.Nil(t, pending)
 	_, cmd := m.Update(terminalProbeTimeoutMsg{})
 	require.NotNil(t, cmd)
 	require.IsType(t, sessionDetailsMsg{}, cmd())
@@ -219,7 +230,9 @@ func TestInvalidModelFailureStartsOnlyAfterTerminalProbe(t *testing.T) {
 		},
 	}}
 
-	_ = m.Init()
+	batch := m.Init()().(tea.BatchMsg)
+	_, pending := m.Update(batch[0]())
+	require.Nil(t, pending)
 	require.False(t, m.terminalReady)
 	require.Nil(t, m.Error)
 
@@ -1611,4 +1624,52 @@ func TestQuitCancelsRequestContext(t *testing.T) {
 func TestCancelContextNilSafe(t *testing.T) {
 	m := &Mods{userInput: newUserInputManager(&Config{})}
 	require.NotPanics(t, func() { m.cancelContext() })
+}
+
+func TestTerminalProbeFinishesBeforeSessionPreparation(t *testing.T) {
+	m := testMods(t)
+	m.Config.InteractiveTTYAvailable = true
+	batch := m.Init()().(tea.BatchMsg)
+	_, cmd := m.Update(terminalProbeTimeoutMsg{})
+	require.Nil(t, cmd)
+	require.True(t, m.terminalReady)
+	_, cmd = m.Update(batch[0]())
+	require.NotNil(t, cmd)
+	require.IsType(t, sessionDetailsMsg{}, cmd())
+}
+
+func TestSessionFailureWaitsForTerminalProbe(t *testing.T) {
+	m := testMods(t)
+	m.db = testDB(t)
+	m.Config.InteractiveTTYAvailable = true
+	m.Config.Continue = "missing"
+	batch := m.Init()().(tea.BatchMsg)
+	result := batch[0]()
+	require.IsType(t, modsError{}, result.(startupSessionMsg).result)
+	_, cmd := m.Update(result)
+	require.Nil(t, cmd)
+	require.Nil(t, m.Error)
+	_, cmd = m.Update(terminalProbeTimeoutMsg{})
+	require.NotNil(t, cmd)
+	require.IsType(t, modsError{}, cmd())
+}
+
+func TestRawRendererIsLazyAndUnchangedBackgroundReusesRenderer(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Raw = true
+	cfg.SkillsDirs = []string{t.TempDir()}
+	m, err := New(context.Background(), &cfg, nil)
+	require.NoError(t, err)
+	defer m.quit()
+	require.Nil(t, m.glam)
+	_, err = m.RenderMarkdown("**hello**")
+	require.NoError(t, err)
+	renderer := m.glam
+	background := color.White
+	if m.rendererDark {
+		background = color.Black
+	}
+	m.terminalReady = true
+	_, _ = m.Update(tea.BackgroundColorMsg{Color: background})
+	require.Same(t, renderer, m.glam)
 }

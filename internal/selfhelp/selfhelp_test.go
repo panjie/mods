@@ -141,3 +141,20 @@ func TestProviderKnowledgeIsAvailableOnDemand(t *testing.T) {
 	require.Contains(t, providers, "The Azure adapter uses Chat Completions")
 	require.Contains(t, providers, "does not send OpenAI's store or encrypted-content include fields")
 }
+
+func TestLazyReferenceLoadsOnceAcrossCopies(t *testing.T) {
+	calls := 0
+	reference := NewLazyReference(func() (Catalog, error) {
+		calls++
+		return Catalog{Tools: []Tool{{Name: "example"}}}, nil
+	})
+	copied := reference
+	require.Zero(t, calls)
+	text, err := copied.Lookup(TopicTools)
+	require.NoError(t, err)
+	require.Contains(t, text, "example")
+	catalog := reference.Catalog()
+	catalog.Tools[0].Name = "changed"
+	require.Equal(t, "example", copied.Catalog().Tools[0].Name)
+	require.Equal(t, 1, calls)
+}

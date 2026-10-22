@@ -30,6 +30,7 @@ type Skill struct {
 	Name        string // frontmatter.name, or directory name fallback
 	Description string // frontmatter.description, or "(no description)" fallback
 	Body        string // markdown body after frontmatter (content of SKILL.md)
+	lazyBody    bool
 	Dir         string // path of the skill directory as scanned (for auxiliary file reads)
 }
 
@@ -39,6 +40,10 @@ type Skill struct {
 // Parse failures are skipped with a debug warning; other skills continue.
 // Returns nil, nil if dir does not exist or contains no SKILL.md.
 func Scan(dir string) ([]Skill, error) {
+	return scan(dir, readFullSkill)
+}
+
+func scan(dir string, read func(string) (Skill, error)) ([]Skill, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -54,13 +59,8 @@ func Scan(dir string) ([]Skill, error) {
 		if info, statErr := os.Stat(skillDir); statErr != nil || !info.IsDir() {
 			continue // not a directory (or broken symlink); skip silently
 		}
-		data, readErr := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
+		skill, readErr := read(skillDir)
 		if readErr != nil {
-			continue // no SKILL.md in this directory; skip silently
-		}
-		skill, parseErr := parseSkill(string(data), skillDir)
-		if parseErr != nil {
-			debug.Printf("skills: skipping %q: %v", entry.Name(), parseErr)
 			continue
 		}
 		found = append(found, skill)
@@ -90,13 +90,17 @@ func Scan(dir string) ([]Skill, error) {
 // ScanDirs scans multiple skills directories, with later directories
 // overriding earlier same-name skills. The returned catalog is sorted by name.
 func ScanDirs(dirs []string) ([]Skill, error) {
+	return scanDirs(dirs, Scan)
+}
+
+func scanDirs(dirs []string, scanDir func(string) ([]Skill, error)) ([]Skill, error) {
 	byName := make(map[string]Skill)
 	for _, dir := range dirs {
 		dir = strings.TrimSpace(dir)
 		if dir == "" {
 			continue
 		}
-		catalog, err := Scan(dir)
+		catalog, err := scanDir(dir)
 		if err != nil {
 			return nil, err
 		}

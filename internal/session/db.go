@@ -73,6 +73,10 @@ func MigrateDefaultStorage(sessionDir string) error {
 	return nil
 }
 
+// schemaVersion advances whenever the on-disk schema changes. Version zero
+// identifies databases written before versioned migrations were introduced.
+const schemaVersion = 1
+
 func Open(ds string) (*DB, error) {
 	db, err := sqlx.Open("sqlite", ds)
 	if err != nil {
@@ -96,6 +100,17 @@ func Open(ds string) (*DB, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
 		return nil, fmt.Errorf("could not enable foreign keys: %w", err)
+	}
+	var version int
+	if err := db.Get(&version, "PRAGMA user_version"); err != nil {
+		return nil, fmt.Errorf("read schema version: %w", err)
+	}
+	if version > schemaVersion {
+		return nil, fmt.Errorf("database schema version %d is newer than supported version %d", version, schemaVersion)
+	}
+	if version == schemaVersion {
+		initialized = true
+		return &DB{db: db}, nil
 	}
 	if err := migrateLegacySessionSchema(db); err != nil {
 		return nil, fmt.Errorf("could not migrate db: %w", err)
@@ -218,6 +233,11 @@ func Open(ds string) (*DB, error) {
 		}
 	}
 
+	// Record success last: failed/partial migrations retain version zero and
+	// retry the existing idempotent, column-guarded migration path next time.
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
+		return nil, fmt.Errorf("record schema version: %w", err)
+	}
 	initialized = true
 	return &DB{db: db}, nil
 }

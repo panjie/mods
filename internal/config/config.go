@@ -558,13 +558,6 @@ func Ensure() (Config, error) {
 	applySessionDirDefault(&c)
 	applySkillsDirsDefault(&c)
 
-	if err := os.MkdirAll(
-		c.SessionDir,
-		0o700,
-	); err != nil { //nolint:mnd
-		return fallback, modsError{Err: err, ReasonText: "Could not create session directory."}
-	}
-
 	c.applyDefaults()
 
 	return c, nil

@@ -11,11 +11,14 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -66,11 +69,11 @@ func Tools(ctx context.Context, cfg *Config) (map[string][]mcp.Tool, error) {
 }
 
 func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Registry) error {
-	session, err := NewToolSession(ctx, cfg)
+	session, release, err := acquireSession(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	registry.AddCloser(session.Close)
+	registry.AddCloser(release)
 	for sname, serverSession := range session.servers {
 		serverTools := serverSession.tools
 		for _, tool := range serverTools {
@@ -97,7 +100,7 @@ func RegisterTools(ctx context.Context, cfg *Config, registry *toolregistry.Regi
 					return session.ToolCall(ctx, capturedSname, capturedToolName, data)
 				},
 			}); err != nil {
-				_ = session.Close()
+				_ = release()
 				return err
 			}
 		}
@@ -139,7 +142,9 @@ func IsReadOnly(tool mcp.Tool) bool {
 }
 
 type ToolSession struct {
-	servers map[string]*toolServerSession
+	invalid    atomic.Bool
+	poolCancel context.CancelFunc
+	servers    map[string]*toolServerSession
 }
 
 type toolServerSession struct {
@@ -161,6 +166,8 @@ func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
 	for sname, server := range EnabledServers(cfg) {
 		sname, server := sname, server
 		wg.Go(func() error {
+			started := time.Now()
+			defer func() { debug.Printf("Startup: MCP %s=%s", sname, time.Since(started)) }()
 			connectionCtx, cancel := context.WithCancel(ctx)
 			stopSetupCancellation := context.AfterFunc(setupCtx, cancel)
 			defer stopSetupCancellation()
@@ -226,6 +233,9 @@ func (s *ToolSession) Close() error {
 	if s == nil {
 		return nil
 	}
+	if s.poolCancel != nil {
+		s.poolCancel()
+	}
 	var errs []error
 	for name, server := range s.servers {
 		server.mu.Lock()
@@ -269,6 +279,7 @@ func (s *ToolSession) ToolCall(ctx context.Context, sname, tool string, data []b
 	request.Params.Arguments = args
 	result, err := server.client.CallTool(ctx, request)
 	if err != nil {
+		s.invalid.Store(true)
 		return "", fmt.Errorf("mcp: %w", err)
 	}
 	return toolResultText(result)

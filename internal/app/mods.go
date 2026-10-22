@@ -42,14 +42,18 @@ const (
 // LLM APIs (OpenAI, Anthropic, Google, Ollama, and others).
 type Mods struct {
 	outputRenderer
-	Input         string
-	Styles        Styles
-	Error         *modsError
-	state         state
-	terminalReady bool
-	retries       int
-	glam          *glamour.TermRenderer
-	glamViewport  viewport.Model
+	Input           string
+	Styles          Styles
+	Error           *modsError
+	state           state
+	terminalReady   bool
+	startupPending  tea.Msg
+	terminalStarted time.Time
+	rendererDark    bool
+	rendererWidth   int
+	retries         int
+	glam            *glamour.TermRenderer
+	glamViewport    viewport.Model
 	// messages is the session history fed to the provider on each
 	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
 	// dispatched by startCompletionCmd) and re-read from the
@@ -151,23 +155,32 @@ func New(
 	for _, option := range options {
 		option(&newOptions)
 	}
+	started := time.Now()
+	defer func() { debug.Printf("Startup: app=%s", time.Since(started)) }()
 	isDark := ui.StderrIsDark()
-	gr, err := newMarkdownRenderer(cfg.WordWrap, isDark)
-	if err != nil {
-		return nil, fmt.Errorf("could not create glamour renderer: %w", err)
+	var gr *glamour.TermRenderer
+	if !cfg.Raw {
+		var err error
+		gr, err = newMarkdownRenderer(cfg.WordWrap, isDark)
+		if err != nil {
+			return nil, fmt.Errorf("could not create glamour renderer: %w", err)
+		}
 	}
 	vp := viewport.New()
 	vp.GotoBottom()
 	skillDirs := cfg.ResolveSkillsDirs()
-	skillCatalog, scanErr := skills.ScanDirs(skillDirs)
+	skillCatalog, scanErr := skills.ScanCatalogDirs(skillDirs)
 	if scanErr != nil {
 		debug.Printf("skills: scan %v failed: %v (proceeding without skills)", skillDirs, scanErr)
 	}
 	debug.Printf("Skills: loaded %d skill(s) from %v", len(skillCatalog), skillDirs)
-	selfHelpReference, err := buildSelfHelpReference(newOptions.selfHelpFlags)
-	if err != nil {
-		return nil, fmt.Errorf("could not build self-help reference: %w", err)
-	}
+	selfHelpReference := selfhelp.NewLazyReference(func() (selfhelp.Catalog, error) {
+		reference, err := buildSelfHelpReference(newOptions.selfHelpFlags)
+		if err != nil {
+			return selfhelp.Catalog{}, err
+		}
+		return reference.Catalog(), nil
+	})
 	// Derive a cancellable child of ctx so quit() can abort every in-flight
 	// provider HTTP request, tool call, shell-classifier call, and approval/
 	// user-input select (all descend from m.ctx) when the user quits. The
@@ -178,6 +191,8 @@ func New(
 	return &Mods{
 		Styles:              styles,
 		glam:                gr,
+		rendererDark:        isDark,
+		rendererWidth:       cfg.WordWrap,
 		state:               startState,
 		glamViewport:        vp,
 		contentMutex:        &sync.Mutex{},
@@ -223,6 +238,14 @@ func (m *Mods) RenderedOutput() string {
 // and word-wrap configuration used for model responses. It does not mutate
 // the conversation's accumulated or rendered output.
 func (m *Mods) RenderMarkdown(content string) (string, error) {
+	if m.glam == nil {
+		gr, err := newMarkdownRenderer(m.Config.WordWrap, m.rendererDark)
+		if err != nil {
+			return "", err
+		}
+		m.glam = gr
+		m.rendererWidth = m.Config.WordWrap
+	}
 	return m.glam.Render(content)
 }
 
@@ -237,6 +260,8 @@ func (m *Mods) ApprovalRules() []Rule {
 	return m.reviewer.rules.Snapshot()
 }
 
+type startupSessionMsg struct{ result tea.Msg }
+
 // Init implements tea.Model.
 func (m *Mods) Init() tea.Cmd {
 	// Terminal queries are only safe when the CLI has an interactive input
@@ -247,11 +272,14 @@ func (m *Mods) Init() tea.Cmd {
 		return m.findSessionDetails()
 	}
 	// Bubble Tea queries terminal modes 2026 and 2027 before running Init.
-	// Wait for the subsequently requested background-color reply before doing
-	// work that can fail and quit immediately. Terminal replies are ordered,
+	// Prepare session data in parallel, but hold its result (including errors)
+	// until the subsequently requested background-color reply arrives. Terminal replies are ordered,
 	// so receiving BackgroundColorMsg also means the earlier mode replies have
 	// been consumed by Bubble Tea's input loop.
+	m.terminalStarted = time.Now()
+	find := m.findSessionDetails()
 	return tea.Batch(
+		func() tea.Msg { return startupSessionMsg{result: find()} },
 		tea.RequestBackgroundColor,
 		tea.Tick(terminalProbeTimeout, func(time.Time) tea.Msg {
 			return terminalProbeTimeoutMsg{}
@@ -264,23 +292,37 @@ func (m *Mods) continueAfterTerminalProbe() tea.Cmd {
 		return nil
 	}
 	m.terminalReady = true
-	return m.findSessionDetails()
+	debug.Printf("Startup: terminal=%s", time.Since(m.terminalStarted))
+	pending := m.startupPending
+	m.startupPending = nil
+	if pending != nil {
+		return msgCmd(pending)
+	}
+	return nil
 }
 
 // Update implements tea.Model.
 func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	if startup, ok := msg.(startupSessionMsg); ok {
+		if !m.terminalReady {
+			m.startupPending = startup.result
+			return m, nil
+		}
+		return m, msgCmd(startup.result)
+	}
 	if msg, ok := msg.(tea.BackgroundColorMsg); ok {
 		isDark := msg.IsDark()
 		m.Styles = ui.MakeStylesWithTheme(m.Config.Theme, isDark)
-		gr, err := newMarkdownRenderer(m.Config.WordWrap, isDark)
-		if err != nil {
-			return m, msgCmd(modsError{
-				Err:        err,
-				ReasonText: "Could not update Markdown renderer for the terminal background.",
-			})
+		if m.glam != nil && (m.rendererWidth != m.Config.WordWrap || (os.Getenv("GLAMOUR_STYLE") == "" && m.rendererDark != isDark)) {
+			gr, err := newMarkdownRenderer(m.Config.WordWrap, isDark)
+			if err != nil {
+				return m, msgCmd(modsError{Err: err, ReasonText: "Could not update Markdown renderer for the terminal background."})
+			}
+			m.glam = gr
+			m.rendererWidth = m.Config.WordWrap
 		}
-		m.glam = gr
+		m.rendererDark = isDark
 		if cmd := m.continueAfterTerminalProbe(); cmd != nil {
 			return m, cmd
 		}

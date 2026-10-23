@@ -16,6 +16,7 @@ import (
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/chatgpt"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/google"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/ollama"
@@ -541,7 +542,7 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				if name == "process_run" {
 					fresh = m.constrainResolvedProcessAssessment(fresh, processBinding)
 				}
-				freshIntent := normalizeAccessIntentDirs(fresh.AccessIntent(), scope.Value, name, true)
+				freshIntent := normalizeAccessIntentDirs(commandResultToIntent(commandanalysis.Result(fresh)), scope.Value, name, true)
 				if !reflect.DeepEqual(prepared.intent, freshIntent) {
 					if attempt >= 1 {
 						return proto.ToolResult{}, errors.New("command targets changed repeatedly during review")

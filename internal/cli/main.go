@@ -17,7 +17,7 @@ import (
 	"charm.land/lipgloss/v2"
 	timeago "github.com/caarlos0/timea.go"
 	"github.com/charmbracelet/x/editor"
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -149,7 +149,7 @@ var startupConfigDuration time.Duration
 
 func Run(version, commit string) int {
 	// The bridge is shared across turns, but owned by this CLI invocation.
-	defer approval.CloseBridge()
+	defer commandanalysis.CloseBridge()
 	Version = version
 	CommitSHA = commit
 	buildVersion()

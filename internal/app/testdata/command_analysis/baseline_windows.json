@@ -1,0 +1,583 @@
+{
+  "argv-git-multi-push": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [
+      "https://first.example",
+      "https://second.example"
+    ],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "argv-git-reflog-write": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "argv-literal-dollar": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "argv-uniq-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "argv-uniq-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "argv-workspace-program": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unverified execution context"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-authorized-touch": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-changed-cwd": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "mutable path context"
+    ],
+    "dirs": [
+      "."
+    ],
+    "write_paths": [
+      "output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-copy-mixed": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-external-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cEXT\u003e/input.txt"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "posix-move-source-ungranted": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "posix-safe-touch": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "posix-shadow-pwd": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets"
+    ],
+    "dirs": [],
+    "write_paths": [
+      "${PWD}/output.txt"
+    ],
+    "dynamic": [
+      "$PWD"
+    ],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-space-name": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "posix-uniq-dash-name": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "posix-uniq-missing-value": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-uniq-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "posix-uniq-unknown-option": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-uniq-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-unknown-sibling": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-unknown-temp-redirect": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "posix-xxd-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "ps-git-multi-push": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [
+      "https://first.example",
+      "https://second.example"
+    ],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "ps-provider": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets",
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [
+      "HKCU:/Software/ModsBaseline"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [
+      "HKCU:/Software/ModsBaseline"
+    ],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "ps-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "ps-read-before-git": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [
+      "Git execution context"
+    ],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "ps-redirect": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets",
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "ps-safe-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cSAFE\u003e",
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow"
+  },
+  "ps-unknown-temp-redirect": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets",
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  },
+  "ps-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow"
+  }
+}

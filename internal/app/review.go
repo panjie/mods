@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
@@ -300,9 +301,9 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 	if registry != nil && registry.ShellExecution(name) {
 		if assessment == nil {
 			unknown := approval.UnknownCommandAssessment()
-			return unknown.AccessIntent()
+			return commandResultToIntent(commandanalysis.Result(unknown))
 		}
-		intent := assessment.AccessIntent()
+		intent := commandResultToIntent(commandanalysis.Result(*assessment))
 		return intent
 	}
 	if registry != nil {

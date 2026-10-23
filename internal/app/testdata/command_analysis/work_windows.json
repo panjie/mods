@@ -1,0 +1,436 @@
+{
+  "argv-git-multi-push": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 1
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 1
+    }
+  },
+  "argv-git-reflog-write": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "argv-literal-dollar": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "argv-uniq-read": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "argv-uniq-write": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "argv-workspace-program": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "posix-authorized-touch": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-changed-cwd": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-copy-mixed": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-external-read": {
+    "initial": {
+      "posix_parses": 5,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "posix-move-source-ungranted": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-read": {
+    "initial": {
+      "posix_parses": 5,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "posix-safe-touch": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-shadow-pwd": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-space-name": {
+    "initial": {
+      "posix_parses": 5,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "posix-uniq-dash-name": {
+    "initial": {
+      "posix_parses": 5,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "posix-uniq-missing-value": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-uniq-read": {
+    "initial": {
+      "posix_parses": 5,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "posix-uniq-unknown-option": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-uniq-write": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-unknown-sibling": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-unknown-temp-redirect": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "posix-xxd-write": {
+    "initial": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 4,
+      "bridge_parses": 1,
+      "bridge_round_trips": 1,
+      "git_queries": 0
+    }
+  },
+  "ps-git-multi-push": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 1
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 1
+    }
+  },
+  "ps-provider": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    }
+  },
+  "ps-read": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 0,
+      "bridge_round_trips": 0,
+      "git_queries": 0
+    }
+  },
+  "ps-read-before-git": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    }
+  },
+  "ps-redirect": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    }
+  },
+  "ps-safe-write": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    }
+  },
+  "ps-unknown-temp-redirect": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    }
+  },
+  "ps-write": {
+    "initial": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    },
+    "revalidation": {
+      "posix_parses": 0,
+      "bridge_parses": 2,
+      "bridge_round_trips": 2,
+      "git_queries": 0
+    }
+  }
+}

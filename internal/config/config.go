@@ -323,6 +323,9 @@ type Config struct {
 	SessionDir                                               string
 	PortableDir                                              string
 	SessionReadFromID, SessionWriteToID, SessionWriteToTitle string
+	// ProjectInstructionsNoticeShown records the one-time AGENTS.md load
+	// announcement so later turns and chat invocations stay quiet.
+	ProjectInstructionsNoticeShown bool `yaml:"-"`
 }
 
 // PromptConfig holds user overrides for built-in runtime prompts.

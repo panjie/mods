@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Project instructions loaded from `AGENTS.md` now emit a one-time tool-style record (`✓ Project instructions: <path>`) in interactive sessions, so the automatic context load is visible like a skill load. `--no-instructions`, `--minimal`, `--raw`, `--hide-tool-status`, and non-interactive runs stay silent.
+
 ### Changed
 - Simple commands and aggregation pipelines run directly; scripts are preferred for complex branching, loops, or reusable logic. Prompt evaluations now cover normal mode with explicit minimal controls, and debug output reports system/tool-definition byte breakdowns backed by assembled-request budget tests.
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.

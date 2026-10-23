@@ -123,3 +123,68 @@ func TestSetupStreamContextInjectsAgentsMD(t *testing.T) {
 		require.NotContains(t, systemJoin(m), "Project instructions (AGENTS.md)")
 	})
 }
+
+// TestProjectInstructionsNotice covers the one-time tool-style record that
+// announces AGENTS.md was loaded. The record follows the same visibility
+// switches as tool status records and is emitted once per process.
+func TestProjectInstructionsNotice(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# Agents\nBuild with `task check`."), 0o644))
+
+	newMods := func(modify func(*Config)) *Mods {
+		cfg := Config{}
+		cfg.WorkingDir = root
+		cfg.ApplyDefaults()
+		cfg.Roles = map[string][]string{}
+		cfg.InteractiveTTYAvailable = true
+		cfg.WordWrap = 200
+		if modify != nil {
+			modify(&cfg)
+		}
+		return &Mods{Config: &cfg, Styles: makeStyles(true), showOperationStatus: true, width: 200}
+	}
+
+	t.Run("announces the loaded file once per process", func(t *testing.T) {
+		m := newMods(nil)
+		line := m.projectInstructionsNoticeLine()
+		require.Contains(t, line, "Project instructions:")
+		require.Contains(t, line, filepath.Join(root, "AGENTS.md"))
+
+		require.NotNil(t, m.emitProjectInstructionsNotice())
+		require.True(t, m.Config.ProjectInstructionsNoticeShown)
+		require.Nil(t, m.emitProjectInstructionsNotice())
+	})
+
+	t.Run("hidden by no-instructions", func(t *testing.T) {
+		m := newMods(func(c *Config) { c.NoInstructions = true })
+		require.Empty(t, m.projectInstructionsNoticeLine())
+	})
+
+	t.Run("hidden in minimal mode", func(t *testing.T) {
+		m := newMods(func(c *Config) { c.Minimal = true })
+		require.Empty(t, m.projectInstructionsNoticeLine())
+	})
+
+	t.Run("hidden when tool status is hidden", func(t *testing.T) {
+		m := newMods(nil)
+		m.showOperationStatus = false
+		require.Empty(t, m.projectInstructionsNoticeLine())
+	})
+
+	t.Run("hidden without an interactive terminal", func(t *testing.T) {
+		m := newMods(func(c *Config) { c.InteractiveTTYAvailable = false })
+		require.Empty(t, m.projectInstructionsNoticeLine())
+	})
+
+	t.Run("hidden when AGENTS.md is missing", func(t *testing.T) {
+		m := newMods(func(c *Config) { c.WorkingDir = t.TempDir() })
+		require.Empty(t, m.projectInstructionsNoticeLine())
+	})
+
+	t.Run("hidden when AGENTS.md is blank", func(t *testing.T) {
+		blankRoot := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(blankRoot, "AGENTS.md"), []byte("\n\n"), 0o644))
+		m := newMods(func(c *Config) { c.WorkingDir = blankRoot })
+		require.Empty(t, m.projectInstructionsNoticeLine())
+	})
+}

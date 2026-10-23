@@ -86,13 +86,17 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		}})
 	}
 
-	return func() tea.Msg {
+	startCmd := func() tea.Msg {
 		session, err := m.buildRequestSession(content)
 		if err != nil {
 			return err
 		}
 		return session.runner.receiveCmd()()
 	}
+	if notice := m.emitProjectInstructionsNotice(); notice != nil {
+		return tea.Sequence(notice, startCmd)
+	}
+	return startCmd
 }
 
 func (m *Mods) toolCallContext(registry *toolregistry.Registry, name string, cfg *Config) (context.Context, context.CancelFunc) {

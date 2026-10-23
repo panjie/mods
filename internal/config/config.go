@@ -134,7 +134,7 @@ var Help = map[string]string{
 	"apis.<provider>.models":           "Models configured for this provider",
 	"apis.<provider>.user":             "Provider-specific user or Azure deployment identifier",
 	"apis.<provider>.api-type":         "Wire protocol used by this provider",
-	"apis.<provider>.provider-profile": "Provider request dialect: openai, deepseek, qwen, glm, kimi, or minimax",
+	"apis.<provider>.provider-profile": "Provider request dialect: openai, deepseek, qwen, glm, kimi, minimax, or chatgpt (built-in subscription provider only)",
 
 	"apis.<provider>.models.<model>.aliases":              "Alternative names that select this model",
 	"apis.<provider>.models.<model>.fallback":             "Fallback model used after a provider failure",
@@ -281,6 +281,7 @@ type PersistentConfig struct {
 // so that all persisted fields are promoted and accessible directly on Config.
 // The remaining fields are CLI-only flags or computed runtime state.
 type Config struct {
+	ChatGPTAuth string `yaml:"-"`
 	// WorkingDir is runtime execution context, never a persistent setting. Empty uses os.Getwd.
 	WorkingDir string `yaml:"-"`
 
@@ -550,13 +551,6 @@ func Ensure() (Config, error) {
 
 	applySessionDirDefault(&c)
 	applySkillsDirsDefault(&c)
-
-	if err := os.MkdirAll(
-		c.SessionDir,
-		0o700,
-	); err != nil { //nolint:mnd
-		return fallback, modsError{Err: err, ReasonText: "Could not create session directory."}
-	}
 
 	c.applyDefaults()
 

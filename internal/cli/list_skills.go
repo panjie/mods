@@ -9,7 +9,7 @@ import (
 	"github.com/panjie/mods/internal/skills"
 )
 
-var scanSkills = skills.ScanDirs
+var scanSkills = skills.ScanCatalogDirs
 
 // listSkills prints installed skills. Missing or empty user
 // directories are valid; actual scan failures are errors.

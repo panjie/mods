@@ -830,28 +830,28 @@ func TestFlagTableMatchesRegistration(t *testing.T) {
 // as "no arguments" or as a side-effect action. Make such a change here, on
 // purpose.
 func TestOneShotRoleAssignments(t *testing.T) {
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"settings", "list-sessions", "continue", "continue-last", "reset-settings",
 		"config", "list-mcps", "list-tools", "list-prompts", "list-skills",
 	}, sessionActionFlags, "mutually exclusive one-shot actions")
 	require.Equal(t, []string{"continue"}, sessionCompleteFlags, "flags taking a session id")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"help", "chat", "list-sessions", "list-roles", "list-prompts", "list-tools",
 		"list-skills", "list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleNoArgs), "flags that make the invocation non-empty")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
 		"list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleBlocksChat), "flags that cannot be combined with --chat")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
 		"list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleBlocksAutoConfig), "flags that skip first-run auto configuration")
 
-	require.ElementsMatch(t, []string{
+	require.ElementsMatch(t, []string{"chatgpt-auth",
 		"list-sessions", "list-roles", "list-prompts", "list-tools", "list-skills",
 		"list-mcps", "dirs",
 	}, flagNamesWithRole(roleBlocksPassiveAutoConfig), "flags that skip the auto-created config cleanup")
@@ -1200,4 +1200,60 @@ func TestNextBackupPathAvoidsOverwrite(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, base+".2", third)
 	})
+}
+
+func TestNonSessionActionsDoNotOpenDatabase(t *testing.T) {
+	for _, action := range []string{"dirs", "roles", "prompts", "skills", "mcps", "tools", "no-save"} {
+		t.Run(action, func(t *testing.T) {
+			oldDB, oldRun := db, runOneTurnProgram
+			db = nil
+			t.Cleanup(func() {
+				if db != nil {
+					_ = db.Close()
+				}
+				db = oldDB
+				runOneTurnProgram = oldRun
+			})
+			cfg := Default()
+			cfg.SettingsExisted = true
+			cfg.SessionDir = filepath.Join(t.TempDir(), "absent-sessions")
+			cfg.SkillsDirs = []string{t.TempDir()}
+			switch action {
+			case "dirs":
+				cfg.Dirs = true
+			case "roles":
+				cfg.ListRoles = true
+			case "prompts":
+				cfg.ListPrompts = true
+			case "skills":
+				cfg.ListSkills = true
+			case "mcps":
+				cfg.MCPList = true
+			case "tools":
+				cfg.MCPListTools = true
+			case "no-save":
+				cfg.NoSave = true
+				cfg.Raw = true
+			}
+			runOneTurnProgram = func(context.Context, []tea.ProgramOption) (*Mods, error) {
+				require.Nil(t, db)
+				return &Mods{}, nil
+			}
+			withTestConfig(t, cfg, func() {
+				cmd := *rootCmd
+				cmd.SetContext(context.Background())
+				_ = captureStdout(t, func() {
+					_ = captureStderr(t, func() {
+						args := []string(nil)
+						if action == "no-save" {
+							args = []string{"hello"}
+						}
+						require.NoError(t, rootCmd.RunE(&cmd, args))
+					})
+				})
+				require.Nil(t, db)
+				require.NoDirExists(t, cfg.SessionDir)
+			})
+		})
+	}
 }

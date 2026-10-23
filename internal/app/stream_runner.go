@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/proto"
@@ -35,12 +36,14 @@ type streamEventMsg struct {
 // path (receiveCmd returning streamEventDone/streamEventError) and the user
 // quit path can both invoke it without double-close issues.
 type streamRunner struct {
-	stream     stream.Stream
-	cleanup    *toolregistry.Registry
-	errh       func(error) tea.Msg
-	cancel     context.CancelFunc
-	closed     atomic.Bool
-	usageTaken atomic.Bool
+	stream        stream.Stream
+	cleanup       *toolregistry.Registry
+	errh          func(error) tea.Msg
+	cancel        context.CancelFunc
+	closed        atomic.Bool
+	usageTaken    atomic.Bool
+	firstResponse atomic.Bool
+	requestedAt   time.Time
 }
 
 func newStreamRunner(st stream.Stream, cleanup *toolregistry.Registry, cancel context.CancelFunc, errh func(error) tea.Msg) *streamRunner {
@@ -50,6 +53,9 @@ func newStreamRunner(st stream.Stream, cleanup *toolregistry.Registry, cancel co
 func (r *streamRunner) receiveCmd() tea.Cmd {
 	return func() tea.Msg {
 		if r.stream.Next() {
+			if r.firstResponse.CompareAndSwap(false, true) && !r.requestedAt.IsZero() {
+				debug.Printf("Startup: first-response=%s", time.Since(r.requestedAt))
+			}
 			chunk, err := r.stream.Current()
 			if err != nil && !errors.Is(err, stream.ErrNoContent) {
 				r.close()

@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Mods) findSessionDetails() tea.Cmd {
 	return func() tea.Msg {
+		started := time.Now()
+		defer func() { debug.Printf("Startup: session=%s", time.Since(started)) }()
 		continueLast := m.Config.ContinueLast || m.Config.Continue != ""
 		readID := m.Config.Continue
 		writeID := m.Config.Continue

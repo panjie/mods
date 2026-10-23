@@ -26,6 +26,7 @@ type ProviderProfile string
 
 const (
 	ProviderProfileOpenAI   ProviderProfile = "openai"
+	ProviderProfileChatGPT  ProviderProfile = "chatgpt"
 	ProviderProfileDeepSeek ProviderProfile = "deepseek"
 	ProviderProfileQwen     ProviderProfile = "qwen"
 

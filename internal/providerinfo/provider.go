@@ -18,6 +18,7 @@ type Descriptor struct {
 }
 
 var descriptors = map[string]Descriptor{
+	"chatgpt": {Protocol: "openai", Profile: "chatgpt", Description: "ChatGPT subscription (Continue with ChatGPT)", DefaultBaseURL: "https://api.openai.com/v1"},
 	"openai": {
 		Protocol:       "openai",
 		Profile:        "openai",
@@ -99,7 +100,7 @@ type NamedDescriptor struct {
 }
 
 var protocols = []string{"openai", "anthropic", "google", "ollama", "azure", "github-copilot"}
-var profiles = []string{"openai", "deepseek", "qwen", "glm", "kimi", "minimax", "anthropic", "google", "ollama"}
+var profiles = []string{"chatgpt", "openai", "deepseek", "qwen", "glm", "kimi", "minimax", "anthropic", "google", "ollama"}
 
 // Descriptors returns built-in provider metadata in stable name order.
 func Descriptors() []NamedDescriptor {

@@ -134,8 +134,8 @@ func TestEnsurePortableModePopulatesFields(t *testing.T) {
 		filepath.Join(xdg.Home, ".agents", "skills"),
 		filepath.Join(dir, "skills"),
 	}, cfg.ResolveSkillsDirs())
-	// The sessions directory is created by Ensure.
-	require.DirExists(t, filepath.Join(dir, "sessions"))
+	// Session storage is created only when a database action needs it.
+	require.NoDirExists(t, filepath.Join(dir, "sessions"))
 }
 
 func TestEnsurePortableModeUsesConfiguredSkillsDirs(t *testing.T) {

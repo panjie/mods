@@ -480,7 +480,7 @@ func buildConfigWizardUpdates(d configWizardSaveData) []FieldUpdate {
 		}
 	}
 
-	if d.apiName != "ollama" {
+	if d.apiName != "ollama" && d.apiName != "chatgpt" {
 		if d.apiName == "github-copilot" && d.apiKey == "" {
 			if key := configuredAPIKey(d.apiName); key != "" {
 				d.apiKey = key

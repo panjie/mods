@@ -9,6 +9,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
@@ -36,6 +37,10 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 		Tools: fromResponseToolSpecs(request.Tools),
 		User:  openai.String(request.User),
 	}
+	if profile == ProviderProfileChatGPT {
+		body.User = param.Opt[string]{}
+		body.Tools = chatGPTTools(request.Tools)
+	}
 	if profile != ProviderProfileDeepSeek {
 		body.Store = openai.Bool(false)
 		if profile != ProviderProfileQwen {
@@ -44,10 +49,10 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 			}
 		}
 	}
-	if request.Temperature != nil {
+	if request.Temperature != nil && profile != ProviderProfileChatGPT {
 		body.Temperature = openai.Float(*request.Temperature)
 	}
-	if request.MaxTokens != nil {
+	if request.MaxTokens != nil && profile != ProviderProfileChatGPT {
 		body.MaxOutputTokens = openai.Int(*request.MaxTokens)
 	}
 	if request.ResponseFormat != nil && *request.ResponseFormat == "json" {
@@ -128,6 +133,12 @@ func (c *Client) responsesReasoningEffort() (string, bool, error) {
 func responsesRequestOptions(extra map[string]any, profile ResponsesProfile) []option.RequestOption {
 	opts := make([]option.RequestOption, 0, len(extra)*2)
 	flattenMap("", extra, func(key string, value any) {
+		if profile == ProviderProfileChatGPT {
+			// Only explicitly supported tuning can augment the subscription request.
+			if key != "reasoning.effort" && key != "reasoning.summary" && key != "text.verbosity" {
+				return
+			}
+		}
 		switch key {
 		case "reasoning_effort", "store", "previous_response_id", "conversation", "include", "stream":
 			return
@@ -341,6 +352,9 @@ func responseSources(response responses.Response) string {
 }
 
 func responsesProviderName(profile ResponsesProfile) string {
+	if profile == ProviderProfileChatGPT {
+		return "ChatGPT subscription"
+	}
 	if profile == ResponsesProfileDeepSeek {
 		return "DeepSeek"
 	}
@@ -348,6 +362,15 @@ func responsesProviderName(profile ResponsesProfile) string {
 }
 
 func responseFailureError(response responses.Response, provider string) error {
+	if provider == "ChatGPT subscription" {
+		switch string(response.Error.Code) {
+		case "subscription_sharing_usage_limit_exceeded":
+			return fmt.Errorf("ChatGPT plan usage limit reached; review app limits in ChatGPT Settings or wait for the allowance to reset")
+		case "subscription_sharing_usage_unavailable":
+			return fmt.Errorf("ChatGPT plan usage is unavailable; check this account/workspace and the mods grant in ChatGPT Settings")
+		}
+	}
+
 	if response.Error.Message != "" {
 		if response.Error.Code != "" {
 			return fmt.Errorf("%s Responses API failed (%s): %s", provider, response.Error.Code, response.Error.Message)

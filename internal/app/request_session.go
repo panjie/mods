@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/chatgpt"
 	"github.com/panjie/mods/internal/google"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/ollama"
@@ -33,6 +34,7 @@ type requestSession struct {
 }
 
 func (m *Mods) buildRequestSession(content string) (requestSession, error) {
+	started := time.Now()
 	cfg := m.Config
 	api, mod, err := m.resolveModel(cfg)
 	if err != nil {
@@ -95,6 +97,8 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	localWebSearch, providerWebSearch := resolveWebSearch(cfg, client.Capabilities())
 	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
 
+	debug.Printf("Startup: provider=%s", time.Since(started))
+	contextStarted := time.Now()
 	err = m.setupCompletionContext(content)
 	if err != nil {
 		return requestSession{}, err
@@ -103,6 +107,8 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		return requestSession{}, modsError{Err: err, ReasonText: "Media input is unavailable"}
 	}
 	m.sanitizeProviderContinuation(mod, ccfg.UseResponses)
+	debug.Printf("Startup: context=%s", time.Since(contextStarted))
+	toolsStarted := time.Now()
 
 	// Registry connections live for the request; MCP discovery applies its own
 	// timeout without attaching that deadline to a persistent SSE transport.
@@ -140,6 +146,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	debugTools(tools, registry.Len())
 
+	debug.Printf("Startup: tools=%s", time.Since(toolsStarted))
 	request := proto.Request{
 		Messages:     m.messages,
 		API:          mod.API,
@@ -163,11 +170,14 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if m.retryCheckpoint == nil {
 		m.retryCheckpoint = &completionCheckpoint{messages: cloneCompletionMessages(m.messages)}
 	}
+	debug.Printf("Startup: request-ready=%s", time.Since(started))
+	requestedAt := time.Now()
 	st := client.Request(streamCtx, request)
 	errh := func(err error) tea.Msg {
 		return m.handleRequestError(err, mod, m.Input)
 	}
 	runner := newStreamRunner(st, registry, streamCancel, errh)
+	runner.requestedAt = requestedAt
 	m.setActiveRunner(runner)
 	return requestSession{
 		stream:  st,
@@ -216,6 +226,9 @@ func (m *Mods) sanitizeProviderContinuation(mod Model, useResponses bool) {
 }
 
 func allowedProviderDataKeys(mod Model, useResponses bool) map[string]struct{} {
+	if modelProviderProfile(mod) == openai.ProviderProfileChatGPT && useResponses {
+		return map[string]struct{}{"chatgpt.responses.output.v1": {}}
+	}
 	if modelProtocol(mod) == "openai" && modelProviderProfile(mod) == openai.ProviderProfileQwen {
 		if useResponses {
 			return map[string]struct{}{"qwen.responses.output.v1": {}}
@@ -298,9 +311,29 @@ func applyHTTPProxy(cfg *Config, accfg *anthropic.Config, gccfg *google.Config, 
 	}
 	httpClient := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	ccfg.HTTPClient = httpClient
+	if ccfg.ProviderProfile == openai.ProviderProfileChatGPT {
+		c := chatgpt.NewClient()
+		c.HTTP = &http.Client{Transport: httpClient.Transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		ccfg.HTTPClient = c.HTTPClient()
+	}
 	accfg.HTTPClient = httpClient
+	if ccfg.ProviderProfile == openai.ProviderProfileChatGPT {
+		c := chatgpt.NewClient()
+		c.HTTP = &http.Client{Transport: httpClient.Transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		ccfg.HTTPClient = c.HTTPClient()
+	}
 	gccfg.HTTPClient = httpClient
+	if ccfg.ProviderProfile == openai.ProviderProfileChatGPT {
+		c := chatgpt.NewClient()
+		c.HTTP = &http.Client{Transport: httpClient.Transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		ccfg.HTTPClient = c.HTTPClient()
+	}
 	occfg.HTTPClient = httpClient
+	if ccfg.ProviderProfile == openai.ProviderProfileChatGPT {
+		c := chatgpt.NewClient()
+		c.HTTP = &http.Client{Transport: httpClient.Transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		ccfg.HTTPClient = c.HTTPClient()
+	}
 	return nil
 }
 

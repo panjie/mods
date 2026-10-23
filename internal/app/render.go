@@ -513,7 +513,7 @@ func (m *Mods) flushRender() {
 	preprocessed := strings.ReplaceAll(m.displayOutput, "\n\n", "\r")
 	preprocessed = strings.ReplaceAll(preprocessed, "\n", "  \n")
 	preprocessed = strings.ReplaceAll(preprocessed, "\r", "\n\n")
-	m.glamOutput, _ = m.glam.Render(preprocessed)
+	m.glamOutput, _ = m.RenderMarkdown(preprocessed)
 	m.glamOutput = strings.TrimRightFunc(m.glamOutput, unicode.IsSpace)
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
 	m.glamOutput = m.replaceDisplayBlocks(m.glamOutput)

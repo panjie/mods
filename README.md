@@ -448,6 +448,49 @@ Install skills under `~/.agents/skills`, or add directories with `--skills-dirs`
 Later directories override same-name skills. Portable installs also read a
 `skills/` directory beside the executable.
 
+## ChatGPT subscription
+
+Run `mods --config`, select **chatgpt**, and choose **Continue with ChatGPT**.
+Your system browser opens automatically. Grant plan usage there, then
+return to mods to select an account-provided model. The connection check sends a
+small inference request using your plan allowance. No API key is required.
+If the browser cannot be opened, mods displays the authorization URL as a fallback.
+
+Account management is also available without the wizard:
+
+```sh
+mods --chatgpt-auth login                 # add an account/workspace
+mods --chatgpt-auth list                  # show registrations; * marks the active one
+mods --chatgpt-auth use:<client-id>        # switch the active registration
+mods --chatgpt-auth login:<client-id>      # renew a saved registration
+mods --chatgpt-auth logout                # sign out of the active registration
+mods -a chatgpt -m <configured-model> "Hello"
+```
+
+Each workspace registration has its own client ID and credentials. After
+switching accounts, rerun `mods --config` to refresh the model choices. Access
+tokens refresh automatically, including between tool rounds. Tokens live in
+`$XDG_CONFIG_HOME/mods/chatgpt/accounts.json` (or the OS user configuration
+directory when unset), separately from `mods.yml` and conversation history.
+This storage stays local even when using a portable configuration. Protect this
+credential file; it is written with owner-only permissions on Unix. Logout
+attempts remote session revocation and clears local tokens while retaining the
+registration and host ID. If revocation cannot be confirmed, disconnect mods
+in ChatGPT Settings.
+
+This uses OpenAI's official **Sign in with ChatGPT** preview for local open-source
+apps and the public Responses endpoint. Account/workspace eligibility and plan
+limits apply. Text, images, local tools and MCP function tools use the existing
+mods approval flow. This route does not support audio/video input or hosted
+Responses tools such as image generation, file search and Code Interpreter.
+Unsupported sampling/output-limit parameters are omitted, and complete context
+is sent with each request (`store: false`). Usage-limit failures do not fall back
+to API-key billing.
+
+Protocol references: [registration and sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in),
+[accounts and sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions),
+[preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
+
 ## Supported Providers
 
 Mods is configured for the providers below out of the box. The easiest way to

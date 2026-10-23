@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/panjie/mods/internal/chatgpt"
 	"github.com/panjie/mods/internal/textutil"
 	"gopkg.in/yaml.v3"
 )
@@ -435,6 +436,9 @@ func deleteNestedValue(mapping *yaml.Node, parts []string) {
 // HasAPIKey reports whether the default provider has a resolvable API key.
 // Ollama is treated as always-OK (local, no key needed).
 func HasAPIKey(config *Config) bool {
+	if config.API == "chatgpt" {
+		return chatgpt.DefaultStore().SignedIn()
+	}
 	if config.API == "ollama" {
 		return true
 	}

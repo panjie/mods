@@ -23,7 +23,9 @@ func RegisterImages(r *Registry, cfg FilesystemConfig) error {
 	if err != nil {
 		return err
 	}
-	root, err = filepath.EvalSymlinks(root)
+	if !r.catalogueOnly {
+		root, err = filepath.EvalSymlinks(root)
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

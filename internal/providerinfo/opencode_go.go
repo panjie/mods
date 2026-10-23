@@ -78,6 +78,9 @@ func OpenCodeHeaders(baseURL, sessionID string) map[string]string {
 // OpenAIEndpoint resolves the shared defaults used by runtime and setup.
 // Explicit choices always win. This function does no discovery or I/O.
 func OpenAIEndpoint(api, model, baseURL, endpoint string) string {
+	if api == "chatgpt" {
+		return "responses"
+	}
 	if value := strings.ToLower(strings.TrimSpace(endpoint)); value != "" {
 		return value
 	}

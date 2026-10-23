@@ -14,6 +14,7 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/panjie/mods/internal/chatgpt"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/session"
@@ -82,6 +83,7 @@ type setupModel struct {
 	busy                                     string
 	request                                  uint64
 	cancel                                   context.CancelFunc
+	browserErr                               error
 	device                                   copilotDeviceCode
 	picker                                   bool
 	apis                                     []setupOption
@@ -159,7 +161,7 @@ func RunConfigWizard() error {
 		}
 	}
 	d := m.draft()
-	if d.storage == "env" && m.api() != "ollama" && m.api() != "github-copilot" {
+	if d.storage == "env" && m.api() != "ollama" && m.api() != "github-copilot" && m.api() != "chatgpt" {
 		fmt.Fprintf(os.Stderr, "Remember to export your key:\n  export %s=sk-...\n", resolveEnvVar(m.api()))
 	}
 	if m.data.webSearchOn && webSearchProviderUsesKey(m.data.webSearchProvider) && m.data.webSearchKeyStorage == "env" {
@@ -236,6 +238,9 @@ func (m *setupModel) protocol() string {
 	return providerinfo.Protocol(m.api(), "")
 }
 func (m *setupModel) endpoint() string {
+	if m.api() == "chatgpt" {
+		return chatgpt.BaseURL
+	}
 	if value := strings.TrimSpace(m.draft().endpoint); value != "" {
 		return value
 	}
@@ -258,10 +263,12 @@ func (m *setupModel) pages() []setupPage {
 	if m.provider == addProviderOption {
 		pages = append(pages, setupName, setupProtocol)
 	}
-	pages = append(pages, setupEndpoint)
+	if m.api() != "chatgpt" {
+		pages = append(pages, setupEndpoint)
+	}
 	switch m.api() {
 	case "ollama":
-	case "github-copilot":
+	case "github-copilot", "chatgpt":
 		pages = append(pages, setupAuth)
 	default:
 		pages = append(pages, setupCredentials)
@@ -311,6 +318,7 @@ func (m *setupModel) enter(page setupPage) tea.Cmd {
 	m.filtering = false
 	m.filter.SetValue("")
 	m.device = copilotDeviceCode{}
+	m.browserErr = nil
 	cmd := m.prepare()
 	if page == setupDiscovery && !m.draft().discovered {
 		return m.discover()
@@ -595,6 +603,12 @@ func (m *setupModel) validate() error {
 	return nil
 }
 func (m *setupModel) accept() tea.Cmd {
+	if m.page == setupAuth && m.api() == "chatgpt" {
+		if !chatgpt.DefaultStore().SignedIn() {
+			return m.authenticateChatGPT()
+		}
+		return m.move(false)
+	}
 	if m.page == setupAuth {
 		if configWizardWaitingForCopilotAuth(m.api(), m.draft().key) {
 			return m.authenticate()

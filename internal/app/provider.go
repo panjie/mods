@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/panjie/mods/internal/anthropic"
+	"github.com/panjie/mods/internal/chatgpt"
 	"github.com/panjie/mods/internal/copilot"
 	"github.com/panjie/mods/internal/google"
 	"github.com/panjie/mods/internal/ollama"
@@ -46,6 +47,17 @@ func resolveProvider(mod Model, api API) (resolvedProvider, error) {
 	if err := validateEndpointForProtocol(resolved.Protocol, mod.Endpoint); err != nil {
 		return resolved, err
 	}
+	if resolved.Profile == openai.ProviderProfileChatGPT && mod.API != "chatgpt" {
+		return resolved, fmt.Errorf("ChatGPT subscription profile requires the chatgpt provider")
+	}
+	if mod.API == "chatgpt" {
+		if resolved.Protocol != "openai" || resolved.Profile != openai.ProviderProfileChatGPT || (mod.Endpoint != "" && mod.Endpoint != "responses") {
+			return resolved, fmt.Errorf("ChatGPT requires its subscription profile and Responses endpoint")
+		}
+		if api.BaseURL != "" && strings.TrimRight(api.BaseURL, "/") != chatgpt.BaseURL {
+			return resolved, fmt.Errorf("ChatGPT subscription requires %s", chatgpt.BaseURL)
+		}
+	}
 	baseURL, err := resolvedProviderBaseURL(api)
 	if err != nil {
 		return resolved, err
@@ -64,7 +76,7 @@ func resolveProvider(mod Model, api API) (resolvedProvider, error) {
 		resolved.Endpoint = resolved.Protocol
 	}
 	if resolved.Endpoint == copilot.EndpointResponses &&
-		resolved.Profile != openai.ProviderProfileOpenAI && resolved.Profile != openai.ProviderProfileDeepSeek && resolved.Profile != openai.ProviderProfileQwen {
+		resolved.Profile != openai.ProviderProfileChatGPT && resolved.Profile != openai.ProviderProfileOpenAI && resolved.Profile != openai.ProviderProfileDeepSeek && resolved.Profile != openai.ProviderProfileQwen {
 		return resolved, fmt.Errorf("endpoint responses is not implemented for provider-profile %s", resolved.Profile)
 	}
 	return resolved, nil
@@ -148,7 +160,11 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 		if err := validateResponsesEndpoint(mod.Endpoint); err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "Invalid model endpoint configuration"}
 		}
-		key, err := m.ensureKey(api, keyEnv, keyURL)
+		key := ""
+		var err error
+		if mod.API != "chatgpt" {
+			key, err = m.ensureKey(api, keyEnv, keyURL)
+		}
 		if err != nil {
 			return cfgs, modsError{Err: err, ReasonText: "OpenAI authentication failed"}
 		}
@@ -162,6 +178,9 @@ func (m *Mods) buildProviderConfigs(mod Model, api API) (providerConfigs, error)
 			ThoughtFields:    mod.ThinkFields,
 			ThinkTag:         mod.ThinkTag,
 		}
+	}
+	if mod.API == "chatgpt" {
+		cfgs.OpenAI.HTTPClient = chatgpt.NewClient().HTTPClient()
 	}
 	// Match the endpoint rather than the configurable provider alias.
 	if providerinfo.OpenCodeHeaders(resolved.BaseURL, "") != nil {

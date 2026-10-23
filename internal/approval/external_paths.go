@@ -35,10 +35,8 @@ var (
 // reference locations outside the cwd: absolute paths not under
 // cwdDir, home-expanded paths (~/ and ~user), and parent-traversal paths
 // (../). The results populate KnownDirs so ClassifyAccess and risk labels can
-// correctly identify external access even when the LLM omits them. The bool
-// reports whether an unquoted bare ~ was resolved, which callers must not
-// override with classifier-supplied guesses.
-func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, policy ReadOnlyCommandPolicy) ([]string, bool) {
+// preserve external access facts when command-specific analysis omits them.
+func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, policy ReadOnlyCommandPolicy) []string {
 	originalCommand := command
 	opts := pathutil.DefaultOptions(cwdDir, flavor)
 	seen := map[string]bool{}
@@ -86,7 +84,7 @@ func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, poli
 		for _, m := range reParentPath.FindAllString(command, -1) {
 			add(m)
 		}
-		return paths, false
+		return paths
 	}
 
 	// POSIX branch: Unix absolute paths (including single-segment like
@@ -134,7 +132,7 @@ func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, poli
 			}
 		}
 	}
-	return paths, hasBareHome
+	return paths
 }
 
 // trimTruncatedSubstitutionPath repairs raw-text path tokens cut off at a

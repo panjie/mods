@@ -39,12 +39,11 @@ func powershellConformanceCases() []conformanceCase {
 		},
 		{
 			name: "leading-slash tokens are not paths in PowerShell", tool: "powershell_run",
-			command: `findstr /i /c:"x" <EXT>\d.txt`, want: approval.EffectWrite,
+			command: `findstr /i /c:"x" <EXT>\d.txt`, want: approval.EffectUnknown,
 			// findstr is not in the read-only cmdlet table, so the deterministic
-			// analysis cannot prove an effect and the classifier stub completes
-			// it as a write. The point of the case is the fact list: /i and /c:
+			// analysis cannot prove an effect. The point is the fact list: /i and /c:
 			// are native-program flags and must never appear as directories.
-			wantDirs: []string{`<EXT>\d.txt`, `<EXT>\from-classifier`},
+			wantDirs: []string{`<EXT>\d.txt`},
 			note:     "leading-slash flag tokens are excluded by the PowerShell dialect policy",
 		},
 	}
@@ -55,7 +54,7 @@ func TestShellAssessmentConformancePowerShell(t *testing.T) {
 	for _, tc := range powershellConformanceCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			command := dirs.expand(tc.command)[0]
-			got := conformanceMods(dirs.ext).assessShellCommand(tc.tool, pathutil.FlavorPowerShell, command, nil, dirs.ws)
+			got := conformanceMods().assessShellCommand(tc.tool, pathutil.FlavorPowerShell, command, nil, dirs.ws)
 
 			require.Equal(t, tc.want, got.Effect, "effect for %q", command)
 			require.Equal(t, slashSet(dirs.expand(tc.wantDirs...)), slashSet(got.KnownDirs),
@@ -69,9 +68,6 @@ func TestShellAssessmentScriptFilePayloadConformancePowerShell(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := &Mods{
 		Config: testConfigForWorkingDir(dirs.ws),
-		shellAnalyzer: func(string, string) approval.CommandAssessment {
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	script := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python check.py", nil, dirs.ws)

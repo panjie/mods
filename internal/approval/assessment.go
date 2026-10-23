@@ -28,10 +28,15 @@ type CommandShape struct {
 // process invocation. Approval policy is derived from it and never stored in
 // the assessment itself.
 type CommandAssessment struct {
-	// StaticRead is set only by deterministic analysis, never by the LLM.
+	Evidence      Evidence
+	WriteCoverage TargetCoverage
+	Gaps          []AssessmentGap
+	// StaticRead is set only by deterministic analysis.
 	StaticRead bool
 	Effect     CommandEffect
 	KnownDirs  []string
+	// WritePaths retains leaf operands until the app resolves filesystem links.
+	WritePaths []string
 	// ProviderWriteTargets records non-filesystem PowerShell provider paths.
 	// They are exact review targets but never become filesystem DirAllow rules.
 	ProviderWriteTargets []string
@@ -69,10 +74,12 @@ func UnknownCommandAssessment() CommandAssessment {
 // boundary. Unknown effects intentionally map to write.
 func (assessment CommandAssessment) AccessIntent() AccessIntent {
 	class := AccessWrite
-	if assessment.Effect == EffectRead {
+	if assessment.Effect == EffectRead && assessment.Evidence != EvidenceUnknown {
 		class = AccessRead
 	}
 	return AccessIntent{
+		WriteCoverage:           assessment.WriteCoverage,
+		Gaps:                    append([]AssessmentGap(nil), assessment.Gaps...),
 		Class:                   class,
 		Dirs:                    append([]string(nil), assessment.KnownDirs...),
 		ProviderWriteTargets:    append([]string(nil), assessment.ProviderWriteTargets...),
@@ -87,8 +94,8 @@ func (assessment CommandAssessment) AccessIntent() AccessIntent {
 
 // AssessShellStaticWithPolicy parses command exactly once and derives every
 // deterministic fact available from that syntax tree. Unknown effects are
-// intentionally left for the app-layer LLM completion step. The cwd-less
-// form cannot resolve Git repository directories; callers that know the
+// retained and require ordinary approval. The cwd-less form cannot resolve
+// Git repository directories; callers that know the
 // execution directory should use AssessShellStaticWithContext.
 func AssessShellStaticWithPolicy(command string, posix bool, policy ReadOnlyCommandPolicy) CommandAssessment {
 	return AssessShellStaticWithContext(command, posix, policy, "")
@@ -111,6 +118,20 @@ func AssessShellStaticWithContext(command string, posix bool, policy ReadOnlyCom
 		result = assessPowerShellStatic(command, policy, cwd)
 	}
 	result.StaticRead = result.Effect == EffectRead
+	if result.Effect != EffectUnknown {
+		result.Evidence = EvidenceStatic
+	}
+	if result.Effect == EffectRead && len(policy.Commands) > 0 {
+		var baseline CommandAssessment
+		if posix {
+			baseline = assessPOSIXStatic(command, ReadOnlyCommandPolicy{}, cwd)
+		} else {
+			baseline = assessPowerShellStatic(command, ReadOnlyCommandPolicy{}, cwd)
+		}
+		if baseline.Effect != EffectRead {
+			result.Evidence = EvidenceTrust
+		}
+	}
 	return result
 }
 
@@ -142,6 +163,7 @@ func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string)
 		}
 	}
 	if readOnly {
+		result.WriteCoverage = CoverageComplete
 		result.Effect = EffectRead
 		result.KnownDirs = posixAccessArguments(file)
 		result.Reason = "read-only command (AST analysis)"
@@ -154,6 +176,7 @@ func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string)
 		result.KnownDirs = dedupeSorted(dirs)
 		result.Reason = "write command (static analysis from POSIX AST)"
 	}
+	assessPOSIXCoverage(&result, file, policy)
 	return result
 }
 
@@ -253,6 +276,10 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 		result.Effect = EffectWrite
 		result.KnownDirs = dirs
 		result.Reason = "write command (PowerShell AST static analysis)"
+	}
+	assessPowerShellCoverage(&result, ir, policy)
+	if result.Effect != EffectUnknown {
+		result.Evidence = EvidenceStatic
 	}
 	return result
 }

@@ -23,7 +23,7 @@ func TestElevatedToolDispatchStillRequiresApproval(t *testing.T) {
 				cfg := defaultConfig()
 				cfg.WorkingDir, cfg.ReviewMode, cfg.InteractiveTTYAvailable = cwd, mode, false
 				m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
-				m.shellAnalyzer = func(string, string) approval.CommandAssessment { return approval.UnknownCommandAssessment() }
+
 				registry := toolregistry.NewRegistry()
 				called := false
 				require.NoError(t, registry.Register(toolregistry.Tool{
@@ -69,7 +69,7 @@ func TestElevationPreservesTargetRulesAndReadPolicy(t *testing.T) {
 			{"always ignores rule", ReviewAlways, approval.EffectWrite, true, false},
 		} {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				assessment := approval.CommandAssessment{Effect: tc.effect, KnownDirs: []string{cwd}}
+				assessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: tc.effect, KnownDirs: []string{cwd}}
 				plain := buildAccessIntent(name, []byte(`{}`), registry, &assessment)
 				elevated := buildAccessIntent(name, []byte(`{"elevated":true}`), registry, &assessment)
 				require.Equal(t, plain, elevated)
@@ -90,7 +90,7 @@ func TestElevationPreservesTargetRulesAndReadPolicy(t *testing.T) {
 
 func TestElevationVisibleInReview(t *testing.T) {
 	for _, name := range []string{"process_run", "powershell_run", "shell_run"} {
-		p := formatReviewPresentationWithIntent(name, []byte(`{"command":"powercfg /h off","program":"powercfg","args":["/h","off"],"elevated":true}`), approval.UnknownCommandAssessment(), Scope{}, AccessIntent{Class: AccessWrite})
+		p := formatReviewPresentationWithIntent(name, []byte(`{"command":"powercfg /h off","program":"powercfg","args":["/h","off"],"elevated":true}`), approval.UnknownCommandAssessment(), Scope{}, AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite})
 		require.Contains(t, p.rows, interactionRow{Label: "Elevation", Value: "Windows UAC administrator privileges (this command only)"})
 	}
 }

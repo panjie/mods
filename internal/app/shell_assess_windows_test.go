@@ -35,10 +35,6 @@ func TestAnalyzeShellCommandPowerShellUserProfileDoesNotInventPlaceholder(t *tes
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `Select-String -Path "$env:USERPROFILE\.config\mods\mods.yml" -Pattern "default-api|default-model|base-url|model" | Select-Object -First 20`
 
@@ -56,10 +52,6 @@ func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkingDirRead(t *testing.T
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `Get-ChildItem -Recurse -Include *.go | Where-Object { $_.FullName -notmatch '\\(vendor|\.git|bin)\\' } | Get-Content | Measure-Object -Line | Select-Object -ExpandProperty Lines`
 
@@ -75,10 +67,6 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `$prof = $PROFILE.CurrentUserCurrentHost; $dir = Split-Path $prof; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }; Set-Content -Path $prof -Value "Invoke-Expression (&starship init powershell)" -Encoding UTF8`
 
@@ -104,15 +92,12 @@ func TestAssessCommandPowerShellLiteralVariableReadResolvesConcreteDir(t *testin
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads emacs init content"}
-		},
 	}
 	cmd := `$p="C:\Users\Test\AppData\Roaming\.emacs.d\init.el"; $c=Get-Content $p -Raw; "=== ensure line present: $($c.Contains('use-package-always-ensure t')) ==="; $c | Select-String -Pattern 'always-ensure' -AllMatches`
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a literal-assigned variable resolves to a concrete target")
 	require.Contains(t, assessment.KnownDirs, `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
@@ -124,10 +109,6 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := "$p=\"C:\\Users\\Test\\AppData\\Roaming\\.emacs.d\\init.el\"\n$c=Get-Content $p -Raw\n$new_block=@'\n(require 'package)\n(setq package-archives '((\"gnu\" . \"https://mirrors.tuna.tsinghua.edu.cn/elpa/gnu/\")))\n(package-initialize)\n'@\n$c=$c.Replace(\"old\", $new_block)\nSet-Content -Path $p -Value $c -Encoding UTF8\n\"written\""
 
@@ -151,10 +132,6 @@ func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testin
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `$suffix='\..\outside'; $p='` + cwd + `\init.el'+$suffix; Set-Content -Path $p -Value x`
 
@@ -172,10 +149,6 @@ func TestAssessCommandPowerShellLiteralVariableWorkingDirReadAutoAllows(t *testi
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for a statically-proven read: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `$p = "` + cwd + `\init.el"; Get-Content $p | Select-Object -Skip 83 -First 5`
 
@@ -199,10 +172,6 @@ func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testi
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for a statically-proven read: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	external := `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`
 	cmd := `$p = "` + external + `"; Get-Content $p | Select-Object -Skip 83 -First 5`
@@ -223,10 +192,6 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Set-Content -Path $PROFILE -Value "Import-Module foo"`)
 
@@ -244,12 +209,12 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
 	))
-	require.NotEmpty(t, candidateRulesForIntent(
+	require.Empty(t, candidateRulesForIntent(
 		assessment.AccessIntent(),
 		scope,
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
-	), "the concrete dir must make the approval rule-saveable")
+	), "a materialized parent alone does not bind the runtime leaf")
 }
 
 func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *testing.T) {
@@ -258,19 +223,13 @@ func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *t
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{
-				Effect: approval.EffectRead,
-				Reason: "inspects PowerShell profile paths and WinGet links",
-			}
-		},
 	}
 	cmd := `Write-Output "=== All profile paths ==="; $PROFILE | Format-List *; Write-Output "=== Which exist? ==="; $PROFILE.PSObject.Properties | ForEach-Object { $v = $_.Value; "{0,-45} exists={1}" -f $v, (Test-Path $v) }; Write-Output "=== WinGet links dir (shim check) ==="; Get-ChildItem "C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links" -ErrorAction SilentlyContinue | Select-Object Name`
 
 	got := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, got.Effect)
-	require.Equal(t, AccessRead, got.AccessIntent().Class)
+	require.Equal(t, approval.EffectUnknown, got.Effect)
+	require.Equal(t, AccessWrite, got.AccessIntent().Class)
 	require.Contains(t, got.DynamicTargets, `$v`)
 }
 
@@ -294,10 +253,6 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	tests := []struct {
 		command string
@@ -324,10 +279,6 @@ func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	command := `[PSCustomObject]@{ Path = $PROFILE.CurrentUserCurrentHost; Exists = Test-Path -LiteralPath $PROFILE.CurrentUserCurrentHost } | ConvertTo-Json -Compress`
 	assessment := m.assessCommand("powershell_run", command)
@@ -347,10 +298,6 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Get-Content -LiteralPath $env:AWS_SHARED_CREDENTIALS_FILE`)
 
@@ -371,10 +318,6 @@ func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	tests := []struct {
 		name    string
@@ -405,10 +348,6 @@ func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Test-Path $env:STARSHIP_CONFIG`)
 
@@ -429,10 +368,6 @@ func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Write-Output $PROFILE.CurrentUserCurrentHost`)
 
@@ -456,10 +391,6 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Get-ChildItem -Path "$env:SystemRoot\WinSxS" -Filter "*.dll" | Select-Object -First 3`)
 
@@ -482,17 +413,14 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads notes"}
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `$env:TEMP = "C:\Users\Test\Documents"; Get-Content "$env:TEMP\notes.txt"`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\notes.txt`, "an env reassignment must keep the target runtime-resolved")
 	require.Equal(t, []string{`C:\Users\Test\Documents`}, assessment.KnownDirs,
 		"the assigned literal is still extracted; the process TEMP location must not be substituted")
-	require.Equal(t, DecisionAllow, ClassifyAccess(
+	require.Equal(t, DecisionAsk, ClassifyAccess(
 		assessment.AccessIntent(),
 		WorkingDirScope(cwd),
 		nil,
@@ -506,10 +434,6 @@ func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) 
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Set-Content -Path "$env:TEMP\profile_init.el" -Value "x"`)
 
@@ -530,10 +454,6 @@ func TestAssessCommandPowerShellStableEnvWriteAssignmentKeepsDynamicTargets(t *t
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `$env:TEMP = "C:\Users\Test\Documents"; Set-Content -Path "$env:TEMP\foo.el" -Value "x"`)
 
@@ -546,10 +466,6 @@ func TestAssessCommandPowerShellSystemEnvironmentMutationKeepsDynamicTargets(t *
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	command := `[System.Environment]::SetEnvironmentVariable('TEMP', [IO.Path]::Combine($HOME, 'elsewhere'), 'Process'); Set-Content -Path "$env:TEMP\foo.el" -Value "x"`
 	assessment := m.assessCommand("powershell_run", command)
@@ -565,10 +481,6 @@ func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	assessment := m.assessCommand("powershell_run", `Resolve-Path $env:SystemRoot\WinSxS`)
 
@@ -655,10 +567,6 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	command := `Remove-Item "$env:TEMP\tts_test.wav","$env:TEMP\tts_en.wav","$env:TEMP\t_ja.wav","$env:TEMP\t_en.wav","$env:TEMP\t_auto2.wav" -ErrorAction SilentlyContinue; "cleaned"`
 
@@ -677,8 +585,8 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 	}
 	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)),
 		"the write is no longer classified as a dynamic mutation")
-	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
-		"a temp-dir write reaches the safe-dir allow cell instead of a dynamic-target review")
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
+		"flattened array operands need complete leaf binding before temp exemption")
 }
 
 func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T) {
@@ -689,10 +597,6 @@ func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T)
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	// Regression: the quoted env path inside ReadAllBytes("...") ends with
 	// `")`, which the use scanner used to treat as unbounded concatenation,
@@ -714,8 +618,8 @@ func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T)
 			"every affected path stays inside TEMP: %v", dirs)
 	}
 	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)))
-	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
-		"a temp-dir write whose every env reference expands to the safe directory matches the allow cell of the approval matrix")
+	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
+		"method side effects remain incomplete even with a materialized temp path")
 }
 
 func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.T) {
@@ -727,10 +631,6 @@ func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `Get-Content "$env:USERPROFILE\.emacs.d\init.el" -TotalCount 300 -ErrorAction SilentlyContinue`
 
@@ -751,15 +651,12 @@ func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "prints emacs init time"}
-		},
 	}
 	cmd := `emacs --batch --eval "(progn (message \"load-time: %s\" (emacs-init-time)) (kill-emacs))" 2>&1`
 
 	assessment := m.assessCommand("shell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "mis-parsed POSIX --eval fragments must not become dynamic targets")
 }
 
@@ -772,10 +669,6 @@ func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `Get-Content "$env:USERPROFILE\.emacs.d\init.el" -TotalCount 300 -ErrorAction SilentlyContinue`
 	args := []byte(`{"command":` + strconv.Quote(cmd) + `}`)
@@ -795,10 +688,6 @@ func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	assessment := m.assessCommand("powershell_run", `$env:Path -split ';' | Where-Object { $_ }`)
@@ -821,10 +710,6 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	assessment := m.assessCommand("powershell_run", `Write-Output $env:GITHUB_TOKEN`)
@@ -847,16 +732,12 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 func TestAssessProcessInvocationPowerShellFlagsAreNotPathFacts(t *testing.T) {
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(tool, input string) approval.CommandAssessment {
-			require.Equal(t, "process_run", tool)
-			return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "writes a registry value"}
-		},
 	}
 	invoke := `{"program":"reg.exe","args":["add","HKCU\\Software\\Classes\\*\\shell\\EditWithEmacs","/v","Icon","/d","C:\\tools\\emacs\\bin\\emacs.exe,0","/f"]}`
 
 	assessment := m.assessCommand("process_run", invoke)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	for _, flag := range []string{"/v", "/d", "/f"} {
 		require.NotContains(t, assessment.KnownDirs, flag,
 			"a native-program switch must not become a review target")
@@ -871,10 +752,6 @@ func TestAssessCommandPowerShellRegistryWriteStaysOutOfFilesystemRules(t *testin
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for known PowerShell writers: %s", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 	cmd := `New-Item -Path "HKCU:\Software\Classes\Neovide" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\Neovide" -Name "(Default)" -Value "Neovide Text Editor"; Get-ItemProperty "HKCU:\Software\Classes\Neovide" | Select-Object -ExpandProperty "(Default)"`
 
@@ -1012,31 +889,20 @@ func TestProcessLiteralPathFilterDropsPowerShellProviderTargets(t *testing.T) {
 	require.Equal(t, []string{`C:\real\file.txt`}, dirs)
 }
 
-// TestAssessShellCommandPowerShellDropsLeadingSlashClassifierDirs pins the
-// dialect policy for classifier-supplied directories, which bypass
-// shellExternalPathFacts: leading-slash guesses are native-program switches,
-// while a forward-slash UNC path remains a directory.
-func TestAssessShellCommandPowerShellDropsLeadingSlashClassifierDirs(t *testing.T) {
+// Native-program switches must not become filesystem targets.
+func TestAssessShellCommandPowerShellSwitchesAreNotPaths(t *testing.T) {
 	t.Cleanup(func() { approval.CloseBridge() })
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
-		shellAnalyzer: func(string, string) approval.CommandAssessment {
-			return approval.CommandAssessment{
-				Effect:    approval.EffectWrite,
-				KnownDirs: []string{"/out", "/d", "//server/share", `C:\real`},
-				Reason:    "classifier said write",
-			}
-		},
 	}
 
 	got := m.assessCommand("powershell_run", `custom-writer /out src.cs`)
 
-	require.Equal(t, approval.EffectWrite, got.Effect)
+	require.Equal(t, approval.EffectUnknown, got.Effect)
 	require.NotContains(t, got.KnownDirs, "/out")
 	require.NotContains(t, got.KnownDirs, "/d")
-	require.Contains(t, got.KnownDirs, "//server/share")
-	require.Contains(t, got.KnownDirs, `C:\real`)
+
 }
 
 func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
@@ -1045,9 +911,6 @@ func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads runtime-resolved path"}
-		},
 	}
 	cmd := `Get-Content -LiteralPath $env:APP_NOTES_FILE`
 	args := []byte(`{"command":` + strconv.Quote(cmd) + `}`)
@@ -1069,9 +932,6 @@ func TestAssessCommandPowerShellEncodingConstructorIsNotADynamicTarget(t *testin
 	cwd := t.TempDir()
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{cwd}, Reason: "classifier said write"}
-		},
 	}
 	// Regression: New-Object System.Text.UTF8Encoding($false) parses the
 	// constructor argument as "($false)", which used to surface as a bogus
@@ -1082,5 +942,5 @@ func TestAssessCommandPowerShellEncodingConstructorIsNotADynamicTarget(t *testin
 	assessment := m.assessCommand("powershell_run", cmd)
 
 	require.Empty(t, assessment.DynamicTargets, "a boolean constructor argument is never a runtime path")
-	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)))
+	require.Equal(t, "unknown effect and location", shellRiskLevel(assessment, WorkingDirScope(cwd)))
 }

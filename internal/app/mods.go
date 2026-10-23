@@ -13,7 +13,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	glamourstyles "charm.land/glamour/v2/styles"
-	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/selfhelp"
@@ -124,7 +123,7 @@ type Mods struct {
 	ctx context.Context
 
 	// ctxCancel cancels ctx. Invoked by quit() so every provider HTTP request,
-	// tool call, shell-classifier call, and approval/user-input select derived
+	// tool call, and approval/user-input select derived
 	// from ctx aborts promptly when the user quits (Ctrl+C) instead of leaking
 	// until process exit. Nil when *Mods is built without New (tests);
 	// cancelContext is nil-safe.
@@ -133,8 +132,6 @@ type Mods struct {
 	reviewer  *toolReviewer
 	userInput *userInputManager
 	secrets   *secrets.Store
-
-	shellAnalyzer func(tool, command string) approval.CommandAssessment
 
 	// skillCatalog contains installed skills from
 	// skills.ScanDirs(cfg.ResolveSkillsDirs()) at New() time.
@@ -169,7 +166,7 @@ func New(
 		return nil, fmt.Errorf("could not build self-help reference: %w", err)
 	}
 	// Derive a cancellable child of ctx so quit() can abort every in-flight
-	// provider HTTP request, tool call, shell-classifier call, and approval/
+	// provider HTTP request, tool call, and approval/
 	// user-input select (all descend from m.ctx) when the user quits. The
 	// parent ctx is untouched, so cancelling m.ctx does not affect any caller.
 	requestCtx, requestCancel := context.WithCancel(ctx)
@@ -508,7 +505,7 @@ func (m *Mods) addCancel(cancel context.CancelFunc) {
 }
 
 // cancelContext cancels the request context (m.ctx), aborting every in-flight
-// provider HTTP request, tool call, shell-classifier call, and approval/user-
+// provider HTTP request, tool call, and approval/user-
 // input select derived from it. Nil-safe so tests that build *Mods directly
 // (without New) can still call quit().
 func (m *Mods) cancelContext() {
@@ -549,7 +546,7 @@ func (m *Mods) closeActiveRunner() {
 
 func (m *Mods) quit() tea.Msg {
 	// Cancel the request context first so every in-flight provider HTTP
-	// request, tool call, shell-classifier call, and approval/user-input
+	// request, tool call, and approval/user-input
 	// select derived from m.ctx aborts immediately. This closes the window
 	// before setActiveRunner registers the stream runner, where
 	// closeActiveRunner and the cancelRequest slice are both still empty and

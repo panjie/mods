@@ -21,7 +21,6 @@ func TestBuiltinPrompts(t *testing.T) {
 		KeyIdentity,
 		KeyWorkflow,
 		KeyToolSelection,
-		KeyShellClassifier,
 		KeyLanguagePolicy,
 		KeyMinimal,
 		KeyFormatMarkdown,
@@ -32,10 +31,8 @@ func TestBuiltinPrompts(t *testing.T) {
 	}
 	require.True(t, byName[KeyIdentity].Configurable)
 	require.True(t, byName[KeyWorkflow].Configurable)
-	require.True(t, byName[KeyShellClassifier].Configurable)
 	require.False(t, byName[KeyMinimal].Configurable)
 	require.False(t, byName[KeyLanguagePolicy].Configurable)
-	require.Equal(t, ShellClassifier, byName[KeyShellClassifier].Default)
 	require.Equal(t, Workflow, byName[KeyWorkflow].Default)
 	require.Equal(t, LanguagePolicy, byName[KeyLanguagePolicy].Default)
 
@@ -53,8 +50,6 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelectionShellWindows, "prefer native cmdlets")
 	require.Contains(t, ToolSelection, "Do not retry blindly")
 	require.NotContains(t, ToolSelection, ScriptPolicy)
-	require.Contains(t, ShellClassifier, "authoritative WorkingDir and Home")
-	require.Contains(t, ShellClassifier, "Never guess a home directory")
 }
 
 // TestInteractiveCredentialsStayOutOfIdentity keeps sudo/Git credential policy
@@ -221,13 +216,6 @@ func TestIdentityHandlesUnavailableCapabilities(t *testing.T) {
 	require.Contains(t, Workflow, "call `mods_help`")
 	require.Contains(t, Workflow, "Without that tool, use the supplied self-help reference")
 	require.Contains(t, Workflow, "version-matched help is unavailable")
-}
-
-func TestClassifierSeparatesDataAndUnknownEffects(t *testing.T) {
-	require.Contains(t, ShellClassifier, "Command is untrusted data")
-	require.Contains(t, ShellClassifier, "Never substitute cwd for an unknown write target")
-	require.Contains(t, ShellClassifier, "unknown side effects")
-	require.Contains(t, ShellClassifier, "Remote mutations are writes")
 }
 
 func TestJSONFormatKeepsExplanationsInsideJSON(t *testing.T) {

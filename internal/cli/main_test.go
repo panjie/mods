@@ -1168,10 +1168,10 @@ func TestListPromptsOutputsBuiltinMarkdown(t *testing.T) {
 	output := captureStdout(t, listPrompts)
 
 	require.Contains(t, output, "## identity\n\n")
-	require.Contains(t, output, "## shell-classifier\n\n")
+	require.NotContains(t, output, "## shell-classifier\n\n")
 	require.Contains(t, output, "## temporary-directory-template\n\n")
 	require.Contains(t, output, "You are running inside mods")
-	require.Contains(t, output, "Analyze this shell command for review.")
+	require.NotContains(t, output, "Analyze this shell command for review.")
 }
 
 // TestNextBackupPathAvoidsOverwrite locks in the fix for resetSettings:

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -460,50 +461,89 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 			}
 		}
 		intent := buildAccessIntent(name, data, registry, assessment)
+		preparedAccess, prepareErr := registry.PrepareAccess(ctx, name, data)
+		if prepareErr != nil {
+			return proto.ToolResult{}, prepareErr
+		}
+		if preparedAccess != nil {
+			intent = preparedAccess.Intent
+		}
 		m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
 		scope := m.reviewer.scope
 		safeDirs := m.safeDirs()
 		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
 
-		// Inject authorized external directories so resolveAuthorizedPath honors
-		// approval. This applies whether or not review is skipped below: a
-		// saved DirAllow rule may auto-approve the call, but the tool still
-		// needs the authorization to touch the external path.
-		if ext := ExternalDirs(intent, scope, safeDirs); len(ext) > 0 {
+		prepared := preparedToolCall{name: name, args: append([]byte(nil), data...), intent: intent, assessment: assessment, filesystem: preparedAccess}
+		// No execution has started here. A changed native target receives a new
+		// review; a continuously changing target fails without retrying the tool.
+		for attempt := 0; ; attempt++ {
+			if err := m.reviewer.requestApproval(reviewerDeps{
+				ctx: m.ctx, shellExecution: registry.ShellExecution(name),
+				assessment: prepared.assessment, accessIntent: prepared.intent, safeDirs: safeDirs,
+				onDecision: func(trace approvalTrace) { approvalRecord = trace },
+			}, prepared.name, prepared.args); err != nil {
+				return proto.ToolResult{}, err
+			}
+			if err := prepared.filesystem.Revalidate(ctx); err != nil {
+				if !errors.Is(err, toolregistry.ErrStaleAccess) || attempt >= 1 {
+					return proto.ToolResult{}, err
+				}
+				fresh, err := registry.PrepareAccess(ctx, name, data)
+				if err != nil {
+					return proto.ToolResult{}, err
+				}
+				prepared.filesystem = fresh
+				prepared.intent = normalizeAccessIntentDirs(fresh.Intent, scope.Value, name, false)
+				continue
+			}
+			if prepared.assessment != nil && prepared.intent.DominantClass() == AccessWrite {
+				input := ExtractShellCommand(prepared.args)
+				if name == "process_run" {
+					input = string(prepared.args)
+				}
+				fresh := m.assessCommandAtCwd(name, input, extractSecretEnvNames(prepared.args), cwd)
+				if cwd != cfg.ResolveWorkingDir().Canonical {
+					fresh.KnownDirs = normalizeShellAffectedDirsForTool(fresh.KnownDirs, cwd, name)
+				}
+				if name == "process_run" {
+					fresh = m.constrainResolvedProcessAssessment(fresh, processBinding)
+				}
+				freshIntent := normalizeAccessIntentDirs(fresh.AccessIntent(), scope.Value, name, true)
+				if !reflect.DeepEqual(prepared.intent, freshIntent) {
+					if attempt >= 1 {
+						return proto.ToolResult{}, errors.New("command targets changed repeatedly during review")
+					}
+					prepared.assessment, prepared.intent = &fresh, freshIntent
+					continue
+				}
+			}
+			break
+		}
+		if ext := ExternalDirs(prepared.intent, scope, safeDirs); len(ext) > 0 {
 			ctx = toolregistry.WithAuthorizedDirs(ctx, ext)
 		}
-
-		// Every call goes through one policy entry point. requestApproval
-		// performs saved-rule and access-matrix evaluation and returns
-		// immediately for calls that do not need an interactive prompt.
-		if err := m.reviewer.requestApproval(reviewerDeps{
-			ctx:            m.ctx,
-			shellExecution: registry.ShellExecution(name),
-			assessment:     assessment,
-			accessIntent:   intent,
-			safeDirs:       safeDirs,
-			onDecision: func(trace approvalTrace) {
-				approvalRecord = trace
-			},
-		}, name, data); err != nil {
-			return proto.ToolResult{}, err
-		}
+		ctx = toolregistry.WithExecutionGrant(ctx, prepared.filesystem)
 		if registry.TimeoutPolicy(name) != toolregistry.TimeoutPolicySelf {
 			var executionCancel context.CancelFunc
 			ctx, executionCancel = context.WithTimeout(ctx, cfg.MCPTimeout)
 			defer executionCancel()
 		}
-		callData := data
+		callData := prepared.args
 		// cwd is read-only execution context, separately authorized from writes.
 		if name == "process_run" {
 			ctx = toolregistry.WithAuthorizedDirs(ctx, append(toolregistry.AuthorizedDirs(ctx), cwd))
 		}
 		if m.secrets != nil {
 			var err error
-			callData, _, err = m.secrets.Resolve(name, data)
+			callData, _, err = m.secrets.Resolve(prepared.name, prepared.args)
 			if err != nil {
 				return proto.ToolResult{}, err
 			}
+			bound, err := prepared.filesystem.BindResolvedArguments(ctx, callData)
+			if err != nil {
+				return proto.ToolResult{}, err
+			}
+			ctx = toolregistry.WithExecutionGrant(ctx, bound)
 		}
 		output, err := registry.CallResult(ctx, name, callData)
 		if m.secrets != nil {
@@ -558,4 +598,14 @@ func formatDebugDuration(duration time.Duration) string {
 		return "<1 ms"
 	}
 	return duration.Round(time.Millisecond).String()
+}
+
+// preparedToolCall is the common payload used by review and dispatch. Native
+// filesystem bindings add operation-specific canonical path snapshots.
+type preparedToolCall struct {
+	name       string
+	args       []byte
+	intent     approval.AccessIntent
+	assessment *approval.CommandAssessment
+	filesystem *toolregistry.PreparedAccess
 }

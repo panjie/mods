@@ -19,11 +19,11 @@ func TestReviewPresentationSemanticTones(t *testing.T) {
 		intent   AccessIntent
 		want     interactionTone
 	}{
-		{name: "delete", tool: "fs_delete_file", args: `{"path":"/cwd/file"}`, intent: AccessIntent{Class: AccessWrite}, want: interactionToneDanger},
-		{name: "external read", tool: "fs_read_file", args: `{"path":"/etc/hosts"}`, intent: AccessIntent{Class: AccessRead, Dirs: []string{"/etc"}}, want: interactionToneInfo},
-		{name: "cwd write", tool: "shell_run", args: `{"command":"touch file"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/cwd"}}, intent: AccessIntent{Class: AccessWrite, Dirs: []string{"/cwd"}}, want: interactionToneWarning},
-		{name: "remote write", tool: "shell_run", args: `{"command":"curl -X DELETE https://example.com/item"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, RemoteOrigins: []string{"https://example.com"}}, intent: AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://example.com"}}, want: interactionToneWarning},
-		{name: "sudo", tool: "shell_run", args: `{"command":"sudo rm /usr/local/bin/mods"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/usr/local/bin"}}, intent: AccessIntent{Class: AccessWrite, Dirs: []string{"/usr/local/bin"}}, want: interactionToneDanger},
+		{name: "delete", tool: "fs_delete_file", args: `{"path":"/cwd/file"}`, intent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite}, want: interactionToneDanger},
+		{name: "external read", tool: "fs_read_file", args: `{"path":"/etc/hosts"}`, intent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessRead, Dirs: []string{"/etc"}}, want: interactionToneInfo},
+		{name: "cwd write", tool: "shell_run", args: `{"command":"touch file"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/cwd"}}, intent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{"/cwd"}}, want: interactionToneWarning},
+		{name: "remote write", tool: "shell_run", args: `{"command":"curl -X DELETE https://example.com/item"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, RemoteOrigins: []string{"https://example.com"}}, intent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, RemoteOrigins: []string{"https://example.com"}}, want: interactionToneWarning},
+		{name: "sudo", tool: "shell_run", args: `{"command":"sudo rm /usr/local/bin/mods"}`, analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/usr/local/bin"}}, intent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{"/usr/local/bin"}}, want: interactionToneDanger},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,12 +60,12 @@ func TestReviewPresentationsStayConcise(t *testing.T) {
 				Shape:         approval.CommandShape{TopLevelActions: 4, Pipelines: 2},
 				Reviewability: approval.CommandReviewability{Level: approval.ReviewabilityCompound},
 			},
-			intent: AccessIntent{Class: AccessWrite, Dirs: []string{"/cwd"}}, maxRows: 2,
+			intent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{"/cwd"}}, maxRows: 2,
 		},
 		{
 			name: "process", tool: "process_run", args: `{"program":"rm","args":["out"]}`,
 			analysis: approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/cwd"}},
-			intent:   AccessIntent{Class: AccessWrite, Dirs: []string{"/cwd"}}, maxRows: 2,
+			intent:   AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{"/cwd"}}, maxRows: 2,
 		},
 		{name: "custom", tool: "mcp_custom", args: `{"query":"status","verbose":true}`, maxRows: 1},
 	}
@@ -94,7 +94,7 @@ func TestReviewPresentationWorkingDirRow(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			args := []byte(`{"command":"touch out","cwd":` + strconv.Quote(tt.cwd) + `}`)
-			got := formatReviewPresentationWithIntent("shell_run", args, approval.CommandAssessment{}, scope, AccessIntent{})
+			got := formatReviewPresentationWithIntent("shell_run", args, approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 			row := -1
 			for i, r := range got.rows {
 				if r.Label == "Working dir" {

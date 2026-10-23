@@ -181,7 +181,7 @@ func TestBuildRegistryFilesystemDoesNotAllowLoadedSkillDir(t *testing.T) {
 	args, err := json.Marshal(map[string]string{"path": target, "content": "not-safe"})
 	require.NoError(t, err)
 	_, err = reg.Call(context.Background(), "fs_write_file", args)
-	require.ErrorContains(t, err, "outside authorized directories")
+	require.ErrorIs(t, err, toolregistry.ErrMissingWriteGrant)
 }
 
 func TestBuildRegistryRegistersTodoWrite(t *testing.T) {

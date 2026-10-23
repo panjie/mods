@@ -128,7 +128,7 @@ func TestRegistry(t *testing.T) {
 		t.Fatal("expected duplicate tool registration to fail")
 	}
 
-	out, err := registry.Call(context.Background(), "echo", []byte(`{"ok":true}`))
+	out, err := callWithTestApproval(registry, context.Background(), "echo", []byte(`{"ok":true}`))
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestFilesystemToolsStayInsideRoot(t *testing.T) {
 		t.Fatalf("register filesystem: %v", err)
 	}
 
-	_, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"../outside.txt"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":"../outside.txt"}`))
 	if err == nil {
 		t.Fatal("expected path outside root to fail")
 	}
@@ -284,7 +284,7 @@ func TestUnknownToolErrorSuggestsCloseName(t *testing.T) {
 	})
 
 	t.Run("Call returns the same suggested error", func(t *testing.T) {
-		_, err := registry.Call(context.Background(), "powerRun", []byte(`{}`))
+		_, err := callWithTestApproval(registry, context.Background(), "powerRun", []byte(`{}`))
 		require.ErrorContains(t, err, `did you mean "powershell_run"?`)
 	})
 }
@@ -495,19 +495,19 @@ func TestShellTimeoutMSOverride(t *testing.T) {
 	require.NoError(t, RegisterShell(registry, ShellConfig{Root: root, Timeout: 2 * time.Second}))
 
 	t.Run("shorter than default times out", func(t *testing.T) {
-		_, err := registry.Call(context.Background(), "shell_run", []byte(`{"command":"sleep 1","timeout_ms":50}`))
+		_, err := callWithTestApproval(registry, context.Background(), "shell_run", []byte(`{"command":"sleep 1","timeout_ms":50}`))
 		require.ErrorContains(t, err, "timed out after")
 	})
 
 	t.Run("longer than default is honored", func(t *testing.T) {
 		registry := NewRegistry()
 		require.NoError(t, RegisterShell(registry, ShellConfig{Root: root, Timeout: 100 * time.Millisecond}))
-		_, err := registry.Call(context.Background(), "shell_run", []byte(`{"command":"sleep 0.5","timeout_ms":2000}`))
+		_, err := callWithTestApproval(registry, context.Background(), "shell_run", []byte(`{"command":"sleep 0.5","timeout_ms":2000}`))
 		require.NoError(t, err)
 	})
 
 	t.Run("non-positive rejected", func(t *testing.T) {
-		_, err := registry.Call(context.Background(), "shell_run", []byte(`{"command":"echo hi","timeout_ms":0}`))
+		_, err := callWithTestApproval(registry, context.Background(), "shell_run", []byte(`{"command":"echo hi","timeout_ms":0}`))
 		require.ErrorContains(t, err, "timeout_ms must be positive")
 	})
 }
@@ -532,7 +532,7 @@ func TestProcessRunValidationAndRuntimeInfo(t *testing.T) {
 
 	registry := NewRegistry()
 	require.NoError(t, RegisterRuntimeInfo(registry, root))
-	out, err := registry.Call(context.Background(), "runtime_info", []byte(`{"commands":["go","go","definitely-not-a-mods-command"]}`))
+	out, err := callWithTestApproval(registry, context.Background(), "runtime_info", []byte(`{"commands":["go","go","definitely-not-a-mods-command"]}`))
 	require.NoError(t, err)
 	var info runtimeInfoResult
 	require.NoError(t, json.Unmarshal([]byte(out), &info))
@@ -541,7 +541,7 @@ func TestProcessRunValidationAndRuntimeInfo(t *testing.T) {
 	require.NotEmpty(t, info.Shell.Executable)
 	require.True(t, info.Commands["go"].Found)
 	require.False(t, info.Commands["definitely-not-a-mods-command"].Found)
-	_, err = registry.Call(context.Background(), "runtime_info", []byte(`{"commands":["../go"]}`))
+	_, err = callWithTestApproval(registry, context.Background(), "runtime_info", []byte(`{"commands":["../go"]}`))
 	require.ErrorContains(t, err, "invalid command name")
 }
 
@@ -601,7 +601,7 @@ func TestSearchSkipsSymlinks(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	got, err := registry.Call(context.Background(), "fs_search", []byte(`{"path":".","query":"TOPSECRET"}`))
+	got, err := callWithTestApproval(registry, context.Background(), "fs_search", []byte(`{"path":".","query":"TOPSECRET"}`))
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -617,7 +617,7 @@ func TestFilesystemReadByLines(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	// 5-line file with lines "L1".."L5".
-	if _, err := registry.Call(context.Background(), "fs_write_file", []byte(`{"path":"f.txt","content":"L1\nL2\nL3\nL4\nL5\n"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_write_file", []byte(`{"path":"f.txt","content":"L1\nL2\nL3\nL4\nL5\n"}`)); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -636,7 +636,7 @@ func TestFilesystemReadByLines(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := registry.Call(context.Background(), "fs_read_file", []byte(tc.data))
+			got, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(tc.data))
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil (output=%q)", tc.wantErr, got)
@@ -676,7 +676,7 @@ func TestFilesystemReadByLinesTruncation(t *testing.T) {
 	}
 
 	// Default window (no end_line) -> truncates at defaultReadLines.
-	got, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"big.txt","start_line":1}`))
+	got, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":"big.txt","start_line":1}`))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -691,7 +691,7 @@ func TestFilesystemReadByLinesTruncation(t *testing.T) {
 	}
 
 	// Explicit end_line at EOF -> no truncation message.
-	got, err = registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"big.txt","start_line":1,"end_line":5}`))
+	got, err = callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":"big.txt","start_line":1,"end_line":5}`))
 	if err != nil {
 		t.Fatalf("read window: %v", err)
 	}
@@ -715,12 +715,12 @@ func TestFilesystemReadWriteSearch(t *testing.T) {
 		t.Fatalf("register filesystem: %v", err)
 	}
 
-	_, err := registry.Call(context.Background(), "fs_write_file", []byte(`{"path":"notes/a.txt","content":"alpha\nbeta\n"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_write_file", []byte(`{"path":"notes/a.txt","content":"alpha\nbeta\n"}`))
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
-	content, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"notes/a.txt"}`))
+	content, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":"notes/a.txt"}`))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -728,7 +728,7 @@ func TestFilesystemReadWriteSearch(t *testing.T) {
 		t.Fatalf("unexpected content: %q", content)
 	}
 
-	result, err := registry.Call(context.Background(), "fs_search", []byte(`{"path":".","query":"beta"}`))
+	result, err := callWithTestApproval(registry, context.Background(), "fs_search", []byte(`{"path":".","query":"beta"}`))
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -760,7 +760,7 @@ func TestFilesystemLargestFileKindIgnoresDirectoryEntries(t *testing.T) {
 		t.Fatalf("register filesystem: %v", err)
 	}
 
-	files, err := registry.Call(context.Background(), "fs_largest", []byte(`{"path":"Downloads","kind":"file","max_results":1}`))
+	files, err := callWithTestApproval(registry, context.Background(), "fs_largest", []byte(`{"path":"Downloads","kind":"file","max_results":1}`))
 	if err != nil {
 		t.Fatalf("largest files: %v", err)
 	}
@@ -771,7 +771,7 @@ func TestFilesystemLargestFileKindIgnoresDirectoryEntries(t *testing.T) {
 		t.Fatalf("file search must not return directory entries: %q", files)
 	}
 
-	dirs, err := registry.Call(context.Background(), "fs_largest", []byte(`{"path":"Downloads","kind":"dir","max_results":1}`))
+	dirs, err := callWithTestApproval(registry, context.Background(), "fs_largest", []byte(`{"path":"Downloads","kind":"dir","max_results":1}`))
 	if err != nil {
 		t.Fatalf("largest dirs: %v", err)
 	}
@@ -791,7 +791,7 @@ func TestFilesystemDeleteFileAndDirBoundaries(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir target dir: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_delete_file", []byte(`{"path":"target-dir"}`)); err == nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_delete_file", []byte(`{"path":"target-dir"}`)); err == nil {
 		t.Fatal("fs_delete_file must refuse directories")
 	}
 
@@ -799,7 +799,7 @@ func TestFilesystemDeleteFileAndDirBoundaries(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatalf("seed file: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_delete_file", []byte(`{"path":"target.txt"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_delete_file", []byte(`{"path":"target.txt"}`)); err != nil {
 		t.Fatalf("delete file: %v", err)
 	}
 	if _, err := os.Stat(file); !errors.Is(err, fs.ErrNotExist) {
@@ -813,13 +813,13 @@ func TestFilesystemDeleteFileAndDirBoundaries(t *testing.T) {
 	if err := os.WriteFile(nested, []byte("x"), 0o644); err != nil {
 		t.Fatalf("seed nested: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_delete_dir", []byte(`{"path":"non-empty"}`)); err == nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_delete_dir", []byte(`{"path":"non-empty"}`)); err == nil {
 		t.Fatal("non-recursive fs_delete_dir must refuse non-empty directories")
 	}
 	if _, err := os.Stat(nested); err != nil {
 		t.Fatalf("non-recursive delete should leave contents in place: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_delete_dir", []byte(`{"path":"non-empty","recursive":true}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_delete_dir", []byte(`{"path":"non-empty","recursive":true}`)); err != nil {
 		t.Fatalf("recursive delete dir: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "non-empty")); !errors.Is(err, fs.ErrNotExist) {
@@ -843,7 +843,7 @@ func TestFilesystemDeleteFileDeletesSymlinkItself(t *testing.T) {
 	if err := RegisterFilesystem(registry, FilesystemConfig{Root: root}); err != nil {
 		t.Fatalf("register filesystem: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_delete_file", []byte(`{"path":"link.txt"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_delete_file", []byte(`{"path":"link.txt"}`)); err != nil {
 		t.Fatalf("delete symlink: %v", err)
 	}
 	if _, err := os.Lstat(link); !errors.Is(err, fs.ErrNotExist) {
@@ -861,20 +861,20 @@ func TestFilesystemCopyMoveMkdir(t *testing.T) {
 		t.Fatalf("register filesystem: %v", err)
 	}
 
-	if _, err := registry.Call(context.Background(), "fs_mkdir", []byte(`{"path":"nested/out"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_mkdir", []byte(`{"path":"nested/out"}`)); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "source.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatalf("seed source: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"source.txt","dest_path":"nested/out"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_copy", []byte(`{"source_path":"source.txt","dest_path":"nested/out"}`)); err != nil {
 		t.Fatalf("copy file into dir: %v", err)
 	}
 	copied := filepath.Join(root, "nested", "out", "source.txt")
 	if got, err := os.ReadFile(copied); err != nil || string(got) != "hello" {
 		t.Fatalf("copied file content=%q err=%v", got, err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_move", []byte(`{"source_path":"nested/out/source.txt","dest_path":"renamed.txt"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_move", []byte(`{"source_path":"nested/out/source.txt","dest_path":"renamed.txt"}`)); err != nil {
 		t.Fatalf("move file: %v", err)
 	}
 	if got, err := os.ReadFile(filepath.Join(root, "renamed.txt")); err != nil || string(got) != "hello" {
@@ -890,16 +890,16 @@ func TestFilesystemCopyMoveMkdir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "tree", "sub", "data.txt"), []byte("tree"), 0o644); err != nil {
 		t.Fatalf("seed tree: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy"}`)); err == nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy"}`)); err == nil {
 		t.Fatal("directory copy must require recursive=true")
 	}
-	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree/backup","recursive":true}`)); err == nil || !strings.Contains(err.Error(), "inside itself") {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree/backup","recursive":true}`)); err == nil || !strings.Contains(err.Error(), "inside itself") {
 		t.Fatalf("directory copy into itself should fail, err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "tree", "backup")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("failed self-copy must not leave a partial destination, stat err=%v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy","recursive":true}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_copy", []byte(`{"source_path":"tree","dest_path":"tree-copy","recursive":true}`)); err != nil {
 		t.Fatalf("copy dir: %v", err)
 	}
 	if got, err := os.ReadFile(filepath.Join(root, "tree-copy", "sub", "data.txt")); err != nil || string(got) != "tree" {
@@ -923,7 +923,7 @@ func TestFilesystemApplyPatch(t *testing.T) {
 -old
 +new
 `
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	if err != nil {
 		t.Fatalf("apply patch: %v", err)
 	}
@@ -969,7 +969,7 @@ func TestFilesystemApplyPatchAcceptsCodexFormat(t *testing.T) {
 +new
 *** End Patch
 `
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(root, "nested", "added.txt"))
@@ -999,7 +999,7 @@ func TestFilesystemApplyPatchCodexFormatPreservesCRLF(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "crlf.txt"), []byte("alpha\r\nbeta\r\n"), 0o644))
 
 	patch := "*** Begin Patch\n*** Update File: crlf.txt\n@@\n alpha\n-beta\n+changed\n*** End Patch\n"
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(filepath.Join(root, "crlf.txt"))
@@ -1025,7 +1025,7 @@ func TestFilesystemApplyPatchCodexFormatIsAtomic(t *testing.T) {
 +changed
 *** End Patch
 `
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	require.Error(t, err)
 	content, readErr := os.ReadFile(path)
 	require.NoError(t, readErr)
@@ -1038,7 +1038,7 @@ func TestFilesystemApplyPatchCodexFormatRejectsTraversal(t *testing.T) {
 	require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
 
 	patch := "*** Begin Patch\n*** Add File: ../escape.txt\n+pwned\n*** End Patch\n"
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	require.ErrorContains(t, err, "outside authorized directories")
 	require.NoFileExists(t, filepath.Join(root, "..", "escape.txt"))
 }
@@ -1063,7 +1063,7 @@ func TestFilesystemReplace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal args: %v", err)
 	}
-	if _, err := registry.Call(context.Background(), "fs_replace", data); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_replace", data); err != nil {
 		t.Fatalf("replace text: %v", err)
 	}
 	content, err := os.ReadFile(path)
@@ -1093,7 +1093,7 @@ func TestFilesystemReplaceAllowsEmptyNewText(t *testing.T) {
 		t.Fatalf("seed file: %v", err)
 	}
 
-	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"beta\n","new_text":""}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"beta\n","new_text":""}`))
 	if err != nil {
 		t.Fatalf("delete text with empty replacement: %v", err)
 	}
@@ -1118,7 +1118,7 @@ func TestFilesystemReplaceReportsUnchangedWithoutWriting(t *testing.T) {
 			require.NoError(t, err)
 			registry := NewRegistry()
 			require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
-			out, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"alpha\n","new_text":"alpha\n"}`))
+			out, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"alpha\n","new_text":"alpha\n"}`))
 			require.NoError(t, err)
 			require.Contains(t, out, "No changes")
 			require.Contains(t, out, "matched 1 occurrence")
@@ -1143,7 +1143,7 @@ func TestFilesystemReplaceRequiresUniqueOldText(t *testing.T) {
 		t.Fatalf("seed file: %v", err)
 	}
 
-	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"same\n","new_text":"once\n"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"same\n","new_text":"once\n"}`))
 	if err == nil {
 		t.Fatal("expected duplicate old_text to fail")
 	}
@@ -1158,7 +1158,7 @@ func TestFilesystemReplaceRequiresUniqueOldText(t *testing.T) {
 		t.Fatalf("file changed after failed replace: %q", content)
 	}
 
-	_, err = registry.Call(context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"missing","new_text":"x"}`))
+	_, err = callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"a.txt","old_text":"missing","new_text":"x"}`))
 	if err == nil {
 		t.Fatal("expected missing old_text to fail")
 	}
@@ -1174,7 +1174,7 @@ func TestFilesystemReplaceMatchesLFTextInCRLFFile(t *testing.T) {
 	path := filepath.Join(root, "crlf.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbeta\r\ngamma\r\n"), 0o644))
 
-	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"beta\ngamma\n","new_text":"delta\nepsilon\n"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"beta\ngamma\n","new_text":"delta\nepsilon\n"}`))
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(path)
@@ -1189,7 +1189,7 @@ func TestFilesystemReplaceMatchesCRLFTextInLFFile(t *testing.T) {
 	path := filepath.Join(root, "lf.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o644))
 
-	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"lf.txt","old_text":"beta\r\ngamma\r\n","new_text":"delta\r\nepsilon\r\n"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"lf.txt","old_text":"beta\r\ngamma\r\n","new_text":"delta\r\nepsilon\r\n"}`))
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(path)
@@ -1204,7 +1204,7 @@ func TestFilesystemReplaceKeepsCRLFEndingsForNewText(t *testing.T) {
 	path := filepath.Join(root, "crlf.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbeta\r\ngamma\r\n"), 0o644))
 
-	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"beta\r\n","new_text":"delta\n"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"beta\r\n","new_text":"delta\n"}`))
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(path)
@@ -1219,7 +1219,7 @@ func TestFilesystemReplaceNormalizedMatchStillRequiresUniqueText(t *testing.T) {
 	path := filepath.Join(root, "crlf.txt")
 	require.NoError(t, os.WriteFile(path, []byte("same\r\nsame\r\n"), 0o644))
 
-	_, err := registry.Call(context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"same\n","new_text":"once\n"}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_replace", []byte(`{"path":"crlf.txt","old_text":"same\n","new_text":"once\n"}`))
 	require.ErrorContains(t, err, "matched 2 times")
 
 	content, readErr := os.ReadFile(path)
@@ -1234,7 +1234,7 @@ func TestFilesystemReplaceRoundTripFromLineReadOnCRLF(t *testing.T) {
 	path := filepath.Join(root, "crlf.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbeta\r\ngamma\r\n"), 0o644))
 
-	read, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":"crlf.txt","start_line":2,"end_line":3}`))
+	read, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":"crlf.txt","start_line":2,"end_line":3}`))
 	require.NoError(t, err)
 	lines := strings.Split(read, "\n")
 	oldText := strings.TrimPrefix(lines[0], "2: ") + "\n" + strings.TrimPrefix(lines[1], "3: ") + "\n"
@@ -1242,7 +1242,7 @@ func TestFilesystemReplaceRoundTripFromLineReadOnCRLF(t *testing.T) {
 
 	args, err := json.Marshal(map[string]string{"path": "crlf.txt", "old_text": oldText, "new_text": "delta\n"})
 	require.NoError(t, err)
-	_, err = registry.Call(context.Background(), "fs_replace", args)
+	_, err = callWithTestApproval(registry, context.Background(), "fs_replace", args)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(path)
@@ -1261,7 +1261,7 @@ func TestFilesystemApplyPatchRecountsHunkHeaders(t *testing.T) {
 	}
 
 	patch := "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n+more\n"
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	if err != nil {
 		t.Fatalf("apply patch with stale hunk count: %v", err)
 	}
@@ -1287,7 +1287,7 @@ func TestFilesystemApplyPatchRefusesSymlink(t *testing.T) {
 	}
 	for name, patch := range symlinkPatches {
 		t.Run(name, func(t *testing.T) {
-			_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 			if err == nil {
 				t.Fatal("expected symlink patch to be refused")
 			}
@@ -1314,7 +1314,7 @@ func TestFilesystemApplyPatchRejectsTraversal(t *testing.T) {
 
 	// A patch that tries to write outside the cwd via a literal `..` path.
 	patch := "--- a/../outside.txt\n+++ b/../outside.txt\n@@ -0,0 +1 @@\n+pwned\n"
-	_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+	_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 	if err == nil {
 		t.Fatal("expected traversal patch to be rejected")
 	}
@@ -1344,7 +1344,7 @@ func TestFilesystemApplyPatchRejectsQuotedTraversal(t *testing.T) {
 	}
 	for name, patch := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 			if err == nil {
 				t.Fatal("expected quoted-path traversal patch to be rejected")
 			}
@@ -1368,7 +1368,7 @@ func TestFilesystemApplyPatchAcceptsQuotedLegitPath(t *testing.T) {
 	// Modify an existing file whose name contains a space; git emits such
 	// paths C-quoted. The validator must accept the quoted path.
 	patch := "--- \"a/with space.txt\"\n+++ \"b/with space.txt\"\n@@ -1 +1 @@\n-old\n+new\n"
-	if _, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`)); err != nil {
 		t.Fatalf("legitimate quoted path with space must be accepted: %v", err)
 	}
 }
@@ -1391,7 +1391,7 @@ func TestFilesystemApplyPatchRejectsRenameTraversal(t *testing.T) {
 	}
 	for name, patch := range patches {
 		t.Run(name, func(t *testing.T) {
-			_, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			_, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
 			if err == nil {
 				t.Fatal("expected rename/copy traversal patch to be rejected")
 			}
@@ -1415,7 +1415,7 @@ func TestFilesystemApplyPatchAcceptsTabbedTimestamp(t *testing.T) {
 	// `git apply` accepts a TAB followed by a timestamp on +++/--- lines.
 	// Validation must strip that suffix, not reject the patch.
 	patch := "--- a/a.txt\t2024-01-01 12:00:00 +0000\n+++ b/a.txt\t2024-01-02 12:00:00 +0000\n@@ -1 +1 @@\n-old\n+new\n"
-	if _, err := registry.Call(context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`)); err != nil {
 		t.Fatalf("apply patch with timestamps: %v", err)
 	}
 }
@@ -1504,7 +1504,7 @@ func TestPowerShellRun(t *testing.T) {
 	}
 
 	t.Run("runs basic command", func(t *testing.T) {
-		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"Write-Output ok"}`))
+		out, err := callWithTestApproval(registry, context.Background(), "powershell_run", []byte(`{"command":"Write-Output ok"}`))
 		if err != nil {
 			t.Fatalf("call: %v", err)
 		}
@@ -1514,7 +1514,7 @@ func TestPowerShellRun(t *testing.T) {
 	})
 
 	t.Run("round-trips non-ASCII output", func(t *testing.T) {
-		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"Write-Output '项目-测试'"}`))
+		out, err := callWithTestApproval(registry, context.Background(), "powershell_run", []byte(`{"command":"Write-Output '项目-测试'"}`))
 		if err != nil {
 			t.Fatalf("call: %v", err)
 		}
@@ -1524,7 +1524,7 @@ func TestPowerShellRun(t *testing.T) {
 	})
 
 	t.Run("runs variables and pipelines without nested quoting", func(t *testing.T) {
-		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"1,2,3 | Where-Object { $_ -gt 1 } | Measure-Object | Select-Object -ExpandProperty Count"}`))
+		out, err := callWithTestApproval(registry, context.Background(), "powershell_run", []byte(`{"command":"1,2,3 | Where-Object { $_ -gt 1 } | Measure-Object | Select-Object -ExpandProperty Count"}`))
 		if err != nil {
 			t.Fatalf("call: %v", err)
 		}
@@ -1534,7 +1534,7 @@ func TestPowerShellRun(t *testing.T) {
 	})
 
 	t.Run("returns typed error and output for nonzero exit", func(t *testing.T) {
-		out, err := registry.Call(context.Background(), "powershell_run", []byte(`{"command":"Write-Output before; exit 7"}`))
+		out, err := callWithTestApproval(registry, context.Background(), "powershell_run", []byte(`{"command":"Write-Output before; exit 7"}`))
 		if err == nil {
 			t.Fatal("expected exit error")
 		}
@@ -1953,7 +1953,7 @@ func TestFilesystemToolsAcceptWorkingDirSymlinkAlias(t *testing.T) {
 	}
 
 	target := filepath.Join(aliasRoot, "lisp", "init.el")
-	got, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`))
+	got, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`))
 	if err != nil {
 		t.Fatalf("read via cwd symlink alias must succeed: %v", err)
 	}
@@ -1962,7 +1962,7 @@ func TestFilesystemToolsAcceptWorkingDirSymlinkAlias(t *testing.T) {
 	}
 
 	writeTarget := filepath.Join(aliasRoot, "lisp", "new.el")
-	if _, err := registry.Call(context.Background(), "fs_write_file", []byte(`{"path":`+strconv.Quote(writeTarget)+`,"content":"new"}`)); err != nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_write_file", []byte(`{"path":`+strconv.Quote(writeTarget)+`,"content":"new"}`)); err != nil {
 		t.Fatalf("write via cwd symlink alias must succeed: %v", err)
 	}
 	if data, err := os.ReadFile(filepath.Join(realRoot, "lisp", "new.el")); err != nil || string(data) != "new" {
@@ -1989,7 +1989,7 @@ func TestResolveAuthorizedPathStillRejectsExternalViaSymlinkAlias(t *testing.T) 
 		t.Fatalf("register: %v", err)
 	}
 	target := filepath.Join(aliasExternal, "secret.txt")
-	if _, err := registry.Call(context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`)); err == nil {
+	if _, err := callWithTestApproval(registry, context.Background(), "fs_read_file", []byte(`{"path":`+strconv.Quote(target)+`}`)); err == nil {
 		t.Fatal("read through symlink alias of external dir must fail without approval")
 	}
 }

@@ -42,6 +42,7 @@ type ToolCapabilities struct {
 
 // Tool is a registered executable tool.
 type Tool struct {
+	PrepareAccess func(context.Context, json.RawMessage) (*PreparedAccess, error)
 	// Validate checks structured arguments without executing or mutating state.
 	Validate        func(json.RawMessage) error
 	Spec            proto.ToolSpec

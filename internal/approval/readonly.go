@@ -92,7 +92,7 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 	if policy.matchesPOSIX(name) {
 		return true, policy.reason(name)
 	}
-	if name != "env" && name != "xxd" && readOnlyCommands[name] {
+	if name != "env" && name != "xxd" && name != "uniq" && readOnlyCommands[name] {
 		return true, "read-only command: " + name
 	}
 	args := shellWordsForAccess(call.Args)
@@ -133,6 +133,9 @@ func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool
 		return envInvocationReadOnly(args[1:], policy)
 	}
 	switch name {
+	case "uniq", "xxd":
+		operands, reverse, ok := textOutputOperands(name, args[1:])
+		return ok && !reverse && len(operands) < 2, "read-only text output"
 	case "find":
 		if findInvocationReadOnly(args[1:]) {
 			return true, "read-only command: find"
@@ -492,6 +495,10 @@ func readOnlySubcommandInvocation(name string, args []string) bool {
 	if name == "git" && gitDiscoveryReadOnly(args) {
 		return true
 	}
+	if name == "git" && args[0] == "reflog" {
+		// Explicit query forms only; expire/delete/drop/write mutate refs.
+		return len(args) == 1 || args[1] == "show" && !hasAnyArg(args[2:], "--output", "--ext-diff", "--textconv")
+	}
 	subcommands, ok := subcommandReadOnly[name]
 	if !ok {
 		return false
@@ -683,7 +690,7 @@ var readOnlyCommands = map[string]bool{
 	"join": true,
 	// Shell builtins that only affect shell state, never the filesystem.
 	// Recognising cd as read-only lets the common "cd /path && cmd" pattern
-	// pass the static classifier instead of falling through to the LLM.
+	// be recognized by deterministic static analysis.
 	"cd": true,
 }
 

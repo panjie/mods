@@ -282,7 +282,7 @@ This sends one real search request; ordinary tests do not call the service.
 
 ## Safety & Review
 
-Reads are free: Mods runs read-only operations without review, including reads
+Reads proven by static analysis or explicitly trusted configuration run without review, including reads
 from any local directory and reads whose path is resolved only at runtime.
 Writes are reviewed by target by default.
 
@@ -307,11 +307,16 @@ Review: Run: rm -f /path/to/project/demo.gif
 - `Ctrl+C` — cancel the whole run
 
 `Allow for session` is available only when every write target can be identified.
-Dynamic or otherwise unknown write targets can be allowed once, but cannot be
-saved. Remote rules use a credential-free origin such as
+Unknown effects or incomplete write targets can be allowed once, but cannot be
+saved. Finding one path does not bound the rest of a command. Command assessment
+uses deterministic analysis; no LLM classifier is involved. Remote rules use a credential-free origin such as
 `https://api.example.com` or `ssh://github.com`; paths, queries, fragments, and
 credentials never appear in the saved rule. Writes confined to Mods' safe
-temporary directories do not require review.
+temporary directories do not require review only when the complete write scope
+is proven. A script's location does not authorize its effects. Native file writes
+are approved against real paths, including symlink/junction targets, and are
+rechecked before execution. Git reviews include all known push destinations;
+unmodeled hooks or helpers require approval for each call.
 
 Write targets that still depend on runtime expansion (for example PowerShell's
 `$PROFILE` or a URL stored in a variable) are shown as dynamic and can only be
@@ -599,10 +604,13 @@ copy the one you want to customize:
 
 ```yaml
 prompts:
-  shell-classifier: |
-    Analyze this shell command for review.
-    Return only strict JSON.
+  workflow: |
+    Follow the task through implementation and verification.
+    Explain the result and any remaining uncertainty.
 ```
+
+The removed `prompts.shell-classifier` and `shell-classify-prompt` settings are
+ignored in existing configuration files and can be deleted.
 
 ## Images, Audio, and Video
 

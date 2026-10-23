@@ -76,7 +76,7 @@ func parseDownloads(root string, data json.RawMessage) (downloadArgs, error) {
 
 // RegisterDownload uses the same path authorization as filesystem tools.
 func RegisterDownload(registry *Registry, cfg FilesystemConfig) error {
-	return registry.Register(Tool{
+	return registry.Register(withPreparedFilesystem(Tool{
 		TimeoutPolicy: TimeoutPolicySelf,
 		Kind:          ToolKindBuiltin,
 		Capabilities:  ToolCapabilities{Mutable: true},
@@ -86,7 +86,7 @@ func RegisterDownload(registry *Registry, cfg FilesystemConfig) error {
 			if err != nil {
 				return approval.AccessIntent{Class: approval.AccessWrite, UncertainEffect: true}
 			}
-			intent := approval.AccessIntent{WriteDirs: []string{}, ReadOrigins: []string{}}
+			intent := approval.AccessIntent{WriteCoverage: approval.CoverageComplete, WriteDirs: []string{}, ReadOrigins: []string{}}
 			for _, item := range args.Files {
 				intent.WriteDirs = append(intent.WriteDirs, filepath.Dir(item.Path))
 				u, _ := url.Parse(item.URL)
@@ -103,7 +103,7 @@ func RegisterDownload(registry *Registry, cfg FilesystemConfig) error {
 			}, "files"),
 		},
 		Call: func(ctx context.Context, data json.RawMessage) (string, error) { return runDownloads(ctx, cfg, data) },
-	})
+	}, cfg.Root, cfg.SafeDirs))
 }
 
 func runDownloads(ctx context.Context, cfg FilesystemConfig, data json.RawMessage) (string, error) {

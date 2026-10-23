@@ -25,7 +25,7 @@ func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval
 		}
 		_ = json.Unmarshal(data, &args)
 		if args.Path == "" {
-			return approval.AccessIntent{Class: class}
+			return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: class}
 		}
 		var dir string
 		if readOnly {
@@ -34,7 +34,7 @@ func pathParentIntent(root string, readOnly bool) func(json.RawMessage) approval
 			p := pathutil.NormalizePath(args.Path, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
 			dir = pathutil.ParentDir(p)
 		}
-		return approval.AccessIntent{Class: class, Dirs: []string{dir}}
+		return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: class, Dirs: []string{dir}}
 	}
 }
 
@@ -84,7 +84,7 @@ func patchIntent(root string) func(json.RawMessage) approval.AccessIntent {
 				dirs = append(dirs, d)
 			}
 		}
-		return approval.AccessIntent{Class: approval.AccessWrite, Dirs: dirs}
+		return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: approval.AccessWrite, Dirs: dirs}
 	}
 }
 
@@ -95,10 +95,10 @@ func pathSelfIntent(root string, class approval.AccessClass) func(json.RawMessag
 		}
 		_ = json.Unmarshal(data, &args)
 		if args.Path == "" {
-			return approval.AccessIntent{Class: class}
+			return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: class}
 		}
 		path := pathutil.NormalizePath(args.Path, pathutil.DefaultOptions(root, pathutil.FlavorPOSIX))
-		return approval.AccessIntent{Class: class, Dirs: []string{path}}
+		return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: class, Dirs: []string{path}}
 	}
 }
 
@@ -117,7 +117,7 @@ func filesystemCopyIntent(root string) func(json.RawMessage) approval.AccessInte
 		if dest := destIntentDir(root, args.SourcePath, args.DestPath); dest != "" {
 			writes = append(writes, dest)
 		}
-		return approval.AccessIntent{ReadDirs: reads, WriteDirs: writes}
+		return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, ReadDirs: reads, WriteDirs: writes}
 	}
 }
 
@@ -132,7 +132,7 @@ func filesystemMoveIntent(root string) func(json.RawMessage) approval.AccessInte
 		seen := map[string]struct{}{}
 		addIntentDir(&dirs, seen, sourceIntentDir(root, args.SourcePath))
 		addIntentDir(&dirs, seen, destIntentDir(root, args.SourcePath, args.DestPath))
-		return approval.AccessIntent{Class: approval.AccessWrite, Dirs: dirs}
+		return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: approval.AccessWrite, Dirs: dirs}
 	}
 }
 

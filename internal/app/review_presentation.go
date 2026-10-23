@@ -94,6 +94,17 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 	if intent.HasAccess() && intent.DominantClass() == AccessRead && result.tone == interactionToneWarning {
 		result.tone, result.toneText = interactionToneInfo, "Info"
 	}
+	if intent.DominantClass() == AccessWrite {
+		if !intent.HasCompleteWriteTargets() {
+			result.rows = append(result.rows, interactionRow{Label: "Coverage", Value: "Other side effects are not bounded; approval applies to this call only."})
+		}
+		for _, group := range intent.Groups() {
+			if group.Class == AccessWrite && len(group.Dirs) > 0 && name != "shell_run" && name != "powershell_run" && name != "process_run" {
+				result.rows = append(result.rows, interactionRow{Label: "Write scope", Value: strings.Join(group.Dirs, "\n")})
+			}
+		}
+	}
+
 	return result
 }
 

@@ -1,5 +1,7 @@
 # AST 只读 Shell 命令分类器设计
 
+> 历史设计：其中 LLM 兜底授权与旧审批策略已被 [2026-10-22 审批重构](2026-10-22-command-approval-refactor-design.md) 替代。
+
 - 状态：已确认（§1–§5 逐节通过）
 - 日期：2026-07-03
 - 范围：`internal/approval`、`internal/app`

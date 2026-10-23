@@ -89,7 +89,6 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 		"web-search-api-key",
 		"prompts.identity",
 		"prompts.workflow",
-		"prompts.shell-classifier",
 		"apis.<provider>.api-key",
 		"apis.<provider>.api-key-cmd",
 		"apis.<provider>.models.<model>.extra-params",
@@ -105,16 +104,13 @@ func TestPromptConfig(t *testing.T) {
   identity: custom identity
   workflow: custom workflow
   tool-selection: custom tools
-  shell-classifier: custom shell
 `), &cfg))
 
 	require.Equal(t, "custom identity", cfg.Prompts.Identity)
 	require.Equal(t, "custom workflow", cfg.Prompts.Workflow)
 	require.Equal(t, "custom tools", cfg.Prompts.ToolSelection)
-	require.Equal(t, "custom shell", cfg.Prompts.ShellClassifier)
 	require.Equal(t, "custom identity", cfg.Prompts.Value(prompts.KeyIdentity))
 	require.Equal(t, "custom workflow", cfg.Prompts.Value(prompts.KeyWorkflow))
-	require.Equal(t, "custom shell", cfg.Prompts.Value(prompts.KeyShellClassifier))
 }
 
 func TestReasoningEffortOffYAML(t *testing.T) {
@@ -781,4 +777,18 @@ func TestNormalizeSkillsDirExpandsHome(t *testing.T) {
 
 func TestNormalizeSkillsDirLeavesRelativePathUnchanged(t *testing.T) {
 	require.Equal(t, filepath.Join("relative", "skills"), NormalizeSkillsDir(filepath.Join("relative", "skills")))
+}
+
+func TestRemovedShellClassifierSettingsAreIgnored(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte(`shell-classify-prompt: legacy prompt
+prompts:
+  shell-classifier: legacy classifier
+  workflow: retained workflow
+`), &cfg))
+	require.Equal(t, "retained workflow", cfg.Prompts.Workflow)
+	encoded, err := yaml.Marshal(cfg)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "shell-classifier")
+	require.NotContains(t, string(encoded), "shell-classify-prompt")
 }

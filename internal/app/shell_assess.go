@@ -6,12 +6,11 @@ package app
 // invocation path.
 //
 // Path facts come from two sources, merged here: approval's AST/IR analysis
-// (authoritative) and approval's literal-extraction fallback. The LLM
-// classifier lives in shell_classify.go and is only consulted when the
-// deterministic analysis cannot prove an effect.
+// (authoritative) and approval's literal-extraction fallback.
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -38,7 +37,7 @@ func (m *Mods) assessCommandAtCwd(tool, command string, shadowedEnv map[string]b
 	return m.assessShellCommand(tool, shellPathFlavor(tool), command, shadowedEnv, ws)
 }
 
-// assessShellCommand runs the deterministic-then-classifier pipeline for one
+// assessShellCommand builds deterministic facts for one
 // shell invocation.
 //
 // flavor is an explicit parameter rather than being derived from tool inside
@@ -52,8 +51,9 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 	posix := flavor != pathutil.FlavorPowerShell
 	result := approval.AssessShellStaticWithContext(command, posix, policy, ws)
 	result.RemoteOrigins = append(result.RemoteOrigins, extractLiteralRemoteOrigins(command)...)
-	gitOrigins, unresolvedGitRemotes := m.resolveGitPushOrigins(tool, command, ws)
+	gitOrigins, unresolvedGitRemotes, gitDirs := m.resolveGitPushOrigins(tool, command, ws)
 	result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
+	result.KnownDirs = appendMissingShellDirs(result.KnownDirs, gitDirs)
 	result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
 	result.RemoteOrigins = approval.NormalizeRemoteOrigins(result.RemoteOrigins)
 	staticEffect := result.Effect
@@ -65,36 +65,14 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 	// approval scope.
 	externalPaths := shellExternalPathFacts(result.KnownDirs, ws, flavor)
 	var extractedPaths []string
-	var hasBareHome bool
 	if !result.PowerShellPathContextMutation {
-		extractedPaths, hasBareHome = approval.ExternalShellPathFacts(command, ws, flavor, policy)
+		extractedPaths = approval.ExternalShellPathFacts(command, ws, flavor, policy)
 	}
 	externalPaths = appendMissingShellDirs(externalPaths, extractedPaths)
 	if result.Effect == approval.EffectWrite {
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, externalPaths)
 	} else {
-		result.KnownDirs = externalPaths
-	}
-	if result.Effect == approval.EffectUnknown {
-		completion := approval.UnknownCommandAssessment()
-		if m.shellAnalyzer != nil {
-			completion = m.shellAnalyzer(tool, command)
-		} else {
-			completion = m.classifyShellAtCwd(tool, command, ws)
-		}
-		if hasBareHome {
-			// The child shell and path normalizer share HOME. Once an unquoted
-			// bare tilde has been resolved locally, classifier-supplied paths are
-			// guesses and must not replace or broaden that deterministic scope.
-			completion.KnownDirs = nil
-		}
-		if flavor == pathutil.FlavorPowerShell {
-			// Classifier dirs bypass shellExternalPathFacts, so the PowerShell
-			// dialect policy has to be applied here: a leading-slash token is a
-			// native-program switch or division, never a path.
-			completion.KnownDirs = filterPowerShellDialectDirs(completion.KnownDirs)
-		}
-		result = mergeCommandAssessment(result, completion)
+		result.KnownDirs = appendMissingShellDirs(externalPaths, gitDirs)
 	}
 	// Path-shaped references to inherited environment variables resolve
 	// deterministically for the child shell whenever the command does not
@@ -108,7 +86,7 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 	// re-dynamizing the intent. Probes keep their dynamic-target auto-allow
 	// semantics, and commands that reassign the environment never expand:
 	// the child would observe a different value.
-	if result.Effect == approval.EffectRead || result.Effect == approval.EffectWrite {
+	{
 		allowValueDirs := result.Effect == approval.EffectRead
 		if flavor == pathutil.FlavorPowerShell && !result.DynamicProbe && !commandMutatesPowerShellEnvironment(command) {
 			result.KnownDirs, result.DynamicTargets = resolvePowerShellEnvTargets(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs)
@@ -130,20 +108,17 @@ func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command s
 		}
 	}
 	// A statically proven read with no explicit external target operates in the
-	// current working directory context. Classifier-completed commands do not get
+	// current working directory context. Unknown commands do not get
 	// this fallback: cwd is execution context, not evidence of an affected dir.
 	if staticEffect == approval.EffectRead && len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(ws) != "" {
 		result.KnownDirs = []string{ws}
 	}
+	result = m.resolveAssessmentWritePaths(result, ws, flavor, false)
 	return finalizeCommandAssessment(result, flavor)
 }
 
-// filterPowerShellDialectDirs drops heuristic directory facts that use
-// leading-slash path syntax. In the PowerShell/Windows dialect such tokens are
-// native-program switches (/out, /d) or division, never filesystem paths;
-// forward-slash UNC paths (//server/share) remain paths. It complements
 // shellExternalPathFacts, which applies the same policy to approval's static
-// facts only: classifier-supplied and literal argv directories never pass
+// facts only: literal argv directories never pass
 // through that gate.
 func filterPowerShellDialectDirs(dirs []string) []string {
 	if len(dirs) == 0 {
@@ -177,7 +152,7 @@ func filterPowerShellDialectDirs(dirs []string) []string {
 // a dialect policy rather than a distrust of approval: leading-slash tokens are
 // native-program flags or division, never paths (see
 // approval.IsExplicitPowerShellPathArg and the "Unix-style absolute paths are
-// ignored" cases in shell_classify_test.go).
+// ignored" cases in shell_assess_test.go).
 func shellExternalPathFacts(dirs []string, ws string, flavor pathutil.Flavor) []string {
 	if len(dirs) == 0 {
 		return nil
@@ -199,21 +174,6 @@ func shellExternalPathFacts(dirs []string, ws string, flavor pathutil.Flavor) []
 		result = appendMissingShellDirs(result, []string{normalized})
 	}
 	return result
-}
-
-func mergeCommandAssessment(static, completion approval.CommandAssessment) approval.CommandAssessment {
-	if static.Effect != approval.EffectUnknown {
-		return static
-	}
-	if completion.Effect != approval.EffectRead && completion.Effect != approval.EffectWrite {
-		return static
-	}
-	static.Effect = completion.Effect
-	static.KnownDirs = appendMissingShellDirs(static.KnownDirs, completion.KnownDirs)
-	if strings.TrimSpace(completion.Reason) != "" {
-		static.Reason = completion.Reason
-	}
-	return static
 }
 
 func finalizeCommandAssessment(result approval.CommandAssessment, flavor pathutil.Flavor) approval.CommandAssessment {
@@ -316,8 +276,9 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	})
 	result.RemoteOrigins = extractLiteralRemoteOrigins(strings.Join(append([]string{invocation.Program}, invocation.Args...), " "))
 	if isGitProgram(invocation.Program) {
-		gitOrigins, unresolvedGitRemotes := m.resolveGitPushArgvOrigins(invocation.Args, cwd)
+		gitOrigins, unresolvedGitRemotes, gitDirs := m.resolveGitPushArgvOrigins(invocation.Args, cwd)
 		result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
+		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, gitDirs)
 		result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
 	}
 	result.RemoteOrigins = approval.NormalizeRemoteOrigins(result.RemoteOrigins)
@@ -332,36 +293,14 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		writeDirs := normalizeLiteralProcessDirs(staticDirs, cwd, flavor)
 		result.KnownDirs = appendMissingShellDirs(writeDirs, explicitDirs)
 	default:
-		classifierInput, _ := json.Marshal(map[string]any{
-			"kind":    "direct_process_invocation",
-			"program": invocation.Program,
-			"args":    invocation.Args,
-			"cwd":     cwd,
-			"note":    "Arguments are literal; no shell expansion, pipeline, redirection, globbing, or variable interpolation occurs.",
-		})
-		completion := approval.UnknownCommandAssessment()
-		if m.shellAnalyzer != nil {
-			completion = m.shellAnalyzer("process_run", string(classifierInput))
-		} else {
-			completion = m.classifyShellWithLLM("process_run", string(classifierInput))
-		}
-		// An LLM may recognize that a program mutates state, but it cannot
-		// safely bound an arbitrary executable's filesystem effects. In
-		// particular, cwd in the classifier input is execution context rather
-		// than evidence that the cwd is the mutation target. Preserve
-		// effect/reason completion while deriving process directories only from
-		// deterministic argv analysis.
-		completion.KnownDirs = nil
-		result = mergeCommandAssessment(result, completion)
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, explicitDirs)
 	}
 	// An executable given by an explicit relative or absolute path that lives
-	// inside the cwd or a safe directory stays reviewable even when the
-	// classifier calls it read-only: the script itself may do anything once it
+	// inside the cwd or a safe directory stays reviewable because the
+	// script itself may do anything once it
 	// runs. Bare names resolved into those directories are handled separately
 	// via the pinned PATH binding in constrainResolvedProcessAssessment.
-	if (result.Effect == approval.EffectRead || result.Effect == approval.EffectWrite) &&
-		(strings.ContainsAny(invocation.Program, `/\`) || pathutil.IsAbs(invocation.Program)) {
+	if strings.ContainsAny(invocation.Program, `/\`) || pathutil.IsAbs(invocation.Program) {
 		resolved := strings.TrimSpace(invocation.Program)
 		if !pathutil.IsAbs(resolved) {
 			resolved = pathutil.NormalizeShellPath(resolved, pathutil.DefaultOptions(cwd, flavor))
@@ -369,10 +308,48 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 		switch pathutil.Location(resolved, baseDir, m.safeDirs()) {
 		case pathutil.LocationWorkingDir, pathutil.LocationSafe:
 			result.Effect = approval.EffectUnknown
+			result.Evidence = approval.EvidenceUnknown
+			result.AddGap(approval.GapExecutionContext)
 			result.Reason = "executable resolves from a cwd or temporary directory"
 		}
 	}
+	result = m.resolveAssessmentWritePaths(result, cwd, flavor, true)
 	return finalizeProcessAssessment(result)
+}
+
+// Preserve lexical facts, and add the real leaf's parent before any temp or
+// saved-rule decision. Runtime expressions cannot establish a reusable scope.
+func (m *Mods) resolveAssessmentWritePaths(result approval.CommandAssessment, cwd string, flavor pathutil.Flavor, literal bool) approval.CommandAssessment {
+	for _, raw := range result.WritePaths {
+		if !literal && strings.Contains(raw, "$") && len(result.DynamicTargets) == 0 {
+			opts := pathutil.DefaultOptions(cwd, flavor)
+			opts.Env["PWD"] = cwd
+			if expanded, ok := pathutil.ExpandEnvPath(raw, opts); ok {
+				raw = expanded
+			}
+		}
+		if !literal && strings.ContainsAny(raw, "$`*?[]") {
+			result.AddGap(approval.GapWriteTargets)
+			continue
+		}
+		path := pathutil.NormalizeShellPath(raw, pathutil.DefaultOptions(cwd, flavor))
+		if literal {
+			path = normalizeLiteralProcessPath(raw, cwd, flavor)
+		}
+		if !filepath.IsAbs(path) {
+			result.AddGap(approval.GapWriteTargets)
+			continue
+		}
+		real, err := pathutil.ResolveThroughExistingParent(path)
+		if err != nil {
+			result.AddGap(approval.GapWriteTargets)
+			continue
+		}
+		if real != path {
+			result.KnownDirs = appendMissingShellDirs(result.KnownDirs, []string{filepath.Dir(real)})
+		}
+	}
+	return result
 }
 
 func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessment, binding toolregistry.ProcessProgramBinding) approval.CommandAssessment {
@@ -385,6 +362,8 @@ func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessm
 		return result
 	}
 	result.Effect = approval.EffectUnknown
+	result.Evidence = approval.EvidenceUnknown
+	result.AddGap(approval.GapExecutionContext)
 	result.Reason = "executable resolves from a cwd or temporary directory"
 	return result
 }

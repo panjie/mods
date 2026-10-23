@@ -7,14 +7,14 @@ import (
 )
 
 func TestCommandAssessmentAccessIntent(t *testing.T) {
-	readWithDir := CommandAssessment{Effect: EffectRead, KnownDirs: []string{"/etc"}, RemoteOrigins: []string{"https://api.example.com"}, UnresolvedRemoteTargets: []string{"$REMOTE"}, DynamicTargets: []string{"$PROFILE"}}
+	readWithDir := CommandAssessment{Evidence: EvidenceStatic, Effect: EffectRead, KnownDirs: []string{"/etc"}, RemoteOrigins: []string{"https://api.example.com"}, UnresolvedRemoteTargets: []string{"$REMOTE"}, DynamicTargets: []string{"$PROFILE"}}
 	require.Equal(t, AccessRead, readWithDir.AccessIntent().Class)
 	require.Equal(t, []string{"/etc"}, readWithDir.AccessIntent().Dirs)
 	require.Equal(t, []string{"https://api.example.com"}, readWithDir.AccessIntent().RemoteOrigins)
 	require.Equal(t, []string{"$REMOTE"}, readWithDir.AccessIntent().UnresolvedRemoteTargets)
 	require.Equal(t, []string{"$PROFILE"}, readWithDir.AccessIntent().UnresolvedPaths)
 
-	dynamicRead := CommandAssessment{Effect: EffectRead, DynamicTargets: []string{"$PROFILE"}, DynamicProbe: true}
+	dynamicRead := CommandAssessment{Evidence: EvidenceStatic, Effect: EffectRead, DynamicTargets: []string{"$PROFILE"}, DynamicProbe: true}
 	require.Equal(t, AccessRead, dynamicRead.AccessIntent().Class)
 	require.Empty(t, dynamicRead.AccessIntent().Dirs)
 	require.Equal(t, []string{"$PROFILE"}, dynamicRead.AccessIntent().UnresolvedPaths)

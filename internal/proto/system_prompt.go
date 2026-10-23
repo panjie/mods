@@ -72,7 +72,7 @@ var systemLayerTitles = map[systemLayer]string{
 // NormalizeSystemMessages renders classified system fragments into one
 // structured system message placed before all non-system messages. Requests
 // without classified system fragments are returned unchanged so internal
-// single-purpose calls such as shell classification retain their wire shape.
+// single-purpose calls retain their wire shape.
 func NormalizeSystemMessages(messages []Message) []Message {
 	structured := false
 	for _, message := range messages {

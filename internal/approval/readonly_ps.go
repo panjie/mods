@@ -9,7 +9,7 @@ import (
 // PowerShell bridge process (pwsh.exe if present, otherwise powershell.exe)
 // that calls System.Management.Automation.Language.Parser.
 // Returns (true, reason, paths) when read-only; (false, "", nil) when not or
-// inconclusive (fail-closed — caller degrades to LLM classifier). The paths
+// inconclusive (fail-closed — caller requires ordinary approval). The paths
 // return value contains AST-extracted string literal argument values that the
 // caller can filter to external paths for AffectedDirs.
 func IsReadOnlyPowerShell(command string) (bool, string, []string) {

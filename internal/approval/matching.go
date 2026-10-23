@@ -57,7 +57,11 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 			// then ignore the scope for authorization matching.
 			base = rule.ScopeValue
 		}
-		allowedPaths = append(allowedPaths, normalizeShellDirsForWorkingDir(rule.Paths, base)...)
+		// Stored grants name directories, not filesystem objects to reinterpret.
+		// Never follow a newly retargeted link or promote a replaced file to its parent.
+		for _, path := range rule.Paths {
+			allowedPaths = append(allowedPaths, pathutil.NormalizeShellPath(path, pathutil.DefaultOptions(base, pathutil.FlavorPOSIX)))
+		}
 	}
 	for _, dir := range dirs {
 		if !dirWithinPaths(allowedPaths, dir) {

@@ -26,9 +26,7 @@ func TestShellAssessmentPWDUsesExecutionDirectory(t *testing.T) {
 	child, err = filepath.EvalSymlinks(child)
 	require.NoError(t, err)
 	t.Setenv("PWD", parent)
-	m := &Mods{Config: testConfigForWorkingDir(parent), shellAnalyzer: func(string, string) approval.CommandAssessment {
-		return approval.UnknownCommandAssessment()
-	}}
+	m := &Mods{Config: testConfigForWorkingDir(parent)}
 	for _, command := range []string{`touch "$PWD/probe.txt"`, `touch "${PWD}/probe.txt"`} {
 		a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, child)
 		intent := normalizeAccessIntentDirs(a.AccessIntent(), child, "shell_run", true)
@@ -39,7 +37,7 @@ func TestShellAssessmentPWDUsesExecutionDirectory(t *testing.T) {
 			allowed bool
 		}{{parent, false}, {child, true}} {
 			rules := approval.RulesForDirs([]string{tc.dir}, WorkingDirScope(parent), AccessWrite)
-			require.Equal(t, tc.allowed, approval.RulesAllowIntent(rules, intent, WorkingDirScope(parent), nil, approval.ReviewAuto))
+			require.Equal(t, tc.allowed, approval.RulesAllowIntent(rules, intent, WorkingDirScope(parent), nil, approval.ReviewAuto), "assessment: %+v", a)
 		}
 	}
 	for _, tc := range []struct {

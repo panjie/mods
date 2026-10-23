@@ -13,7 +13,18 @@ func AssessArgvStaticWithPolicy(program string, args []string, posix bool, polic
 // AssessArgvStaticWithContext assesses a direct executable invocation with
 // deterministic execution context used by program-specific analyzers.
 func AssessArgvStaticWithContext(program string, args []string, posix bool, policy ReadOnlyCommandPolicy, context ArgvStaticContext) (result CommandAssessment) {
-	defer func() { result.StaticRead = result.Effect == EffectRead }()
+	defer func() {
+		result.StaticRead = result.Effect == EffectRead
+		if result.Effect != EffectUnknown {
+			result.Evidence = EvidenceStatic
+		}
+		if strings.HasPrefix(result.Reason, "user-configured") {
+			result.Evidence = EvidenceTrust
+		}
+		if result.Effect == EffectRead {
+			result.WriteCoverage = CoverageComplete
+		}
+	}()
 	program = strings.TrimSpace(program)
 	result = UnknownCommandAssessment()
 	result.Shape = CommandShape{TopLevelActions: 1, Pipelines: 1}
@@ -47,9 +58,15 @@ func AssessArgvStaticWithContext(program string, args []string, posix bool, poli
 		return result
 	}
 	result.Effect = EffectWrite
+	collectWriteOperands(&result, tokens, posix)
 	result.KnownDirs = analysis.Dirs
 	result.ProviderWriteTargets = analysis.ProviderTargets
 	result.Reason = "write command (static argv analysis)"
+	if boundedWriteInvocation(tokens, posix) {
+		result.WriteCoverage = CoverageComplete
+	} else {
+		result.AddGap(GapWriteTargets)
+	}
 	return result
 }
 

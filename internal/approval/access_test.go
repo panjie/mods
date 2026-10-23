@@ -23,35 +23,35 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		intent AccessIntent
 		want   Decision
 	}{
-		{"read in cwd", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}}, DecisionAllow},
-		{"write in cwd", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}}, DecisionAsk},
-		{"read in temp", AccessIntent{Class: AccessRead, Dirs: []string{tempDir}}, DecisionAllow},
-		{"write in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}}, DecisionAllow},
-		{"read external", AccessIntent{Class: AccessRead, Dirs: []string{external}}, DecisionAllow},
-		{"write external", AccessIntent{Class: AccessWrite, Dirs: []string{external}}, DecisionAsk},
-		{"read empty dirs", AccessIntent{Class: AccessRead}, DecisionAllow},
-		{"write empty dirs", AccessIntent{Class: AccessWrite}, DecisionAsk},
-		{"mixed ws+external read", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value, external}}, DecisionAllow},
-		{"write spanning temp and external", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir, external}}, DecisionAsk},
-		{"copy external source to temp", AccessIntent{ReadDirs: []string{external}, WriteDirs: []string{tempDir}}, DecisionAllow},
-		{"copy cwd source to temp", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
-		{"copy cwd source to cwd", AccessIntent{ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
-		{"missing access intent fails closed", AccessIntent{}, DecisionAsk},
-		{"dynamic probe without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}, DynamicProbe: true}, DecisionAllow},
-		{"dynamic content read without concrete dirs", AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
-		{"dynamic read with concrete dir", AccessIntent{Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
-		{"dynamic write target fails closed", AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
-		{"provider write target fails closed", AccessIntent{Class: AccessWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}, DecisionAsk},
-		{"remote read", AccessIntent{Class: AccessRead, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAllow},
-		{"remote write", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAsk},
-		{"unresolved remote write", AccessIntent{Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}, DecisionAsk},
-		{"uncertain write effect", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}, UncertainEffect: true}, DecisionAsk},
-		{"uncertain effect in temp", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UncertainEffect: true}, DecisionAllow},
-		{"uncertain effect in temp subdirectory", AccessIntent{Class: AccessWrite, Dirs: []string{filepath.Join(tempDir, "out")}, UncertainEffect: true}, DecisionAllow},
-		{"uncertain effect without dirs", AccessIntent{Class: AccessWrite, UncertainEffect: true}, DecisionAsk},
-		{"uncertain effect spanning temp and external", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir, external}, UncertainEffect: true}, DecisionAsk},
-		{"uncertain effect with dynamic target", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UnresolvedPaths: []string{"$target"}, UncertainEffect: true}, DecisionAsk},
-		{"uncertain effect with unresolved remote target", AccessIntent{Class: AccessWrite, Dirs: []string{tempDir}, UnresolvedRemoteTargets: []string{"$API_URL"}, UncertainEffect: true}, DecisionAsk},
+		{"read in cwd", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{ws.Value}}, DecisionAllow},
+		{"write in cwd", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{ws.Value}}, DecisionAsk},
+		{"read in temp", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{tempDir}}, DecisionAllow},
+		{"write in temp", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{tempDir}}, DecisionAllow},
+		{"read external", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{external}}, DecisionAllow},
+		{"write external", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{external}}, DecisionAsk},
+		{"read empty dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead}, DecisionAllow},
+		{"write empty dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite}, DecisionAsk},
+		{"mixed ws+external read", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{ws.Value, external}}, DecisionAllow},
+		{"write spanning temp and external", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{tempDir, external}}, DecisionAsk},
+		{"copy external source to temp", AccessIntent{WriteCoverage: CoverageComplete, ReadDirs: []string{external}, WriteDirs: []string{tempDir}}, DecisionAllow},
+		{"copy cwd source to temp", AccessIntent{WriteCoverage: CoverageComplete, ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
+		{"copy cwd source to cwd", AccessIntent{WriteCoverage: CoverageComplete, ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
+		{"missing access intent fails closed", AccessIntent{WriteCoverage: CoverageComplete}, DecisionAsk},
+		{"dynamic probe without concrete dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, UnresolvedPaths: []string{"$target"}, DynamicProbe: true}, DecisionAllow},
+		{"dynamic content read without concrete dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
+		{"dynamic read with concrete dir", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
+		{"dynamic write target fails closed", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},
+		{"provider write target fails closed", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}, DecisionAsk},
+		{"remote read", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAllow},
+		{"remote write", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, DecisionAsk},
+		{"unresolved remote write", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}, DecisionAsk},
+		{"uncertain write effect", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect in temp", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{tempDir}, UncertainEffect: true}, DecisionAllow},
+		{"uncertain effect in temp subdirectory", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{filepath.Join(tempDir, "out")}, UncertainEffect: true}, DecisionAllow},
+		{"uncertain effect without dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect spanning temp and external", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{tempDir, external}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect with dynamic target", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{tempDir}, UnresolvedPaths: []string{"$target"}, UncertainEffect: true}, DecisionAsk},
+		{"uncertain effect with unresolved remote target", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{tempDir}, UnresolvedRemoteTargets: []string{"$API_URL"}, UncertainEffect: true}, DecisionAsk},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
 	ws := WorkingDirScope(t.TempDir())
 	rules := RulesForDirs([]string{ws.Value}, ws, AccessWrite)
-	intent := AccessIntent{Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$PROFILE.CurrentUserCurrentHost"}}
+	intent := AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$PROFILE.CurrentUserCurrentHost"}}
 	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto),
 		"a dynamic write stays reviewable even when its concrete dirs are rule-covered")
 }
@@ -71,13 +71,13 @@ func TestRulesCannotAuthorizeUnresolvedPaths(t *testing.T) {
 func TestDirectoryRulesCannotAuthorizeProviderWrites(t *testing.T) {
 	ws := WorkingDirScope(t.TempDir())
 	rules := RulesForDirs([]string{ws.Value}, ws, AccessWrite)
-	intent := AccessIntent{Class: AccessWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}
+	intent := AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, ProviderWriteTargets: []string{`HKCU:\Software\Classes\Neovide`}}
 	require.False(t, RulesAllowIntent(rules, intent, ws, nil, ReviewAuto))
 }
 
 func TestReadsNeverNeedSavedRules(t *testing.T) {
 	ws := wsScope(t)
-	dynamicRead := AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$FILE"}}
+	dynamicRead := AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, UnresolvedPaths: []string{"$FILE"}}
 	require.Equal(t, DecisionAllow, ClassifyAccess(dynamicRead, ws, nil, ReviewAlways))
 	require.False(t, RulesAllowIntent(nil, dynamicRead, ws, nil, ReviewAuto))
 }
@@ -85,10 +85,10 @@ func TestReadsNeverNeedSavedRules(t *testing.T) {
 func TestClassifyAccessModeOverride(t *testing.T) {
 	ws := wsScope(t)
 	external := filepath.Clean(t.TempDir())
-	read := AccessIntent{Class: AccessRead, Dirs: []string{external}}
+	read := AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{external}}
 	require.Equal(t, DecisionAllow, ClassifyAccess(read, ws, nil, ReviewNever))
-	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{Class: AccessWrite, UnresolvedPaths: []string{"$target"}}, ws, nil, ReviewNever))
-	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{}, ws, nil, ReviewNever))
+	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, UnresolvedPaths: []string{"$target"}}, ws, nil, ReviewNever))
+	require.Equal(t, DecisionAllow, ClassifyAccess(AccessIntent{WriteCoverage: CoverageComplete}, ws, nil, ReviewNever))
 }
 
 func TestLocateDir(t *testing.T) {

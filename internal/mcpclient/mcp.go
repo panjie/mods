@@ -110,7 +110,7 @@ func remoteMCPIntentExtractor(capabilities toolregistry.ToolCapabilities, remote
 		return nil
 	}
 	return func(json.RawMessage) approval.AccessIntent {
-		return approval.AccessIntent{Class: approval.AccessWrite, RemoteOrigins: []string{remoteOrigin}}
+		return approval.AccessIntent{WriteCoverage: approval.CoverageComplete, Class: approval.AccessWrite, RemoteOrigins: []string{remoteOrigin}}
 	}
 }
 

@@ -23,6 +23,9 @@ import (
 // path outside its boundary.
 
 func resolveAuthorizedPath(ctx context.Context, root, input string, safeDirs []string) (string, error) {
+	if path, ok, err := grantedPath(ctx, root, input, false); ok {
+		return path, err
+	}
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -72,6 +75,9 @@ func resolveAuthorizedPath(ctx context.Context, root, input string, safeDirs []s
 }
 
 func resolveAuthorizedPathNoFollowLeaf(ctx context.Context, root, input string, safeDirs []string) (string, error) {
+	if path, ok, err := grantedPath(ctx, root, input, true); ok {
+		return path, err
+	}
 	if input == "" {
 		return "", fmt.Errorf("path is required")
 	}

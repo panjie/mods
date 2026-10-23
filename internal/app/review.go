@@ -318,8 +318,8 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 
 // normalizeAffectedDirs reduces file paths to their parent directories and
 // drops entries already covered by a broader directory, so the review
-// summary and candidate DirAllow rule only mention directories. The LLM
-// classifier and external-path extractor occasionally report a file path
+// summary and candidate DirAllow rule only mention directories. The
+// external-path extractor occasionally reports a file path
 // alongside (or instead of) its containing directory; without this, the
 // "Always allows" line would advertise a file name as if it were a dir.
 func normalizeAffectedDirs(dirs []string) []string {
@@ -401,7 +401,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if shellExecution {
 		intent = normalizeAccessIntentDirs(intent, r.scope.Value, name, true)
 		assessment.KnownDirs = normalizeShellAffectedDirsForTool(assessment.KnownDirs, r.scope.Value, name)
-		debug.Printf("command assessment: effect=%s dirs=%v dynamic=%v reason=%q", assessment.Effect, assessment.KnownDirs, assessment.DynamicTargets, assessment.Reason)
+		debug.Printf("command assessment: effect=%s evidence=%s coverage=%d gaps=%v dirs=%v", assessment.Effect, assessment.Evidence, assessment.WriteCoverage, assessment.Gaps, assessment.KnownDirs)
 	}
 	if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
 		trace.Source = "auto"
@@ -507,7 +507,7 @@ func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string
 		}
 		var reviewDirs []string
 		for _, dir := range group.Dirs {
-			if ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}}, scope, safeDirs, reviewMode) == DecisionAsk {
+			if ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}, WriteCoverage: approval.CoverageComplete}, scope, safeDirs, reviewMode) == DecisionAsk {
 				reviewDirs = append(reviewDirs, dir)
 			}
 		}

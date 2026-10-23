@@ -31,10 +31,10 @@ func TestComplexCommandDispatchUsesOrdinaryApproval(t *testing.T) {
 		savedRule bool
 		wantRun   bool
 	}{
-		{"classified read auto", ReviewAuto, approval.EffectRead, false, true},
-		{"classified read always", ReviewAlways, approval.EffectRead, false, true},
+		{"classified read auto", ReviewAuto, approval.EffectRead, false, false},
+		{"classified read always", ReviewAlways, approval.EffectRead, false, false},
 		{"write requires approval", ReviewAuto, approval.EffectWrite, false, false},
-		{"saved write target", ReviewAuto, approval.EffectWrite, true, true},
+		{"saved write target", ReviewAuto, approval.EffectWrite, true, false},
 		{"always ignores saved target", ReviewAlways, approval.EffectWrite, true, false},
 		{"unknown requires approval", ReviewAuto, approval.EffectUnknown, false, false},
 		{"unknown is not covered by target rule", ReviewAuto, approval.EffectUnknown, true, false},
@@ -46,13 +46,7 @@ func TestComplexCommandDispatchUsesOrdinaryApproval(t *testing.T) {
 				cfg.WorkingDir, cfg.ReviewMode, cfg.Minimal = cwd, tc.mode, minimal
 				cfg.InteractiveTTYAvailable = false
 				m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
-				m.shellAnalyzer = func(string, string) approval.CommandAssessment {
-					a := approval.CommandAssessment{Effect: tc.effect}
-					if tc.effect != approval.EffectUnknown {
-						a.KnownDirs = []string{cwd}
-					}
-					return a
-				}
+
 				if tc.savedRule {
 					m.reviewer.rules.Add(RulesForDirs([]string{cwd}, m.reviewer.scope, AccessWrite)...)
 				}
@@ -96,7 +90,7 @@ func TestComplexCommandInteractiveApprovalPreservesPayload(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			r := &toolReviewer{reviewMode: ReviewAuto, scope: WorkingDirScope(cfg.WorkingDir), reviewAvailabilityKnown: true, interactiveReviewAvailable: true, reviewChan: make(chan toolReviewItem, 1)}
-			m := &Mods{Config: &cfg, ctx: ctx, reviewer: r, shellAnalyzer: func(string, string) approval.CommandAssessment { return approval.UnknownCommandAssessment() }}
+			m := &Mods{Config: &cfg, ctx: ctx, reviewer: r}
 			registry := toolregistry.NewRegistry()
 			var executed atomic.Int32
 			var received json.RawMessage
@@ -145,10 +139,7 @@ func TestRelatedStaticReadsExecuteAsOneCall(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.WorkingDir = t.TempDir()
 	cfg.ReviewMode = ReviewAlways
-	m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg), shellAnalyzer: func(string, string) approval.CommandAssessment {
-		t.Fatal("related static reads must not need an LLM classifier")
-		return approval.UnknownCommandAssessment()
-	}}
+	m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
 	if runtime.GOOS == "windows" {
 		t.Cleanup(func() { approval.CloseBridge() })
 	}
@@ -182,9 +173,7 @@ func TestComplexProcessDispatchDoesNotRequireResubmission(t *testing.T) {
 			cfg.WorkingDir = t.TempDir()
 			cfg.ReviewMode = ReviewAuto
 			cfg.InteractiveTTYAvailable = false
-			m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg), shellAnalyzer: func(string, string) approval.CommandAssessment {
-				return approval.CommandAssessment{Effect: effect}
-			}}
+			m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
 			data, err := json.Marshal(map[string]any{"program": program, "args": args})
 			require.NoError(t, err)
 			require.True(t, m.assessCommand("process_run", string(data)).HasReviewabilityConcerns())
@@ -199,13 +188,8 @@ func TestComplexProcessDispatchDoesNotRequireResubmission(t *testing.T) {
 				},
 			}))
 			_, err = m.toolCaller(registry, &cfg)(proto.ToolCallRequest{Name: "process_run", Arguments: data})
-			if effect == approval.EffectRead {
-				require.NoError(t, err)
-				require.Equal(t, 1, calls)
-			} else {
-				require.ErrorIs(t, err, errReviewUnavailable)
-				require.Zero(t, calls)
-			}
+			require.ErrorIs(t, err, errReviewUnavailable)
+			require.Zero(t, calls)
 		})
 	}
 }

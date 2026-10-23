@@ -16,6 +16,6 @@ func extractExternalPaths(command, cwdDir string) []string {
 }
 
 func extractExternalPathsWithFlavor(command, cwdDir string, flavor pathutil.Flavor) []string {
-	paths, _ := approval.ExternalShellPathFacts(command, cwdDir, flavor, approval.ReadOnlyCommandPolicy{})
+	paths := approval.ExternalShellPathFacts(command, cwdDir, flavor, approval.ReadOnlyCommandPolicy{})
 	return paths
 }

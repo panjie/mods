@@ -77,17 +77,17 @@ func TestFullReviewShowsPagesHintOnlyWhenContentPaginates(t *testing.T) {
 
 func TestUncertainEffectTargetPolicy(t *testing.T) {
 	r := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope, raw: true}
-	deps := reviewerDeps{ctx: context.Background(), accessIntent: AccessIntent{Class: approval.AccessWrite, UncertainEffect: true}, safeDirs: []string{testApprovalScope.Value}}
+	deps := reviewerDeps{ctx: context.Background(), accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: approval.AccessWrite, UncertainEffect: true}, safeDirs: []string{testApprovalScope.Value}}
 	require.ErrorIs(t, r.requestApproval(deps, "shell_run", []byte(`{"command":"echo x"}`)), errReviewUnavailable,
 		"an unknown effect without concrete targets still fails closed")
 
 	temp := t.TempDir()
-	deps.accessIntent = AccessIntent{Class: approval.AccessWrite, Dirs: []string{temp}, UncertainEffect: true}
+	deps.accessIntent = AccessIntent{WriteCoverage: testCompleteCoverage, Class: approval.AccessWrite, Dirs: []string{temp}, UncertainEffect: true}
 	deps.safeDirs = []string{temp}
 	require.NoError(t, r.requestApproval(deps, "shell_run", []byte(`{"command":"opaque /tmp"}`)),
 		"an unknown effect whose only target is a safe temp dir needs no review")
 
 	r.reviewMode = ReviewNever
-	deps.accessIntent = AccessIntent{Class: approval.AccessWrite, UncertainEffect: true}
+	deps.accessIntent = AccessIntent{WriteCoverage: testCompleteCoverage, Class: approval.AccessWrite, UncertainEffect: true}
 	require.NoError(t, r.requestApproval(deps, "shell_run", []byte(`{"command":"echo x"}`)))
 }

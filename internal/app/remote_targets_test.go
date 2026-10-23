@@ -25,12 +25,9 @@ func TestAssessCommandAddsDeterministicRemoteOrigin(t *testing.T) {
 	m := &Mods{
 		ctx:    context.Background(),
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "HTTP mutation"}
-		},
 	}
 	assessment := m.assessCommand("shell_run", `curl -X POST https://user:secret@API.Example.com:443/v1/items?token=x`)
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Equal(t, []string{"https://api.example.com"}, assessment.RemoteOrigins)
 	require.NotContains(t, assessment.RemoteOrigins[0], "secret")
 }
@@ -82,12 +79,10 @@ func TestResolveGitPushOrigin(t *testing.T) {
 	repo := t.TempDir()
 	require.NoError(t, exec.Command("git", "-C", repo, "init", "-q").Run())
 	require.NoError(t, exec.Command("git", "-C", repo, "remote", "add", "origin", "git@GitHub.com:acme/project.git").Run())
-	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(repo), shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-		return approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{repo}, Reason: "pushes refs"}
-	}}
+	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(repo)}
 	assessment := m.assessCommand("shell_run", "git push origin main")
 	require.Equal(t, []string{"ssh://github.com"}, assessment.RemoteOrigins)
-	require.Contains(t, assessment.KnownDirs, filepath.Clean(repo))
+	require.Empty(t, assessment.KnownDirs, "classifier cwd is not a write fact")
 
 	parent := filepath.Dir(repo)
 	process := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(parent)}
@@ -102,9 +97,7 @@ func TestResolvePowerShellGitPushOrigin(t *testing.T) {
 	repo := t.TempDir()
 	require.NoError(t, exec.Command("git", "-C", repo, "init", "-q").Run())
 	require.NoError(t, exec.Command("git", "-C", repo, "remote", "add", "upstream", "ssh://git@example.com:2222/acme/project.git").Run())
-	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(repo), shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-		return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "pushes refs"}
-	}}
+	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(repo)}
 	assessment := m.assessCommand("powershell_run", "git push upstream main")
 	require.Equal(t, []string{"ssh://example.com:2222"}, assessment.RemoteOrigins)
 }
@@ -115,9 +108,7 @@ func TestUnresolvedGitPushRemoteCannotBeSaved(t *testing.T) {
 	}
 	repo := t.TempDir()
 	require.NoError(t, exec.Command("git", "-C", repo, "init", "-q").Run())
-	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(repo), shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-		return approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{repo}, Reason: "pushes refs"}
-	}}
+	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(repo)}
 
 	assessment := m.assessCommand("shell_run", "git push missing main")
 	require.Equal(t, []string{"missing"}, assessment.UnresolvedRemoteTargets)
@@ -125,7 +116,7 @@ func TestUnresolvedGitPushRemoteCannotBeSaved(t *testing.T) {
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
 	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
 	presentation := formatReviewPresentationWithIntent("shell_run", []byte(`{"command":"git push missing main"}`), assessment, WorkingDirScope(repo), intent)
-	require.Equal(t, "Modify an unknown remote resource", presentation.headline)
+	require.Equal(t, "Run with unknown effects", presentation.headline)
 	require.Contains(t, presentation.rows, interactionRow{Label: "Remote", Value: "Unknown"})
 
 	process := m.assessCommand("process_run", `{"program":"git","args":["push","missing","main"]}`)
@@ -133,10 +124,12 @@ func TestUnresolvedGitPushRemoteCannotBeSaved(t *testing.T) {
 }
 
 func TestExplicitGitPushURLProducesOrigin(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
 	cwd := t.TempDir()
-	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(cwd), shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-		return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "pushes refs"}
-	}}
+	require.NoError(t, exec.Command("git", "-C", cwd, "init", "-q").Run())
+	m := &Mods{ctx: context.Background(), Config: testConfigForWorkingDir(cwd)}
 	assessment := m.assessCommand("shell_run", "git push https://user:secret@Git.Example.com:443/acme/repo.git main")
 	require.Equal(t, []string{"https://git.example.com"}, assessment.RemoteOrigins)
 	require.Empty(t, assessment.UnresolvedRemoteTargets)
@@ -144,7 +137,7 @@ func TestExplicitGitPushURLProducesOrigin(t *testing.T) {
 
 func TestRemoteWriteCandidatesAndSavedRules(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
-	intent := AccessIntent{
+	intent := AccessIntent{WriteCoverage: testCompleteCoverage,
 		Class:         AccessWrite,
 		Dirs:          []string{scope.Value},
 		RemoteOrigins: []string{"https://API.example.com:443/v1"},
@@ -161,27 +154,34 @@ func TestRemoteWriteCandidatesAndSavedRules(t *testing.T) {
 
 func TestUnknownRemoteWriteHasNoAlwaysRule(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
-	intent := AccessIntent{Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}
+	intent := AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
-func TestUnknownEffectWithKnownOriginHasAlwaysRule(t *testing.T) {
+func TestUnknownEffectWithKnownOriginHasNoAlwaysRule(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
 	intent := approval.CommandAssessment{
 		Effect: approval.EffectUnknown, RemoteOrigins: []string{"https://api.example.com"},
 	}.AccessIntent()
 	require.True(t, intent.UncertainEffect)
 	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
-	require.Equal(t, approval.RulesForRemoteOrigins(intent.RemoteOrigins), rules)
-	require.True(t, RulesAllowIntent(rules, intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
+	require.Empty(t, rules)
+	require.False(t, RulesAllowIntent(rules, intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestTemporaryWriteAlwaysAllowsEvenInAlwaysMode(t *testing.T) {
 	safe := filepath.Clean(t.TempDir())
 	scope := WorkingDirScope(t.TempDir())
-	intent := AccessIntent{Class: AccessWrite, Dirs: []string{safe}}
+	intent := AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{safe}}
 	require.Equal(t, DecisionAllow, ClassifyAccess(intent, scope, []string{safe}, ApprovalReviewMode(ReviewAlways)))
 	reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: scope}
 	require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent, safeDirs: []string{safe}}, "fs_write_file", []byte(`{"path":"tmp.txt","content":"x"}`)))
+}
+
+func TestExplicitGitPushURLQueryFailureStaysUnresolved(t *testing.T) {
+	cwd := filepath.Join(t.TempDir(), "missing")
+	m := &Mods{ctx: context.Background()}
+	_, unresolved, _ := m.resolveGitPushArgvOrigins([]string{"push", "https://git.example.com/acme/repo.git"}, cwd)
+	require.NotEmpty(t, unresolved)
 }

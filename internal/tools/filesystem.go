@@ -73,6 +73,9 @@ func RegisterFilesystem(registry *Registry, cfg FilesystemConfig) error {
 		filesystemApplyPatchTool(root, safeDirs),
 	}
 	for _, t := range tools {
+		if t.Capabilities.Mutable {
+			t = withPreparedFilesystem(t, root, safeDirs)
+		}
 		if err := registry.Register(t); err != nil {
 			return err
 		}

@@ -108,13 +108,11 @@ var Help = map[string]string{
 	"think":                  "Enable extended thinking for supported models; thinking-type can override provider defaults",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
 	"no-review":              "Disable tool review; shorthand for --review-mode=never",
-	"shell-classify-prompt":  "Legacy custom prompt for classifying whether a shell command needs review; prefer prompts.shell-classifier",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Pass the CLI flag without a directory to print the effective directories. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 
-	"prompts.identity":         "Override the built-in runtime safety identity prompt; empty uses the built-in default",
-	"prompts.workflow":         "Override the built-in workflow prompt (skills, planning, diagnosis, verification, self-help); empty uses the built-in default",
-	"prompts.tool-selection":   "Override tool-selection guidance; empty uses capability-filtered defaults",
-	"prompts.shell-classifier": "Override the shell safety classifier prompt; empty uses the built-in default",
+	"prompts.identity":       "Override the built-in runtime safety identity prompt; empty uses the built-in default",
+	"prompts.workflow":       "Override the built-in workflow prompt (skills, planning, diagnosis, verification, self-help); empty uses the built-in default",
+	"prompts.tool-selection": "Override tool-selection guidance; empty uses capability-filtered defaults",
 
 	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
 	"builtin-tools.shell":                    "Enable the native shell execution tool",
@@ -245,35 +243,34 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 // file and loaded from environment variables. It is embedded in Config so all
 // fields are promoted and accessible directly on Config.
 type PersistentConfig struct {
-	API                 string     `yaml:"default-api" env:"API"`
-	Model               string     `yaml:"default-model" env:"MODEL"`
-	Format              string     `yaml:"format" env:"FORMAT"`
-	FormatText          FormatText `yaml:"format-text"`
-	Minimal             bool       `yaml:"minimal" env:"MINIMAL"`
-	Raw                 bool       `yaml:"raw" env:"RAW"`
-	HideToolStatus      bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
-	ShowTokenUsage      bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
-	NoInstructions      bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
-	MaxRetries          int        `yaml:"max-retries" env:"MAX_RETRIES"`
-	WordWrap            int        `yaml:"word-wrap" env:"WORD_WRAP"`
-	HTTPProxy           string     `yaml:"http-proxy" env:"HTTP_PROXY"`
-	APIs                APIs       `yaml:"apis"`
-	Role                string     `yaml:"role" env:"ROLE"`
-	Roles               map[string][]string
-	Prompts             PromptConfig `yaml:"prompts"`
-	Theme               string
-	NerdFontGlyphs      bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
-	MCPServers          map[string]MCPServerConfig `yaml:"mcp-servers"`
-	MCPTimeout          time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
-	BuiltinTools        BuiltinToolsConfig         `yaml:"builtin-tools"`
-	WebSearch           bool                       `yaml:"web-search" env:"WEB_SEARCH"`
-	WebSearchProvider   string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
-	WebSearchAPIKey     string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
-	WebSearchAPIKeyEnv  string                     `yaml:"web-search-api-key-env"`
-	Think               bool                       `yaml:"think" env:"THINK"`
-	ReviewMode          ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
-	ShellClassifyPrompt string                     `yaml:"shell-classify-prompt"`
-	SkillsDirs          []string                   `yaml:"skills-dirs"`
+	API                string     `yaml:"default-api" env:"API"`
+	Model              string     `yaml:"default-model" env:"MODEL"`
+	Format             string     `yaml:"format" env:"FORMAT"`
+	FormatText         FormatText `yaml:"format-text"`
+	Minimal            bool       `yaml:"minimal" env:"MINIMAL"`
+	Raw                bool       `yaml:"raw" env:"RAW"`
+	HideToolStatus     bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
+	ShowTokenUsage     bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
+	NoInstructions     bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
+	MaxRetries         int        `yaml:"max-retries" env:"MAX_RETRIES"`
+	WordWrap           int        `yaml:"word-wrap" env:"WORD_WRAP"`
+	HTTPProxy          string     `yaml:"http-proxy" env:"HTTP_PROXY"`
+	APIs               APIs       `yaml:"apis"`
+	Role               string     `yaml:"role" env:"ROLE"`
+	Roles              map[string][]string
+	Prompts            PromptConfig `yaml:"prompts"`
+	Theme              string
+	NerdFontGlyphs     bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
+	MCPServers         map[string]MCPServerConfig `yaml:"mcp-servers"`
+	MCPTimeout         time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
+	BuiltinTools       BuiltinToolsConfig         `yaml:"builtin-tools"`
+	WebSearch          bool                       `yaml:"web-search" env:"WEB_SEARCH"`
+	WebSearchProvider  string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
+	WebSearchAPIKey    string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+	WebSearchAPIKeyEnv string                     `yaml:"web-search-api-key-env"`
+	Think              bool                       `yaml:"think" env:"THINK"`
+	ReviewMode         ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	SkillsDirs         []string                   `yaml:"skills-dirs"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
@@ -329,10 +326,9 @@ type Config struct {
 
 // PromptConfig holds user overrides for built-in runtime prompts.
 type PromptConfig struct {
-	Identity        string `yaml:"identity"`
-	Workflow        string `yaml:"workflow"`
-	ToolSelection   string `yaml:"tool-selection"`
-	ShellClassifier string `yaml:"shell-classifier"`
+	Identity      string `yaml:"identity"`
+	Workflow      string `yaml:"workflow"`
+	ToolSelection string `yaml:"tool-selection"`
 }
 
 func (p PromptConfig) Value(key string) string {
@@ -343,8 +339,6 @@ func (p PromptConfig) Value(key string) string {
 		return p.Workflow
 	case prompts.KeyToolSelection:
 		return p.ToolSelection
-	case prompts.KeyShellClassifier:
-		return p.ShellClassifier
 	default:
 		return ""
 	}

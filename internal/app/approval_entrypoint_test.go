@@ -59,7 +59,7 @@ func TestRequestApprovalSavedDirectoryTargets(t *testing.T) {
 			r.rules.Add(rule)
 			var trace approvalTrace
 			err := r.requestApproval(reviewerDeps{
-				ctx: context.Background(), accessIntent: AccessIntent{Class: AccessWrite, Dirs: tc.targets},
+				ctx: context.Background(), accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: tc.targets},
 				// A separate temp root prevents the automatic temporary-write exception
 				// from masking missing rule coverage in these synthetic fixtures.
 				safeDirs: []string{t.TempDir()}, onDecision: func(got approvalTrace) { trace = got },
@@ -124,13 +124,13 @@ func TestRequestApprovalTargetRulesRespectModes(t *testing.T) {
 				intent   AccessIntent
 				reusable bool
 			}{
-				{"local write", AccessIntent{Class: AccessWrite, Dirs: []string{root}}, true},
-				{"remote write", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, true},
-				{"mixed writes", AccessIntent{WriteDirs: []string{root}, WriteOrigins: []string{"https://api.example.com"}}, true},
-				{"different remote origin", AccessIntent{Class: AccessWrite, RemoteOrigins: []string{"https://other.example.com"}}, false},
-				{"unresolved write", AccessIntent{Class: AccessWrite, Dirs: []string{root}, UnresolvedPaths: []string{"$TARGET"}}, false},
-				{"provider write", AccessIntent{Class: AccessWrite, Dirs: []string{root}, ProviderWriteTargets: []string{`HKCU:\Software\Test`}}, false},
-				{"unknown write", AccessIntent{Class: AccessWrite}, false},
+				{"local write", AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{root}}, true},
+				{"remote write", AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, RemoteOrigins: []string{"https://api.example.com"}}, true},
+				{"mixed writes", AccessIntent{WriteCoverage: testCompleteCoverage, WriteDirs: []string{root}, WriteOrigins: []string{"https://api.example.com"}}, true},
+				{"different remote origin", AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, RemoteOrigins: []string{"https://other.example.com"}}, false},
+				{"unresolved write", AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{root}, UnresolvedPaths: []string{"$TARGET"}}, false},
+				{"provider write", AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{root}, ProviderWriteTargets: []string{`HKCU:\Software\Test`}}, false},
+				{"unknown write", AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite}, false},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					err := r.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: tc.intent, safeDirs: []string{t.TempDir()}}, "mcp_update", nil)
@@ -142,7 +142,7 @@ func TestRequestApprovalTargetRulesRespectModes(t *testing.T) {
 				})
 			}
 			// Proven reads do not depend on saved write permissions, even in always.
-			require.NoError(t, r.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: AccessIntent{Class: AccessRead, UnresolvedPaths: []string{"$FILE"}}}, "fs_read_file", nil))
+			require.NoError(t, r.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessRead, UnresolvedPaths: []string{"$FILE"}}}, "fs_read_file", nil))
 		})
 	}
 }
@@ -178,7 +178,7 @@ func TestToolCallerUsesTargetApproval(t *testing.T) {
 				require.NoError(t, registry.Register(toolregistry.Tool{
 					Spec: proto.ToolSpec{Name: name}, Capabilities: toolregistry.ToolCapabilities{Mutable: true},
 					IntentExtractor: func(json.RawMessage) approval.AccessIntent {
-						return AccessIntent{Class: AccessWrite, Dirs: []string{cwd}}
+						return AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{cwd}}
 					},
 					Call: func(context.Context, json.RawMessage) (string, error) { called = true; return "ok", nil },
 				}))

@@ -24,19 +24,10 @@ import (
 // comparison normalizes separators and sorts, because pathutil emits the host
 // separator and known dirs are an unordered set.
 
-// conformanceMods returns a model whose classifier leg is a deterministic stub.
-// The stub is only consulted when the deterministic analysis cannot prove an
-// effect, which is what makes the classifier-merge cases meaningful.
-func conformanceMods(ext string) *Mods {
+// conformanceMods uses the production deterministic assessment pipeline.
+func conformanceMods() *Mods {
 	return &Mods{
 		Config: &Config{},
-		shellAnalyzer: func(string, string) approval.CommandAssessment {
-			return approval.CommandAssessment{
-				Effect:    approval.EffectWrite,
-				KnownDirs: []string{filepath.Join(ext, "from-classifier")},
-				Reason:    "classifier said write",
-			}
-		},
 	}
 }
 
@@ -181,15 +172,15 @@ func posixConformanceCases() []conformanceCase {
 			wantDirs: []string{"<HOME>/x"},
 		},
 		{
-			name: "unknown command merges classifier dirs with literal facts", tool: "shell_run",
-			command: "unknowncmd --flag <EXT>/f", want: approval.EffectWrite,
-			wantDirs: []string{"<EXT>/f", "<EXT>/from-classifier"},
-			note:     "two sources merged: normalized literal plus raw classifier dir",
+			name: "unknown command keeps literal path facts", tool: "shell_run",
+			command: "unknowncmd --flag <EXT>/f", want: approval.EffectUnknown,
+			wantDirs: []string{"<EXT>/f"},
+			note:     "literal extraction preserves external directories for unknown commands",
 		},
 		{
-			name: "unknown command with a bare tilde keeps both sources", tool: "shell_run",
-			command: "unknowncmd ~/x", want: approval.EffectWrite,
-			wantDirs: []string{"<HOME>/x", "<EXT>/from-classifier"},
+			name: "unknown command with a bare tilde keeps literal facts", tool: "shell_run",
+			command: "unknowncmd ~/x", want: approval.EffectUnknown,
+			wantDirs: []string{"<HOME>/x"},
 		},
 		{
 			name: "UNC-style external read is not collapsed into the cwd", tool: "shell_run",
@@ -211,7 +202,7 @@ func TestShellAssessmentConformancePOSIX(t *testing.T) {
 	for _, tc := range posixConformanceCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			command := dirs.expand(tc.command)[0]
-			got := conformanceMods(dirs.ext).assessShellCommand(tc.tool, pathutil.FlavorPOSIX, command, nil, dirs.ws)
+			got := conformanceMods().assessShellCommand(tc.tool, pathutil.FlavorPOSIX, command, nil, dirs.ws)
 
 			require.Equal(t, tc.want, got.Effect, "effect for %q", command)
 			require.Equal(t, slashSet(dirs.expand(tc.wantDirs...)), slashSet(got.KnownDirs),
@@ -231,7 +222,7 @@ func TestShellAssessmentConformancePOSIX(t *testing.T) {
 // scope, so the read branch may replace them with the cwd fallback.
 func TestShellAssessmentKeepsAuthoritativePathFacts(t *testing.T) {
 	dirs := newConformanceDirs(t)
-	m := conformanceMods(dirs.ext)
+	m := conformanceMods()
 
 	for _, tc := range posixConformanceCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -256,9 +247,6 @@ func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 	dirs := newConformanceDirs(t)
 	m := &Mods{
 		Config: testConfigForWorkingDir(dirs.ws),
-		shellAnalyzer: func(string, string) approval.CommandAssessment {
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	script := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 tools/check.py", nil, dirs.ws)
@@ -280,7 +268,7 @@ func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 // Synthetic reconstructions of the truncated omapop log, not its exact calls.
 func TestShellAssessmentReadDiscovery(t *testing.T) {
 	dirs := newConformanceDirs(t)
-	m := conformanceMods(dirs.ext)
+	m := conformanceMods()
 	for _, command := range []string{
 		`ls -la; find . -maxdepth 3 -type f \( -name "*.css" -o -name "*.qml" \)`,
 		`grep -n font Popup.qml | head -80`,

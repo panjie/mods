@@ -248,15 +248,15 @@ func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, boo
 			return parentTargets([]string{output}), true
 		}
 		return nil, hasAnyArg(args[1:], "--ext-diff", "--textconv")
-	case "xxd":
-		if !hasAnyArg(args[1:], "-r", "--revert") {
+	case "uniq", "xxd":
+		operands, reverse, ok := textOutputOperands(command, args[1:])
+		if !ok {
 			return nil, false
 		}
-		operands := commandOperands(args[1:])
-		if len(operands) < 2 {
-			return nil, true
+		if len(operands) == 2 {
+			return parentTargets(operands[1:]), true
 		}
-		return parentTargets(operands[len(operands)-1:]), true
+		return nil, reverse
 	case "remove-item":
 		mode := parentTargets
 		if removeTargetsAreDirs(args[1:], false) {

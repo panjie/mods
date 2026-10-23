@@ -28,6 +28,8 @@ const (
 // UnresolvedPaths records runtime expressions that cannot safely become
 // concrete directory rules (for example $PROFILE or $target).
 type AccessIntent struct {
+	WriteCoverage   TargetCoverage
+	Gaps            []AssessmentGap
 	Class           AccessClass
 	Dirs            []string
 	RemoteOrigins   []string
@@ -44,11 +46,8 @@ type AccessIntent struct {
 	// selected at runtime. A write with an unresolved remote target can be
 	// approved once, but can never produce a reusable allow rule.
 	UnresolvedRemoteTargets []string
-	// UncertainEffect marks a write intent produced when command analysis
-	// could not determine whether or where persistent effects occur. It no
-	// longer forces review by itself: concrete targets still follow the
-	// ordinary location rules, so a safe temporary directory is exempt even
-	// when the effect could not be proven.
+	// UncertainEffect is presentation metadata. WriteCoverage independently
+	// determines whether the known targets bound all possible writes.
 	UncertainEffect bool
 	DynamicProbe    bool
 	Reason          string
@@ -93,10 +92,9 @@ func (intent AccessIntent) HasProviderWriteTargets() bool {
 	return len(intent.ProviderWriteTargets) > 0
 }
 
-// Effect uncertainty alone does not make a concrete target unresolved.
-// Concrete targets follow the ordinary location rules: safe temporary
-// directories are exempt, others require review and explicit target rules may
-// authorize them.
+// HasUnresolvedWriteTargets describes unresolved destinations only. A concrete
+// destination does not establish complete coverage; temporary exemptions and
+// saved rules must also pass HasCompleteWriteTargets.
 func (intent AccessIntent) HasUnresolvedWriteTargets() bool {
 	return intent.DominantClass() == AccessWrite &&
 		(intent.HasUnresolvedPaths() || intent.HasUnresolvedRemoteTargets())
@@ -105,8 +103,7 @@ func (intent AccessIntent) HasUnresolvedWriteTargets() bool {
 // HasNonReusableWriteTargets reports write targets that cannot be represented
 // by a persistent directory or remote-origin rule.
 func (intent AccessIntent) HasNonReusableWriteTargets() bool {
-	return intent.DominantClass() == AccessWrite &&
-		(intent.HasUnresolvedWriteTargets() || intent.HasProviderWriteTargets())
+	return intent.DominantClass() == AccessWrite && !intent.HasCompleteWriteTargets()
 }
 
 func (intent AccessIntent) DominantClass() AccessClass {
@@ -188,12 +185,15 @@ func locateDir(path string, scope Scope, safeDirs []string) dirLocation {
 
 // ClassifyAccess applies the write-only approval matrix. Reads are always
 // allowed, irrespective of location, dynamic targets, or review mode. Writes,
-// including unknown effects mapped to write, ask unless every target is a safe
-// temporary directory. ReviewNever forces allow. Empty or unresolved write
-// targets fail closed to ask.
+// including unknown effects mapped to write, ask unless complete coverage is
+// proven and every target is a safe temporary directory. ReviewNever forces
+// allow. Empty or unresolved write targets fail closed to ask.
 func ClassifyAccess(intent AccessIntent, scope Scope, safeDirs []string, mode ReviewMode) Decision {
 	if mode == ReviewNever {
 		return DecisionAllow
+	}
+	if intent.DominantClass() == AccessWrite && !intent.HasCompleteWriteTargets() {
+		return DecisionAsk
 	}
 	if intent.DominantClass() == AccessWrite && intent.HasProviderWriteTargets() {
 		return DecisionAsk

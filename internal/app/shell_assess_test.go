@@ -450,7 +450,7 @@ func TestShellStaticAnalysisSetsEffect(t *testing.T) {
 }
 
 func TestShellAccessMode(t *testing.T) {
-	require.Equal(t, AccessRead, approval.CommandAssessment{Effect: approval.EffectRead}.AccessIntent().Class)
+	require.Equal(t, AccessRead, approval.CommandAssessment{Evidence: approval.EvidenceStatic, Effect: approval.EffectRead}.AccessIntent().Class)
 	require.Equal(t, AccessWrite, approval.CommandAssessment{Effect: approval.EffectWrite}.AccessIntent().Class)
 	require.Equal(t, AccessWrite, approval.CommandAssessment{Effect: approval.EffectUnknown}.AccessIntent().Class)
 }
@@ -458,6 +458,7 @@ func TestShellAccessMode(t *testing.T) {
 func TestFinalizeShellAnalysisPreservesDynamicReadEffect(t *testing.T) {
 	got := finalizeCommandAssessment(
 		approval.CommandAssessment{
+			Evidence:       approval.EvidenceStatic,
 			Effect:         approval.EffectRead,
 			Reason:         "inspects runtime path",
 			DynamicTargets: []string{"$target"},
@@ -471,79 +472,17 @@ func TestFinalizeShellAnalysisPreservesDynamicReadEffect(t *testing.T) {
 	require.Equal(t, []string{"$target"}, got.DynamicTargets)
 }
 
-func TestParseShellAnalysisResponseCanReturnUnknownEffect(t *testing.T) {
-	analysis, ok := parseShellAssessmentResponse(`{"needs_review":true,"affected_dirs":[],"reason":"not sure","effect":"unknown"}`)
-	require.True(t, ok)
-	require.Equal(t, approval.EffectUnknown, analysis.Effect)
-}
-
-func TestParseShellAssessmentResponseAcceptsNewSchemaAndRejectsDynamicDirs(t *testing.T) {
-	assessment, ok := parseShellAssessmentResponse(`{"effect":"read","affected_dirs":["/etc","$PROFILE.CurrentUserCurrentHost","<cwd>","unknown"],"reason":"inspection"}`)
-	require.True(t, ok)
-	require.Equal(t, approval.EffectRead, assessment.Effect)
-	require.Equal(t, []string{"/etc"}, assessment.KnownDirs)
-}
-
-func TestMergeCommandAssessmentOnlyCompletesUnknownEffect(t *testing.T) {
-	static := approval.CommandAssessment{
-		Effect:         approval.EffectUnknown,
-		DynamicTargets: []string{"$PROFILE"},
-		Shape:          approval.CommandShape{TopLevelActions: 2, Pipelines: 2},
-		Reviewability: approval.CommandReviewability{
-			Level: approval.ReviewabilityCompound,
-		},
-	}
-	completion := approval.CommandAssessment{
-		Effect:         approval.EffectRead,
-		KnownDirs:      []string{"/etc"},
-		DynamicTargets: []string{"$ignored"},
-		Shape:          approval.CommandShape{TopLevelActions: 99, Opaque: true},
-		Reviewability:  approval.CommandReviewability{Level: approval.ReviewabilitySimple},
-	}
-	got := mergeCommandAssessment(static, completion)
-	require.Equal(t, approval.EffectRead, got.Effect)
-	require.Equal(t, []string{"/etc"}, got.KnownDirs)
-	require.Equal(t, []string{"$PROFILE"}, got.DynamicTargets)
-	require.Equal(t, static.Shape, got.Shape)
-	require.Equal(t, static.Reviewability, got.Reviewability)
-
-	known := static
-	known.Effect = approval.EffectWrite
-	require.Equal(t, known, mergeCommandAssessment(known, completion))
-
-	uncertain := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{"/tmp"}, Reason: "classifier timeout"}
-	require.Equal(t, static, mergeCommandAssessment(static, uncertain))
-}
-
-func TestParseLegacyShellEffectRejectsAmbiguousAnswers(t *testing.T) {
-	effect, ok := parseLegacyShellEffect("YES")
-	require.True(t, ok)
-	require.Equal(t, approval.EffectWrite, effect)
-	effect, ok = parseLegacyShellEffect("NO")
-	require.True(t, ok)
-	require.Equal(t, approval.EffectRead, effect)
-	_, ok = parseLegacyShellEffect("YES or NO")
-	require.False(t, ok)
-}
-
-func TestAnalyzeShellCommandDoesNotConcreteDynamicClassifierPaths(t *testing.T) {
+func TestAnalyzeShellCommandUnknownKeepsDynamicPathsUnresolved(t *testing.T) {
 	cwd := canonicalTestPath(t, t.TempDir())
 	m := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			require.Equal(t, "powershell_run", tool)
-			return approval.CommandAssessment{
-				KnownDirs: []string{`$runtime_target`},
-				Reason:    "writes a runtime-resolved target",
-				Effect:    approval.EffectWrite,
-			}
-		},
 	}
 
 	got := m.assessCommand("powershell_run", `custom-writer -Path $target`)
-	require.Equal(t, approval.EffectWrite, got.Effect)
+	require.Equal(t, approval.EffectUnknown, got.Effect)
 	require.Empty(t, got.KnownDirs)
-	require.Contains(t, got.DynamicTargets, `$runtime_target`)
+	require.NotContains(t, got.DynamicTargets, `$runtime_target`)
+
 	for _, dir := range got.KnownDirs {
 		require.NotContains(t, dir, `$runtime_target`)
 	}
@@ -598,9 +537,7 @@ func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows; POSIX AST coverage applies to non-Windows shell_run")
 	}
-	// These commands would previously fall through to the LLM classifier
-	// because of shell metacharacters (|, &&, $()) or missing from the
-	// simple allowlist. The AST classifier should catch them locally.
+	// Deterministic AST analysis handles shell metacharacters and pipelines.
 	cases := []struct {
 		name string
 		tool string
@@ -618,13 +555,8 @@ func TestAnalyzeShellCommandASTReadOnly(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			mods := &Mods{
-				shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-					t.Fatalf("LLM classifier should not be called for %q", command)
-					return approval.UnknownCommandAssessment()
-				},
-			}
-			t.Cleanup(func() { mods.shellAnalyzer = nil })
+			mods := &Mods{}
+
 			result := mods.assessCommand(c.tool, c.cmd)
 			require.NotEmptyf(t, result.Reason, "cmd=%q should have a reason", c.cmd)
 		})
@@ -666,12 +598,7 @@ func TestAnalyzeShellCommandComplexPOSIXReadOnly(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			mods := &Mods{
 				Config: testConfigForWorkingDir(t.TempDir()),
-				shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-					t.Fatalf("LLM classifier should not be called for %q", command)
-					return approval.UnknownCommandAssessment()
-				},
 			}
-			t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 			result := mods.assessCommand("shell_run", c.cmd)
 			require.Equal(t, approval.EffectRead, result.Effect)
@@ -687,9 +614,6 @@ func TestAnalyzeShellCommandPOSIXScalarVariablesDoNotRequireDynamicReview(t *tes
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only statistics"}
-		},
 	}
 	command := `echo "=== 各语言代码量 ===" && for ext in go md yml yaml json sh ts tsx css html; do count=$(find . -name "*.$ext" -not -path "./vendor/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'); files=$(find . -name "*.$ext" -not -path "./vendor/*" | wc -l | tr -d ' '); [ "$count" -gt 0 ] 2>/dev/null && echo "$ext: $count 行, $files 文件"; done 2>/dev/null`
 
@@ -724,9 +648,6 @@ func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only dynamic path"}
-		},
 	}
 	tests := []struct {
 		name    string
@@ -819,12 +740,7 @@ func TestAnalyzeShellCommandComplexPOSIXWrites(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			mods := &Mods{
 				Config: testConfigForWorkingDir(t.TempDir()),
-				shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-					t.Fatalf("LLM classifier should not be called for %q", command)
-					return approval.UnknownCommandAssessment()
-				},
 			}
-			t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 			result := mods.assessCommand("shell_run", c.cmd)
 			require.Equal(t, approval.EffectWrite, result.Effect)
@@ -844,12 +760,7 @@ func TestAnalyzeShellCommandOldestDownloadsPipelineIsExternalRead(t *testing.T) 
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 	cmd := `find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`
 	result := mods.assessCommand("shell_run", cmd)
@@ -860,14 +771,9 @@ func TestAnalyzeShellCommandOldestDownloadsPipelineIsExternalRead(t *testing.T) 
 
 func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 	// Read-only command with external path: AST classifier says read-only,
-	// extractExternalPaths provides KnownDirs, no LLM call needed.
-	mods := &Mods{
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
-	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	// extractExternalPaths provides KnownDirs.
+	mods := &Mods{}
+
 	result := mods.assessCommand("shell_run", "cat /etc/passwd")
 	if runtime.GOOS == "windows" {
 		require.NotContains(t, result.KnownDirs, "/etc/passwd")
@@ -877,13 +783,8 @@ func TestAnalyzeShellCommandASTExternalPath(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandASTSingleQuotedExternalPath(t *testing.T) {
-	mods := &Mods{
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
-	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	mods := &Mods{}
+
 	result := mods.assessCommand("shell_run", "cat '/etc/passwd'")
 	if runtime.GOOS == "windows" {
 		require.NotContains(t, result.KnownDirs, "/etc/passwd")
@@ -903,12 +804,7 @@ func TestAnalyzeShellCommandConfiguredReadOnlyCommand(t *testing.T) {
 	cfg.BuiltinTools.ShellReadOnlyCommands = []string{"rg", "find"}
 	mods := &Mods{
 		Config: cfg,
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for configured command %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 	result := mods.assessCommand("shell_run", "rg needle '"+externalFile+"'")
 	require.Equal(t, approval.EffectRead, result.Effect)
@@ -916,8 +812,10 @@ func TestAnalyzeShellCommandConfiguredReadOnlyCommand(t *testing.T) {
 	require.NotEmpty(t, result.Reason)
 
 	result = mods.assessCommand("shell_run", "find . -delete")
+	require.Equal(t, approval.EffectWrite, result.Effect)
 
 	result = mods.assessCommand("shell_run", "rg needle README.md > matches.txt")
+	require.Equal(t, approval.EffectWrite, result.Effect)
 }
 
 func TestAnalyzeShellCommandReadOnlyWorkingDirAffectedDirs(t *testing.T) {
@@ -928,26 +826,18 @@ func TestAnalyzeShellCommandReadOnlyWorkingDirAffectedDirs(t *testing.T) {
 	t.Run("cwd command falls back to cwd", func(t *testing.T) {
 		mods := &Mods{
 			Config: testConfigForWorkingDir(cwd),
-			shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-				return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only"}
-			},
 		}
-		t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 		result := mods.assessCommand("shell_run", "git status")
 		require.Equal(t, []string{cwd}, result.KnownDirs)
 	})
 
-	t.Run("classifier-completed cwd command has no inferred target", func(t *testing.T) {
+	t.Run("unknown cwd command has no inferred target", func(t *testing.T) {
 		mods := &Mods{
 			Config: testConfigForWorkingDir(cwd),
-			shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-				return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only"}
-			},
 		}
-		t.Cleanup(func() { mods.shellAnalyzer = nil })
 
-		cmd := "cd " + cwd + " && git tag --list 'v*' --sort=-v:refname | head -20"
+		cmd := "custom-reader ."
 		result := mods.assessCommand("shell_run", cmd)
 		require.Empty(t, result.KnownDirs)
 	})
@@ -955,11 +845,7 @@ func TestAnalyzeShellCommandReadOnlyWorkingDirAffectedDirs(t *testing.T) {
 	t.Run("external read does not add cwd", func(t *testing.T) {
 		mods := &Mods{
 			Config: testConfigForWorkingDir(cwd),
-			shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-				return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only"}
-			},
 		}
-		t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 		result := mods.assessCommand("shell_run", "cat "+externalFile)
 		require.NotEmpty(t, result.KnownDirs)
@@ -968,7 +854,7 @@ func TestAnalyzeShellCommandReadOnlyWorkingDirAffectedDirs(t *testing.T) {
 	})
 }
 
-func TestAnalyzeShellCommandBareHomeRejectsClassifierGuess(t *testing.T) {
+func TestAnalyzeShellCommandBareHomeUsesLocalHome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows")
 	}
@@ -977,15 +863,6 @@ func TestAnalyzeShellCommandBareHomeRejectsClassifierGuess(t *testing.T) {
 	t.Setenv("HOME", home)
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			require.Equal(t, "shell_run", tool)
-			require.Equal(t, `cd ~; sed -n '98,104p' .spacemacs`, command)
-			return approval.CommandAssessment{
-				Effect:    approval.EffectRead,
-				KnownDirs: []string{"/home/user"},
-				Reason:    "reads a file",
-			}
-		},
 	}
 
 	command := `cd ~; sed -n '98,104p' .spacemacs`
@@ -1005,26 +882,18 @@ func TestAnalyzeShellCommandBareHomeRejectsClassifierGuess(t *testing.T) {
 	require.Empty(t, rules)
 }
 
-func TestAnalyzeShellCommandWithoutBareHomeKeepsClassifierDirs(t *testing.T) {
+func TestAnalyzeShellCommandUnknownDoesNotInventDirs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell_run uses PowerShell on Windows")
 	}
 	cwd := canonicalTestPath(t, t.TempDir())
-	classifierDir := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{
-				Effect:    approval.EffectRead,
-				KnownDirs: []string{classifierDir},
-				Reason:    "reads external state",
-			}
-		},
 	}
 
 	assessment := mods.assessCommand("shell_run", "awk '{print $1}' settings.ini")
 	require.Equal(t, approval.EffectRead, assessment.Effect)
-	require.Equal(t, []string{classifierDir}, assessment.KnownDirs)
+	require.Empty(t, assessment.KnownDirs)
 }
 
 func hasPathUnder(paths []string, dir string) bool {
@@ -1054,17 +923,11 @@ func TestExtractExternalPathsIgnoresHeredocBody(t *testing.T) {
 	require.NotContains(t, got, "/this/looks/like/a/path")
 }
 
-func TestAnalyzeShellCommandMergesWritableDirsWhenAnalyzerOmitsDirs(t *testing.T) {
+func TestAnalyzeShellCommandPreservesStaticWriteDirs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test exercises POSIX shell heredoc analysis")
 	}
-	mods := &Mods{
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
-	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	mods := &Mods{}
 
 	result := mods.assessCommand("shell_run", "cat > ~/dev/myconfigs/nvim/.gitignore <<'EOF'\nignored\nEOF")
 	require.Contains(t, result.KnownDirs, "~/dev/myconfigs/nvim")
@@ -1090,7 +953,7 @@ func TestAssessCommandPOSIXTargetDirectoryKeepsExternalWrite(t *testing.T) {
 	))
 }
 
-func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
+func TestAnalyzeShellCommandStaticWriteEffects(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test exercises POSIX shell command analysis")
 	}
@@ -1110,13 +973,7 @@ func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			mods := &Mods{
-				shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-					t.Fatalf("LLM classifier should not be called for %q", command)
-					return approval.UnknownCommandAssessment()
-				},
-			}
-			t.Cleanup(func() { mods.shellAnalyzer = nil })
+			mods := &Mods{}
 
 			result := mods.assessCommand("shell_run", c.cmd)
 			require.Contains(t, result.KnownDirs, c.dir)
@@ -1125,30 +982,19 @@ func TestAnalyzeShellCommandStaticWriteSkipsLLM(t *testing.T) {
 	}
 }
 
-func TestAnalyzeShellCommandUnknownFallsThroughToLLM(t *testing.T) {
-	called := false
-	mods := &Mods{
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			called = true
-			return approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "unknown writer"}
-		},
-	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
+func TestAnalyzeShellCommandUnknownRemainsUnknown(t *testing.T) {
+	mods := &Mods{}
 
 	result := mods.assessCommand("shell_run", "some unsupported writer")
-	require.True(t, called, "unknown commands should still reach the LLM seam")
-	require.Equal(t, approval.EffectWrite, result.Effect)
+	require.Equal(t, approval.EffectUnknown, result.Effect)
 }
 
 func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
-	// PowerShell AST classifier requires Windows + powershell.exe. On other
-	// platforms IsReadOnlyPowerShell fail-closes, so read-only commands
-	// reach the LLM seam and t.Fatalf would fire.
+	// These tests require a Windows PowerShell host.
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell AST classifier requires Windows")
 	}
-	// These PowerShell commands should be caught by the AST classifier
-	// and never reach the LLM (shellAnalyzer test seam).
+	// These PowerShell commands are recognized by deterministic AST analysis.
 	cases := []struct {
 		name string
 		cmd  string
@@ -1162,30 +1008,19 @@ func TestAnalyzeShellCommandPowerShellReadOnly(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			mods := &Mods{
-				shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-					t.Fatalf("LLM classifier should not be called for %q", command)
-					return approval.UnknownCommandAssessment()
-				},
-			}
-			t.Cleanup(func() { mods.shellAnalyzer = nil })
+			mods := &Mods{}
+
 			result := mods.assessCommand("powershell_run", c.cmd)
 			require.Equal(t, approval.EffectRead, result.Effect)
 		})
 	}
 }
 
-func TestAnalyzeShellCommandPowerShellWriteSkipsLLM(t *testing.T) {
+func TestAnalyzeShellCommandPowerShellWriteEffects(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell AST classifier requires Windows")
 	}
-	mods := &Mods{
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
-	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	mods := &Mods{}
 
 	result := mods.assessCommand("powershell_run", "Set-Content file.txt 'hello'")
 	require.Contains(t, result.KnownDirs, ".")
@@ -1197,14 +1032,9 @@ func TestAnalyzeShellCommandPowerShellExternalPathDirs(t *testing.T) {
 		t.Skip("PowerShell AST classifier requires Windows")
 	}
 	// Read-only PowerShell command with external path: AST classifier
-	// says read-only, AST-extracted paths provide KnownDirs, no LLM call.
-	mods := &Mods{
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
-	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
+	// says read-only, and AST-extracted paths provide KnownDirs.
+	mods := &Mods{}
+
 	result := mods.assessCommand("powershell_run", "Get-Content C:\\Users\\Public\\file.txt")
 	require.NotEmpty(t, result.KnownDirs, "should have affected dirs from AST")
 
@@ -1222,11 +1052,7 @@ func TestAnalyzeShellCommandPowerShellDivisionDoesNotAffectRoot(t *testing.T) {
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "read-only"}
-		},
 	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 	cmd := `$dl = "$env:USERPROFILE\Downloads"; Get-ChildItem -Path $dl -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 50MB } | ForEach-Object { $sizeInMB = [math]::Round($_.Length / 1MB, 2); "$($_.FullName)  ($sizeInMB MB)" }`
 	result := mods.assessCommand("powershell_run", cmd)
@@ -1242,12 +1068,7 @@ func TestAnalyzeShellCommandPowerShellSetLocationGitLogWorkingDirDirs(t *testing
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(tool, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
-	t.Cleanup(func() { mods.shellAnalyzer = nil })
 
 	cmd := "Set-Location " + cwd + "; git log --oneline -1 -- docs/superpowers/plans/2026-07-02-unified-directory-approval.md"
 	result := mods.assessCommand("powershell_run", cmd)
@@ -1290,10 +1111,6 @@ func TestAnalyzeShellCommandPOSIXEnvPathReferenceResolvesConcreteDir(t *testing.
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	assessment := mods.assessCommand("shell_run", `cat "$MODS_TEST_DATA/config.yml"`)
@@ -1315,10 +1132,6 @@ func TestAnalyzeShellCommandPOSIXEnvBareReferenceResolvesValueDir(t *testing.T) 
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	assessment := mods.assessCommand("shell_run", `ls $MODS_TEST_DATA`)
@@ -1336,9 +1149,6 @@ func TestAnalyzeShellCommandPOSIXEnvAssignmentSuppressesExpansion(t *testing.T) 
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads assigned path"}
-		},
 	}
 
 	assessment := mods.assessCommand("shell_run", `MODS_TEST_DATA=/elsewhere cat "$MODS_TEST_DATA/config.yml"`)
@@ -1356,9 +1166,6 @@ func TestAnalyzeShellCommandPOSIXReadBindingBuiltinSuppressesExpansion(t *testin
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			return approval.CommandAssessment{Effect: approval.EffectRead, Reason: "reads runtime-bound path"}
-		},
 	}
 
 	assessment := mods.assessCommand("shell_run", `read MODS_TEST_DATA; cat "$MODS_TEST_DATA/config.yml"`)
@@ -1412,10 +1219,6 @@ func TestAnalyzeShellCommandPOSIXPublicEnvContentReadAutoAllows(t *testing.T) {
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	assessment := mods.assessCommand("shell_run", `echo $PATH`)
@@ -1457,10 +1260,6 @@ func TestAnalyzeShellCommandTimestampedBackupCopyMaterializesScope(t *testing.T)
 
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	command := `cp ~/.config/hypr/input.lua ~/.config/hypr/input.lua.bak.gesture.$(date +%s) && ls ~/.config/hypr/input.lua.bak.gesture.*`
@@ -1502,11 +1301,6 @@ func TestAnalyzeShellCommandGitCommitResolvesRepositoryScope(t *testing.T) {
 
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, _ string) approval.CommandAssessment {
-			// Outside a repository the static path cannot prove the write, so
-			// the classifier fallback legitimately runs.
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	// The shell runs in the repository, not the cwd, mirroring a cwd
@@ -1514,10 +1308,6 @@ func TestAnalyzeShellCommandGitCommitResolvesRepositoryScope(t *testing.T) {
 	cfg := testConfigForWorkingDir(repo)
 	modsRepo := &Mods{
 		Config: cfg,
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	command := `git commit -m "Confine scalar command substitutions and widen read-only detection"`
@@ -1555,10 +1345,6 @@ func TestAnalyzeShellCommandCompoundInspectionChainAutoAllows(t *testing.T) {
 	cwd := canonicalTestPath(t, t.TempDir())
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	command := `grep -rn "default_entry\|remembers\|remember_last_entry\|2\b" /usr/share/omarchy/ /usr/share/omarchy/default/limine/ 2>/dev/null | head; echo "=== omarchy refs === "; zcat /proc/config.gz 2>/dev/null | grep -i limine | head; echo "--- try limine source/help referenced in entry-tool ---"; sed -n '1,60p' /usr/bin/limine-entry-tool`
@@ -1596,10 +1382,6 @@ func TestAnalyzeShellCommandStateBindingKeepsScalarSubstitutionDynamic(t *testin
 	t.Setenv("HOME", home)
 	mods := &Mods{
 		Config: testConfigForWorkingDir(cwd),
-		shellAnalyzer: func(_, command string) approval.CommandAssessment {
-			t.Fatalf("LLM classifier should not be called for %q", command)
-			return approval.UnknownCommandAssessment()
-		},
 	}
 
 	command := `export PATH=/tmp:$PATH; cp ~/cfg/a.lua ~/cfg/a.lua.$(date +%s)`

@@ -113,20 +113,12 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 }
 
 func readOnlyPowerShellInvocation(inv psCommandInvocation, policy ReadOnlyCommandPolicy) bool {
-	if !isBarePowerShellCommand(inv.Name) {
-		return false
+	session := policy.session
+	if session == nil {
+		session = newSemanticSession(nil, policy)
 	}
-	name := normalizePowerShellCommandName(inv.Name)
-	if policy.matchesPowerShell(name) {
-		return true
-	}
-	if name == "foreach-object" && !powerShellInvocationHasScriptBlockArg(inv) {
-		return false
-	}
-	if readOnlyPowerShellCmdlets[name] {
-		return true
-	}
-	return readOnlySubcommandInvocation(name, inv.Args)
+	read, _ := invocationRead(session.ps(inv), policy)
+	return read
 }
 
 func isBarePowerShellCommand(name string) bool {
@@ -377,82 +369,4 @@ func powerShellCommandArgsContainUnsafeVariable(ir *psBridgeIR) bool {
 		}
 	}
 	return false
-}
-
-// readOnlyPowerShellCmdlets is the allowlist of PowerShell cmdlets and
-// aliases that are always read-only. All names are lowercase.
-var readOnlyPowerShellCmdlets = map[string]bool{
-	// Filesystem reads
-	"get-childitem": true, "gci": true, "ls": true, "dir": true,
-	"get-content": true, "gc": true, "cat": true, "type": true,
-	"get-item": true, "gi": true,
-	"get-itemproperty":      true,
-	"get-itempropertyvalue": true,
-	"test-path":             true,
-	"resolve-path":          true,
-	"get-filehash":          true,
-	"get-acl":               true,
-	"select-string":         true,
-	"get-location":          true, "gl": true, "pwd": true,
-	"get-psdrive":    true,
-	"get-psprovider": true,
-	"convert-path":   true,
-	"join-path":      true,
-	"split-path":     true,
-
-	// Current-process location changes. These alter only the transient
-	// PowerShell working context used by this tool call.
-	"set-location": true, "cd": true, "chdir": true, "sl": true,
-	"push-location": true, "pushd": true,
-	"pop-location": true, "popd": true,
-
-	// Object inspection / transforms (pure)
-	"get-member": true, "gm": true,
-	"get-unique": true, "gu": true,
-	"compare-object": true, "compare": true,
-	"join-string":      true,
-	"get-random":       true,
-	"convertto-json":   true,
-	"convertfrom-json": true,
-	"convertto-csv":    true,
-	"convertfrom-csv":  true,
-	"convertto-xml":    true,
-	"convertto-html":   true,
-	"format-hex":       true,
-
-	// Pipeline transformers
-	"select-object": true, "select": true,
-	"foreach-object": true,
-	"sort-object":    true, "sort": true,
-	"group-object": true, "group": true,
-	"where-object": true, "?": true, "where": true,
-	"measure-object": true, "measure": true,
-	"format-table": true, "ft": true,
-	"format-list": true, "fl": true,
-	"format-wide": true, "fw": true,
-	"format-custom": true, "fc": true,
-	"out-string": true,
-	"out-host":   true,
-	"out-null":   true,
-
-	// Output
-	"write-output": true, "write": true, "echo": true,
-	"write-host": true,
-
-	// System info
-	"get-process": true, "gps": true, "ps": true,
-	"get-service": true, "gsv": true,
-	"get-computerinfo": true,
-	"get-host":         true,
-	"get-date":         true, "date": true,
-	"get-hotfix":    true,
-	"get-timezone":  true,
-	"get-uptime":    true,
-	"get-culture":   true,
-	"get-uiculture": true,
-	"get-alias":     true, "gal": true,
-	"get-history": true, "h": true, "history": true,
-
-	// Other
-	"start-sleep": true, "sleep": true,
 }

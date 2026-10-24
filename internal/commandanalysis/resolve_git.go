@@ -72,8 +72,13 @@ func (m *analysisRun) resolveParsedGitPushOrigins(p *parsedCommand, baseDir stri
 		local = append(local, dirs...)
 		unresolved = append(unresolved, unknown...)
 		if !gitArgsArePush(inv.Args) {
-			a := AssessArgvStaticWithPolicy("git", inv.Args, true, ReadOnlyCommandPolicy{})
-			if a.Effect != EffectRead {
+			read := false
+			if p.semantics != nil && p.semantics.byID[inv.NodeID] != nil {
+				read = p.semantics.byID[inv.NodeID].BuiltinRead
+			} else {
+				read = catalogTokens(append([]string{"git"}, inv.Args...), nativeSpace, ReadOnlyCommandPolicy{}).BuiltinRead
+			}
+			if !read {
 				contextChanged = true
 			}
 		}

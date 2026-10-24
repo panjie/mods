@@ -1,6 +1,7 @@
 package commandanalysis
 
 import (
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -89,32 +90,11 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 	if !ok || !isBarePOSIXCommand(name) {
 		return false, ""
 	}
-	if policy.matchesPOSIX(name) {
-		return true, policy.reason(name)
+	session := policy.session
+	if session == nil {
+		session = newSemanticSession(nil, policy)
 	}
-	if name != "env" && name != "xxd" && name != "uniq" && readOnlyCommands[name] {
-		return true, "read-only command: " + name
-	}
-	args := shellWordsForAccess(call.Args)
-	if len(args) > 0 {
-		args[0] = name
-	}
-	if name == "find" {
-		// mvdan preserves backslashes in unquoted Lit nodes. Decode only
-		// find's grouping tokens here, not quoted data or general path facts.
-		for i, word := range call.Args {
-			if i >= len(args) || len(word.Parts) != 1 {
-				continue
-			}
-			if lit, ok := word.Parts[0].(*syntax.Lit); ok && (lit.Value == `\(` || lit.Value == `\)`) {
-				args[i] = lit.Value[1:]
-			}
-		}
-	}
-	if readOnly, reason := invocationTokensReadOnly(args, policy); readOnly {
-		return true, reason
-	}
-	return false, ""
+	return invocationRead(session.posix(call), policy)
 }
 
 // invocationTokensReadOnly classifies one statically tokenized command. It
@@ -122,54 +102,11 @@ func callIsReadOnly(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) (bool, 
 // output-producing flags cannot inherit a read-only classification merely
 // from their first token.
 func invocationTokensReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, string) {
-	if len(args) == 0 || !isBarePOSIXCommand(args[0]) {
-		return false, ""
-	}
-	name := args[0]
-	if policy.matchesPOSIX(name) {
-		return true, policy.reason(name)
-	}
-	if name == "env" {
-		return envInvocationReadOnly(args[1:], policy)
-	}
-	switch name {
-	case "uniq", "xxd":
-		operands, reverse, ok := textOutputOperands(name, args[1:])
-		return ok && !reverse && len(operands) < 2, "read-only text output"
-	case "find":
-		if findInvocationReadOnly(args[1:]) {
-			return true, "read-only command: find"
-		}
-		return false, ""
-	case "sed":
-		if sedInvocationReadOnly(args[1:]) {
-			return true, "read-only command: sed"
-		}
-		return false, ""
-	case "sort":
-		if sortInvocationReadOnly(args[1:]) {
-			return true, "read-only command: sort"
-		}
-		return false, ""
-	case "xargs":
-		if xargsInvocationReadOnly(args[1:]) {
-			return true, "read-only command: xargs"
-		}
-		return false, ""
-	}
-	if readOnlyCommands[name] {
-		if name == "xxd" && hasAnyArg(args[1:], "-r", "--revert") {
-			return false, ""
-		}
-		return true, "read-only command: " + name
-	}
-	if readOnlySubcommandInvocation(name, args[1:]) {
-		return true, "read-only subcommand: " + name + " " + strings.ToLower(args[1])
-	}
-	return false, ""
+	f := catalogTokens(args, nativeSpace, policy)
+	return f.ReadOnly, f.ReadReason
 }
 
-func findInvocationReadOnly(args []string) bool {
+func findInvocationReadOnly(args []string, ev *catalogEvaluation) bool {
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -207,7 +144,7 @@ paths:
 			if !ok {
 				return false
 			}
-			if readOnly, _ := invocationTokensReadOnly(nested, ReadOnlyCommandPolicy{}); !readOnly {
+			if !ev.processTokens(nested, nativeSpace).BuiltinRead {
 				return false
 			}
 			i = next
@@ -382,7 +319,7 @@ func xargsInvocationReadOnly(args []string) bool {
 	if !isBarePOSIXCommand(name) {
 		return false
 	}
-	if !readOnlyCommands[name] || name == "xxd" {
+	if !catalogNameOnlyRead(nativeSpace, name) {
 		return false
 	}
 	return true
@@ -427,7 +364,7 @@ func shortXargsOptionWithValue(arg string, option byte) bool {
 	return len(arg) > 2 && arg[0] == '-' && arg[1] == option
 }
 
-func envInvocationReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, string) {
+func envInvocationReadOnly(args []string, policy ReadOnlyCommandPolicy, ev *catalogEvaluation) (bool, string) {
 	nested, ok := envCommandArgs(args)
 	if !ok {
 		return false, ""
@@ -435,7 +372,8 @@ func envInvocationReadOnly(args []string, policy ReadOnlyCommandPolicy) (bool, s
 	if len(nested) == 0 {
 		return true, "read-only command: env"
 	}
-	return invocationTokensReadOnly(nested, policy)
+	f := ev.processTokens(nested, nativeSpace)
+	return invocationRead(&f, policy)
 }
 
 func envCommandArgs(args []string) ([]string, bool) {
@@ -488,7 +426,8 @@ func isEnvAssignment(arg string) bool {
 	return true
 }
 
-func readOnlySubcommandInvocation(name string, args []string) bool {
+func readSubcommandEntry(entry *commandEntry, args []string) bool {
+	name := entry.Name
 	if len(args) == 0 {
 		return false
 	}
@@ -499,12 +438,8 @@ func readOnlySubcommandInvocation(name string, args []string) bool {
 		// Explicit query forms only; expire/delete/drop/write mutate refs.
 		return len(args) == 1 || args[1] == "show" && !hasAnyArg(args[2:], "--output", "--ext-diff", "--textconv")
 	}
-	subcommands, ok := subcommandReadOnly[name]
-	if !ok {
-		return false
-	}
 	subcmd := strings.ToLower(args[0])
-	if subcmd == "" || strings.HasPrefix(subcmd, "-") || !subcommands[subcmd] {
+	if subcmd == "" || strings.HasPrefix(subcmd, "-") || !slices.Contains(entry.Subcommands, subcmd) {
 		return false
 	}
 	if name == "git" && hasAnyArg(args[1:], "--output", "--ext-diff", "--textconv") {
@@ -665,72 +600,4 @@ func stmtsAreReadOnly(stmts []*syntax.Stmt, policy ReadOnlyCommandPolicy) bool {
 		}
 	}
 	return true
-}
-
-// readOnlyCommands are always read-only regardless of flags.
-var readOnlyCommands = map[string]bool{
-	"ls": true, "cat": true, "head": true, "tail": true,
-	"wc": true, "file": true, "stat": true, "pwd": true,
-	"echo": true, "date": true, "whoami": true, "hostname": true,
-	"uname": true, "du": true, "df": true, "which": true,
-	"printenv": true, "basename": true, "dirname": true,
-	"realpath": true, "readlink": true,
-	"grep": true, "egrep": true, "fgrep": true,
-	"diff": true, "uniq": true, "comm": true, "tr": true,
-	"cut": true, "strings": true, "xxd": true, "od": true,
-	"zcat":    true,
-	"hexdump": true, "nm": true, "objdump": true, "readelf": true,
-	"md5sum": true, "sha1sum": true, "sha256sum": true, "sha512sum": true,
-	"shasum": true, "cksum": true, "test": true, "[": true,
-	"true": true, "false": true, "seq": true, "printf": true,
-	"id": true, "groups": true, "lsof": true, "ps": true,
-	"free": true, "uptime": true, "w": true, "column": true,
-	"paste": true, "expand": true, "unexpand": true, "nl": true,
-	"rev": true, "tac": true, "fold": true, "fmt": true,
-	"join": true,
-	// Shell builtins that only affect shell state, never the filesystem.
-	// Recognising cd as read-only lets the common "cd /path && cmd" pattern
-	// be recognized by deterministic static analysis.
-	"cd": true,
-}
-
-// subcommandReadOnly maps a tool to its read-only subcommands.
-var subcommandReadOnly = map[string]map[string]bool{
-	"git": {
-		"status": true, "log": true, "diff": true, "show": true,
-		"blame": true, "annotate": true, "rev-parse": true, "describe": true,
-		"reflog": true, "shortlog": true, "ls-files": true, "ls-tree": true,
-		"ls-remote": true, "whatchanged": true, "cat-file": true,
-		"rev-list": true, "merge-base": true, "name-rev": true,
-		"var": true, "for-each-ref": true,
-	},
-	"docker": {
-		"ps": true, "images": true, "logs": true, "inspect": true,
-		"stats": true, "top": true, "history": true, "search": true,
-		"version": true, "info": true, "events": true,
-	},
-	"kubectl": {
-		"get": true, "describe": true, "logs": true, "explain": true,
-		"top": true, "version": true, "api-resources": true,
-		"api-versions": true, "cluster-info": true, "diff": true,
-	},
-	"go": {
-		"version": true, "list": true, "vet": true, "doc": true,
-		"help": true,
-	},
-	"npm": {
-		"list": true, "ls": true, "outdated": true, "info": true,
-		"view": true, "root": true, "help": true, "why": true,
-		"explain": true,
-	},
-	"pnpm": {
-		"list": true, "ls": true, "outdated": true, "info": true,
-		"view": true, "root": true, "help": true, "why": true,
-		"explain": true,
-	},
-	"yarn": {
-		"list": true, "ls": true, "outdated": true, "info": true,
-		"view": true, "root": true, "help": true, "why": true,
-		"explain": true,
-	},
 }

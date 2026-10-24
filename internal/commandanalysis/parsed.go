@@ -14,12 +14,13 @@ import (
 // parsedCommand belongs to one Analyze call. All consumers traverse the same
 // immutable syntax; no parser or filesystem result survives revalidation.
 type parsedCommand struct {
-	source  string
-	file    *syntax.File
-	ir      *psBridgeIR
-	err     error
-	nodes   []parsedNode
-	nodeIDs map[syntax.Node]int
+	semantics *semanticSession
+	source    string
+	file      *syntax.File
+	ir        *psBridgeIR
+	err       error
+	nodes     []parsedNode
+	nodeIDs   map[syntax.Node]int
 }
 
 type parsedNode struct {

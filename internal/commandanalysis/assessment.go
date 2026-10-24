@@ -100,7 +100,10 @@ func (p *parsedCommand) assess(policy ReadOnlyCommandPolicy, context ArgvStaticC
 	if context.run == nil {
 		context.run = NewEngine(Settings{}, Dependencies{}).run(ctxpkg.Background())
 	}
+	p.semantics = newSemanticSession(p, policy)
+	context.semantics = p.semantics
 	analyze := func(policy ReadOnlyCommandPolicy) CommandAssessment {
+		policy.session = p.semantics
 		if p.file != nil {
 			return assessPOSIXFile(p.file, policy, context)
 		}
@@ -211,7 +214,10 @@ func collectPOSIXWriteFactsContext(file *syntax.File, context ArgvStaticContext)
 	if file == nil {
 		return nil, false
 	}
-	confinementOK := posixFileAllowsScalarConfinement(file)
+	if context.semantics == nil {
+		context.semantics = newSemanticSession(&parsedCommand{file: file}, ReadOnlyCommandPolicy{})
+	}
+	confinementOK := context.semantics.confined
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch node := node.(type) {
 		case *syntax.Redirect:
@@ -226,20 +232,15 @@ func collectPOSIXWriteFactsContext(file *syntax.File, context ArgvStaticContext)
 			if len(node.Args) == 0 {
 				return true
 			}
-			if name, ok := staticShellWord(node.Args[0]); ok && hasKnownRiskyInvocation([]string{name}, true) {
-				known = true
-			}
+			f := context.semantics.posix(node)
 			tokens := shellWordsForAccessConfined(node.Args, confinementOK)
-			if len(tokens) == 0 {
-				return true
-			}
-			if gitResult, handled := assessGitArgvStatic(tokens, true, context); handled {
+			if gitResult := context.semantics.git(f, tokens, true, context); gitResult != nil {
 				known = true
 				dirs = append(dirs, gitResult.KnownDirs...)
 				return true
 			}
-			analysis := analyzeWritableTargetsFromTokens(tokens, true, context.pathOptions(true))
-			if analysis.Known || hasKnownRiskyInvocation(tokens, true) {
+			analysis := analyzeWritableTargets(f.Writes, f.KnownWrite, true, true, context.pathOptions(true))
+			if f.KnownWrite || f.Risky {
 				known = true
 				dirs = append(dirs, analysis.Dirs...)
 			}
@@ -257,6 +258,10 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 	return assessPowerShellIRContext(command, ir, policy, ArgvStaticContext{Cwd: cwd})
 }
 func assessPowerShellIRContext(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
+	if policy.session == nil {
+		policy.session = newSemanticSession(nil, policy)
+	}
+	context.semantics = policy.session
 	dirs, dynamic, providerTargets, knownWrite := analyzePowerShellWritablePathsContext(ir, policy, context)
 	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
 	result := CommandAssessment{

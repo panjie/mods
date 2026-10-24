@@ -8,7 +8,10 @@
 - 阶段 2 已实现共享解析、环境快照、固定类型查询/预算/取消、PowerShell IR v2 和取消零执行保护。详细证据见 [阶段 2 记录](docs/superpowers/plans/2026-10-24-command-analysis-stage2.md)。
 - Linux 全量构建/测试、带计数测试、相关包 race 通过；Windows 根模块和 commandanalysis 测试交叉编译通过。真实 Windows host/快照/junction 验收仍待补，不能将交叉编译记作运行通过。
 - 23 条 Linux 事实与阶段 1 完全相同；初次 POSIX 解析计数从 90 降为 17，复核从 60 降为 12。已加入审查后的 Linux 事实和 stage2 work 快照，原 Windows 快照未修改。
-- 阶段 1/2 修改已按用户要求纳入本次本地提交，未推送。阶段 3–6 未开始。后续先补 Windows 真实回放，再按授权推进 catalog；不要重跑迁移脚本。
+- 阶段 1/2 已提交为 `70b2737`，未推送。用户随后授权实施第三阶段。
+- 阶段 3 已实现统一 catalog、选项绑定、注册校验、每次分析内的 invocation 事实复用、native/cmdlet/builtin 身份隔离；未审计规则保留 compatibility 标记。1,032 条独立旧实现观测通过差分检查，date/hostname 及 wrapper/身份的安全收紧有单独测试。详细实现与限制见 [阶段 3 记录](docs/superpowers/plans/2026-10-24-command-analysis-stage3.md)。
+- 阶段 3 Linux 全量 build/test、commandtrace、相关 race 通过；Windows 测试和根模块交叉编译通过。原 app Linux/Windows 事实及 work 快照未修改；真实 Windows/macOS 执行仍待补。
+- 本轮第三阶段修改已按用户要求纳入本次本地提交，未推送。阶段 4–6 尚未实施；角色已建模，但授权仍用 legacy 字段，cp/mv/Git 等不因角色建模而获得 complete。不要重跑一次性迁移脚本。
 
 以下第 0–10 节为 2026-10-23 历史交接记录，其中“下一台机器”待办及阶段状态已由上方结果更新。
 

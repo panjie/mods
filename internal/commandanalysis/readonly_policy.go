@@ -10,6 +10,7 @@ import (
 // command safety checks still run before a leaf invocation reaches the policy.
 type ReadOnlyCommandPolicy struct {
 	Commands []string
+	session  *semanticSession
 }
 
 func (p ReadOnlyCommandPolicy) matchesPOSIX(name string) bool {

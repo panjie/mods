@@ -1,7 +1,6 @@
 package commandanalysis
 
 import (
-	"path"
 	"regexp"
 	"strings"
 
@@ -12,8 +11,8 @@ import (
 // POSIX AST, PowerShell bridge IR, or direct argv assessment.
 
 // Writable target analysis maps a tokenized command (args[0] = program
-// name) to the directories it could write. The dispatch is a hardcoded
-// table of common POSIX utilities and PowerShell cmdlets; anything not
+// name) to the directories it could write. The dispatch uses the unified
+// catalog of common POSIX utilities and PowerShell cmdlets; anything not
 // recognized returns nil (fail-closed at the caller level).
 type writableTargetMode uint8
 
@@ -162,184 +161,13 @@ func validPowerShellProviderName(value string) bool {
 // a concrete relative path from a runtime expression instead of turning both
 // into ".".
 func writableTargetsFromTokens(args []string, posix bool) ([]writableTarget, bool) {
-	if len(args) == 0 {
-		return nil, false
-	}
-	command := path.Base(args[0])
-	if !posix {
-		command = normalizePowerShellCommandName(command)
-		command = canonicalPowerShellWriteCommand(command)
-	}
-	parentTargets := func(paths []string) []writableTarget {
-		result := make([]writableTarget, 0, len(paths))
-		for _, p := range paths {
-			result = append(result, writableTarget{path: p, mode: writableTargetParent})
-		}
-		return result
-	}
-	dirTargets := func(paths []string) []writableTarget {
-		result := make([]writableTarget, 0, len(paths))
-		for _, p := range paths {
-			result = append(result, writableTarget{path: p, mode: writableTargetDirectory})
-		}
-		return result
-	}
-	destinationTargets := func(paths []string) []writableTarget {
-		result := make([]writableTarget, 0, len(paths))
-		for _, p := range paths {
-			result = append(result, writableTarget{path: p, mode: writableTargetDestination})
-		}
-		return result
-	}
-	runtimeTarget := func(value string) []writableTarget {
-		return []writableTarget{{path: value, mode: writableTargetRuntime}}
-	}
-	operandsFor := func(values []string) []string {
-		if posix {
-			return commandOperands(values)
-		}
-		return powerShellCommandOperands(values)
-	}
-	firstOperand := func(values []string) []string {
-		operands := operandsFor(values)
-		if len(operands) == 0 {
-			return nil
-		}
-		return operands[:1]
-	}
-	switch command {
-	case "env":
-		nested, ok := envCommandArgs(args[1:])
-		if !ok || len(nested) == 0 {
-			return nil, false
-		}
-		return writableTargetsFromTokens(nested, posix)
-	case "rm":
-		operands := operandsFor(args[1:])
-		if removeTargetsAreDirs(args[1:], true) {
-			return dirTargets(operands), true
-		}
-		return parentTargets(operands), true
-	case "rmdir":
-		return dirTargets(operandsFor(args[1:])), true
-	case "unlink", "touch", "chmod", "chown":
-		return parentTargets(operandsFor(args[1:])), true
-	case "mkdir":
-		return parentTargets(operandsFor(args[1:])), true
-	case "cp", "mv":
-		if target := targetDirectoryOption(args[1:]); target != "" {
-			// -t names an existing target directory. The command writes inside
-			// that directory, rather than replacing the directory entry itself.
-			return dirTargets([]string{target}), true
-		}
-		operands := operandsFor(args[1:])
-		if len(operands) == 0 {
-			return nil, true
-		}
-		return destinationTargets(operands[len(operands)-1:]), true
-	case "tee":
-		return parentTargets(operandsFor(args[1:])), true
-	case "find":
-		if !findHasWriteAction(args[1:]) {
-			return nil, false
-		}
-		return dirTargets(findRootOperands(args[1:])), true
-	case "sort":
-		if output := sortOutputPath(args[1:]); output != "" {
-			return parentTargets([]string{output}), true
-		}
-		return nil, sortUsesWritableScratch(args[1:])
-	case "git":
-		if output := flagValue(args[1:], "--output"); output != "" {
-			return parentTargets([]string{output}), true
-		}
-		return nil, hasAnyArg(args[1:], "--ext-diff", "--textconv")
-	case "uniq", "xxd":
-		operands, reverse, ok := textOutputOperands(command, args[1:])
-		if !ok {
-			return nil, false
-		}
-		if len(operands) == 2 {
-			return parentTargets(operands[1:]), true
-		}
-		return nil, reverse
-	case "remove-item":
-		mode := parentTargets
-		if removeTargetsAreDirs(args[1:], false) {
-			mode = dirTargets
-		}
-		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
-			return mode(paths), true
-		}
-		return mode(operandsFor(args[1:])), true
-	case "copy-item", "move-item", "copy-itemproperty", "move-itemproperty":
-		if destinations := powerShellParamValues(args, "destination"); len(destinations) > 0 {
-			return destinationTargets(destinations), true
-		}
-		operands := operandsFor(args[1:])
-		if len(operands) == 0 {
-			return nil, true
-		}
-		return destinationTargets(operands[len(operands)-1:]), true
-	case "copy", "move":
-		operands := operandsFor(args[1:])
-		if len(operands) == 0 {
-			return nil, true
-		}
-		return destinationTargets(operands[len(operands)-1:]), true
-	case "new-item", "set-content", "add-content", "clear-content",
-		"set-item", "clear-item", "set-itemproperty", "new-itemproperty",
-		"remove-itemproperty", "clear-itemproperty", "rename-item", "rename-itemproperty", "set-acl":
-		if paths := powerShellParamValues(args, "path", "literalpath"); len(paths) > 0 {
-			return parentTargets(paths), true
-		}
-		if paths := firstOperand(args[1:]); len(paths) > 0 {
-			return parentTargets(paths), true
-		}
-		return runtimeTarget("PowerShell pipeline target"), true
-	case "out-file":
-		if paths := powerShellParamValues(args, "filepath", "literalpath", "path"); len(paths) > 0 {
-			return parentTargets(paths), true
-		}
-		return parentTargets(firstOperand(args[1:])), true
-	default:
-		return nil, false
-	}
+	f := catalogTokens(args, spaceForShell(posix), ReadOnlyCommandPolicy{})
+	return f.Writes, f.KnownWrite
 }
-
-var powerShellWriteAliases = map[string]string{
-	"ac":    "add-content",
-	"clc":   "clear-content",
-	"cli":   "clear-item",
-	"clp":   "clear-itemproperty",
-	"copy":  "copy-item",
-	"cp":    "copy-item",
-	"cpi":   "copy-item",
-	"cpp":   "copy-itemproperty",
-	"del":   "remove-item",
-	"erase": "remove-item",
-	"mi":    "move-item",
-	"mp":    "move-itemproperty",
-	"md":    "new-item",
-	"move":  "move-item",
-	"mv":    "move-item",
-	"ni":    "new-item",
-	"rd":    "remove-item",
-	"ren":   "rename-item",
-	"ri":    "remove-item",
-	"rm":    "remove-item",
-	"rmdir": "remove-item",
-	"rni":   "rename-item",
-	"rnp":   "rename-itemproperty",
-	"rp":    "remove-itemproperty",
-	"sc":    "set-content",
-	"si":    "set-item",
-	"sp":    "set-itemproperty",
-}
-
 func canonicalPowerShellWriteCommand(name string) string {
-	if canonical := powerShellWriteAliases[name]; canonical != "" {
-		return canonical
+	e := commandCatalog.lookup(powershellSpace, name)
+	if e != nil {
+		return e.Name
 	}
 	return name
 }
@@ -488,36 +316,10 @@ func flagValue(args []string, name string) string {
 }
 
 func hasKnownRiskyInvocation(args []string, posix bool) bool {
-	if len(args) == 0 {
-		return false
-	}
-	name := path.Base(args[0])
-	if !posix {
-		name = strings.ToLower(name)
-	}
-	switch name {
-	case "env":
-		nested, ok := envCommandArgs(args[1:])
-		return ok && hasKnownRiskyInvocation(nested, posix)
-	case "rm", "rmdir", "unlink", "touch", "chmod", "chown", "mkdir", "cp", "mv", "tee":
-		return true
-	case "find":
-		return findHasWriteAction(args[1:])
-	case "sort":
-		return sortOutputPath(args[1:]) != "" || sortUsesWritableScratch(args[1:])
-	case "xargs":
-		nested, ok := xargsCommandArgs(args[1:])
-		return ok && hasKnownRiskyInvocation(nested, posix)
-	case "git":
-		return hasAnyArg(args[1:], "--output", "--ext-diff", "--textconv")
-	case "xxd":
-		return hasAnyArg(args[1:], "-r", "--revert")
-	default:
-		return false
-	}
+	return catalogTokens(args, spaceForShell(posix), ReadOnlyCommandPolicy{}).Risky
 }
 
-func findHasWriteAction(args []string) bool {
+func findHasWriteAction(args []string, ev *catalogEvaluation) bool {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-delete", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls":
@@ -527,7 +329,7 @@ func findHasWriteAction(args []string) bool {
 			if !ok {
 				return true
 			}
-			if readOnly, _ := invocationTokensReadOnly(nested, ReadOnlyCommandPolicy{}); !readOnly {
+			if !ev.processTokens(nested, nativeSpace).BuiltinRead {
 				return true
 			}
 			i = next - 1

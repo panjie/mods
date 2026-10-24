@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/panjie/mods/internal/pathutil"
@@ -15,25 +16,9 @@ import (
 // Engine calls inspect inherited Git selectors from the same environment snapshot.
 type ArgvStaticContext struct {
 	run             *analysisRun
+	semantics       *semanticSession
 	Cwd             string
 	EnvironmentKeys []string
-}
-
-var gitWorkingDirWriteSubcommands = map[string]bool{
-	"add":         true,
-	"checkout":    true,
-	"cherry-pick": true,
-	"clean":       true,
-	"commit":      true,
-	"merge":       true,
-	"mv":          true,
-	"rebase":      true,
-	"reset":       true,
-	"restore":     true,
-	"revert":      true,
-	"rm":          true,
-	"stash":       true,
-	"switch":      true,
 }
 
 var gitRepositoryEnvironmentNames = map[string]bool{
@@ -63,7 +48,7 @@ func assessGitArgvStatic(tokens []string, posix bool, context ArgvStaticContext)
 		return CommandAssessment{}, false
 	}
 	subcommand := strings.ToLower(strings.TrimSpace(tokens[1]))
-	if !gitWorkingDirWriteSubcommands[subcommand] || gitInvocationHasUnsupportedIndirection(tokens[2:]) {
+	if !slices.Contains(commandCatalog.lookup(nativeSpace, "git").RepositoryWrites, subcommand) || gitInvocationHasUnsupportedIndirection(tokens[2:]) {
 		return CommandAssessment{}, false
 	}
 	overridden := false

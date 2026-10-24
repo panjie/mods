@@ -43,9 +43,10 @@ func AssessArgvStaticWithContext(program string, args []string, posix bool, poli
 		tokens[0] = normalizePowerShellCommandName(program)
 		policy = ReadOnlyCommandPolicy{}
 	}
-	if ro, reason := invocationTokensReadOnly(tokens, policy); ro {
+	facts := catalogProcessTokens(tokens, policy)
+	if facts.ReadOnly {
 		result.Effect = EffectRead
-		result.Reason = reason
+		result.Reason = facts.ReadReason
 		return result
 	}
 	if gitResult, handled := assessGitArgvStatic(tokens, posix, context); handled {
@@ -53,16 +54,16 @@ func AssessArgvStaticWithContext(program string, args []string, posix bool, poli
 		gitResult.Reviewability = result.Reviewability
 		return gitResult
 	}
-	analysis := analyzeLiteralWritableTargetsFromTokens(tokens, posix)
-	if len(analysis.Dirs) == 0 && len(analysis.ProviderTargets) == 0 && !hasKnownRiskyInvocation(tokens, posix) {
+	analysis := analyzeWritableTargets(facts.Writes, facts.KnownWrite, posix, false)
+	if len(analysis.Dirs) == 0 && len(analysis.ProviderTargets) == 0 && !facts.Risky {
 		return result
 	}
 	result.Effect = EffectWrite
-	collectWriteOperands(&result, tokens, posix)
+	appendWriteOperands(&result, facts.CoverageWrites)
 	result.KnownDirs = analysis.Dirs
 	result.ProviderWriteTargets = analysis.ProviderTargets
 	result.Reason = "write command (static argv analysis)"
-	if boundedWriteInvocation(tokens, posix) {
+	if facts.BoundedWrite {
 		result.WriteCoverage = CoverageComplete
 	} else {
 		result.AddGap(GapWriteTargets)
@@ -77,15 +78,20 @@ func analyzePowerShellWritablePathsContext(ir *psBridgeIR, policy ReadOnlyComman
 	if ir == nil || len(ir.ParseErrors) > 0 {
 		return nil, nil, nil, false
 	}
+	if policy.session == nil {
+		policy.session = newSemanticSession(nil, policy)
+	}
+	context.semantics = policy.session
 	var readUnresolved []string
 	for _, inv := range ir.Invocations {
 		tokens := append([]string{inv.Name}, inv.Args...)
-		if gitResult, handled := assessGitArgvStatic(tokens, false, context); handled {
+		f := policy.session.ps(inv)
+		if gitResult := policy.session.git(f, tokens, false, context); gitResult != nil {
 			known = true
 			dirs = append(dirs, gitResult.KnownDirs...)
 			continue
 		}
-		analysis := analyzeWritableTargetsFromTokens(tokens, false, context.pathOptions(false))
+		analysis := analyzeWritableTargets(f.Writes, f.KnownWrite, false, true, context.pathOptions(false))
 		if !analysis.Known {
 			args := inv.Args
 			readOnly := readOnlyPowerShellInvocation(inv, policy)

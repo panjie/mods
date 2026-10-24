@@ -10,6 +10,9 @@ import (
 // redirection or one known writer cannot hide an unknown invocation beside it.
 func assessPOSIXCoverage(result *CommandAssessment, file *syntax.File, policy ReadOnlyCommandPolicy) {
 	result.WriteCoverage = CoverageComplete
+	if policy.session == nil {
+		policy.session = newSemanticSession(&parsedCommand{file: file}, policy)
+	}
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.CallExpr:
@@ -18,7 +21,8 @@ func assessPOSIXCoverage(result *CommandAssessment, file *syntax.File, policy Re
 				return true
 			}
 			tokens := coverageWords(n.Args)
-			collectWriteOperands(result, tokens, true)
+			f := policy.session.posix(n)
+			appendWriteOperands(result, f.CoverageWrites)
 			if len(tokens) == 0 {
 				result.AddGap(GapUnknownInvocation)
 				return true
@@ -26,7 +30,7 @@ func assessPOSIXCoverage(result *CommandAssessment, file *syntax.File, policy Re
 			if tokens[0] == "cd" {
 				result.AddGap(GapPathContext)
 			}
-			if ro, _ := callIsReadOnly(n, policy); !ro && !boundedWriteInvocation(tokens, true) {
+			if ro, _ := callIsReadOnly(n, policy); !ro && !f.BoundedWrite {
 				result.AddGap(GapUnknownInvocation)
 			}
 		case *syntax.IfClause, *syntax.ForClause, *syntax.WhileClause, *syntax.CaseClause, *syntax.FuncDecl, *syntax.ArithmCmd:
@@ -104,12 +108,16 @@ func assessPowerShellCoverage(result *CommandAssessment, ir *psBridgeIR, policy 
 	if powerShellMutatesPathContext(ir) {
 		result.AddGap(GapPathContext)
 	}
+	if policy.session == nil {
+		policy.session = newSemanticSession(nil, policy)
+	}
 	for _, inv := range ir.Invocations {
 		if readOnlyPowerShellInvocation(inv, policy) {
 			continue
 		}
-		collectWriteOperands(result, append([]string{inv.Name}, inv.Args...), false)
-		if !boundedWriteInvocation(append([]string{inv.Name}, inv.Args...), false) {
+		f := policy.session.ps(inv)
+		appendWriteOperands(result, f.CoverageWrites)
+		if !f.BoundedWrite {
 			result.AddGap(GapUnknownInvocation)
 		}
 	}
@@ -126,82 +134,18 @@ func assessPowerShellCoverage(result *CommandAssessment, ir *psBridgeIR, policy 
 }
 
 func collectWriteOperands(result *CommandAssessment, tokens []string, posix bool) {
-	targets, _ := writableTargetsFromTokens(tokens, posix)
-	for _, target := range targets {
-		value := trimPowerShellLiteral(strings.TrimSpace(target.path))
-		if value != "" {
-			result.WritePaths = append(result.WritePaths, value)
-		}
-	}
+	f := catalogTokens(tokens, spaceForShell(posix), ReadOnlyCommandPolicy{})
+	appendWriteOperands(result, f.CoverageWrites)
 }
 
 func boundedWriteInvocation(tokens []string, posix bool) bool {
-	if len(tokens) == 0 {
-		return false
-	}
-	name := tokens[0]
-	if posix && !isBarePOSIXCommand(name) || !posix && !isBarePowerShellCommand(name) {
-		return false
-	}
-	if !posix {
-		name = canonicalPowerShellWriteCommand(normalizePowerShellCommandName(name))
-	}
-	// Keep this set narrow. Collecting a filename from find -exec, git hooks,
-	// an interpreter, or an unknown program cannot bound its side effects.
-	switch name {
-	case "touch", "tee", "mkdir", "rm", "rmdir", "unlink", "chmod", "chown",
-		"set-content", "add-content", "clear-content", "out-file", "remove-item":
-	case "uniq", "xxd":
-		_, _, ok := textOutputOperands(name, tokens[1:])
-		if !ok {
-			return false
-		}
-	default:
-		return false
-	}
-	analysis := analyzeWritableTargetsFromTokens(tokens, posix)
-	return analysis.Known && (len(analysis.Dirs) > 0 || len(analysis.Unresolved) > 0 || len(analysis.ProviderTargets) > 0)
+	return catalogTokens(tokens, spaceForShell(posix), ReadOnlyCommandPolicy{}).BoundedWrite
 }
-
-// textOutputOperands implements a deliberately bounded subset of the utilities'
-// option grammars. Unknown forms stay reviewable instead of guessing argv roles.
-func textOutputOperands(name string, args []string) (operands []string, reverse, ok bool) {
-	options := true
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if options && arg == "--" {
-			options = false
-			continue
-		}
-		if !options || arg == "-" || !strings.HasPrefix(arg, "-") {
-			operands = append(operands, arg)
-			continue
-		}
-		if name == "uniq" {
-			switch arg {
-			case "-c", "-d", "-u", "-i", "-z", "--count", "--repeated", "--unique", "--ignore-case", "--zero-terminated":
-			case "-f", "-s", "-w", "--skip-fields", "--skip-chars", "--check-chars":
-				i++
-				if i >= len(args) {
-					return nil, false, false
-				}
-			default:
-				return nil, false, false
-			}
-		} else {
-			switch arg {
-			case "-r", "-revert":
-				reverse = true
-			case "-a", "-b", "-e", "-i", "-p", "-ps", "-u":
-			case "-c", "-cols", "-g", "-groupsize", "-l", "-len", "-s", "-seek", "-o":
-				i++
-				if i >= len(args) {
-					return nil, false, false
-				}
-			default:
-				return nil, false, false
-			}
-		}
+func textOutputOperands(name string, args []string) ([]string, bool, bool) {
+	e := commandCatalog.lookup(nativeSpace, name)
+	if e == nil || !e.TextOutput {
+		return nil, false, false
 	}
-	return operands, reverse, len(operands) <= 2
+	b, ok := bindOptions(e.Options, args)
+	return b.Operands, b.Flags["reverse"], ok && len(b.Operands) <= 2
 }

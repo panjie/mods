@@ -115,8 +115,8 @@ func processArgsPassKnownCommandAsScript(args []string, policy ReadOnlyCommandPo
 	if !isBarePOSIXCommand(operand) {
 		return false
 	}
-	return policy.matchesPOSIX(operand) || readOnlyCommands[operand] ||
-		subcommandReadOnly[operand] != nil || subcommandShellCommands[operand] ||
+	return policy.matchesPOSIX(operand) || catalogHasRead(nativeSpace, operand) ||
+		catalogHasSubcommands(operand) || subcommandShellCommands[operand] ||
 		flagPrefixShellCommands[operand] || exactShellCommands[operand]
 }
 
@@ -189,7 +189,7 @@ func analyzePOSIXReviewability(file *syntax.File, policy ReadOnlyCommandPolicy, 
 			}
 			if read, _ := callIsReadOnly(leaf.call, policy); read {
 				readCount++
-			} else if posixCallKnownWriter(leaf.call) {
+			} else if posixCallKnownWriterPolicy(leaf.call, policy) {
 				writeCount++
 			}
 			if posixDecorativeCall(leaf.call) {
@@ -248,14 +248,17 @@ func posixStatementShape(stmt *syntax.Stmt) (actions, pipelines int) {
 }
 
 func posixCallKnownWriter(call *syntax.CallExpr) bool {
+	return posixCallKnownWriterPolicy(call, ReadOnlyCommandPolicy{})
+}
+func posixCallKnownWriterPolicy(call *syntax.CallExpr, policy ReadOnlyCommandPolicy) bool {
 	if call == nil || len(call.Args) == 0 {
 		return false
 	}
-	tokens := shellWordsForAccess(call.Args)
-	if len(tokens) == 0 {
-		return false
+	session := policy.session
+	if session == nil {
+		session = newSemanticSession(nil, policy)
 	}
-	return analyzeWritableTargetsFromTokens(tokens, true).Known || hasKnownRiskyInvocation(tokens, true)
+	return session.posix(call).DiagnosticWrite
 }
 
 func posixDecorativeCall(call *syntax.CallExpr) bool {
@@ -320,8 +323,11 @@ func analyzePowerShellReviewability(ir *psBridgeIR, policy ReadOnlyCommandPolicy
 		if readOnlyPowerShellInvocation(inv, policy) {
 			readCount++
 		} else {
-			tokens := append([]string{inv.Name}, inv.Args...)
-			if analyzeWritableTargetsFromTokens(tokens, false).Known || hasKnownRiskyInvocation(tokens, false) {
+			session := policy.session
+			if session == nil {
+				session = newSemanticSession(nil, policy)
+			}
+			if session.ps(inv).DiagnosticWrite {
 				writeCount++
 			}
 		}
@@ -385,7 +391,7 @@ func powerShellDirectProgram(ir *psBridgeIR) bool {
 	}
 	inv := ir.Invocations[0]
 	name := normalizePowerShellCommandName(inv.Name)
-	if !isBarePowerShellCommand(inv.Name) || readOnlyPowerShellCmdlets[name] || powerShellStateCommands[name] || shellHostPrograms[name] || looksLikePowerShellCmdlet(name) {
+	if !isBarePowerShellCommand(inv.Name) || catalogHasRead(powershellSpace, name) || powerShellStateCommands[name] || shellHostPrograms[name] || looksLikePowerShellCmdlet(name) {
 		return false
 	}
 	for _, arg := range inv.Args {

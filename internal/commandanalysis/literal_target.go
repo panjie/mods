@@ -15,10 +15,12 @@ import (
 // PowerShell provider values stay separate so they cannot become DirAllow
 // rules.
 func propagateLiteralTargets(known, dynamic []string, literals map[string]string, ws string) ([]string, []string, []string) {
+	return propagateLiteralTargetsOptions(known, dynamic, literals, ws, pathutil.DefaultOptions(ws, pathutil.FlavorPowerShell))
+}
+func propagateLiteralTargetsOptions(known, dynamic []string, literals map[string]string, ws string, opts pathutil.Options) ([]string, []string, []string) {
 	if len(literals) == 0 || len(dynamic) == 0 {
 		return known, dynamic, nil
 	}
-	opts := pathutil.DefaultOptions(ws, pathutil.FlavorPowerShell)
 	kept := make([]string, 0, len(dynamic))
 	var added, providers []string
 	for _, target := range dynamic {

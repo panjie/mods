@@ -2,10 +2,7 @@ package commandanalysis
 
 import (
 	"bytes"
-	"os"
 	"strings"
-
-	"github.com/panjie/mods/internal/commandtrace"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -132,11 +129,9 @@ func simpleHomeExpansion(exp *syntax.ParamExp) (string, bool) {
 		exp.Slice != nil || exp.Repl != nil || exp.Names != 0 || exp.Exp != nil {
 		return "", false
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return "", false
-	}
-	return home, true
+	// Keep the reference symbolic until the per-analysis environment snapshot
+	// materializes targets. Syntax consumers must never reread process state.
+	return "$HOME", true
 }
 
 func shellWordsForAccess(words []*syntax.Word) []string {
@@ -218,12 +213,18 @@ func shellWordsForAccessConfined(words []*syntax.Word, confinementOK bool) []str
 // this to recover quoted path arguments without treating quoted awk/sed
 // programs as raw shell text.
 func StaticPOSIXLiteralArgs(command string) []string {
-	commandtrace.POSIXParse()
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
+	file, err := parsePOSIX(command)
 	if err != nil {
 		return nil
 	}
+	return staticPOSIXLiteralArgs(file)
+}
+
+func staticPOSIXLiteralArgs(file *syntax.File) []string {
+	if file == nil {
+		return nil
+	}
+
 	var args []string
 	syntax.Walk(file, func(node syntax.Node) bool {
 		call, ok := node.(*syntax.CallExpr)
@@ -246,12 +247,18 @@ func StaticPOSIXLiteralArgs(command string) []string {
 // word remain literal. Keeping this distinction in the AST layer prevents the
 // approval classifier from guessing a concrete home directory.
 func POSIXHasUnquotedBareHomeArg(command string) bool {
-	commandtrace.POSIXParse()
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
+	file, err := parsePOSIX(command)
 	if err != nil {
 		return false
 	}
+	return posixHasUnquotedBareHomeArg(file)
+}
+
+func posixHasUnquotedBareHomeArg(file *syntax.File) bool {
+	if file == nil {
+		return false
+	}
+
 	found := false
 	syntax.Walk(file, func(node syntax.Node) bool {
 		if found {

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/panjie/mods/internal/commandtrace"
 	"github.com/panjie/mods/internal/pathutil"
 )
 
@@ -47,7 +45,14 @@ func trimRemoteToken(value string) string {
 }
 
 func (m *analysisRun) resolveGitPushOrigins(posix bool, command, baseDir string) (origins, unresolved, local []string) {
-	invocations, ok := ShellInvocations(command, posix)
+	flavor := pathutil.FlavorPOSIX
+	if !posix {
+		flavor = pathutil.FlavorPowerShell
+	}
+	return m.resolveParsedGitPushOrigins(m.parse(command, flavor), baseDir)
+}
+func (m *analysisRun) resolveParsedGitPushOrigins(p *parsedCommand, baseDir string) (origins, unresolved, local []string) {
+	invocations, ok := p.invocations()
 	if !ok {
 		return nil, nil, nil
 	}
@@ -147,45 +152,35 @@ func (m *analysisRun) resolveGitRemoteOrigins(rest []string, cwd string) (origin
 	if cwd == "" || strings.ContainsAny(remote, "$`") {
 		return nil, []string{"Git remote"}, nil
 	}
+	for _, key := range m.environmentKeys {
+		if gitRepositoryEnvironmentKey(key) || strings.EqualFold(key, "PATH") {
+			return nil, []string{"Git environment"}, nil
+		}
+	}
 	ctx := context.Background()
 	if m != nil && m.ctx != nil {
 		ctx = m.ctx
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	git, err := exec.LookPath("git")
-	if err != nil {
+	query := func(kind GitQueryKind, name string) (string, error) { return m.gitQuery(ctx, kind, cwd, name) }
+	if _, err := query(GitExecutable, ""); err != nil {
 		return nil, []string{"Git executable"}, nil
 	}
-	if location := pathutil.Location(git, cwd, m.programDirs); location == pathutil.LocationWorkingDir || location == pathutil.LocationSafe {
-		return nil, []string{"untrusted Git executable"}, nil
-	}
-	query := func(args ...string) (string, error) {
-		commandtrace.GitQuery()
-		cmd := exec.CommandContext(ctx, git, append([]string{"-C", cwd}, args...)...)
-		cmd.WaitDelay = 100 * time.Millisecond
-		out := &gitQueryOutput{limit: 64 << 10}
-		cmd.Stdout = out
-		cmd.Stderr = io.Discard
-		err := cmd.Run()
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(out.String()), nil
-	}
+
 	if remote == "" {
-		branch, _ := query("symbolic-ref", "--quiet", "--short", "HEAD")
+		branch, _ := query(GitBranch, "")
 		if branch != "" {
-			remote, _ = query("config", "--get", "branch."+branch+".pushRemote")
+			remote, _ = query(GitBranchPushRemote, branch)
 		}
 		if remote == "" {
-			remote, _ = query("config", "--get", "remote.pushDefault")
+			remote, _ = query(GitPushDefault, "")
 		}
 		if remote == "" && branch != "" {
-			remote, _ = query("config", "--get", "branch."+branch+".remote")
+			remote, _ = query(GitBranchRemote, branch)
 		}
 		if remote == "" {
-			remotes, queryErr := query("remote")
+			remotes, queryErr := query(GitRemotes, "")
 			if queryErr != nil {
 				return nil, []string{"default Git remote"}, nil
 			}
@@ -207,7 +202,7 @@ func (m *analysisRun) resolveGitRemoteOrigins(rest []string, cwd string) (origin
 	if origin, ok := NormalizeRemoteOrigin(remote); ok {
 		// Query configuration only: remote get-url does not accept a remote
 		// defined solely through -c on all supported Git versions.
-		config, err := query("config", "--null", "--get-regexp", `^url\..*\.(insteadof|pushinsteadof)$`)
+		config, err := query(GitURLRewrites, "")
 		var exitErr *exec.ExitError
 		if err != nil && !(errors.As(err, &exitErr) && exitErr.ExitCode() == 1) {
 			return []string{origin}, []string{"Git URL rewrite configuration"}, nil
@@ -216,7 +211,7 @@ func (m *analysisRun) resolveGitRemoteOrigins(rest []string, cwd string) (origin
 		if normalized, valid := NormalizeRemoteOrigin(rewritten); valid && !gitHelperDestination(rewritten) {
 			return []string{normalized}, nil, nil
 		}
-		if target, valid := gitLocalTarget(rewritten, cwd); valid {
+		if target, valid := m.gitLocalTarget(rewritten, cwd); valid {
 			return nil, nil, []string{target}
 		}
 		return nil, []string{"Git rewritten destination"}, nil
@@ -225,18 +220,18 @@ func (m *analysisRun) resolveGitRemoteOrigins(rest []string, cwd string) (origin
 		return nil, []string{"Git remote"}, nil
 	}
 	if strings.ContainsAny(remote, `/\`) || remote == "." {
-		if target, ok := gitLocalTarget(remote, cwd); ok {
+		if target, ok := m.gitLocalTarget(remote, cwd); ok {
 			return nil, nil, []string{target}
 		}
 	}
-	output, err := query("remote", "get-url", "--push", "--all", remote)
+	output, err := query(GitPushURLs, remote)
 	if err != nil {
 		return nil, []string{remote}, nil
 	}
 	for _, target := range strings.Split(output, "\n") {
 		if origin, ok := NormalizeRemoteOrigin(strings.TrimSpace(target)); ok && !gitHelperDestination(target) {
 			origins = append(origins, origin)
-		} else if target, ok := gitLocalTarget(strings.TrimSpace(target), cwd); ok {
+		} else if target, ok := m.gitLocalTarget(strings.TrimSpace(target), cwd); ok {
 			local = append(local, target)
 		} else {
 			unresolved = append(unresolved, "Git destination")
@@ -260,7 +255,7 @@ type gitQueryOutput struct {
 
 func (b *gitQueryOutput) Write(p []byte) (int, error) {
 	if b.Len()+len(p) > b.limit {
-		return 0, fmt.Errorf("Git query output exceeded limit")
+		return 0, fmt.Errorf("%w: Git query output", errAnalysisBudget)
 	}
 	return b.Buffer.Write(p)
 }
@@ -295,6 +290,9 @@ func isGitProgram(program string) bool {
 
 // Local remotes are directory targets, not network origins or helper names.
 func gitLocalTarget(raw, cwd string) (string, bool) {
+	return NewEngine(Settings{}, Dependencies{}).run(context.Background()).gitLocalTarget(raw, cwd)
+}
+func (m *analysisRun) gitLocalTarget(raw, cwd string) (string, bool) {
 	if strings.HasPrefix(raw, "file://") {
 		u, err := url.Parse(raw)
 		if err != nil {
@@ -317,7 +315,7 @@ func gitLocalTarget(raw, cwd string) (string, bool) {
 	if !filepath.IsAbs(raw) {
 		raw = filepath.Join(cwd, raw)
 	}
-	resolved, err := pathutil.ResolveThroughExistingParent(raw)
+	resolved, err := m.resolvePath(raw)
 	return resolved, err == nil
 }
 

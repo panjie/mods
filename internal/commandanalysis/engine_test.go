@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -58,7 +59,7 @@ func TestEngineSnapshotsTrustAndInputs(t *testing.T) {
 	require.Contains(t, constrained.Gaps, GapExecutionContext)
 	require.Equal(t, EffectRead, result.Effect, "binding must not mutate an approved snapshot")
 
-	shell := Input{Dialect: pathutil.FlavorPOSIX, Shell: &ShellInput{InvocationDialect: pathutil.FlavorPOSIX, Source: "cat file", ShadowedEnvironment: map[string]bool{"SECRET": true}}}
+	shell := Input{Dialect: pathutil.FlavorPOSIX, Shell: &ShellInput{Source: "cat file", ShadowedEnvironment: map[string]bool{"SECRET": true}}}
 	copy, err := shell.snapshot()
 	require.NoError(t, err)
 	delete(shell.Shell.ShadowedEnvironment, "SECRET")
@@ -97,4 +98,38 @@ func TestAnalysisPackageDoesNotImportPolicyOrApplication(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Exercise every reference field so new mutable facts cannot silently bypass
+// the approved-result snapshot boundary.
+func TestResultCloneIsolatesAllReferenceFields(t *testing.T) {
+	before := Result{}
+	fields := reflect.ValueOf(&before).Elem()
+	for i := 0; i < fields.NumField(); i++ {
+		field := fields.Field(i)
+		switch field.Kind() {
+		case reflect.Slice:
+			field.Set(reflect.MakeSlice(field.Type(), 1, 1))
+			field.Index(0).SetString("original")
+		case reflect.Map:
+			field.Set(reflect.MakeMap(field.Type()))
+			field.SetMapIndex(reflect.ValueOf("key"), reflect.ValueOf("original"))
+		}
+	}
+	before.Reviewability.Reasons = []ReviewabilityReason{ReviewabilityOpaqueExecution}
+	after := before.Clone()
+	fields = reflect.ValueOf(&after).Elem()
+	for i := 0; i < fields.NumField(); i++ {
+		field := fields.Field(i)
+		switch field.Kind() {
+		case reflect.Slice:
+			field.Index(0).SetString("changed")
+			require.Equal(t, "original", reflect.ValueOf(before).Field(i).Index(0).String(), fields.Type().Field(i).Name)
+		case reflect.Map:
+			field.SetMapIndex(reflect.ValueOf("key"), reflect.ValueOf("changed"))
+			require.Equal(t, "original", reflect.ValueOf(before).Field(i).MapIndex(reflect.ValueOf("key")).String())
+		}
+	}
+	after.Reviewability.Reasons[0] = ReviewabilityDynamicWriteTarget
+	require.Equal(t, ReviewabilityOpaqueExecution, before.Reviewability.Reasons[0])
 }

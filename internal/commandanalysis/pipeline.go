@@ -26,10 +26,16 @@ import (
 // unreachable on Windows, where every shell tool name selects PowerShell.
 func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) CommandAssessment {
 	policy := m.policy
-	posix := flavor != pathutil.FlavorPowerShell
-	result := AssessShellStaticWithContext(command, posix, policy, ws)
+	p := m.parse(command, flavor)
+	result := p.assess(policy, ArgvStaticContext{Cwd: ws, run: m})
+	if p.err != nil {
+		result.AddGap(GapParse)
+		if m.failure != nil || m.ctx.Err() != nil {
+			return result
+		}
+	}
 	result.RemoteOrigins = append(result.RemoteOrigins, extractLiteralRemoteOrigins(command)...)
-	gitOrigins, unresolvedGitRemotes, gitDirs := m.resolveGitPushOrigins(m.invocationDialect != pathutil.FlavorPowerShell, command, ws)
+	gitOrigins, unresolvedGitRemotes, gitDirs := m.resolveParsedGitPushOrigins(p, ws)
 	result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
 	result.KnownDirs = appendMissingShellDirs(result.KnownDirs, gitDirs)
 	result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
@@ -41,10 +47,10 @@ func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shado
 	// an authoritative directory is never dropped in favour of the fallback: an
 	// omitted external literal must never silently collapse to the cwd
 	// approval scope.
-	externalPaths := shellExternalPathFacts(result.KnownDirs, ws, flavor)
+	externalPaths := shellExternalPathFactsOptions(result.KnownDirs, ws, flavor, m.options(ws, flavor))
 	var extractedPaths []string
 	if !result.PowerShellPathContextMutation {
-		extractedPaths = ExternalShellPathFacts(command, ws, flavor, policy)
+		extractedPaths = externalShellPathFacts(p, ws, flavor, result.Effect == EffectRead, m.options(ws, flavor))
 	}
 	externalPaths = appendMissingShellDirs(externalPaths, extractedPaths)
 	if result.Effect == EffectWrite {
@@ -67,22 +73,22 @@ func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shado
 	{
 		allowValueDirs := result.Effect == EffectRead
 		if flavor == pathutil.FlavorPowerShell && !result.DynamicProbe && !commandMutatesPowerShellEnvironment(command) {
-			result.KnownDirs, result.DynamicTargets = resolvePowerShellEnvTargets(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs)
+			result.KnownDirs, result.DynamicTargets = resolvePowerShellEnvTargetsOptions(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs, m.options(ws, flavor))
 			// Engine-automatic variables ($PROFILE / $HOME) resolve in a fresh
 			// child shell and can be materialized ahead of approval, turning an
 			// unresolvable dynamic target into a concrete, rule-saveable directory.
-			resolved := ResolveEngineAutomaticTargets(result.DynamicTargets, probeAssignedSet(result.AssignedVariables))
+			resolved := m.resolveAutomatics(result.DynamicTargets, probeAssignedSet(result.AssignedVariables))
 			result.KnownDirs, result.DynamicTargets = materializeProbeTargets(result.KnownDirs, result.DynamicTargets, resolved)
 			// Variables assigned a literal value in the same command resolve to a
 			// concrete path as well, so a target such as $p in `$p="C:\x"; Set-Content $p`
 			// becomes a reviewable, rule-saveable directory instead of a dynamic target.
 			var literalProviders []string
-			result.KnownDirs, result.DynamicTargets, literalProviders = propagateLiteralTargets(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws)
+			result.KnownDirs, result.DynamicTargets, literalProviders = propagateLiteralTargetsOptions(result.KnownDirs, result.DynamicTargets, result.LiteralAssignments, ws, m.options(ws, flavor))
 			if result.Effect == EffectWrite {
 				result.ProviderWriteTargets = appendMissingShellDirs(result.ProviderWriteTargets, literalProviders)
 			}
-		} else if flavor == pathutil.FlavorPOSIX && !commandMutatesPOSIXEnvironment(command) {
-			result.KnownDirs, result.DynamicTargets = resolvePOSIXEnvTargets(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs)
+		} else if flavor == pathutil.FlavorPOSIX && !posixEnvironmentMutation(command, p.file) {
+			result.KnownDirs, result.DynamicTargets = resolvePOSIXEnvTargetsOptions(result.KnownDirs, result.DynamicTargets, ws, command, shadowedEnv, allowValueDirs, m.options(ws, flavor))
 		}
 	}
 	// A statically proven read with no explicit external target operates in the
@@ -95,7 +101,7 @@ func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shado
 	return finalizeCommandAssessment(result, flavor)
 }
 
-// shellExternalPathFacts, which applies the same policy to approval's static
+// shellExternalPathFacts, which applies the same policy to the parser's static
 // facts only: literal argv directories never pass
 // through that gate.
 func filterPowerShellDialectDirs(dirs []string) []string {
@@ -113,30 +119,32 @@ func filterPowerShellDialectDirs(dirs []string) []string {
 	return kept
 }
 
-// shellExternalPathFacts keeps the directories approval reported whose location
+// shellExternalPathFacts keeps the directories the parser reported whose location
 // is outside the cwd.
 //
 // For the POSIX dialect it deliberately does not re-judge whether a token
-// "looks like" an explicit path: approval already extracted it from a real
+// "looks like" an explicit path: the parser already extracted it from a real
 // shell parse, and a second heuristic here could only drop facts. Dropping one
 // is unsafe because the read branch replaces the fact list wholesale, so an
 // emptied list falls back to the cwd scope below — turning an external
 // read into a silent cwd read. Measured example: `cat \\server\share\f`
-// in the POSIX dialect is reported by approval as external but does not look
+// in the POSIX dialect is reported by the parser as external but does not look
 // like an explicit path to the older heuristic, and used to collapse to the
 // cwd scope.
 //
 // The PowerShell dialect keeps the explicit-path gate, because there it encodes
-// a dialect policy rather than a distrust of approval: leading-slash tokens are
+// a dialect policy rather than a distrust of the parser: leading-slash tokens are
 // native-program flags or division, never paths (see
 // IsExplicitPowerShellPathArg and the "Unix-style absolute paths are
-// ignored" cases in shell_assess_test.go).
+// ignored" cases in pipeline_helpers_test.go).
 func shellExternalPathFacts(dirs []string, ws string, flavor pathutil.Flavor) []string {
+	return shellExternalPathFactsOptions(dirs, ws, flavor, pathutil.DefaultOptions(ws, flavor))
+}
+func shellExternalPathFactsOptions(dirs []string, ws string, flavor pathutil.Flavor, opts pathutil.Options) []string {
 	if len(dirs) == 0 {
 		return nil
 	}
 	var result []string
-	opts := pathutil.DefaultOptions(ws, flavor)
 	for _, dir := range dirs {
 		dir = strings.TrimSpace(dir)
 		if dir == "" {
@@ -221,7 +229,7 @@ func appendReviewabilityReason(reasons []ReviewabilityReason, reason Reviewabili
 func (m *analysisRun) resolveAssessmentWritePaths(result CommandAssessment, cwd string, flavor pathutil.Flavor, literal bool) CommandAssessment {
 	for _, raw := range result.WritePaths {
 		if !literal && strings.Contains(raw, "$") && len(result.DynamicTargets) == 0 {
-			opts := pathutil.DefaultOptions(cwd, flavor)
+			opts := m.options(cwd, flavor)
 			opts.Env["PWD"] = cwd
 			if expanded, ok := pathutil.ExpandEnvPath(raw, opts); ok {
 				raw = expanded
@@ -231,7 +239,7 @@ func (m *analysisRun) resolveAssessmentWritePaths(result CommandAssessment, cwd 
 			result.AddGap(GapWriteTargets)
 			continue
 		}
-		path := pathutil.NormalizeShellPath(raw, pathutil.DefaultOptions(cwd, flavor))
+		path := pathutil.NormalizeShellPath(raw, m.options(cwd, flavor))
 		if literal {
 			path = normalizeLiteralProcessPath(raw, cwd, flavor)
 		}
@@ -239,7 +247,7 @@ func (m *analysisRun) resolveAssessmentWritePaths(result CommandAssessment, cwd 
 			result.AddGap(GapWriteTargets)
 			continue
 		}
-		real, err := pathutil.ResolveThroughExistingParent(path)
+		real, err := m.resolvePath(path)
 		if err != nil {
 			result.AddGap(GapWriteTargets)
 			continue
@@ -428,6 +436,7 @@ func (m *analysisRun) analyzeProcess(invocation ProcessInput, cwd string, flavor
 	result := AssessArgvStaticWithContext(invocation.Program, invocation.Args, posix, policy, ArgvStaticContext{
 		Cwd:             cwd,
 		EnvironmentKeys: environmentKeys,
+		run:             m,
 	})
 	result.RemoteOrigins = extractLiteralRemoteOrigins(strings.Join(append([]string{invocation.Program}, invocation.Args...), " "))
 	if isGitProgram(invocation.Program) {
@@ -458,7 +467,7 @@ func (m *analysisRun) analyzeProcess(invocation ProcessInput, cwd string, flavor
 	if strings.ContainsAny(invocation.Program, `/\`) || pathutil.IsAbs(invocation.Program) {
 		resolved := strings.TrimSpace(invocation.Program)
 		if !pathutil.IsAbs(resolved) {
-			resolved = pathutil.NormalizeShellPath(resolved, pathutil.DefaultOptions(cwd, flavor))
+			resolved = pathutil.NormalizeShellPath(resolved, m.options(cwd, flavor))
 		}
 		switch pathutil.Location(resolved, baseDir, m.programDirs) {
 		case pathutil.LocationWorkingDir, pathutil.LocationSafe:

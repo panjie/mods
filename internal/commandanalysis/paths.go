@@ -23,7 +23,7 @@ func parentDir(path string) string {
 }
 
 func cleanDir(path string) string {
-	cleaned := pathutil.NormalizePath(path, pathutil.DefaultOptions("", pathutil.FlavorPOSIX))
+	cleaned := pathutil.NormalizePath(path, pathutil.Options{Flavor: pathutil.FlavorPOSIX, Env: map[string]string{}})
 	if cleaned == "" {
 		return "."
 	}

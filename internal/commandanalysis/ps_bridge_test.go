@@ -389,3 +389,29 @@ func TestParseWithBridgeBackgroundOperatorSemantics(t *testing.T) {
 		})
 	}
 }
+
+func TestParseWithBridgeV2Relationships(t *testing.T) {
+	t.Cleanup(CloseBridge)
+	source := `Get-Content 'notes.txt' | ForEach-Object { Write-Output $_ }; Write-Output hello > 'out.txt'`
+	ir, err := parseWithBridge(source)
+	require.NoError(t, err)
+	require.Equal(t, "2", ir.Version)
+	require.NoError(t, validateIRNodes(ir, source))
+	require.NotEmpty(t, ir.Nodes)
+	require.Len(t, ir.Redirections, 1)
+	require.Equal(t, "'out.txt'", ir.Redirections[0].Target)
+	require.True(t, ir.Redirections[0].Literal)
+	require.NotZero(t, ir.Redirections[0].Owner)
+	require.False(t, ir.Redirections[0].Append)
+	found := false
+	for _, inv := range ir.Invocations {
+		require.NotZero(t, inv.NodeID)
+		if inv.Name == "get-content" {
+			require.Len(t, inv.Arguments, 1)
+			require.True(t, inv.Arguments[0].Literal)
+			require.Equal(t, "'notes.txt'", inv.Arguments[0].Text)
+			found = true
+		}
+	}
+	require.True(t, found)
+}

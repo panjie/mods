@@ -3,6 +3,8 @@ package commandanalysis
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +26,8 @@ var psBridgeScript []byte
 // bridge script after parsing a command. The Go-side classifier consumes
 // this to determine read-only status.
 type psBridgeIR struct {
+	Nodes                        []psSyntaxNode        `json:"nodes"`
+	Redirections                 []psRedirection       `json:"redirections"`
 	Version                      string                `json:"version"`
 	Commands                     []string              `json:"commands"`
 	Operators                    []string              `json:"operators"`
@@ -52,45 +57,48 @@ type psBridgeIR struct {
 }
 
 type psCommandInvocation struct {
-	Name string   `json:"name"`
-	Args []string `json:"args"`
+	NodeID    int          `json:"node_id"`
+	Arguments []psArgument `json:"arguments"`
+	Name      string       `json:"name"`
+	Args      []string     `json:"args"`
 }
 
 type bridgeProcess struct {
-	mu         sync.Mutex
-	cmd        *exec.Cmd
-	stdin      io.WriteCloser
-	stdout     *bufio.Reader
-	scriptPath string
-	dead       bool
+	hostKey      [32]byte
+	shutdownOnce sync.Once
+	mu           sync.Mutex
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	stdout       *bufio.Reader
+	scriptPath   string
+	dead         bool
 }
 
 func (bp *bridgeProcess) shutdown() {
-	defer func() {
-		if bp.scriptPath != "" {
-			_ = os.Remove(bp.scriptPath)
+	bp.shutdownOnce.Do(func() {
+		defer func() {
+			if bp.scriptPath != "" {
+				_ = os.Remove(bp.scriptPath)
+			}
+		}()
+		_ = bp.stdin.Close()
+		done := make(chan struct{})
+		go func() {
+			_ = bp.cmd.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			_ = bp.cmd.Process.Kill()
+			<-done
 		}
-	}()
-	_ = bp.stdin.Close()
-	done := make(chan struct{})
-	go func() {
-		_ = bp.cmd.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		_ = bp.cmd.Process.Kill()
-		<-done
-	}
+	})
 }
 
 var (
 	globalBridge   *bridgeProcess
 	globalBridgeMu sync.Mutex
-
-	winPSPath     string
-	winPSPathOnce sync.Once
 )
 
 // getWindowsShellPath resolves the PowerShell binary that runs the
@@ -106,18 +114,8 @@ var (
 // closed. If the executor is ever changed to use a different host, update
 // this resolver to match.
 func getWindowsShellPath() string {
-	winPSPathOnce.Do(func() {
-		if p, err := exec.LookPath("pwsh.exe"); err == nil {
-			winPSPath = p
-			return
-		}
-		if p, err := exec.LookPath("powershell.exe"); err == nil {
-			winPSPath = p
-			return
-		}
-		winPSPath = ""
-	})
-	return winPSPath
+	shell, _ := powerShellHost(os.Environ())
+	return shell
 }
 
 const maxCommandBytes = 65536
@@ -135,15 +133,38 @@ func sanitizeCommand(command string) error {
 }
 
 func getOrStartBridge() (*bridgeProcess, error) {
-	globalBridgeMu.Lock()
-	defer globalBridgeMu.Unlock()
-	if globalBridge != nil {
-		return globalBridge, nil
-	}
-	bp, err := startBridgeProcess()
+	return getOrStartBridgeFor(context.Background(), os.Environ())
+}
+func getOrStartBridgeFor(ctx context.Context, env []string) (*bridgeProcess, error) {
+	shell, err := powerShellHost(env)
 	if err != nil {
 		return nil, err
 	}
+	key := sha256.Sum256([]byte(shell + "\x00" + strings.Join(env, "\x00")))
+	for !globalBridgeMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Millisecond):
+		}
+	}
+	defer globalBridgeMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if globalBridge != nil && globalBridge.hostKey == key {
+		return globalBridge, nil
+	}
+	if globalBridge != nil {
+		old := globalBridge
+		globalBridge = nil
+		go old.shutdown()
+	}
+	bp, err := startBridgeProcessFor(shell, env)
+	if err != nil {
+		return nil, err
+	}
+	bp.hostKey = key
 	globalBridge = bp
 	return bp, nil
 }
@@ -169,10 +190,14 @@ func CloseBridge() {
 }
 
 func startBridgeProcess() (*bridgeProcess, error) {
-	shell := getWindowsShellPath()
-	if shell == "" {
-		return nil, fmt.Errorf("PowerShell host not available (neither pwsh.exe nor powershell.exe found on PATH)")
+	env := os.Environ()
+	shell, err := powerShellHost(env)
+	if err != nil {
+		return nil, err
 	}
+	return startBridgeProcessFor(shell, env)
+}
+func startBridgeProcessFor(shell string, env []string) (*bridgeProcess, error) {
 	scriptFile, err := os.CreateTemp("", "mods-ps-bridge-*.ps1")
 	if err != nil {
 		return nil, fmt.Errorf("create bridge script: %w", err)
@@ -192,6 +217,7 @@ func startBridgeProcess() (*bridgeProcess, error) {
 		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-File", scriptPath,
 	)
+	cmd.Env = env
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
 		_ = os.Remove(scriptPath)
@@ -219,8 +245,12 @@ func startBridgeProcess() (*bridgeProcess, error) {
 }
 
 const bridgeCallTimeout = 15 * time.Second
+const maxBridgeOutputBytes = 4 << 20
 
 func (bp *bridgeProcess) roundTrip(command string) ([]byte, error) {
+	return bp.roundTripContext(context.Background(), command)
+}
+func (bp *bridgeProcess) roundTripContext(ctx context.Context, command string) ([]byte, error) {
 	req, err := json.Marshal(struct {
 		Cmd string `json:"cmd"`
 	}{Cmd: command})
@@ -239,13 +269,16 @@ func (bp *bridgeProcess) roundTrip(command string) ([]byte, error) {
 			ch <- result{nil, fmt.Errorf("write: %w", werr)}
 			return
 		}
-		line, rerr := bp.stdout.ReadBytes('\n')
+		line, rerr := readBridgeLine(bp.stdout)
 		ch <- result{bytes.TrimSpace(line), rerr}
 	}()
 
 	select {
 	case r := <-ch:
 		return r.data, r.err
+	case <-ctx.Done():
+		_ = bp.stdin.Close()
+		return nil, ctx.Err()
 	case <-time.After(bridgeCallTimeout):
 		_ = bp.stdin.Close()
 		return nil, fmt.Errorf("bridge call timed out after %s", bridgeCallTimeout)
@@ -257,6 +290,12 @@ func (bp *bridgeProcess) roundTrip(command string) ([]byte, error) {
 // failure, JSON decode error) it returns a non-nil error so the caller
 // can fail-closed. One automatic restart is attempted on transport failure.
 func parseWithBridge(command string) (*psBridgeIR, error) {
+	return parseWithBridgeContext(context.Background(), command)
+}
+func parseWithBridgeContext(ctx context.Context, command string) (*psBridgeIR, error) {
+	return parseWithBridgeHost(ctx, command, os.Environ())
+}
+func parseWithBridgeHost(ctx context.Context, command string, env []string) (*psBridgeIR, error) {
 	commandtrace.BridgeParse()
 	if runtime.GOOS != "windows" {
 		return nil, fmt.Errorf("powerShell bridge requires Windows")
@@ -266,12 +305,21 @@ func parseWithBridge(command string) (*psBridgeIR, error) {
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		bp, err := getOrStartBridge()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		bp, err := getOrStartBridgeFor(ctx, env)
 		if err != nil {
 			return nil, err
 		}
 
-		bp.mu.Lock()
+		for !bp.mu.TryLock() {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Millisecond):
+			}
+		}
 		if bp.dead {
 			bp.mu.Unlock()
 			invalidateBridge(bp)
@@ -279,25 +327,36 @@ func parseWithBridge(command string) (*psBridgeIR, error) {
 			continue
 		}
 		commandtrace.BridgeRoundTrip()
-		raw, callErr := bp.roundTrip(command)
+		raw, callErr := bp.roundTripContext(ctx, command)
 		if callErr != nil {
 			bp.dead = true
 			bp.mu.Unlock()
 			invalidateBridge(bp)
 			go bp.shutdown()
-			if attempt == 0 {
+			if attempt == 0 && ctx.Err() == nil {
 				continue
 			}
 			return nil, callErr
 		}
 		bp.mu.Unlock()
 
-		return unmarshalBridgeResponse(raw)
+		ir, decodeErr := unmarshalBridgeResponse(raw)
+		if decodeErr != nil {
+			bp.mu.Lock()
+			bp.dead = true
+			bp.mu.Unlock()
+			invalidateBridge(bp)
+			go bp.shutdown()
+		}
+		return ir, decodeErr
 	}
 	return nil, fmt.Errorf("bridge unavailable after restart")
 }
 
 func unmarshalBridgeResponse(raw []byte) (*psBridgeIR, error) {
+	if len(raw) > maxBridgeOutputBytes {
+		return nil, errAnalysisBudget
+	}
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("bridge emitted empty output")
 	}
@@ -305,8 +364,44 @@ func unmarshalBridgeResponse(raw []byte) (*psBridgeIR, error) {
 	if err := json.Unmarshal(raw, &ir); err != nil {
 		return nil, fmt.Errorf("bridge JSON decode: %w", err)
 	}
-	if ir.Version != "1" {
+	if ir.Version != "2" {
 		return nil, fmt.Errorf("bridge IR version mismatch: got %q", ir.Version)
 	}
 	return &ir, nil
+}
+
+func readBridgeLine(reader *bufio.Reader) ([]byte, error) {
+	var data []byte
+	for {
+		part, err := reader.ReadSlice('\n')
+		if len(data)+len(part) > maxBridgeOutputBytes {
+			return nil, errAnalysisBudget
+		}
+		data = append(data, part...)
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		return data, err
+	}
+}
+
+type psSyntaxNode struct {
+	ID     int    `json:"id"`
+	Parent int    `json:"parent"`
+	Start  int    `json:"start"`
+	End    int    `json:"end"`
+	Kind   string `json:"kind"`
+}
+type psArgument struct {
+	NodeID  int    `json:"node_id"`
+	Text    string `json:"text"`
+	Literal bool   `json:"literal"`
+}
+type psRedirection struct {
+	NodeID  int    `json:"node_id"`
+	Owner   int    `json:"owner"`
+	Target  string `json:"target"`
+	Literal bool   `json:"literal"`
+	Append  bool   `json:"append"`
+	Stream  int    `json:"stream"`
 }

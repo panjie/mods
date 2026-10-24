@@ -296,9 +296,30 @@ func TestCommandAnalysisWorkBaseline(t *testing.T) {
 			f.assess(t, c)
 			repeat = commandtrace.Snapshot().Since(before)
 		}
+		// Stage 2's contract is independent of saved measurements: one main
+		// parse per shell analysis, including a fresh parse for revalidation.
+		assertParseWork := func(counts commandtrace.Counts) {
+			t.Helper()
+			switch c.Mode {
+			case "posix":
+				require.EqualValues(t, 1, counts.POSIXParses, c.ID)
+				require.Zero(t, counts.BridgeParses, c.ID)
+			case "powershell":
+				require.Zero(t, counts.POSIXParses, c.ID)
+				require.EqualValues(t, 1, counts.BridgeParses, c.ID)
+				require.EqualValues(t, 1, counts.BridgeRoundTrips, c.ID)
+			default:
+				require.Zero(t, counts.POSIXParses, c.ID)
+				require.Zero(t, counts.BridgeParses, c.ID)
+			}
+		}
+		assertParseWork(first)
+		if a.AccessIntent().DominantClass() == approval.AccessWrite {
+			assertParseWork(repeat)
+		}
 		observed[c.ID] = work{first, repeat}
 	}
-	file := filepath.Join("testdata", "command_analysis", "work_"+runtime.GOOS+".json")
+	file := filepath.Join("testdata", "command_analysis", "work_stage2_"+runtime.GOOS+".json")
 	if *updateCommandBaseline {
 		data, err := json.MarshalIndent(observed, "", "  ")
 		require.NoError(t, err)

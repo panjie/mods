@@ -4,6 +4,7 @@ package commandanalysis
 
 import (
 	"context"
+	"os"
 	"slices"
 
 	"github.com/panjie/mods/internal/pathutil"
@@ -21,36 +22,73 @@ func NewEngine(settings Settings, dependencies Dependencies) *Engine {
 }
 
 type analysisRun struct {
-	ctx               context.Context
-	workingDir        string
-	programDirs       []string
-	policy            ReadOnlyCommandPolicy
-	invocationDialect pathutil.Flavor
+	dependencies         Dependencies
+	environment          []string
+	environmentKeys      []string
+	queries, outputBytes int
+	failure              error
+	ctx                  context.Context
+	workingDir           string
+	programDirs          []string
+	policy               ReadOnlyCommandPolicy
 }
 
 func (e *Engine) run(ctx context.Context) *analysisRun {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return &analysisRun{ctx: ctx, workingDir: e.settings.WorkingDir,
+	deps := e.dependencies
+	if deps.Environment == nil {
+		deps.Environment = os.Environ
+	}
+	if deps.Paths == nil {
+		deps.Paths = hostPaths{}
+	}
+	if deps.Git == nil {
+		deps.Git = hostGit{}
+	}
+	return &analysisRun{dependencies: deps, environment: slices.Clone(deps.Environment()), ctx: ctx, workingDir: e.settings.WorkingDir,
 		programDirs: slices.Clone(e.dependencies.UntrustedProgramDirs),
 		policy:      ReadOnlyCommandPolicy{Commands: slices.Clone(e.settings.ReadOnlyCommands)}}
 }
 
 func (e *Engine) Analyze(ctx context.Context, input Input) (Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return UnknownCommandAssessment(), err
+	}
+	if !input.withinBudget() {
+		result := UnknownCommandAssessment()
+		result.AddGap(GapAnalysisBudget)
+		result.Reason = errAnalysisBudget.Error()
+		return result, nil
+	}
 	in, err := input.snapshot()
 	if err != nil {
 		return UnknownCommandAssessment(), err
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, analysisTimeout)
+	defer cancel()
 	run := e.run(ctx)
+
 	if err := run.ctx.Err(); err != nil {
 		return UnknownCommandAssessment(), err
 	}
 	if in.Shell != nil {
-		run.invocationDialect = in.Shell.InvocationDialect
-		return run.analyzeShell(in.Dialect, in.Shell.Source, in.Shell.ShadowedEnvironment, in.Cwd).Clone(), nil
+		for key, shadowed := range in.Shell.ShadowedEnvironment {
+			if shadowed {
+				run.environmentKeys = append(run.environmentKeys, key)
+			}
+		}
+		return run.finish(run.analyzeShell(in.Dialect, in.Shell.Source, in.Shell.ShadowedEnvironment, in.Cwd))
 	}
-	return run.analyzeProcess(*in.Process, in.Cwd, in.Dialect).Clone(), nil
+	run.environmentKeys = slices.Clone(in.Process.EnvironmentKeys)
+	return run.finish(run.analyzeProcess(*in.Process, in.Cwd, in.Dialect))
 }
 
 // ConstrainResolvedProcess preserves the existing pinned-program trust check.

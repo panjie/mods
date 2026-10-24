@@ -28,7 +28,7 @@ func TestWindowsReliabilityPowerShellHostAndGrammar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse profile/unicode/error command with %q: %v", host, err)
 	}
-	if ir.Version != "1" || len(ir.Commands) == 0 {
+	if ir.Version != "2" || len(ir.Commands) == 0 {
 		t.Fatalf("incomplete bridge IR: %#v", ir)
 	}
 

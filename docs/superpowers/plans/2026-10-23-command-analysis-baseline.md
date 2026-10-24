@@ -1,6 +1,6 @@
 # 阶段 0：命令分析基线
 
-日期：2026-10-23。阶段 0 已实施；独立分析模块和语义库尚未迁移。  
+日期：2026-10-23。本报告保留阶段 0 测量时的状态；后续模块迁移与 Linux 验证见 [阶段 1 收尾](2026-10-24-command-analysis-stage1.md)。
 关联：[设计](../specs/2026-10-23-command-analysis-catalog-design.md)、[实施计划](2026-10-23-command-analysis-catalog.md)。
 
 ## 1. 测量范围与环境
@@ -132,3 +132,7 @@ Linux/macOS、race、PowerShell 5.1 实际 host 尚未验证；不把 Windows �
 3. 语义扩展先写人工正反例，再评审具体快照差异；限制样本变 allow 必须证明全部副作用/目标。
 4. 自动生成的观测不是安全真值。发现现有错误放行时独立修复，不以兼容性保留漏洞。
 5. 新平台用同一 corpus 运行并审查后才保存该平台快照；真实工作负载数据另建分组，不与构造样本混用分母。
+
+## 9. 阶段 2 后续测量
+
+2026-10-24 在独立 checkout 对比阶段 1/2 的 Linux 23 条事实，JSON 完全一致，已新增 `baseline_linux.json`。阶段 2 工作量保存为 `work_stage2_linux.json`，原 Windows 阶段 0 测量保留。详细计数、范围和未验证平台见 [阶段 2 记录](2026-10-24-command-analysis-stage2.md)，不能用阶段 0 的重复解析计数作为阶段 2 的期望。

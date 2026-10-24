@@ -22,6 +22,9 @@ const (
 type AssessmentGap string
 
 const (
+	GapAnalysisBudget    AssessmentGap = "analysis budget exceeded"
+	GapAnalysisCancelled AssessmentGap = "analysis cancelled"
+	GapParse             AssessmentGap = "syntax unavailable"
 	GapUnknownInvocation AssessmentGap = "unknown invocation"
 	GapControlFlow       AssessmentGap = "unmodeled control flow"
 	GapPathContext       AssessmentGap = "mutable path context"

@@ -543,6 +543,9 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	})
 
 	t.Run("auto allows read-only powershell touching external path in non-TTY", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("real PowerShell bridge requires Windows")
+		}
 
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
@@ -556,6 +559,9 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	})
 
 	t.Run("auto allows read-only powershell pipeline touching external path", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("real PowerShell bridge requires Windows")
+		}
 
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
 		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
@@ -569,6 +575,9 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 	})
 
 	t.Run("saved rule allows matching powershell command", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("real PowerShell bridge requires Windows")
+		}
 
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
 		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite}))

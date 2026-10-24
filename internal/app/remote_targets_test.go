@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -82,6 +83,9 @@ func TestResolveGitPushOrigin(t *testing.T) {
 }
 
 func TestResolvePowerShellGitPushOrigin(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("real PowerShell bridge requires Windows")
+	}
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
 	}

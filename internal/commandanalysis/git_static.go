@@ -6,12 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/panjie/mods/internal/pathutil"
 )
 
 // ArgvStaticContext carries deterministic process facts that are not encoded
 // in argv. EnvironmentKeys must include keys added by the tool invocation;
-// inherited Git repository-selection variables are inspected directly.
+// Engine calls inspect inherited Git selectors from the same environment snapshot.
 type ArgvStaticContext struct {
+	run             *analysisRun
 	Cwd             string
 	EnvironmentKeys []string
 }
@@ -63,10 +66,22 @@ func assessGitArgvStatic(tokens []string, posix bool, context ArgvStaticContext)
 	if !gitWorkingDirWriteSubcommands[subcommand] || gitInvocationHasUnsupportedIndirection(tokens[2:]) {
 		return CommandAssessment{}, false
 	}
-	if gitRepositoryEnvironmentOverridden(context.EnvironmentKeys) {
+	overridden := false
+	if context.run != nil {
+		overridden = gitEnvironmentOverridden(context.run.environment, context.run.environmentKeys)
+	} else {
+		overridden = gitRepositoryEnvironmentOverridden(context.EnvironmentKeys)
+	}
+	if overridden {
 		return CommandAssessment{}, false
 	}
-	dirs, err := discoverGitWriteDirs(context.Cwd)
+	var dirs []string
+	var err error
+	if context.run != nil {
+		dirs, err = context.run.repositoryDirs(context.Cwd)
+	} else {
+		dirs, err = discoverGitWriteDirs(context.Cwd)
+	}
 	if err != nil {
 		return CommandAssessment{}, false
 	}
@@ -96,7 +111,10 @@ func gitInvocationHasUnsupportedIndirection(args []string) bool {
 }
 
 func gitRepositoryEnvironmentOverridden(extraKeys []string) bool {
-	for _, entry := range os.Environ() {
+	return gitEnvironmentOverridden(os.Environ(), extraKeys)
+}
+func gitEnvironmentOverridden(environment, extraKeys []string) bool {
+	for _, entry := range environment {
 		name, value, ok := strings.Cut(entry, "=")
 		if ok && value != "" && gitRepositoryEnvironmentKey(name) {
 			return true
@@ -238,4 +256,15 @@ func canonicalExistingDir(value string) (string, error) {
 		return "", err
 	}
 	return filepath.Clean(resolved), nil
+}
+
+func (c ArgvStaticContext) pathOptions(posix bool) pathutil.Options {
+	flavor := pathutil.FlavorPOSIX
+	if !posix {
+		flavor = pathutil.FlavorPowerShell
+	}
+	if c.run != nil {
+		return c.run.options(c.Cwd, flavor)
+	}
+	return pathutil.DefaultOptions(c.Cwd, flavor)
 }

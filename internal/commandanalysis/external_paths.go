@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/panjie/mods/internal/commandtrace"
 	"github.com/panjie/mods/internal/pathutil"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -38,8 +37,11 @@ var (
 // (../). The results populate KnownDirs so ClassifyAccess and risk labels can
 // preserve external access facts when command-specific analysis omits them.
 func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, policy ReadOnlyCommandPolicy) []string {
-	originalCommand := command
-	opts := pathutil.DefaultOptions(cwdDir, flavor)
+	p := parseCommandLegacy(command, flavor != pathutil.FlavorPowerShell)
+	return externalShellPathFacts(p, cwdDir, flavor, p.assess(policy, ArgvStaticContext{}).Effect == EffectRead, pathutil.DefaultOptions(cwdDir, flavor))
+}
+func externalShellPathFacts(p *parsedCommand, cwdDir string, flavor pathutil.Flavor, readOnly bool, opts pathutil.Options) []string {
+	command := p.source
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
@@ -92,7 +94,7 @@ func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, poli
 	// /etc, /tmp) are valid filesystem references. Heredoc bodies are
 	// blanked first so embedded path-like tokens don't produce false
 	// positives, then single-quoted script literals are stripped.
-	command = blankPOSIXHeredocBodies(command)
+	command = blankPOSIXHeredocBodiesFromFile(command, p.file)
 	command = reSingleQuoted.ReplaceAllString(command, " ")
 	for _, m := range reUnixAbsPath.FindAllStringSubmatch(command, -1) {
 		add(m[1])
@@ -112,7 +114,7 @@ func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, poli
 	for _, m := range reParentPath.FindAllString(command, -1) {
 		add(m)
 	}
-	hasBareHome := POSIXHasUnquotedBareHomeArg(originalCommand)
+	hasBareHome := posixHasUnquotedBareHomeArg(p.file)
 	if hasBareHome {
 		add("~")
 	}
@@ -120,8 +122,8 @@ func ExternalShellPathFacts(command, cwdDir string, flavor pathutil.Flavor, poli
 	// awk/sed regex syntax as paths. Recover genuine quoted path arguments
 	// from the shell AST: only values that begin with explicit external-path
 	// syntax are considered, so quoted program bodies remain ignored.
-	if readOnly, _ := IsReadOnlyPOSIXWithPolicy(originalCommand, policy); readOnly {
-		for _, arg := range StaticPOSIXLiteralArgs(originalCommand) {
+	if readOnly {
+		for _, arg := range staticPOSIXLiteralArgs(p.file) {
 			if arg == "~" {
 				// A bare tilde in the literal recovery list may be quoted in
 				// the source, which the child shell never expands; the
@@ -293,10 +295,15 @@ func IsShellPathSeparator(ch byte) bool {
 }
 
 func blankPOSIXHeredocBodies(command string) string {
-	commandtrace.POSIXParse()
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
+	file, err := parsePOSIX(command)
 	if err != nil {
+		return command
+	}
+	return blankPOSIXHeredocBodiesFromFile(command, file)
+}
+
+func blankPOSIXHeredocBodiesFromFile(command string, file *syntax.File) string {
+	if file == nil {
 		return command
 	}
 

@@ -542,17 +542,18 @@ func TestAnalyzeShellCommandPOSIXScalarVariablesDoNotRequireDynamicReview(t *tes
 	command := `echo "=== 各语言代码量 ===" && for ext in go md yml yaml json sh ts tsx css html; do count=$(find . -name "*.$ext" -not -path "./vendor/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'); files=$(find . -name "*.$ext" -not -path "./vendor/*" | wc -l | tr -d ' '); [ "$count" -gt 0 ] 2>/dev/null && echo "$ext: $count 行, $files 文件"; done 2>/dev/null`
 
 	assessment := mods.assessCommand("shell_run", command)
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	// Runtime evaluation remains unproven; materialized paths cannot prove effects.
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets)
 	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
-	require.Equal(t, DecisionAllow, ClassifyAccess(
+	require.Equal(t, DecisionAsk, ClassifyAccess(
 		assessment.AccessIntent(), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto),
 	))
 	presentation := formatReviewPresentationWithIntent(
 		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
 		WorkingDirScope(cwd), assessment.AccessIntent(),
 	)
-	require.Equal(t, "Run a read-only command", presentation.headline)
+	require.Equal(t, "Run with unknown effects", presentation.headline)
 	for _, row := range presentation.rows {
 		if row.Label != "Target" {
 			continue
@@ -574,26 +575,32 @@ func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
 		Config: testConfigForWorkingDir(cwd),
 	}
 	tests := []struct {
-		name    string
-		command string
-		target  string
+		name     string
+		command  string
+		target   string
+		effect   approval.CommandEffect
+		decision approval.Decision
 	}{
-		{name: "reader operand", command: `cat "$FILE"`, target: "$FILE"},
-		{name: "find root", command: `find "$ROOT" -name "*.$ext" -print`, target: "$ROOT"},
+		{name: "reader operand", command: `cat "$FILE"`, target: "$FILE", effect: approval.EffectRead, decision: DecisionAllow},
+		{name: "find root", command: `find "$ROOT" -name "*.$ext" -print`, target: "$ROOT", effect: approval.EffectUnknown, decision: DecisionAsk},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assessment := mods.assessCommand("shell_run", tt.command)
-			require.Equal(t, approval.EffectRead, assessment.Effect)
+			require.Equal(t, tt.effect, assessment.Effect)
 			require.Equal(t, []string{tt.target}, assessment.DynamicTargets)
-			require.Equal(t, DecisionAllow, ClassifyAccess(
+			require.Equal(t, tt.decision, ClassifyAccess(
 				assessment.AccessIntent(), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto),
 			))
 			presentation := formatReviewPresentationWithIntent(
 				"shell_run", []byte(`{"command":`+strconv.Quote(tt.command)+`}`), assessment,
 				WorkingDirScope(cwd), assessment.AccessIntent(),
 			)
-			require.Equal(t, "Read a dynamic target", presentation.headline)
+			if tt.effect == approval.EffectRead {
+				require.Equal(t, "Read a dynamic target", presentation.headline)
+			} else {
+				require.Equal(t, "Run with unknown effects", presentation.headline)
+			}
 			require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: tt.target})
 		})
 	}
@@ -735,6 +742,11 @@ func TestAnalyzeShellCommandConfiguredReadOnlyCommand(t *testing.T) {
 	require.Contains(t, result.KnownDirs, externalFile)
 	require.NotEmpty(t, result.Reason)
 
+	// Explicit user trust overrides the built-in command classification.
+	result = mods.assessCommand("shell_run", "find . -delete")
+	require.Equal(t, approval.EffectRead, result.Effect)
+	require.Equal(t, approval.EvidenceTrust, result.Evidence)
+	cfg.BuiltinTools.ShellReadOnlyCommands = []string{"rg"}
 	result = mods.assessCommand("shell_run", "find . -delete")
 	require.Equal(t, approval.EffectWrite, result.Effect)
 
@@ -816,7 +828,8 @@ func TestAnalyzeShellCommandUnknownDoesNotInventDirs(t *testing.T) {
 	}
 
 	assessment := mods.assessCommand("shell_run", "awk '{print $1}' settings.ini")
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	// Runtime evaluation remains unproven; materialized paths cannot prove effects.
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 }
 
@@ -1077,7 +1090,8 @@ func TestAnalyzeShellCommandPOSIXEnvAssignmentSuppressesExpansion(t *testing.T) 
 
 	assessment := mods.assessCommand("shell_run", `MODS_TEST_DATA=/elsewhere cat "$MODS_TEST_DATA/config.yml"`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	// Runtime evaluation remains unproven; materialized paths cannot prove effects.
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Equal(t, []string{"$MODS_TEST_DATA"}, assessment.DynamicTargets,
 		"an assigned variable must keep its reference runtime-resolved")
 }
@@ -1094,7 +1108,8 @@ func TestAnalyzeShellCommandPOSIXReadBindingBuiltinSuppressesExpansion(t *testin
 
 	assessment := mods.assessCommand("shell_run", `read MODS_TEST_DATA; cat "$MODS_TEST_DATA/config.yml"`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	// Runtime evaluation remains unproven; materialized paths cannot prove effects.
+	require.Equal(t, approval.EffectUnknown, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, "$MODS_TEST_DATA",
 		"a runtime-bound variable must keep its reference dynamic")
 }
@@ -1163,11 +1178,11 @@ func TestAnalyzeShellCommandTimestampedBackupCopyMaterializesScope(t *testing.T)
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 
 	rules := candidateRulesForIntent(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto))
-	require.Len(t, rules, 1)
-	require.Equal(t, approval.DirAllow, rules[0].Type)
-	require.Equal(t, []string{hyprDir}, rules[0].Paths)
-	require.True(t, RulesAllowIntent(rules, intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)),
-		"a saved DirAllow rule must auto-approve this command class")
+	require.Empty(t, rules, "incomplete writes cannot offer reusable rules")
+	require.Equal(t, approval.CoverageIncomplete, intent.WriteCoverage)
+	saved := []ApprovalRule{{Type: approval.DirAllow, Paths: intent.Dirs, Mode: AccessWrite}}
+	require.False(t, RulesAllowIntent(saved, intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)),
+		"known directories cannot cover unmodeled effects")
 
 	presentation := formatReviewPresentationWithIntent(
 		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
@@ -1207,10 +1222,11 @@ func TestAnalyzeShellCommandGitCommitResolvesRepositoryScope(t *testing.T) {
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
 
 	rules := candidateRulesForIntent(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto))
-	require.Len(t, rules, 1)
-	require.Equal(t, approval.DirAllow, rules[0].Type)
-	require.True(t, RulesAllowIntent(rules, intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)),
-		"a saved DirAllow rule must auto-approve later commits")
+	require.Empty(t, rules, "incomplete writes cannot offer reusable rules")
+	require.Equal(t, approval.CoverageIncomplete, intent.WriteCoverage)
+	saved := []ApprovalRule{{Type: approval.DirAllow, Paths: intent.Dirs, Mode: AccessWrite}}
+	require.False(t, RulesAllowIntent(saved, intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)),
+		"known directories cannot cover unmodeled effects")
 
 	presentation := formatReviewPresentationWithIntent(
 		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,

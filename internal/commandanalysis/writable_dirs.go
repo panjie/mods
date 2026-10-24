@@ -4,6 +4,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/panjie/mods/internal/pathutil"
 )
 
 // Writable targets are extracted from literal operands supplied by the
@@ -34,9 +36,9 @@ type writableTargetAnalysis struct {
 	ProviderTargets []string
 }
 
-func analyzeWritableTargetsFromTokens(args []string, posix bool) writableTargetAnalysis {
+func analyzeWritableTargetsFromTokens(args []string, posix bool, options ...pathutil.Options) writableTargetAnalysis {
 	targets, known := writableTargetsFromTokens(args, posix)
-	return analyzeWritableTargets(targets, known, posix, true)
+	return analyzeWritableTargets(targets, known, posix, true, options...)
 }
 
 func analyzeLiteralWritableTargetsFromTokens(args []string, posix bool) writableTargetAnalysis {
@@ -44,7 +46,7 @@ func analyzeLiteralWritableTargetsFromTokens(args []string, posix bool) writable
 	return analyzeWritableTargets(targets, known, posix, false)
 }
 
-func analyzeWritableTargets(targets []writableTarget, known, posix, expandShell bool) writableTargetAnalysis {
+func analyzeWritableTargets(targets []writableTarget, known, posix, expandShell bool, options ...pathutil.Options) writableTargetAnalysis {
 	result := writableTargetAnalysis{Known: known}
 	for _, target := range targets {
 		value := trimPowerShellLiteral(strings.TrimSpace(target.path))
@@ -72,7 +74,11 @@ func analyzeWritableTargets(targets []writableTarget, known, posix, expandShell 
 		case writableTargetDirectory:
 			result.Dirs = append(result.Dirs, targetDirs([]string{value})...)
 		case writableTargetDestination:
-			result.Dirs = append(result.Dirs, destinationDir(value))
+			dir := destinationDir(value)
+			if expandShell && len(options) > 0 && (strings.HasSuffix(value, "/") || strings.HasSuffix(value, `\`)) {
+				dir = pathutil.ExpandToken(dir, options[0])
+			}
+			result.Dirs = append(result.Dirs, dir)
 		default:
 			result.Dirs = append(result.Dirs, parentDir(value))
 		}

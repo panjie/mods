@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"runtime"
 	"strings"
 
@@ -50,31 +51,43 @@ func commandResultToIntent(result commandanalysis.Result) approval.AccessIntent 
 }
 
 func (m *Mods) assessCommandAtCwd(tool, command string, shadowedEnv map[string]bool, ws string) approval.CommandAssessment {
+	result, _ := m.assessCommandAtCwdResult(tool, command, shadowedEnv, ws)
+	return result
+}
+func (m *Mods) assessCommandAtCwdResult(tool, command string, shadowedEnv map[string]bool, ws string) (approval.CommandAssessment, error) {
 	if tool == "process_run" {
-		return m.assessProcessInvocation(command)
+		return m.assessProcessInvocationResult(command)
 	}
-	return m.assessShellCommand(tool, shellPathFlavor(tool), command, shadowedEnv, ws)
+	return m.assessShellCommandResult(tool, shellPathFlavor(tool), command, shadowedEnv, ws)
 }
 
 func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) approval.CommandAssessment {
+	result, _ := m.assessShellCommandResult(tool, flavor, command, shadowedEnv, ws)
+	return result
+}
+func (m *Mods) assessShellCommandResult(tool string, flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) (approval.CommandAssessment, error) {
 	engine, ctx := m.commandAnalyzer()
 	result, err := engine.Analyze(ctx, commandanalysis.Input{Cwd: ws, Dialect: flavor,
-		Shell: &commandanalysis.ShellInput{Source: command, ShadowedEnvironment: shadowedEnv, InvocationDialect: shellPathFlavor(tool)}})
-	if err != nil {
-		return approval.UnknownCommandAssessment()
-	}
-	return commandResult(result)
+		Shell: &commandanalysis.ShellInput{Source: command, ShadowedEnvironment: shadowedEnv}})
+	return commandResult(result), err
 }
 
 func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
+	result, _ := m.assessProcessInvocationResult(raw)
+	return result
+}
+func (m *Mods) assessProcessInvocationResult(raw string) (approval.CommandAssessment, error) {
 	var invocation struct {
 		Program   string            `json:"program"`
 		Args      []string          `json:"args"`
 		Cwd       string            `json:"cwd"`
 		SecretEnv map[string]string `json:"secret_env"`
 	}
-	if err := json.Unmarshal([]byte(raw), &invocation); err != nil || strings.TrimSpace(invocation.Program) == "" {
-		return approval.UnknownCommandAssessment()
+	if err := json.Unmarshal([]byte(raw), &invocation); err != nil {
+		return approval.UnknownCommandAssessment(), err
+	}
+	if strings.TrimSpace(invocation.Program) == "" {
+		return approval.UnknownCommandAssessment(), errors.New("empty process program")
 	}
 	baseDir := ""
 	if m != nil && m.Config != nil {
@@ -94,10 +107,7 @@ func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
 	engine, ctx := m.commandAnalyzer()
 	result, err := engine.Analyze(ctx, commandanalysis.Input{Cwd: cwd, Dialect: flavor,
 		Process: &commandanalysis.ProcessInput{Program: invocation.Program, Args: invocation.Args, EnvironmentKeys: keys}})
-	if err != nil {
-		return approval.UnknownCommandAssessment()
-	}
-	return commandResult(result)
+	return commandResult(result), err
 }
 
 func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessment, binding toolregistry.ProcessProgramBinding) approval.CommandAssessment {

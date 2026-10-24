@@ -20,9 +20,6 @@ type Input struct {
 type ShellInput struct {
 	Source              string
 	ShadowedEnvironment map[string]bool
-	// InvocationDialect preserves the legacy Git enumeration dialect during
-	// phase 1. Phase 2 will replace that second parse with shared syntax facts.
-	InvocationDialect pathutil.Flavor
 }
 
 type ProcessInput struct {
@@ -40,9 +37,6 @@ func (in Input) snapshot() (Input, error) {
 	}
 	if in.Shell != nil {
 		v := *in.Shell
-		if v.InvocationDialect != pathutil.FlavorPOSIX && v.InvocationDialect != pathutil.FlavorPowerShell {
-			return Input{}, errors.New("unsupported invocation dialect")
-		}
 		v.ShadowedEnvironment = make(map[string]bool, len(in.Shell.ShadowedEnvironment))
 		for k, value := range in.Shell.ShadowedEnvironment {
 			v.ShadowedEnvironment[k] = value
@@ -58,4 +52,40 @@ func (in Input) snapshot() (Input, error) {
 		in.Process = &v
 	}
 	return in, nil
+}
+
+// Bound untrusted input before copying its mutable containers.
+func (in Input) withinBudget() bool {
+	size := len(in.Cwd)
+	if in.Shell != nil {
+		size += len(in.Shell.Source)
+		if len(in.Shell.ShadowedEnvironment) > maxAnalysisNodes {
+			return false
+		}
+		for name := range in.Shell.ShadowedEnvironment {
+			size += len(name)
+			if size > maxAnalysisInputBytes {
+				return false
+			}
+		}
+	}
+	if in.Process != nil {
+		if len(in.Process.Args) > maxAnalysisNodes || len(in.Process.EnvironmentKeys) > maxAnalysisNodes {
+			return false
+		}
+		size += len(in.Process.Program)
+		for _, arg := range in.Process.Args {
+			size += len(arg)
+			if size > maxAnalysisInputBytes {
+				return false
+			}
+		}
+		for _, key := range in.Process.EnvironmentKeys {
+			size += len(key)
+			if size > maxAnalysisInputBytes {
+				return false
+			}
+		}
+	}
+	return size <= maxAnalysisInputBytes
 }

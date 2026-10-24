@@ -9,6 +9,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
@@ -150,7 +151,14 @@ func TestBuildRegistryFilesystemUsesApprovalSafeDirs(t *testing.T) {
 	args, err := json.Marshal(map[string]string{"path": target, "content": "safe-dir consistency"})
 	require.NoError(t, err)
 	_, err = reg.Call(context.Background(), "fs_write_file", args)
-	require.NoError(t, err, "a path treated as approval-safe must also be accepted by the filesystem tool")
+	require.Error(t, err, "safe directories do not bypass exact-call grants")
+	require.NoFileExists(t, target)
+	prepared, err := reg.PrepareAccess(context.Background(), "fs_write_file", args)
+	require.NoError(t, err)
+	require.NotNil(t, prepared)
+	require.Equal(t, approval.DecisionAllow, approval.ClassifyAccess(prepared.Intent, approval.Scope{Value: cfg.ResolveWorkingDir().Canonical}, approval.SafeDirs(), approval.ReviewAuto))
+	_, err = reg.Call(toolregistry.WithExecutionGrant(context.Background(), prepared), "fs_write_file", args)
+	require.NoError(t, err, "an approved safe-directory write must be executable")
 
 	got, err := os.ReadFile(target)
 	require.NoError(t, err)

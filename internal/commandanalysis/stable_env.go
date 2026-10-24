@@ -47,10 +47,12 @@ func commandMutatesPowerShellEnvironment(command string) bool {
 // References under a name shadowed by this call's secret environment never
 // expand: the child shell would observe the secret's value.
 func resolvePowerShellEnvTargets(known, dynamic []string, cwd, command string, shadowedEnv map[string]bool, allowValueDirs bool) ([]string, []string) {
+	return resolvePowerShellEnvTargetsOptions(known, dynamic, cwd, command, shadowedEnv, allowValueDirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPowerShell))
+}
+func resolvePowerShellEnvTargetsOptions(known, dynamic []string, cwd, command string, shadowedEnv map[string]bool, allowValueDirs bool, opts pathutil.Options) ([]string, []string) {
 	if len(dynamic) == 0 {
 		return known, dynamic
 	}
-	opts := pathutil.DefaultOptions(cwd, pathutil.FlavorPowerShell)
 	kept := make([]string, 0, len(dynamic))
 	var expanded []string
 	for _, target := range dynamic {

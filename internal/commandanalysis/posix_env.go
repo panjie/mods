@@ -27,16 +27,21 @@ var posixBindingCommandNames = map[string]bool{
 // export forms), loop binding, function scope, or read-style builtin makes
 // statically known values unreliable for the child shell.
 func commandMutatesPOSIXEnvironment(command string) bool {
-	// mvdan's strict POSIX grammar can represent the common shell arithmetic
-	// command ((...)) without a LetClause. It still mutates shell variables,
-	// so conservatively treat the construct as an environment mutation.
+	file, err := parsePOSIX(command)
+	if err != nil {
+		return true
+	}
+	return posixEnvironmentMutation(command, file)
+}
+
+func posixEnvironmentMutation(command string, file *syntax.File) bool {
+	if file == nil {
+		return true
+	}
 	if strings.Contains(command, "((") || strings.Contains(command, "<&") {
 		return true
 	}
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX)).Parse(strings.NewReader(command), "")
-	if err != nil {
-		return true // fail closed on unparseable input
-	}
+
 	binding := false
 	syntax.Walk(file, func(node syntax.Node) bool {
 		if binding {
@@ -73,10 +78,12 @@ func basePOSIXCommandName(literal string) string {
 // shared policy. POSIX dynamic targets are bare $NAME references, so only
 // the bare-reference decisions apply here.
 func resolvePOSIXEnvTargets(known, dynamic []string, cwd, command string, shadowedEnv map[string]bool, allowValueDirs bool) ([]string, []string) {
+	return resolvePOSIXEnvTargetsOptions(known, dynamic, cwd, command, shadowedEnv, allowValueDirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX))
+}
+func resolvePOSIXEnvTargetsOptions(known, dynamic []string, cwd, command string, shadowedEnv map[string]bool, allowValueDirs bool, opts pathutil.Options) ([]string, []string) {
 	if len(dynamic) == 0 {
 		return known, dynamic
 	}
-	opts := pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX)
 	// sh initializes PWD from its execution directory, not the parent mods
 	// process. An empty context must remain unresolved rather than inherit it.
 	opts.Env["PWD"] = cwd

@@ -1,16 +1,13 @@
 package commandanalysis
 
 import (
-	"strings"
-
-	"github.com/panjie/mods/internal/commandtrace"
-
 	"mvdan.cc/sh/v3/syntax"
 )
 
 // Invocation is syntax-derived argv. Literal=false preserves the fact that
 // evaluating an argument or execution context requires running shell code.
 type Invocation struct {
+	NodeID  int
 	Program string
 	Args    []string
 	Literal bool
@@ -20,14 +17,19 @@ type Invocation struct {
 // It never executes the command. Callers must retain uncertainty about control
 // flow/configuration mutation rather than resolving later calls using old state.
 func ShellInvocations(command string, posix bool) ([]Invocation, bool) {
+	p := parseCommandLegacy(command, posix)
+	return p.invocations()
+}
+
+func (p *parsedCommand) invocations() ([]Invocation, bool) {
+	if p.err != nil {
+		return nil, false
+	}
 	var result []Invocation
-	if !posix {
-		ir, err := parseWithBridge(command)
-		if err != nil || len(ir.ParseErrors) > 0 {
-			return nil, false
-		}
+	if p.ir != nil {
+		ir := p.ir
 		for _, inv := range ir.Invocations {
-			item := Invocation{Program: trimPowerShellLiteral(inv.Name), Literal: !ir.HasControlFlow && !ir.HasStopParsing && len(ir.AssignmentTargets) == 0}
+			item := Invocation{NodeID: inv.NodeID, Program: trimPowerShellLiteral(inv.Name), Literal: !ir.HasControlFlow && !ir.HasStopParsing && len(ir.AssignmentTargets) == 0}
 			for _, arg := range inv.Args {
 				single, double := powerShellArgQuoting(arg)
 				value := trimPowerShellLiteral(arg)
@@ -40,9 +42,8 @@ func ShellInvocations(command string, posix bool) ([]Invocation, bool) {
 		}
 		return result, true
 	}
-	commandtrace.POSIXParse()
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX)).Parse(strings.NewReader(command), "")
-	if err != nil {
+	file := p.file
+	if file == nil {
 		return nil, false
 	}
 	syntax.Walk(file, func(node syntax.Node) bool {
@@ -51,7 +52,7 @@ func ShellInvocations(command string, posix bool) ([]Invocation, bool) {
 			return true
 		}
 		name, literal := staticShellWord(call.Args[0])
-		item := Invocation{Program: name, Literal: literal && len(call.Assigns) == 0}
+		item := Invocation{NodeID: p.nodeIDs[call], Program: name, Literal: literal && len(call.Assigns) == 0}
 		for _, arg := range call.Args[1:] {
 			value, ok := staticShellWord(arg)
 			if !ok {

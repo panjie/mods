@@ -9,7 +9,9 @@ $ErrorActionPreference = 'Stop'
 
 function New-IR {
     return @{
-        version           = "1"
+        version           = "2"
+        nodes             = [System.Collections.Generic.List[object]]::new()
+        redirections      = [System.Collections.Generic.List[object]]::new()
         commands          = [System.Collections.Generic.List[string]]::new()
         operators         = [System.Collections.Generic.List[string]]::new()
         redirects         = [System.Collections.Generic.List[string]]::new()
@@ -169,7 +171,17 @@ function Invoke-Parse {
     }
 
     $astNodes = $ast.FindAll({ $true }, $true)
+    $nodeIds = @{}
+    $nextId = 1
+    foreach ($node in $astNodes) { $nodeIds[$node] = $nextId; $nextId++ }
     foreach ($node in $astNodes) {
+        $parentId = 0
+        if ($null -ne $node.Parent -and $nodeIds.ContainsKey($node.Parent)) { $parentId = $nodeIds[$node.Parent] }
+        $ir.nodes.Add([ordered]@{
+            id = $nodeIds[$node]; parent = $parentId
+            start = $node.Extent.StartOffset; end = $node.Extent.EndOffset
+            kind = $node.GetType().Name
+        }) | Out-Null
         if ($node -is [System.Management.Automation.Language.CommandAst]) {
             $elems = $node.CommandElements
             if ($elems -and $elems.Count -gt 0) {
@@ -218,7 +230,17 @@ function Invoke-Parse {
                             if ($memberName) { Add-Unique $ir.foreach_member_names $memberName }
                         }
                     }
+                    $arguments = @()
+                    for ($argIndex = 1; $argIndex -lt $elems.Count; $argIndex++) {
+                        $arg = $elems[$argIndex]
+                        $arguments += [ordered]@{
+                            node_id = $nodeIds[$arg]; text = $arg.Extent.Text
+                            literal = ($arg -is [System.Management.Automation.Language.StringConstantExpressionAst])
+                        }
+                    }
                     $ir.command_invocations.Add([ordered]@{
+                        node_id = $nodeIds[$node]
+                        arguments = @($arguments)
                         name = $cmdName
                         args = @($argv)
                     }) | Out-Null
@@ -262,6 +284,12 @@ function Invoke-Parse {
 
         if ($node -is [System.Management.Automation.Language.FileRedirectionAst]) {
             Add-Unique $ir.redirects "FileRedirection"
+            $ir.redirections.Add([ordered]@{
+                node_id = $nodeIds[$node]; owner = $parentId
+                target = $node.Location.Extent.Text
+                literal = ($node.Location -is [System.Management.Automation.Language.StringConstantExpressionAst])
+                append = [bool]$node.Append; stream = [int]$node.FromStream
+            }) | Out-Null
             if ($node.Location -and $node.Location -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
                 $fileVal = $node.Location.Value.Trim()
                 if ($fileVal) { Add-Unique $ir.paths $fileVal }
@@ -399,6 +427,8 @@ function Write-IR {
     }
     $out = [ordered]@{
         version          = $ir.version
+        nodes            = @($ir.nodes)
+        redirections     = @($ir.redirections)
         commands         = @($ir.commands)
         operators        = @($ir.operators)
         redirects        = @($ir.redirects)
@@ -425,7 +455,7 @@ function Write-IR {
         top_level_statement_count = $ir.top_level_statement_count
         pipeline_count      = $ir.pipeline_count
     }
-    [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 3))
+    [Console]::Out.WriteLine(($out | ConvertTo-Json -Compress -Depth 8))
     [Console]::Out.Flush()
 }
 

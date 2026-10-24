@@ -479,7 +479,13 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 			if name == "process_run" {
 				command = string(data)
 			}
-			assessed := m.assessCommandAtCwd(name, command, extractSecretEnvNames(data), cwd)
+			assessed, analysisErr := m.assessCommandAtCwdResult(name, command, extractSecretEnvNames(data), cwd)
+			if analysisErr != nil {
+				return proto.ToolResult{}, analysisErr
+			}
+			if err := ctx.Err(); err != nil {
+				return proto.ToolResult{}, err
+			}
 			if cwd != cfg.ResolveWorkingDir().Canonical {
 				assessed.KnownDirs = normalizeShellAffectedDirsForTool(assessed.KnownDirs, cwd, name)
 			}
@@ -535,7 +541,13 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				if name == "process_run" {
 					input = string(prepared.args)
 				}
-				fresh := m.assessCommandAtCwd(name, input, extractSecretEnvNames(prepared.args), cwd)
+				fresh, analysisErr := m.assessCommandAtCwdResult(name, input, extractSecretEnvNames(prepared.args), cwd)
+				if analysisErr != nil {
+					return proto.ToolResult{}, analysisErr
+				}
+				if err := ctx.Err(); err != nil {
+					return proto.ToolResult{}, err
+				}
 				if cwd != cfg.ResolveWorkingDir().Canonical {
 					fresh.KnownDirs = normalizeShellAffectedDirsForTool(fresh.KnownDirs, cwd, name)
 				}

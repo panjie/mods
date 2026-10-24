@@ -1,10 +1,10 @@
 package commandanalysis
 
 import (
+	ctxpkg "context"
 	"strings"
 
-	"github.com/panjie/mods/internal/commandtrace"
-
+	"github.com/panjie/mods/internal/pathutil"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -53,13 +53,13 @@ type CommandAssessment struct {
 	Shape                         CommandShape
 	Reviewability                 CommandReviewability
 	// AssignedVariables lists lowercase normalized names of PowerShell
-	// variables assigned within the command (from the parser IR). The app
-	// layer uses it to skip probe resolution for targets whose value depends
+	// variables assigned within the command (from the parser IR). The analysis
+	// pipeline uses it to skip probe resolution for targets whose value depends
 	// on runtime execution rather than the engine.
 	AssignedVariables []string
 	// LiteralAssignments maps the lowercase name of a PowerShell variable
 	// assigned exactly once at top level with a pure string-literal value (no
-	// interpolation) to that literal. The app layer uses it to materialize
+	// interpolation) to that literal. The analysis pipeline uses it to materialize
 	// dynamic targets that reference the variable. Nil for POSIX and for
 	// commands with no such assignments.
 	LiteralAssignments map[string]string
@@ -87,43 +87,66 @@ func AssessShellStaticWithPolicy(command string, posix bool, policy ReadOnlyComm
 // administrative storage) the same way direct argv invocations do. An empty
 // cwd disables that enrichment fail-closed.
 func AssessShellStaticWithContext(command string, posix bool, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
-	command = strings.TrimSpace(command)
-	if command == "" {
+	return parseCommandLegacy(command, posix).assess(policy, ArgvStaticContext{Cwd: cwd})
+}
+
+func (p *parsedCommand) assess(policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
+	if strings.TrimSpace(p.source) == "" {
 		return UnknownCommandAssessment()
 	}
-	var result CommandAssessment
-	if posix {
-		result = assessPOSIXStatic(command, policy, cwd)
-	} else {
-		result = assessPowerShellStatic(command, policy, cwd)
+	if p.err != nil || (p.file == nil && p.ir == nil) {
+		return opaqueAssessment()
+	}
+	if context.run == nil {
+		context.run = NewEngine(Settings{}, Dependencies{}).run(ctxpkg.Background())
+	}
+	analyze := func(policy ReadOnlyCommandPolicy) CommandAssessment {
+		if p.file != nil {
+			return assessPOSIXFile(p.file, policy, context)
+		}
+		return assessPowerShellIRContext(p.source, p.ir, policy, context)
+	}
+	result := analyze(policy)
+	run := context.run
+	flavor := pathutil.FlavorPOSIX
+	if p.ir != nil {
+		flavor = pathutil.FlavorPowerShell
+	}
+	opts := run.options(context.Cwd, flavor)
+	for i, value := range result.KnownDirs {
+		if strings.HasPrefix(value, "$HOME") || strings.HasPrefix(value, "${HOME}") {
+			result.KnownDirs[i] = pathutil.ExpandToken(value, opts)
+		}
+	}
+	for i, value := range result.WritePaths {
+		if strings.HasPrefix(value, "$HOME") || strings.HasPrefix(value, "${HOME}") {
+			result.WritePaths[i] = pathutil.ExpandToken(value, opts)
+		}
 	}
 	result.StaticRead = result.Effect == EffectRead
 	if result.Effect != EffectUnknown {
 		result.Evidence = EvidenceStatic
 	}
-	if result.Effect == EffectRead && len(policy.Commands) > 0 {
-		var baseline CommandAssessment
-		if posix {
-			baseline = assessPOSIXStatic(command, ReadOnlyCommandPolicy{}, cwd)
-		} else {
-			baseline = assessPowerShellStatic(command, ReadOnlyCommandPolicy{}, cwd)
-		}
-		if baseline.Effect != EffectRead {
-			result.Evidence = EvidenceTrust
-		}
+	if result.Effect == EffectRead && len(policy.Commands) > 0 && analyze(ReadOnlyCommandPolicy{}).Effect != EffectRead {
+		result.Evidence = EvidenceTrust
 	}
 	return result
 }
 
+func opaqueAssessment() CommandAssessment {
+	result := UnknownCommandAssessment()
+	result.Shape.Opaque = true
+	result.Reviewability = opaqueReviewability()
+	return result
+}
+
 func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
-	commandtrace.POSIXParse()
-	parser := syntax.NewParser(syntax.Variant(syntax.LangPOSIX))
-	file, err := parser.Parse(strings.NewReader(command), "")
-	if err != nil || len(file.Stmts) == 0 {
-		result := UnknownCommandAssessment()
-		result.Shape.Opaque = true
-		result.Reviewability = opaqueReviewability()
-		return result
+	return parseCommandLegacy(command, true).assess(policy, ArgvStaticContext{Cwd: cwd})
+}
+
+func assessPOSIXFile(file *syntax.File, policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
+	if file == nil || len(file.Stmts) == 0 {
+		return opaqueAssessment()
 	}
 
 	dynamic := unresolvedPOSIXRuntimeExpressionsFromFile(file)
@@ -151,7 +174,7 @@ func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string)
 		return result
 	}
 
-	dirs, knownWrite := collectPOSIXWriteFacts(file, cwd)
+	dirs, knownWrite := collectPOSIXWriteFactsContext(file, context)
 	if knownWrite {
 		result.Effect = EffectWrite
 		result.KnownDirs = dedupeSorted(dirs)
@@ -182,6 +205,9 @@ func posixAccessArguments(file *syntax.File) []string {
 }
 
 func collectPOSIXWriteFacts(file *syntax.File, cwd string) (dirs []string, known bool) {
+	return collectPOSIXWriteFactsContext(file, ArgvStaticContext{Cwd: cwd})
+}
+func collectPOSIXWriteFactsContext(file *syntax.File, context ArgvStaticContext) (dirs []string, known bool) {
 	if file == nil {
 		return nil, false
 	}
@@ -207,12 +233,12 @@ func collectPOSIXWriteFacts(file *syntax.File, cwd string) (dirs []string, known
 			if len(tokens) == 0 {
 				return true
 			}
-			if gitResult, handled := assessGitArgvStatic(tokens, true, ArgvStaticContext{Cwd: cwd}); handled {
+			if gitResult, handled := assessGitArgvStatic(tokens, true, context); handled {
 				known = true
 				dirs = append(dirs, gitResult.KnownDirs...)
 				return true
 			}
-			analysis := analyzeWritableTargetsFromTokens(tokens, true)
+			analysis := analyzeWritableTargetsFromTokens(tokens, true, context.pathOptions(true))
 			if analysis.Known || hasKnownRiskyInvocation(tokens, true) {
 				known = true
 				dirs = append(dirs, analysis.Dirs...)
@@ -224,18 +250,14 @@ func collectPOSIXWriteFacts(file *syntax.File, cwd string) (dirs []string, known
 }
 
 func assessPowerShellStatic(command string, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
-	ir, err := parseWithBridge(command)
-	if err != nil || len(ir.ParseErrors) > 0 {
-		result := UnknownCommandAssessment()
-		result.Shape.Opaque = true
-		result.Reviewability = opaqueReviewability()
-		return result
-	}
-	return assessPowerShellIR(command, ir, policy, cwd)
+	return parseCommandLegacy(command, false).assess(policy, ArgvStaticContext{Cwd: cwd})
 }
 
 func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy, cwd string) CommandAssessment {
-	dirs, dynamic, providerTargets, knownWrite := analyzePowerShellWritablePathsIR(ir, policy, cwd)
+	return assessPowerShellIRContext(command, ir, policy, ArgvStaticContext{Cwd: cwd})
+}
+func assessPowerShellIRContext(command string, ir *psBridgeIR, policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
+	dirs, dynamic, providerTargets, knownWrite := analyzePowerShellWritablePathsContext(ir, policy, context)
 	shape, reviewability := analyzePowerShellReviewabilityIR(ir, policy, dynamic)
 	result := CommandAssessment{
 		Effect:                        EffectUnknown,
@@ -268,7 +290,7 @@ func assessPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommandPo
 // assignedPowerShellVariables returns the lowercase normalized names of every
 // variable assigned within the command, whether at top level or inside a
 // script block. The result feeds CommandAssessment.AssignedVariables so the
-// app-layer probe can avoid resolving a reference whose value the command
+// analysis probe can avoid resolving a reference whose value the command
 // itself sets at runtime.
 func assignedPowerShellVariables(ir *psBridgeIR) []string {
 	if ir == nil {

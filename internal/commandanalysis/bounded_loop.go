@@ -46,7 +46,13 @@ func boundedLoopContextSafe(file *syntax.File) bool {
 			}
 			name, ok := staticShellWord(n.Args[0])
 			e := commandCatalog.lookup(nativeSpace, name)
-			if !ok || !isBarePOSIXCommand(name) || posixBindingCommandNames[name] || e == nil || e.Read == nil || e.Write != nil || e.Risk != nil {
+			if !ok || !isBarePOSIXCommand(name) || posixBindingCommandNames[name] || e == nil || e.Read == nil {
+				safe = false
+				break
+			}
+			// Dual-use commands are safe siblings only when this invocation is
+			// itself read-only. Loop bodies are still rebound and checked below.
+			if (e.Write != nil || e.Risk != nil) && !catalogTokens(shellWordsForAccess(n.Args), nativeSpace, ReadOnlyCommandPolicy{}).BuiltinRead {
 				safe = false
 			}
 		}

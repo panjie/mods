@@ -21,6 +21,7 @@ func TestAnalyzePOSIXCommandReviewability(t *testing.T) {
 		{name: "pipeline remains one purpose", command: "find . -name '*.go' | wc -l", level: ReviewabilitySimple, statements: 1, pipelineCount: 1},
 		{name: "find exec reader pipeline", command: "find . -name '*.go' -exec cat {} + | wc -l", level: ReviewabilitySimple, statements: 1, pipelineCount: 1},
 		{name: "shell builtin stays shell", command: "printf '%s\\n' hello", level: ReviewabilitySimple, statements: 1},
+		{name: "no-op builtin stays shell", command: ": ignored", level: ReviewabilitySimple, statements: 1},
 		{name: "quoted semicolon", command: "printf '%s\\n' 'a;b'", level: ReviewabilitySimple, statements: 1},
 		{name: "three inspections", command: "echo first; git status; git diff", level: ReviewabilityCompound, reason: ReviewabilityMultipleIndependent, statements: 3},
 		{name: "mixed read and write", command: "git status; rm out.txt", level: ReviewabilityCompound, reason: ReviewabilityMixedReadWrite, statements: 2},

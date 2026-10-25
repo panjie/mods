@@ -12,20 +12,34 @@ import (
 const packageQueryLoop = `for p in dust duf; do pacman -Si $p 2>/dev/null | grep -E '^(Name|Version|Description)'; done; echo '--- installed?'; pacman -Q ncdu gdu dust duf btop 2>&1`
 
 func TestBoundedReadOnlyLoops(t *testing.T) {
-	for _, source := range []string{packageQueryLoop, `for p in dust duf; do pacman -Si "$p"; done`, `for p in dust duf; do printf '%s\n' "$p"; done`, `for p in 'space name' dust; do cat "$p"; done`} {
+	for _, source := range []string{
+		packageQueryLoop,
+		`for p in dust duf; do pacman -Si "$p"; done`,
+		`for p in dust duf; do printf '%s\n' "$p"; done`,
+		`for p in 'space name' dust; do cat "$p"; done`,
+		`for pat in 'a' 'b'; do :; done`,
+		`git ls-files -z -- '*.go' | xargs -0 wc -l | tail -1
+ echo '--- split ---'
+ for pat in '*.go:internal/*' '*.go:internal/*_test.go' '*.go:tests/*'; do :; done
+ printf 'prod go (non-test): '; git ls-files -z -- '*.go' | grep -zv '_test\.go$' | xargs -0 wc -l | tail -1
+ printf 'test go: '; git ls-files -z -- '*.go' | grep -z '_test\.go$' | xargs -0 wc -l | tail -1`,
+	} {
 		t.Run(source, func(t *testing.T) {
 			r, err := NewEngine(Settings{}, Dependencies{}).Analyze(context.Background(), Input{Cwd: t.TempDir(), Dialect: pathutil.FlavorPOSIX, Shell: &ShellInput{Source: source}})
 			require.NoError(t, err)
+			require.Empty(t, r.Diagnostics)
 			require.Equal(t, EffectRead, r.Effect)
 			require.Equal(t, EvidenceStatic, r.Evidence)
 			require.Equal(t, CoverageComplete, r.WriteCoverage)
 			require.Empty(t, r.Gaps)
-			require.Empty(t, r.Diagnostics)
 		})
 	}
 }
 func TestBoundedLoopRejectsUnprovenEffects(t *testing.T) {
 	sources := []string{
+		`for p in dust; do : > "$p"; done`,
+		`for p in dust; do :; done > out`,
+		`for p in dust; do : "$(touch out)"; done`,
 		`for p in dust; do printf x; done > NUL`,
 		`for p in dust; do printf x; done > '/dev/null '`,
 		`for p in dust; do printf x >& file; done`,

@@ -9,6 +9,7 @@ func builtinCommandEntries() []commandEntry {
 		{Name: "mawk", Space: nativeSpace, ID: "native/mawk", Revision: 1, AliasOf: "awk", Tests: []string{"TestAWKReadOnlyPrograms", "TestAWKUnsafePrograms"}},
 		{Name: "nawk", Space: nativeSpace, ID: "native/nawk", Revision: 1, AliasOf: "awk", Tests: []string{"TestAWKReadOnlyPrograms", "TestAWKUnsafePrograms"}},
 		{Name: "pacman", Space: nativeSpace, ID: "native/pacman", Revision: 2, LiteralRead: true, Tests: []string{"TestPacmanQueries"}, Read: readPacman},
+		{Name: ":", Space: nativeSpace, ID: "native/:", Revision: 1, ShellOnly: true, Tests: []string{"TestPOSIXNoOpBuiltin"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "[", Space: nativeSpace, ID: "native/[", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "basename", Space: nativeSpace, ID: "native/basename", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "cat", Space: nativeSpace, ID: "native/cat", ContextStableRead: true, ReadPaths: true, Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries", "TestStage5GitPredecessor"}, Read: readAnyArguments, NameOnlyRead: true},

@@ -21,6 +21,7 @@ func TestPackageQueryLoopApprovalDispatch(t *testing.T) {
 		allow   bool
 	}{
 		{`for p in dust duf; do pacman -Si $p 2>/dev/null | grep -E '^(Name|Version|Description)'; done; echo '--- installed?'; pacman -Q ncdu gdu dust duf btop 2>&1`, true},
+		{`for pat in '*.go:internal/*' '*.go:internal/*_test.go' '*.go:tests/*'; do :; done`, true},
 		{`pacman -Si dust duf`, true},
 		{`for p in gdu dust dua-cli btop bottom nvtop pacseek paru yay paccache bleachbit stacer tui-journal; do printf '%s: ' "$p"; pacman -Ss "^$p\$" | head -1; echo; done`, true},
 		{`pacman -Ss '^gdu$'`, true},

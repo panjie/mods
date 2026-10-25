@@ -43,6 +43,32 @@ func TestPowerShellExecutableDoesNotInheritAliasRead(t *testing.T) {
 	}
 }
 
+func TestPOSIXNoOpBuiltin(t *testing.T) {
+	for _, source := range []string{
+		`:`, `: ignored --anything 'x y'`, `: "$value"`,
+		`: 2>/dev/null`, `: >/dev/null`, `: < input`,
+	} {
+		r := AssessShellStaticWithPolicy(source, true, ReadOnlyCommandPolicy{})
+		require.Equal(t, EffectRead, r.Effect, source)
+		require.Equal(t, CoverageComplete, r.WriteCoverage, source)
+		require.Empty(t, r.Gaps, source)
+	}
+	for _, source := range []string{
+		`: > out`, `: >> out`, `: <> out`, `: 2> out`, `: > "$OUT"`,
+		`: > NUL`, `: > '/dev/null '`,
+		`: "$(touch out)"`, `: < "$(touch out)"`, `: <(touch out)`,
+		": <<EOF\n$(touch out)\nEOF",
+		`PATH=/tmp :`, `env :`, `xargs :`, `find . -exec : {} \;`,
+	} {
+		r := AssessShellStaticWithPolicy(source, true, ReadOnlyCommandPolicy{})
+		require.NotEqual(t, EffectRead, r.Effect, source)
+	}
+	for _, posix := range []bool{true, false} {
+		r := AssessArgvStaticWithPolicy(":", nil, posix, ReadOnlyCommandPolicy{})
+		require.Equal(t, EffectUnknown, r.Effect)
+	}
+}
+
 func TestShellBuiltinDoesNotBecomeNativeProgram(t *testing.T) {
 	require.Equal(t, EffectRead, AssessShellStaticWithPolicy("cd /tmp", true, ReadOnlyCommandPolicy{}).Effect)
 	for _, source := range []string{"env cd /tmp", "xargs cd", "find . -exec cd {} \\;"} {

@@ -433,7 +433,7 @@ func appendReason(reasons []ReviewabilityReason, reason ReviewabilityReason) []R
 }
 
 var posixShellBuiltins = map[string]bool{
-	"cd": true, "echo": true, "printf": true, "test": true, "[": true,
+	":": true, "cd": true, "echo": true, "printf": true, "test": true, "[": true,
 	"true": true, "false": true, "pwd": true, "read": true, "export": true,
 	"unset": true, "set": true, "alias": true, "unalias": true, "type": true,
 	"command": true, "eval": true, "exec": true, "trap": true, "umask": true,

@@ -37,7 +37,7 @@ func stmtIsReadOnly(stmt *syntax.Stmt, policy ReadOnlyCommandPolicy) (bool, stri
 		if redirectionWritesPersistent(redir) {
 			return false, ""
 		}
-		if redir.Word != nil && wordHasProcSubst(redir.Word) {
+		if !wordIsReadOnly(redir.Word, policy) || !wordIsReadOnly(redir.Hdoc, policy) {
 			return false, ""
 		}
 	}
@@ -581,25 +581,6 @@ func wordIsReadOnly(word *syntax.Word, policy ReadOnlyCommandPolicy) bool {
 		}
 	})
 	return readonly
-}
-
-// wordHasProcSubst reports whether a word contains any ProcSubst node.
-func wordHasProcSubst(word *syntax.Word) bool {
-	if word == nil {
-		return false
-	}
-	found := false
-	syntax.Walk(word, func(node syntax.Node) bool {
-		if found {
-			return false
-		}
-		if _, ok := node.(*syntax.ProcSubst); ok {
-			found = true
-			return false
-		}
-		return true
-	})
-	return found
 }
 
 func stmtsAreReadOnly(stmts []*syntax.Stmt, policy ReadOnlyCommandPolicy) bool {

@@ -308,8 +308,7 @@ func redirectionWritesPersistent(redir *syntax.Redirect) bool {
 }
 
 func isNullRedirectionTarget(target string) bool {
-	target = strings.TrimSpace(target)
-	return target == "/dev/null" || strings.EqualFold(target, "NUL")
+	return target == "/dev/null"
 }
 
 // A catalog grammar may distinguish input operands from embedded code. Use

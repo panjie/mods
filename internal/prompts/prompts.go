@@ -43,6 +43,7 @@ const (
 	// identity prompt and are deliberately not restated here.
 	ToolSelectionGeneral = `Tool selection:
 - Combine related reads and aggregations that share inputs; use structured batches when available. Split calls for result dependencies or separate authorization. Compute totals and breakdowns in tools from the same data, not mental arithmetic. Finish when the requested result is supported and no concrete uncertainty remains.
+- Prefer the simplest sufficient read-only command or pipeline. Do not probe optional tools or create scripts for simple aggregation.
 - If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly.`
 
 	ToolSelectionFilesystem = `- When http_download is available, use its explicit URL/path list for downloads instead of shell loops.
@@ -53,9 +54,9 @@ const (
 	// These blocks carry only the choice between available tools.
 	ToolSelectionProcess = `- Prefer process_run for one executable; use shell tools for shell source and runtime_info for unknown availability.`
 
-	ToolSelectionShellPOSIX = `- Use shell_run for pipelines, redirection, expansion, globs, and builtins; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (git ls-files -z | xargs -0 ...).`
+	ToolSelectionShellPOSIX = `- Use shell_run for pipelines, redirection, expansion, globs, and builtins; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (find ... -print0 | xargs -0 ...); use git ls-files -z only when tracked files are intended.`
 
-	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and shell syntax; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (git ls-files -z | xargs -0 ...).`
+	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and shell syntax; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (find ... -print0 | xargs -0 ...); use git ls-files -z only when tracked files are intended.`
 
 	POSIXIntentGuidance = `Group related reads around one clear purpose. Keep necessary pipelines intact and omit decorative separators. Resolve unknown write targets before mutation. Authorization depends on effects and targets, not command length. Never rewrite an existing script file for review.`
 

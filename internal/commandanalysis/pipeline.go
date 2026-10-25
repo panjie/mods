@@ -292,8 +292,9 @@ func literalArgLooksPathLike(arg string, flavor pathutil.Flavor) bool {
 }
 
 func normalizeLiteralProcessPath(value, cwd string, flavor pathutil.Flavor) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
+	// Also guard transfer proofs, which normalize before building Targets.
+	// Returning no path prevents a proof about a different operand.
+	if value == "" || unsafeTargetNormalization(value) || unsafeTargetNormalization(cwd) {
 		return ""
 	}
 	if !pathutil.IsAbs(value) {

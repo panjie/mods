@@ -140,10 +140,13 @@ func (m *analysisRun) resolveTargets(result CommandAssessment, cwd string, flavo
 			}
 			continue
 		}
-		raw := trimPowerShellLiteral(strings.TrimSpace(t.Raw))
-		if literal {
-			raw = t.Raw
+		raw := t.Raw
+		// POSIX AST words and process argv are already decoded. Only the
+		// PowerShell IR retains syntactic quotes around a literal operand.
+		if !literal && flavor == pathutil.FlavorPowerShell {
+			raw = trimPowerShellLiteral(raw)
 		}
+		unsafePath := unsafeTargetNormalization(raw) || unsafeTargetNormalization(cwd)
 		if raw == "" {
 			if t.Role == TargetWrite {
 				result.AddGap(GapWriteTargets)
@@ -156,6 +159,13 @@ func (m *analysisRun) resolveTargets(result CommandAssessment, cwd string, flavo
 				opts.Env["PWD"] = cwd
 			} else {
 				delete(opts.Env, "PWD")
+			}
+			// ExpandEnvPath cleans its inputs; do not let an unsafe
+			// environment value lose its significant components first.
+			for name, value := range opts.Env {
+				if unsafeTargetNormalization(value) {
+					delete(opts.Env, name)
+				}
 			}
 			if value, ok := pathutil.ExpandEnvPath(raw, opts); ok {
 				raw = value
@@ -172,7 +182,12 @@ func (m *analysisRun) resolveTargets(result CommandAssessment, cwd string, flavo
 				continue
 			}
 		}
+		// Normalization must not erase filesystem-significant components.
+		// Until these forms have an exact resolver, writes require review.
 		unresolved := !targetLiteral && strings.ContainsAny(raw, "$`*?[]")
+		if t.Role == TargetWrite && (unsafePath || unsafeTargetNormalization(raw)) {
+			unresolved = true
+		}
 		if t.Role == TargetWrite && (t.Operation == OperationRemoveEntry || t.Operation == OperationRenameEntry) && (strings.HasSuffix(raw, "/") || strings.HasSuffix(raw, `\`) || filepath.Base(raw) == "." || filepath.Base(raw) == "..") {
 			unresolved = true
 		}
@@ -203,7 +218,7 @@ func (m *analysisRun) resolveTargets(result CommandAssessment, cwd string, flavo
 						query = filepath.Dir(path)
 					}
 					real, err := m.resolvePath(query)
-					if err == nil && filepath.IsAbs(real) {
+					if err == nil && filepath.IsAbs(real) && !unsafeTargetNormalization(real) {
 						t.Path = real
 						t.Dir = filepath.Dir(real)
 						t.State = TargetResolved
@@ -216,7 +231,7 @@ func (m *analysisRun) resolveTargets(result CommandAssessment, cwd string, flavo
 						}
 						if t.Operation == OperationCreateEntry {
 							parent, err := m.creationParent(path)
-							if err != nil || !filepath.IsAbs(parent) {
+							if err != nil || !filepath.IsAbs(parent) || unsafeTargetNormalization(parent) {
 								result.AddGap(GapWriteTargets)
 								t.State = TargetUnresolved
 							} else {
@@ -254,6 +269,20 @@ func quotedLiteralWord(word *syntax.Word) bool {
 	switch word.Parts[0].(type) {
 	case *syntax.SglQuoted, *syntax.DblQuoted:
 		return true
+	}
+	return false
+}
+
+// unsafeTargetNormalization identifies paths that the lexical path helpers
+// cannot safely canonicalize for authorization. In particular, link/.. must
+// traverse the link before applying .., and whitespace is part of a filename.
+// Check both separators conservatively because these helpers support Windows
+// paths even when analysis runs on another platform.
+func unsafeTargetNormalization(value string) bool {
+	for _, part := range strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if part == ".." || part != strings.TrimSpace(part) {
+			return true
+		}
 	}
 	return false
 }

@@ -146,3 +146,28 @@ func TestTrustedPowerShellGitDoesNotAcquireWriteRoles(t *testing.T) {
 		require.NotEqual(t, TargetWrite, target.Role)
 	}
 }
+
+func TestWriteTargetsRejectLossyNormalization(t *testing.T) {
+	root := t.TempDir()
+	e := NewEngine(Settings{WorkingDir: root}, Dependencies{Environment: func() []string {
+		return []string{"HOME=" + root + "/link/../external"}
+	}})
+	for _, operand := range []string{"leaf ", " leaf", "dir /leaf", "dir/../leaf", "..\\leaf"} {
+		t.Run(operand, func(t *testing.T) {
+			r, err := e.Analyze(context.Background(), Input{Cwd: root, Dialect: pathutil.FlavorPOSIX, Process: &ProcessInput{Program: "touch", Args: []string{operand}}})
+			require.NoError(t, err)
+			require.Equal(t, CoverageIncomplete, r.WriteCoverage)
+			for _, target := range r.Targets {
+				if target.Role == TargetWrite {
+					require.Equal(t, TargetUnresolved, target.State)
+				}
+			}
+			require.Empty(t, normalizeLiteralProcessPath(operand, root, pathutil.FlavorPOSIX))
+		})
+	}
+	for _, source := range []string{`touch "$HOME/file"`, `touch "$PWD/link/../file"`, `touch "$PWD/leaf "`} {
+		r, err := e.Analyze(context.Background(), Input{Cwd: root, Dialect: pathutil.FlavorPOSIX, Shell: &ShellInput{Source: source}})
+		require.NoError(t, err)
+		require.Equal(t, CoverageIncomplete, r.WriteCoverage, source)
+	}
+}

@@ -1,6 +1,6 @@
 # 命令分析重构交接记录
 
-更新时间：2026-10-25（Linux 第五阶段首批验收）。
+更新时间：2026-10-25（第六阶段清理与本机验收）。
 
 ## 最新续作结果（优先于下方历史记录）
 
@@ -17,6 +17,14 @@
 - 第五阶段首批已实现 uniq 参数、普通文件写严格选项、经文件类型证明的 cp/mv、Git 只读前序上下文及 wrapper 边界。详见 [阶段 5 记录](docs/superpowers/plans/2026-10-25-command-analysis-stage5.md)。23 条 Linux 固定样本有 1 条复制 Ask→Allow；移动补齐两端目标但因缺少源权限仍 Ask。原 safety 断言与旧快照未改。
 - 第五阶段 Linux build/test、commandtrace、相关 race 通过；Windows 根模块及测试仅交叉编译。PowerShell 新参数/重定向扩展及真实 Windows/macOS 验收待补，阶段 6 未开始。
 - 第四、五阶段已按用户要求合并到本次本地提交，未推送。不要重跑一次性迁移脚本；本次提交包含两个阶段的代码、测试、快照与文档。
+
+- 用户随后要求继续第五阶段。本轮已补齐 touch 有值参数/短选项组合、受限 env 写入、Git 全局参数、PowerShell 标量内容写与 AST 重定向目标。新增 10 条固定样本相对 `54060c5` 有 5 条 Ask→Allow、其余负例继续 Ask；原 23 条事实及 work 快照不变。见 [后续实施记录](docs/superpowers/plans/2026-10-25-command-analysis-stage5-extension.md)。
+- 本轮 Linux build/test、commandtrace、race 及 Windows 交叉编译通过；Linux PowerShell 7.6.8 的 15 个真实桥样本和 7 个隔离执行正例通过。真实 Windows/macOS、PowerShell 5.1 与 junction 验收仍待补，第六阶段未开始。
+- 第五阶段后续实施时的基线为 `54060c5`；此前第四阶段与第五阶段首批已在该提交中。后续改动的提交状态见下方第六阶段记录。
+
+- 用户要求实施第六阶段。本轮已删除 approval 命令薄包装与 KnownDirs 旧授权转换，迁移所有调用及测试，加入结构/依赖边界、组合性质与三组 fuzz，补冷/热基准和发布说明。见 [阶段 6 记录](docs/superpowers/plans/2026-10-25-command-analysis-stage6.md)。
+- 第六阶段 Linux build/test、commandtrace、race 与约 26 万次 fuzz 通过；Linux PowerShell 真解析/隔离执行通过；Windows/macOS 根模块及 app/commandanalysis 测试交叉编译通过。真实 Windows/macOS 仍待验收，不能说全平台最终出口已完成。
+- 用户要求提交代码：第五阶段后续与第六阶段改动合并到本次本地提交，包含兼容文件删除、新增测试、快照和文档；父提交为 `54060c5`，未推送。下一步仍需在真实 Windows/macOS 上执行平台矩阵。
 
 以下第 0–10 节为 2026-10-23 历史交接记录，其中“下一台机器”待办及阶段状态已由上方结果更新。
 

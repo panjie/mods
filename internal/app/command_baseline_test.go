@@ -39,23 +39,23 @@ type commandBaselineCase struct {
 }
 
 type commandBaselineFacts struct {
-	Effect           approval.CommandEffect   `json:"effect"`
-	Evidence         approval.Evidence        `json:"evidence"`
-	Coverage         approval.TargetCoverage  `json:"coverage"`
-	Gaps             []approval.AssessmentGap `json:"gaps"`
-	Dirs             []string                 `json:"dirs"`
-	WritePaths       []string                 `json:"write_paths"`
-	Dynamic          []string                 `json:"dynamic"`
-	Origins          []string                 `json:"origins"`
-	UnresolvedRemote []string                 `json:"unresolved_remote"`
-	Provider         []string                 `json:"provider"`
-	Auto             approval.Decision        `json:"auto"`
-	Always           approval.Decision        `json:"always"`
-	Never            approval.Decision        `json:"never"`
-	ReadDirs         []string                 `json:"read_dirs"`
-	WriteDirs        []string                 `json:"write_dirs"`
-	Candidates       []string                 `json:"candidate_paths"`
-	IntentCoverage   approval.TargetCoverage  `json:"intent_coverage"`
+	Effect           commandanalysis.CommandEffect `json:"effect"`
+	Evidence         commandanalysis.Evidence      `json:"evidence"`
+	Coverage         approval.TargetCoverage       `json:"coverage"`
+	Gaps             []approval.AssessmentGap      `json:"gaps"`
+	Dirs             []string                      `json:"dirs"`
+	WritePaths       []string                      `json:"write_paths"`
+	Dynamic          []string                      `json:"dynamic"`
+	Origins          []string                      `json:"origins"`
+	UnresolvedRemote []string                      `json:"unresolved_remote"`
+	Provider         []string                      `json:"provider"`
+	Auto             approval.Decision             `json:"auto"`
+	Always           approval.Decision             `json:"always"`
+	Never            approval.Decision             `json:"never"`
+	ReadDirs         []string                      `json:"read_dirs"`
+	WriteDirs        []string                      `json:"write_dirs"`
+	Candidates       []string                      `json:"candidate_paths"`
+	IntentCoverage   approval.TargetCoverage       `json:"intent_coverage"`
 }
 
 type commandBaselineFixture struct {
@@ -138,7 +138,7 @@ func (f commandBaselineFixture) expand(s string) string {
 	return strings.NewReplacer("<WS>", filepath.ToSlash(f.ws), "<EXT>", filepath.ToSlash(f.external), "<SAFE>", filepath.ToSlash(f.safe)).Replace(s)
 }
 
-func (f commandBaselineFixture) assess(t testing.TB, c commandBaselineCase) approval.CommandAssessment {
+func (f commandBaselineFixture) assess(t testing.TB, c commandBaselineCase) commandanalysis.CommandAssessment {
 	t.Helper()
 	if c.Mode == "argv" {
 		args := make([]string, len(c.Args))
@@ -160,7 +160,7 @@ func (f commandBaselineFixture) assess(t testing.TB, c commandBaselineCase) appr
 	return f.m.assessShellCommand("shell_run", flavor, f.expand(c.Command), shadow, f.ws)
 }
 
-func (f commandBaselineFixture) facts(c commandBaselineCase, a approval.CommandAssessment) commandBaselineFacts {
+func (f commandBaselineFixture) facts(c commandBaselineCase, a commandanalysis.CommandAssessment) commandBaselineFacts {
 	normalize := func(values []string) []string {
 		out := make([]string, 0, len(values))
 		for _, value := range values {
@@ -204,7 +204,7 @@ func (f commandBaselineFixture) facts(c commandBaselineCase, a approval.CommandA
 func TestCommandAnalysisBaseline(t *testing.T) {
 	cases := loadCommandBaselineCases(t)
 	f := newCommandBaselineFixture(t)
-	t.Cleanup(approval.CloseBridge)
+	t.Cleanup(commandanalysis.CloseBridge)
 	observed := map[string]commandBaselineFacts{}
 	for _, c := range cases {
 		t.Run(c.ID, func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestCommandAnalysisBaseline(t *testing.T) {
 func BenchmarkCommandAnalysisBaseline(b *testing.B) {
 	cases := loadCommandBaselineCases(b)
 	f := newCommandBaselineFixture(b)
-	b.Cleanup(approval.CloseBridge)
+	b.Cleanup(commandanalysis.CloseBridge)
 	for _, c := range cases {
 		if c.Mode == "powershell" && runtime.GOOS != "windows" {
 			continue
@@ -272,13 +272,13 @@ func BenchmarkCommandAnalysisColdBridge(b *testing.B) {
 		b.Skip("Windows PowerShell bridge")
 	}
 	f := newCommandBaselineFixture(b)
-	b.Cleanup(approval.CloseBridge)
+	b.Cleanup(commandanalysis.CloseBridge)
 	c := commandBaselineCase{Mode: "powershell", Command: "Get-Content '<WS>/input.txt'"}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		b.StopTimer()
-		approval.CloseBridge()
+		commandanalysis.CloseBridge()
 		b.StartTimer()
 		f.assess(b, c)
 	}
@@ -292,7 +292,7 @@ func TestCommandAnalysisWorkBaseline(t *testing.T) {
 	}
 	cases := loadCommandBaselineCases(t)
 	f := newCommandBaselineFixture(t)
-	t.Cleanup(approval.CloseBridge)
+	t.Cleanup(commandanalysis.CloseBridge)
 	type work struct {
 		Initial      commandtrace.Counts `json:"initial"`
 		Revalidation commandtrace.Counts `json:"revalidation"`

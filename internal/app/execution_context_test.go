@@ -29,7 +29,7 @@ func TestShellAssessmentPWDUsesExecutionDirectory(t *testing.T) {
 	m := &Mods{Config: testConfigForWorkingDir(parent)}
 	for _, command := range []string{`touch "$PWD/probe.txt"`, `touch "${PWD}/probe.txt"`} {
 		a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, child)
-		intent := normalizeAccessIntentDirs(a.AccessIntent(), child, "shell_run", true)
+		intent := normalizeAccessIntentDirs(commandResultToIntent(a), child, "shell_run", true)
 		require.Empty(t, a.DynamicTargets)
 		require.Equal(t, slashSet([]string{filepath.Join(child, "probe.txt")}), slashSet(a.KnownDirs))
 		for _, tc := range []struct {

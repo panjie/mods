@@ -1,0 +1,12 @@
+[
+ {"id":"touch-reference","mode":"posix","command":"touch -am -r '<EXT>/input.txt' '<WS>/output.txt'","grant":["<WS>"],"required":"allow"},
+ {"id":"touch-reference-equals","mode":"posix","command":"touch --reference='<EXT>/input.txt' '<WS>/output.txt'","grant":["<WS>"],"required":"allow"},
+ {"id":"env-touch","mode":"posix","command":"env LANG=C touch '<WS>/output.txt'","grant":["<WS>"],"required":"allow"},
+ {"id":"env-remove","mode":"posix","command":"env LANG=C rm '<WS>/output.txt'","grant":["<WS>"],"required":"allow"},
+ {"id":"git-global-read","mode":"posix","command":"git --no-pager -C '<WS>' status","required":"allow"},
+ {"id":"env-unsafe-assignment","mode":"posix","command":"env PATH=/unknown touch '<WS>/output.txt'","grant":["<WS>"],"required":"ask"},
+ {"id":"env-unknown-sibling","mode":"posix","command":"env LANG=C touch '<WS>/output.txt'; mystery","grant":["<WS>"],"required":"ask"},
+ {"id":"touch-unknown-bundle","mode":"posix","command":"touch -az '<WS>/output.txt'","grant":["<WS>"],"required":"ask"},
+ {"id":"touch-missing-value","mode":"posix","command":"touch --reference","grant":["<WS>"],"required":"ask"},
+ {"id":"git-global-config","mode":"posix","command":"git -c core.pager=mystery log","required":"ask"}
+]

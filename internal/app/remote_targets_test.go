@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,19 +20,19 @@ func TestAssessCommandAddsDeterministicRemoteOrigin(t *testing.T) {
 		Config: testConfigForWorkingDir(cwd),
 	}
 	assessment := m.assessCommand("shell_run", `curl -X POST https://user:secret@API.Example.com:443/v1/items?token=x`)
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Equal(t, []string{"https://api.example.com"}, assessment.RemoteOrigins)
 	require.NotContains(t, assessment.RemoteOrigins[0], "secret")
 }
 
 func TestRemoteCredentialsAreRedactedFromReviewText(t *testing.T) {
 	command := `curl -X POST 'https://user:secret@API.Example.com:443/v1/items?token=hidden#part'`
-	assessment := approval.CommandAssessment{Effect: approval.EffectWrite, RemoteOrigins: []string{"https://api.example.com"}}
+	assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, RemoteOrigins: []string{"https://api.example.com"}}
 	scope := WorkingDirScope(t.TempDir())
 	summary := shellRiskSummary(command, assessment, scope)
 	presentation := formatReviewPresentationWithIntent(
 		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment, scope,
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 	)
 
 	require.Contains(t, summary, "https://api.example.com")
@@ -107,7 +108,7 @@ func TestUnresolvedGitPushRemoteCannotBeSaved(t *testing.T) {
 
 	assessment := m.assessCommand("shell_run", "git push missing main")
 	require.Equal(t, []string{"missing"}, assessment.UnresolvedRemoteTargets)
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
 	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
 	presentation := formatReviewPresentationWithIntent("shell_run", []byte(`{"command":"git push missing main"}`), assessment, WorkingDirScope(repo), intent)
@@ -156,9 +157,9 @@ func TestUnknownRemoteWriteHasNoAlwaysRule(t *testing.T) {
 
 func TestUnknownEffectWithKnownOriginHasNoAlwaysRule(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
-	intent := approval.CommandAssessment{
-		Effect: approval.EffectUnknown, RemoteOrigins: []string{"https://api.example.com"},
-	}.AccessIntent()
+	intent := commandResultToIntent(commandanalysis.CommandAssessment{
+		Effect: commandanalysis.EffectUnknown, RemoteOrigins: []string{"https://api.example.com"},
+	})
 	require.True(t, intent.UncertainEffect)
 	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
 	require.Empty(t, rules)

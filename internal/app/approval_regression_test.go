@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -20,15 +21,15 @@ import (
 func TestApprovalP1WritableReadForms(t *testing.T) {
 	for _, command := range []string{"uniq input.txt output.txt", "xxd input.txt output.txt", "git reflog expire --expire=now --all"} {
 		t.Run(command, func(t *testing.T) {
-			a := approval.AssessShellStaticWithContext(command, true, approval.ReadOnlyCommandPolicy{}, "/workspace")
-			require.NotEqual(t, approval.EffectRead, a.Effect)
+			a := commandanalysis.AssessShellStaticWithContext(command, true, commandanalysis.ReadOnlyCommandPolicy{}, "/workspace")
+			require.NotEqual(t, commandanalysis.EffectRead, a.Effect)
 			require.False(t, a.StaticRead)
 		})
 	}
 	for _, program := range []string{"uniq", "xxd"} {
 		for _, posix := range []bool{true, false} {
-			a := approval.AssessArgvStaticWithPolicy(program, []string{"input.txt", "output.txt"}, posix, approval.ReadOnlyCommandPolicy{})
-			require.NotEqual(t, approval.EffectRead, a.Effect)
+			a := commandanalysis.AssessArgvStaticWithPolicy(program, []string{"input.txt", "output.txt"}, posix, commandanalysis.ReadOnlyCommandPolicy{})
+			require.NotEqual(t, commandanalysis.EffectRead, a.Effect)
 		}
 	}
 }
@@ -86,7 +87,7 @@ func TestApprovalP1UnknownEffectsCannotBorrowTargets(t *testing.T) {
 		t.Run(tc.command, func(t *testing.T) {
 			m := &Mods{Config: &Config{}}
 			a := m.assessShellCommand(tc.tool, tc.flavor, tc.command, nil, tc.cwd)
-			intent := normalizeAccessIntentDirs(a.AccessIntent(), tc.cwd, tc.tool, true)
+			intent := normalizeAccessIntentDirs(commandResultToIntent(a), tc.cwd, tc.tool, true)
 			scope := approval.WorkingDirScope(tc.cwd)
 			for _, mode := range []approval.ReviewMode{approval.ReviewAuto, approval.ReviewAlways} {
 				require.Equal(t, approval.DecisionAsk, approval.ClassifyAccess(intent, scope, []string{tc.safe}, mode))

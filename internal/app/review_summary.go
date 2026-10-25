@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/textutil"
@@ -18,7 +17,7 @@ type patchFileChange struct {
 	removed int
 }
 
-func formatReviewSummaryWithIntent(name string, args []byte, assessment approval.CommandAssessment, scope Scope, intent AccessIntent) string {
+func formatReviewSummaryWithIntent(name string, args []byte, assessment commandanalysis.CommandAssessment, scope Scope, intent AccessIntent) string {
 	parsed := ToolOperationArgs(args)
 	switch name {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
@@ -97,7 +96,7 @@ func writeTargetMode(path string, scope Scope) string {
 	}
 }
 
-func shellRiskSummary(command string, assessment approval.CommandAssessment, scope Scope) string {
+func shellRiskSummary(command string, assessment commandanalysis.CommandAssessment, scope Scope) string {
 	risk := shellRiskLevel(assessment, scope)
 	if len(assessment.Targets) > 0 {
 		rows := commandReviewRows(command, assessment, risk)
@@ -174,7 +173,7 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 	return s
 }
 
-func shellRiskLevel(assessment approval.CommandAssessment, _ Scope) string {
+func shellRiskLevel(assessment commandanalysis.CommandAssessment, _ Scope) string {
 	if len(assessment.Targets) > 0 {
 		intent := commandResultToIntent(commandanalysis.Result(assessment))
 		assessment.KnownDirs = intent.WriteDirs
@@ -201,32 +200,32 @@ func shellRiskLevel(assessment approval.CommandAssessment, _ Scope) string {
 		}
 		assessment.ProviderWriteTargets = intent.ProviderWriteTargets
 		if intent.UncertainEffect {
-			assessment.Effect = approval.EffectUnknown
+			assessment.Effect = commandanalysis.EffectUnknown
 		}
 	}
 	if len(assessment.DynamicTargets) > 0 {
 		switch assessment.Effect {
-		case approval.EffectRead:
+		case commandanalysis.EffectRead:
 			return "dynamic read"
-		case approval.EffectWrite:
+		case commandanalysis.EffectWrite:
 			return "dynamic mutation"
 		default:
 			return "unknown"
 		}
 	}
-	if len(assessment.ProviderWriteTargets) > 0 && assessment.Effect == approval.EffectWrite {
+	if len(assessment.ProviderWriteTargets) > 0 && assessment.Effect == commandanalysis.EffectWrite {
 		return "provider mutation"
 	}
-	if assessment.Effect == approval.EffectUnknown {
+	if assessment.Effect == commandanalysis.EffectUnknown {
 		if len(assessment.KnownDirs) == 0 {
 			return "unknown effect and location"
 		}
 		return "unknown"
 	}
-	if assessment.Effect == approval.EffectWrite && len(assessment.UnresolvedRemoteTargets) > 0 {
+	if assessment.Effect == commandanalysis.EffectWrite && len(assessment.UnresolvedRemoteTargets) > 0 {
 		return "unknown remote mutation"
 	}
-	if assessment.Effect == approval.EffectRead {
+	if assessment.Effect == commandanalysis.EffectRead {
 		return "read-only"
 	}
 	if len(assessment.RemoteOrigins) > 0 && len(assessment.KnownDirs) == 0 {
@@ -261,7 +260,7 @@ func summarizeAffectedDirs(dirs []string) string {
 }
 
 func summarizeRemoteOrigins(origins []string) string {
-	return summarizeAffectedDirs(approval.NormalizeRemoteOrigins(origins))
+	return summarizeAffectedDirs(commandanalysis.NormalizeRemoteOrigins(origins))
 }
 
 func patchSummary(patch string) string {

@@ -297,10 +297,10 @@ func (r *toolReviewer) reviewActions() []interactionAction {
 // separate so they cannot become directory rules. Tools with a registered IntentExtractor use that;
 // read-only tools without directory semantics become read intents; anything
 // else degrades fail-closed to a write with no known dirs.
-func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, assessment *approval.CommandAssessment) AccessIntent {
+func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, assessment *commandanalysis.CommandAssessment) AccessIntent {
 	if registry != nil && registry.ShellExecution(name) {
 		if assessment == nil {
-			unknown := approval.UnknownCommandAssessment()
+			unknown := commandanalysis.UnknownCommandAssessment()
 			return commandResultToIntent(commandanalysis.Result(unknown))
 		}
 		intent := commandResultToIntent(commandanalysis.Result(*assessment))
@@ -374,7 +374,7 @@ func normalizeAccessIntentDirs(intent AccessIntent, cwd, tool string, shell bool
 type reviewerDeps struct {
 	ctx            context.Context
 	shellExecution bool
-	assessment     *approval.CommandAssessment
+	assessment     *commandanalysis.CommandAssessment
 	accessIntent   AccessIntent
 	safeDirs       []string
 	onDecision     func(approvalTrace)
@@ -401,7 +401,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	}
 	shellExecution := deps.shellExecution
 	intent := deps.accessIntent
-	assessment := approval.CommandAssessment{}
+	assessment := commandanalysis.CommandAssessment{}
 	if deps.assessment != nil {
 		assessment = *deps.assessment
 	}

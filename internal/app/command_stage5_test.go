@@ -35,6 +35,12 @@ func TestStage5TransferApprovalDispatch(t *testing.T) {
 		{"text numeric option", "uniq --skip-fields=1 <SRC> <DST>", false, true},
 		{"text missing value", "uniq --skip-fields <SRC> <DST>", false, false},
 		{"text unknown option", "uniq --mystery <SRC> <DST>", false, false},
+		{"reference and bundled flags", "touch -am -r <SRC> <DST>", false, true},
+		{"env exact writes", "env LANG=C touch --reference=<SRC> <DST>", false, true},
+		{"env unknown interpreter", "env LANG=C mystery <DST>", false, false},
+		{"env path override", "env PATH=/unknown touch <DST>", false, false},
+		{"unknown bundled flag", "touch -az <DST>", false, false},
+		{"unknown timestamp option", "touch --mystery <SRC> <DST>", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, err := filepath.EvalSymlinks(t.TempDir())
@@ -71,7 +77,15 @@ func TestStage5TransferApprovalDispatch(t *testing.T) {
 				require.Equal(t, 1, calls)
 				data, err := os.ReadFile(dst)
 				require.NoError(t, err)
-				require.NotEmpty(t, data)
+				if strings.Contains(tc.command, "touch ") {
+					srcInfo, err := os.Stat(src)
+					require.NoError(t, err)
+					dstInfo, err := os.Stat(dst)
+					require.NoError(t, err)
+					require.Equal(t, srcInfo.ModTime(), dstInfo.ModTime())
+				} else {
+					require.NotEmpty(t, data)
+				}
 				if tc.sourceGrant {
 					_, err = os.Stat(src)
 					require.True(t, os.IsNotExist(err))

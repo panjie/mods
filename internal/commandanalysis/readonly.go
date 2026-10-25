@@ -428,6 +428,13 @@ func isEnvAssignment(arg string) bool {
 
 func readSubcommandEntry(entry *commandEntry, args []string) bool {
 	name := entry.Name
+	if name == "git" {
+		var ok bool
+		args, _, ok = bindGitGlobals(args, "")
+		if !ok {
+			return false
+		}
+	}
 	if len(args) == 0 {
 		return false
 	}

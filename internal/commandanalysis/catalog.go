@@ -61,6 +61,7 @@ const (
 )
 
 type InvocationTarget struct {
+	Literal   bool
 	Path      string
 	Role      TargetRole
 	Operation TargetOperation
@@ -70,6 +71,8 @@ type readRule func(*commandEntry, []string, ReadOnlyCommandPolicy, *catalogEvalu
 type writeRule func([]string, bool, *catalogEvaluation) ([]writableTarget, bool)
 type riskRule func([]string, bool, *catalogEvaluation) bool
 type commandEntry struct {
+	ScalarOutput             bool
+	EnvWrites                bool
 	ContextStableRead        bool
 	ID, Name, AliasOf        string
 	Space                    commandSpace
@@ -141,7 +144,7 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		if !isBarePOSIXCommand(e.Name) || e.Space == powershellSpace && normalizePowerShellCommandName(e.Name) != e.Name {
 			return nil, fmt.Errorf("non-canonical identity %s", e.ID)
 		}
-		if e.AliasOf != "" && (e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
+		if e.AliasOf != "" && (e.ScalarOutput || e.EnvWrites || e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
 			return nil, fmt.Errorf("alias contains rules %s", e.ID)
 		}
 		if e.BoundedWrite && e.Write == nil || e.NameOnlyRead && e.Read == nil || e.TextOutput && (e.Read != nil || e.Write != nil || len(e.Options) == 0) {
@@ -154,6 +157,12 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		}
 		if _, exists := c.entries[catalogKey{e.Space, e.Name}]; exists {
 			return nil, fmt.Errorf("duplicate command identity %s", e.Name)
+		}
+		if e.ScalarOutput && (e.Space != powershellSpace || e.Write == nil) {
+			return nil, fmt.Errorf("invalid scalar writer %s", e.ID)
+		}
+		if e.EnvWrites && (e.Space != nativeSpace || e.Name != "env") {
+			return nil, fmt.Errorf("invalid wrapper %s", e.ID)
 		}
 		if e.TransferMove && !e.TransferFile || e.TransferFile && (e.Space != nativeSpace || e.Write == nil || e.BoundedWrite) || e.StrictFile && (e.Space != nativeSpace || e.Write == nil) || !e.StrictFile && (len(e.StrictFileOptions) > 0 || e.MaxOperands != 0) {
 			return nil, fmt.Errorf("invalid file grammar %s", e.ID)
@@ -321,15 +330,22 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 			} else if e.Write != nil {
 				v.writes, v.known = e.Write(args, space == nativeSpace, ev)
 				v.bounded = e.BoundedWrite && v.known
+				if e.ScalarOutput {
+					_, _, ok := bindPowerShellOutput(e.Name, args[1:])
+					v.bounded = v.bounded && ok
+				}
 				if e.StrictFile {
 					b, ok := bindOptions(e.StrictFileOptions, args[1:])
 					if ok { // The binder, including --, is authoritative for exact operands.
 						v.writes = parentTargets(b.Operands)
+						for _, path := range b.Reads {
+							v.reads = append(v.reads, InvocationTarget{Path: path, Role: TargetRead, Operation: OperationRead})
+						}
 						if e.Name == "rmdir" {
 							v.writes = dirTargets(b.Operands)
 						}
 					}
-					v.bounded = v.bounded && ok && len(b.Operands) > 0 && (e.MaxOperands == 0 || len(b.Operands) <= e.MaxOperands)
+					v.bounded = v.bounded && !slices.Contains(b.Operands, "-") && ok && len(b.Operands) > 0 && (e.MaxOperands == 0 || len(b.Operands) <= e.MaxOperands)
 				}
 			}
 			if e.Risk != nil {
@@ -448,6 +464,26 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 		}
 		for _, operand := range operands {
 			f.Targets = append(f.Targets, InvocationTarget{Path: operand, Role: role, Operation: op})
+		}
+	}
+	if e != nil && e.ScalarOutput && f.BoundedWrite && len(binding.Coverage) > 0 {
+		path, literal, ok := bindPowerShellOutput(e.Name, binding.Coverage[1:])
+		if ok {
+			f.Targets = []InvocationTarget{{Path: path, Role: TargetWrite, Operation: OperationFollowLeaf, Literal: literal}}
+		}
+	}
+	// Reuse exact inner write semantics only for audited env assignments.
+	// Host-dependent transfers and dynamic binding remain unproven here.
+	if e != nil && e.EnvWrites && bare && originalSpace == nativeSpace && len(binding.Coverage) > 0 {
+		if nested, ok := envCommandArgs(binding.Coverage[1:]); ok && len(nested) > 0 {
+			inner := ev.processTokens(nested, nativeSpace)
+			if inner.BoundedWrite && inner.Evidence == EvidenceStatic && !inner.ReadOnly {
+				f.Targets = slices.Clone(inner.Targets)
+				f.Writes = slices.Clone(inner.Writes)
+				f.CoverageWrites = slices.Clone(inner.CoverageWrites)
+				f.BoundedWrite = true
+				f.KnownWrite = true
+			}
 		}
 	}
 	if e != nil && e.TransferFile && bare && space == nativeSpace {

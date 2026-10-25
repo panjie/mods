@@ -24,7 +24,7 @@ func TestCatalogSystemMutationSafety(t *testing.T) {
 }
 
 func TestCatalogIncompleteWritersStayIncomplete(t *testing.T) {
-	for _, source := range []string{"cp input output", "mv input output", "find . -exec touch out \\;", "env touch out", "mystery > out", "touch a; mystery b"} {
+	for _, source := range []string{"cp input output", "mv input output", "find . -exec touch out \\;", "env PATH=/unknown touch out", "mystery > out", "touch a; mystery b"} {
 		r := AssessShellStaticWithPolicy(source, true, ReadOnlyCommandPolicy{})
 		require.NotEqual(t, EffectRead, r.Effect, source)
 		require.NotEqual(t, CoverageComplete, r.WriteCoverage, source)

@@ -472,7 +472,7 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 			}
 			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
 		}
-		var assessment *approval.CommandAssessment
+		var assessment *commandanalysis.CommandAssessment
 		if registry.ShellExecution(name) {
 			command := ExtractShellCommand(data)
 			if name == "process_run" {
@@ -652,6 +652,6 @@ type preparedToolCall struct {
 	name       string
 	args       []byte
 	intent     approval.AccessIntent
-	assessment *approval.CommandAssessment
+	assessment *commandanalysis.CommandAssessment
 	filesystem *toolregistry.PreparedAccess
 }

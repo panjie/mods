@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +79,7 @@ type conformanceCase struct {
 	name     string
 	tool     string
 	command  string
-	want     approval.CommandEffect
+	want     commandanalysis.CommandEffect
 	wantDirs []string
 	wantDyn  []string
 	note     string
@@ -92,105 +92,105 @@ func posixConformanceCases() []conformanceCase {
 	return []conformanceCase{
 		{
 			name: "cwd read falls back to cwd scope", tool: "shell_run",
-			command: "ls -la", want: approval.EffectRead,
+			command: "ls -la", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<WS>"},
 		},
 		{
 			name: "cwd file read falls back to cwd scope", tool: "shell_run",
-			command: "cat README.md", want: approval.EffectRead,
+			command: "cat README.md", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<WS>"},
 		},
 		{
 			name: "absolute external read keeps the file fact", tool: "shell_run",
-			command: "cat /etc/passwd", want: approval.EffectRead,
+			command: "cat /etc/passwd", want: commandanalysis.EffectRead,
 			wantDirs: []string{"/etc/passwd"},
 		},
 		{
 			name: "external read keeps the file fact", tool: "shell_run",
-			command: "cat <EXT>/secret.txt", want: approval.EffectRead,
+			command: "cat <EXT>/secret.txt", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<EXT>/secret.txt"},
 		},
 		{
 			name: "relative write keeps the literal dot", tool: "shell_run",
-			command: "touch out.txt", want: approval.EffectWrite,
+			command: "touch out.txt", want: commandanalysis.EffectWrite,
 			wantDirs: []string{"."},
 		},
 		{
 			name: "redirect write records target and parent", tool: "shell_run",
-			command: "echo hi > <EXT>/out.txt", want: approval.EffectWrite,
+			command: "echo hi > <EXT>/out.txt", want: commandanalysis.EffectWrite,
 			wantDirs: []string{"<EXT>", "<EXT>/out.txt"},
 		},
 		{
 			name: "single external operand from both sources denotes one target", tool: "shell_run",
-			command: "rm -rf <SAFE>/x", want: approval.EffectWrite,
+			command: "rm -rf <SAFE>/x", want: commandanalysis.EffectWrite,
 			wantDirs: []string{"<SAFE>/x"},
 		},
 		{
 			name: "pipeline reads both operands", tool: "shell_run",
-			command: "cat <EXT>/a <EXT>/b | grep x", want: approval.EffectRead,
+			command: "cat <EXT>/a <EXT>/b | grep x", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<EXT>/a", "<EXT>/b"},
 		},
 		{
 			name: "find delete is a write of the searched root", tool: "shell_run",
-			command: "find <EXT> -name '*.log' -delete", want: approval.EffectWrite,
+			command: "find <EXT> -name '*.log' -delete", want: commandanalysis.EffectWrite,
 			wantDirs: []string{"<EXT>"},
 		},
 		{
 			name: "single quoted path with a space is recovered", tool: "shell_run",
-			command: "cat '<EXT>/quoted path'", want: approval.EffectRead,
+			command: "cat '<EXT>/quoted path'", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<EXT>/quoted path"},
 		},
 		{
 			name: "heredoc body is not a path fact", tool: "shell_run",
-			command: "cat <<'EOF'\n<EXT>/inside\nEOF", want: approval.EffectRead,
+			command: "cat <<'EOF'\n<EXT>/inside\nEOF", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<WS>"},
 			note:     "the heredoc body must not leak an external fact",
 		},
 		{
 			name: "git status reads the execution context", tool: "shell_run",
-			command: "git status", want: approval.EffectRead,
+			command: "git status", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<WS>"},
 		},
 		{
 			name: "du of an external directory", tool: "shell_run",
-			command: "du -sh <EXT>", want: approval.EffectRead,
+			command: "du -sh <EXT>", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<EXT>"},
 		},
 		{
 			name: "sort -o is a write with both operands", tool: "shell_run",
-			command: "sort <EXT>/in.txt -o <EXT>/out.txt", want: approval.EffectWrite,
+			command: "sort <EXT>/in.txt -o <EXT>/out.txt", want: commandanalysis.EffectWrite,
 			wantDirs: []string{"<EXT>", "<EXT>/in.txt", "<EXT>/out.txt"},
 		},
 		{
 			name: "home expansion is an external read fact", tool: "shell_run",
-			command: "cat <HOME>/Downloads/secret.txt", want: approval.EffectRead,
+			command: "cat <HOME>/Downloads/secret.txt", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<HOME>/Downloads/secret.txt"},
 		},
 		{
 			name: "environment expansion is an external read fact", tool: "shell_run",
-			command: "echo $HOME/x", want: approval.EffectRead,
+			command: "echo $HOME/x", want: commandanalysis.EffectRead,
 			wantDirs: []string{"<HOME>/x"},
 		},
 		{
 			name: "unknown command keeps literal path facts", tool: "shell_run",
-			command: "unknowncmd --flag <EXT>/f", want: approval.EffectUnknown,
+			command: "unknowncmd --flag <EXT>/f", want: commandanalysis.EffectUnknown,
 			wantDirs: []string{"<EXT>/f"},
 			note:     "literal extraction preserves external directories for unknown commands",
 		},
 		{
 			name: "unknown command with a bare tilde keeps literal facts", tool: "shell_run",
-			command: "unknowncmd ~/x", want: approval.EffectUnknown,
+			command: "unknowncmd ~/x", want: commandanalysis.EffectUnknown,
 			wantDirs: []string{"<HOME>/x"},
 		},
 		{
 			name: "UNC-style external read is not collapsed into the cwd", tool: "shell_run",
-			command: `cat \\server\share\f`, want: approval.EffectRead,
+			command: `cat \\server\share\f`, want: commandanalysis.EffectRead,
 			wantDirs: []string{`\\server\share\f`},
 			note:     "regression: this fact carries no explicit-path syntax and used to be replaced by <WS>",
 		},
 		{
 			name: "other-user home read keeps the unresolved home fact", tool: "shell_run",
-			command: "cat ~root", want: approval.EffectRead,
+			command: "cat ~root", want: commandanalysis.EffectRead,
 			wantDirs: []string{"~root"},
 			note:     "~root carries no explicit-path syntax either; the literal fallback supplies it",
 		},
@@ -227,7 +227,7 @@ func TestShellAssessmentKeepsAuthoritativePathFacts(t *testing.T) {
 	for _, tc := range posixConformanceCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			command := dirs.expand(tc.command)[0]
-			authoritative := approval.AssessShellStaticWithContext(command, true, approval.ReadOnlyCommandPolicy{}, dirs.ws)
+			authoritative := commandanalysis.AssessShellStaticWithContext(command, true, commandanalysis.ReadOnlyCommandPolicy{}, dirs.ws)
 			merged := m.assessShellCommand(tc.tool, pathutil.FlavorPOSIX, command, nil, dirs.ws)
 
 			for _, dir := range authoritative.KnownDirs {
@@ -251,14 +251,14 @@ func TestShellAssessmentScriptFilePayloadConformance(t *testing.T) {
 
 	script := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 tools/check.py", nil, dirs.ws)
 	require.True(t, script.Reviewability.ScriptFilePayload)
-	require.Equal(t, approval.EffectUnknown, script.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, script.Effect)
 	require.Empty(t, slashSet(script.KnownDirs))
 	require.Empty(t, slashSet(script.DynamicTargets))
 	require.True(t, script.HasReviewabilityConcerns())
 
 	inline := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "python3 -c 'print(1)'", nil, dirs.ws)
 	require.False(t, inline.Reviewability.ScriptFilePayload)
-	require.Equal(t, approval.EffectUnknown, inline.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, inline.Effect)
 
 	external := "python3 " + filepath.ToSlash(filepath.Join(dirs.ext, "check.py"))
 	require.True(t, m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, external, nil, dirs.ws).Reviewability.ScriptFilePayload,
@@ -276,7 +276,7 @@ func TestShellAssessmentReadDiscovery(t *testing.T) {
 	} {
 		t.Run(command, func(t *testing.T) {
 			a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, dirs.ws)
-			require.Equal(t, approval.EffectRead, a.Effect)
+			require.Equal(t, commandanalysis.EffectRead, a.Effect)
 			require.True(t, a.StaticRead, "%+v", a)
 			require.False(t, a.HasReviewabilityConcerns())
 		})
@@ -290,7 +290,7 @@ func TestShellAssessmentReadDiscovery(t *testing.T) {
 	} {
 		t.Run(command, func(t *testing.T) {
 			a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, dirs.ws)
-			require.False(t, a.StaticRead && a.Effect == approval.EffectRead, "%+v", a)
+			require.False(t, a.StaticRead && a.Effect == commandanalysis.EffectRead, "%+v", a)
 		})
 	}
 }

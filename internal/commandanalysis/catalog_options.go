@@ -6,13 +6,17 @@ import (
 )
 
 type optionSpec struct {
-	Names   []string
-	Value   bool
-	Flag    string
-	Numeric bool
+	Names    []string
+	Value    bool
+	Flag     string
+	Numeric  bool
+	Attached bool
+	Combined bool
+	ReadPath bool
 }
 type optionBinding struct {
 	Operands []string
+	Reads    []string
 	Flags    map[string]bool
 }
 
@@ -29,7 +33,7 @@ var xxdOptions = []optionSpec{
 func validateOptions(options []optionSpec) error {
 	seen := map[string]bool{}
 	for _, o := range options {
-		if len(o.Names) == 0 || o.Numeric && !o.Value || o.Value && o.Flag != "" {
+		if len(o.Names) == 0 || (o.Numeric || o.Attached || o.ReadPath) && !o.Value || o.Value && o.Flag != "" {
 			return fmt.Errorf("empty option names")
 		}
 		for _, name := range o.Names {
@@ -42,8 +46,7 @@ func validateOptions(options []optionSpec) error {
 	return nil
 }
 
-// Only explicitly numeric options accept --name=value or -nVALUE.
-// Combined flags and other attached values remain unmodeled.
+// Attached values and flag-only bundles require explicit catalog metadata.
 // Tokens after -- and a lone - are operands, including leading-dash filenames.
 func bindOptions(options []optionSpec, args []string) (optionBinding, bool) {
 	b := optionBinding{Flags: map[string]bool{}}
@@ -58,11 +61,42 @@ func bindOptions(options []optionSpec, args []string) (optionBinding, bool) {
 			b.Operands = append(b.Operands, arg)
 			continue
 		}
+		// Expand a bundle only when every component is an audited valueless
+		// flag. Never guess where a value-taking option starts.
+		if len(arg) > 2 && !strings.HasPrefix(arg, "--") {
+			bundle := true
+			for _, ch := range arg[1:] {
+				matched := false
+				for _, o := range options {
+					for _, name := range o.Names {
+						if name == "-"+string(ch) && o.Combined && !o.Value {
+							matched = true
+						}
+					}
+				}
+				if !matched {
+					bundle = false
+					break
+				}
+			}
+			if bundle {
+				for _, ch := range arg[1:] {
+					for _, o := range options {
+						for _, name := range o.Names {
+							if name == "-"+string(ch) && o.Flag != "" {
+								b.Flags[o.Flag] = true
+							}
+						}
+					}
+				}
+				continue
+			}
+		}
 		found := false
 		for _, o := range options {
 			for _, name := range o.Names {
 				value := ""
-				inline := o.Numeric && ((strings.HasPrefix(name, "--") && strings.HasPrefix(arg, name+"=")) || (len(name) == 2 && len(arg) > 2 && strings.HasPrefix(arg, name)))
+				inline := (o.Numeric || o.Attached) && ((strings.HasPrefix(name, "--") && strings.HasPrefix(arg, name+"=")) || (len(name) == 2 && len(arg) > 2 && strings.HasPrefix(arg, name)))
 				if name == arg || inline {
 					found = true
 					if inline {
@@ -80,6 +114,9 @@ func bindOptions(options []optionSpec, args []string) (optionBinding, bool) {
 					}
 					if o.Numeric && (value == "" || strings.Trim(value, "0123456789") != "") {
 						return b, false
+					}
+					if o.ReadPath {
+						b.Reads = append(b.Reads, value)
 					}
 					if o.Flag != "" {
 						b.Flags[o.Flag] = true

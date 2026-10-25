@@ -55,6 +55,13 @@ func TestCatalogCompatibilityEntries(t *testing.T) {
 			if dashOperand {
 				bounded = true
 			}
+			// Stage-5 scalar cmdlet audit narrows legacy unbound/unknown forms.
+			if !c.Posix && (c.Name == "add-content" || c.Name == "ac" || c.Name == "set-content" || c.Name == "sc") && (len(c.Args) == 0 || strings.HasPrefix(c.Args[0], "-")) {
+				bounded = false
+			}
+			if !c.Posix && c.Name == "out-file" && len(c.Args) > 1 {
+				bounded = false
+			}
 			require.Equal(t, bounded, f.BoundedWrite, "bounded")
 			var paths []string
 			var modes []uint8

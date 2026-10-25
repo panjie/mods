@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,8 +25,8 @@ func TestRunClosesPowerShellBridge(t *testing.T) {
 		require.NoError(t, err, "%s", out)
 		return
 	}
-	defer approval.CloseBridge()
-	assessment := approval.AssessShellStaticWithContext("Get-Date", false, approval.ReadOnlyCommandPolicy{}, "")
+	defer commandanalysis.CloseBridge()
+	assessment := commandanalysis.AssessShellStaticWithContext("Get-Date", false, commandanalysis.ReadOnlyCommandPolicy{}, "")
 	require.True(t, assessment.StaticRead, "%+v", assessment)
 	scripts, err := filepath.Glob(filepath.Join(os.TempDir(), "mods-ps-bridge-*.ps1"))
 	require.NoError(t, err)

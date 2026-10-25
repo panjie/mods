@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 )
@@ -15,14 +15,14 @@ func (m *Mods) toolCaller(registry *toolregistry.Registry, cfg *Config) proto.To
 	}
 }
 
-func (m *Mods) assessCommand(tool, command string) approval.CommandAssessment {
+func (m *Mods) assessCommand(tool, command string) commandanalysis.CommandAssessment {
 	return m.assessCommandWithEnv(tool, command, nil)
 }
 
 // assessCommandWithEnv additionally receives the environment names this
 // call injects as secrets; static environment path expansion skips them so
 // classification never substitutes a value the child shell will not see.
-func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string]bool) approval.CommandAssessment {
+func (m *Mods) assessCommandWithEnv(tool, command string, shadowedEnv map[string]bool) commandanalysis.CommandAssessment {
 	ws := ""
 	if m.Config != nil {
 		ws = m.Config.ResolveWorkingDir().Canonical

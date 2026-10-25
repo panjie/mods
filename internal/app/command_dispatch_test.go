@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -27,18 +27,18 @@ func TestComplexCommandDispatchUsesOrdinaryApproval(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		mode      ReviewMode
-		effect    approval.CommandEffect
+		effect    commandanalysis.CommandEffect
 		savedRule bool
 		wantRun   bool
 	}{
-		{"classified read auto", ReviewAuto, approval.EffectRead, false, false},
-		{"classified read always", ReviewAlways, approval.EffectRead, false, false},
-		{"write requires approval", ReviewAuto, approval.EffectWrite, false, false},
-		{"saved write target", ReviewAuto, approval.EffectWrite, true, false},
-		{"always ignores saved target", ReviewAlways, approval.EffectWrite, true, false},
-		{"unknown requires approval", ReviewAuto, approval.EffectUnknown, false, false},
-		{"unknown is not covered by target rule", ReviewAuto, approval.EffectUnknown, true, false},
-		{"explicit never", ReviewNever, approval.EffectUnknown, false, true},
+		{"classified read auto", ReviewAuto, commandanalysis.EffectRead, false, false},
+		{"classified read always", ReviewAlways, commandanalysis.EffectRead, false, false},
+		{"write requires approval", ReviewAuto, commandanalysis.EffectWrite, false, false},
+		{"saved write target", ReviewAuto, commandanalysis.EffectWrite, true, false},
+		{"always ignores saved target", ReviewAlways, commandanalysis.EffectWrite, true, false},
+		{"unknown requires approval", ReviewAuto, commandanalysis.EffectUnknown, false, false},
+		{"unknown is not covered by target rule", ReviewAuto, commandanalysis.EffectUnknown, true, false},
+		{"explicit never", ReviewNever, commandanalysis.EffectUnknown, false, true},
 	} {
 		for _, minimal := range []bool{false, true} {
 			t.Run(tc.name+"/minimal="+strconv.FormatBool(minimal), func(t *testing.T) {
@@ -141,7 +141,7 @@ func TestRelatedStaticReadsExecuteAsOneCall(t *testing.T) {
 	cfg.ReviewMode = ReviewAlways
 	m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
 	if runtime.GOOS == "windows" {
-		t.Cleanup(func() { approval.CloseBridge() })
+		t.Cleanup(func() { commandanalysis.CloseBridge() })
 	}
 	a := m.assessCommand("shell_run", command)
 	require.True(t, a.StaticRead)
@@ -167,7 +167,7 @@ func TestComplexProcessDispatchDoesNotRequireResubmission(t *testing.T) {
 	if _, err := exec.LookPath(program); err != nil {
 		t.Skipf("fixture requires %s on PATH", program)
 	}
-	for _, effect := range []approval.CommandEffect{approval.EffectRead, approval.EffectUnknown} {
+	for _, effect := range []commandanalysis.CommandEffect{commandanalysis.EffectRead, commandanalysis.EffectUnknown} {
 		t.Run(string(effect), func(t *testing.T) {
 			cfg := defaultConfig()
 			cfg.WorkingDir = t.TempDir()

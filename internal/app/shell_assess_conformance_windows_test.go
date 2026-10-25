@@ -5,7 +5,7 @@ package app
 import (
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/stretchr/testify/require"
 )
@@ -19,27 +19,27 @@ func powershellConformanceCases() []conformanceCase {
 	return []conformanceCase{
 		{
 			name: "Get-Content reads the named file", tool: "powershell_run",
-			command: `Get-Content <EXT>\notes.txt`, want: approval.EffectRead,
+			command: `Get-Content <EXT>\notes.txt`, want: commandanalysis.EffectRead,
 			wantDirs: []string{`<EXT>\notes.txt`},
 		},
 		{
 			name: "Set-Content writes target and parent", tool: "powershell_run",
-			command: `Set-Content -Path <EXT>\out.txt -Value x`, want: approval.EffectWrite,
+			command: `Set-Content -Path <EXT>\out.txt -Value x`, want: commandanalysis.EffectWrite,
 			wantDirs: []string{`<EXT>`, `<EXT>\out.txt`},
 		},
 		{
 			name: "Remove-Item writes target and parent", tool: "powershell_run",
-			command: `Remove-Item <EXT>\gone.txt`, want: approval.EffectWrite,
+			command: `Remove-Item <EXT>\gone.txt`, want: commandanalysis.EffectWrite,
 			wantDirs: []string{`<EXT>`, `<EXT>\gone.txt`},
 		},
 		{
 			name: "quoted absolute read is an external fact", tool: "powershell_run",
-			command: `Get-Content "C:\Windows\win.ini"`, want: approval.EffectRead,
+			command: `Get-Content "C:\Windows\win.ini"`, want: commandanalysis.EffectRead,
 			wantDirs: []string{`C:\Windows\win.ini`},
 		},
 		{
 			name: "leading-slash tokens are not paths in PowerShell", tool: "powershell_run",
-			command: `findstr /i /c:"x" <EXT>\d.txt`, want: approval.EffectUnknown,
+			command: `findstr /i /c:"x" <EXT>\d.txt`, want: commandanalysis.EffectUnknown,
 			// findstr is not in the read-only cmdlet table, so the deterministic
 			// analysis cannot prove an effect. The point is the fact list: /i and /c:
 			// are native-program flags and must never appear as directories.
@@ -72,14 +72,14 @@ func TestShellAssessmentScriptFilePayloadConformancePowerShell(t *testing.T) {
 
 	script := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python check.py", nil, dirs.ws)
 	require.True(t, script.Reviewability.ScriptFilePayload)
-	require.Equal(t, approval.EffectUnknown, script.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, script.Effect)
 	require.True(t, script.HasReviewabilityConcerns())
 
 	inline := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "python -c 'print(1)'", nil, dirs.ws)
 	require.False(t, inline.Reviewability.ScriptFilePayload)
-	require.Equal(t, approval.EffectUnknown, inline.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, inline.Effect)
 
 	file := m.assessShellCommand("powershell_run", pathutil.FlavorPowerShell, "pwsh -File build.ps1", nil, dirs.ws)
 	require.True(t, file.Reviewability.ScriptFilePayload)
-	require.Equal(t, approval.EffectUnknown, file.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, file.Effect)
 }

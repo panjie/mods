@@ -17,7 +17,7 @@ type reviewPresentation struct {
 	rows     []interactionRow
 }
 
-func formatReviewPresentationWithIntent(name string, args []byte, assessment approval.CommandAssessment, scope Scope, intent AccessIntent) reviewPresentation {
+func formatReviewPresentationWithIntent(name string, args []byte, assessment commandanalysis.CommandAssessment, scope Scope, intent AccessIntent) reviewPresentation {
 	parsed := ToolOperationArgs(args)
 	result := reviewPresentation{tone: interactionToneWarning, toneText: "Warning"}
 	switch name {
@@ -83,7 +83,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment app
 			result.rows = []interactionRow{{Label: "Details", Value: summary}}
 		}
 	}
-	if origins := strings.Join(approval.NormalizeRemoteOrigins(intent.AllRemoteOrigins()), ", "); origins != "" && name != "shell_run" && name != "powershell_run" && name != "process_run" {
+	if origins := strings.Join(commandanalysis.NormalizeRemoteOrigins(intent.AllRemoteOrigins()), ", "); origins != "" && name != "shell_run" && name != "powershell_run" && name != "process_run" {
 		result.rows = append(result.rows, interactionRow{Label: "Remote", Value: origins})
 	}
 	if result.headline == "" {
@@ -121,7 +121,7 @@ func downloadReviewURL(raw string) string {
 	return u.String()
 }
 
-func commandReviewRows(command string, assessment approval.CommandAssessment, risk string) []interactionRow {
+func commandReviewRows(command string, assessment commandanalysis.CommandAssessment, risk string) []interactionRow {
 	rows := []interactionRow{{Label: "Command", Value: redactRemoteURLsForDisplay(command)}}
 	if len(assessment.Targets) > 0 || len(assessment.UnresolvedRemoteTargets) > 0 {
 		for _, target := range assessment.Targets {
@@ -145,7 +145,7 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 			}
 			rows = append(rows, interactionRow{Label: label, Value: redactRemoteURLsForDisplay(value)})
 		}
-		if assessment.WriteCoverage != approval.CoverageComplete && assessment.Effect != approval.EffectRead {
+		if assessment.WriteCoverage != approval.CoverageComplete && assessment.Effect != commandanalysis.EffectRead {
 			rows = append(rows, interactionRow{Label: "Unknown effects", Value: "Additional write targets may exist"})
 		}
 		for _, target := range assessment.UnresolvedRemoteTargets {
@@ -156,7 +156,7 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 	if target := commandReviewTarget(assessment, risk); target != "" {
 		rows = append(rows, interactionRow{Label: "Target", Value: target})
 	}
-	if origins := strings.Join(approval.NormalizeRemoteOrigins(assessment.RemoteOrigins), ", "); origins != "" {
+	if origins := strings.Join(commandanalysis.NormalizeRemoteOrigins(assessment.RemoteOrigins), ", "); origins != "" {
 		rows = append(rows, interactionRow{Label: "Remote", Value: origins})
 	}
 	if len(assessment.UnresolvedRemoteTargets) > 0 {
@@ -165,7 +165,7 @@ func commandReviewRows(command string, assessment approval.CommandAssessment, ri
 	return rows
 }
 
-func commandReviewTarget(assessment approval.CommandAssessment, risk string) string {
+func commandReviewTarget(assessment commandanalysis.CommandAssessment, risk string) string {
 	// Approval content must be complete. Compact summaries are only for status
 	// output; the review panel paginates these full target lists.
 	dynamic := strings.Join(pathShapedDynamicTargets(assessment.DynamicTargets), ", ")

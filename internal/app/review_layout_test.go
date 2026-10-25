@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,8 +108,8 @@ func TestReviewNavigationSkipsUnavailableActions(t *testing.T) {
 }
 
 func TestReviewShowsAllTargetsWithoutSessionGrant(t *testing.T) {
-	assessment := approval.CommandAssessment{
-		Effect:               approval.EffectWrite,
+	assessment := commandanalysis.CommandAssessment{
+		Effect:               commandanalysis.EffectWrite,
 		KnownDirs:            []string{"/one", "/two", "/three", "/four"},
 		DynamicTargets:       []string{"$ONE", "$TWO", "$THREE", "$FOUR"},
 		ProviderWriteTargets: []string{"HKLM:\\one", "HKLM:\\two", "HKLM:\\three", "HKLM:\\four"},
@@ -119,7 +120,7 @@ func TestReviewShowsAllTargetsWithoutSessionGrant(t *testing.T) {
 	r := &toolReviewer{}
 	r.handleStartMsg(toolReviewStartMsg{item: toolReviewItem{
 		name: "shell_run", resp: make(chan reviewResponse, 1),
-		presentation: formatReviewPresentationWithIntent("shell_run", args, assessment, WorkingDirScope("/cwd"), assessment.AccessIntent()),
+		presentation: formatReviewPresentationWithIntent("shell_run", args, assessment, WorkingDirScope("/cwd"), commandResultToIntent(assessment)),
 	}})
 	var all string
 	for {

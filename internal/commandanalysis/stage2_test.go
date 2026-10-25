@@ -196,7 +196,7 @@ func TestStage2BoundedBridgeIO(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
-func TestStage2IRMetadataCannotGrantRedirectionCoverage(t *testing.T) {
+func TestIRBoundLiteralRedirectionCoverage(t *testing.T) {
 	source := "Write-Output hello > out.txt"
 	ir := psBridgeIR{Version: "2", Commands: []string{"write-output"}, Redirects: []string{"FileRedirection"},
 		Nodes:        []psSyntaxNode{{ID: 1, Kind: "CommandAst", End: len(source)}, {ID: 2, Parent: 1, Kind: "FileRedirectionAst", Start: 19, End: len(source)}},
@@ -210,7 +210,11 @@ func TestStage2IRMetadataCannotGrantRedirectionCoverage(t *testing.T) {
 	in.Dialect = pathutil.FlavorPowerShell
 	result, err := e.Analyze(context.Background(), in)
 	require.NoError(t, err)
-	require.Equal(t, CoverageIncomplete, result.WriteCoverage)
+	require.Equal(t, CoverageComplete, result.WriteCoverage)
+	require.Len(t, result.Targets, 1)
+	require.Equal(t, TargetWrite, result.Targets[0].Role)
+	ir.Redirections = nil
+	require.False(t, func() bool { _, ok := powerShellRedirectionTargets(&ir); return ok }(), "legacy labels alone cannot grant coverage")
 	require.NotEqual(t, EffectRead, result.Effect)
 	ir.Nodes[1].Parent = 99
 	require.Error(t, validateIRNodes(&ir, source))

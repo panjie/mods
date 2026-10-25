@@ -1,0 +1,248 @@
+{
+  "env-remove": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "env-touch": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "env-unknown-sibling": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "env-unsafe-assignment": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "/unknown"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [
+      "/unknown"
+    ],
+    "intent_coverage": 0
+  },
+  "git-global-config": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "git-global-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "touch-missing-value": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "touch-reference": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "touch-reference-equals": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "touch-unknown-bundle": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  }
+}

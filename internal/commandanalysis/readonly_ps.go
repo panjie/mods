@@ -47,6 +47,10 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 		return false
 	}
 
+	if len(ir.Redirections) > 0 {
+		return false
+	}
+
 	// File redirection → writes to filesystem
 	for _, r := range ir.Redirects {
 		if r == "FileRedirection" {

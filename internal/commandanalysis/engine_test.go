@@ -4,6 +4,7 @@ import (
 	"context"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -82,7 +83,19 @@ func TestResultCloneOwnsMutableFacts(t *testing.T) {
 }
 
 func TestAnalysisPackageDoesNotImportPolicyOrApplication(t *testing.T) {
-	files, err := filepath.Glob("*.go")
+	var files []string
+	err := filepath.WalkDir(".", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && entry.Name() == "testdata" {
+			return filepath.SkipDir
+		}
+		if !entry.IsDir() && strings.HasSuffix(path, ".go") {
+			files = append(files, path)
+		}
+		return nil
+	})
 	require.NoError(t, err)
 	for _, file := range files {
 		if strings.HasSuffix(file, "_test.go") {

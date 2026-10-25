@@ -53,7 +53,7 @@ func TestAssessPOSIXDynamicTargetsUsePathContext(t *testing.T) {
 			name:        "external git working directory is not bounded to cwd",
 			command:     `wc -l $(git -C /etc ls-files '*.go')`,
 			wantTargets: []string{"command substitution"},
-			wantEffect:  EffectUnknown,
+			wantEffect:  EffectRead,
 		},
 		{name: "write redirect", command: `printf x > "$OUT"`, wantTargets: []string{"$OUT"}, wantEffect: EffectWrite},
 		{name: "writer operand", command: `rm "$TARGET"`, wantTargets: []string{"$TARGET"}, wantEffect: EffectWrite},

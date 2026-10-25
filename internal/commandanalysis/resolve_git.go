@@ -117,26 +117,15 @@ func (m *analysisRun) resolveParsedGitPushOrigins(p *parsedCommand, baseDir stri
 }
 
 func (m *analysisRun) resolveGitPushArgvOrigins(args []string, cwd string) (origins, unresolved, local []string) {
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-C":
-			i++
-			if i >= len(args) {
-				return nil, []string{"Git working directory"}, nil
-			}
-			candidate := args[i]
-			if !filepath.IsAbs(candidate) {
-				candidate = filepath.Join(cwd, candidate)
-			}
-			cwd = candidate
-		case "push":
-			return m.resolveGitRemoteOrigins(args[i+1:], cwd)
-		default:
-			if strings.HasPrefix(args[i], "-") && gitArgsArePush(args[i:]) {
-				return nil, []string{"Git global options"}, nil
-			}
-			return nil, nil, nil
+	rest, dir, ok := bindGitGlobals(args, cwd)
+	if !ok {
+		if gitArgsArePush(args) {
+			return nil, []string{"Git global options"}, nil
 		}
+		return nil, nil, nil
+	}
+	if len(rest) > 0 && rest[0] == "push" {
+		return m.resolveGitRemoteOrigins(rest[1:], dir)
 	}
 	return nil, nil, nil
 }

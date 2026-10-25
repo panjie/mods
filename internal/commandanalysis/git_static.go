@@ -41,12 +41,13 @@ func assessGitArgvStatic(tokens []string, posix bool, context ArgvStaticContext)
 	if len(tokens) < 2 || normalizedGitProgram(tokens[0], posix) != "git" {
 		return CommandAssessment{}, false
 	}
-	// Supporting global options requires applying Git's option-order and
-	// repository-selection semantics. Keep them on the normal fail-closed path
-	// for now, especially -C, -c, --git-dir, and --work-tree.
-	if strings.HasPrefix(tokens[1], "-") {
+	args, cwd, ok := bindGitGlobals(tokens[1:], context.Cwd)
+	if !ok {
 		return CommandAssessment{}, false
 	}
+	context.Cwd = cwd
+	tokens = append([]string{tokens[0]}, args...)
+
 	subcommand := strings.ToLower(strings.TrimSpace(tokens[1]))
 	if !slices.Contains(commandCatalog.lookup(nativeSpace, "git").RepositoryWrites, subcommand) || gitInvocationHasUnsupportedIndirection(tokens[2:]) {
 		return CommandAssessment{}, false

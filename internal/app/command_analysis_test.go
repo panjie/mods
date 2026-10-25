@@ -28,7 +28,7 @@ func TestCommandAdapterErrorsRemainUnapprovableByRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Mods{Config: testConfigForWorkingDir(cwd), ctx: tc.ctx}
 			result := m.assessCommand(tc.tool, tc.input)
-			require.Equal(t, approval.EffectUnknown, result.Effect)
+			require.Equal(t, commandanalysis.EffectUnknown, result.Effect)
 			intent := commandResultToIntent(commandanalysis.Result(result))
 			require.Equal(t, approval.AccessWrite, intent.Class)
 			require.Equal(t, approval.CoverageIncomplete, intent.WriteCoverage)

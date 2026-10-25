@@ -40,10 +40,10 @@ func (m *Mods) commandAnalyzer() (*commandanalysis.Engine, context.Context) {
 	return commandanalysis.NewEngine(settings, commandanalysis.Dependencies{UntrustedProgramDirs: approval.SafeDirs()}), ctx
 }
 
-// commandResult adapts the phase-1 fact model without reconstructing any facts.
-// The compatibility type remains for callers; authorization uses Targets only.
-func commandResult(result commandanalysis.Result) approval.CommandAssessment {
-	return approval.CommandAssessment(result.Clone())
+// commandResult isolates analyzer facts for the review snapshot.
+// Authorization uses only the role-aware conversion below.
+func commandResult(result commandanalysis.Result) commandanalysis.CommandAssessment {
+	return result.Clone()
 }
 
 // commandResultToIntent is the only production command authorization adapter.
@@ -236,33 +236,33 @@ func commandAuthorizationEqual(a, b approval.AccessIntent) bool {
 	return reflect.DeepEqual(semantic(a), semantic(b))
 }
 
-func (m *Mods) assessCommandAtCwd(tool, command string, shadowedEnv map[string]bool, ws string) approval.CommandAssessment {
+func (m *Mods) assessCommandAtCwd(tool, command string, shadowedEnv map[string]bool, ws string) commandanalysis.CommandAssessment {
 	result, _ := m.assessCommandAtCwdResult(tool, command, shadowedEnv, ws)
 	return result
 }
-func (m *Mods) assessCommandAtCwdResult(tool, command string, shadowedEnv map[string]bool, ws string) (approval.CommandAssessment, error) {
+func (m *Mods) assessCommandAtCwdResult(tool, command string, shadowedEnv map[string]bool, ws string) (commandanalysis.CommandAssessment, error) {
 	if tool == "process_run" {
 		return m.assessProcessInvocationResult(command)
 	}
 	return m.assessShellCommandResult(tool, shellPathFlavor(tool), command, shadowedEnv, ws)
 }
 
-func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) approval.CommandAssessment {
+func (m *Mods) assessShellCommand(tool string, flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) commandanalysis.CommandAssessment {
 	result, _ := m.assessShellCommandResult(tool, flavor, command, shadowedEnv, ws)
 	return result
 }
-func (m *Mods) assessShellCommandResult(tool string, flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) (approval.CommandAssessment, error) {
+func (m *Mods) assessShellCommandResult(tool string, flavor pathutil.Flavor, command string, shadowedEnv map[string]bool, ws string) (commandanalysis.CommandAssessment, error) {
 	engine, ctx := m.commandAnalyzer()
 	result, err := engine.Analyze(ctx, commandanalysis.Input{Cwd: ws, Dialect: flavor,
 		Shell: &commandanalysis.ShellInput{Source: command, ShadowedEnvironment: shadowedEnv}})
 	return commandResult(result), err
 }
 
-func (m *Mods) assessProcessInvocation(raw string) approval.CommandAssessment {
+func (m *Mods) assessProcessInvocation(raw string) commandanalysis.CommandAssessment {
 	result, _ := m.assessProcessInvocationResult(raw)
 	return result
 }
-func (m *Mods) assessProcessInvocationResult(raw string) (approval.CommandAssessment, error) {
+func (m *Mods) assessProcessInvocationResult(raw string) (commandanalysis.CommandAssessment, error) {
 	var invocation struct {
 		Program   string            `json:"program"`
 		Args      []string          `json:"args"`
@@ -270,10 +270,10 @@ func (m *Mods) assessProcessInvocationResult(raw string) (approval.CommandAssess
 		SecretEnv map[string]string `json:"secret_env"`
 	}
 	if err := json.Unmarshal([]byte(raw), &invocation); err != nil {
-		return approval.UnknownCommandAssessment(), err
+		return commandanalysis.UnknownCommandAssessment(), err
 	}
 	if strings.TrimSpace(invocation.Program) == "" {
-		return approval.UnknownCommandAssessment(), errors.New("empty process program")
+		return commandanalysis.UnknownCommandAssessment(), errors.New("empty process program")
 	}
 	baseDir := ""
 	if m != nil && m.Config != nil {
@@ -296,7 +296,7 @@ func (m *Mods) assessProcessInvocationResult(raw string) (approval.CommandAssess
 	return commandResult(result), err
 }
 
-func (m *Mods) constrainResolvedProcessAssessment(result approval.CommandAssessment, binding toolregistry.ProcessProgramBinding) approval.CommandAssessment {
+func (m *Mods) constrainResolvedProcessAssessment(result commandanalysis.CommandAssessment, binding toolregistry.ProcessProgramBinding) commandanalysis.CommandAssessment {
 	if m == nil || m.Config == nil {
 		return result
 	}

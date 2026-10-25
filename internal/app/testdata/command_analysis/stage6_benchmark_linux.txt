@@ -1,0 +1,51 @@
+Linux amd64; stage-6 working tree. Single-run observations, not statistical performance claims.
+
+goos: linux
+goarch: amd64
+pkg: github.com/panjie/mods/internal/app
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+BenchmarkCommandAnalysisBaseline/posix-read-32         	     200	     69665 ns/op	  123758 B/op	     220 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-external-read-32         	     200	     84034 ns/op	  150646 B/op	     306 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-uniq-read-32             	     200	     73280 ns/op	  124378 B/op	     223 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-uniq-write-32            	     200	     97920 ns/op	  168503 B/op	     297 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-xxd-write-32             	     200	     93742 ns/op	  168880 B/op	     297 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-authorized-touch-32      	     200	     78301 ns/op	  145072 B/op	     261 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-safe-touch-32            	     200	     87751 ns/op	  149841 B/op	     300 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-unknown-temp-redirect-32 	     200	     83359 ns/op	  149745 B/op	     277 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-unknown-sibling-32       	     200	     98555 ns/op	  176717 B/op	     357 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-copy-mixed-32            	     200	    109745 ns/op	  174664 B/op	     355 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-move-source-ungranted-32 	     200	    114670 ns/op	  179493 B/op	     411 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-uniq-unknown-option-32   	     200	     66205 ns/op	  126003 B/op	     242 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-uniq-missing-value-32    	     200	     53728 ns/op	  123123 B/op	     216 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-uniq-dash-name-32        	     200	     59542 ns/op	  125582 B/op	     253 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-space-name-32            	     200	     57380 ns/op	  123856 B/op	     231 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-shadow-pwd-32            	     200	     66290 ns/op	  144845 B/op	     245 allocs/op
+BenchmarkCommandAnalysisBaseline/posix-changed-cwd-32           	     200	     82005 ns/op	  154595 B/op	     343 allocs/op
+BenchmarkCommandAnalysisBaseline/argv-uniq-read-32              	     200	     24803 ns/op	   37347 B/op	     130 allocs/op
+BenchmarkCommandAnalysisBaseline/argv-uniq-write-32             	     200	     43921 ns/op	   61311 B/op	     187 allocs/op
+BenchmarkCommandAnalysisBaseline/argv-literal-dollar-32         	     200	     39986 ns/op	   61440 B/op	     196 allocs/op
+BenchmarkCommandAnalysisBaseline/argv-workspace-program-32      	     200	     19009 ns/op	   17091 B/op	     107 allocs/op
+BenchmarkCommandAnalysisBaseline/argv-git-multi-push-32         	     200	    611404 ns/op	   90822 B/op	     472 allocs/op
+BenchmarkCommandAnalysisBaseline/argv-git-reflog-write-32       	     200	     17079 ns/op	   21366 B/op	     163 allocs/op
+BenchmarkStage5Extended/touch-reference-32                      	     200	     93745 ns/op	  169622 B/op	     344 allocs/op
+BenchmarkStage5Extended/touch-reference-equals-32               	     200	     87939 ns/op	  169141 B/op	     313 allocs/op
+BenchmarkStage5Extended/env-touch-32                            	     200	     69486 ns/op	  132906 B/op	     330 allocs/op
+BenchmarkStage5Extended/env-remove-32                           	     200	     67026 ns/op	  131491 B/op	     324 allocs/op
+BenchmarkStage5Extended/git-global-read-32                      	     200	     58683 ns/op	  108266 B/op	     283 allocs/op
+BenchmarkStage5Extended/env-unsafe-assignment-32                	     200	     64249 ns/op	  128580 B/op	     302 allocs/op
+BenchmarkStage5Extended/env-unknown-sibling-32                  	     200	     78688 ns/op	  158288 B/op	     378 allocs/op
+BenchmarkStage5Extended/touch-unknown-bundle-32                 	     200	     69225 ns/op	  148191 B/op	     289 allocs/op
+BenchmarkStage5Extended/touch-missing-value-32                  	     200	     47889 ns/op	  122705 B/op	     217 allocs/op
+BenchmarkStage5Extended/git-global-config-32                    	     200	     53036 ns/op	  126820 B/op	     260 allocs/op
+PASS
+ok  	github.com/panjie/mods/internal/app	0.611s
+
+Linux PowerShell 7.6.8: real parsing, no source command execution by benchmark.
+goos: linux
+goarch: amd64
+pkg: github.com/panjie/mods/internal/commandanalysis
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+BenchmarkPowerShellBridgeLifecycle/cold-32         	       5	 297407358 ns/op
+BenchmarkPowerShellBridgeLifecycle/warm-32         	       5	   3944144 ns/op
+PASS
+ok  	github.com/panjie/mods/internal/commandanalysis	7.994s

@@ -27,10 +27,3 @@ func TestIncompleteCoverageNeverBorrowsPermission(t *testing.T) {
 	require.Equal(t, DecisionAllow, ClassifyAccess(trusted, scope, []string{target}, ReviewAuto))
 	require.True(t, RulesAllowIntent(rules, trusted, scope, nil, ReviewAuto))
 }
-
-func TestReadEffectRequiresEvidence(t *testing.T) {
-	a := CommandAssessment{Effect: EffectRead}
-	require.Equal(t, AccessWrite, a.AccessIntent().DominantClass())
-	a.Evidence = EvidenceStatic
-	require.Equal(t, AccessRead, a.AccessIntent().DominantClass())
-}

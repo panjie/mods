@@ -121,13 +121,10 @@ func assessPowerShellCoverage(result *CommandAssessment, ir *psBridgeIR, policy 
 			result.AddGap(GapUnknownInvocation)
 		}
 	}
-	// The current IR does not bind a redirection path to its operation. Until
-	// that is modeled, other known targets must not make it reusable.
-	for _, redir := range ir.Redirects {
-		if redir == "FileRedirection" {
-			result.AddGap(GapWriteTargets)
-		}
+	if _, ok := powerShellRedirectionTargets(ir); !ok {
+		result.AddGap(GapWriteTargets)
 	}
+
 	if result.Effect == EffectUnknown {
 		result.AddGap(GapUnknownInvocation)
 	}

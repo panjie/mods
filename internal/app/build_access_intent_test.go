@@ -23,20 +23,20 @@ func TestBuildAccessIntent(t *testing.T) {
 	require.NoError(t, toolregistry.RegisterShell(reg, toolregistry.ShellConfig{Root: root}))
 
 	// Legacy directory display alone never creates target authority.
-	readAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: approval.EffectRead, KnownDirs: []string{"/ws"}}
+	readAssessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: commandanalysis.EffectRead, KnownDirs: []string{"/ws"}}
 	intent := buildAccessIntent("shell_run", []byte(`{"command":"ls"}`), reg, &readAssessment)
 	require.Equal(t, AccessRead, intent.Class)
 	require.Empty(t, intent.AllDirs())
 
 	// shell mutable -> AccessWrite.
-	writeAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: approval.EffectWrite, KnownDirs: []string{"/ws/x"}}
+	writeAssessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: commandanalysis.EffectWrite, KnownDirs: []string{"/ws/x"}}
 	intentMut := buildAccessIntent("shell_run", []byte(`{"command":"rm x"}`), reg, &writeAssessment)
 	require.Equal(t, AccessWrite, intentMut.Class)
 	require.Empty(t, intentMut.WriteDirs)
 	require.False(t, intentMut.HasCompleteWriteTargets())
 
-	dynamicAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete,
-		Effect:         approval.EffectWrite,
+	dynamicAssessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete,
+		Effect:         commandanalysis.EffectWrite,
 		Targets:        []commandanalysis.Target{{Kind: commandanalysis.TargetFilesystem, Role: commandanalysis.TargetWrite, Operation: commandanalysis.OperationFollowLeaf, Raw: "$target"}},
 		DynamicTargets: []string{"$target"},
 	}
@@ -45,7 +45,7 @@ func TestBuildAccessIntent(t *testing.T) {
 	require.Equal(t, DecisionAsk, ClassifyAccess(intentDynamic, WorkingDirScope(root), nil, ApprovalReviewMode(ReviewAuto)))
 
 	// Unknown effect remains write-like even when analyzer output is inconsistent.
-	unknownAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: approval.EffectUnknown, KnownDirs: []string{"/ws/opaque"}}
+	unknownAssessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: commandanalysis.EffectUnknown, KnownDirs: []string{"/ws/opaque"}}
 	intentUnknown := buildAccessIntent("shell_run", []byte(`{"command":"opaque"}`), reg, &unknownAssessment)
 	require.Equal(t, AccessWrite, intentUnknown.Class)
 	require.Empty(t, intentUnknown.WriteDirs)
@@ -145,7 +145,7 @@ func TestAssessProcessInvocationSymlinkAliasWorkingDirProgramStaysReviewable(t *
 
 	invoke := fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(aliasRoot, "tool.sh"))
 	assessment := m.assessCommand("process_run", invoke)
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Contains(t, assessment.Reason, "cwd or temporary directory")
 }
 
@@ -199,7 +199,7 @@ func TestAssessProcessInvocationGitWorkingDirWritesAreStatic(t *testing.T) {
 		`{"program":"git","args":["checkout","--","internal/app/render.go"]}`,
 	} {
 		assessment := m.assessCommand("process_run", invocation)
-		require.Equal(t, approval.EffectWrite, assessment.Effect)
+		require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 		require.Contains(t, assessment.KnownDirs, cfg.ResolveWorkingDir().Canonical)
 		require.Contains(t, assessment.KnownDirs, filepath.Join(cfg.ResolveWorkingDir().Canonical, ".git"))
 	}
@@ -216,7 +216,7 @@ func TestAssessProcessInvocationGitEnvironmentRedirectFailsClosed(t *testing.T) 
 
 	assessment := m.assessCommand("process_run", `{"program":"git","args":["add","-A"],"secret_env":{"GIT_INDEX_FILE":"secret-ref"}}`)
 
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 }
 
@@ -254,9 +254,9 @@ func TestAssessProcessInvocationGitExternalRepositoryStateRequiresReview(t *test
 			}
 
 			assessment := m.assessCommand("process_run", `{"program":"git","args":["add","-A"]}`)
-			intent := assessment.AccessIntent()
+			intent := commandResultToIntent(assessment)
 
-			require.Equal(t, approval.EffectWrite, assessment.Effect)
+			require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 			require.Contains(t, assessment.KnownDirs, canonicalTestPath(t, externalTarget))
 			require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(canonicalTestPath(t, cwd)), nil, ApprovalReviewMode(ReviewAuto)))
 		})
@@ -275,7 +275,7 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	data := []byte(`{"program":"go","args":["install","github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"],"cwd":` + strconv.Quote(root) + `}`)
 
 	assessment := m.assessCommand("process_run", string(data))
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 
 	intent := buildAccessIntent("process_run", data, reg, &assessment)
@@ -295,8 +295,8 @@ func TestConstrainResolvedProcessAssessmentForWorkingDirExecutable(t *testing.T)
 	cfg := defaultConfig()
 	cfg.WorkingDir = root
 	m := &Mods{Config: &cfg}
-	assessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete,
-		Effect:    approval.EffectRead,
+	assessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete,
+		Effect:    commandanalysis.EffectRead,
 		KnownDirs: []string{root},
 		Reason:    "allowlisted command",
 	}
@@ -305,7 +305,7 @@ func TestConstrainResolvedProcessAssessmentForWorkingDirExecutable(t *testing.T)
 		Requested: "git",
 		Resolved:  filepath.Join(root, "git"),
 	})
-	require.Equal(t, approval.EffectUnknown, got.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, got.Effect)
 	require.Equal(t, assessment.KnownDirs, got.KnownDirs)
 	require.Contains(t, got.Reason, "cwd or temporary directory")
 }
@@ -321,25 +321,25 @@ func TestAssessProcessInvocationExplicitWorkingDirProgramStaysReviewable(t *test
 	tests := []struct {
 		name       string
 		invoke     string
-		expect     approval.CommandEffect
+		expect     commandanalysis.CommandEffect
 		wantReason string
 	}{
 		{
 			name:       "relative cwd program stays reviewable",
 			invoke:     `{"program":"./tool.sh","args":["--run"]}`,
-			expect:     approval.EffectUnknown,
+			expect:     commandanalysis.EffectUnknown,
 			wantReason: "cwd or temporary directory",
 		},
 		{
 			name:       "absolute cwd program stays reviewable",
 			invoke:     fmt.Sprintf(`{"program":%q,"args":["--run"]}`, filepath.Join(root, "tool.sh")),
-			expect:     approval.EffectUnknown,
+			expect:     commandanalysis.EffectUnknown,
 			wantReason: "cwd or temporary directory",
 		},
 		{
 			name:   "external program requires review",
 			invoke: `{"program":"/usr/local/bin/deploy","args":["--dry-run"]}`,
-			expect: approval.EffectUnknown,
+			expect: commandanalysis.EffectUnknown,
 		},
 	}
 
@@ -375,9 +375,9 @@ func TestAssessProcessInvocationExternalProgramPathIsNotATarget(t *testing.T) {
 		}
 		invoke := fmt.Sprintf(`{"program":%q,"args":["--headless","+luafile init.lua"]}`, external("external-pgm", "tool.exe"))
 		assessment := m.assessCommand("process_run", invoke)
-		require.Equal(t, approval.EffectUnknown, assessment.Effect)
+		require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 		require.Empty(t, assessment.KnownDirs)
-		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), cwd, "process_run", true)
+		intent := normalizeAccessIntentDirs(commandResultToIntent(assessment), cwd, "process_run", true)
 		require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 		require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 	})
@@ -389,10 +389,11 @@ func TestAssessProcessInvocationExternalProgramPathIsNotATarget(t *testing.T) {
 		target := external("external-out", "out.txt")
 		invoke := fmt.Sprintf(`{"program":%q,"args":["--out",%q]}`, external("external-pgm", "tool.exe"), target)
 		assessment := m.assessCommand("process_run", invoke)
-		require.Equal(t, approval.EffectUnknown, assessment.Effect)
+		require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 		require.Equal(t, []string{target}, assessment.KnownDirs)
-		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), cwd, "process_run", true)
-		require.Equal(t, []string{target}, intent.Dirs)
+		intent := normalizeAccessIntentDirs(commandResultToIntent(assessment), cwd, "process_run", true)
+		require.Empty(t, intent.Dirs)
+		require.Empty(t, intent.WriteDirs)
 		require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 		rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
 		require.Empty(t, rules)

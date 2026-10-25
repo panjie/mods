@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 )
 
@@ -16,6 +16,6 @@ func extractExternalPaths(command, cwdDir string) []string {
 }
 
 func extractExternalPathsWithFlavor(command, cwdDir string, flavor pathutil.Flavor) []string {
-	paths := approval.ExternalShellPathFacts(command, cwdDir, flavor, approval.ReadOnlyCommandPolicy{})
+	paths := commandanalysis.ExternalShellPathFacts(command, cwdDir, flavor, commandanalysis.ReadOnlyCommandPolicy{})
 	return paths
 }

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,67 +15,67 @@ func TestFormatReviewSummaryWithIntent(t *testing.T) {
 	t.Run("fs write shows create or overwrite", func(t *testing.T) {
 		root := t.TempDir()
 		scope := WorkingDirScope(root)
-		createSummary := formatReviewSummaryWithIntent("fs_write_file", []byte(`{"path":"new.txt","content":"hello"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+		createSummary := formatReviewSummaryWithIntent("fs_write_file", []byte(`{"path":"new.txt","content":"hello"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, createSummary, "new.txt")
 		require.Contains(t, createSummary, "creates new file")
 		require.Contains(t, createSummary, "5 bytes")
 
 		existing := filepath.Join(root, "existing.txt")
 		require.NoError(t, os.WriteFile(existing, []byte("old"), 0o644))
-		overwriteSummary := formatReviewSummaryWithIntent("fs_write_file", []byte(`{"path":"existing.txt","content":"hello"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+		overwriteSummary := formatReviewSummaryWithIntent("fs_write_file", []byte(`{"path":"existing.txt","content":"hello"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, overwriteSummary, "overwrites existing file")
 	})
 
 	t.Run("patch summarizes files and line counts", func(t *testing.T) {
 		patch := "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1,2 @@\n-old\n+new\n+more\n"
-		summary := formatReviewSummaryWithIntent("fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`), approval.CommandAssessment{}, testApprovalScope, AccessIntent{WriteCoverage: testCompleteCoverage})
+		summary := formatReviewSummaryWithIntent("fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`), commandanalysis.CommandAssessment{}, testApprovalScope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Equal(t, "Patch: a.txt (+2 -1)", summary)
 	})
 
 	t.Run("replace summarizes byte counts", func(t *testing.T) {
-		summary := formatReviewSummaryWithIntent("fs_replace", []byte(`{"path":"a.txt","old_text":"old","new_text":"newer"}`), approval.CommandAssessment{}, testApprovalScope, AccessIntent{WriteCoverage: testCompleteCoverage})
+		summary := formatReviewSummaryWithIntent("fs_replace", []byte(`{"path":"a.txt","old_text":"old","new_text":"newer"}`), commandanalysis.CommandAssessment{}, testApprovalScope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Equal(t, "Target: a.txt - replace 3 bytes with 5 bytes", summary)
 	})
 
 	t.Run("new filesystem mutations summarize action", func(t *testing.T) {
 		scope := WorkingDirScope(t.TempDir())
-		require.Contains(t, formatReviewSummaryWithIntent("fs_delete_file", []byte(`{"path":"old.txt"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "delete file")
-		require.Contains(t, formatReviewSummaryWithIntent("fs_delete_dir", []byte(`{"path":"old-dir"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "delete directory")
-		require.Contains(t, formatReviewSummaryWithIntent("fs_mkdir", []byte(`{"path":"new-dir"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "create directory")
-		require.Contains(t, formatReviewSummaryWithIntent("fs_copy", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "a.txt -> b.txt")
-		require.Contains(t, formatReviewSummaryWithIntent("fs_move", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "a.txt -> b.txt")
+		require.Contains(t, formatReviewSummaryWithIntent("fs_delete_file", []byte(`{"path":"old.txt"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "delete file")
+		require.Contains(t, formatReviewSummaryWithIntent("fs_delete_dir", []byte(`{"path":"old-dir"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "delete directory")
+		require.Contains(t, formatReviewSummaryWithIntent("fs_mkdir", []byte(`{"path":"new-dir"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "create directory")
+		require.Contains(t, formatReviewSummaryWithIntent("fs_copy", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "a.txt -> b.txt")
+		require.Contains(t, formatReviewSummaryWithIntent("fs_move", []byte(`{"source_path":"a.txt","dest_path":"b.txt"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}), "a.txt -> b.txt")
 	})
 
 	t.Run("shell risk uses affected dirs", func(t *testing.T) {
 		scope := WorkingDirScope("/cwd")
 		require.Contains(t,
-			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"ls"}`), approval.CommandAssessment{Effect: approval.EffectRead}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
+			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"ls"}`), commandanalysis.CommandAssessment{Effect: commandanalysis.EffectRead}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
 			"read-only",
 		)
 		require.Contains(t,
-			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"touch out"}`), approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"."}}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
+			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"touch out"}`), commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: []string{"."}}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
 			"local mutation",
 		)
-		unknownSummary := formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"opaque-command"}`), approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{"/cwd"}}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+		unknownSummary := formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"opaque-command"}`), commandanalysis.CommandAssessment{Effect: commandanalysis.EffectUnknown, KnownDirs: []string{"/cwd"}}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, unknownSummary, "unknown")
 		require.NotContains(t, unknownSummary, "local mutation")
-		contradictoryWrite := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/cwd"}}
+		contradictoryWrite := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: []string{"/cwd"}}
 		contradictoryWriteSummary := formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"touch out"}`), contradictoryWrite, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, contradictoryWriteSummary, "local mutation")
 		require.NotContains(t, contradictoryWriteSummary, "read-only")
 		require.Contains(t,
-			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"rm /tmp/x"}`), approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/tmp"}}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
+			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"rm /tmp/x"}`), commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: []string{"/tmp"}}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
 			"local mutation",
 		)
 		require.Contains(t,
-			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"unknown"}`), approval.CommandAssessment{Effect: approval.EffectWrite}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
+			formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"unknown"}`), commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite}, scope, AccessIntent{WriteCoverage: testCompleteCoverage}),
 			"unknown-location mutation",
 		)
 	})
 
 	t.Run("process risk uses argv preview", func(t *testing.T) {
 		scope := WorkingDirScope("/cwd")
-		analysis := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/cwd"}}
+		analysis := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: []string{"/cwd"}}
 		args := []byte(`{"program":"rm","args":["path with space"]}`)
 		summary := formatReviewSummaryWithIntent("process_run", args, analysis, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, summary, "local mutation")
@@ -90,7 +90,7 @@ func TestFormatReviewSummaryWithIntent(t *testing.T) {
 	t.Run("shell risk hides speculative assessment reason when dirs unknown", func(t *testing.T) {
 		scope := WorkingDirScope("/cwd")
 		got := formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"scoop install nodejs"}`),
-			approval.CommandAssessment{Effect: approval.EffectWrite, Reason: "installs nodejs via scoop"}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+			commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, Reason: "installs nodejs via scoop"}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, got, "unknown-location mutation")
 		require.NotContains(t, got, "installs nodejs via scoop")
 	})
@@ -98,7 +98,7 @@ func TestFormatReviewSummaryWithIntent(t *testing.T) {
 	t.Run("shell risk surfaces assessment reason when dirs present", func(t *testing.T) {
 		scope := WorkingDirScope("/cwd")
 		got := formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"scoop install nodejs"}`),
-			approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: []string{"/home/user/scoop"}, Reason: "modifies system state"}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+			commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: []string{"/home/user/scoop"}, Reason: "modifies system state"}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.Contains(t, got, "local mutation")
 		require.Contains(t, got, "modifies system state")
 	})
@@ -106,15 +106,15 @@ func TestFormatReviewSummaryWithIntent(t *testing.T) {
 	t.Run("shell risk omits reason when empty", func(t *testing.T) {
 		scope := WorkingDirScope("/cwd")
 		got := formatReviewSummaryWithIntent("shell_run", []byte(`{"command":"unknown"}`),
-			approval.CommandAssessment{Effect: approval.EffectWrite}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+			commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 		require.NotContains(t, got, "(")
 	})
 }
 
 func TestDynamicShellTargetPresentation(t *testing.T) {
 	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
-	analysis := approval.CommandAssessment{
-		Effect:         approval.EffectWrite,
+	analysis := commandanalysis.CommandAssessment{
+		Effect:         commandanalysis.EffectWrite,
 		DynamicTargets: []string{`$PROFILE.CurrentUserCurrentHost`, `$prof`},
 		Reason:         "writes PowerShell profile",
 	}
@@ -137,13 +137,13 @@ func TestDynamicShellTargetPresentation(t *testing.T) {
 func TestPowerShellProviderWritePresentation(t *testing.T) {
 	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
 	target := `HKCU:\Software\Classes\Neovide`
-	analysis := approval.CommandAssessment{
-		Effect:               approval.EffectWrite,
+	analysis := commandanalysis.CommandAssessment{
+		Effect:               commandanalysis.EffectWrite,
 		ProviderWriteTargets: []string{target},
 		Reason:               "writes a PowerShell provider target",
 	}
 	args := []byte(`{"command":"Set-ItemProperty -Path HKCU:\\Software\\Classes\\Neovide -Name x -Value y"}`)
-	intent := analysis.AccessIntent()
+	intent := commandResultToIntent(analysis)
 
 	presentation := formatReviewPresentationWithIntent("powershell_run", args, analysis, scope, intent)
 	require.Equal(t, "Modify a PowerShell provider target", presentation.headline)
@@ -154,8 +154,8 @@ func TestPowerShellProviderWritePresentation(t *testing.T) {
 
 func TestDynamicReadShellTargetPresentation(t *testing.T) {
 	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
-	analysis := approval.CommandAssessment{
-		Effect:         approval.EffectRead,
+	analysis := commandanalysis.CommandAssessment{
+		Effect:         commandanalysis.EffectRead,
 		KnownDirs:      []string{`C:\Users\panjie\AppData\Local\Microsoft\WinGet\Links`},
 		DynamicTargets: []string{`$v`},
 		Reason:         "inspects PowerShell profile paths",
@@ -182,8 +182,8 @@ func TestDynamicReadShellTargetPresentation(t *testing.T) {
 
 func TestNonPathShapedDynamicTargetHiddenFromReviewPanel(t *testing.T) {
 	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
-	analysis := approval.CommandAssessment{
-		Effect:         approval.EffectRead,
+	analysis := commandanalysis.CommandAssessment{
+		Effect:         commandanalysis.EffectRead,
 		DynamicTargets: []string{`(json-insert (emacs-startup-usage))`},
 		Reason:         "measures emacs startup",
 	}
@@ -198,8 +198,8 @@ func TestNonPathShapedDynamicTargetHiddenFromReviewPanel(t *testing.T) {
 
 func TestEmbeddedVariableDynamicTargetNotShownAsReviewTarget(t *testing.T) {
 	scope := WorkingDirScope(`C:\Users\panjie\dev\mods`)
-	analysis := approval.CommandAssessment{
-		Effect:         approval.EffectRead,
+	analysis := commandanalysis.CommandAssessment{
+		Effect:         commandanalysis.EffectRead,
 		DynamicTargets: []string{`$env:GITLAB_TOKEN`, `PRIVATE-TOKEN: $env:GITLAB_TOKEN`},
 		Reason:         "reads the GitLab user API",
 	}
@@ -239,11 +239,11 @@ func TestPathShapedDynamicTargetsDedupsEmbeddedReferences(t *testing.T) {
 }
 
 func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
-	analysis := approval.CommandAssessment{
-		Shape: approval.CommandShape{TopLevelActions: 4, Pipelines: 2},
-		Reviewability: approval.CommandReviewability{
-			Level:   approval.ReviewabilityCompound,
-			Reasons: []approval.ReviewabilityReason{approval.ReviewabilityMultipleIndependent},
+	analysis := commandanalysis.CommandAssessment{
+		Shape: commandanalysis.CommandShape{TopLevelActions: 4, Pipelines: 2},
+		Reviewability: commandanalysis.CommandReviewability{
+			Level:   commandanalysis.ReviewabilityCompound,
+			Reasons: []commandanalysis.ReviewabilityReason{commandanalysis.ReviewabilityMultipleIndependent},
 		},
 	}
 	presentation := formatReviewPresentationWithIntent(
@@ -261,7 +261,7 @@ func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 
 func TestFormatReviewSummaryReadOnly(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
-	got := formatReviewSummaryWithIntent("fs_read_file", []byte(`{"path":"/etc/passwd"}`), approval.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
+	got := formatReviewSummaryWithIntent("fs_read_file", []byte(`{"path":"/etc/passwd"}`), commandanalysis.CommandAssessment{}, scope, AccessIntent{WriteCoverage: testCompleteCoverage})
 	require.Contains(t, got, "read-only")
 	require.Contains(t, got, "/etc")
 	require.NotContains(t, got, "passwd")

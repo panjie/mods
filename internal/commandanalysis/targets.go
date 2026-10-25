@@ -59,7 +59,7 @@ func targetFromInvocation(t InvocationTarget) Target {
 			op = OperationFollowLeaf
 		}
 	}
-	return Target{Kind: TargetFilesystem, Role: t.Role, Operation: op, Raw: t.Path}
+	return Target{Kind: TargetFilesystem, Role: t.Role, Operation: op, Raw: t.Path, Literal: t.Literal}
 }
 func appendInvocationTargets(result *CommandAssessment, f *InvocationFacts) {
 	for _, t := range f.Targets {

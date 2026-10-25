@@ -1,0 +1,35 @@
+Before: 54060c5, isolated worktree, same cases_stage5_extended.json and benchmark harness.
+goos: linux
+goarch: amd64
+pkg: github.com/panjie/mods/internal/app
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+BenchmarkStage5Extended/touch-reference-32         	     200	    113813 ns/op	  174855 B/op	     407 allocs/op
+BenchmarkStage5Extended/touch-reference-equals-32  	     200	    103324 ns/op	  149454 B/op	     303 allocs/op
+BenchmarkStage5Extended/env-touch-32               	     200	     95799 ns/op	  132565 B/op	     328 allocs/op
+BenchmarkStage5Extended/env-remove-32              	     200	     85900 ns/op	  131513 B/op	     326 allocs/op
+BenchmarkStage5Extended/git-global-read-32         	     200	     83014 ns/op	  127896 B/op	     284 allocs/op
+BenchmarkStage5Extended/env-unsafe-assignment-32   	     200	     88198 ns/op	  130673 B/op	     303 allocs/op
+BenchmarkStage5Extended/env-unknown-sibling-32     	     200	    101939 ns/op	  156579 B/op	     372 allocs/op
+BenchmarkStage5Extended/touch-unknown-bundle-32    	     200	     84331 ns/op	  147805 B/op	     289 allocs/op
+BenchmarkStage5Extended/touch-missing-value-32     	     200	     65243 ns/op	  123685 B/op	     217 allocs/op
+BenchmarkStage5Extended/git-global-config-32       	     200	     70133 ns/op	  125706 B/op	     259 allocs/op
+PASS
+ok  	github.com/panjie/mods/internal/app	0.212s
+
+After: stage-5 extension working tree, same host, sequential run.
+goos: linux
+goarch: amd64
+pkg: github.com/panjie/mods/internal/app
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+BenchmarkStage5Extended/touch-reference-32         	     200	    114890 ns/op	  169295 B/op	     344 allocs/op
+BenchmarkStage5Extended/touch-reference-equals-32  	     200	    105669 ns/op	  168952 B/op	     313 allocs/op
+BenchmarkStage5Extended/env-touch-32               	     200	     82935 ns/op	  133171 B/op	     331 allocs/op
+BenchmarkStage5Extended/env-remove-32              	     200	     79814 ns/op	  131285 B/op	     324 allocs/op
+BenchmarkStage5Extended/git-global-read-32         	     200	     74476 ns/op	  107704 B/op	     283 allocs/op
+BenchmarkStage5Extended/env-unsafe-assignment-32   	     200	     84365 ns/op	  129322 B/op	     302 allocs/op
+BenchmarkStage5Extended/env-unknown-sibling-32     	     200	     91215 ns/op	  158184 B/op	     378 allocs/op
+BenchmarkStage5Extended/touch-unknown-bundle-32    	     200	     82333 ns/op	  148798 B/op	     289 allocs/op
+BenchmarkStage5Extended/touch-missing-value-32     	     200	     58587 ns/op	  124430 B/op	     218 allocs/op
+BenchmarkStage5Extended/git-global-config-32       	     200	     65443 ns/op	  126448 B/op	     260 allocs/op
+PASS
+ok  	github.com/panjie/mods/internal/app	0.200s

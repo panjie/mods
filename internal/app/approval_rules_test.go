@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/skills"
@@ -94,14 +95,15 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 }
 
 func TestDynamicProbeWithoutConcreteDirectorySkipsAutoReview(t *testing.T) {
-	assessment := approval.CommandAssessment{
-		Evidence:       approval.EvidenceStatic,
-		Effect:         approval.EffectRead,
+	assessment := commandanalysis.CommandAssessment{
+		Evidence:       commandanalysis.EvidenceStatic,
+		WriteCoverage:  commandanalysis.CoverageComplete,
+		Effect:         commandanalysis.EffectRead,
 		DynamicTargets: []string{`$PROFILE.CurrentUserCurrentHost`},
 		DynamicProbe:   true,
 		Reason:         "read-only PowerShell command (AST analysis)",
 	}
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.Equal(t, AccessRead, intent.Class)
 	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, intent.UnresolvedPaths)
 	require.True(t, intent.DynamicProbe)
@@ -695,7 +697,7 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 			Dirs:   []string{"/opt/scoop"},
 			Reason: "installs nodejs via scoop",
 		}
-		assessment := approval.CommandAssessment{Effect: approval.EffectWrite, KnownDirs: intent.Dirs, Reason: intent.Reason}
+		assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: intent.Dirs, Reason: intent.Reason}
 		reviewer := &toolReviewer{
 			reviewMode: ReviewAuto,
 			scope:      testApprovalScope,
@@ -761,8 +763,9 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 			reviewChan: make(chan toolReviewItem, 1),
 		}
 		assessment := mods.assessShellCommand("shell_run", pathutil.FlavorPOSIX, `du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20`, nil, testApprovalScope.Value)
-		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), testApprovalScope.Value, "shell_run", true)
-		require.Contains(t, intent.Dirs, downloads)
+		intent := normalizeAccessIntentDirs(commandResultToIntent(assessment), testApprovalScope.Value, "shell_run", true)
+		require.Contains(t, normalizeShellAffectedDirsForTool(assessment.KnownDirs, testApprovalScope.Value, "shell_run"), downloads)
+		require.Empty(t, intent.Dirs)
 		require.Empty(t, intent.WriteDirs)
 		require.Empty(t, candidateRulesForIntent(intent, testApprovalScope, nil, ApprovalReviewMode(ReviewAuto)))
 		require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`)))
@@ -974,7 +977,7 @@ func receiveReviewItem(t *testing.T, ch <-chan toolReviewItem) toolReviewItem {
 func testRequestApproval(reviewer *toolReviewer, mods *Mods, name string, data []byte) error {
 	registry := mods.currentToolRegistry
 	shellExecution := registry != nil && registry.ShellExecution(name)
-	var assessment *approval.CommandAssessment
+	var assessment *commandanalysis.CommandAssessment
 	if shellExecution {
 		input := string(data)
 		if name != "process_run" {
@@ -1270,8 +1273,8 @@ func TestUnknownEffectCannotReuseKnownTargets(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/known-target", tool), func(t *testing.T) {
 			dir := filepath.Clean(t.TempDir())
 			scope := WorkingDirScope(dir)
-			assessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{dir}}
-			intent := assessment.AccessIntent()
+			assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectUnknown, KnownDirs: []string{dir}}
+			intent := commandResultToIntent(assessment)
 			r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: true}
 			r.startSession()
 			defer r.reset()
@@ -1304,12 +1307,12 @@ func TestUnknownEffectCannotReuseKnownTargets(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/safe-temp-target", tool), func(t *testing.T) {
 			safe := filepath.Clean(t.TempDir())
 			scope := WorkingDirScope(filepath.Clean(t.TempDir()))
-			assessment := approval.CommandAssessment{Effect: approval.EffectUnknown, KnownDirs: []string{safe}}
+			assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectUnknown, KnownDirs: []string{safe}}
 			deps := reviewerDeps{
 				ctx:            context.Background(),
 				shellExecution: true,
 				assessment:     &assessment,
-				accessIntent:   assessment.AccessIntent(),
+				accessIntent:   commandResultToIntent(assessment),
 				safeDirs:       []string{safe},
 			}
 			r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: false}

@@ -301,7 +301,14 @@ func assessPowerShellIRContext(command string, ir *psBridgeIR, policy ReadOnlyCo
 		for i := start; i < len(result.Targets); i++ {
 			result.Targets[i].NodeID = inv.NodeID
 			single, _ := powerShellArgQuoting(result.Targets[i].Raw)
-			result.Targets[i].Literal = single
+			result.Targets[i].Literal = result.Targets[i].Literal || single
+		}
+	}
+	if redirections, ok := powerShellRedirectionTargets(ir); ok && len(redirections) > 0 {
+		result.Targets = append(result.Targets, redirections...)
+		result.Effect = EffectWrite
+		for _, target := range redirections {
+			result.WritePaths = append(result.WritePaths, target.Raw)
 		}
 	}
 	assessPowerShellCoverage(&result, ir, policy)

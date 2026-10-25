@@ -3,12 +3,11 @@ package app
 import (
 	"github.com/panjie/mods/internal/apperr"
 	"github.com/panjie/mods/internal/approval"
-
+	"github.com/panjie/mods/internal/commandanalysis"
 	cfgpkg "github.com/panjie/mods/internal/config"
-	"github.com/panjie/mods/internal/session"
-
 	debugpkg "github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
+	"github.com/panjie/mods/internal/session"
 	"github.com/panjie/mods/internal/tooling"
 	"github.com/panjie/mods/internal/ui"
 )
@@ -68,7 +67,7 @@ var DecisionAllow = approval.DecisionAllow
 var DecisionAsk = approval.DecisionAsk
 var ClassifyAccess = approval.ClassifyAccess
 var ExternalDirs = approval.ExternalDirs
-var NormalizeRemoteOrigins = approval.NormalizeRemoteOrigins
+var NormalizeRemoteOrigins = commandanalysis.NormalizeRemoteOrigins
 var safeDirs = approval.SafeDirs
 var ErrNoMatches = session.ErrNoMatches
 

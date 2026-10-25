@@ -10,23 +10,24 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAnalyzeShellCommandPowerShellLineCountPipelineIsReadOnly(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	cmd := `Get-ChildItem -Recurse -Filter *.go | Select-Object FullName | ForEach-Object { $lines = (Get-Content $_.FullName | Measure-Object -Line).Lines; "$($_.FullName): $lines lines" } | Sort-Object { [int]($_.Split(':')[1].Trim().Split(' ')[0]) } -Descending`
 
 	got := m.assessCommand("shell_run", cmd)
-	require.Equal(t, approval.EffectRead, got.Effect)
+	require.Equal(t, commandanalysis.EffectRead, got.Effect)
 	require.NotEmpty(t, got.Reason)
 }
 
 func TestAnalyzeShellCommandPowerShellUserProfileDoesNotInventPlaceholder(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
@@ -39,14 +40,14 @@ func TestAnalyzeShellCommandPowerShellUserProfileDoesNotInventPlaceholder(t *tes
 
 	got := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, got.Effect)
+	require.Equal(t, commandanalysis.EffectRead, got.Effect)
 	require.Len(t, got.KnownDirs, 1)
 	require.True(t, strings.HasPrefix(strings.ToLower(got.KnownDirs[0]), strings.ToLower(home)), got.KnownDirs)
 	require.NotContains(t, got.KnownDirs[0], "<user>")
 }
 
 func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkingDirRead(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -56,12 +57,12 @@ func TestAnalyzeShellCommandPowerShellNotMatchRegexIsWorkingDirRead(t *testing.T
 
 	got := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, got.Effect)
+	require.Equal(t, commandanalysis.EffectRead, got.Effect)
 	require.Equal(t, []string{cwd}, got.KnownDirs)
 }
 
 func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -71,7 +72,7 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 
 	got := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, got.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, got.Effect)
 	// The engine-automatic $PROFILE.CurrentUserCurrentHost reference resolves
 	// to a concrete path; the command-local $prof / $dir stay runtime-resolved.
 	require.Len(t, got.KnownDirs, 1)
@@ -86,7 +87,7 @@ func TestAnalyzeShellCommandPowerShellProfileWriteKeepsRuntimeTargetsUnresolved(
 }
 
 func TestAssessCommandPowerShellLiteralVariableReadResolvesConcreteDir(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -96,14 +97,14 @@ func TestAssessCommandPowerShellLiteralVariableReadResolvesConcreteDir(t *testin
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a literal-assigned variable resolves to a concrete target")
 	require.Contains(t, assessment.KnownDirs, `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`)
-	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
 }
 
 func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -113,12 +114,12 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a literal-assigned write target resolves to a concrete directory")
 	require.Contains(t, assessment.KnownDirs, `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`)
-	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
 	require.Equal(t, DecisionAsk, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
@@ -126,7 +127,7 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 }
 
 func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -136,14 +137,14 @@ func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testin
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$p`,
 		"a string expression must not be reduced to its literal prefix")
 	require.NotContains(t, assessment.LiteralAssignments, "p")
 }
 
 func TestAssessCommandPowerShellLiteralVariableWorkingDirReadAutoAllows(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -153,12 +154,12 @@ func TestAssessCommandPowerShellLiteralVariableWorkingDirReadAutoAllows(t *testi
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect,
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect,
 		"a pure-literal top-level assignment must not block the static read-only proof")
 	require.Empty(t, assessment.DynamicTargets)
 	require.Contains(t, assessment.KnownDirs, cwd+`\init.el`)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
@@ -166,7 +167,7 @@ func TestAssessCommandPowerShellLiteralVariableWorkingDirReadAutoAllows(t *testi
 }
 
 func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -177,16 +178,16 @@ func TestAssessCommandPowerShellLiteralVariableExternalReadAsksWithRule(t *testi
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets)
 	require.Contains(t, assessment.KnownDirs, external)
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -194,22 +195,22 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	}
 	assessment := m.assessCommand("powershell_run", `Set-Content -Path $PROFILE -Value "Import-Module foo"`)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "an engine-automatic write target resolves to a concrete path")
 	require.Len(t, assessment.KnownDirs, 1)
 	require.Contains(t, strings.ToLower(assessment.KnownDirs[0]), "profile", assessment.KnownDirs)
-	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
 	scope := WorkingDirScope(cwd)
 	// $PROFILE lives outside the cwd, so the write still asks once; the
 	// concrete resolved directory is what makes the answer saveable as a rule.
 	require.Equal(t, DecisionAsk, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		scope,
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
 	))
 	require.Empty(t, candidateRulesForIntent(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		scope,
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
@@ -217,7 +218,7 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 }
 
 func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -227,28 +228,28 @@ func TestAnalyzeShellCommandPowerShellDynamicProfileInspectionStaysReadOnly(t *t
 
 	got := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectUnknown, got.Effect)
-	require.Equal(t, AccessWrite, got.AccessIntent().Class)
+	require.Equal(t, commandanalysis.EffectUnknown, got.Effect)
+	require.Equal(t, AccessWrite, commandResultToIntent(got).Class)
 	require.Contains(t, got.DynamicTargets, `$v`)
 }
 
 func TestAnalyzeShellCommandPowerShellProfileProbeIsCompound(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	m := &Mods{Config: testConfigForWorkingDir(t.TempDir())}
 	cmd := `"USERPROFILE=$env:USERPROFILE"; "Profile: $PROFILE"; "ProfileExists: $(Test-Path $PROFILE)"; Get-ChildItem $env:USERPROFILE\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName`
 
 	got := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, got.Effect)
-	require.Equal(t, approval.ReviewabilityCompound, got.Reviewability.Level)
+	require.Equal(t, commandanalysis.EffectRead, got.Effect)
+	require.Equal(t, commandanalysis.ReviewabilityCompound, got.Reviewability.Level)
 	require.Equal(t, 4, got.Shape.TopLevelActions)
-	require.Contains(t, got.Reviewability.Reasons, approval.ReviewabilityMultipleIndependent)
+	require.Contains(t, got.Reviewability.Reasons, commandanalysis.ReviewabilityMultipleIndependent)
 	require.False(t, got.HasReviewabilityConcerns(), "a proven static read needs no complexity diagnostic")
 }
 
 func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
@@ -262,18 +263,18 @@ func TestAssessCommandPowerShellStandardDynamicReads(t *testing.T) {
 	}
 	for _, tc := range tests {
 		assessment := m.assessCommand("powershell_run", tc.command)
-		require.Equal(t, approval.EffectRead, assessment.Effect)
+		require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 		require.Contains(t, assessment.DynamicTargets, tc.target)
-		require.Equal(t, AccessRead, assessment.AccessIntent().Class)
-		require.Equal(t, []string{tc.target}, assessment.AccessIntent().UnresolvedPaths)
-		require.True(t, assessment.AccessIntent().DynamicProbe)
-		require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkingDirScope(m.Config.ResolveWorkingDir().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
-		require.Equal(t, approval.ReviewabilityCompound, assessment.Reviewability.Level)
+		require.Equal(t, AccessRead, commandResultToIntent(assessment).Class)
+		require.Equal(t, []string{tc.target}, commandResultToIntent(assessment).UnresolvedPaths)
+		require.True(t, commandResultToIntent(assessment).DynamicProbe)
+		require.Equal(t, DecisionAllow, ClassifyAccess(commandResultToIntent(assessment), WorkingDirScope(m.Config.ResolveWorkingDir().Canonical), nil, ApprovalReviewMode(ReviewAuto)))
+		require.Equal(t, commandanalysis.ReviewabilityCompound, assessment.Reviewability.Level)
 	}
 }
 
 func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -282,17 +283,17 @@ func TestAssessCommandPowerShellProfileObjectProbeAutoAllows(t *testing.T) {
 	command := `[PSCustomObject]@{ Path = $PROFILE.CurrentUserCurrentHost; Exists = Test-Path -LiteralPath $PROFILE.CurrentUserCurrentHost } | ConvertTo-Json -Compress`
 	assessment := m.assessCommand("powershell_run", command)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 	require.Contains(t, assessment.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
-	require.Equal(t, approval.ReviewabilitySimple, assessment.Reviewability.Level)
-	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, assessment.AccessIntent().UnresolvedPaths)
-	require.True(t, assessment.AccessIntent().DynamicProbe)
-	require.Equal(t, DecisionAllow, ClassifyAccess(assessment.AccessIntent(), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, commandanalysis.ReviewabilitySimple, assessment.Reviewability.Level)
+	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, commandResultToIntent(assessment).UnresolvedPaths)
+	require.True(t, commandResultToIntent(assessment).DynamicProbe)
+	require.Equal(t, DecisionAllow, ClassifyAccess(commandResultToIntent(assessment), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -300,11 +301,11 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 	}
 	assessment := m.assessCommand("powershell_run", `Get-Content -LiteralPath $env:AWS_SHARED_CREDENTIALS_FILE`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:AWS_SHARED_CREDENTIALS_FILE`)
 	require.False(t, assessment.DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -312,7 +313,7 @@ func TestAssessCommandPowerShellDynamicContentReadRequiresReview(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -329,10 +330,10 @@ func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assessment := m.assessCommand("powershell_run", tc.command)
 
-			require.Equal(t, approval.EffectRead, assessment.Effect)
+			require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 			require.False(t, assessment.DynamicProbe)
 			require.Equal(t, DecisionAllow, ClassifyAccess(
-				assessment.AccessIntent(),
+				commandResultToIntent(assessment),
 				WorkingDirScope(cwd),
 				nil,
 				ApprovalReviewMode(ReviewAuto),
@@ -342,7 +343,7 @@ func TestAssessCommandPowerShellOutputProbeWithEnvRequiresReview(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -350,11 +351,11 @@ func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
 	}
 	assessment := m.assessCommand("powershell_run", `Test-Path $env:STARSHIP_CONFIG`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:STARSHIP_CONFIG`)
 	require.True(t, assessment.DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -362,7 +363,7 @@ func TestAssessCommandPowerShellPathProbeWithEnvAutoAllows(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -370,11 +371,11 @@ func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
 	}
 	assessment := m.assessCommand("powershell_run", `Write-Output $PROFILE.CurrentUserCurrentHost`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$PROFILE.CurrentUserCurrentHost`)
 	require.True(t, assessment.DynamicProbe)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -382,7 +383,7 @@ func TestAssessCommandPowerShellOutputProbeWithProfileAutoAllows(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	systemRoot := os.Getenv("SystemRoot")
 	require.NotEmpty(t, systemRoot, "SystemRoot must be set on Windows")
@@ -393,13 +394,13 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 	}
 	assessment := m.assessCommand("powershell_run", `Get-ChildItem -Path "$env:SystemRoot\WinSxS" -Filter "*.dll" | Select-Object -First 3`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Len(t, assessment.KnownDirs, 1)
 	require.True(t, strings.EqualFold(assessment.KnownDirs[0], systemRoot+`\WinSxS`), assessment.KnownDirs)
 	require.Empty(t, assessment.DynamicTargets)
-	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -407,7 +408,7 @@ func TestAssessCommandPowerShellStableEnvPathReadResolvesConcreteDir(t *testing.
 }
 
 func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -415,12 +416,12 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 	}
 	assessment := m.assessCommand("powershell_run", `$env:TEMP = "C:\Users\Test\Documents"; Get-Content "$env:TEMP\notes.txt"`)
 
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\notes.txt`, "an env reassignment must keep the target runtime-resolved")
 	require.Equal(t, []string{`C:\Users\Test\Documents`}, assessment.KnownDirs,
 		"the assigned literal is still extracted; the process TEMP location must not be substituted")
 	require.Equal(t, DecisionAsk, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -428,7 +429,7 @@ func TestAssessCommandPowerShellStableEnvAssignmentKeepsDynamicTargets(t *testin
 }
 
 func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -436,12 +437,12 @@ func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) 
 	}
 	assessment := m.assessCommand("powershell_run", `Set-Content -Path "$env:TEMP\profile_init.el" -Value "x"`)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a stable-env write target resolves to a concrete directory")
 	require.Len(t, assessment.KnownDirs, 1)
 	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(os.TempDir())), assessment.KnownDirs)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
@@ -449,19 +450,19 @@ func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) 
 }
 
 func TestAssessCommandPowerShellStableEnvWriteAssignmentKeepsDynamicTargets(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
 	}
 	assessment := m.assessCommand("powershell_run", `$env:TEMP = "C:\Users\Test\Documents"; Set-Content -Path "$env:TEMP\foo.el" -Value "x"`)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\foo.el`, "an env reassignment must keep the write target runtime-resolved")
 }
 
 func TestAssessCommandPowerShellSystemEnvironmentMutationKeepsDynamicTargets(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
@@ -469,13 +470,13 @@ func TestAssessCommandPowerShellSystemEnvironmentMutationKeepsDynamicTargets(t *
 	command := `[System.Environment]::SetEnvironmentVariable('TEMP', [IO.Path]::Combine($HOME, 'elsewhere'), 'Process'); Set-Content -Path "$env:TEMP\foo.el" -Value "x"`
 	assessment := m.assessCommand("powershell_run", command)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:TEMP\foo.el`,
 		"a fully-qualified environment mutation must suppress expansion of the process TEMP value")
 }
 
 func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -483,11 +484,11 @@ func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 	}
 	assessment := m.assessCommand("powershell_run", `Resolve-Path $env:SystemRoot\WinSxS`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.True(t, assessment.DynamicProbe)
 	require.NotEmpty(t, assessment.DynamicTargets)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -495,7 +496,7 @@ func TestAssessCommandPowerShellStableEnvProbeStaysDynamic(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	temp := os.Getenv("TEMP")
 	require.NotEmpty(t, temp, "TEMP must be set on Windows")
@@ -507,9 +508,9 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 
 	assessment := m.assessCommand("powershell_run", command)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "each quoted array element expands to a concrete path instead of one flattened dynamic token")
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.False(t, intent.HasUnresolvedPaths())
 	dirs := intent.AllDirs()
 	require.NotEmpty(t, dirs)
@@ -525,7 +526,7 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	temp := os.Getenv("TEMP")
 	require.NotEmpty(t, temp, "TEMP must be set on Windows")
@@ -541,9 +542,9 @@ func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T)
 
 	assessment := m.assessCommand("powershell_run", command)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a quoted env path inside a .NET method call argument is bounded by its expanded path")
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.False(t, intent.HasUnresolvedPaths())
 	dirs := intent.AllDirs()
 	require.NotEmpty(t, dirs)
@@ -558,7 +559,7 @@ func TestAssessCommandPowerShellQuotedTempPathInMethodCallResolves(t *testing.T)
 }
 
 func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
@@ -571,18 +572,18 @@ func TestAssessCommandPowerShellUserProfileReadOffersRuleSaveableDir(t *testing.
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "the bare home-variable reference is subsumed by its expanded path form")
-	require.False(t, assessment.AccessIntent().HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
 	require.NotEmpty(t, assessment.KnownDirs)
 	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(home)+`\`), assessment.KnownDirs)
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
@@ -591,12 +592,12 @@ func TestAssessCommandPowerShellMisparsedLiteralNotDynamic(t *testing.T) {
 
 	assessment := m.assessCommand("shell_run", cmd)
 
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "mis-parsed POSIX --eval fragments must not become dynamic targets")
 }
 
 func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
@@ -609,7 +610,7 @@ func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 	args := []byte(`{"command":` + strconv.Quote(cmd) + `}`)
 
 	assessment := m.assessCommand("powershell_run", cmd)
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	scope := WorkingDirScope(cwd)
 	rules := candidateRulesForIntent(intent, scope, approval.SafeDirs(), ApprovalReviewMode(ReviewAuto))
 	require.Empty(t, rules)
@@ -618,7 +619,7 @@ func TestUserProfileEnvReadNeedsNoReviewOrRule(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -627,12 +628,12 @@ func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
 
 	assessment := m.assessCommand("powershell_run", `$env:Path -split ';' | Where-Object { $_ }`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a public machine-metadata variable carries no capability to review")
 	// With no dynamic target left, the read falls back to the cwd
 	// scope, which the matrix allows without review.
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -640,7 +641,7 @@ func TestAssessCommandPowerShellPublicEnvContentReadAutoAllows(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -649,11 +650,11 @@ func TestAssessCommandPowerShellSecretEnvContentReadStillAsks(t *testing.T) {
 
 	assessment := m.assessCommand("powershell_run", `Write-Output $env:GITHUB_TOKEN`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Contains(t, assessment.DynamicTargets, `$env:GITHUB_TOKEN`,
 		"a secret-bearing variable is not public metadata and stays dynamic")
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -672,7 +673,7 @@ func TestAssessProcessInvocationPowerShellFlagsAreNotPathFacts(t *testing.T) {
 
 	assessment := m.assessCommand("process_run", invoke)
 
-	require.Equal(t, approval.EffectUnknown, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	for _, flag := range []string{"/v", "/d", "/f"} {
 		require.NotContains(t, assessment.KnownDirs, flag,
 			"a native-program switch must not become a review target")
@@ -682,7 +683,7 @@ func TestAssessProcessInvocationPowerShellFlagsAreNotPathFacts(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellRegistryWriteStaysOutOfFilesystemRules(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -691,10 +692,10 @@ func TestAssessCommandPowerShellRegistryWriteStaysOutOfFilesystemRules(t *testin
 	cmd := `New-Item -Path "HKCU:\Software\Classes\Neovide" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Classes\Neovide" -Name "(Default)" -Value "Neovide Text Editor"; Get-ItemProperty "HKCU:\Software\Classes\Neovide" | Select-Object -ExpandProperty "(Default)"`
 
 	assessment := m.assessCommand("powershell_run", cmd)
-	intent := normalizeAccessIntentDirs(assessment.AccessIntent(), cwd, "powershell_run", true)
+	intent := normalizeAccessIntentDirs(commandResultToIntent(assessment), cwd, "powershell_run", true)
 	presentation := formatReviewPresentationWithIntent("powershell_run", []byte(`{"command":`+strconv.Quote(cmd)+`}`), assessment, WorkingDirScope(cwd), intent)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 	require.Empty(t, assessment.DynamicTargets)
 	require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, assessment.ProviderWriteTargets)
@@ -706,17 +707,17 @@ func TestAssessCommandPowerShellRegistryWriteStaysOutOfFilesystemRules(t *testin
 }
 
 func TestAssessCommandPowerShellRegistryAliasWriteStaysOutOfFilesystemRules(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	assessment := m.assessCommand("powershell_run", `sp -PSPath "HKCU:\Software\Classes\Neovide" -Name x -Value y`)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 	require.Equal(t, []string{`HKCU:\Software\Classes\Neovide`}, assessment.ProviderWriteTargets)
 	require.Empty(t, candidateRulesForIntent(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -724,18 +725,18 @@ func TestAssessCommandPowerShellRegistryAliasWriteStaysOutOfFilesystemRules(t *t
 }
 
 func TestAssessCommandPowerShellDriveMutationCannotUseFilesystemRules(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	cmd := `Remove-PSDrive C; New-PSDrive -Name C -PSProvider Registry -Root HKCU:\Software; Set-Content -Path C:\Users\marker.txt -Value x`
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 	require.Equal(t, []string{"PowerShell path context"}, assessment.DynamicTargets)
 	require.Empty(t, candidateRulesForIntent(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -743,18 +744,18 @@ func TestAssessCommandPowerShellDriveMutationCannotUseFilesystemRules(t *testing
 }
 
 func TestAssessCommandPowerShellProviderLocationCannotUseFilesystemRules(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	cmd := `Set-Location Env:; Set-Item .\MODS_REVIEW_PROBE value`
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 	require.Equal(t, []string{"PowerShell path context"}, assessment.DynamicTargets)
 	require.Empty(t, candidateRulesForIntent(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -762,18 +763,18 @@ func TestAssessCommandPowerShellProviderLocationCannotUseFilesystemRules(t *test
 }
 
 func TestAssessCommandPowerShellPipelineProviderWriteCannotUseFilesystemRules(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	cmd := `Get-Item HKCU:\Software\Classes\Neovide | Set-ItemProperty -Name x -Value y`
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)
 	require.Equal(t, []string{"PowerShell pipeline target"}, assessment.DynamicTargets)
 	require.Empty(t, candidateRulesForIntent(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -781,7 +782,7 @@ func TestAssessCommandPowerShellPipelineProviderWriteCannotUseFilesystemRules(t 
 }
 
 func TestAssessCommandPowerShellRegistryLoopKeepsOnlyDynamicWriter(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
@@ -789,24 +790,24 @@ func TestAssessCommandPowerShellRegistryLoopKeepsOnlyDynamicWriter(t *testing.T)
 
 	assessment := m.assessCommand("powershell_run", cmd)
 
-	require.Equal(t, approval.EffectWrite, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Equal(t, []string{`$p`}, assessment.DynamicTargets)
 	require.Empty(t, assessment.ProviderWriteTargets)
 	require.NotContains(t, strings.Join(assessment.DynamicTargets, "\n"), `$_`)
 }
 
 func TestAssessCommandPowerShellLiteralRegistryReadDoesNotBecomeWrite(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{Config: testConfigForWorkingDir(cwd)}
 	assessment := m.assessCommand("powershell_run", `$p = "HKCU:\Software\Classes\Neovide"; Get-ItemProperty -Path $p`)
 
-	require.Equal(t, approval.EffectRead, assessment.Effect)
+	require.Equal(t, commandanalysis.EffectRead, assessment.Effect)
 	require.Empty(t, assessment.ProviderWriteTargets)
 	require.Empty(t, assessment.DynamicTargets)
 	require.Equal(t, DecisionAllow, ClassifyAccess(
-		assessment.AccessIntent(),
+		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		nil,
 		ApprovalReviewMode(ReviewAuto),
@@ -815,7 +816,7 @@ func TestAssessCommandPowerShellLiteralRegistryReadDoesNotBecomeWrite(t *testing
 
 // Native-program switches must not become filesystem targets.
 func TestAssessShellCommandPowerShellSwitchesAreNotPaths(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	m := &Mods{
 		Config: testConfigForWorkingDir(t.TempDir()),
@@ -823,14 +824,14 @@ func TestAssessShellCommandPowerShellSwitchesAreNotPaths(t *testing.T) {
 
 	got := m.assessCommand("powershell_run", `custom-writer /out src.cs`)
 
-	require.Equal(t, approval.EffectUnknown, got.Effect)
+	require.Equal(t, commandanalysis.EffectUnknown, got.Effect)
 	require.NotContains(t, got.KnownDirs, "/out")
 	require.NotContains(t, got.KnownDirs, "/d")
 
 }
 
 func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{
@@ -840,7 +841,7 @@ func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 	args := []byte(`{"command":` + strconv.Quote(cmd) + `}`)
 
 	assessment := m.assessCommand("powershell_run", cmd)
-	intent := assessment.AccessIntent()
+	intent := commandResultToIntent(assessment)
 	require.True(t, intent.HasUnresolvedPaths())
 	require.Equal(t, DecisionAllow, ClassifyAccess(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 
@@ -851,7 +852,7 @@ func TestDynamicReadNeedsNoReviewOrRule(t *testing.T) {
 }
 
 func TestAssessCommandPowerShellEncodingConstructorIsNotADynamicTarget(t *testing.T) {
-	t.Cleanup(func() { approval.CloseBridge() })
+	t.Cleanup(func() { commandanalysis.CloseBridge() })
 
 	cwd := t.TempDir()
 	m := &Mods{

@@ -35,6 +35,8 @@ P1-1/2/3 已通过隔离分析及规则匹配验证；P1-4 已通过 Windows jun
 
 ## 3. 目标架构与模块职责
 
+2026-10-25 更新：命令分析迁移与统一语义库已接入，下表按实际实现更新；旧职责划分被 [命令分析模块设计](2026-10-23-command-analysis-catalog-design.md) 取代。
+
 ```mermaid
 flowchart TD
     A[工具参数] --> B[准备调用：校验、cwd、程序绑定]
@@ -49,8 +51,9 @@ flowchart TD
 
 | 责任 | 模块 | 边界 |
 | --- | --- | --- |
-| 语法解析、语义规则、合并 | `internal/approval` | 保留两种 shell 解析器；逐步共享 invocation 事实；不调用模型或执行待审命令 |
-| 环境/路径/Git 查询编排 | `internal/app/shell_assess.go`、目标解析 helper | 使用有取消和预算的只读解析；结果必须带缺口，不凭猜测补全 |
+| 语法解析、语义规则、合并 | `internal/commandanalysis` | 单次 AST/IR、统一 catalog 与 invocation 事实；不调用模型或执行待审命令 |
+| 环境/路径/Git 查询编排 | `internal/commandanalysis/pipeline.go`、`host.go` | 有取消与预算的只读依赖；每次 Analyze 重新查询，不跨复核复用可变事实 |
+| 工具参数及授权转换 | `internal/app/command_analysis.go` | 唯一 `commandResultToIntent` 消费角色化目标；KnownDirs 和候选路径不产生写权限 |
 | 路径规范化及链接语义 | `internal/pathutil` | 明确区分词法路径、真实路径、跟随/不跟随叶子链接 |
 | 纯授权策略与规则 | `internal/approval/access.go`、`matching.go` | 只消费可信事实；统一决定是否需要询问、能否生成规则 |
 | 人工交互 | `internal/app/review.go`、`review_*` | 展示相同事实和候选授权范围；返回决策及本次凭据 |

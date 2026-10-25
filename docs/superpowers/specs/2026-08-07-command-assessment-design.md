@@ -1,5 +1,7 @@
 # Command assessment design
 
+> Historical policy notice (2026-10-25): any LLM effect-completion, read-classifier exemption, correction budget, or KnownDirs-based authorization described below is superseded. Production uses deterministic `commandanalysis.Engine` + the shared catalog, role-aware `app.commandResultToIntent`, and ordinary target approval. Unknown/incomplete writes cannot borrow saved or temporary-directory permissions. See [current design](2026-10-23-command-analysis-catalog-design.md) and [stage-6 verification](../plans/2026-10-25-command-analysis-stage6.md). Reviewability remains diagnostic metadata only.
+
 ## Goal
 
 Shell and direct-process approval uses one immutable fact bundle per tool

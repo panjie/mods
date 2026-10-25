@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -264,8 +264,8 @@ func assertStarshipToolSequence(t *testing.T, calls []recordedToolCall) {
 			if strings.EqualFold(args.Program, "winget") && slices.Contains(args.Args, "install") {
 				installIndex = i
 			}
-			wrapped := approval.AnalyzeProcessReviewability(args.Program, args.Args, false)
-			require.NotContains(t, wrapped.Reasons, approval.ReviewabilityNestedShellHost, "process_run must not wrap shell source")
+			wrapped := commandanalysis.AnalyzeProcessReviewability(args.Program, args.Args, false)
+			require.NotContains(t, wrapped.Reasons, commandanalysis.ReviewabilityNestedShellHost, "process_run must not wrap shell source")
 		}
 		if call.name == "fs_write_file" || call.name == "fs_replace" {
 			profileWrite = true

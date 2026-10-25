@@ -33,7 +33,7 @@ func TestStage5FileGrammar(t *testing.T) {
 		f = catalogTokens([]string{name, "--unknown", "output"}, nativeSpace, ReadOnlyCommandPolicy{})
 		require.False(t, f.BoundedWrite, name)
 	}
-	for _, args := range [][]string{{"rm", "-rf", "output"}, {"rmdir", "-p", "output"}, {"touch", "-r"}, {"unlink", "a", "b"}, {"touch", "-r", "source", "output"}} {
+	for _, args := range [][]string{{"rm", "-rf", "output"}, {"rmdir", "-p", "output"}, {"touch", "-r"}, {"unlink", "a", "b"}} {
 		require.False(t, catalogTokens(args, nativeSpace, ReadOnlyCommandPolicy{}).BoundedWrite, args)
 	}
 }

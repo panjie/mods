@@ -107,7 +107,7 @@ func TestAssessArgvStaticGitWriteFailsClosed(t *testing.T) {
 		context ArgvStaticContext
 	}{
 		{name: "missing cwd context", program: "git", args: []string{"add", "-A"}},
-		{name: "global repository selector", program: "git", args: []string{"-C", root, "add", "-A"}, context: ArgvStaticContext{Cwd: root}},
+		{name: "global repository selector", program: "git", args: []string{"--git-dir", root, "add", "-A"}, context: ArgvStaticContext{Cwd: root}},
 		{name: "pathspec indirection", program: "git", args: []string{"add", "--pathspec-from-file=paths.txt"}, context: ArgvStaticContext{Cwd: root}},
 		{name: "help may launch viewer", program: "git", args: []string{"checkout", "--help"}, context: ArgvStaticContext{Cwd: root}},
 		{name: "invocation environment redirect", program: "git", args: []string{"add", "-A"}, context: ArgvStaticContext{Cwd: root, EnvironmentKeys: []string{"GIT_INDEX_FILE"}}},
@@ -188,7 +188,7 @@ func TestAssessShellStaticGitWorkingDirWrites(t *testing.T) {
 	})
 
 	t.Run("global selector stays rejected", func(t *testing.T) {
-		got := AssessShellStaticWithContext(`git -C `+root+` commit -m "msg"`, true, ReadOnlyCommandPolicy{}, root)
+		got := AssessShellStaticWithContext(`git --git-dir `+root+` commit -m "msg"`, true, ReadOnlyCommandPolicy{}, root)
 		require.Equal(t, EffectUnknown, got.Effect)
 		require.Empty(t, got.KnownDirs)
 	})

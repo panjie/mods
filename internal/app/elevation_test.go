@@ -61,19 +61,19 @@ func TestElevationPreservesTargetRulesAndReadPolicy(t *testing.T) {
 		for _, tc := range []struct {
 			name        string
 			mode        ReviewMode
-			effect      approval.CommandEffect
+			effect      commandanalysis.CommandEffect
 			rule, allow bool
 		}{
-			{"read", ReviewAlways, approval.EffectRead, false, true},
-			{"write denied", ReviewAuto, approval.EffectWrite, false, false},
-			{"saved write rule", ReviewAuto, approval.EffectWrite, true, true},
-			{"always ignores rule", ReviewAlways, approval.EffectWrite, true, false},
+			{"read", ReviewAlways, commandanalysis.EffectRead, false, true},
+			{"write denied", ReviewAuto, commandanalysis.EffectWrite, false, false},
+			{"saved write rule", ReviewAuto, commandanalysis.EffectWrite, true, true},
+			{"always ignores rule", ReviewAlways, commandanalysis.EffectWrite, true, false},
 		} {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				assessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: tc.effect, KnownDirs: []string{cwd}}
+				assessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: tc.effect, KnownDirs: []string{cwd}}
 				role := commandanalysis.TargetWrite
 				op := commandanalysis.OperationDirectory
-				if tc.effect == approval.EffectRead {
+				if tc.effect == commandanalysis.EffectRead {
 					role = commandanalysis.TargetRead
 				}
 				assessment.Targets = []commandanalysis.Target{{Kind: commandanalysis.TargetFilesystem, Role: role, Operation: op, Raw: cwd, Path: cwd, Dir: cwd, State: commandanalysis.TargetResolved}}
@@ -97,7 +97,7 @@ func TestElevationPreservesTargetRulesAndReadPolicy(t *testing.T) {
 
 func TestElevationVisibleInReview(t *testing.T) {
 	for _, name := range []string{"process_run", "powershell_run", "shell_run"} {
-		p := formatReviewPresentationWithIntent(name, []byte(`{"command":"powercfg /h off","program":"powercfg","args":["/h","off"],"elevated":true}`), approval.UnknownCommandAssessment(), Scope{}, AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite})
+		p := formatReviewPresentationWithIntent(name, []byte(`{"command":"powercfg /h off","program":"powercfg","args":["/h","off"],"elevated":true}`), commandanalysis.UnknownCommandAssessment(), Scope{}, AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite})
 		require.Contains(t, p.rows, interactionRow{Label: "Elevation", Value: "Windows UAC administrator privileges (this command only)"})
 	}
 }

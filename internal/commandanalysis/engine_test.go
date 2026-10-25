@@ -110,7 +110,11 @@ func TestResultCloneIsolatesAllReferenceFields(t *testing.T) {
 		switch field.Kind() {
 		case reflect.Slice:
 			field.Set(reflect.MakeSlice(field.Type(), 1, 1))
-			field.Index(0).SetString("original")
+			if field.Type().Elem().Kind() == reflect.Struct {
+				field.Index(0).FieldByName("Raw").SetString("original")
+			} else {
+				field.Index(0).SetString("original")
+			}
 		case reflect.Map:
 			field.Set(reflect.MakeMap(field.Type()))
 			field.SetMapIndex(reflect.ValueOf("key"), reflect.ValueOf("original"))
@@ -123,8 +127,13 @@ func TestResultCloneIsolatesAllReferenceFields(t *testing.T) {
 		field := fields.Field(i)
 		switch field.Kind() {
 		case reflect.Slice:
-			field.Index(0).SetString("changed")
-			require.Equal(t, "original", reflect.ValueOf(before).Field(i).Index(0).String(), fields.Type().Field(i).Name)
+			if field.Type().Elem().Kind() == reflect.Struct {
+				field.Index(0).FieldByName("Raw").SetString("changed")
+				require.Equal(t, "original", reflect.ValueOf(before).Field(i).Index(0).FieldByName("Raw").String())
+			} else {
+				field.Index(0).SetString("changed")
+				require.Equal(t, "original", reflect.ValueOf(before).Field(i).Index(0).String(), fields.Type().Field(i).Name)
+			}
 		case reflect.Map:
 			field.SetMapIndex(reflect.ValueOf("key"), reflect.ValueOf("changed"))
 			require.Equal(t, "original", reflect.ValueOf(before).Field(i).MapIndex(reflect.ValueOf("key")).String())

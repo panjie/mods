@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 )
 
 type reviewPresentation struct {
@@ -122,6 +123,36 @@ func downloadReviewURL(raw string) string {
 
 func commandReviewRows(command string, assessment approval.CommandAssessment, risk string) []interactionRow {
 	rows := []interactionRow{{Label: "Command", Value: redactRemoteURLsForDisplay(command)}}
+	if len(assessment.Targets) > 0 || len(assessment.UnresolvedRemoteTargets) > 0 {
+		for _, target := range assessment.Targets {
+			label := "Candidate"
+			switch target.Role {
+			case commandanalysis.TargetRead:
+				label = "Read source"
+			case commandanalysis.TargetWrite:
+				label = "Write target"
+			}
+			value := target.Path
+			if target.State != commandanalysis.TargetResolved {
+				value = target.Raw
+				label += " (unresolved)"
+			}
+			if value == "" {
+				value = target.Raw
+			}
+			if target.LexicalPath != "" && target.LexicalPath != target.Path && target.State == commandanalysis.TargetResolved {
+				value = target.LexicalPath + " → " + target.Path
+			}
+			rows = append(rows, interactionRow{Label: label, Value: redactRemoteURLsForDisplay(value)})
+		}
+		if assessment.WriteCoverage != approval.CoverageComplete && assessment.Effect != approval.EffectRead {
+			rows = append(rows, interactionRow{Label: "Unknown effects", Value: "Additional write targets may exist"})
+		}
+		for _, target := range assessment.UnresolvedRemoteTargets {
+			rows = append(rows, interactionRow{Label: "Remote (unresolved)", Value: redactRemoteURLsForDisplay(target)})
+		}
+		return rows
+	}
 	if target := commandReviewTarget(assessment, risk); target != "" {
 		rows = append(rows, interactionRow{Label: "Target", Value: target})
 	}
@@ -249,9 +280,9 @@ func reviewOrderedRows(rows []interactionRow) []interactionRow {
 	}
 	priority := func(label string) int {
 		switch label {
-		case "Target", "Remote":
+		case "Target", "Remote", "Write target", "Write target (unresolved)":
 			return 0
-		case "Source", "Working dir", "Overwrite":
+		case "Source", "Read source", "Read source (unresolved)", "Working dir", "Overwrite":
 			return 1
 		case "Command", "Patch", "Details":
 			return 3

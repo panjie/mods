@@ -28,6 +28,8 @@ const (
 // UnresolvedPaths records runtime expressions that cannot safely become
 // concrete directory rules (for example $PROFILE or $target).
 type AccessIntent struct {
+	// TargetBindings pins command leaf identities for revalidation; it grants no access.
+	TargetBindings  []string
 	WriteCoverage   TargetCoverage
 	Gaps            []AssessmentGap
 	Class           AccessClass

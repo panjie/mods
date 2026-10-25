@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/textutil"
 )
@@ -98,6 +99,14 @@ func writeTargetMode(path string, scope Scope) string {
 
 func shellRiskSummary(command string, assessment approval.CommandAssessment, scope Scope) string {
 	risk := shellRiskLevel(assessment, scope)
+	if len(assessment.Targets) > 0 {
+		rows := commandReviewRows(command, assessment, risk)
+		parts := []string{}
+		for _, row := range rows[1:] {
+			parts = append(parts, row.Label+": "+OneLinePreview(row.Value))
+		}
+		return "Risk: " + risk + " - " + strings.Join(parts, "; ")
+	}
 	dirs := summarizeAffectedDirs(assessment.KnownDirs)
 	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
 	providers := summarizeAffectedDirs(assessment.ProviderWriteTargets)
@@ -166,6 +175,35 @@ func shellRiskSummary(command string, assessment approval.CommandAssessment, sco
 }
 
 func shellRiskLevel(assessment approval.CommandAssessment, _ Scope) string {
+	if len(assessment.Targets) > 0 {
+		intent := commandResultToIntent(commandanalysis.Result(assessment))
+		assessment.KnownDirs = intent.WriteDirs
+		assessment.RemoteOrigins = intent.WriteOrigins
+		if intent.DominantClass() == AccessRead {
+			assessment.KnownDirs = intent.ReadDirs
+			assessment.RemoteOrigins = intent.ReadOrigins
+		}
+		assessment.DynamicTargets = intent.UnresolvedPaths
+		if intent.DominantClass() == AccessWrite {
+			assessment.DynamicTargets = nil
+			for _, target := range assessment.Targets {
+				if target.Role != commandanalysis.TargetWrite || target.Kind != commandanalysis.TargetFilesystem {
+					continue
+				}
+				if target.Operation == commandanalysis.OperationDestination && target.Path != "" {
+					assessment.KnownDirs = append(assessment.KnownDirs, target.Path)
+					continue
+				}
+				if target.State == commandanalysis.TargetUnresolved {
+					assessment.DynamicTargets = append(assessment.DynamicTargets, target.Raw)
+				}
+			}
+		}
+		assessment.ProviderWriteTargets = intent.ProviderWriteTargets
+		if intent.UncertainEffect {
+			assessment.Effect = approval.EffectUnknown
+		}
+	}
 	if len(assessment.DynamicTargets) > 0 {
 		switch assessment.Effect {
 		case approval.EffectRead:

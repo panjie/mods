@@ -310,3 +310,40 @@ func powerShellHost(env []string) (string, error) {
 	}
 	return helperPath("powershell", env)
 }
+
+func (hostPaths) CreationParent(ctx context.Context, p string) (string, error) {
+	p = filepath.Dir(p)
+	for depth := 0; depth < maxAnalysisDepth; depth++ {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if _, err := os.Lstat(p); err == nil {
+			return pathutil.ResolveThroughExistingParent(p)
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return "", errors.New("no existing creation parent")
+		}
+		p = parent
+	}
+	return "", errAnalysisBudget
+}
+func (r *analysisRun) creationParent(path string) (string, error) {
+	if err := r.beginQuery(); err != nil {
+		return "", err
+	}
+	resolver, ok := r.dependencies.Paths.(CreationParentResolver)
+	if !ok {
+		return "", errors.New("creation parent evidence unavailable")
+	}
+	value, err := resolver.CreationParent(r.ctx, path)
+	if errors.Is(err, errAnalysisBudget) {
+		r.failure = err
+	}
+	if bound := r.accountOutput(len(value)); bound != nil {
+		return "", bound
+	}
+	return value, err
+}

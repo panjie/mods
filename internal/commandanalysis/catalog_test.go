@@ -44,12 +44,30 @@ func TestCatalogCompatibilityEntries(t *testing.T) {
 			require.Equal(t, read, f.ReadOnly, "read")
 			require.Equal(t, c.Known, f.KnownWrite, "known write")
 			require.Equal(t, c.Risk, f.Risky, "risky")
-			require.Equal(t, c.Bounded, f.BoundedWrite, "bounded")
+			bounded := c.Bounded
+			// unlink accepts exactly one operand; the immutable legacy corpus
+			// contains a two-operand call formerly labeled complete.
+			if c.Posix && c.Name == "unlink" && len(c.Args) > 1 {
+				bounded = false
+			}
+			// Reviewed stage-5 -- binding: the old extractor dropped -output.
+			dashOperand := c.Posix && len(c.Args) == 2 && c.Args[0] == "--" && c.Args[1] == "-output" && (c.Name == "touch" || c.Name == "mkdir" || c.Name == "rm" || c.Name == "rmdir" || c.Name == "tee" || c.Name == "unlink")
+			if dashOperand {
+				bounded = true
+			}
+			require.Equal(t, bounded, f.BoundedWrite, "bounded")
 			var paths []string
 			var modes []uint8
 			for _, w := range f.Writes {
 				paths = append(paths, w.path)
 				modes = append(modes, uint8(w.mode))
+			}
+			if dashOperand {
+				c.Paths = []string{"-output"}
+				c.Modes = []uint8{uint8(writableTargetParent)}
+				if c.Name == "rmdir" {
+					c.Modes = []uint8{uint8(writableTargetDirectory)}
+				}
 			}
 			require.Equal(t, c.Paths, paths)
 			require.Equal(t, c.Modes, modes)
@@ -73,7 +91,7 @@ func TestCatalogTextOutput(t *testing.T) {
 		{[]string{"uniq", "--", "-input", "-output"}, EffectWrite, true, "-output"},
 		{[]string{"uniq", "--unknown", "input"}, EffectUnknown, false, ""},
 		{[]string{"uniq", "-f"}, EffectUnknown, false, ""},
-		{[]string{"uniq", "--skip-fields=2", "input"}, EffectUnknown, false, ""},
+		{[]string{"uniq", "--skip-fields=2", "input"}, EffectRead, true, ""},
 		{[]string{"uniq", "a", "b", "c"}, EffectUnknown, false, ""},
 		{[]string{"xxd", "-c", "16", "input"}, EffectRead, true, ""},
 		{[]string{"xxd", "-r", "input"}, EffectWrite, false, ""},
@@ -90,7 +108,7 @@ func TestCatalogTextOutput(t *testing.T) {
 			require.Equal(t, c.effect, f.Effect)
 			require.Equal(t, c.complete, f.Coverage == CoverageComplete)
 			if c.output != "" {
-				require.Contains(t, f.Targets, InvocationTarget{Path: c.output, Role: TargetWrite})
+				require.Contains(t, f.Targets, InvocationTarget{Path: c.output, Role: TargetWrite, Operation: OperationFollowLeaf})
 			}
 			result := AssessArgvStaticWithPolicy(c.args[0], c.args[1:], true, ReadOnlyCommandPolicy{})
 			require.Equal(t, c.effect, result.Effect)

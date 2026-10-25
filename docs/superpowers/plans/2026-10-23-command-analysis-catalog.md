@@ -1,7 +1,7 @@
 # 独立命令分析模块与统一语义库实施计划
 
 日期：2026-10-23  
-状态：阶段 0 已完成 Windows 本地验证；阶段 1 已收尾并通过 Linux 本地验证，阶段 2 已实现并通过 Linux/race 验证，Windows 真实 host/快照验收待补；阶段 3 已实现并通过 Linux 验证（见 2026-10-24 阶段 3 记录），阶段 4–6 待实施。
+状态：阶段 0 已完成 Windows 本地验证；阶段 1 已收尾并通过 Linux 本地验证，阶段 2 已实现并通过 Linux/race 验证，Windows 真实 host/快照验收待补；阶段 3 已实现并通过 Linux 验证（见 2026-10-24 阶段 3 记录），阶段 4 已实现角色化授权并通过 Linux 验证（见 2026-10-24 阶段 4 记录），阶段 5 首批已实现并通过 Linux 验证（见 [阶段 5 记录](2026-10-25-command-analysis-stage5.md)），更多参数与真实平台验收列入后续，阶段 6 待实施。
 设计依据：[独立命令分析模块与统一命令语义库](../specs/2026-10-23-command-analysis-catalog-design.md)。
 
 阶段 0 结果：[基线、依赖清单和测试记录](2026-10-23-command-analysis-baseline.md)。
@@ -117,6 +117,8 @@ approval 中临时包装依赖新包，绝不能形成反向导入。`CommandAss
 出口：所有已有命令从统一 registry 分派；每个 invocation 只做一次语义求值；没有第二套完整写名单；确定性 fixture 和现有 app 回归通过。
 
 ## 6. 阶段 4：切换角色化目标与审批适配
+
+实施记录：[阶段 4 实现与验收](2026-10-24-command-analysis-stage4.md)。以下保留原计划。
 
 主要修改：`commandanalysis/result.go`、目标解析/组合层，`internal/app/review.go`、`request_session.go`、review summary/presentation 及新转换测试。
 

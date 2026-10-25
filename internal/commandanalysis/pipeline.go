@@ -9,7 +9,6 @@ package commandanalysis
 // (authoritative) and the literal-extraction fallback.
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/panjie/mods/internal/pathutil"
@@ -35,9 +34,16 @@ func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shado
 		}
 	}
 	result.RemoteOrigins = append(result.RemoteOrigins, extractLiteralRemoteOrigins(command)...)
+	appendOriginTargets(&result, extractLiteralRemoteOrigins(command), TargetCandidate)
 	gitOrigins, unresolvedGitRemotes, gitDirs := m.resolveParsedGitPushOrigins(p, ws)
 	result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
 	result.KnownDirs = appendMissingShellDirs(result.KnownDirs, gitDirs)
+	gitRole := TargetWrite
+	if result.Effect == EffectRead {
+		gitRole = TargetRead
+	}
+	appendDirectoryTargets(&result, gitDirs, gitRole)
+	appendOriginTargets(&result, gitOrigins, gitRole)
 	result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
 	result.RemoteOrigins = NormalizeRemoteOrigins(result.RemoteOrigins)
 	staticEffect := result.Effect
@@ -52,6 +58,7 @@ func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shado
 	if !result.PowerShellPathContextMutation {
 		extractedPaths = externalShellPathFacts(p, ws, flavor, result.Effect == EffectRead, m.options(ws, flavor))
 	}
+	appendDirectoryTargets(&result, extractedPaths, TargetCandidate)
 	externalPaths = appendMissingShellDirs(externalPaths, extractedPaths)
 	if result.Effect == EffectWrite {
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, externalPaths)
@@ -97,7 +104,8 @@ func (m *analysisRun) analyzeShell(flavor pathutil.Flavor, command string, shado
 	if staticEffect == EffectRead && len(result.KnownDirs) == 0 && len(result.DynamicTargets) == 0 && strings.TrimSpace(ws) != "" {
 		result.KnownDirs = []string{ws}
 	}
-	result = m.resolveAssessmentWritePaths(result, ws, flavor, false)
+	expand := flavor == pathutil.FlavorPOSIX && !posixEnvironmentMutation(command, p.file) || flavor == pathutil.FlavorPowerShell && !commandMutatesPowerShellEnvironment(command)
+	result = m.resolveTargets(result, ws, flavor, false, expand)
 	return finalizeCommandAssessment(result, flavor)
 }
 
@@ -222,41 +230,6 @@ func appendReviewabilityReason(reasons []ReviewabilityReason, reason Reviewabili
 		}
 	}
 	return append(reasons, reason)
-}
-
-// Preserve lexical facts, and add the real leaf's parent before any temp or
-// saved-rule decision. Runtime expressions cannot establish a reusable scope.
-func (m *analysisRun) resolveAssessmentWritePaths(result CommandAssessment, cwd string, flavor pathutil.Flavor, literal bool) CommandAssessment {
-	for _, raw := range result.WritePaths {
-		if !literal && strings.Contains(raw, "$") && len(result.DynamicTargets) == 0 {
-			opts := m.options(cwd, flavor)
-			opts.Env["PWD"] = cwd
-			if expanded, ok := pathutil.ExpandEnvPath(raw, opts); ok {
-				raw = expanded
-			}
-		}
-		if !literal && strings.ContainsAny(raw, "$`*?[]") {
-			result.AddGap(GapWriteTargets)
-			continue
-		}
-		path := pathutil.NormalizeShellPath(raw, m.options(cwd, flavor))
-		if literal {
-			path = normalizeLiteralProcessPath(raw, cwd, flavor)
-		}
-		if !filepath.IsAbs(path) {
-			result.AddGap(GapWriteTargets)
-			continue
-		}
-		real, err := m.resolvePath(path)
-		if err != nil {
-			result.AddGap(GapWriteTargets)
-			continue
-		}
-		if real != path {
-			result.KnownDirs = appendMissingShellDirs(result.KnownDirs, []string{filepath.Dir(real)})
-		}
-	}
-	return result
 }
 
 func normalizeLiteralProcessDirs(dirs []string, cwd string, flavor pathutil.Flavor) []string {
@@ -443,6 +416,12 @@ func (m *analysisRun) analyzeProcess(invocation ProcessInput, cwd string, flavor
 		gitOrigins, unresolvedGitRemotes, gitDirs := m.resolveGitPushArgvOrigins(invocation.Args, cwd)
 		result.RemoteOrigins = append(result.RemoteOrigins, gitOrigins...)
 		result.KnownDirs = appendMissingShellDirs(result.KnownDirs, gitDirs)
+		gitRole := TargetWrite
+		if result.Effect == EffectRead {
+			gitRole = TargetRead
+		}
+		appendDirectoryTargets(&result, gitDirs, gitRole)
+		appendOriginTargets(&result, gitOrigins, gitRole)
 		result.UnresolvedRemoteTargets = append(result.UnresolvedRemoteTargets, unresolvedGitRemotes...)
 	}
 	result.RemoteOrigins = NormalizeRemoteOrigins(result.RemoteOrigins)
@@ -477,6 +456,8 @@ func (m *analysisRun) analyzeProcess(invocation ProcessInput, cwd string, flavor
 			result.Reason = "executable resolves from a cwd or temporary directory"
 		}
 	}
-	result = m.resolveAssessmentWritePaths(result, cwd, flavor, true)
+	appendDirectoryTargets(&result, explicitDirs, TargetCandidate)
+	appendOriginTargets(&result, result.RemoteOrigins, TargetCandidate)
+	result = m.resolveTargets(result, cwd, flavor, true, false)
 	return finalizeProcessAssessment(result)
 }

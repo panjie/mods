@@ -329,7 +329,7 @@ func findHasWriteAction(args []string, ev *catalogEvaluation) bool {
 			if !ok {
 				return true
 			}
-			if !ev.processTokens(nested, nativeSpace).BuiltinRead {
+			if !findExecReadOnly(nested, args[next-1] == "+", ev) {
 				return true
 			}
 			i = next - 1

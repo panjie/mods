@@ -2,13 +2,13 @@ package commandanalysis
 
 import "slices"
 
-// Result retains the existing facts during the behavior-preserving migration.
-// KnownDirs is not a role-aware target model yet. Authorization belongs to the
-// consuming adapter, not this package.
+// Result exposes role-aware Targets. KnownDirs remains a display-only legacy
+// projection; authorization belongs to the consuming adapter.
 type Result = CommandAssessment
 
 // Clone isolates both analyzer results and approved snapshots from later edits.
 func (a CommandAssessment) Clone() CommandAssessment {
+	a.Targets = slices.Clone(a.Targets)
 	a.Gaps = slices.Clone(a.Gaps)
 	a.KnownDirs = slices.Clone(a.KnownDirs)
 	a.WritePaths = slices.Clone(a.WritePaths)

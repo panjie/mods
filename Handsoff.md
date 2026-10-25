@@ -1,6 +1,6 @@
 # 命令分析重构交接记录
 
-更新时间：2026-10-24（Linux 续作）。
+更新时间：2026-10-25（Linux 第五阶段首批验收）。
 
 ## 最新续作结果（优先于下方历史记录）
 
@@ -11,7 +11,12 @@
 - 阶段 1/2 已提交为 `70b2737`，未推送。用户随后授权实施第三阶段。
 - 阶段 3 已实现统一 catalog、选项绑定、注册校验、每次分析内的 invocation 事实复用、native/cmdlet/builtin 身份隔离；未审计规则保留 compatibility 标记。1,032 条独立旧实现观测通过差分检查，date/hostname 及 wrapper/身份的安全收紧有单独测试。详细实现与限制见 [阶段 3 记录](docs/superpowers/plans/2026-10-24-command-analysis-stage3.md)。
 - 阶段 3 Linux 全量 build/test、commandtrace、相关 race 通过；Windows 测试和根模块交叉编译通过。原 app Linux/Windows 事实及 work 快照未修改；真实 Windows/macOS 执行仍待补。
-- 本轮第三阶段修改已按用户要求纳入本次本地提交，未推送。阶段 4–6 尚未实施；角色已建模，但授权仍用 legacy 字段，cp/mv/Git 等不因角色建模而获得 complete。不要重跑一次性迁移脚本。
+- 第三阶段已提交为 `0ce4129`，未推送。用户随后授权实施第四阶段。
+- 第四阶段已接入角色化目标、操作相关叶子/父目录解析、唯一 app 授权转换及叶子绑定复核；`KnownDirs` 与候选路径不再授予写权限。真实审批链新增混合读写、读取来源动态变量、同目录链接变化及持续变化零执行测试。见 [阶段 4 记录](docs/superpowers/plans/2026-10-24-command-analysis-stage4.md)。
+- 第四阶段 Linux 全量构建/测试、commandtrace、相关 race 已验证；Windows 根模块、commandanalysis/app 测试仅交叉编译，真实 Windows/macOS 尚待执行。23 条 Linux 样本审批结果不变，新增独立 stage4 事实快照；原平台事实/work 快照未改。
+- 第五阶段首批已实现 uniq 参数、普通文件写严格选项、经文件类型证明的 cp/mv、Git 只读前序上下文及 wrapper 边界。详见 [阶段 5 记录](docs/superpowers/plans/2026-10-25-command-analysis-stage5.md)。23 条 Linux 固定样本有 1 条复制 Ask→Allow；移动补齐两端目标但因缺少源权限仍 Ask。原 safety 断言与旧快照未改。
+- 第五阶段 Linux build/test、commandtrace、相关 race 通过；Windows 根模块及测试仅交叉编译。PowerShell 新参数/重定向扩展及真实 Windows/macOS 验收待补，阶段 6 未开始。
+- 第四、五阶段已按用户要求合并到本次本地提交，未推送。不要重跑一次性迁移脚本；本次提交包含两个阶段的代码、测试、快照与文档。
 
 以下第 0–10 节为 2026-10-23 历史交接记录，其中“下一台机器”待办及阶段状态已由上方结果更新。
 

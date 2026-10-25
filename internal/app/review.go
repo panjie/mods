@@ -345,9 +345,15 @@ func normalizeAccessIntentDirs(intent AccessIntent, cwd, tool string, shell bool
 	if intent.ReadDirs != nil || intent.WriteDirs != nil {
 		if intent.ReadDirs != nil {
 			intent.ReadDirs = normalize(intent.ReadDirs)
+			if intent.ReadDirs == nil {
+				intent.ReadDirs = []string{}
+			}
 		}
 		if intent.WriteDirs != nil {
 			intent.WriteDirs = normalize(intent.WriteDirs)
+			if intent.WriteDirs == nil {
+				intent.WriteDirs = []string{}
+			}
 		}
 	} else if len(intent.Dirs) > 0 {
 		intent.Dirs = normalize(intent.Dirs)

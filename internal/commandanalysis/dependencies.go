@@ -56,3 +56,10 @@ type Settings struct {
 	WorkingDir       string
 	ReadOnlyCommands []string
 }
+
+// CreationParentResolver optionally proves the existing ancestor whose entries
+// may be created by mkdir -p. A resolver without this capability cannot make
+// directory creation complete.
+type CreationParentResolver interface {
+	CreationParent(context.Context, string) (string, error)
+}

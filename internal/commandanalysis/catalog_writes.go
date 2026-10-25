@@ -1,7 +1,7 @@
 package commandanalysis
 
 // Catalog write rules retain the existing operand interpretation. Target roles
-// are recorded in InvocationFacts; authorization continues using legacy fields.
+// are recorded in InvocationFacts; production authorization uses those roles.
 func writeRemove(args []string, posix bool, ev *catalogEvaluation) ([]writableTarget, bool) {
 	operands := writeOperands(args[1:], posix)
 	if removeTargetsAreDirs(args[1:], true) {

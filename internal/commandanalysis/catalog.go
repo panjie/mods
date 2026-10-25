@@ -23,8 +23,10 @@ func spaceForShell(posix bool) commandSpace {
 }
 
 // InvocationFacts is semantic evidence, never an authorization. Legacy write
-// projections coexist with roles until the stage-4 policy adapter is switched.
+// projections remain for compatibility; production authorization uses roles.
 type InvocationFacts struct {
+	ContextStableRead                                      bool
+	Transfer                                               *transferRequest
 	EntryID                                                string
 	Revision                                               int
 	Effect                                                 CommandEffect
@@ -53,20 +55,22 @@ type invocationBinding struct {
 type TargetRole uint8
 
 const (
-	TargetRead TargetRole = iota
+	TargetRead TargetRole = iota + 1
 	TargetWrite
 	TargetCandidate
 )
 
 type InvocationTarget struct {
-	Path string
-	Role TargetRole
+	Path      string
+	Role      TargetRole
+	Operation TargetOperation
 }
 
 type readRule func(*commandEntry, []string, ReadOnlyCommandPolicy, *catalogEvaluation) bool
 type writeRule func([]string, bool, *catalogEvaluation) ([]writableTarget, bool)
 type riskRule func([]string, bool, *catalogEvaluation) bool
 type commandEntry struct {
+	ContextStableRead        bool
 	ID, Name, AliasOf        string
 	Space                    commandSpace
 	Revision                 int
@@ -79,6 +83,17 @@ type commandEntry struct {
 	NameOnlyRead             bool
 	ShellOnly                bool
 	RiskHint                 bool
+	ReadDirectory            bool
+	ReadPaths                bool
+	ReadPathParameters       []string
+	FirstReadOperand         bool
+	WriteOperation           TargetOperation
+	SourceRole               TargetRole
+	TransferFile             bool
+	TransferMove             bool
+	StrictFileOptions        []optionSpec
+	StrictFile               bool
+	MaxOperands              int
 	Read                     readRule
 	Write                    writeRule
 	Risk                     riskRule
@@ -105,6 +120,11 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 	ids := map[string]bool{}
 	for i := range entries {
 		e := entries[i]
+		e.StrictFileOptions = slices.Clone(e.StrictFileOptions)
+		for j := range e.StrictFileOptions {
+			e.StrictFileOptions[j].Names = slices.Clone(e.StrictFileOptions[j].Names)
+		}
+		e.ReadPathParameters = slices.Clone(e.ReadPathParameters)
 		e.Tests = slices.Clone(e.Tests)
 		e.Subcommands = slices.Clone(e.Subcommands)
 		e.RepositoryWrites = slices.Clone(e.RepositoryWrites)
@@ -121,7 +141,7 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		if !isBarePOSIXCommand(e.Name) || e.Space == powershellSpace && normalizePowerShellCommandName(e.Name) != e.Name {
 			return nil, fmt.Errorf("non-canonical identity %s", e.ID)
 		}
-		if e.AliasOf != "" && (e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
+		if e.AliasOf != "" && (e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
 			return nil, fmt.Errorf("alias contains rules %s", e.ID)
 		}
 		if e.BoundedWrite && e.Write == nil || e.NameOnlyRead && e.Read == nil || e.TextOutput && (e.Read != nil || e.Write != nil || len(e.Options) == 0) {
@@ -134,6 +154,12 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		}
 		if _, exists := c.entries[catalogKey{e.Space, e.Name}]; exists {
 			return nil, fmt.Errorf("duplicate command identity %s", e.Name)
+		}
+		if e.TransferMove && !e.TransferFile || e.TransferFile && (e.Space != nativeSpace || e.Write == nil || e.BoundedWrite) || e.StrictFile && (e.Space != nativeSpace || e.Write == nil) || !e.StrictFile && (len(e.StrictFileOptions) > 0 || e.MaxOperands != 0) {
+			return nil, fmt.Errorf("invalid file grammar %s", e.ID)
+		}
+		if err := validateOptions(e.StrictFileOptions); err != nil {
+			return nil, err
 		}
 		if err := validateOptions(e.Options); err != nil {
 			return nil, err
@@ -150,6 +176,9 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 				return nil, fmt.Errorf("conflicting repository subcommand in %s", e.ID)
 			}
 			seen[sub] = true
+		}
+		if e.WriteOperation != 0 && (e.Write == nil || e.WriteOperation < OperationFollowLeaf || e.WriteOperation > OperationDestination) || e.SourceRole != 0 && (e.Write == nil || e.SourceRole != TargetRead && e.SourceRole != TargetWrite) {
+			return nil, fmt.Errorf("invalid target roles in %s", e.ID)
 		}
 		if len(e.Options) > 0 && !e.TextOutput || len(e.Subcommands) > 0 && e.Read == nil || len(e.RepositoryWrites) > 0 && e.Write == nil || e.ShellOnly && e.Space != nativeSpace {
 			return nil, fmt.Errorf("unbound grammar in %s", e.ID)
@@ -253,6 +282,7 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 	e := commandCatalog.lookup(space, name)
 	if e != nil {
 		f.EntryID, f.Revision = e.ID, e.Revision
+		f.ContextStableRead = e.ContextStableRead
 		canonical := func(tokens []string) []string {
 			if len(tokens) == 0 {
 				return nil
@@ -281,7 +311,7 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 					v.read = !b.Flags["reverse"] && len(b.Operands) < 2 && space == nativeSpace
 					v.known = b.Flags["reverse"] || len(b.Operands) == 2
 					if len(b.Operands) > 0 {
-						v.reads = []InvocationTarget{{Path: b.Operands[0], Role: TargetRead}}
+						v.reads = []InvocationTarget{{Path: b.Operands[0], Role: TargetRead, Operation: OperationRead}}
 					}
 					if len(b.Operands) == 2 {
 						v.writes = []writableTarget{{path: b.Operands[1], mode: writableTargetParent}}
@@ -291,6 +321,16 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 			} else if e.Write != nil {
 				v.writes, v.known = e.Write(args, space == nativeSpace, ev)
 				v.bounded = e.BoundedWrite && v.known
+				if e.StrictFile {
+					b, ok := bindOptions(e.StrictFileOptions, args[1:])
+					if ok { // The binder, including --, is authoritative for exact operands.
+						v.writes = parentTargets(b.Operands)
+						if e.Name == "rmdir" {
+							v.writes = dirTargets(b.Operands)
+						}
+					}
+					v.bounded = v.bounded && ok && len(b.Operands) > 0 && (e.MaxOperands == 0 || len(b.Operands) <= e.MaxOperands)
+				}
 			}
 			if e.Risk != nil {
 				v.risky = e.Risk(args, space == nativeSpace, ev)
@@ -359,8 +399,62 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 	if trusted {
 		f.ReadReason = policy.reason(name)
 	}
-	for _, w := range f.Writes {
-		f.Targets = append(f.Targets, InvocationTarget{Path: w.path, Role: TargetWrite})
+	writes := f.CoverageWrites
+	if len(writes) == 0 {
+		writes = f.Writes
+	}
+	for _, w := range writes {
+		op := OperationFollowLeaf
+		if w.mode == writableTargetDirectory {
+			op = OperationDirectory
+		}
+		if w.mode == writableTargetDestination {
+			op = OperationDestination
+		}
+		if e != nil && e.WriteOperation != 0 {
+			op = e.WriteOperation
+		}
+		f.Targets = append(f.Targets, InvocationTarget{Path: w.path, Role: TargetWrite, Operation: op})
+	}
+	targetRead := binding.Read
+	if len(targetRead) == 0 {
+		targetRead = binding.Coverage
+	}
+	if e != nil && e.SourceRole != 0 && len(targetRead) == 3 && !strings.HasPrefix(targetRead[1], "-") && !strings.HasPrefix(targetRead[2], "-") {
+		operands := writeOperands(targetRead[1:], space == nativeSpace)
+		if len(operands) > 1 {
+			for _, source := range operands[:len(operands)-1] {
+				op := OperationRead
+				if e.SourceRole == TargetWrite {
+					op = OperationRenameEntry
+				}
+				f.Targets = append(f.Targets, InvocationTarget{Path: source, Role: e.SourceRole, Operation: op})
+			}
+		}
+	} else if len(targetRead) > 1 && len(f.Targets) == 0 && f.BuiltinRead && e != nil && len(e.ReadPathParameters) > 0 {
+		for _, source := range powerShellReadPathArguments(psCommandInvocation{Name: e.Name, Args: targetRead[1:]}) {
+			f.Targets = append(f.Targets, InvocationTarget{Path: source, Role: TargetRead, Operation: OperationRead})
+		}
+	} else if len(targetRead) > 1 && len(f.Targets) == 0 && f.BuiltinRead && e != nil && (e.ReadPaths || e.ReadDirectory) {
+		role := TargetCandidate
+		if f.BuiltinRead && e != nil && (e.ReadPaths || e.ReadDirectory) {
+			role = TargetRead
+		}
+		operands := commandOperands(targetRead[1:])
+		op := OperationRead
+		if e != nil && e.ReadDirectory {
+			operands = findRootOperands(targetRead[1:])
+			op = OperationDirectory
+		}
+		for _, operand := range operands {
+			f.Targets = append(f.Targets, InvocationTarget{Path: operand, Role: role, Operation: op})
+		}
+	}
+	if e != nil && e.TransferFile && bare && space == nativeSpace {
+		b, ok := bindOptions(nil, binding.Coverage[min(1, len(binding.Coverage)):])
+		if len(binding.Coverage) > 0 && ok && len(b.Operands) == 2 && b.Operands[0] != "" && b.Operands[1] != "" {
+			f.Transfer = &transferRequest{Source: b.Operands[0], Destination: b.Operands[1], Move: e.TransferMove}
+		}
 	}
 	if f.ReadOnly {
 		f.Effect, f.Coverage, f.Evidence = EffectRead, CoverageComplete, EvidenceStatic

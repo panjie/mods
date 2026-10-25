@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"time"
 
@@ -555,13 +554,14 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 					fresh = m.constrainResolvedProcessAssessment(fresh, processBinding)
 				}
 				freshIntent := normalizeAccessIntentDirs(commandResultToIntent(commandanalysis.Result(fresh)), scope.Value, name, true)
-				if !reflect.DeepEqual(prepared.intent, freshIntent) {
+				if !commandAuthorizationEqual(prepared.intent, freshIntent) {
 					if attempt >= 1 {
 						return proto.ToolResult{}, errors.New("command targets changed repeatedly during review")
 					}
 					prepared.assessment, prepared.intent = &fresh, freshIntent
 					continue
 				}
+				prepared.assessment, prepared.intent = &fresh, freshIntent
 			}
 			break
 		}

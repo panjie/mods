@@ -205,7 +205,7 @@ func TestGitTargetChangeRequiresFreshReview(t *testing.T) {
 	git("remote", "set-url", "origin", "https://after.example/repo")
 	item.resp <- reviewResponse{approved: true}
 	item = receiveReviewItem(t, r.reviewChan)
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Remote", Value: "https://after.example"})
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Write target", Value: "https://after.example"})
 	item.resp <- reviewResponse{approved: false}
 	require.Error(t, <-done)
 	require.False(t, called, "denied refreshed target must never dispatch")

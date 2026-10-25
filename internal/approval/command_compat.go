@@ -127,6 +127,8 @@ func IsUnresolvedShellPathExpression(value string, posix bool) bool {
 
 // AccessIntent converts command facts into the existing tool-neutral policy
 // boundary. Unknown effects intentionally map to write.
+// Deprecated: legacy fixture adapter only. Production command authorization
+// uses app.commandResultToIntent with role-aware targets, never KnownDirs.
 func (assessment CommandAssessment) AccessIntent() AccessIntent {
 	class := AccessWrite
 	if assessment.Effect == EffectRead && assessment.Evidence != EvidenceUnknown {

@@ -144,7 +144,7 @@ paths:
 			if !ok {
 				return false
 			}
-			if !ev.processTokens(nested, nativeSpace).BuiltinRead {
+			if !findExecReadOnly(nested, args[next-1] == "+", ev) {
 				return false
 			}
 			i = next
@@ -600,4 +600,13 @@ func stmtsAreReadOnly(stmts []*syntax.Stmt, policy ReadOnlyCommandPolicy) bool {
 		}
 	}
 	return true
+}
+
+// Batched substitution changes operand count: uniq's second operand is an
+// output, even though a single {} is read-only. Share this with effect discovery.
+func findExecReadOnly(nested []string, batch bool, ev *catalogEvaluation) bool {
+	if len(nested) == 0 || batch && !catalogNameOnlyRead(nativeSpace, nested[0]) {
+		return false
+	}
+	return ev.processTokens(nested, nativeSpace).BuiltinRead
 }

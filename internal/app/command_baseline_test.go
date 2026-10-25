@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/commandtrace"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/stretchr/testify/require"
@@ -51,6 +52,10 @@ type commandBaselineFacts struct {
 	Auto             approval.Decision        `json:"auto"`
 	Always           approval.Decision        `json:"always"`
 	Never            approval.Decision        `json:"never"`
+	ReadDirs         []string                 `json:"read_dirs"`
+	WriteDirs        []string                 `json:"write_dirs"`
+	Candidates       []string                 `json:"candidate_paths"`
+	IntentCoverage   approval.TargetCoverage  `json:"intent_coverage"`
 }
 
 type commandBaselineFixture struct {
@@ -166,7 +171,17 @@ func (f commandBaselineFixture) facts(c commandBaselineCase, a approval.CommandA
 		slices.Sort(out)
 		return slices.Compact(out)
 	}
-	intent := a.AccessIntent()
+	intent := normalizeAccessIntentDirs(commandResultToIntent(commandanalysis.Result(a)), f.ws, "shell_run", true)
+	var candidates []string
+	for _, target := range a.Targets {
+		if target.Role == commandanalysis.TargetCandidate {
+			value := target.Path
+			if value == "" {
+				value = target.Raw
+			}
+			candidates = append(candidates, value)
+		}
+	}
 	scope := approval.WorkingDirScope(f.ws)
 	var rules []approval.Rule
 	for _, grant := range c.Grant {
@@ -183,7 +198,7 @@ func (f commandBaselineFixture) facts(c commandBaselineCase, a approval.CommandA
 	slices.Sort(gaps)
 	return commandBaselineFacts{a.Effect, a.Evidence, a.WriteCoverage, gaps,
 		normalize(a.KnownDirs), normalize(a.WritePaths), normalize(a.DynamicTargets), normalize(a.RemoteOrigins), normalize(a.UnresolvedRemoteTargets), normalize(a.ProviderWriteTargets),
-		decision(approval.ReviewAuto), decision(approval.ReviewAlways), decision(approval.ReviewNever)}
+		decision(approval.ReviewAuto), decision(approval.ReviewAlways), decision(approval.ReviewNever), normalize(intent.ReadDirs), normalize(intent.WriteDirs), normalize(candidates), intent.WriteCoverage}
 }
 
 func TestCommandAnalysisBaseline(t *testing.T) {
@@ -210,7 +225,7 @@ func TestCommandAnalysisBaseline(t *testing.T) {
 			}
 		})
 	}
-	file := filepath.Join("testdata", "command_analysis", "baseline_"+runtime.GOOS+".json")
+	file := filepath.Join("testdata", "command_analysis", "baseline_stage5_"+runtime.GOOS+".json")
 	if *updateCommandBaseline {
 		if t.Failed() {
 			t.Fatal("refusing to update baseline after a semantic assertion failed")
@@ -291,7 +306,7 @@ func TestCommandAnalysisWorkBaseline(t *testing.T) {
 		a := f.assess(t, c)
 		first := commandtrace.Snapshot().Since(before)
 		var repeat commandtrace.Counts
-		if a.AccessIntent().DominantClass() == approval.AccessWrite {
+		if commandResultToIntent(commandanalysis.Result(a)).DominantClass() == approval.AccessWrite {
 			before = commandtrace.Snapshot()
 			f.assess(t, c)
 			repeat = commandtrace.Snapshot().Since(before)
@@ -314,7 +329,7 @@ func TestCommandAnalysisWorkBaseline(t *testing.T) {
 			}
 		}
 		assertParseWork(first)
-		if a.AccessIntent().DominantClass() == approval.AccessWrite {
+		if commandResultToIntent(commandanalysis.Result(a)).DominantClass() == approval.AccessWrite {
 			assertParseWork(repeat)
 		}
 		observed[c.ID] = work{first, repeat}

@@ -30,6 +30,7 @@ type CommandShape struct {
 // process invocation. Approval policy is derived from it and never stored in
 // the assessment itself.
 type CommandAssessment struct {
+	Targets       []Target
 	Evidence      Evidence
 	WriteCoverage TargetCoverage
 	Gaps          []AssessmentGap
@@ -101,6 +102,7 @@ func (p *parsedCommand) assess(policy ReadOnlyCommandPolicy, context ArgvStaticC
 		context.run = NewEngine(Settings{}, Dependencies{}).run(ctxpkg.Background())
 	}
 	p.semantics = newSemanticSession(p, policy)
+	p.semantics.context = context
 	context.semantics = p.semantics
 	analyze := func(policy ReadOnlyCommandPolicy) CommandAssessment {
 		policy.session = p.semantics
@@ -147,14 +149,22 @@ func assessPOSIXStatic(command string, policy ReadOnlyCommandPolicy, cwd string)
 	return parseCommandLegacy(command, true).assess(policy, ArgvStaticContext{Cwd: cwd})
 }
 
-func assessPOSIXFile(file *syntax.File, policy ReadOnlyCommandPolicy, context ArgvStaticContext) CommandAssessment {
+func assessPOSIXFile(file *syntax.File, policy ReadOnlyCommandPolicy, context ArgvStaticContext) (result CommandAssessment) {
+	if policy.session == nil {
+		policy.session = newSemanticSession(&parsedCommand{file: file}, policy)
+	}
+	defer func() {
+		if file != nil {
+			appendPOSIXTargets(&result, file, policy.session)
+		}
+	}()
 	if file == nil || len(file.Stmts) == 0 {
 		return opaqueAssessment()
 	}
 
 	dynamic := unresolvedPOSIXRuntimeExpressionsFromFile(file)
 	shape, reviewability := analyzePOSIXReviewabilityFile(file, policy, dynamic)
-	result := CommandAssessment{
+	result = CommandAssessment{
 		Effect:         EffectUnknown,
 		DynamicTargets: dynamic,
 		Reason:         "effects could not be proven",
@@ -284,6 +294,15 @@ func assessPowerShellIRContext(command string, ir *psBridgeIR, policy ReadOnlyCo
 		result.Effect = EffectWrite
 		result.KnownDirs = dirs
 		result.Reason = "write command (PowerShell AST static analysis)"
+	}
+	for _, inv := range ir.Invocations {
+		start := len(result.Targets)
+		appendInvocationTargets(&result, policy.session.ps(inv))
+		for i := start; i < len(result.Targets); i++ {
+			result.Targets[i].NodeID = inv.NodeID
+			single, _ := powerShellArgQuoting(result.Targets[i].Raw)
+			result.Targets[i].Literal = single
+		}
 	}
 	assessPowerShellCoverage(&result, ir, policy)
 	if result.Effect != EffectUnknown {

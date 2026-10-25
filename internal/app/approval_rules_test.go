@@ -144,7 +144,8 @@ func TestOldestDownloadsPipelineReadNeedsNoApproval(t *testing.T) {
 	assessment := mods.assessCommand("shell_run", cmd)
 	intent := buildAccessIntent("shell_run", data, registry, &assessment)
 
-	require.Equal(t, []string{downloads}, intent.Dirs)
+	require.Contains(t, intent.ReadDirs, downloads)
+	require.Empty(t, intent.WriteDirs)
 	require.NoError(t, reviewer.requestApproval(reviewerDeps{
 		ctx:            context.Background(),
 		shellExecution: true,
@@ -733,12 +734,12 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 		}
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"rm -rf ~/.ssh"}`))
+			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"rm ~/.ssh"}`))
 		}()
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Len(t, item.candidateRules, 1)
-		require.Equal(t, []string{filepath.Join(home, ".ssh")}, item.candidateRules[0].Paths)
+		require.Equal(t, []string{home}, item.candidateRules[0].Paths, "removing the .ssh entry requires its parent directory")
 		item.resp <- reviewResponse{approved: true}
 		require.NoError(t, <-errCh)
 	})
@@ -761,7 +762,8 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 		}
 		assessment := mods.assessShellCommand("shell_run", pathutil.FlavorPOSIX, `du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20`, nil, testApprovalScope.Value)
 		intent := normalizeAccessIntentDirs(assessment.AccessIntent(), testApprovalScope.Value, "shell_run", true)
-		require.Equal(t, []string{downloads}, intent.Dirs)
+		require.Contains(t, intent.Dirs, downloads)
+		require.Empty(t, intent.WriteDirs)
 		require.Empty(t, candidateRulesForIntent(intent, testApprovalScope, nil, ApprovalReviewMode(ReviewAuto)))
 		require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`)))
 	})

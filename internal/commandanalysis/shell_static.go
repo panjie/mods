@@ -44,12 +44,16 @@ func AssessArgvStaticWithContext(program string, args []string, posix bool, poli
 		policy = ReadOnlyCommandPolicy{}
 	}
 	facts := catalogProcessTokens(tokens, policy)
+	context.run.resolveTransferFacts(&facts, context.Cwd, true)
+	appendInvocationTargets(&result, &facts)
 	if facts.ReadOnly {
 		result.Effect = EffectRead
 		result.Reason = facts.ReadReason
 		return result
 	}
 	if gitResult, handled := assessGitArgvStatic(tokens, posix, context); handled {
+		appendDirectoryTargets(&gitResult, gitResult.KnownDirs, TargetWrite)
+		gitResult.Targets = append(gitResult.Targets, result.Targets...)
 		gitResult.Shape = result.Shape
 		gitResult.Reviewability = result.Reviewability
 		return gitResult
@@ -187,22 +191,18 @@ func safePowerShellDynamicTargets(ir *psBridgeIR) []string {
 }
 
 func powerShellReadPathArguments(inv psCommandInvocation) []string {
-	name := normalizePowerShellCommandName(inv.Name)
-	switch name {
-	case "get-childitem", "gci", "ls", "dir",
-		"get-content", "gc", "cat", "type",
-		"get-item", "gi", "get-itemproperty", "get-itempropertyvalue",
-		"test-path", "resolve-path", "get-filehash", "get-acl",
-		"convert-path", "split-path", "join-path":
-		if paths := powerShellParamValues(append([]string{inv.Name}, inv.Args...), "path", "literalpath"); len(paths) > 0 {
-			return paths
-		}
+	entry := commandCatalog.lookup(powershellSpace, normalizePowerShellCommandName(inv.Name))
+	if entry == nil || len(entry.ReadPathParameters) == 0 {
+		return nil
+	}
+	if paths := powerShellParamValues(append([]string{inv.Name}, inv.Args...), entry.ReadPathParameters...); len(paths) > 0 {
+		return paths
+	}
+	if entry.FirstReadOperand {
 		operands := commandOperands(inv.Args)
 		if len(operands) > 0 {
 			return operands[:1]
 		}
-	case "select-string":
-		return powerShellParamValues(append([]string{inv.Name}, inv.Args...), "path", "literalpath")
 	}
 	return nil
 }

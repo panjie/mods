@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
@@ -70,6 +71,12 @@ func TestElevationPreservesTargetRulesAndReadPolicy(t *testing.T) {
 		} {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
 				assessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: tc.effect, KnownDirs: []string{cwd}}
+				role := commandanalysis.TargetWrite
+				op := commandanalysis.OperationDirectory
+				if tc.effect == approval.EffectRead {
+					role = commandanalysis.TargetRead
+				}
+				assessment.Targets = []commandanalysis.Target{{Kind: commandanalysis.TargetFilesystem, Role: role, Operation: op, Raw: cwd, Path: cwd, Dir: cwd, State: commandanalysis.TargetResolved}}
 				plain := buildAccessIntent(name, []byte(`{}`), registry, &assessment)
 				elevated := buildAccessIntent(name, []byte(`{"elevated":true}`), registry, &assessment)
 				require.Equal(t, plain, elevated)

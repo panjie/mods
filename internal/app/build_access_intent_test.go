@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/panjie/mods/internal/approval"
+	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/websearch"
@@ -21,20 +22,22 @@ func TestBuildAccessIntent(t *testing.T) {
 	reg := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterShell(reg, toolregistry.ShellConfig{Root: root}))
 
-	// shell read-only -> AccessRead + KnownDirs propagated.
+	// Legacy directory display alone never creates target authority.
 	readAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: approval.EffectRead, KnownDirs: []string{"/ws"}}
 	intent := buildAccessIntent("shell_run", []byte(`{"command":"ls"}`), reg, &readAssessment)
 	require.Equal(t, AccessRead, intent.Class)
-	require.Equal(t, []string{"/ws"}, intent.Dirs)
+	require.Empty(t, intent.AllDirs())
 
 	// shell mutable -> AccessWrite.
 	writeAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: approval.EffectWrite, KnownDirs: []string{"/ws/x"}}
 	intentMut := buildAccessIntent("shell_run", []byte(`{"command":"rm x"}`), reg, &writeAssessment)
 	require.Equal(t, AccessWrite, intentMut.Class)
-	require.Equal(t, []string{"/ws/x"}, intentMut.Dirs)
+	require.Empty(t, intentMut.WriteDirs)
+	require.False(t, intentMut.HasCompleteWriteTargets())
 
 	dynamicAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete,
 		Effect:         approval.EffectWrite,
+		Targets:        []commandanalysis.Target{{Kind: commandanalysis.TargetFilesystem, Role: commandanalysis.TargetWrite, Operation: commandanalysis.OperationFollowLeaf, Raw: "$target"}},
 		DynamicTargets: []string{"$target"},
 	}
 	intentDynamic := buildAccessIntent("shell_run", []byte(`{"command":"writer $target"}`), reg, &dynamicAssessment)
@@ -45,7 +48,8 @@ func TestBuildAccessIntent(t *testing.T) {
 	unknownAssessment := approval.CommandAssessment{Evidence: approval.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: approval.EffectUnknown, KnownDirs: []string{"/ws/opaque"}}
 	intentUnknown := buildAccessIntent("shell_run", []byte(`{"command":"opaque"}`), reg, &unknownAssessment)
 	require.Equal(t, AccessWrite, intentUnknown.Class)
-	require.Equal(t, []string{"/ws/opaque"}, intentUnknown.Dirs)
+	require.Empty(t, intentUnknown.WriteDirs)
+	require.False(t, intentUnknown.HasCompleteWriteTargets())
 
 	// fs read via registered IntentExtractor.
 	regFs := toolregistry.NewRegistry()
@@ -157,12 +161,12 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	readAssessment := m.assessCommand("process_run", `{"program":"git","args":["status"]}`)
 	read := buildAccessIntent("process_run", nil, reg, &readAssessment)
 	require.Equal(t, AccessRead, read.Class)
-	require.Contains(t, read.Dirs, canonicalRoot)
+	require.Empty(t, read.WriteDirs)
 
 	writeAssessment := m.assessCommand("process_run", `{"program":"rm","args":["out.txt"]}`)
 	write := buildAccessIntent("process_run", nil, reg, &writeAssessment)
 	require.Equal(t, AccessWrite, write.Class)
-	require.Contains(t, write.Dirs, canonicalRoot)
+	require.Contains(t, write.WriteDirs, canonicalRoot)
 
 	unknownAssessment := m.assessCommand("process_run", `{"program":"custom-tool","args":["$HOME",";rm"]}`)
 	unknown := buildAccessIntent("process_run", nil, reg, &unknownAssessment)
@@ -175,8 +179,8 @@ func TestBuildAccessIntentForProcessRun(t *testing.T) {
 	literalHomeAssessment := m.assessCommand("process_run", `{"program":"rm","args":["$HOME/out.txt"]}`)
 	literalHome := buildAccessIntent("process_run", nil, reg, &literalHomeAssessment)
 	require.Equal(t, AccessWrite, literalHome.Class)
-	require.Contains(t, literalHome.Dirs, filepath.Join(canonicalRoot, "$HOME"))
-	for _, dir := range literalHome.Dirs {
+	require.Contains(t, literalHome.WriteDirs, filepath.Join(canonicalRoot, "$HOME"))
+	for _, dir := range literalHome.WriteDirs {
 		require.NotContains(t, dir, filepath.Join(os.Getenv("HOME"), "out.txt"))
 	}
 }

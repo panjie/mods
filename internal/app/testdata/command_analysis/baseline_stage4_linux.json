@@ -1,0 +1,569 @@
+{
+  "argv-git-multi-push": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [
+      "https://first.example",
+      "https://second.example"
+    ],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [
+      "https://first.example",
+      "https://second.example"
+    ],
+    "intent_coverage": 0
+  },
+  "argv-git-reflog-write": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "argv-literal-dollar": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e/$HOME"
+    ],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "argv-uniq-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "argv-uniq-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "argv-workspace-program": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unverified execution context"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-authorized-touch": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-changed-cwd": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "mutable path context"
+    ],
+    "dirs": [
+      "."
+    ],
+    "write_paths": [
+      "output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-copy-mixed": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets",
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-external-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cEXT\u003e/input.txt"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [
+      "\u003cEXT\u003e/input.txt"
+    ],
+    "intent_coverage": 1
+  },
+  "posix-move-source-ungranted": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets",
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-safe-touch": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-shadow-pwd": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unbounded write targets"
+    ],
+    "dirs": [],
+    "write_paths": [
+      "${PWD}/output.txt"
+    ],
+    "dynamic": [
+      "$PWD"
+    ],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-space-name": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-uniq-dash-name": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-uniq-missing-value": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-uniq-read": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-uniq-unknown-option": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-uniq-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "posix-unknown-sibling": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-unknown-temp-redirect": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "posix-xxd-write": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [
+      "\u003cWS\u003e/output.txt"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  }
+}

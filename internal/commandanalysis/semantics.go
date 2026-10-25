@@ -11,6 +11,7 @@ import (
 // comparison and Git enumeration. Revalidation always creates a new session.
 // Keys identify syntax nodes, not command names or results from earlier runs.
 type semanticSession struct {
+	context     ArgvStaticContext
 	policy      ReadOnlyCommandPolicy
 	confined    bool
 	posixFacts  map[*syntax.CallExpr]*InvocationFacts
@@ -54,6 +55,7 @@ func (s *semanticSession) posix(call *syntax.CallExpr) *InvocationFacts {
 		}
 	}
 	f := evaluateInvocation(invocationBinding{Name: name, Read: read, Write: shellWordsForAccessConfined(call.Args, s.confined), Coverage: coverageWords(call.Args)}, nativeSpace, s.policy)
+	s.context.run.resolveTransferFacts(&f, s.context.Cwd, false)
 	s.evaluations++
 	s.posixFacts[call] = &f
 	if id := s.nodeIDs[call]; id > 0 {

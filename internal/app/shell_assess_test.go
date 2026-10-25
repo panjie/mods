@@ -601,7 +601,11 @@ func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
 			} else {
 				require.Equal(t, "Run with unknown effects", presentation.headline)
 			}
-			require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: tt.target})
+			if tt.effect == approval.EffectRead {
+				require.Contains(t, presentation.rows, interactionRow{Label: "Read source (unresolved)", Value: "${FILE}"})
+			} else {
+				require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: tt.target})
+			}
 		})
 	}
 }
@@ -812,7 +816,7 @@ func TestAnalyzeShellCommandBareHomeUsesLocalHome(t *testing.T) {
 		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
 		WorkingDirScope(cwd), intent,
 	)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: home})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Candidate", Value: home})
 
 	rules := candidateRulesForIntent(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto))
 	require.Empty(t, rules)
@@ -1233,7 +1237,8 @@ func TestAnalyzeShellCommandGitCommitResolvesRepositoryScope(t *testing.T) {
 		WorkingDirScope(repo), intent,
 	)
 	require.Equal(t, "Modify local files", presentation.headline)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: repo + ", " + gitDir})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Write target", Value: repo})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Write target", Value: gitDir})
 
 	// Outside a repository the same command still fails closed.
 	outside := mods.assessCommand("shell_run", command)
@@ -1302,5 +1307,5 @@ func TestAnalyzeShellCommandStateBindingKeepsScalarSubstitutionDynamic(t *testin
 		"shell_run", []byte(`{"command":`+strconv.Quote(command)+`}`), assessment,
 		WorkingDirScope(cwd), intent,
 	)
-	require.Equal(t, "Modify a dynamic target", presentation.headline)
+	require.Equal(t, "Modify an unknown target", presentation.headline)
 }

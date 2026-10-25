@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/panjie/mods/internal/pathutil"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 var (
@@ -56,9 +57,38 @@ func (m *analysisRun) resolveParsedGitPushOrigins(p *parsedCommand, baseDir stri
 	if !ok {
 		return nil, nil, nil
 	}
+	// Only a straight-line AST without assignments, redirections or nested
+	// execution can use the audited context-preserving read evidence.
+	stableSequence := p.file != nil
+	if stableSequence {
+		syntax.Walk(p.file, func(n syntax.Node) bool {
+			switch v := n.(type) {
+			case *syntax.Stmt:
+				if v.Background || v.Coprocess || len(v.Redirs) > 0 {
+					stableSequence = false
+				}
+				switch v.Cmd.(type) {
+				case *syntax.CallExpr:
+				default:
+					stableSequence = false
+				}
+			case *syntax.CallExpr:
+				if len(v.Assigns) > 0 {
+					stableSequence = false
+				}
+			}
+			return true
+		})
+	}
 	contextChanged := false
 	for _, inv := range invocations {
 		if !isGitProgram(inv.Program) {
+			if stableSequence && inv.Literal && p.semantics != nil {
+				f := p.semantics.byID[inv.NodeID]
+				if f != nil && f.BuiltinRead && f.ContextStableRead {
+					continue
+				}
+			}
 			// A preceding arbitrary command may change Git configuration or cwd.
 			contextChanged = true
 			continue

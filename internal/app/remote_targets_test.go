@@ -112,7 +112,7 @@ func TestUnresolvedGitPushRemoteCannotBeSaved(t *testing.T) {
 	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(repo), nil, ApprovalReviewMode(ReviewAuto)))
 	presentation := formatReviewPresentationWithIntent("shell_run", []byte(`{"command":"git push missing main"}`), assessment, WorkingDirScope(repo), intent)
 	require.Equal(t, "Run with unknown effects", presentation.headline)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Remote", Value: "Unknown"})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Remote (unresolved)", Value: "missing"})
 
 	process := m.assessCommand("process_run", `{"program":"git","args":["push","missing","main"]}`)
 	require.Equal(t, []string{"missing"}, process.UnresolvedRemoteTargets)

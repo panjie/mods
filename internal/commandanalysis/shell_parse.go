@@ -231,6 +231,10 @@ func staticPOSIXLiteralArgs(file *syntax.File) []string {
 		if !ok {
 			return true
 		}
+		if inputs, handled := literalReadOperands(call); handled {
+			args = append(args, inputs...)
+			return true
+		}
 		for _, word := range call.Args {
 			if value, ok := staticShellWord(word); ok && value != "" {
 				args = append(args, value)
@@ -306,4 +310,31 @@ func redirectionWritesPersistent(redir *syntax.Redirect) bool {
 func isNullRedirectionTarget(target string) bool {
 	target = strings.TrimSpace(target)
 	return target == "/dev/null" || strings.EqualFold(target, "NUL")
+}
+
+// A catalog grammar may distinguish input operands from embedded code. Use
+// it before generic path recovery, even when that code is outside our read
+// subset, so a regex or program string is never presented as a file target.
+func literalReadOperands(call *syntax.CallExpr) ([]string, bool) {
+	if len(call.Args) == 0 {
+		return nil, false
+	}
+	name, ok := staticShellWord(call.Args[0])
+	if !ok {
+		return nil, false
+	}
+	entry := commandCatalog.lookup(nativeSpace, name)
+	if entry == nil || entry.ReadOperands == nil {
+		return nil, false
+	}
+	var args []string
+	for _, word := range call.Args[1:] {
+		value, ok := boundLoopWord(word, "", "", false)
+		if !ok {
+			return nil, true
+		}
+		args = append(args, value)
+	}
+	inputs, _ := entry.ReadOperands(args)
+	return inputs, true
 }

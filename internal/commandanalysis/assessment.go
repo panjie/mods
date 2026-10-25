@@ -209,6 +209,10 @@ func posixAccessArguments(file *syntax.File) []string {
 		if !ok {
 			return true
 		}
+		if inputs, handled := literalReadOperands(call); handled {
+			args = append(args, inputs...)
+			return true
+		}
 		for _, word := range call.Args[1:] {
 			if value, ok := accessShellWord(word); ok && value != "" {
 				args = append(args, value)

@@ -4,6 +4,10 @@ package commandanalysis
 // of every flag of the external utility. Registration performs no host queries.
 func builtinCommandEntries() []commandEntry {
 	return []commandEntry{
+		{Name: "awk", Space: nativeSpace, ID: "native/awk", Revision: 1, LiteralRead: true, ReadOperands: awkReadOperands, Tests: []string{"TestAWKReadOnlyPrograms", "TestAWKUnsafePrograms"}, Read: readAWK},
+		{Name: "gawk", Space: nativeSpace, ID: "native/gawk", Revision: 1, AliasOf: "awk", Tests: []string{"TestAWKReadOnlyPrograms", "TestAWKUnsafePrograms"}},
+		{Name: "mawk", Space: nativeSpace, ID: "native/mawk", Revision: 1, AliasOf: "awk", Tests: []string{"TestAWKReadOnlyPrograms", "TestAWKUnsafePrograms"}},
+		{Name: "nawk", Space: nativeSpace, ID: "native/nawk", Revision: 1, AliasOf: "awk", Tests: []string{"TestAWKReadOnlyPrograms", "TestAWKUnsafePrograms"}},
 		{Name: "pacman", Space: nativeSpace, ID: "native/pacman", Revision: 2, LiteralRead: true, Tests: []string{"TestPacmanQueries"}, Read: readPacman},
 		{Name: "[", Space: nativeSpace, ID: "native/[", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "basename", Space: nativeSpace, ID: "native/basename", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},

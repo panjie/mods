@@ -543,7 +543,7 @@ func TestAnalyzeShellCommandPOSIXScalarVariablesDoNotRequireDynamicReview(t *tes
 	command := `echo "=== 各语言代码量 ===" && for ext in go md yml yaml json sh ts tsx css html; do count=$(find . -name "*.$ext" -not -path "./vendor/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}'); files=$(find . -name "*.$ext" -not -path "./vendor/*" | wc -l | tr -d ' '); [ "$count" -gt 0 ] 2>/dev/null && echo "$ext: $count 行, $files 文件"; done 2>/dev/null`
 
 	assessment := mods.assessCommand("shell_run", command)
-	// Runtime evaluation remains unproven; materialized paths cannot prove effects.
+	// File-loaded code remains unproven; materialized paths cannot prove effects.
 	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets)
 	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
@@ -832,7 +832,7 @@ func TestAnalyzeShellCommandUnknownDoesNotInventDirs(t *testing.T) {
 		Config: testConfigForWorkingDir(cwd),
 	}
 
-	assessment := mods.assessCommand("shell_run", "awk '{print $1}' settings.ini")
+	assessment := mods.assessCommand("shell_run", "awk -f script.awk settings.ini")
 	// Runtime evaluation remains unproven; materialized paths cannot prove effects.
 	require.Equal(t, commandanalysis.EffectUnknown, assessment.Effect)
 	require.Empty(t, assessment.KnownDirs)

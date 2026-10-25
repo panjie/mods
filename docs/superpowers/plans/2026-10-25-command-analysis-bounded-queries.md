@@ -26,3 +26,11 @@ Coverage now consults the existing recursive read-only proof before requiring co
 Review rows deduplicate identical displayed targets and omit a resolved candidate already represented by a resolved read/write target. Separate read and write roles and unresolved candidates remain visible; underlying target facts, node identities and revalidation are unchanged. Incomplete coverage is described as an analysis limitation rather than an assertion that extra write targets exist.
 
 `TestMixedReadSubstitutionsKeepWriteCoverage`, `TestMixedReadSubstitutionsPreserveUnprovenEffects`, `TestCodeCountDirectoryChangeExplained`, `TestMixedReadWriteApprovalDispatch`, and `TestCommandReviewDeduplicatesDisplayOnly` cover these changes. No specialized code-counting procedure was added to model prompts.
+
+## AWK query subset
+
+The catalog now declares `awk` and aliases `gawk`, `mawk`, `nawk`, using exact literal-argv evidence. Inline field filters such as `NF==2 {print $2}`, regex filters, numeric accumulation, averages, string transformations, grouping and stdout formatting are accepted by a bounded conservative lexical proof. `-F` and `-v` are bound explicitly. The proof makes no subprocess or filesystem queries, and adds no parser dependency.
+
+Strings and regex literals are distinguished from executable tokens. Programs invoking system commands, getline, user/indirect functions, extensions, execution-related special variables, or output redirection remain unproven. Script files, source-loading options, profiling/debugging and unknown options are rejected. The subset is intentionally conservative: ambiguous comparisons after print/printf and unsupported syntax still require review. Limits are 64 KiB of source and 8192 tokens; the proof does not claim to validate every AWK syntax error.
+
+`TestAWKReadOnlyPrograms` and `TestAWKUnsafePrograms` cover the aliases, argument grammar, quoted data and unsafe forms. `TestAWKApprovalDispatch` includes the complete reported pipeline and verifies that saved directory rules do not authorize unknown AWK effects. A host fixture exercises `NF==2 {print $2}` when awk is available. The single-parse trace and fuzz seeds include the reported pipeline; `FuzzAWKReadOnlyProof` checks bounded scanning and injected unsafe prefixes. Original platform snapshots remain unchanged.

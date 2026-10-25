@@ -170,7 +170,7 @@ func TestIsReadOnlyPOSIX(t *testing.T) {
 		{"bare docker", "docker", false},
 		{"git global flag", "git --git-dir=/x status", false},
 		{"unknown subcmd", "git push", false},
-		{"awk", "awk '{print $1}'", false},
+		{"awk", "awk '{print $1}'", true},
 		{"curl", "curl https://example.com", false},
 	}
 	for _, c := range cases {

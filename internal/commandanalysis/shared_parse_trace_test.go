@@ -11,7 +11,7 @@ import (
 )
 
 func TestAnalyzeParsesPOSIXOnce(t *testing.T) {
-	for _, source := range []string{codeCountCommand, anchoredPackageQueryLoop, packageQueryLoop, "cat /external/file", "trusted-reader /external/file", "cat <<'EOF'\n/path/in/heredoc\nEOF", "touch out; unknown > /tmp/file", "cat $(unknown)", "git status; git push origin", "cat '", ""} {
+	for _, source := range []string{awkCodeCountPipeline, codeCountCommand, anchoredPackageQueryLoop, packageQueryLoop, "cat /external/file", "trusted-reader /external/file", "cat <<'EOF'\n/path/in/heredoc\nEOF", "touch out; unknown > /tmp/file", "cat $(unknown)", "git status; git push origin", "cat '", ""} {
 		t.Run(source, func(t *testing.T) {
 			e := NewEngine(Settings{ReadOnlyCommands: []string{"trusted-reader"}}, Dependencies{Git: gitFunc(func(context.Context, GitQuery) (string, error) { return "https://example.com/repo", nil })})
 			for i := 0; i < 2; i++ {

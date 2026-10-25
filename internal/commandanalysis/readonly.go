@@ -60,6 +60,8 @@ func cmdIsReadOnly(cmd syntax.Command, policy ReadOnlyCommandPolicy) (bool, stri
 			}
 		}
 		return true, "read-only subshell"
+	case *syntax.ForClause:
+		return policy.session.boundedLoop(c).read, "bounded read-only loop"
 	case *syntax.CallExpr:
 		return callIsReadOnly(c, policy)
 	default:

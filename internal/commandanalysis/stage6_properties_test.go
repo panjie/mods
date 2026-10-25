@@ -24,7 +24,7 @@ func TestUnknownSiblingNeverInheritsCompleteCoverage(t *testing.T) {
 }
 
 func FuzzCommandAnalysisNoPanic(f *testing.F) {
-	for _, s := range []string{"touch out", "cat $(unknown)", "env LANG=C uniq -f2 input", "git -C . push origin", "if true; then touch out; fi", "\x00", "'unterminated"} {
+	for _, s := range []string{codeCountCommand, packageQueryLoop, "touch out", "cat $(unknown)", "env LANG=C uniq -f2 input", "git -C . push origin", "if true; then touch out; fi", "\x00", "'unterminated"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, source string) {

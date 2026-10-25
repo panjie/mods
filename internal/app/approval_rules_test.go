@@ -88,7 +88,8 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	require.Equal(t, "Warning", item.presentation.toneText)
 	require.Equal(t, "Run with unknown effects", item.presentation.headline)
 	require.Contains(t, item.presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
-	require.Len(t, item.presentation.rows, 3)
+	require.Len(t, item.presentation.rows, 4)
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Analysis", Value: "Unmodeled command or arguments: opaque-command"})
 	require.Empty(t, item.candidateRules)
 	item.resp <- reviewResponse{approved: true}
 	require.NoError(t, <-errCh)

@@ -80,6 +80,11 @@ func appendInvocationTargets(result *CommandAssessment, f *InvocationFacts) {
 func appendPOSIXTargets(result *CommandAssessment, file *syntax.File, session *semanticSession) {
 	syntax.Walk(file, func(n syntax.Node) bool {
 		switch n := n.(type) {
+		case *syntax.ForClause:
+			if proof := session.boundedLoop(n); proof.read {
+				result.Targets = append(result.Targets, proof.targets...)
+				return false
+			}
 		case *syntax.CallExpr:
 			if len(n.Args) > 0 {
 				start := len(result.Targets)

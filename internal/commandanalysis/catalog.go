@@ -50,6 +50,7 @@ type invocationBinding struct {
 	Read, Write, Coverage []string
 	Name                  string
 	NativeProcess         bool
+	ExactRead             bool // Read argv was decoded from syntax or supplied by a process call.
 }
 
 type TargetRole uint8
@@ -71,6 +72,8 @@ type readRule func(*commandEntry, []string, ReadOnlyCommandPolicy, *catalogEvalu
 type writeRule func([]string, bool, *catalogEvaluation) ([]writableTarget, bool)
 type riskRule func([]string, bool, *catalogEvaluation) bool
 type commandEntry struct {
+	NumericOutput            func([]string) bool // Exact argv produces only a count on stdout.
+	LiteralRead              bool                // Option-sensitive reads require literal argument evidence.
 	ScalarOutput             bool
 	EnvWrites                bool
 	ContextStableRead        bool
@@ -144,7 +147,7 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		if !isBarePOSIXCommand(e.Name) || e.Space == powershellSpace && normalizePowerShellCommandName(e.Name) != e.Name {
 			return nil, fmt.Errorf("non-canonical identity %s", e.ID)
 		}
-		if e.AliasOf != "" && (e.ScalarOutput || e.EnvWrites || e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
+		if e.AliasOf != "" && (e.NumericOutput != nil || e.LiteralRead || e.ScalarOutput || e.EnvWrites || e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
 			return nil, fmt.Errorf("alias contains rules %s", e.ID)
 		}
 		if e.BoundedWrite && e.Write == nil || e.NameOnlyRead && e.Read == nil || e.TextOutput && (e.Read != nil || e.Write != nil || len(e.Options) == 0) {
@@ -220,7 +223,11 @@ func catalogNameOnlyRead(space commandSpace, name string) bool {
 }
 
 func catalogProcessTokens(tokens []string, policy ReadOnlyCommandPolicy) InvocationFacts {
-	return newCatalogEvaluation(policy).processTokens(tokens, nativeSpace)
+	name := ""
+	if len(tokens) > 0 {
+		name = tokens[0]
+	}
+	return evaluateInvocation(invocationBinding{Name: name, Read: tokens, Write: tokens, Coverage: tokens, NativeProcess: true, ExactRead: true}, nativeSpace, policy)
 }
 func catalogTokens(tokens []string, space commandSpace, policy ReadOnlyCommandPolicy) InvocationFacts {
 	return newCatalogEvaluation(policy).tokens(tokens, space)
@@ -409,6 +416,16 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 	}
 	if e != nil && e.ShellOnly && (binding.NativeProcess || originalSpace == powershellSpace) {
 		f.BuiltinRead = false
+	}
+	if e != nil && e.LiteralRead && !binding.ExactRead {
+		// Legacy projections have no quoting provenance. Only plain tokens
+		// can supply literal evidence; decoded/process argv bypasses this gate.
+		for _, arg := range binding.Read {
+			if strings.ContainsAny(arg, "$`*?[]\\") {
+				f.BuiltinRead = false
+				break
+			}
+		}
 	}
 	f.BuiltinRead = f.BuiltinRead && bare
 	f.ReadOnly = f.BuiltinRead || trusted

@@ -30,6 +30,7 @@ type CommandShape struct {
 // process invocation. Approval policy is derived from it and never stored in
 // the assessment itself.
 type CommandAssessment struct {
+	Diagnostics   []string // Explanation only; never authorization evidence.
 	Targets       []Target
 	Evidence      Evidence
 	WriteCoverage TargetCoverage
@@ -156,6 +157,7 @@ func assessPOSIXFile(file *syntax.File, policy ReadOnlyCommandPolicy, context Ar
 	defer func() {
 		if file != nil {
 			appendPOSIXTargets(&result, file, policy.session)
+			result.Diagnostics = posixAnalysisDiagnostics(file, policy.session)
 		}
 	}()
 	if file == nil || len(file.Stmts) == 0 {

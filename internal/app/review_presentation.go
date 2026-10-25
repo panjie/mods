@@ -97,7 +97,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment com
 	}
 	if intent.DominantClass() == AccessWrite {
 		if !intent.HasCompleteWriteTargets() {
-			result.rows = append(result.rows, interactionRow{Label: "Coverage", Value: "Other side effects are not bounded; approval applies to this call only."})
+			result.rows = append(result.rows, interactionRow{Label: "Coverage", Value: "Write-target coverage is incomplete; approval applies to this call only."})
 		}
 		for _, group := range intent.Groups() {
 			if group.Class == AccessWrite && len(group.Dirs) > 0 && name != "shell_run" && name != "powershell_run" && name != "process_run" {
@@ -121,10 +121,39 @@ func downloadReviewURL(raw string) string {
 	return u.String()
 }
 
-func commandReviewRows(command string, assessment commandanalysis.CommandAssessment, risk string) []interactionRow {
-	rows := []interactionRow{{Label: "Command", Value: redactRemoteURLsForDisplay(command)}}
+func commandReviewRows(command string, assessment commandanalysis.CommandAssessment, risk string) (rows []interactionRow) {
+	// Presentation-only deduplication: retain every target and node identity
+	// in the assessment used by authorization and revalidation.
+	defer func() {
+		seen := map[interactionRow]bool{}
+		unique := make([]interactionRow, 0, len(rows))
+		for _, row := range rows {
+			if !seen[row] {
+				unique = append(unique, row)
+				seen[row] = true
+			}
+		}
+		rows = unique
+	}()
+	rows = []interactionRow{{Label: "Command", Value: redactRemoteURLsForDisplay(command)}}
+	for _, diagnostic := range assessment.Diagnostics {
+		rows = append(rows, interactionRow{Label: "Analysis", Value: redactRemoteURLsForDisplay(diagnostic)})
+	}
 	if len(assessment.Targets) > 0 || len(assessment.UnresolvedRemoteTargets) > 0 {
+		type displayTarget struct {
+			kind commandanalysis.TargetKind
+			path string
+		}
+		proven := map[displayTarget]bool{}
 		for _, target := range assessment.Targets {
+			if target.Role != commandanalysis.TargetCandidate && target.State == commandanalysis.TargetResolved && target.Path != "" {
+				proven[displayTarget{target.Kind, target.Path}] = true
+			}
+		}
+		for _, target := range assessment.Targets {
+			if target.Role == commandanalysis.TargetCandidate && target.State == commandanalysis.TargetResolved && proven[displayTarget{target.Kind, target.Path}] {
+				continue
+			}
 			label := "Candidate"
 			switch target.Role {
 			case commandanalysis.TargetRead:
@@ -146,12 +175,18 @@ func commandReviewRows(command string, assessment commandanalysis.CommandAssessm
 			rows = append(rows, interactionRow{Label: label, Value: redactRemoteURLsForDisplay(value)})
 		}
 		if assessment.WriteCoverage != approval.CoverageComplete && assessment.Effect != commandanalysis.EffectRead {
-			rows = append(rows, interactionRow{Label: "Unknown effects", Value: "Additional write targets may exist"})
+			rows = append(rows, interactionRow{Label: "Unknown effects", Value: "Write-target coverage is incomplete; see analysis details"})
 		}
 		for _, target := range assessment.UnresolvedRemoteTargets {
 			rows = append(rows, interactionRow{Label: "Remote (unresolved)", Value: redactRemoteURLsForDisplay(target)})
 		}
 		return rows
+	}
+	if len(assessment.Diagnostics) > 0 {
+		for _, expression := range assessment.DynamicTargets {
+			rows = append(rows, interactionRow{Label: "Unresolved expression", Value: redactRemoteURLsForDisplay(expression)})
+		}
+		assessment.DynamicTargets = nil
 	}
 	if target := commandReviewTarget(assessment, risk); target != "" {
 		rows = append(rows, interactionRow{Label: "Target", Value: target})

@@ -605,7 +605,7 @@ func TestAnalyzeShellCommandPOSIXPathVariablesStillRequireReview(t *testing.T) {
 			if tt.effect == commandanalysis.EffectRead {
 				require.Contains(t, presentation.rows, interactionRow{Label: "Read source (unresolved)", Value: "${FILE}"})
 			} else {
-				require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: tt.target})
+				require.Contains(t, presentation.rows, interactionRow{Label: "Unresolved expression", Value: tt.target})
 			}
 		})
 	}

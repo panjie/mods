@@ -36,7 +36,7 @@ const (
 
 	// ScriptPolicy is shared by tool descriptions. Simple commands and pipelines
 	// stay inline; a script is a preference for complex or reusable logic.
-	ScriptPolicy = "Run simple commands and clear aggregation pipelines directly. Prefer a readable script for complex branching, loops, or reusable logic; put temporary scripts in the supplied temporary directory and invoke their interpreter and path. Script execution follows ordinary effect and target review; its location grants no execution permission."
+	ScriptPolicy = "Run simple commands and clear aggregation pipelines directly. Prefer native multi-operand queries over loops when equivalent. Prefer a readable script for complex branching, loops, or reusable logic; put temporary scripts in the supplied temporary directory and invoke their interpreter and path. Script execution follows ordinary effect and target review; its location grants no execution permission."
 
 	// ToolSelectionGeneral carries only tool-choice guidance. Tool
 	// availability, review/permission policy, and denial handling live in the

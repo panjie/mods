@@ -4,6 +4,7 @@ package commandanalysis
 // of every flag of the external utility. Registration performs no host queries.
 func builtinCommandEntries() []commandEntry {
 	return []commandEntry{
+		{Name: "pacman", Space: nativeSpace, ID: "native/pacman", Revision: 2, LiteralRead: true, Tests: []string{"TestPacmanQueries"}, Read: readPacman},
 		{Name: "[", Space: nativeSpace, ID: "native/[", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "basename", Space: nativeSpace, ID: "native/basename", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "cat", Space: nativeSpace, ID: "native/cat", ContextStableRead: true, ReadPaths: true, Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries", "TestStage5GitPredecessor"}, Read: readAnyArguments, NameOnlyRead: true},
@@ -35,7 +36,7 @@ func builtinCommandEntries() []commandEntry {
 		{Name: "free", Space: nativeSpace, ID: "native/free", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "git", Space: nativeSpace, ID: "native/git", Revision: 2, Compatibility: true, Tests: []string{"TestStage5ExtendedGitGlobals", "TestCatalogCompatibilityEntries"}, RepositoryWrites: []string{"add", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "rebase", "reset", "restore", "revert", "rm", "stash", "switch"}, Read: readSubcommand, Subcommands: []string{"status", "log", "diff", "show", "blame", "annotate", "rev-parse", "describe", "reflog", "shortlog", "ls-files", "ls-tree", "ls-remote", "whatchanged", "cat-file", "rev-list", "merge-base", "name-rev", "var", "for-each-ref"}, Write: writeGit, Risk: riskGit},
 		{Name: "go", Space: nativeSpace, ID: "native/go", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readSubcommand, Subcommands: []string{"version", "list", "vet", "doc", "help"}},
-		{Name: "grep", Space: nativeSpace, ID: "native/grep", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
+		{Name: "grep", Space: nativeSpace, NumericOutput: numericGrepArgs, ID: "native/grep", Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries", "TestMixedReadSubstitutionsKeepWriteCoverage", "TestMixedReadSubstitutionsPreserveUnprovenEffects"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "groups", Space: nativeSpace, ID: "native/groups", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "head", Space: nativeSpace, ID: "native/head", ContextStableRead: true, Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries", "TestStage5GitPredecessor"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "hexdump", Space: nativeSpace, ID: "native/hexdump", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
@@ -88,7 +89,7 @@ func builtinCommandEntries() []commandEntry {
 		{Name: "unlink", Space: nativeSpace, ID: "native/unlink", Revision: 4, StrictFile: true, StrictFileOptions: []optionSpec{}, MaxOperands: 1, Compatibility: true, Tests: []string{"TestStage5ExtendedFileAndEnvBindings", "TestCatalogCompatibilityEntries", "TestStage5FileGrammar"}, Write: writeParent, WriteOperation: OperationRemoveEntry, BoundedWrite: true, Risk: alwaysRisky},
 		{Name: "uptime", Space: nativeSpace, ID: "native/uptime", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "w", Space: nativeSpace, ID: "native/w", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
-		{Name: "wc", Space: nativeSpace, ID: "native/wc", ContextStableRead: true, Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries", "TestStage5GitPredecessor"}, Read: readAnyArguments, NameOnlyRead: true},
+		{Name: "wc", Space: nativeSpace, NumericOutput: numericWCArgs, ID: "native/wc", ContextStableRead: true, Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries", "TestStage5GitPredecessor"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "which", Space: nativeSpace, ID: "native/which", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "whoami", Space: nativeSpace, ID: "native/whoami", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "xargs", Space: nativeSpace, ID: "native/xargs", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readXargs, Risk: riskXargs},

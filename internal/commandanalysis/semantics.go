@@ -11,15 +11,18 @@ import (
 // comparison and Git enumeration. Revalidation always creates a new session.
 // Keys identify syntax nodes, not command names or results from earlier runs.
 type semanticSession struct {
-	context     ArgvStaticContext
-	policy      ReadOnlyCommandPolicy
-	confined    bool
-	posixFacts  map[*syntax.CallExpr]*InvocationFacts
-	psFacts     map[string]*InvocationFacts
-	byID        map[int]*InvocationFacts
-	nodeIDs     map[syntax.Node]int
-	evaluations int
-	gitChecked  map[*InvocationFacts]bool
+	context         ArgvStaticContext
+	policy          ReadOnlyCommandPolicy
+	confined        bool
+	loopContextSafe bool
+	loops           map[*syntax.ForClause]*boundedLoopProof
+	loopWork        int
+	posixFacts      map[*syntax.CallExpr]*InvocationFacts
+	psFacts         map[string]*InvocationFacts
+	byID            map[int]*InvocationFacts
+	nodeIDs         map[syntax.Node]int
+	evaluations     int
+	gitChecked      map[*InvocationFacts]bool
 }
 
 func newSemanticSession(p *parsedCommand, policy ReadOnlyCommandPolicy) *semanticSession {
@@ -27,6 +30,8 @@ func newSemanticSession(p *parsedCommand, policy ReadOnlyCommandPolicy) *semanti
 	s := &semanticSession{policy: policy, posixFacts: map[*syntax.CallExpr]*InvocationFacts{}, psFacts: map[string]*InvocationFacts{}, byID: map[int]*InvocationFacts{}, gitChecked: map[*InvocationFacts]bool{}}
 	if p != nil {
 		s.nodeIDs = p.nodeIDs
+		s.loops = map[*syntax.ForClause]*boundedLoopProof{}
+		s.loopContextSafe = boundedLoopContextSafe(p.file)
 		if p.file != nil {
 			s.confined = posixFileAllowsScalarConfinement(p.file)
 		}
@@ -54,7 +59,21 @@ func (s *semanticSession) posix(call *syntax.CallExpr) *InvocationFacts {
 			}
 		}
 	}
-	f := evaluateInvocation(invocationBinding{Name: name, Read: read, Write: shellWordsForAccessConfined(call.Args, s.confined), Coverage: coverageWords(call.Args)}, nativeSpace, s.policy)
+	exactRead := false
+	if entry := commandCatalog.lookup(nativeSpace, name); entry != nil && entry.LiteralRead {
+		read = nil
+		exactRead = true
+		for _, word := range call.Args {
+			value, ok := boundLoopWord(word, "", "", false)
+			if !ok {
+				read = nil
+				exactRead = false
+				break
+			}
+			read = append(read, value)
+		}
+	}
+	f := evaluateInvocation(invocationBinding{Name: name, Read: read, ExactRead: exactRead, Write: shellWordsForAccessConfined(call.Args, s.confined), Coverage: coverageWords(call.Args)}, nativeSpace, s.policy)
 	s.context.run.resolveTransferFacts(&f, s.context.Cwd, false)
 	s.evaluations++
 	s.posixFacts[call] = &f

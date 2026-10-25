@@ -23,17 +23,33 @@ func assessPOSIXCoverage(result *CommandAssessment, file *syntax.File, policy Re
 			tokens := coverageWords(n.Args)
 			f := policy.session.posix(n)
 			appendWriteOperands(result, f.CoverageWrites)
-			if len(tokens) == 0 {
-				result.AddGap(GapUnknownInvocation)
-				return true
-			}
-			if tokens[0] == "cd" {
+			name, _ := staticShellWord(n.Args[0])
+			if name == "cd" {
 				result.AddGap(GapPathContext)
 			}
-			if ro, _ := callIsReadOnly(n, policy); !ro && !f.BoundedWrite {
+			// A read does not need concrete argv to prove write coverage.
+			// Keep walking its children so substitutions and redirects still
+			// contribute their own effects and context gaps.
+			if ro, _ := callIsReadOnly(n, policy); ro {
+				return true
+			}
+			if len(tokens) == 0 || !f.BoundedWrite {
 				result.AddGap(GapUnknownInvocation)
 			}
-		case *syntax.IfClause, *syntax.ForClause, *syntax.WhileClause, *syntax.CaseClause, *syntax.FuncDecl, *syntax.ArithmCmd:
+		case *syntax.ParamExp:
+			if n.Exp != nil && (n.Exp.Op == syntax.AssignUnset || n.Exp.Op == syntax.AssignUnsetOrNull) {
+				result.AddGap(GapExecutionContext)
+			}
+		case *syntax.ArithmExp:
+			if !numericArithmetic(n.X) {
+				result.AddGap(GapExecutionContext)
+			}
+		case *syntax.ForClause:
+			if policy.session.boundedLoop(n).read {
+				return false
+			}
+			result.AddGap(GapControlFlow)
+		case *syntax.IfClause, *syntax.WhileClause, *syntax.CaseClause, *syntax.FuncDecl, *syntax.ArithmCmd:
 			result.AddGap(GapControlFlow)
 		case *syntax.Redirect:
 			if redirectionWritesPersistent(n) {

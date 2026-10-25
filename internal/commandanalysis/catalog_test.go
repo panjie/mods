@@ -80,7 +80,10 @@ func TestCatalogCompatibilityEntries(t *testing.T) {
 			require.Equal(t, c.Modes, modes)
 		})
 	}
-	for key := range commandCatalog.entries {
+	for key, entry := range commandCatalog.entries {
+		if !entry.Compatibility {
+			continue
+		} // New entries have dedicated independent tests.
 		require.True(t, covered[key], "missing independent fixture for %+v", key)
 	}
 }

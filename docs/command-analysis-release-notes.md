@@ -19,6 +19,6 @@ date/hostname 的修改形式、unlink 多操作数，以及 PowerShell 未绑�
 
 ## 验证与限制
 
-Linux 构建、全量测试、race、计数快照和三组 fuzz 通过；Linux PowerShell 7.6.8 完成真实解析与隔离执行验证。Windows/macOS 仅交叉编译，实机运行、Windows PowerShell 5.1 和路径链接验收仍待完成。
+Linux 构建、全量测试、race、计数快照和三组 fuzz 通过；Linux PowerShell 7.6.8 完成真实解析与隔离执行验证。2026-10-26 补齐 Windows 全量测试、PS7/PS5.1 真实解析与隔离执行、junction 边界和平台计数快照，见 [Windows 验收记录](superpowers/plans/2026-10-26-command-analysis-windows.md)。Windows cp/mv 文件身份与卷证明仍保持未支持；UNC、Windows race 和 macOS 实机验收仍有缺口。
 
 固定构造样本观察到审批改善，不能据此宣称真实用户误报率下降。分析不是操作系统沙箱，也不能消除批准与文件系统调用之间的所有竞态。详细证据见 [第六阶段记录](superpowers/plans/2026-10-25-command-analysis-stage6.md)。

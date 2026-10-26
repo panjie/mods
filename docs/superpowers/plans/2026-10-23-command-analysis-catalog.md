@@ -4,6 +4,8 @@
 状态：阶段 0 已完成 Windows 本地验证；阶段 1 已收尾并通过 Linux 本地验证，阶段 2 已实现并通过 Linux/race 验证，Windows 真实 host/快照验收待补；阶段 3 已实现并通过 Linux 验证（见 2026-10-24 阶段 3 记录），阶段 4 已实现角色化授权并通过 Linux 验证（见 2026-10-24 阶段 4 记录），阶段 5 首批已实现并通过 Linux 验证（见 [阶段 5 记录](2026-10-25-command-analysis-stage5.md)），后续文件参数/env/Git/PowerShell 支持已实现并通过 Linux 验证（见 [后续记录](2026-10-25-command-analysis-stage5-extension.md)）；第六阶段清理、边界/fuzz 与本机验收已实施（见 [阶段 6 记录](2026-10-25-command-analysis-stage6.md)）；真实 Windows/macOS 验收仍待补，全平台最终出口尚未关闭。
 设计依据：[独立命令分析模块与统一命令语义库](../specs/2026-10-23-command-analysis-catalog-design.md)。
 
+2026-10-26 平台更新：Windows 全量与 PS7/PS5.1 实机验证、junction 和新平台快照已完成，见 [验收记录](2026-10-26-command-analysis-windows.md)；上方阶段状态保留历史过程，macOS 实机等剩余缺口仍未关闭。
+
 阶段 0 结果：[基线、依赖清单和测试记录](2026-10-23-command-analysis-baseline.md)。
 
 ## 1. 交付顺序

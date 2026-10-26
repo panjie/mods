@@ -117,13 +117,14 @@ func TestAssessCommandPowerShellLiteralVariableWriteResolvesConcreteDir(t *testi
 	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "a literal-assigned write target resolves to a concrete directory")
 	require.Contains(t, assessment.KnownDirs, `C:\Users\Test\AppData\Roaming\.emacs.d\init.el`)
-	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasCompleteWriteTargets(), "materialized display paths do not prove scalar write bindings")
+	require.Empty(t, candidateRulesForIntent(commandResultToIntent(assessment), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 	require.Equal(t, DecisionAsk, ClassifyAccess(
 		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
-	), "an external write still asks once, but the concrete dir makes the approval rule-saveable")
+	), "the variable content and path binding remain incomplete and require per-call approval")
 }
 
 func TestAssessCommandPowerShellExpressionAssignmentKeepsDynamicTarget(t *testing.T) {
@@ -199,10 +200,9 @@ func TestAssessCommandPowerShellProfileWriteResolvesConcreteDir(t *testing.T) {
 	require.Empty(t, assessment.DynamicTargets, "an engine-automatic write target resolves to a concrete path")
 	require.Len(t, assessment.KnownDirs, 1)
 	require.Contains(t, strings.ToLower(assessment.KnownDirs[0]), "profile", assessment.KnownDirs)
-	require.False(t, commandResultToIntent(assessment).HasUnresolvedPaths())
+	require.False(t, commandResultToIntent(assessment).HasCompleteWriteTargets())
 	scope := WorkingDirScope(cwd)
-	// $PROFILE lives outside the cwd, so the write still asks once; the
-	// concrete resolved directory is what makes the answer saveable as a rule.
+	// Resolving $PROFILE for display does not prove a literal scalar binding.
 	require.Equal(t, DecisionAsk, ClassifyAccess(
 		commandResultToIntent(assessment),
 		scope,
@@ -441,12 +441,14 @@ func TestAssessCommandPowerShellStableEnvWriteResolvesConcreteDir(t *testing.T) 
 	require.Empty(t, assessment.DynamicTargets, "a stable-env write target resolves to a concrete directory")
 	require.Len(t, assessment.KnownDirs, 1)
 	require.True(t, strings.HasPrefix(strings.ToLower(assessment.KnownDirs[0]), strings.ToLower(os.TempDir())), assessment.KnownDirs)
-	require.Equal(t, DecisionAllow, ClassifyAccess(
+	require.False(t, commandResultToIntent(assessment).HasCompleteWriteTargets())
+	require.Empty(t, candidateRulesForIntent(commandResultToIntent(assessment), WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
+	require.Equal(t, DecisionAsk, ClassifyAccess(
 		commandResultToIntent(assessment),
 		WorkingDirScope(cwd),
 		approval.SafeDirs(),
 		ApprovalReviewMode(ReviewAuto),
-	), "a write into the safe temp directory matches the allow cell of the approval matrix")
+	), "a materialized environment path cannot bypass incomplete scalar binding through the temp exemption")
 }
 
 func TestAssessCommandPowerShellStableEnvWriteAssignmentKeepsDynamicTargets(t *testing.T) {
@@ -511,16 +513,17 @@ func TestAssessCommandPowerShellArrayEnvTargetsResolve(t *testing.T) {
 	require.Equal(t, commandanalysis.EffectWrite, assessment.Effect)
 	require.Empty(t, assessment.DynamicTargets, "each quoted array element expands to a concrete path instead of one flattened dynamic token")
 	intent := commandResultToIntent(assessment)
-	require.False(t, intent.HasUnresolvedPaths())
-	dirs := intent.AllDirs()
+	require.False(t, intent.HasCompleteWriteTargets())
+	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
+	dirs := assessment.KnownDirs
 	require.NotEmpty(t, dirs)
 	for _, dir := range dirs {
 		lower := strings.ToLower(dir)
 		require.True(t, lower == strings.ToLower(temp) || strings.HasPrefix(lower, strings.ToLower(temp)+`\`),
 			"every affected path stays inside TEMP: %v", dirs)
 	}
-	require.Equal(t, "local mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)),
-		"the write is no longer classified as a dynamic mutation")
+	require.Equal(t, "dynamic mutation", shellRiskLevel(assessment, WorkingDirScope(cwd)),
+		"display path expansion does not resolve the array write binding")
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(cwd), approval.SafeDirs(), ApprovalReviewMode(ReviewAuto)),
 		"flattened array operands need complete leaf binding before temp exemption")
 }
@@ -703,7 +706,8 @@ func TestAssessCommandPowerShellRegistryWriteStaysOutOfFilesystemRules(t *testin
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 	require.Empty(t, candidateRulesForIntent(intent, WorkingDirScope(cwd), nil, ApprovalReviewMode(ReviewAuto)))
 	require.Equal(t, "Modify a PowerShell provider target", presentation.headline)
-	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: `HKCU:\Software\Classes\Neovide`})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Write target", Value: `HKCU:\Software\Classes\Neovide`})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Read source", Value: `HKCU:\Software\Classes\Neovide`})
 }
 
 func TestAssessCommandPowerShellRegistryAliasWriteStaysOutOfFilesystemRules(t *testing.T) {

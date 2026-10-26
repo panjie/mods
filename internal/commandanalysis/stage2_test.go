@@ -207,6 +207,7 @@ func TestIRBoundLiteralRedirectionCoverage(t *testing.T) {
 	require.NoError(t, err)
 	e := NewEngine(Settings{}, Dependencies{PowerShell: parserFunc(func(context.Context, string) ([]byte, error) { return raw, nil })})
 	in := shellInput(source)
+	in.Cwd = t.TempDir()
 	in.Dialect = pathutil.FlavorPowerShell
 	result, err := e.Analyze(context.Background(), in)
 	require.NoError(t, err)

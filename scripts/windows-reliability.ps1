@@ -17,13 +17,11 @@ $originalExpectedHost = $env:MODS_EXPECT_POWERSHELL_HOST
 $originalIterations = $env:MODS_WINDOWS_STRESS_ITERATIONS
 try {
     if ($PowerShellHost -eq 'ps51') {
-        $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
-        if ($pwsh) {
-            $pwshDirectory = Split-Path -Parent $pwsh.Source
-            $env:PATH = (($env:PATH -split ';') | Where-Object {
-                $_ -and -not [String]::Equals($_.TrimEnd('\'), $pwshDirectory.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)
-            }) -join ';'
-        }
+        # A machine can expose several installations (including runtime bundles
+        # and WindowsApps aliases). Removing only the first leaves PS7 selected.
+        $env:PATH = (($env:PATH -split ';') | Where-Object {
+            $_ -and -not (Test-Path -LiteralPath (Join-Path $_.Trim('"') 'pwsh.exe'))
+        }) -join ';'
         $env:MODS_EXPECT_POWERSHELL_HOST = 'powershell.exe'
     } elseif ($PowerShellHost -eq 'ps7') {
         if (-not (Get-Command pwsh.exe -ErrorAction SilentlyContinue)) {
@@ -38,7 +36,7 @@ try {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $lane = "$PowerShellHost-$Mode"
     $jsonLog = Join-Path $outputRoot "$lane-$stamp.jsonl"
-    $packages = @('./internal/tools', './internal/approval', './internal/app')
+    $packages = @('./internal/tools', './internal/approval', './internal/commandanalysis', './internal/app')
     $arguments = @('test', '-tags', 'windowsreliability', '-run', 'WindowsReliability', '-json', '-count=1', '-timeout=15m') + $packages
 
     Push-Location $repoRoot

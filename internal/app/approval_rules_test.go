@@ -67,7 +67,8 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 		reviewChan: make(chan toolReviewItem, 1),
 	}
 	data := []byte(`{"command":"opaque-command"}`)
-	assessment := mods.assessCommand("shell_run", "opaque-command")
+	// POSIX diagnostics are dialect-specific; Windows shell_run uses PowerShell.
+	assessment := mods.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "opaque-command", nil, cwdScope.Value)
 	intent := buildAccessIntent("shell_run", data, registry, &assessment)
 
 	errCh := make(chan error, 1)

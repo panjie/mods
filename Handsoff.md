@@ -1,6 +1,10 @@
 # 命令分析重构交接记录
 
-更新时间：2026-10-25（第六阶段清理与本机验收）。
+更新时间：2026-10-26（Windows 实机验收）。
+
+## Windows 续作（优先于以下历史状态）
+
+已同步周末提交至 `33dd565`，完成 Windows 全量测试及 PS7/PS5.1 真实桥验证，修复跨平台测试假设、旧授权断言及 Windows 验证脚本漏包/宿主隔离问题。新增经审查的 Windows 事实与 work 快照，旧快照未改。详情与剩余 UNC、Windows race、macOS 缺口见 [Windows 验收记录](docs/superpowers/plans/2026-10-26-command-analysis-windows.md)。
 
 ## 最新续作结果（优先于下方历史记录）
 

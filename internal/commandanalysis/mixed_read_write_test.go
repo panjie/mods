@@ -2,6 +2,8 @@ package commandanalysis
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/panjie/mods/internal/pathutil"
@@ -16,7 +18,10 @@ echo "code-ish: $(( $(wc -l < /tmp/all_go.txt) - $(grep -c '^\s*$' /tmp/all_go.t
 
 func TestMixedReadSubstitutionsKeepWriteCoverage(t *testing.T) {
 	for _, source := range []string{codeCountCommand, `printf x > out; echo "$(wc -l < out)"`, `printf x > out; echo "$(cat out)"`, `printf x > out; echo "$((1 + 2 * 3))"`} {
-		r, err := NewEngine(Settings{}, Dependencies{}).Analyze(context.Background(), Input{Cwd: t.TempDir(), Dialect: pathutil.FlavorPOSIX, Shell: &ShellInput{Source: source}})
+		root := t.TempDir()
+		// Keep the POSIX syntax, but resolve its files on the actual host.
+		source = strings.ReplaceAll(source, "/tmp/all_go.txt", "all_go.txt")
+		r, err := NewEngine(Settings{}, Dependencies{}).Analyze(context.Background(), Input{Cwd: root, Dialect: pathutil.FlavorPOSIX, Shell: &ShellInput{Source: source}})
 		require.NoError(t, err)
 		require.Equal(t, EffectWrite, r.Effect, source)
 		require.Equal(t, CoverageComplete, r.WriteCoverage, source)
@@ -27,6 +32,7 @@ func TestMixedReadSubstitutionsKeepWriteCoverage(t *testing.T) {
 			if target.Role == TargetWrite {
 				writes++
 				require.Equal(t, TargetResolved, target.State)
+				require.Equal(t, root, filepath.Dir(target.Path))
 			}
 		}
 		require.Equal(t, 1, writes, source)

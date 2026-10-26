@@ -107,6 +107,11 @@ func TestCommandGenerationBaseline(t *testing.T) {
 				if dialect == "powershell" && c.PowerShellDecision != "" {
 					want = c.PowerShellDecision
 				}
+				// P0/P1 fixtures are immutable evidence of the former limitation.
+				// P2 adds a strict, literal Import-Csv read proof.
+				if dialect == "powershell" && c.ID == "csv-sum" {
+					want = "allow"
+				}
 				require.Equal(t, approval.Decision(want), facts.Auto, "independent policy assertion")
 				observed[c.ID+"/"+dialect] = struct {
 					Facts         commandBaselineFacts                 `json:"facts"`
@@ -129,7 +134,7 @@ func TestCommandGenerationBaseline(t *testing.T) {
 			Reviewability commandanalysis.CommandReviewability `json:"reviewability"`
 		}{facts, a.Shape, a.Reviewability}
 	}
-	path := filepath.Join("testdata", "command_generation", "baseline_"+runtime.GOOS+".json")
+	path := filepath.Join("testdata", "command_generation", "baseline_p2_"+runtime.GOOS+".json")
 	data, err := json.MarshalIndent(observed, "", "  ")
 	require.NoError(t, err)
 	if *updateGenerationBaseline {

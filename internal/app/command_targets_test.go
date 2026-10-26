@@ -105,6 +105,7 @@ func TestCommandAuthorizationComparisonIgnoresPresentation(t *testing.T) {
 	r := ca.Result{Effect: ca.EffectWrite, Evidence: ca.EvidenceStatic, WriteCoverage: ca.CoverageComplete, Targets: []ca.Target{roleTarget(ca.TargetWrite, root, "first")}}
 	a := commandResultToIntent(r)
 	r.Reason = "different diagnostic"
+	r.Structure = &ca.CommandStructure{ControlFlowDepth: 3, UnmodeledInvocations: 1, Findings: []ca.StructureFinding{{Code: ca.StructureUnknownInvocation}}}
 	r.KnownDirs = []string{"noise"}
 	r.Targets = append(r.Targets, roleTarget(ca.TargetCandidate, root, "candidate"))
 	require.True(t, commandAuthorizationEqual(a, commandResultToIntent(r)))

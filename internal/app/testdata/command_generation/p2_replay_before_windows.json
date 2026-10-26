@@ -1,0 +1,418 @@
+[
+  {
+    "id": "normal/generation-completion-minimal-false.json/ambiguous-code/1/5",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $lines = Get-Content -LiteralPath $_.FullName; [pscustomobject]@{ File = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines.Count; Code = ($lines | Where-Object { $_.Trim() -ne '' -and -not $_.Trim().StartsWith('//') }).Count } } | Format-Table -AutoSize",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/ambiguous-code/2/2",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.js','.ts','.py','.java','.c','.h','.cpp','.cs','.rs','.rb','.php','.sh','.ps1','.md','.json','.csv','.log' } | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Ext = $_.Extension; Lines = $lines } } | Format-Table -AutoSize",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/ambiguous-code/3/2",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.md','.json','.csv','.log' } | ForEach-Object { $lines = Get-Content -LiteralPath $_.FullName | Measure-Object; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines.Count; Bytes = $_.Length } } | Format-Table -AutoSize",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/ambiguous-code/4/2",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.md','.json','.csv','.log' } | ForEach-Object { [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } } | Format-Table -AutoSize",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/ambiguous-code/5/2",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.js','.ts','.py','.java','.c','.h','.cpp','.cs','.rs','.rb','.php','.sh','.ps1','.md','.json','.csv','.log' } | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines } } | Format-Table -AutoSize",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/1/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = $f | ForEach-Object { (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } | Measure-Object -Sum; [pscustomobject]@{files=$f.Count; lines=$lines.Sum} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/1/6",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $b=[System.IO.File]::ReadAllBytes($_.FullName); $n=0; foreach($x in $b){ if($x -eq 10){$n++} }; [pscustomobject]@{Name=$_.FullName; Bytes=$b.Length; LF=$n} } | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/2/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; [pscustomobject]@{files=($f | Measure-Object).Count; lines=(($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object).Count)} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/2/7",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $b=[System.IO.File]::ReadAllBytes($_.FullName); $n=0; foreach($x in $b){ if($x -eq 10){$n++} }; if($b.Length -gt 0 -and $b[-1] -ne 10){$n++}; \"$($_.FullName) $n\" }",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/3/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = ($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object).Count; [pscustomobject]@{files=$f.Count; lines=$lines} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/4/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $files = ($f | Measure-Object).Count; $lines = ($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object).Count; [pscustomobject]@{files=$files;lines=$lines} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/5/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; [pscustomobject]@{files=($f | Measure-Object).Count; lines=(($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } ) | Measure-Object).Count} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/physical-lines/5/6",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $b=[System.IO.File]::ReadAllBytes($_.FullName); $n=0; foreach($x in $b){ if($x -eq 10){$n++} }; if($b.Length -gt 0 -and $b[-1] -ne 10){$n++}; \"$($_.FullName) bytes=$($b.Length) lines=$n\" }",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/log-count/1/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/log-count/2/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/log-count/3/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/log-count/4/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-completion-minimal-false.json/log-count/5/0",
+    "source_sha256": "5817524ab609e8d993b330ba225e9c57e2d068589a1f7486d3bba3f70d32f6bd",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-first-round-minimal-false.json/physical-lines/1/0",
+    "source_sha256": "26ccc9b99b86e84a31a2cd5b86c8c9f3b3c6488558244ecd0f972297bfc53c11",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-first-round-minimal-false.json/physical-lines/1/1",
+    "source_sha256": "26ccc9b99b86e84a31a2cd5b86c8c9f3b3c6488558244ecd0f972297bfc53c11",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-first-round-minimal-false.json/requested-breakdown/1/1",
+    "source_sha256": "26ccc9b99b86e84a31a2cd5b86c8c9f3b3c6488558244ecd0f972297bfc53c11",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Select-Object -ExpandProperty FullName",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-first-round-minimal-false.json/log-count/1/0",
+    "source_sha256": "26ccc9b99b86e84a31a2cd5b86c8c9f3b3c6488558244ecd0f972297bfc53c11",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-first-round-minimal-false.json/file-find/1/0",
+    "source_sha256": "26ccc9b99b86e84a31a2cd5b86c8c9f3b3c6488558244ecd0f972297bfc53c11",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $_.FullName }",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "normal/generation-first-round-minimal-false.json/hidden-write/1/0",
+    "source_sha256": "26ccc9b99b86e84a31a2cd5b86c8c9f3b3c6488558244ecd0f972297bfc53c11",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/1/2",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $c = Get-Content -LiteralPath $_.FullName; [PSCustomObject]@{ File = $_.FullName; Lines = $c.Count; NonBlank = ($c | Where-Object { $_.Trim() -ne '' }).Count } } | Format-Table -AutoSize",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/1/3",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $c = Get-Content -LiteralPath $_.FullName; \"$($_.FullName)`t$($c.Count)`t$(($c | Where-Object { $_.Trim() -ne '' }).Count)\" }",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/2/2",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { [pscustomobject]@{ File = $_.FullName; Lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } } | Format-Table -AutoSize",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/3/2",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $c = Get-Content -LiteralPath $_.FullName; [pscustomobject]@{ File = $_.FullName; Lines = $c.Count; NonBlank = ($c | Where-Object { $_.Trim() -ne '' }).Count } } | Format-Table -AutoSize",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/3/3",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $c = Get-Content -LiteralPath $_.FullName; [pscustomobject]@{ File = $_.FullName; Lines = $c.Count; NonBlank = @($c | Where-Object { $_.Trim() -ne '' }).Count } } | ConvertTo-Json",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/4/2",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Include *.go,*.js,*.ts,*.py,*.java,*.cs,*.c,*.cpp,*.h,*.rs,*.rb,*.php,*.sh,*.ps1 | ForEach-Object { [pscustomobject]@{ Path = $_.FullName; Lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } } | Format-Table -AutoSize",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/5/2",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $c = Get-Content -LiteralPath $_.FullName; [pscustomobject]@{ File = $_.FullName; Lines = $c.Count; NonBlank = ($c | Where-Object { $_.Trim() -ne '' }).Count } } | Format-Table -AutoSize",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/ambiguous-code/5/3",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $c = Get-Content -LiteralPath $_.FullName; [pscustomobject]@{ File = $_.Name; Lines = $c.Count; NonBlank = @($c | Where-Object { $_.Trim() -ne '' }).Count } } | ConvertTo-Json -Compress",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/physical-lines/1/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count; Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/physical-lines/2/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = $f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object; [pscustomobject]@{files=$f.Count; lines=$lines.Count} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/physical-lines/3/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count; Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/physical-lines/4/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = $f | ForEach-Object { (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } | Measure-Object -Sum; [pscustomobject]@{files=$f.Count; lines=$lines.Sum} | ConvertTo-Json -Compress",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/physical-lines/5/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count; Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/csv-sum/1/1",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Import-Csv amounts.csv | Measure-Object -Property amount -Sum | Select-Object -ExpandProperty Sum",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/csv-sum/4/1",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Import-Csv amounts.csv | Measure-Object -Property amount -Sum | Select-Object -ExpandProperty Sum",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/csv-sum/5/1",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Import-Csv amounts.csv | Measure-Object -Property amount -Sum | Select-Object -ExpandProperty Sum",
+    "effect": "unknown",
+    "coverage": 0,
+    "decision": "ask"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/log-count/1/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/log-count/2/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/log-count/3/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/log-count/4/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-completion-minimal-true.json/log-count/5/0",
+    "source_sha256": "1da4f9c5027c2d8123eb15ae8e91a17a21d95ba0eefbdd96a19d113fdd0ea4a5",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/physical-lines/1/0",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/physical-lines/1/1",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/requested-breakdown/1/1",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Select-Object -ExpandProperty FullName",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/log-count/1/0",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/file-find/1/0",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $_.FullName }",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/hidden-write/1/0",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  },
+  {
+    "id": "minimal/generation-first-round-minimal-true.json/nested-code/1/0",
+    "source_sha256": "0a241beb39faf5e646f682b0c9813429aaed40499b528d44aa115c328134612f",
+    "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count",
+    "effect": "read",
+    "coverage": 1,
+    "decision": "allow"
+  }
+]

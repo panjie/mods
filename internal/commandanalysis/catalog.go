@@ -539,7 +539,13 @@ func readAnyArguments(*commandEntry, []string, ReadOnlyCommandPolicy, *catalogEv
 	return true
 }
 func readPSForEach(_ *commandEntry, args []string, _ ReadOnlyCommandPolicy, _ *catalogEvaluation) bool {
-	return powerShellInvocationHasScriptBlockArg(psCommandInvocation{Args: args})
+	// The complete IR still checks every child command, variable and method.
+	// A script block alone must not authorize -Parallel, -AsJob, unknown
+	// parameters, or the separate Begin/End/RemainingScripts parameter sets.
+	if len(args) == 2 && strings.EqualFold(args[0], "-Process") {
+		args = args[1:]
+	}
+	return len(args) == 1 && strings.HasPrefix(strings.TrimSpace(args[0]), "{") && strings.HasSuffix(strings.TrimSpace(args[0]), "}")
 }
 func readSubcommand(e *commandEntry, args []string, _ ReadOnlyCommandPolicy, _ *catalogEvaluation) bool {
 	return readSubcommandEntry(e, args)

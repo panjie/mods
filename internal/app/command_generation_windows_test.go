@@ -22,6 +22,7 @@ func TestGenerationPowerShellAggregationSemantics(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 	}
 	for _, tc := range []struct{ name, command, want string }{
+		{"csv", "Import-Csv amounts.csv | Measure-Object -Property amount -Sum | Select-Object -ExpandProperty Sum", "10"},
 		{"files", "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count", "3"},
 		{"physical", "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count", "6"},
 		{"nonempty", "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object -Line | Select-Object -ExpandProperty Lines", "4"},

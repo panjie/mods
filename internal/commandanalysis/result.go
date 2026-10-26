@@ -8,6 +8,11 @@ type Result = CommandAssessment
 
 // Clone isolates both analyzer results and approved snapshots from later edits.
 func (a CommandAssessment) Clone() CommandAssessment {
+	if a.Structure != nil {
+		structure := *a.Structure
+		structure.Findings = slices.Clone(structure.Findings)
+		a.Structure = &structure
+	}
 	a.Diagnostics = slices.Clone(a.Diagnostics)
 	a.Targets = slices.Clone(a.Targets)
 	a.Gaps = slices.Clone(a.Gaps)

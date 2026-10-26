@@ -1,0 +1,1074 @@
+{
+  "ambiguous-code/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "ambiguous-code/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [
+        "$_.FullName"
+      ],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 2,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "build-test/posix": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "build-test/powershell": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "csv-sum/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "csv-sum/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "download-batch/posix": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [
+        "https://example.com"
+      ],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [
+        "https://example.com"
+      ],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "download-batch/powershell": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [
+        "https://example.com"
+      ],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [
+        "https://example.com"
+      ],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "existing-script/posix": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": true
+    }
+  },
+  "existing-script/powershell": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "opaque",
+      "Reasons": [
+        "opaque_execution"
+      ],
+      "RecommendedTool": "",
+      "ScriptFilePayload": true
+    }
+  },
+  "file-find/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "file-find/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "hidden-write/posix": {
+    "facts": {
+      "effect": "write",
+      "evidence": "static",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [
+        "."
+      ],
+      "write_paths": [
+        "."
+      ],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "hidden-write/powershell": {
+    "facts": {
+      "effect": "write",
+      "evidence": "static",
+      "coverage": 0,
+      "gaps": [
+        "unbounded write targets"
+      ],
+      "dirs": [],
+      "write_paths": [
+        "$_.FullName"
+      ],
+      "dynamic": [
+        "$_.FullName"
+      ],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 2,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "compound",
+      "Reasons": [
+        "mixed_read_write",
+        "dynamic_write_target"
+      ],
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "log-count/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "log-count/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "nested-code/posix": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "nested-code/powershell": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "opaque",
+      "Reasons": [
+        "nested_shell_host"
+      ],
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "original/powershell": {
+    "facts": {
+      "effect": "unknown",
+      "evidence": "",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation",
+        "unmodeled control flow"
+      ],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [
+        "$f.FullName"
+      ],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 2,
+      "Pipelines": 12,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "opaque",
+      "Reasons": [
+        "opaque_execution"
+      ],
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "partial-read/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "partial-read/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "physical-lines/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "physical-lines/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [],
+      "write_paths": [],
+      "dynamic": [
+        "$_.FullName"
+      ],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 2,
+      "Opaque": true
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "related-git/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 2,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "compound",
+      "Reasons": [
+        "multiple_independent_actions"
+      ],
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "related-git/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 2,
+      "Pipelines": 2,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "compound",
+      "Reasons": [
+        "multiple_independent_actions"
+      ],
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "requested-breakdown/posix": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": [
+        "single_program_in_shell"
+      ],
+      "RecommendedTool": "process_run",
+      "ScriptFilePayload": false
+    }
+  },
+  "requested-breakdown/powershell": {
+    "facts": {
+      "effect": "read",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "\u003cWS\u003e"
+      ],
+      "write_paths": [],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "allow",
+      "always": "allow",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "required-edit/posix": {
+    "facts": {
+      "effect": "write",
+      "evidence": "static",
+      "coverage": 1,
+      "gaps": [],
+      "dirs": [
+        "."
+      ],
+      "write_paths": [
+        "settings.json"
+      ],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "candidate_paths": [],
+      "intent_coverage": 1
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 0,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  },
+  "required-edit/powershell": {
+    "facts": {
+      "effect": "write",
+      "evidence": "static",
+      "coverage": 0,
+      "gaps": [
+        "unknown invocation"
+      ],
+      "dirs": [
+        "."
+      ],
+      "write_paths": [
+        "settings.json"
+      ],
+      "dynamic": [],
+      "origins": [],
+      "unresolved_remote": [],
+      "provider": [],
+      "auto": "ask",
+      "always": "ask",
+      "never": "allow",
+      "read_dirs": [],
+      "write_dirs": [
+        "\u003cWS\u003e"
+      ],
+      "candidate_paths": [],
+      "intent_coverage": 0
+    },
+    "shape": {
+      "TopLevelActions": 1,
+      "Pipelines": 1,
+      "Opaque": false
+    },
+    "reviewability": {
+      "Level": "simple",
+      "Reasons": null,
+      "RecommendedTool": "",
+      "ScriptFilePayload": false
+    }
+  }
+}

@@ -30,7 +30,8 @@ type CommandShape struct {
 // process invocation. Approval policy is derived from it and never stored in
 // the assessment itself.
 type CommandAssessment struct {
-	Diagnostics   []string // Explanation only; never authorization evidence.
+	Structure     *CommandStructure `json:",omitempty"` // Diagnostic only; never permission evidence.
+	Diagnostics   []string          // Explanation only; never authorization evidence.
 	Targets       []Target
 	Evidence      Evidence
 	WriteCoverage TargetCoverage
@@ -136,6 +137,7 @@ func (p *parsedCommand) assess(policy ReadOnlyCommandPolicy, context ArgvStaticC
 	if result.Effect == EffectRead && len(policy.Commands) > 0 && analyze(ReadOnlyCommandPolicy{}).Effect != EffectRead {
 		result.Evidence = EvidenceTrust
 	}
+	result.Structure = commandStructure(p)
 	return result
 }
 

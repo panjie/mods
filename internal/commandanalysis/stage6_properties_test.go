@@ -60,6 +60,11 @@ func FuzzAuditedOptionsNeverHideUnknownFlag(f *testing.F) {
 			require.False(t, facts.BoundedWrite)
 			require.False(t, facts.BuiltinRead)
 		}
+		for _, name := range []string{"Import-Csv", "ForEach-Object"} {
+			facts := catalogTokens([]string{name, "-ModsUnmodeledOption", arg}, powershellSpace, ReadOnlyCommandPolicy{})
+			require.False(t, facts.BuiltinRead)
+			require.Equal(t, CoverageIncomplete, facts.Coverage)
+		}
 	})
 }
 

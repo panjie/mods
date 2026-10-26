@@ -1,12 +1,14 @@
 # 可审查命令生成与有限简化设计
 
 日期：2026-10-26
-状态：P0 基线和 P1 生成提示已实现；结构/语义扩展、简化及审批界面仍是待实施设计。
+状态：P0/P1 已实现；P2a 结构诊断及 P2b 的 Import-Csv/单层读取聚合首批已实施。其余语义扩展、简化及审批界面仍是待实施设计。
 实施计划：[分阶段实施与验收](../plans/2026-10-26-reviewable-command-generation.md)。
 
 实际结果见 [P0/P1 验收记录](../evidence/2026-10-26-command-generation/README.md)：提示调整出现局部改善，但原始代码统计问题仍未解决；分析器、授权和审批机制保持不变。本设计中的后续能力不能视为当前产品保证。
 
 后续 [P1 失败分析与精修](../evidence/2026-10-26-command-generation-refinement/README.md) 补齐了 minimal 的查询决策提示。最新对照中日志计数、minimal 代码统计有改善，但 normal 物理行数和 CSV 聚合仍有失败/新增审批，不能视为整体问题已解决。
+
+[P2 首批验证](../evidence/2026-10-26-command-generation-p2/README.md) 固定这些历史模型输出重放：52 条 shell 调用中只有 3 条 Import-Csv 求和从 ask 变为 allow，其余 49 条决策保持不变。提示词、审批 UI 和简化机制未改动；这是分析与授权决策对照，不是新一轮模型完整任务成功率。
 
 ## 1. 目标与基本决策
 

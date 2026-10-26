@@ -1,0 +1,16 @@
+[
+  {
+    "revision": "pilot",
+    "changed_fragments": {
+      "script_policy": "Select, read/filter, then aggregate in read-only pipelines. Compute only requested metrics in tools, not from text or file sizes. Keep related reads together; split metrics before adding state. Avoid existence-check branches, suppressed errors and query files. Scripts only when pipelines cannot suffice: invoke interpreter/path; location grants no permission.",
+      "powershell_intent": "Prefer cmdlet pipelines to counters, loops, .NET calls or report objects. ForEach-Object may map paths to Get-Content; aggregate afterward. Get-Content without -Raw emits empty and unterminated lines too. Measure-Object counts records; -Line skips empty lines. Resolve write targets like $PROFILE first. No unsolicited execution-policy/settings changes or encoded commands. Never rewrite an existing script file for review."
+    }
+  },
+  {
+    "revision": "pilot2",
+    "changed_fragments": {
+      "script_policy": "Select/read/filter/aggregate with read-only pipelines. Compute requested metrics in tools, not from text or file sizes. Group related reads, not stateful scripts. Avoid existence checks, suppressed errors and query files. Use a script only if pipelines cannot suffice; invoke interpreter/path. Location grants no permission.",
+      "powershell_intent": "For cmdlet queries, use direct pipelines per metric, not variables, counters, loops, .NET calls or custom objects. Format final JSON yourself. Map paths with ForEach-Object { Get-Content -LiteralPath $_.FullName }, then aggregate. Measure-Object counts records including empty/unterminated lines; -Line skips empty lines. Resolve $PROFILE/write targets first. No unsolicited policy/settings changes or encoded commands. Never rewrite an existing script file for review."
+    }
+  }
+]

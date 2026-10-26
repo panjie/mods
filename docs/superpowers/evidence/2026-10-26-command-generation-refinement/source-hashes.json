@@ -1,0 +1,12 @@
+{
+  "internal/prompts/prompts.go": "2073393e684ffe1b70d92c1dea7a7c72804a52599472434bbe5fb90bdedbba1b",
+  "internal/prompts/prompts_test.go": "7f73dffc732b272137f6eb407a496bfe7273db09dda79ceb6569fa725e7fd3ac",
+  "internal/tools/guidance_test.go": "bc1058ce20fc88e8c1f1a0b95a6555e5204e892728df83bbd966916df0f611d4",
+  "internal/tools/tools_test.go": "ef02dd5b34db7833cfed1d52946e59ca88025b984e10f8eac9dbf31afe5d6c50",
+  "internal/config/config_test.go": "372109cbd9d59c55a7a1b826be773cba05e926377a87c57cd4505198aa2d90c7",
+  "internal/app/command_generation_baseline_test.go": "90af87a12b6e68b890d60b9b4884ab562041f998424c91b0c94a04b4d6980518",
+  "internal/app/command_generation_integration_test.go": "a4e6617708f3783603924bd7c1c5a73fa035a7620d2415cd1a96f2323f328ba5",
+  "internal/app/command_generation_prompt_test.go": "73ed76aa6efc251ae0eb1222c7c54af73e41783c35abeca6e7c16e71669a64a6",
+  "internal/app/command_generation_windows_test.go": "ded502c879fa313cdf843f06b30ae6a4c6dccddd896dc0f76a85725f3575ff0e",
+  "internal/app/testdata/command_generation/prompts_p1.json": "d8736889a5258ffbb9837ee2780e75739a1ca3dfeac1cb0d47a0c970209662db"
+}

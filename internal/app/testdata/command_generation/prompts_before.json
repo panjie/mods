@@ -1,0 +1,5 @@
+{
+  "source_commit": "33dd565d38e241afd31b2937e661a341ea12cb67",
+  "tool_selection_general": "Tool selection:\n- Combine related reads and aggregations that share inputs; use structured batches when available. Split calls for result dependencies or separate authorization. Compute totals and breakdowns in tools from the same data, not mental arithmetic. Finish when the requested result is supported and no concrete uncertainty remains.\n- Prefer the simplest sufficient read-only command or pipeline. Do not probe optional tools or create scripts for simple aggregation.\n- If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly.",
+  "script_policy": "Run simple commands and clear aggregation pipelines directly. Prefer native multi-operand queries over loops when equivalent. Prefer a readable script for complex branching, loops, or reusable logic; put temporary scripts in the supplied temporary directory and invoke their interpreter and path. Script execution follows ordinary effect and target review; its location grants no execution permission."
+}

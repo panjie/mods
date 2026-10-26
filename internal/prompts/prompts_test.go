@@ -44,14 +44,14 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "reported PowerShell host")
 	require.Contains(t, ToolSelection, "find ... -print0 | xargs -0")
 	require.Contains(t, ToolSelection, "git ls-files -z only when tracked files are intended")
-	require.Contains(t, ToolSelection, "simplest sufficient read-only command or pipeline")
-	require.Contains(t, ToolSelection, "Do not probe optional tools or create scripts for simple aggregation")
+	require.Contains(t, ToolSelection, "choose a few direct read/aggregate pipelines")
+	require.Contains(t, ToolSelection, "Probe availability once in a batch only")
 	require.Contains(t, ToolSelection, "without sh -c or bash -c")
 	require.Contains(t, ToolSelectionShellPOSIXFallback, "without sh -c or bash -c")
 	require.Contains(t, Identity, "Recognized reads run without review")
 	require.NotContains(t, ToolSelection, "Recognized read-only commands run without review")
 	require.Contains(t, ToolSelectionShellWindows, "prefer native cmdlets")
-	require.Contains(t, ToolSelection, "Do not retry blindly")
+	require.Contains(t, ToolSelection, "correct once or twice using errors")
 	require.NotContains(t, ToolSelection, ScriptPolicy)
 }
 
@@ -209,6 +209,18 @@ func TestFixedPromptFragmentsStayCompact(t *testing.T) {
 	require.LessOrEqual(t,
 		len(Identity)+len(Workflow)+len(LanguagePolicy)+len(ToolSelection)+len(InteractiveCredentials),
 		5376, "default runtime prompts must stay within 5.25 KiB")
+}
+
+func TestReadOnlyGenerationDoesNotOmitRequiredMutations(t *testing.T) {
+	require.Contains(t, ToolSelectionGeneral, "before writing custom logic")
+	require.Contains(t, ToolSelectionGeneral, "Complete required mutations with explicit targets")
+	require.Contains(t, ToolSelectionGeneral, "builds, tests and scripts can mutate")
+	require.Contains(t, ToolSelectionGeneral, "Return only requested results")
+	require.Contains(t, ToolSelectionGeneral, "not calls per file")
+	require.Contains(t, ToolSelectionGeneral, "report incomplete coverage")
+	require.Contains(t, Minimal, QueryPolicy)
+	require.Contains(t, Minimal, "output only the final answer")
+	require.NotContains(t, ToolSelectionGeneral, "review-mode=never")
 }
 
 func TestIdentityHandlesUnavailableCapabilities(t *testing.T) {

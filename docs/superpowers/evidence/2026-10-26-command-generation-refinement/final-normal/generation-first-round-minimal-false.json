@@ -1,0 +1,1302 @@
+[
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "7901af9b0c4ebccf9f31aff19e5f61fe1fd2a6fc4843ebbf73b5c609b7e8a55a",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1092,
+    "input_tokens": 5136,
+    "output_tokens": 44,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录里有哪些文件。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "6ed400242f364d61d75787e780d3fce68a5bad7f1a6cab6d4f64731d9f5f70d2",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 708,
+    "input_tokens": 5169,
+    "output_tokens": 44,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录里有哪些文件。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "b568d55e41acb846b84ea94ffa9d825409087d40f085801fa0b96a9376ab7b3e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 2009,
+    "input_tokens": 5171,
+    "output_tokens": 182,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$files = Get-ChildItem -Path . -Filter *.go -File -Recurse -Force -ErrorAction SilentlyContinue; $total = 0; foreach ($f in $files) { $bytes = [System.IO.File]::ReadAllBytes($f.FullName); $n = 0; foreach ($b in $bytes) { if ($b -eq 10) { $n++ } }; if ($bytes.Length -gt 0 -and $bytes[$bytes.Length-1] -ne 10) { $n++ }; $total += $n }; [pscustomobject]@{files=$files.Count; lines=$total} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "ab76aa8a94c1946c20198b8b0026d1ee654c10b5156680cfca53c0e316ed14b0",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1714,
+    "input_tokens": 5204,
+    "output_tokens": 132,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": true
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "requested-breakdown",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "0f4f8aeec565988695871dd1e45cfaf6cdd3f48373fa6b83f20213f76c060f0e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 2280,
+    "input_tokens": 5170,
+    "output_tokens": 108,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Path . -Recurse -File -Filter *.go | Select-Object FullName, Length | Format-Table -AutoSize"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录结构，找出所有 .go 文件。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "requested-breakdown",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "497db1d2b79415a3b53931117c1e81da2f14c5ca50b9d5b1280b8e082c7b468c",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1056,
+    "input_tokens": 5203,
+    "output_tokens": 99,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Select-Object -ExpandProperty FullName"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录结构，找出所有 .go 文件。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "461fab6a2dd127029a30119225ca6c197adb188adee04b37349d4e2c5cfff3ab",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 936,
+    "input_tokens": 5150,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "59a536a98761bed0e7a43768bf534489c62ad94130d4479596779e56cdd10081",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 978,
+    "input_tokens": 5183,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "5c0ab767ab952ed0f0404f979da9b0e3a685752b938110e97ef3155b49d8fd51",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 855,
+    "input_tokens": 5149,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "ecdbfdfbebdbbcb8211dc427b4a860c9fd2b510a133bc75022e256d078877cc5",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 872,
+    "input_tokens": 5182,
+    "output_tokens": 67,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "file-find",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "1babc491db6163ec7d796e8c8a35e097324203fb080ec7f7652d329be9a3e37c",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 916,
+    "input_tokens": 5151,
+    "output_tokens": 64,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Path . -Recurse -File -Filter *.go | ForEach-Object { $_.FullName }"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "file-find",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "73713cd4ffccfb987953e8a6213c85b781e8d8947d3d7d5d1d4b761932d838e4",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 974,
+    "input_tokens": 5184,
+    "output_tokens": 61,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $_.FullName }"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "related-git",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "359eb8638d7a8eb4e4bc513aa863db646509ec27d8280fd896d6fcf8865a51a1",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1226,
+    "input_tokens": 5144,
+    "output_tokens": 128,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "rev-parse",
+            "--show-toplevel"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "status",
+            "--short",
+            "--branch"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先检查这个目录是不是 Git 仓库，并查看它的状态。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "related-git",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "c8dbb96424dba57b7a9fc93ea28308cf409737532bd23a452ffa9df1a7e8bdbc",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1070,
+    "input_tokens": 5177,
+    "output_tokens": 129,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "rev-parse",
+            "--show-toplevel"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "status",
+            "--short",
+            "--branch"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先检查当前目录是否是一个 Git 仓库，并查看它的状态。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "required-edit",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f1a64b17838ca942e2863801f8964ad3de7d5b46927ae022745647c5171b3ed9",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 897,
+    "input_tokens": 5146,
+    "output_tokens": 44,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录中的 settings.json。",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "required-edit",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "ef7309bfa186120879797c80360b4e1ca666d1e5008b7660b9b1eaca094d0963",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1103,
+    "input_tokens": 5179,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录下的 settings.json。",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "download-batch",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "d8f56d4426df5824386ce30df77ea320813279a84a0e936b8a1f87a82d7511a9",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1393,
+    "input_tokens": 5163,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_mkdir",
+        "args": {
+          "path": "downloads"
+        },
+        "effect": "write",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "download-batch",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "7e9414ebbe84ca0df9c6c7710b7670e1afa981c5d87a47d57f01b722107ade4c",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1014,
+    "input_tokens": 5196,
+    "output_tokens": 50,
+    "calls": [
+      {
+        "name": "fs_mkdir",
+        "args": {
+          "path": "downloads"
+        },
+        "effect": "write",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "我会先创建目标目录，然后下载这两个文件。",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "build-test",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "ec0e9a2c7c7593a51e79b0c9051dba35b1f1c4b4f88400b36a80094540e00787",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 881,
+    "input_tokens": 5143,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Force | Select-Object Mode,Length,Name; Write-Output \"---\"; Test-Path go.mod"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "I'll run the Go tests for the project.",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "build-test",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "6edd51580ecd1012f997fd6af704c8a8125d5555e65b6cfd3a3fdd6b85fceea7",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 996,
+    "input_tokens": 5176,
+    "output_tokens": 86,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "go",
+          "args": [
+            "test",
+            "./..."
+          ],
+          "timeout_ms": 600000
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "I'll run the Go tests for the project.",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "existing-script",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "dcda4b314997d199de32c8da0dc5ca3204253f0d14c69b0e065f55cda84d6f67",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 953,
+    "input_tokens": 5148,
+    "output_tokens": 42,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "python tools/check.py"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "existing-script",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "03d82ece4c1658f915d64c00878e1638d6ba2eb0274918f498aaec177050c171",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 983,
+    "input_tokens": 5181,
+    "output_tokens": 58,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "python",
+          "args": [
+            "tools/check.py"
+          ]
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "partial-read",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f774afd41fab4fa53c05e043d2f94d920ec2bb82f821ef138d83eb10c1b154b0",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1027,
+    "input_tokens": 5156,
+    "output_tokens": 69,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "missing.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "partial-read",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "a5b7470467024ad5cd05983063284001af772e27a0c74d28a544dcada95473ed",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1046,
+    "input_tokens": 5189,
+    "output_tokens": 69,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "missing.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "hidden-write",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f2e6f5f3070799a0ac1781657eb8dd42fe10323e8c1b3196c6da27ba70da6d51",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1687,
+    "input_tokens": 5138,
+    "output_tokens": 65,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Path . -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "hidden-write",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "91472a3340179ffc4839f9c7b1f4afdd53c5986b21e42f897e4301aaec0fc04a",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 849,
+    "input_tokens": 5171,
+    "output_tokens": 62,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "nested-code",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "c232971569294fb1db3dee486520d9c735cad51bdd6aca70eef0e404515d35f8",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1032,
+    "input_tokens": 5138,
+    "output_tokens": 65,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Path . -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "nested-code",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "b27c78845b847ef4fce5ffef14eab1b150cc2c5ea981907711c75ab47591e971",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 677,
+    "input_tokens": 5171,
+    "output_tokens": 47,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "我先查看当前目录，找出其中的 Go 文件。",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  }
+]

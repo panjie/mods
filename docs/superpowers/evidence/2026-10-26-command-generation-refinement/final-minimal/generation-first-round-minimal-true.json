@@ -1,0 +1,1333 @@
+[
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "1a1acd8a998be6cfcecf75cb2340ba71fa2f0232a421687539d0e27148527125",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 929,
+    "input_tokens": 4173,
+    "output_tokens": 37,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "afc88a3f6290db6b661f3e047f6f2f74dae688facfc64b19c0160f7a52d47a50",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 700,
+    "input_tokens": 4269,
+    "output_tokens": 37,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "a07b1e307541ca242b6847f3853cd74ce9f10134eb59765b56e632abbbf758b8",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 2666,
+    "input_tokens": 4208,
+    "output_tokens": 160,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Path . -Recurse -File -Filter *.go; $lines = 0; foreach ($x in $f) { $c = [System.IO.File]::ReadAllText($x.FullName); if ($c.Length -gt 0) { $lines += ([regex]::Matches($c, \"`n\")).Count; if (-not $c.EndsWith(\"`n\")) { $lines += 1 } } }; [pscustomobject]@{files=$f.Count; lines=$lines} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "3623ee53f097b8c124587db19da90cf1379dd169e9e8beed58204227fa976d8e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1381,
+    "input_tokens": 4304,
+    "output_tokens": 132,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": true
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "requested-breakdown",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "948fd4f94392e4714b622c47d81eb2e67ff2b1483bce47c3764efd6e7eb80a15",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1008,
+    "input_tokens": 4207,
+    "output_tokens": 107,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Path . -Filter *.go -Recurse -File | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "I'll start by exploring the directory structure to find all .go files.",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "requested-breakdown",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "d907c00f5b748247a03f0afeef7df00e8751f89e6a3018d6cbd9f4e615b2a77e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1190,
+    "input_tokens": 4303,
+    "output_tokens": 101,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Select-Object -ExpandProperty FullName"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "I'll start by exploring the directory structure to find all .go files.",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f72c28f670a9ef7a1e4140f8f8f6ce78b8a6685ddfb46825ef4fc086f5d35815",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 897,
+    "input_tokens": 4187,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "d72b020e11f91ffe696a8e643cd1b98f744d0615b573de39ff0b7d77b8b73255",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 559,
+    "input_tokens": 4283,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "34b3f2a4abc1b445b1eea156bb8435f0eff28c067efeff208cc67550551013bf",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 872,
+    "input_tokens": 4186,
+    "output_tokens": 77,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch | Measure-Object).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "b619ffdcdd336da58df78de1aaec7dcc9716569917ce7c44e03ec5561ff4be07",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 753,
+    "input_tokens": 4282,
+    "output_tokens": 67,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "file-find",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f2132466622e06fd17db1a70e6eb486a8be993e4fb95c763c942238f307852f3",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 957,
+    "input_tokens": 4188,
+    "output_tokens": 64,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Path . -Recurse -File -Filter *.go | ForEach-Object { $_.FullName }"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "file-find",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "4e8859709cad0a99e33ca148c7f85f4a1d027df11e4f8bb6d1d436d847e7f1ac",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 995,
+    "input_tokens": 4284,
+    "output_tokens": 61,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $_.FullName }"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "related-git",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "a92d8e185247f90765895d97148931dd16739eee8e68c2886d1ec2f2e5f4fb02",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1762,
+    "input_tokens": 4181,
+    "output_tokens": 158,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "ls-files"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "status",
+            "--short",
+            "--branch"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "diff",
+            "--stat"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 3,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "related-git",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "5745c79b81ad763c7e679195c48efe7b3d782934e70d3b5189e3550ab6093833",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1233,
+    "input_tokens": 4277,
+    "output_tokens": 155,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "ls-files"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "status",
+            "--short"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "process_run",
+        "args": {
+          "program": "git",
+          "args": [
+            "diff",
+            "--stat"
+          ]
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 3,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "required-edit",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "7daef5e8c9bbacb48479413ddf67c4c337c60e241f879113f0a4027cae3dcd15",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1172,
+    "input_tokens": 4183,
+    "output_tokens": 44,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "I'll start by locating the file.",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "required-edit",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "80f21a489282a2eeb57ea51d322e309567e8699a0ced10fa662ef34cd90492b2",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 836,
+    "input_tokens": 4279,
+    "output_tokens": 39,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "download-batch",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "e103b03a3596a5e6a9453d322427e500aed1ddd910b660bee1fe2580494b586d",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 806,
+    "input_tokens": 4200,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_mkdir",
+        "args": {
+          "path": "downloads"
+        },
+        "effect": "write",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "download-batch",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "6f06e985a1c5faba0e8b745be1662a1bbab5e0b630727b9f5ee9aaf2b431ce39",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 864,
+    "input_tokens": 4296,
+    "output_tokens": 40,
+    "calls": [
+      {
+        "name": "fs_mkdir",
+        "args": {
+          "path": "downloads"
+        },
+        "effect": "write",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "build-test",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "af9fab8d7e16d1f1b89f7477574304b4440cbdb5e066947c34b7f68ab756a8b0",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 804,
+    "input_tokens": 4180,
+    "output_tokens": 77,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "go",
+          "args": [
+            "test",
+            "./..."
+          ],
+          "timeout_ms": 600000
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "build-test",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "708ba1bada802196a9c5adf8755ec15638935cfdb86152c5e4ef497aa6ec7645",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1225,
+    "input_tokens": 4276,
+    "output_tokens": 77,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "go",
+          "args": [
+            "test",
+            "./..."
+          ],
+          "timeout_ms": 600000
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "existing-script",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "4bdbc1b7562115c31bf7e0bda9866e12193cbc50364fa16ebaea252143d4f5da",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 740,
+    "input_tokens": 4185,
+    "output_tokens": 42,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "python tools/check.py"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "existing-script",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "6299569e981f97f0be11920cbb25fb0d721c27f1028d7f07d38c7f028b3db139",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 840,
+    "input_tokens": 4281,
+    "output_tokens": 58,
+    "calls": [
+      {
+        "name": "process_run",
+        "args": {
+          "program": "python",
+          "args": [
+            "tools/check.py"
+          ]
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": false,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "partial-read",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f5e1af9285f4a525242c1eeb3f43573a4ac428de89ad08e4f23aa3769bf6eb4c",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1126,
+    "input_tokens": 4193,
+    "output_tokens": 69,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "missing.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "partial-read",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "e4caff7df86f55781c6cddccca265228d461012135654d32262abeb2e83ec41e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1067,
+    "input_tokens": 4289,
+    "output_tokens": 69,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "missing.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 2,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "hidden-write",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "84ad1c42c763d28e3e4169295ab5d45636d41bb0e460ac52a5e08bd50a18147a",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 998,
+    "input_tokens": 4175,
+    "output_tokens": 62,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "hidden-write",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "2646ad610e099c0d65be5cc6615ee5b0b1315beaf4dd326990ed877753d60cd7",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1358,
+    "input_tokens": 4271,
+    "output_tokens": 62,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "nested-code",
+    "arm": "A",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f8f4481a821080cacdce1dba52e6c163c909e195fbfbea98a82a166ad79c6400",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 846,
+    "input_tokens": 4175,
+    "output_tokens": 37,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "nested-code",
+    "arm": "A1",
+    "baseline_revision": "p1",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": true,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "bd13f6c38aa4e9064d04dc356be1fd9aca732069d79214f5d7f9bc0726a9fa3e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": true,
+    "elapsed_ms": 1058,
+    "input_tokens": 4271,
+    "output_tokens": 62,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": null,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  }
+]

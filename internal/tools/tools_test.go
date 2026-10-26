@@ -170,7 +170,7 @@ func TestPowerShellGuidanceDescriptions(t *testing.T) {
 		if !strings.Contains(desc, "native PowerShell cmdlets") {
 			t.Fatalf("expected description to prefer native PowerShell cmdlets: %q", desc)
 		}
-		if !strings.Contains(desc, "one clear purpose") {
+		if !strings.Contains(desc, "Group related reads, not stateful scripts") {
 			t.Fatalf("expected description to encourage cohesive operations: %q", desc)
 		}
 		if !strings.Contains(desc, "do not use Out-File") {

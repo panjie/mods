@@ -177,7 +177,7 @@ func TestToolSelectionRulesCoverCoreChoices(t *testing.T) {
 	require.Contains(t, ToolSelectionRules, "Prefer process_run for one executable")
 	require.Contains(t, ToolSelectionRules, "Use shell_run for pipelines")
 	require.Contains(t, ToolSelectionRules, "reported PowerShell host")
-	require.Contains(t, ToolSelectionRules, "Do not retry blindly")
+	require.Contains(t, ToolSelectionRules, "correct once or twice using errors")
 	// Tool mechanics belong to the tool descriptions, not this prompt.
 	require.NotContains(t, ToolSelectionRules, "Get-ChildItem")
 	require.NotContains(t, ToolSelectionRules, "Script execution still follows")

@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-26",
+  "os": "Microsoft Windows NT 10.0.22631.0",
+  "powershell": "7.4.14",
+  "source_hashes": {
+    "internal/prompts/prompts.go": "164dbab44dbc240d1765452317dd86ca4f5e5e23596525e56e56bedf5c4382ef",
+    "internal/prompts/prompts_test.go": "ae4044db7806cf8e80eb5c3136c5de8e3bcc8738bb2dc8f8ea37be1c78f82600",
+    "internal/tools/guidance_test.go": "338b58a780416363bbe3e58062a3e30f23e4c95d38f19d4f86ea5f29b5ac92e2",
+    "internal/app/command_generation_baseline_test.go": "3c62996c8e87c2dd524c196f80b3c9c9cdc5bf8f2af1c8c1bb56795274f906db",
+    "internal/app/command_generation_integration_test.go": "0295747197e669f483844b52d56f405a2e8bd375b37b37f841451605a0af7b6b",
+    "internal/app/command_generation_prompt_test.go": "7c0bd63122ca6a261890c92bf4a566d860066f8afe33fcb9d534424c0c3b9ccb",
+    "internal/evals/command_generation.go": "f0901f828b7083a7f0c55fa64b248bcd4158a2d3dedd588cefde8e02268ab638",
+    "internal/evals/command_generation_test.go": "f0955e39a6c53237d1e23a7af455146ba98006924c1c6cdee2fa4a52bd7aa569",
+    "internal/evals/testdata/command_generation/cases.json": "89f9d19e4eff3998111a6be25d3e65e48f4d35befd4107910e56cdb98b6e85c8",
+    "internal/evals/testdata/command_generation/original.ps1": "70484b23950c916b368beeb7cca524a619355297c2d06f4d360fec46765eadec"
+  },
+  "production_changes": [
+    "internal/prompts/prompts.go: ToolSelectionGeneral",
+    "internal/prompts/prompts.go: ScriptPolicy"
+  ]
+}

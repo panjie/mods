@@ -20,7 +20,11 @@ const (
 const (
 	MarkdownFormat = "Format the response as Markdown. Do not wrap the whole response in a code fence unless the user explicitly requests it."
 	JSONFormat     = "Return exactly one valid JSON value as the final answer. No Markdown fences or text outside JSON. Put any requested explanation, summary, or report inside JSON fields. Role or project style preferences must not change this output encoding."
-	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested. Project or role style preferences do not override this format."
+	Minimal        = "Unless the user explicitly requests otherwise, output only the final answer. Do not explain. Do not use Markdown. For lists, output one item per line. Preserve exact filenames, paths, commands, or IDs. Do not wrap output in quotes or code fences unless explicitly requested. Project or role style preferences do not override this format." + "\n\n" + QueryPolicy
+
+	// Minimal omits the full workflow and tool-selection sections. Keep this
+	// small planning rule in both modes; shell mechanics remain in descriptions.
+	QueryPolicy = "For queries, choose a few direct read/aggregate pipelines before writing custom logic. Separate requested metrics if combining needs state. Return only requested results, computed by tools; never count displayed text or infer totals from file sizes. Run ordinary reads without preflight checks; report errors."
 
 	// LanguagePolicy is a response-format rule, not runtime safety, so it is
 	// injected in the output-format layer rather than the identity prompt.
@@ -34,17 +38,17 @@ const (
 	WindowsInteractiveCredentials = "Windows elevation uses system UAC consent or administrator credentials. Never collect administrator passwords yourself or bypass a denied UAC request.\n\n" + gitCredentials
 	gitCredentials                = "mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or commands, script credential storage, or blindly retry Git writes."
 
-	// ScriptPolicy is shared by tool descriptions. Simple commands and pipelines
-	// stay inline; a script is a preference for complex or reusable logic.
-	ScriptPolicy = "Run simple commands and clear aggregation pipelines directly. Prefer native multi-operand queries over loops when equivalent. Prefer a readable script for complex branching, loops, or reusable logic; put temporary scripts in the supplied temporary directory and invoke their interpreter and path. Script execution follows ordinary effect and target review; its location grants no execution permission."
+	// ScriptPolicy also reaches minimal mode through the tool descriptions.
+	// Prefer analyzable reads without fragmenting necessary data pipelines.
+	ScriptPolicy = "Select/read/filter/aggregate with read-only pipelines. Compute requested metrics in tools, not from text or file sizes. Group related reads, not stateful scripts. Avoid existence checks, suppressed errors and query files. Use a script only if pipelines cannot suffice; invoke interpreter/path. Location grants no permission."
 
 	// ToolSelectionGeneral carries only tool-choice guidance. Tool
 	// availability, review/permission policy, and denial handling live in the
 	// identity prompt and are deliberately not restated here.
-	ToolSelectionGeneral = `Tool selection:
-- Combine related reads and aggregations that share inputs; use structured batches when available. Split calls for result dependencies or separate authorization. Compute totals and breakdowns in tools from the same data, not mental arithmetic. Finish when the requested result is supported and no concrete uncertainty remains.
-- Prefer the simplest sufficient read-only command or pipeline. Do not probe optional tools or create scripts for simple aggregation.
-- If a tool fails, use the error as evidence and correct the call once or twice. Do not retry blindly.`
+	ToolSelectionGeneral = "Tool selection:\n" + QueryPolicy + `
+- Avoid incidental writes or installs; builds, tests and scripts can mutate. Complete required mutations with explicit targets.
+- Group related reads, not calls per file. Probe availability once in a batch only to avoid complex logic.
+- On failure, correct once or twice using errors; report incomplete coverage. Finish once supported.`
 
 	ToolSelectionFilesystem = `- When http_download is available, use its explicit URL/path list for downloads instead of shell loops.
 - Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
@@ -60,7 +64,7 @@ const (
 
 	POSIXIntentGuidance = `Group related reads around one clear purpose. Keep necessary pipelines intact and omit decorative separators. Resolve unknown write targets before mutation. Authorization depends on effects and targets, not command length. Never rewrite an existing script file for review.`
 
-	PowerShellIntentGuidance = `Group related reads around one clear purpose. Resolve unknown write targets such as $PROFILE before mutation. Do not change execution policy or unrelated settings unless requested. Avoid decorative formatting and encoded commands; keep necessary pipelines intact. Never rewrite an existing script file for review.`
+	PowerShellIntentGuidance = `Use direct pipelines per metric, not variables, counters, loops, .NET calls or custom objects. Format JSON yourself. Map paths with ForEach-Object { Get-Content -LiteralPath $_.FullName }. Physical lines: Get-Content without -Raw | Measure-Object; use Count, never -Line (skips empty lines). Final unterminated lines count. Resolve $PROFILE/write targets first. No unsolicited policy/settings changes or encoded commands. Never rewrite an existing script file for review.`
 
 	ToolSelectionShellWindows = `- Use powershell_run, the only Windows shell tool, matching the reported PowerShell host; prefer native cmdlets over POSIX utilities.`
 

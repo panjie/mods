@@ -1,0 +1,2193 @@
+{
+  "generated_at": "2026-10-27T14:53:46Z",
+  "commit": "b906e77",
+  "go_version": "go1.27.3",
+  "os": "linux/amd64",
+  "model": "deepseek-v4-flash",
+  "phase": "completion",
+  "minimal": true,
+  "repeats": 5,
+  "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+  "runs": [
+    {
+      "case": "ambiguous-code",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "132337a7a320a418cbf7c660224390e9d0ed3c52b96b96188563bc4394be6965",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 4816,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "132337a7a320a418cbf7c660224390e9d0ed3c52b96b96188563bc4394be6965",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 5570,
+      "input_tokens": 16797,
+      "output_tokens": 429,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f \\( -name '*.go' -o -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.java' -o -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.rs' -o -name '*.sh' -o -name '*.rb' -o -name '*.php' -o -name '*.cs' -o -name '*.kt' -o -name '*.swift' -o -name '*.scala' -o -name '*.m' -o -name '*.lua' -o -name '*.pl' -o -name '*.r' -o -name '*.sql' -o -name '*.css' -o -name '*.html' -o -name '*.vue' -o -name '*.jsx' -o -name '*.tsx' \\) -print0 | xargs -0 wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f | sort; echo ---; wc -l README.md amounts.csv events.log settings.json nested/*"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "代码文件行数（.go）：\na.go 3\nempty_test.go 0\nnested/space name.go 2\n合计 5\n\n全部文件行数合计 13（含 README.md 2、amounts.csv 4、events.log 4、settings.json 1）",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "a3c32b81613856800f9eae3a76dd893a61cb968b8b7339fc9bcd54119d9c01a4",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 4812,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "a3c32b81613856800f9eae3a76dd893a61cb968b8b7339fc9bcd54119d9c01a4",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 5481,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "1270fbd22f75ff48c7c1325f83c2829c365d264f28ad802066b255e5f1a34877",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 4339,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "1270fbd22f75ff48c7c1325f83c2829c365d264f28ad802066b255e5f1a34877",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 3319,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "ca0258bd6649da110e1df3c4e6ce1f0bd535d80b6d0958a0de2b81ea3bbe7410",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 5515,
+      "input_tokens": 16244,
+      "output_tokens": 159,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "代码文件（.go）总行数：5\na.go：3\nempty_test.go：0\nnested/space name.go：2",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "ca0258bd6649da110e1df3c4e6ce1f0bd535d80b6d0958a0de2b81ea3bbe7410",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 4964,
+      "input_tokens": 16244,
+      "output_tokens": 159,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "代码文件（.go）总行数：5\na.go：3\nempty_test.go：0\nnested/space name.go：2",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "2a7d3b274b659ad91e69c47d11e2e073193345caed1e7ef29049d5f8a7aa9a5d",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 4496,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "ambiguous-code",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "2a7d3b274b659ad91e69c47d11e2e073193345caed1e7ef29049d5f8a7aa9a5d",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 4035,
+      "input_tokens": 16244,
+      "output_tokens": 151,
+      "calls": [
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "."
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "fs_list_dir",
+          "args": {
+            "path": "nested"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        },
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "wc -l a.go empty_test.go \"nested/space name.go\""
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "a.go 3\nempty_test.go 0\nnested/space name.go 2\n总计 5",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": null,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 3,
+        "tool_rounds": 3,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": null
+    },
+    {
+      "case": "physical-lines",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "d83265e3fc53deb3ad5b9ffec50dbf3a60bb3f78e954cbef8ac51b060685e86e",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2062,
+      "input_tokens": 8070,
+      "output_tokens": 93,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l | tail -n 1; find . -type f -name '*.go' | wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\":3,\"lines\":5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "d83265e3fc53deb3ad5b9ffec50dbf3a60bb3f78e954cbef8ac51b060685e86e",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2026,
+      "input_tokens": 8068,
+      "output_tokens": 73,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\": 3, \"lines\": 5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "04a63ca08fd23a9be5b45f1ec43220560146e2c5e5b54f610c4b4e7a6b43537c",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1741,
+      "input_tokens": 8068,
+      "output_tokens": 73,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\": 3, \"lines\": 5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "04a63ca08fd23a9be5b45f1ec43220560146e2c5e5b54f610c4b4e7a6b43537c",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1697,
+      "input_tokens": 8068,
+      "output_tokens": 73,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\": 3, \"lines\": 5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "8685aad2e393dbc0fdd8e0bc38af1e04f51bd1bc542e896e7f364e26fd562a30",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1438,
+      "input_tokens": 8068,
+      "output_tokens": 73,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\": 3, \"lines\": 5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "8685aad2e393dbc0fdd8e0bc38af1e04f51bd1bc542e896e7f364e26fd562a30",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 3458,
+      "input_tokens": 8068,
+      "output_tokens": 73,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\": 3, \"lines\": 5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "ad1273eea92e8b9a6676d3c24757e450e78cb5f2114c5a8bf335199b1a339c69",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1333,
+      "input_tokens": 8068,
+      "output_tokens": 70,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\":3,\"lines\":5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "ad1273eea92e8b9a6676d3c24757e450e78cb5f2114c5a8bf335199b1a339c69",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1564,
+      "input_tokens": 8068,
+      "output_tokens": 70,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\":3,\"lines\":5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "623cbbbd85bb106f2df432a94d56e1320b2fa106509fc4e3df2636fa70cf08cf",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2077,
+      "input_tokens": 8070,
+      "output_tokens": 93,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l | tail -n 1; find . -type f -name '*.go' | wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\":3,\"lines\":5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "physical-lines",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "623cbbbd85bb106f2df432a94d56e1320b2fa106509fc4e3df2636fa70cf08cf",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1446,
+      "input_tokens": 8070,
+      "output_tokens": 93,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "find . -type f -name '*.go' -print0 | xargs -0 -r wc -l | tail -n 1; find . -type f -name '*.go' | wc -l"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": true
+        }
+      ],
+      "answer": "{\"files\":3,\"lines\":5}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": false,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": false
+    },
+    {
+      "case": "csv-sum",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "941654c19f234c7809cc479759bd2a4441263bd68eacaf1c610b232a449caf22",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2035,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "941654c19f234c7809cc479759bd2a4441263bd68eacaf1c610b232a449caf22",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1379,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "18c345a086a7727320b4b73ea1890c7764c74f6ec89030b0772211edcf4ebea3",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2431,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "18c345a086a7727320b4b73ea1890c7764c74f6ec89030b0772211edcf4ebea3",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1885,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "9879d3fcf05fe4d36a6390fd9bcf53aac32a517adebe9f630c084a4fc6eed9ac",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1859,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "9879d3fcf05fe4d36a6390fd9bcf53aac32a517adebe9f630c084a4fc6eed9ac",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1529,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "b90245f95ff1c85bacee383679f242282e23a807a3a360e0a071e26186067314",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1839,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "b90245f95ff1c85bacee383679f242282e23a807a3a360e0a071e26186067314",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1888,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "b1950cb585492cacc641d5aa616fc167fbb34fdfd68a6d40478519dd1e819d4e",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2155,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "csv-sum",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "b1950cb585492cacc641d5aa616fc167fbb34fdfd68a6d40478519dd1e819d4e",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1756,
+      "input_tokens": 7994,
+      "output_tokens": 46,
+      "calls": [
+        {
+          "name": "fs_read_file",
+          "args": {
+            "path": "amounts.csv"
+          },
+          "effect": "read",
+          "static_read": false,
+          "read_basis": "native_read_contract",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"total\": 10}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "4940f6439cc35e6b3c556ea2ea597bbb57ff246c32bb35c205f38dd90c5d9d12",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1917,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 1,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "4940f6439cc35e6b3c556ea2ea597bbb57ff246c32bb35c205f38dd90c5d9d12",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1964,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "5ecad0e6b80be12fdd5a189c5bc59ecf32d71cba2f3669b0c331aa8b84622db2",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1566,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 2,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "5ecad0e6b80be12fdd5a189c5bc59ecf32d71cba2f3669b0c331aa8b84622db2",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 2361,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "e56d7951dfa33188f5995a344e408cc296a854d4b4072dbf537f649d30ea6e2d",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1452,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 3,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "e56d7951dfa33188f5995a344e408cc296a854d4b4072dbf537f649d30ea6e2d",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1299,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "7d5fc73c2ab5099ea6452d250751f2f8436c6a652fb31571faa74c514205f9f9",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1633,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 4,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "7d5fc73c2ab5099ea6452d250751f2f8436c6a652fb31571faa74c514205f9f9",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1288,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "B",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "off",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "06265f88118e2fe6318d7bc5d0bcb698574f48a8f4d9cd21dc18c1336cceeaa3",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1859,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    },
+    {
+      "case": "log-count",
+      "arm": "C",
+      "baseline_revision": "p5-b906e77",
+      "repeat": 5,
+      "model": "deepseek-v4-flash",
+      "os": "linux",
+      "minimal": true,
+      "command_simplification": "once",
+      "review_mode": "auto",
+      "policy_fingerprint": "885aba0c661519d48c329d7e94283b84bb02a22c25430930c6b84e4b0f728e7d",
+      "prompt_fingerprint": "06265f88118e2fe6318d7bc5d0bcb698574f48a8f4d9cd21dc18c1336cceeaa3",
+      "temperature": 0,
+      "max_tokens": 4096,
+      "think": false,
+      "first_round_only": false,
+      "elapsed_ms": 1748,
+      "input_tokens": 7981,
+      "output_tokens": 49,
+      "calls": [
+        {
+          "name": "shell_run",
+          "args": {
+            "command": "grep -c ERROR events.log"
+          },
+          "effect": "read",
+          "static_read": true,
+          "read_basis": "static_command",
+          "predicted_decision": "allow",
+          "opaque": false
+        }
+      ],
+      "answer": "{\"count\": 2}",
+      "outcome": {
+        "automatic_reorganizations": 0,
+        "manual_reorganizations": 0,
+        "query": true,
+        "completed": true,
+        "correct": true,
+        "actual_review_prompts": 0,
+        "approval_unavailable": 0,
+        "tool_errors": 0,
+        "allow_path_errors": 0,
+        "tool_calls": 1,
+        "tool_rounds": 1,
+        "unexpected_writes": 0
+      },
+      "zero_review_completion": true
+    }
+  ]
+}

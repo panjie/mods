@@ -84,9 +84,17 @@ type GenerationOutcome struct {
 	Correct                  *bool `json:"correct"`
 	ActualReviewPrompts      *int  `json:"actual_review_prompts"`
 	ApprovalUnavailable      int   `json:"approval_unavailable"`
-	ToolCalls                int   `json:"tool_calls"`
-	ToolRounds               int   `json:"tool_rounds"`
-	UnexpectedWrites         int   `json:"unexpected_writes"`
+	// ToolErrors counts non-control errors returned by the production caller.
+	// It is not proof that dispatch happened; a validation or analysis error
+	// can also produce it. Execution failures require a trusted dispatch event.
+	ToolErrors int `json:"tool_errors"`
+	// AllowPathErrors is the subset of ToolErrors for calls the harness observed
+	// as allow-classified immediately before the production caller. It is an
+	// observed post-authorization error, not a trusted dispatch event.
+	AllowPathErrors  int `json:"allow_path_errors"`
+	ToolCalls        int `json:"tool_calls"`
+	ToolRounds       int `json:"tool_rounds"`
+	UnexpectedWrites int `json:"unexpected_writes"`
 }
 
 func (o *GenerationOutcome) ObserveReorganization(err error) {

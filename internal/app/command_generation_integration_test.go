@@ -35,30 +35,36 @@ type generationCallObservation struct {
 	Decision   approval.Decision `json:"predicted_decision"`
 	Opaque     bool              `json:"opaque"`
 	Error      string            `json:"error,omitempty"`
+	// OrganizationReasons is diagnostic-only. It records why P4 would consider
+	// a request-scoped reorganization; it is not a budget or authorization
+	// event and does not imply that the production gate triggered.
+	OrganizationReasons []string `json:"organization_reasons,omitempty"`
 }
 
 type generationRun struct {
-	Case                 string                      `json:"case"`
-	Arm                  string                      `json:"arm"`
-	BaselineRevision     string                      `json:"baseline_revision"`
-	Repeat               int                         `json:"repeat"`
-	Model                string                      `json:"model"`
-	OS                   string                      `json:"os"`
-	Minimal              bool                        `json:"minimal"`
-	PolicyFingerprint    string                      `json:"policy_fingerprint"`
-	PromptFingerprint    string                      `json:"prompt_fingerprint"`
-	Temperature          float64                     `json:"temperature"`
-	MaxTokens            int64                       `json:"max_tokens"`
-	Think                bool                        `json:"think"`
-	FirstRoundOnly       bool                        `json:"first_round_only"`
-	ElapsedMS            int64                       `json:"elapsed_ms"`
-	InputTokens          int64                       `json:"input_tokens"`
-	OutputTokens         int64                       `json:"output_tokens"`
-	Calls                []generationCallObservation `json:"calls"`
-	Answer               string                      `json:"answer"`
-	Error                string                      `json:"error,omitempty"`
-	Outcome              evals.GenerationOutcome     `json:"outcome"`
-	ZeroReviewCompletion *bool                       `json:"zero_review_completion"`
+	Case                  string                      `json:"case"`
+	Arm                   string                      `json:"arm"`
+	BaselineRevision      string                      `json:"baseline_revision"`
+	Repeat                int                         `json:"repeat"`
+	Model                 string                      `json:"model"`
+	OS                    string                      `json:"os"`
+	Minimal               bool                        `json:"minimal"`
+	CommandSimplification string                      `json:"command_simplification,omitempty"`
+	ReviewMode            string                      `json:"review_mode,omitempty"`
+	PolicyFingerprint     string                      `json:"policy_fingerprint"`
+	PromptFingerprint     string                      `json:"prompt_fingerprint"`
+	Temperature           float64                     `json:"temperature"`
+	MaxTokens             int64                       `json:"max_tokens"`
+	Think                 bool                        `json:"think"`
+	FirstRoundOnly        bool                        `json:"first_round_only"`
+	ElapsedMS             int64                       `json:"elapsed_ms"`
+	InputTokens           int64                       `json:"input_tokens"`
+	OutputTokens          int64                       `json:"output_tokens"`
+	Calls                 []generationCallObservation `json:"calls"`
+	Answer                string                      `json:"answer"`
+	Error                 string                      `json:"error,omitempty"`
+	Outcome               evals.GenerationOutcome     `json:"outcome"`
+	ZeroReviewCompletion  *bool                       `json:"zero_review_completion"`
 }
 
 func generationObserve(m *Mods, reg *toolregistry.Registry, call proto.ToolCallRequest) generationCallObservation {
@@ -86,6 +92,7 @@ func generationObserve(m *Mods, reg *toolregistry.Registry, call proto.ToolCallR
 		}
 		o.Opaque = a.Shape.Opaque
 		o.Effect = string(a.Effect)
+		o.OrganizationReasons = commandOrganizationReasons(&a)
 	}
 	intent := buildAccessIntent(call.Name, data, reg, assessed)
 	intent = normalizeAccessIntentDirs(intent, m.Config.WorkingDir, call.Name, reg.ShellExecution(call.Name))

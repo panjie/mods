@@ -7,6 +7,11 @@ param()
 Set-StrictMode -Off
 $ErrorActionPreference = 'Stop'
 
+# Go sends and receives UTF-8 JSON. Do not inherit the Windows console code
+# page: decoding a different source also invalidates every AST source offset.
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 function New-IR {
     return @{
         version           = "2"

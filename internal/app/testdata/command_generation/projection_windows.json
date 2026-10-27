@@ -1,0 +1,286 @@
+{
+  "count": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cEXT\u003e/input.txt"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [
+      "\u003cEXT\u003e/input.txt"
+    ],
+    "intent_coverage": 1
+  },
+  "filter": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cROOT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "group": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cROOT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 1
+  },
+  "map": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_paths": [],
+    "dynamic": [
+      "$_.FullName"
+    ],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cROOT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [
+      "\u003cEXT\u003e"
+    ],
+    "intent_coverage": 1
+  },
+  "redirect-child": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cEXT\u003e/out"
+    ],
+    "write_paths": [
+      "'\u003cEXT\u003e/out'"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "candidate_paths": [
+      "\u003cEXT\u003e/out"
+    ],
+    "intent_coverage": 1
+  },
+  "sum": {
+    "effect": "read",
+    "evidence": "static",
+    "coverage": 1,
+    "gaps": [],
+    "dirs": [
+      "\u003cEXT\u003e/amounts.csv"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "allow",
+    "always": "allow",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cEXT\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [
+      "\u003cEXT\u003e/amounts.csv"
+    ],
+    "intent_coverage": 1
+  },
+  "unbound-property": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [
+      "$env:FIELD"
+    ],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "unknown-option": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [],
+    "intent_coverage": 0
+  },
+  "unknown-sibling": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e/out"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [],
+    "candidate_paths": [
+      "\u003cSAFE\u003e/out"
+    ],
+    "intent_coverage": 0
+  },
+  "unknown-source": {
+    "effect": "unknown",
+    "evidence": "",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e/input"
+    ],
+    "write_paths": [],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [],
+    "write_dirs": [],
+    "candidate_paths": [
+      "\u003cSAFE\u003e/input"
+    ],
+    "intent_coverage": 0
+  },
+  "write-child": {
+    "effect": "write",
+    "evidence": "static",
+    "coverage": 0,
+    "gaps": [
+      "unknown invocation"
+    ],
+    "dirs": [
+      "\u003cSAFE\u003e",
+      "\u003cSAFE\u003e/out"
+    ],
+    "write_paths": [
+      "\u003cSAFE\u003e/out"
+    ],
+    "dynamic": [],
+    "origins": [],
+    "unresolved_remote": [],
+    "provider": [],
+    "auto": "ask",
+    "always": "ask",
+    "never": "allow",
+    "read_dirs": [
+      "\u003cWS\u003e"
+    ],
+    "write_dirs": [
+      "\u003cSAFE\u003e"
+    ],
+    "candidate_paths": [
+      "\u003cSAFE\u003e/out"
+    ],
+    "intent_coverage": 0
+  }
+}

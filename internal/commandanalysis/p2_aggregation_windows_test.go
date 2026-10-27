@@ -13,7 +13,11 @@ import (
 
 // Real production bridge, parse-only. Negative sources are never executed.
 func TestP2PowerShellReadAggregation(t *testing.T) {
-	t.Run("selected-host", testP2PowerShellReadAggregation)
+	testP2PowerShellHosts(t, testP2PowerShellReadAggregation)
+}
+
+func testP2PowerShellHosts(t *testing.T, run func(*testing.T)) {
+	t.Run("selected-host", run)
 	t.Run("windows-powershell-5.1", func(t *testing.T) {
 		if _, err := exec.LookPath("powershell.exe"); err != nil {
 			t.Skip("Windows PowerShell unavailable")
@@ -28,7 +32,7 @@ func TestP2PowerShellReadAggregation(t *testing.T) {
 		}
 		t.Setenv("PATH", strings.Join(paths, string(os.PathListSeparator)))
 		require.Equal(t, "powershell.exe", strings.ToLower(filepath.Base(getWindowsShellPath())))
-		testP2PowerShellReadAggregation(t)
+		run(t)
 	})
 }
 

@@ -65,6 +65,7 @@ func FuzzAuditedOptionsNeverHideUnknownFlag(f *testing.F) {
 			require.False(t, facts.BuiltinRead)
 			require.Equal(t, CoverageIncomplete, facts.Coverage)
 		}
+		require.Empty(t, catalogTokens([]string{"Measure-Object", "-ModsUnmodeledOption", arg}, powershellSpace, ReadOnlyCommandPolicy{}).ReadProperties)
 	})
 }
 

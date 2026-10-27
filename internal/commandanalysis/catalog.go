@@ -25,6 +25,7 @@ func spaceForShell(posix bool) commandSpace {
 // InvocationFacts is semantic evidence, never an authorization. Legacy write
 // projections remain for compatibility; production authorization uses roles.
 type InvocationFacts struct {
+	ReadProperties                                         []string // Audited scalar properties of this invocation's output only.
 	ContextStableRead                                      bool
 	Transfer                                               *transferRequest
 	EntryID                                                string
@@ -72,6 +73,7 @@ type readRule func(*commandEntry, []string, ReadOnlyCommandPolicy, *catalogEvalu
 type writeRule func([]string, bool, *catalogEvaluation) ([]writableTarget, bool)
 type riskRule func([]string, bool, *catalogEvaluation) bool
 type commandEntry struct {
+	ReadProperties           func([]string) []string         // Exact argv -> known scalar output fields; never a general member allowlist.
 	ReadOperands             func([]string) ([]string, bool) // Separates input files from embedded programs/options.
 	NumericOutput            func([]string) bool             // Exact argv produces only a count on stdout.
 	LiteralRead              bool                            // Option-sensitive reads require literal argument evidence.
@@ -148,7 +150,7 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		if !isBarePOSIXCommand(e.Name) || e.Space == powershellSpace && normalizePowerShellCommandName(e.Name) != e.Name {
 			return nil, fmt.Errorf("non-canonical identity %s", e.ID)
 		}
-		if e.AliasOf != "" && (e.ReadOperands != nil || e.NumericOutput != nil || e.LiteralRead || e.ScalarOutput || e.EnvWrites || e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
+		if e.AliasOf != "" && (e.ReadProperties != nil || e.ReadOperands != nil || e.NumericOutput != nil || e.LiteralRead || e.ScalarOutput || e.EnvWrites || e.ContextStableRead || e.TransferFile || e.TransferMove || e.StrictFile || len(e.StrictFileOptions) > 0 || e.MaxOperands != 0 || e.Read != nil || e.Write != nil || e.Risk != nil || e.TextOutput || e.BoundedWrite || e.NameOnlyRead || e.ShellOnly || e.WriteOperation != 0 || e.SourceRole != 0 || e.ReadDirectory || e.ReadPaths || len(e.ReadPathParameters) > 0 || e.FirstReadOperand || len(e.Options) > 0 || len(e.Subcommands) > 0 || len(e.RepositoryWrites) > 0) {
 			return nil, fmt.Errorf("alias contains rules %s", e.ID)
 		}
 		if e.BoundedWrite && e.Write == nil || e.NameOnlyRead && e.Read == nil || e.TextOutput && (e.Read != nil || e.Write != nil || len(e.Options) == 0) {
@@ -164,6 +166,9 @@ func newCatalog(entries []commandEntry) (*catalog, error) {
 		}
 		if e.ScalarOutput && (e.Space != powershellSpace || e.Write == nil) {
 			return nil, fmt.Errorf("invalid scalar writer %s", e.ID)
+		}
+		if e.ReadProperties != nil && (e.Space != powershellSpace || e.Read == nil) {
+			return nil, fmt.Errorf("invalid output-property grammar %s", e.ID)
 		}
 		if e.EnvWrites && (e.Space != nativeSpace || e.Name != "env") {
 			return nil, fmt.Errorf("invalid wrapper %s", e.ID)
@@ -429,6 +434,9 @@ func (ev *catalogEvaluation) evaluate(binding invocationBinding, space commandSp
 		}
 	}
 	f.BuiltinRead = f.BuiltinRead && bare
+	if f.BuiltinRead && e != nil && e.ReadProperties != nil && len(binding.Read) > 0 {
+		f.ReadProperties = e.ReadProperties(binding.Read[1:])
+	}
 	f.ReadOnly = f.BuiltinRead || trusted
 	if trusted {
 		f.ReadReason = policy.reason(name)

@@ -2,6 +2,8 @@
 
 日期：2026-10-26。变更前代码为 `d34fe20`。本轮按用户要求只实施 P2a/P2b 的最小一批，不修改提示词、审批界面、规则匹配、审批策略或简化/重试机制。
 
+后续 [2026-10-27 第二批](PROJECTION.md) 增加聚合结果的标量属性读取及 bridge UTF-8 修复；下文保留首批结果，避免混合不同版本的证据。
+
 ## 实施边界
 
 P2a 新增 `CommandAssessment.Structure`，直接复用同一次解析的 POSIX 节点、PowerShell IR v2 节点及已有 invocation facts。记录控制流深度、脚本块深度、赋值节点数量、可见 shell 宿主/内联载荷、已建模/未建模调用数量及位置。位置明确区分 POSIX byte 与 PowerShell UTF-16；无位置的旧/合成 IR 使用命令级诊断。最多保存 128 条 finding，超出时设置 Truncated；Clone 深复制。新诊断 code 与会改变写覆盖率的 AddGap 分开，不用于授权、拒绝或重试。

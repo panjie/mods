@@ -105,6 +105,8 @@ P1–P3 不恢复自动纠正关卡。P4 才新增 `command-simplification: off 
 
 首批落地：新增精确参数、单个字面文件路径的 `Import-Csv` 只读绑定及真实读取目标；已支持的单层 `Get-ChildItem → ForEach-Object { Get-Content } → Measure-Object` 只加回归，不增加任意循环解释。`ForEach-Object` 参数收紧到单个脚本块或精确 `-Process`，其余形式保持 unknown。具体支持表、安全负例及 52 条历史命令重放见 P2 验证记录。
 
+2026-10-27 第二批：支持顶层 `(已证明读取的管道 | Measure-Object).Count/Sum/...` 标量属性投影。由精确参数产生输出字段证据，再通过 IR 节点所有权和源码位置绑定，不能推广为任意对象属性读取；静态过滤/分组复用既有规则。同步修复 Windows bridge 的 UTF-8 JSON 输入输出编码。新增控制场景及边界见 [第二批记录](../evidence/2026-10-26-command-generation-p2/PROJECTION.md)。原 52 条历史调用没有进一步审批减少，P3/P4 未启动。
+
 涉及 `catalog_entries.go`、`semantics.go`、`readonly_ps.go`、相关 binding/组合代码及专门测试。
 
 推荐顺序：静态属性过滤/投影 → 分组和计数 → 单层逐项读取 → 确实必要的局部纯表达式。每项先确认现有能力，已支持的只补回归；不因设计列出候选就全部重写。

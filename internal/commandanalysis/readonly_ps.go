@@ -87,7 +87,7 @@ func readOnlyPowerShellIR(command string, ir *psBridgeIR, policy ReadOnlyCommand
 		}
 	}
 
-	if !safeTopLevelPowerShellValueExpressions(ir.TopLevelValueExpressions) {
+	if !safeTopLevelPowerShellValues(command, ir, policy.session) {
 		return false
 	}
 

@@ -195,7 +195,7 @@ func builtinCommandEntries() []commandEntry {
 		{Name: "md", Space: powershellSpace, ID: "powershell/md", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, AliasOf: "new-item"},
 		{Name: "measure", Space: powershellSpace, ID: "powershell/measure", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
 		{Name: "import-csv", Space: powershellSpace, ID: "powershell/import-csv", Revision: 1, Tests: []string{"TestP2ImportCSVBinding", "TestP2PowerShellReadAggregation"}, Read: readPSImportCSV, ReadOperands: importCSVReadOperands},
-		{Name: "measure-object", Space: powershellSpace, ID: "powershell/measure-object", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true},
+		{Name: "measure-object", Space: powershellSpace, ID: "powershell/measure-object", Revision: 2, Compatibility: true, Tests: []string{"TestP2MeasureProperties", "TestP2AggregatePropertyProjection", "TestCatalogCompatibilityEntries"}, Read: readAnyArguments, NameOnlyRead: true, ReadProperties: measureOutputProperties},
 		{Name: "mi", Space: powershellSpace, ID: "powershell/mi", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, AliasOf: "move-item"},
 		{Name: "mkdir", Space: powershellSpace, ID: "powershell/mkdir", Revision: 2, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, Write: writeParent, WriteOperation: OperationCreateEntry, BoundedWrite: true, Risk: alwaysRisky},
 		{Name: "move", Space: powershellSpace, ID: "powershell/move", Revision: 1, Compatibility: true, Tests: []string{"TestCatalogCompatibilityEntries"}, AliasOf: "move-item"},

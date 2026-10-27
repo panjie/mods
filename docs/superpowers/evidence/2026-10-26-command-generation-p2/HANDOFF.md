@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+2026-10-27 后续工作已增加聚合结果标量属性读取与 bridge UTF-8 修复，详见 [第二批记录](PROJECTION.md)。以下首批提交及补验记录保留；后续状态以第二批记录为准。
+
 - P0/P1 已提交。P2a（结构诊断）与 P2b 首批（Import-Csv 绑定 + ForEach 参数收紧）已实现，随本提交一并入库。
 - P3/P4/P5 未开始。计划文档 `docs/superpowers/plans/2026-10-26-reviewable-command-generation.md` 的状态行已同步。
 - 详细支持表、52 条重放对照与安全说明见同目录 `README.md`。
@@ -29,7 +31,15 @@
 
 ## 回家后建议的下一步
 
-1. 先修 `TestAssembledPromptBudgets`，让主分支测试回到全绿。
+### 2026-10-27 补验
+
+当前环境重新运行 `TestAssembledPromptBudgets` 全组通过；单独运行 normal/both 测得 system_bytes=6109，低于 6144。没有修改提示词或放大预算。因此，上述 6164 字节失败目前未复现，不能将它直接归因为 P1 固定文案，也不能宣称已修复。该 fixture 包含实际临时目录、工作目录及主机运行信息；若再次失败，应先比较分项字节和这些环境值。
+
+`TestCommandGenerationP2Replay`、`TestCommandGenerationP2AccessBoundaries`、`TestCommandAuthorizationComparisonIgnoresPresentation` 再次通过；补入 Import-Csv/ForEach 未知参数断言后的 `FuzzAuditedOptionsNeverHideUnknownFlag` 运行 10 秒、parallel=2 通过。本次补验未改动生产代码、审批界面或简化机制。
+
+当前提交 `f21448f` 的 `go run github.com/go-task/task/v3/cmd/task@v3.51.1 test` 全量通过（app 46.375s、commandanalysis 28.235s、tools 18.538s）。以上结论限于本次 Windows 环境，保留前述其它环境预算失败的记录。
+
+1. 若提示预算超限再次出现，先定位运行环境与固定文案各自的字节增量；不要直接提高预算或把当前通过视为跨环境修复。
 2. 继续 P2b 后续项，按计划 §4 推荐顺序：静态属性过滤/投影 → 分组和计数 → 单层逐项读取 → 局部纯表达式。每项都要先确认现有能力，已支持的只补回归。
 3. 每项 P2b 扩展需交付：精确语法/参数/来源支持表、独立正例、同结构插入写入与未知命令的负例、真实 bridge 输入 + Go 组合测试、catalog 修订与快照差异说明。
 4. 不要用放行任意循环或 .NET 脚本的方式解决「复杂行数脚本」问题；该原始任务仍未解决（normal 模式 13 条 ask 一条未减）。

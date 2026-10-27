@@ -183,6 +183,9 @@ func validateSettingsForWrite(data []byte) error {
 	if err := validateReviewModeStrict(candidate.ReviewMode); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
+	if err := validateCommandSimplificationStrict(candidate.CommandSimplification); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
 	return nil
 }
 

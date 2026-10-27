@@ -233,6 +233,7 @@ func runGenerationComparison(t *testing.T, firstOnly bool) {
 								r.Outcome.UnexpectedWrites++
 							}
 							result, err := productionCaller(call)
+							r.Outcome.ObserveReorganization(err)
 							if errors.Is(err, errReviewUnavailable) {
 								r.Outcome.ApprovalUnavailable++
 							}

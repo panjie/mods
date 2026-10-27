@@ -1,5 +1,7 @@
 # Command reviewability design
 
+> P4 update (2026-10-27): the default remains diagnostic-only (`command-simplification: off`). Opt-in `once` adds a separate app-owned, request-scoped control result for narrowly qualified commands with unproven effects. It replaces the historical two-error simplification scheme, never grants permission, and retains ordinary approval for subsequent calls. See the [current organization design](2026-10-26-reviewable-command-generation-design.md) and [P4 implementation record](../evidence/2026-10-27-command-generation-p4/README.md).
+
 > Historical policy notice (2026-10-25): any LLM effect-completion, read-classifier exemption, correction budget, or KnownDirs-based authorization described below is superseded. Production uses deterministic `commandanalysis.Engine` + the shared catalog, role-aware `app.commandResultToIntent`, and ordinary target approval. Unknown/incomplete writes cannot borrow saved or temporary-directory permissions. See [current design](2026-10-23-command-analysis-catalog-design.md) and [stage-6 verification](../plans/2026-10-25-command-analysis-stage6.md). Reviewability remains diagnostic metadata only.
 
 Updated 2026-10-19: command structure is diagnostic metadata only. The former

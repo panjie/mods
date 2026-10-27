@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
 - Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.
 - Review now applies only to non-temporary writes: proven reads always run without review, while reusable approvals are scoped to local directory subtrees and normalized remote origins within the current session. `always` reviews every non-temporary write and ignores saved rules.
-- Command reviewability is now advisory. Mods offers at most two simplification nudges per request and then sends the call to ordinary approval instead of rejecting it, so a command that keeps its shape is never stopped and the user always decides. Commands that run a pre-written script file (`bash scripts/build.sh`, `python tools/check.py`, `pwsh -File build.ps1`) are exempt from the nudges and run exactly as written.
+- Added opt-in `command-simplification: once` for one narrow, structurally complex built-in command with unproven effects per user request. It defaults to `off`; the original call returns as `not_executed`, and replacement calls go through ordinary analysis and approval. Manual approval-screen simplification remains available independently.
 - Command and download reviews no longer repeat the saved session grant as a separate `If A` row; their target rows already show the affected directories and origins.
 - `request_user_input` accepts up to 10 options, longer option labels, and multi-line `select`/`multiselect` questions, so multi-item approval checklists render completely in one dialog.
 

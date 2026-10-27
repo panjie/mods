@@ -66,6 +66,8 @@ type Mods struct {
 	// retryCheckpoint contains only completed model/tool rounds. Failed streams
 	// may append partial assistant messages, so their history is not resumable.
 	retryCheckpoint         *completionCheckpoint
+	commandOrganizationMu   sync.Mutex
+	commandOrganization     *commandOrganizationState
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
 	anim                    tea.Model
@@ -398,6 +400,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = requestState
 		cmds = append(cmds, m.startCompletionCmd(msg.content))
 	case streamEventMsg:
+		if msg.runner != nil && msg.runner.organization != nil && msg.runner.organization != m.currentCommandOrganization() {
+			return m, nil // A retired request cannot close or modify its successor.
+		}
 		switch msg.kind {
 		case streamEventChunk:
 			if msg.chunk.Activity != "" {
@@ -420,6 +425,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleToolCallsDone(msg)
 		case streamEventDone:
 			m.retries = 0
+			m.closeCommandOrganization()
 			usage := msg.runner.takeUsage()
 			m.tokenUsage.Add(usage)
 			if usage.Available() {
@@ -587,6 +593,7 @@ func (m *Mods) closeActiveRunner() {
 }
 
 func (m *Mods) quit() tea.Msg {
+	m.closeCommandOrganization()
 	// Cancel the request context first so every in-flight provider HTTP
 	// request, tool call, and approval/user-input
 	// select derived from m.ctx aborts immediately. This closes the window

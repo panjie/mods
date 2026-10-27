@@ -12,6 +12,8 @@ import (
 // batch. Retrying resumes the next model round, preserving tool results (including
 // errors and denials) rather than asking the model to repeat side effects.
 type completionCheckpoint struct {
+	// Automatic organization budget deliberately lives on the user request,
+	// outside this snapshot: restoring an older checkpoint cannot refund it.
 	activityBlocks          map[string][]activityRecord
 	messages                []proto.Message
 	output                  string

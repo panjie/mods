@@ -11,6 +11,7 @@ func (a CommandAssessment) Clone() CommandAssessment {
 	if a.Structure != nil {
 		structure := *a.Structure
 		structure.Findings = slices.Clone(structure.Findings)
+		structure.PayloadSources = slices.Clone(structure.PayloadSources)
 		a.Structure = &structure
 	}
 	a.Diagnostics = slices.Clone(a.Diagnostics)

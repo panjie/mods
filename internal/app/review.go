@@ -93,6 +93,25 @@ func (r *toolReviewer) canReviewInteractively() bool {
 	return IsInputTTY()
 }
 
+// requiresHumanReview mirrors the policy gates in requestApproval without
+// starting an interaction. Organization feedback may only preempt calls that
+// would otherwise reach a human approval decision.
+func (r *toolReviewer) requiresHumanReview(intent AccessIntent, safeDirSet []string) bool {
+	return r.reviewBypassSource(intent, safeDirSet) == ""
+}
+
+func (r *toolReviewer) reviewBypassSource(intent AccessIntent, safeDirSet []string) string {
+	mode := ApprovalReviewMode(r.reviewMode)
+	if ClassifyAccess(intent, r.scope, safeDirSet, mode) != DecisionAsk {
+		return "auto"
+	}
+	if r.reviewMode == ReviewAuto && intent.HasAccess() &&
+		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, mode) {
+		return "saved rule"
+	}
+	return ""
+}
+
 func (r *toolReviewer) isPending() bool {
 	return r.reviewPending && r.reviewItem != nil && r.reviewItem.resp != nil
 }
@@ -434,14 +453,8 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		assessment.KnownDirs = normalizeShellAffectedDirsForTool(assessment.KnownDirs, r.scope.Value, name)
 		debug.Printf("command assessment: effect=%s evidence=%s coverage=%d gaps=%v dirs=%v", assessment.Effect, assessment.Evidence, assessment.WriteCoverage, assessment.Gaps, assessment.KnownDirs)
 	}
-	if ClassifyAccess(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) != DecisionAsk {
-		trace.Source = "auto"
-		trace.Detail = accessIntentSummary(intent)
-		return nil
-	}
-	if r.reviewMode == ReviewAuto && intent.HasAccess() &&
-		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode)) {
-		trace.Source = "saved rule"
+	if source := r.reviewBypassSource(intent, safeDirSet); source != "" {
+		trace.Source = source
 		trace.Detail = accessIntentSummary(intent)
 		return nil
 	}

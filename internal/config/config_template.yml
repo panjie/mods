@@ -74,6 +74,8 @@ max-retries: 5
 think: false
 # {{ index .Help "review-mode" }}
 review-mode: auto
+# {{ index .Help "command-simplification" }}
+command-simplification: off
 
 # -----------------------------------------------------------------------------
 # Tools and MCP

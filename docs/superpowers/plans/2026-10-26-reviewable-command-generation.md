@@ -1,7 +1,7 @@
 # 可审查命令生成：实施计划与验收
 
 日期：2026-10-26
-状态：P0/P1 已实现；P2a/P2b 首批及标量投影已实施。P3a/P3b 与 P3c 基础预览已实现，范围和验证见 [P3 记录](../evidence/2026-10-27-command-generation-p3/README.md)。P4/P5 尚未实施；原始复杂代码行数任务仍未解决。
+状态：P0/P1 已实现；P2a/P2b 首批及标量投影已实施。P3a/P3b 与 P3c 基础预览已实现，范围和验证见 [P3 记录](../evidence/2026-10-27-command-generation-p3/README.md)。P4 已实现，默认关闭，范围见 [P4 记录](../evidence/2026-10-27-command-generation-p4/README.md)；P5 尚未实施，原始复杂代码行数任务仍未解决。
 设计：[可审查命令生成与有限简化](../specs/2026-10-26-reviewable-command-generation-design.md)。
 
 执行记录：[P0/P1 实现、证据及验收限制](../evidence/2026-10-26-command-generation/README.md)。本次只修改两段生产提示词及测试/评测/文档，不修改命令分析、权限规则、审批交互或工具执行。下文保留后续阶段计划，不表示已经授权或完成后续机制。
@@ -171,6 +171,8 @@ P1–P3 不恢复自动纠正关卡。P4 才新增 `command-simplification: off 
 
 ## 6. P4：请求级的一次自动简化
 
+实现说明：已落地 `command-simplification: off | once`，首版默认 off。候选必须是有效解析的内置命令，整体 unknown 或含未建模效果，按现有策略需要审批，且具有未建模嵌套控制流、控制流与至少两个不同局部赋值目标、动态求值或 AST/IR 中绑定的多层内联宿主。文件脚本、未绑定包装器和用户提供的载荷保守排除；缺少内部结构的 literal argv 调用不猜测内联代码。请求预算在 `startCompletionCmd` 的新请求边界创建；API retry 保留，checkpoint 不保存/复位状态，回调和 runner 捕获原请求身份。结果复用 P3 typed `not_executed` 通道。范围与验证见 [P4 记录](../evidence/2026-10-27-command-generation-p4/README.md)。
+
 ### 改动范围
 
 - app 组织决策组件（拟名 `command_organization.go`）和请求生命周期状态。
@@ -292,7 +294,7 @@ P1–P3 不恢复自动纠正关卡。P4 才新增 `command-simplification: off 
 
 ## 9. 验证命令与结果记录
 
-以下保留各阶段验证入口。P0/P1、P2 和 P3 的确切执行结果见各自记录；未完成的 P2 能力、完整载荷模式及 P4/P5 仍是后续计划。
+以下保留各阶段验证入口。P0/P1、P2、P3 和 P4 的实际执行结果见各自记录；未完成的 P2 能力、完整载荷模式及 P5 仍是后续计划。
 
 ### 基础与定向检查
 
@@ -303,6 +305,8 @@ go test ./internal/app -run 'Test(ComplexCommand|RelatedStaticReads|CommandArchi
 go test ./internal/app -run '^TestCommandAnalysisBaseline$' -count=1
 go test -tags commandtrace ./internal/app -run '^TestCommandAnalysisWorkBaseline$' -count=1
 go test ./internal/config ./internal/evals ./internal/stream ./internal/proto -count=1
+go test ./internal/app ./internal/config ./internal/commandanalysis ./internal/evals -run 'Test(CommandOrganization|CommandSimplification|CommandStructure|ReorganizationMetrics)' -count=1
+go test -race ./internal/app ./internal/config ./internal/commandanalysis ./internal/evals -run 'Test(CommandOrganization|CommandSimplification|CommandStructureP4|ReorganizationMetrics)' -count=1
 ```
 
 新增组织状态/载荷测试在 P3/P4 按真实名字加入清单，不能假设上述正则已包含未来测试。原测试名字含“complexity must never return failure”的断言只在对应政策阶段修改，off 和非候选路径仍保留原有保证；不删除安全测试来换通过。

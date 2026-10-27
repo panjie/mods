@@ -77,14 +77,26 @@ func CheckGenerationAnswer(answer string, expected map[string]float64) error {
 // GenerationOutcome uses pointers for unavailable observations. In particular,
 // first-round-only and noninteractive assessments are not UI approval events.
 type GenerationOutcome struct {
-	Query               bool  `json:"query"`
-	Completed           bool  `json:"completed"`
-	Correct             *bool `json:"correct"`
-	ActualReviewPrompts *int  `json:"actual_review_prompts"`
-	ApprovalUnavailable int   `json:"approval_unavailable"`
-	ToolCalls           int   `json:"tool_calls"`
-	ToolRounds          int   `json:"tool_rounds"`
-	UnexpectedWrites    int   `json:"unexpected_writes"`
+	AutomaticReorganizations int   `json:"automatic_reorganizations"`
+	ManualReorganizations    int   `json:"manual_reorganizations"`
+	Query                    bool  `json:"query"`
+	Completed                bool  `json:"completed"`
+	Correct                  *bool `json:"correct"`
+	ActualReviewPrompts      *int  `json:"actual_review_prompts"`
+	ApprovalUnavailable      int   `json:"approval_unavailable"`
+	ToolCalls                int   `json:"tool_calls"`
+	ToolRounds               int   `json:"tool_rounds"`
+	UnexpectedWrites         int   `json:"unexpected_writes"`
+}
+
+func (o *GenerationOutcome) ObserveReorganization(err error) {
+	if automatic, control := ReorganizationKind(err); control {
+		if automatic {
+			o.AutomaticReorganizations++
+		} else {
+			o.ManualReorganizations++
+		}
+	}
 }
 
 func (o GenerationOutcome) ZeroReviewCompletion() *bool {

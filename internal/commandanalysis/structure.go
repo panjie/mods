@@ -36,6 +36,14 @@ type CommandStructure struct {
 	ModeledInvocations, UnmodeledInvocations     int
 	Findings                                     []StructureFinding
 	Truncated                                    bool
+	LocalStateTargets                            int  `json:",omitempty"`
+	DynamicEvaluations                           int  `json:",omitempty"`
+	FilePayload                                  bool `json:",omitempty"`
+	InlineHostDepth                              int  `json:",omitempty"`
+	UnmodeledControlFlowDepth                    int  `json:",omitempty"`
+	// Literal source fragments only exclude user-supplied payloads in the app.
+	// Never log or serialize them as authorization or provenance claims.
+	PayloadSources []string `json:"-"`
 }
 
 const maxStructureFindings = 128
@@ -55,6 +63,18 @@ func commandStructure(p *parsedCommand) *CommandStructure {
 		return nil
 	}
 	s := &CommandStructure{OffsetUnit: "byte"}
+	locals := map[string]bool{}
+	local := func(name string) {
+		if name == "" {
+			return
+		}
+		for _, c := range name {
+			if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+				return
+			}
+		}
+		locals[name] = true
+	}
 	nodes := p.nodes
 	if p.ir != nil {
 		s.OffsetUnit = "utf16"
@@ -86,6 +106,12 @@ func commandStructure(p *parsedCommand) *CommandStructure {
 		s.ControlFlowDepth = max(s.ControlFlowDepth, d.control)
 		s.ScriptBlockDepth = max(s.ScriptBlockDepth, d.block)
 	}
+	inlineHosts := map[int]bool{}
+	payloadSource := func(value string) {
+		if value != "" && len(s.PayloadSources) < maxStructureFindings {
+			s.PayloadSources = append(s.PayloadSources, value)
+		}
+	}
 	invocation := func(id int, name string, args []string) {
 		n := byID[id]
 		var f *InvocationFacts
@@ -96,16 +122,46 @@ func commandStructure(p *parsedCommand) *CommandStructure {
 			s.ModeledInvocations++
 		} else {
 			s.UnmodeledInvocations++
+			s.UnmodeledControlFlowDepth = max(s.UnmodeledControlFlowDepth, depth[id].control)
 			s.add(StructureUnknownInvocation, n)
 		}
+		invokedName := strings.ToLower(name)
 		name = normalizePowerShellCommandName(name)
+		if invokedName == "eval" || invokedName == "invoke-expression" || invokedName == "iex" {
+			s.DynamicEvaluations++
+			for _, arg := range args {
+				payloadSource(trimPowerShellLiteral(arg))
+			}
+		}
+		inline := false
+		for _, arg := range args {
+			arg = strings.ToLower(arg)
+			if (name == "pwsh" || name == "powershell") && (arg == "-noprofile" || arg == "-noninteractive" || arg == "-nologo") {
+				continue
+			}
+			inline = inlinePayloadFlags[arg] || strings.HasPrefix(arg, "--eval=")
+			break // Flags after the script operand are script arguments.
+		}
+		// Any file-host form we cannot positively identify as inline is excluded
+		// from automatic reorganization, including extensionless/dynamic paths.
+		if hasScriptFileSuffix(programBaseName(name)) || name == "." || name == "source" || payloadHostProgram(name) && !inline {
+			s.FilePayload = true
+		}
+		if name == "env" || name == "sudo" || name == "command" || name == "nohup" || name == "xargs" {
+			// The wrapper's file-vs-inline provenance is not bound by these facts.
+			s.FilePayload = true
+		}
 		if shellHostPrograms[name] {
 			s.HostInvocations++
 			s.add(StructureHost, n)
-			for _, arg := range args {
+			for i, arg := range args {
 				switch strings.ToLower(arg) {
 				case "-c", "-command", "-encodedcommand", "-enc", "-en", "/c", "/k":
 					s.InlinePayloads++
+					if i+1 < len(args) {
+						payloadSource(trimPowerShellLiteral(args[i+1]))
+					}
+					inlineHosts[id] = true
 					s.add(StructurePayload, n)
 					return
 				}
@@ -113,6 +169,12 @@ func commandStructure(p *parsedCommand) *CommandStructure {
 		}
 	}
 	if p.ir != nil {
+		for _, name := range p.ir.AssignmentTargets {
+			local(normalizePowerShellVariableName(name))
+		}
+		for _, name := range p.ir.ScriptBlockAssignmentTargets {
+			local(normalizePowerShellVariableName(name))
+		}
 		for _, inv := range p.ir.Invocations {
 			invocation(inv.NodeID, inv.Name, inv.Args)
 		}
@@ -126,17 +188,37 @@ func commandStructure(p *parsedCommand) *CommandStructure {
 	} else {
 		syntax.Walk(p.file, func(n syntax.Node) bool {
 			call, ok := n.(*syntax.CallExpr)
-			if !ok || len(call.Args) == 0 {
+			if !ok {
 				return true
 			}
-			args := shellWordsForAccess(call.Args)
-			name, _ := staticShellWord(call.Args[0])
-			if len(args) > 0 {
-				args = args[1:]
+			if len(call.Args) == 0 {
+				for _, assignment := range call.Assigns {
+					if assignment.Name != nil {
+						local(assignment.Name.Value)
+					}
+				}
+				return true
 			}
+			// Keep literal flags even when a separate argument is dynamic. These
+			// are syntax observations only, never reconstructed executable argv.
+			args := make([]string, len(call.Args)-1)
+			for i, word := range call.Args[1:] {
+				args[i], _ = staticShellWord(word)
+			}
+			name, _ := staticShellWord(call.Args[0])
 			invocation(p.nodeIDs[call], name, args)
 			return true
 		})
+	}
+	s.LocalStateTargets = len(locals)
+	for id := range inlineHosts {
+		count := 0
+		for parent := id; parent > 0; parent = byID[parent].Parent {
+			if inlineHosts[parent] {
+				count++
+			}
+		}
+		s.InlineHostDepth = max(s.InlineHostDepth, count)
 	}
 	return s
 }

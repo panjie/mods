@@ -316,6 +316,18 @@ func appendExitStatus(text string, code int) string {
 	return fmt.Sprintf("[exit status %d]", code)
 }
 
+// ShellReviewInvocation returns the invocation built by the execution path,
+// without starting a process. It is display metadata, never authorization.
+func ShellReviewInvocation(tool, command string) (string, []string) {
+	var cmd *exec.Cmd
+	if tool == "powershell_run" {
+		cmd = powerShellCommand(context.Background(), command)
+	} else {
+		cmd = shellCommand(context.Background(), command)
+	}
+	return cmd.Path, append([]string(nil), cmd.Args...)
+}
+
 func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
 		return powerShellCommand(ctx, command)

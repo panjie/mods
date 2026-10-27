@@ -350,6 +350,9 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error, output .
 		return nil
 	}
 	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())
+	if isCommandReorganization(err) {
+		status = reorganizationActivityStatus(name)
+	}
 	if status == "" {
 		return nil
 	}
@@ -359,7 +362,11 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error, output .
 	if m.Config.InteractiveTTYAvailable && IsErrorTTY() {
 		m.appendToolResultDisplayBlock(m.toolResultDisplayLine(status))
 		if len(output) > 0 {
-			m.recordActivity(name, ToolResultStatus(name, data, err, activityPreviewLimit), "Tool: "+name+"\nArguments: "+string(data)+"\n"+output[0], err)
+			activityStatus := ToolResultStatus(name, data, err, activityPreviewLimit)
+			if isCommandReorganization(err) {
+				activityStatus = reorganizationActivityStatus(name)
+			}
+			m.recordActivity(name, activityStatus, "Tool: "+name+"\nArguments: "+string(data)+"\n"+output[0], err)
 		}
 		return nil
 	}

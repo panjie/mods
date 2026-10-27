@@ -53,6 +53,7 @@ type toolReviewItem struct {
 	candidateRules []Rule
 	summary        string
 	presentation   reviewPresentation
+	allowSimplify  bool
 	resp           chan reviewResponse
 }
 
@@ -79,8 +80,16 @@ type sessionDetailsMsg struct {
 	Rules                  []Rule
 }
 
+type reviewAction uint8
+
+const (
+	reviewActionDeny reviewAction = iota
+	reviewActionApprove
+	reviewActionSimplify
+)
+
 type reviewResponse struct {
-	approved bool
+	action reviewAction
 }
 
 // reviewCancelMsg asks the model to cancel the whole task, without first

@@ -287,7 +287,9 @@ func TestAssessProcessGoInstallKeepsUnknownLocation(t *testing.T) {
 	presentation := formatReviewPresentationWithIntent("process_run", data, assessment, WorkingDirScope(root), intent)
 	require.Equal(t, "Run with unknown effects", presentation.headline)
 	require.Contains(t, presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
-	require.Len(t, presentation.rows, 3)
+	require.Contains(t, presentation.rows, interactionRow{Label: "Effect", Value: "Cannot establish whether additional side effects are present."})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Program", Value: "go"})
+	require.Contains(t, presentation.rows, interactionRow{Label: "Working dir", Value: root})
 }
 
 func TestConstrainResolvedProcessAssessmentForWorkingDirExecutable(t *testing.T) {

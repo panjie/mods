@@ -89,10 +89,11 @@ func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T
 	require.Equal(t, "Warning", item.presentation.toneText)
 	require.Equal(t, "Run with unknown effects", item.presentation.headline)
 	require.Contains(t, item.presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
-	require.Len(t, item.presentation.rows, 4)
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Effect", Value: "Cannot establish whether additional side effects are present."})
+	require.Contains(t, item.presentation.rows, interactionRow{Label: "Working dir", Value: cwdScope.Value})
 	require.Contains(t, item.presentation.rows, interactionRow{Label: "Analysis", Value: "Unmodeled command or arguments: opaque-command"})
 	require.Empty(t, item.candidateRules)
-	item.resp <- reviewResponse{approved: true}
+	item.resp <- reviewResponse{action: reviewActionApprove}
 	require.NoError(t, <-errCh)
 }
 
@@ -389,7 +390,7 @@ func TestRequestApprovalUsesInteractiveReviewAvailability(t *testing.T) {
 
 	item := receiveReviewItem(t, reviewer.reviewChan)
 	require.Equal(t, "fs_write_file", item.name)
-	item.resp <- reviewResponse{approved: true}
+	item.resp <- reviewResponse{action: reviewActionApprove}
 	require.NoError(t, <-errCh)
 }
 
@@ -682,7 +683,7 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Empty(t, item.candidateRules)
-		item.resp <- reviewResponse{approved: true}
+		item.resp <- reviewResponse{action: reviewActionApprove}
 		require.NoError(t, <-errCh)
 	})
 
@@ -717,7 +718,7 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 
 		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Contains(t, item.summary, "installs nodejs via scoop")
-		item.resp <- reviewResponse{approved: true}
+		item.resp <- reviewResponse{action: reviewActionApprove}
 		require.NoError(t, <-errCh)
 	})
 
@@ -744,7 +745,7 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 		item := receiveReviewItem(t, reviewer.reviewChan)
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, []string{home}, item.candidateRules[0].Paths, "removing the .ssh entry requires its parent directory")
-		item.resp <- reviewResponse{approved: true}
+		item.resp <- reviewResponse{action: reviewActionApprove}
 		require.NoError(t, <-errCh)
 	})
 
@@ -801,7 +802,7 @@ func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
 		require.NotContains(t, item.summary, "unknown")
 		require.Len(t, item.candidateRules, 1)
 		require.Equal(t, []string{targetDir}, item.candidateRules[0].Paths)
-		item.resp <- reviewResponse{approved: true}
+		item.resp <- reviewResponse{action: reviewActionApprove}
 		require.NoError(t, <-errCh)
 	})
 
@@ -964,7 +965,9 @@ func receiveReviewItem(t *testing.T, ch <-chan toolReviewItem) toolReviewItem {
 	select {
 	case item := <-ch:
 		return item
-	case <-time.After(time.Second):
+	// Real dispatch tests may start the PowerShell bridge before showing review.
+	// A one-second UI wait also measured host startup and was flaky under load.
+	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for review item")
 		return toolReviewItem{}
 	}

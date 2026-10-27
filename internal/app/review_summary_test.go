@@ -82,8 +82,11 @@ func TestFormatReviewSummaryWithIntent(t *testing.T) {
 		presentation := formatReviewPresentationWithIntent("process_run", args, analysis, scope, AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{"/cwd"}})
 		require.Equal(t, "Modify local files", presentation.headline)
 		require.Equal(t, []interactionRow{
-			{Label: "Command", Value: `rm "path with space"`},
 			{Label: "Target", Value: "/cwd"},
+			{Label: "Coverage", Value: "Write-target coverage is incomplete; approval applies to this call only."},
+			{Label: "Program", Value: "rm"},
+			{Label: "Argv", Value: "0: \"rm\"\n1: \"path with space\""},
+			{Label: "Working dir", Value: scope.Value},
 		}, presentation.rows)
 	})
 
@@ -254,8 +257,10 @@ func TestCompoundShellReviewKeepsInternalAnalysisOutOfPanel(t *testing.T) {
 		AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite},
 	)
 	require.Equal(t, []interactionRow{
-		{Label: "Command", Value: "Write-Output a; Write-Output b"},
+		{Label: "Source", Value: "1 | Write-Output a; Write-Output b"},
 		{Label: "Target", Value: "Unknown"},
+		{Label: "Interpreter", Value: "PowerShell"},
+		{Label: "Working dir", Value: `C:\cwd`},
 	}, presentation.rows)
 }
 

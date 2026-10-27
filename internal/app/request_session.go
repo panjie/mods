@@ -409,6 +409,8 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				m.debugToolSucceeded++
 			case strings.HasPrefix(status, "exit "):
 				m.debugToolExited++
+			case status == "reorganize":
+				// A control response is neither a successful dispatch nor a process failure.
 			case status == "denied":
 				m.debugToolDenied++
 			case status == "cancelled":
@@ -513,12 +515,42 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
 
 		prepared := preparedToolCall{name: name, args: append([]byte(nil), data...), intent: intent, assessment: assessment, filesystem: preparedAccess}
+		preparePayload := func(ctx context.Context) (*commandPayload, error) {
+			return prepareCommandPayload(ctx, name, prepared.args, cwd, processBinding)
+		}
+		var redact func(string) string
+		if m.secrets != nil {
+			redact = m.secrets.Redact
+		}
+		var executionRows []interactionRow
+		if registry.ShellExecution(name) {
+			executionRows = append(executionRows, interactionRow{Label: "Working dir", Value: cwd})
+			if name == "process_run" {
+				program := processBinding.Resolved
+				if program == "" {
+					program = processBinding.Requested
+				}
+				executionRows = append(executionRows, interactionRow{Label: "Interpreter", Value: program})
+			} else if name == "shell_run" || name == "powershell_run" {
+				program, argv := toolregistry.ShellReviewInvocation(name, ExtractShellCommand(data))
+				if redact != nil {
+					for i := range argv {
+						argv[i] = redact(argv[i])
+					}
+				}
+				executionRows = append(executionRows,
+					interactionRow{Label: "Interpreter", Value: program},
+					interactionRow{Label: "Host argv", Value: quotedReviewArgv(argv)},
+				)
+			}
+		}
 		// No execution has started here. A changed native target receives a new
 		// review; a continuously changing target fails without retrying the tool.
 		for attempt := 0; ; attempt++ {
 			if err := m.reviewer.requestApproval(reviewerDeps{
 				ctx: m.ctx, shellExecution: registry.ShellExecution(name),
 				assessment: prepared.assessment, accessIntent: prepared.intent, safeDirs: safeDirs,
+				payload: &prepared.payload, preparePayload: preparePayload, redact: redact, executionRows: executionRows,
 				onDecision: func(trace approvalTrace) { approvalRecord = trace },
 			}, prepared.name, prepared.args); err != nil {
 				return proto.ToolResult{}, err
@@ -534,6 +566,19 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				prepared.filesystem = fresh
 				prepared.intent = normalizeAccessIntentDirs(fresh.Intent, scope.Value, name, false)
 				continue
+			}
+			if prepared.payload != nil {
+				changed, err := prepared.payload.revalidate(ctx)
+				if err != nil {
+					return proto.ToolResult{}, err
+				}
+				if changed {
+					if attempt >= 1 {
+						return proto.ToolResult{}, errors.New("script payload changed repeatedly during review")
+					}
+					prepared.payload = nil
+					continue
+				}
 			}
 			if prepared.assessment != nil && prepared.intent.DominantClass() == AccessWrite {
 				input := ExtractShellCommand(prepared.args)
@@ -626,6 +671,10 @@ func toolDebugStatus(err error) (status, symbol string) {
 	if err == nil {
 		return "success", "✓"
 	}
+	var reorganization *commandReorganizationError
+	if errors.As(err, &reorganization) {
+		return "reorganize", "↪"
+	}
 	var exitErr shellExitCoder
 	if errors.As(err, &exitErr) {
 		return fmt.Sprintf("exit %d", exitErr.ExitCode()), "!"
@@ -654,4 +703,5 @@ type preparedToolCall struct {
 	intent     approval.AccessIntent
 	assessment *commandanalysis.CommandAssessment
 	filesystem *toolregistry.PreparedAccess
+	payload    *commandPayload
 }

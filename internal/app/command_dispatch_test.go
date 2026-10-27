@@ -115,7 +115,11 @@ func TestComplexCommandInteractiveApprovalPreservesPayload(t *testing.T) {
 			case item := <-r.reviewChan:
 				require.Zero(t, executed.Load())
 				require.JSONEq(t, string(data), string(item.args))
-				item.resp <- reviewResponse{approved: allow}
+				response := reviewResponse{action: reviewActionDeny}
+				if allow {
+					response.action = reviewActionApprove
+				}
+				item.resp <- response
 			case err := <-finished:
 				t.Fatalf("call returned before ordinary approval: %v", err)
 			case <-ctx.Done():
@@ -132,6 +136,63 @@ func TestComplexCommandInteractiveApprovalPreservesPayload(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestManualCommandSimplificationReturnsNotExecutedControlResult(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.WorkingDir = t.TempDir()
+	cfg.ReviewMode = ReviewAuto
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	r := &toolReviewer{reviewMode: ReviewAuto, scope: WorkingDirScope(cfg.WorkingDir), reviewAvailabilityKnown: true, interactiveReviewAvailable: true, reviewChan: make(chan toolReviewItem, 1)}
+	m := &Mods{Config: &cfg, ctx: ctx, reviewer: r}
+	registry := toolregistry.NewRegistry()
+	var executed atomic.Int32
+	require.NoError(t, registry.Register(toolregistry.Tool{
+		Spec: proto.ToolSpec{Name: "shell_run"}, Capabilities: toolregistry.ToolCapabilities{Mutable: true, ShellExecution: true},
+		Call: func(context.Context, json.RawMessage) (string, error) {
+			executed.Add(1)
+			return "unexpected", nil
+		},
+	}))
+	data := []byte(`{"command":"python -c \"print(1)\""}`)
+	call := proto.ToolCallRequest{ID: "original-call", Index: 2, Total: 3, Name: "shell_run", Arguments: data}
+	type outcome struct {
+		message proto.Message
+		status  proto.ToolCallStatus
+	}
+	finished := make(chan outcome, 1)
+	go func() {
+		message, status := stream.CallTool(call, nil, m.toolResultCaller(registry, &cfg))
+		finished <- outcome{message: message, status: status}
+	}()
+	item := receiveReviewItem(t, r.reviewChan)
+	require.True(t, item.allowSimplify)
+	require.JSONEq(t, string(data), string(item.args))
+	item.resp <- reviewResponse{action: reviewActionSimplify}
+	got := <-finished
+	require.Zero(t, executed.Load())
+	require.Len(t, got.message.ToolCalls, 1)
+	require.Equal(t, call.ID, got.message.ToolCalls[0].ID)
+	require.True(t, got.message.ToolCalls[0].IsError)
+	require.Equal(t, call.ID, got.status.ID)
+	var control struct {
+		Type        string   `json:"type"`
+		Version     int      `json:"version"`
+		Status      string   `json:"status"`
+		ReasonCodes []string `json:"reason_codes"`
+		Guidance    string   `json:"guidance"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(got.message.Content), &control))
+	require.Equal(t, "mods.command_reorganization", control.Type)
+	require.Equal(t, 1, control.Version)
+	require.Equal(t, "not_executed", control.Status)
+	require.Equal(t, []string{"user_requested"}, control.ReasonCodes)
+	require.Contains(t, control.Guidance, "Preserve the requested scope")
+	var reorganization *commandReorganizationError
+	require.ErrorAs(t, got.status.Err, &reorganization)
+	status, _ := toolDebugStatus(got.status.Err)
+	require.Equal(t, "reorganize", status)
 }
 
 func TestRelatedStaticReadsExecuteAsOneCall(t *testing.T) {

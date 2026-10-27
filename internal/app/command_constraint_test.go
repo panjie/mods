@@ -42,7 +42,7 @@ func TestFullReviewRequiresEveryPage(t *testing.T) {
 		r.renderBanner(60, styles, 22)
 	}
 	r.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	require.True(t, (<-resp).approved)
+	require.Equal(t, reviewActionApprove, (<-resp).action)
 }
 
 func TestFullReviewShowsPagesHintOnlyWhenContentPaginates(t *testing.T) {

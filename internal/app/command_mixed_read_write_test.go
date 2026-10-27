@@ -69,5 +69,5 @@ func TestCommandReviewDeduplicatesDisplayOnly(t *testing.T) {
 	before := a.Clone()
 	rows := commandReviewRows("fixture", a, "")
 	require.Equal(t, before, a)
-	require.Equal(t, []interactionRow{{Label: "Command", Value: "fixture"}, {Label: "Write target", Value: "/tmp/out"}, {Label: "Read source", Value: "/tmp/out"}, {Label: "Candidate (unresolved)", Value: "$unknown"}}, rows)
+	require.Equal(t, []interactionRow{{Label: "Source", Value: "1 | fixture"}, {Label: "Recognized", Value: "write filesystem; read filesystem"}, {Label: "Write target", Value: "/tmp/out"}, {Label: "Read source", Value: "/tmp/out"}, {Label: "Candidate (unresolved)", Value: "$unknown"}}, rows)
 }

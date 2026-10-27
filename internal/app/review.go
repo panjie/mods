@@ -24,6 +24,7 @@ type reviewOptionAction int
 const (
 	reviewOptionApprove reviewOptionAction = iota
 	reviewOptionDeny
+	reviewOptionSimplify
 	reviewOptionAlwaysAllow
 	reviewOptionCancel
 )
@@ -194,7 +195,15 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		if !r.canApprovePages() {
 			return true, nil
 		}
-		r.reviewItem.resp <- reviewResponse{approved: true}
+		r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
+		r.reviewPending = false
+		r.reviewItem = nil
+		return true, r.pollReviewCmd()
+	case "s", "S":
+		if !r.reviewItem.allowSimplify {
+			return true, nil
+		}
+		r.reviewItem.resp <- reviewResponse{action: reviewActionSimplify}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
@@ -211,7 +220,7 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			return true, nil
 		}
 		r.rules.Add(r.reviewItem.candidateRules...)
-		r.reviewItem.resp <- reviewResponse{approved: true}
+		r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
@@ -230,12 +239,14 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		}
 		switch options[r.selected].action {
 		case reviewOptionApprove:
-			r.reviewItem.resp <- reviewResponse{approved: true}
+			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		case reviewOptionDeny:
 			r.reviewItem.resp <- reviewResponse{}
+		case reviewOptionSimplify:
+			r.reviewItem.resp <- reviewResponse{action: reviewActionSimplify}
 		case reviewOptionAlwaysAllow:
 			r.rules.Add(r.reviewItem.candidateRules...)
-			r.reviewItem.resp <- reviewResponse{approved: true}
+			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		case reviewOptionCancel:
 			r.cancelRequested = true
 			return true, msgCmd(reviewCancelMsg{})
@@ -251,6 +262,9 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 	options := []reviewOption{
 		{key: "Y", label: "Allow once", action: reviewOptionApprove},
 		{key: "N", label: "Deny", action: reviewOptionDeny},
+	}
+	if r.reviewItem != nil && r.reviewItem.allowSimplify {
+		options = append(options, reviewOption{key: "S", label: "Simplify", action: reviewOptionSimplify})
 	}
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
 		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
@@ -377,6 +391,10 @@ type reviewerDeps struct {
 	assessment     *commandanalysis.CommandAssessment
 	accessIntent   AccessIntent
 	safeDirs       []string
+	payload        **commandPayload
+	preparePayload func(context.Context) (*commandPayload, error)
+	redact         func(string) string
+	executionRows  []interactionRow
 	onDecision     func(approvalTrace)
 }
 
@@ -390,6 +408,12 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	started := time.Now()
 	trace := approvalTrace{Source: "not reached"}
 	defer func() {
+		// Cancellation wins even if the session-closed channel or a response
+		// becomes ready at the same time. It is not a denial to send to the model.
+		if err := deps.ctx.Err(); err != nil {
+			returnErr = err
+			trace.Source = "cancelled"
+		}
 		trace.Duration = time.Since(started)
 		if deps.onDecision != nil {
 			deps.onDecision(trace)
@@ -430,17 +454,70 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			name,
 		)
 	}
+	if deps.payload != nil && *deps.payload == nil && deps.preparePayload != nil {
+		payload, err := deps.preparePayload(deps.ctx)
+		if err != nil {
+			trace.Source = "unavailable"
+			trace.Detail = "script payload preparation failed"
+			return err
+		}
+		*deps.payload = payload
+	}
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
 	if intent.HasAccess() {
 		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode))
+	}
+	presentation := formatReviewPresentationWithIntent(name, data, assessment, r.scope, intent)
+	// Redact before quoting/numbering: those transformations can otherwise
+	// split a multi-line secret or turn its characters into escape sequences.
+	if deps.redact != nil {
+		for i := range presentation.rows {
+			switch presentation.rows[i].Label {
+			case "Source":
+				if name == "shell_run" || name == "powershell_run" {
+					presentation.rows[i].Value = numberedReviewSource(redactRemoteURLsForDisplay(deps.redact(ExtractShellCommand(data))))
+				}
+			case "Argv":
+				var args commandPayloadArgs
+				if name == "process_run" && json.Unmarshal(data, &args) == nil {
+					argv := append([]string{args.Program}, args.Args...)
+					for j := range argv {
+						argv[j] = deps.redact(argv[j])
+					}
+					presentation.rows[i].Value = quotedReviewArgv(argv)
+				}
+			}
+		}
+	}
+	if len(deps.executionRows) > 0 {
+		rows := presentation.rows[:0]
+		for _, row := range presentation.rows {
+			if row.Label != "Interpreter" && row.Label != "Working dir" {
+				rows = append(rows, row)
+			}
+		}
+		presentation.rows = append(rows, deps.executionRows...)
+	}
+	if deps.payload != nil {
+		presentation.rows = append(presentation.rows, (*deps.payload).reviewRows(deps.redact)...)
+	}
+	if assessment.Reviewability.ScriptFilePayload && (deps.payload == nil || *deps.payload == nil) {
+		presentation.rows = append(presentation.rows, interactionRow{Label: "Script preview", Value: "Unavailable for this invocation form; script content has not been reviewed. Ordinary effect/target approval still applies."})
+	}
+	for i := range presentation.rows {
+		if deps.redact != nil {
+			presentation.rows[i].Value = deps.redact(presentation.rows[i].Value)
+		}
+		presentation.rows[i].Value = redactRemoteURLsForDisplay(presentation.rows[i].Value)
 	}
 	item := toolReviewItem{
 		name:           name,
 		args:           data,
 		candidateRules: candidateRules,
 		summary:        formatReviewSummaryWithIntent(name, data, assessment, r.scope, intent),
-		presentation:   formatReviewPresentationWithIntent(name, data, assessment, r.scope, intent),
+		presentation:   presentation,
+		allowSimplify:  shellExecution,
 		resp:           respCh,
 	}
 	ch, done := r.snapshotSession()
@@ -460,16 +537,25 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	case <-deps.ctx.Done():
 		trace.Source = "cancelled"
 		trace.Detail = "before prompt"
-		return fmt.Errorf("execution denied by user for: %s", name)
+		return deps.ctx.Err()
 	}
 	select {
 	case response := <-respCh:
-		if response.approved {
+		switch response.action {
+		case reviewActionApprove:
 			trace.Detail = "approved"
 			return nil
+		case reviewActionSimplify:
+			if !shellExecution {
+				trace.Detail = "denied"
+				return fmt.Errorf("execution denied by user for: %s", name)
+			}
+			trace.Detail = "simplification requested"
+			return &commandReorganizationError{ReasonCodes: []string{"user_requested"}}
+		default:
+			trace.Detail = "denied"
+			return fmt.Errorf("execution denied by user for: %s", name)
 		}
-		trace.Detail = "denied"
-		return fmt.Errorf("execution denied by user for: %s", name)
 	case <-done:
 		trace.Source = "unavailable"
 		trace.Detail = "review session ended"
@@ -477,7 +563,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	case <-deps.ctx.Done():
 		trace.Source = "cancelled"
 		trace.Detail = "while waiting for user"
-		return fmt.Errorf("execution denied by user for: %s", name)
+		return deps.ctx.Err()
 	}
 }
 

@@ -138,6 +138,39 @@ func TestReviewShowsAllTargetsWithoutSessionGrant(t *testing.T) {
 	require.NotContains(t, all, "+1more")
 }
 
+func TestReviewSimplifyNeedsNoFullPageReviewOrGrant(t *testing.T) {
+	r := newPagedTestReviewer(strings.Repeat("echo long-command; ", 100))
+	r.reviewItem.allowSimplify = true
+	r.renderBanner(60, makeStyles(true).Interaction, 16)
+	require.False(t, r.canApprovePages())
+	require.Contains(t, r.renderBanner(60, makeStyles(true).Interaction, 16), "Simplify")
+	resp := r.reviewItem.resp
+	r.handleKey(tea.KeyPressMsg{Code: 's', Text: "s"})
+	require.Equal(t, reviewActionSimplify, (<-resp).action)
+	require.False(t, r.isPending())
+	require.Empty(t, r.rules.Snapshot())
+}
+
+func TestReviewResponseZeroAndUnknownActionsDeny(t *testing.T) {
+	for _, action := range []reviewAction{reviewActionDeny, reviewAction(255)} {
+		r := &toolReviewer{
+			reviewMode: ReviewAuto, scope: WorkingDirScope("/cwd"), reviewAvailabilityKnown: true,
+			interactiveReviewAvailable: true, reviewChan: make(chan toolReviewItem, 1),
+		}
+		done := make(chan error, 1)
+		go func() {
+			done <- r.requestApproval(reviewerDeps{
+				ctx:          context.Background(),
+				accessIntent: AccessIntent{Class: AccessWrite, WriteCoverage: commandanalysis.CoverageIncomplete},
+			}, "native_write", nil)
+		}()
+		item := receiveReviewItem(t, r.reviewChan)
+		require.False(t, item.allowSimplify)
+		item.resp <- reviewResponse{action: action}
+		require.ErrorContains(t, <-done, "execution denied by user")
+	}
+}
+
 func TestReviewCancelStopsTaskInsteadOfDenying(t *testing.T) {
 	for _, enter := range []bool{false, true} {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -172,7 +205,7 @@ func TestReviewDenyKeepsTaskRunning(t *testing.T) {
 	resp := r.reviewItem.resp
 	m := &Mods{Config: &Config{}, ctx: ctx, ctxCancel: cancel, reviewer: r, userInput: newUserInputManager(&Config{})}
 	m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
-	require.False(t, (<-resp).approved)
+	require.Equal(t, reviewActionDeny, (<-resp).action)
 	require.NoError(t, ctx.Err())
 }
 

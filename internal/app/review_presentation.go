@@ -3,8 +3,12 @@ package app
 import (
 	"fmt"
 	"net/url"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/commandanalysis"
@@ -65,18 +69,31 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment com
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
 		result.rows = commandReviewRows(command, assessment, risk)
-		if cwd := ArgString(parsed, "cwd"); cwd != "" && cwd != scope.Value {
-			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
+		interpreter := "PowerShell"
+		if name == "shell_run" && runtime.GOOS != "windows" {
+			interpreter = "POSIX shell"
 		}
+		result.rows = append(result.rows, interactionRow{Label: "Interpreter", Value: interpreter})
+		result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: reviewWorkingDir(parsed, scope)})
 	case "process_run":
 		risk := shellRiskLevel(assessment, scope)
 		command := ProcessCommandPreview(parsed)
 		result.tone, result.toneText = toneForShellRisk(risk, command)
 		result.headline = shellRiskHeadline(risk)
-		result.rows = commandReviewRows(command, assessment, risk)
-		if cwd := ArgString(parsed, "cwd"); cwd != "" && cwd != scope.Value {
-			result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: cwd})
+		// Native argv has no shell-source coordinate system. Do not apply any
+		// nested payload offsets to the lossy command preview.
+		displayAssessment := assessment.Clone()
+		if displayAssessment.Structure != nil {
+			for i := range displayAssessment.Structure.Findings {
+				displayAssessment.Structure.Findings[i].Located = false
+			}
 		}
+		result.rows = commandReviewRows(command, displayAssessment, risk)[1:]
+		result.rows = append(result.rows,
+			interactionRow{Label: "Program", Value: ArgString(parsed, "program")},
+			interactionRow{Label: "Argv", Value: processReviewArgv(parsed)},
+			interactionRow{Label: "Working dir", Value: reviewWorkingDir(parsed, scope)},
+		)
 	default:
 		result.headline = "Run " + name
 		if summary := ToolArgsSummary(parsed); summary != "" {
@@ -96,7 +113,8 @@ func formatReviewPresentationWithIntent(name string, args []byte, assessment com
 		result.tone, result.toneText = interactionToneInfo, "Info"
 	}
 	if intent.DominantClass() == AccessWrite {
-		if !intent.HasCompleteWriteTargets() {
+		commandTool := name == "shell_run" || name == "powershell_run" || name == "process_run"
+		if !intent.HasCompleteWriteTargets() && !commandTool {
 			result.rows = append(result.rows, interactionRow{Label: "Coverage", Value: "Write-target coverage is incomplete; approval applies to this call only."})
 		}
 		for _, group := range intent.Groups() {
@@ -121,6 +139,44 @@ func downloadReviewURL(raw string) string {
 	return u.String()
 }
 
+func reviewWorkingDir(parsed map[string]any, scope Scope) string {
+	if cwd := ArgString(parsed, "cwd"); cwd != "" {
+		return cwd
+	}
+	return scope.Value
+}
+
+func processReviewArgv(parsed map[string]any) string {
+	argv := []string{ArgString(parsed, "program")}
+	if values, ok := parsed["args"].([]any); ok {
+		for _, value := range values {
+			arg, ok := value.(string)
+			if !ok {
+				continue
+			}
+			argv = append(argv, arg)
+		}
+	}
+	return quotedReviewArgv(argv)
+}
+
+func quotedReviewArgv(argv []string) string {
+	lines := make([]string, len(argv))
+	for i, arg := range argv {
+		lines[i] = strconv.Itoa(i) + ": " + strconv.Quote(redactRemoteURLsForDisplay(arg))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func numberedReviewSource(source string) string {
+	source = strings.ReplaceAll(source, "\r\n", "\n")
+	lines := strings.Split(source, "\n")
+	for i := range lines {
+		lines[i] = strconv.Itoa(i+1) + " | " + lines[i]
+	}
+	return strings.Join(lines, "\n")
+}
+
 func commandReviewRows(command string, assessment commandanalysis.CommandAssessment, risk string) (rows []interactionRow) {
 	// Presentation-only deduplication: retain every target and node identity
 	// in the assessment used by authorization and revalidation.
@@ -135,11 +191,17 @@ func commandReviewRows(command string, assessment commandanalysis.CommandAssessm
 		}
 		rows = unique
 	}()
-	rows = []interactionRow{{Label: "Command", Value: redactRemoteURLsForDisplay(command)}}
+	rows = []interactionRow{{Label: "Source", Value: numberedReviewSource(redactRemoteURLsForDisplay(command))}}
+	for _, finding := range commandStructureFindings(command, assessment.Structure) {
+		rows = append(rows, interactionRow{Label: "Analysis limit", Value: finding})
+	}
 	for _, diagnostic := range assessment.Diagnostics {
 		rows = append(rows, interactionRow{Label: "Analysis", Value: redactRemoteURLsForDisplay(diagnostic)})
 	}
 	if len(assessment.Targets) > 0 || len(assessment.UnresolvedRemoteTargets) > 0 {
+		if recognized := recognizedCommandOperations(assessment.Targets); recognized != "" {
+			rows = append(rows, interactionRow{Label: "Recognized", Value: recognized})
+		}
 		type displayTarget struct {
 			kind commandanalysis.TargetKind
 			path string
@@ -174,8 +236,10 @@ func commandReviewRows(command string, assessment commandanalysis.CommandAssessm
 			}
 			rows = append(rows, interactionRow{Label: label, Value: redactRemoteURLsForDisplay(value)})
 		}
-		if assessment.WriteCoverage != approval.CoverageComplete && assessment.Effect != commandanalysis.EffectRead {
-			rows = append(rows, interactionRow{Label: "Unknown effects", Value: "Write-target coverage is incomplete; see analysis details"})
+		if assessment.Effect == commandanalysis.EffectUnknown {
+			rows = append(rows, interactionRow{Label: "Effect", Value: "Cannot establish whether additional side effects are present."})
+		} else if assessment.Effect == commandanalysis.EffectWrite && assessment.WriteCoverage != approval.CoverageComplete {
+			rows = append(rows, interactionRow{Label: "Coverage", Value: "Write-target coverage is incomplete; approval applies to this call only."})
 		}
 		for _, target := range assessment.UnresolvedRemoteTargets {
 			rows = append(rows, interactionRow{Label: "Remote (unresolved)", Value: redactRemoteURLsForDisplay(target)})
@@ -197,7 +261,100 @@ func commandReviewRows(command string, assessment commandanalysis.CommandAssessm
 	if len(assessment.UnresolvedRemoteTargets) > 0 {
 		rows = append(rows, interactionRow{Label: "Remote", Value: "Unknown"})
 	}
+	if assessment.Effect == commandanalysis.EffectUnknown {
+		rows = append(rows, interactionRow{Label: "Effect", Value: "Cannot establish whether additional side effects are present."})
+	} else if assessment.Effect == commandanalysis.EffectWrite && assessment.WriteCoverage != approval.CoverageComplete {
+		rows = append(rows, interactionRow{Label: "Coverage", Value: "Write-target coverage is incomplete; approval applies to this call only."})
+	}
 	return rows
+}
+
+func recognizedCommandOperations(targets []commandanalysis.Target) string {
+	seen := map[string]bool{}
+	var operations []string
+	for _, target := range targets {
+		if target.Role == commandanalysis.TargetCandidate {
+			continue
+		}
+		operation := "write"
+		if target.Role == commandanalysis.TargetRead || target.Operation == commandanalysis.OperationRead {
+			operation = "read"
+		}
+		kind := "filesystem"
+		switch target.Kind {
+		case commandanalysis.TargetOrigin:
+			kind = "remote resource"
+		case commandanalysis.TargetProvider:
+			kind = "provider target"
+		}
+		value := operation + " " + kind
+		if !seen[value] {
+			seen[value] = true
+			operations = append(operations, value)
+		}
+	}
+	return strings.Join(operations, "; ")
+}
+
+func commandStructureFindings(command string, structure *commandanalysis.CommandStructure) []string {
+	if structure == nil {
+		return nil
+	}
+	findings := make([]string, 0, len(structure.Findings))
+	for _, finding := range structure.Findings {
+		label := map[commandanalysis.StructureCode]string{
+			commandanalysis.StructureControlFlow:       "control flow",
+			commandanalysis.StructureState:             "local state assignment",
+			commandanalysis.StructureScriptBlock:       "script block",
+			commandanalysis.StructureHost:              "nested interpreter host",
+			commandanalysis.StructurePayload:           "inline interpreter payload",
+			commandanalysis.StructureUnknownInvocation: "unmodeled invocation",
+			commandanalysis.StructureMethod:            "unmodeled method expression",
+		}[finding.Code]
+		if label == "" {
+			label = "unmodeled structure"
+		}
+		location := "command level"
+		if line, ok := commandFindingLine(command, structure.OffsetUnit, finding); ok {
+			location = fmt.Sprintf("line %d", line)
+		}
+		if finding.NodeID > 0 {
+			location += fmt.Sprintf(", node %d", finding.NodeID)
+		}
+		findings = append(findings, label+" ["+location+"]")
+	}
+	if structure.Truncated {
+		findings = append(findings, "Additional structure findings omitted (diagnostic limit).")
+	}
+	return findings
+}
+
+func commandFindingLine(command, unit string, finding commandanalysis.StructureFinding) (int, bool) {
+	if !finding.Located || finding.Start < 0 || finding.End < finding.Start {
+		return 0, false
+	}
+	prefix := command
+	if unit == "utf16" {
+		units := utf16.Encode([]rune(command))
+		if finding.End > len(units) {
+			return 0, false
+		}
+		for _, offset := range []int{finding.Start, finding.End} {
+			if offset > 0 && offset < len(units) && units[offset-1] >= 0xd800 && units[offset-1] <= 0xdbff && units[offset] >= 0xdc00 && units[offset] <= 0xdfff {
+				return 0, false
+			}
+		}
+		prefix = string(utf16.Decode(units[:finding.Start]))
+	} else {
+		if unit != "byte" || finding.End > len(command) {
+			return 0, false
+		}
+		if !utf8.ValidString(command[:finding.Start]) || !utf8.ValidString(command[:finding.End]) {
+			return 0, false
+		}
+		prefix = command[:finding.Start]
+	}
+	return 1 + strings.Count(prefix, "\n"), true
 }
 
 func commandReviewTarget(assessment commandanalysis.CommandAssessment, risk string) string {
@@ -319,6 +476,8 @@ func reviewOrderedRows(rows []interactionRow) []interactionRow {
 			return 0
 		case "Source", "Read source", "Read source (unresolved)", "Working dir", "Overwrite":
 			return 1
+		case "Interpreter", "Program", "Argv":
+			return 2
 		case "Command", "Patch", "Details":
 			return 3
 		default:

@@ -61,12 +61,12 @@ func TestPreparedNativeWriteReapprovesChangedTarget(t *testing.T) {
 	require.Contains(t, item.presentation.rows, interactionRow{Label: "Write scope", Value: first})
 	require.NoError(t, os.Remove(link))
 	approvalTestDirectoryLink(t, second, link)
-	item.resp <- reviewResponse{approved: true}
+	item.resp <- reviewResponse{action: reviewActionApprove}
 	item = receiveReviewItem(t, r.reviewChan)
 	require.Contains(t, item.presentation.rows, interactionRow{Label: "Write scope", Value: second})
 	_, err = os.Stat(filepath.Join(second, "result.txt"))
 	require.True(t, os.IsNotExist(err), "changed target must wait for fresh approval")
-	item.resp <- reviewResponse{approved: true}
+	item.resp <- reviewResponse{action: reviewActionApprove}
 	require.NoError(t, <-done)
 	_, err = os.Stat(filepath.Join(first, "result.txt"))
 	require.True(t, os.IsNotExist(err))
@@ -204,10 +204,10 @@ func TestGitTargetChangeRequiresFreshReview(t *testing.T) {
 	item := receiveReviewItem(t, r.reviewChan)
 	require.Empty(t, item.candidateRules, "hooks and helpers remain unbounded")
 	git("remote", "set-url", "origin", "https://after.example/repo")
-	item.resp <- reviewResponse{approved: true}
+	item.resp <- reviewResponse{action: reviewActionApprove}
 	item = receiveReviewItem(t, r.reviewChan)
 	require.Contains(t, item.presentation.rows, interactionRow{Label: "Write target", Value: "https://after.example"})
-	item.resp <- reviewResponse{approved: false}
+	item.resp <- reviewResponse{action: reviewActionDeny}
 	require.Error(t, <-done)
 	require.False(t, called, "denied refreshed target must never dispatch")
 }

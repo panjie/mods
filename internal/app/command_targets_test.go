@@ -186,14 +186,14 @@ func TestCommandLeafChangeReapprovesAndRepeatedChangeStops(t *testing.T) {
 			item := receiveReviewItem(t, r.reviewChan)
 			require.NoError(t, os.Remove(link))
 			require.NoError(t, os.Symlink(second, link))
-			item.resp <- reviewResponse{approved: true}
+			item.resp <- reviewResponse{action: reviewActionApprove}
 			item = receiveReviewItem(t, r.reviewChan)
 			require.False(t, called)
 			if repeat {
 				require.NoError(t, os.Remove(link))
 				require.NoError(t, os.Symlink(first, link))
 			}
-			item.resp <- reviewResponse{approved: true}
+			item.resp <- reviewResponse{action: reviewActionApprove}
 			err := <-done
 			if repeat {
 				require.ErrorContains(t, err, "changed repeatedly")

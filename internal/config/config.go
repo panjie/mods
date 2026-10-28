@@ -70,6 +70,7 @@ var Help = map[string]string{
 	"prompts":          "Override built-in runtime prompts; empty values use the built-in defaults",
 	"raw":              "Render output as raw text when connected to a TTY",
 	"hide-tool-status": "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
+	"hide-chat-path":   "Hide the working directory in the interactive chat banner (useful when sharing your screen)",
 	"show-token-usage": "Show input, output, and total token usage after each interaction",
 	"help":             "Show Help and exit",
 	"version":          "Show version and exit",
@@ -248,6 +249,7 @@ type PersistentConfig struct {
 	Minimal            bool       `yaml:"minimal" env:"MINIMAL"`
 	Raw                bool       `yaml:"raw" env:"RAW"`
 	HideToolStatus     bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
+	HideChatPath       bool       `yaml:"hide-chat-path" env:"HIDE_CHAT_PATH"`
 	ShowTokenUsage     bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
 	NoInstructions     bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
 	MaxRetries         int        `yaml:"max-retries" env:"MAX_RETRIES"`

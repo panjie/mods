@@ -603,9 +603,12 @@ session and `D` deletes marked sessions after confirmation. Inside a transcript,
 `/` searches text, `n`/`N` moves between matches, `w` toggles wrapping, and `Esc`
 returns to the list.
 
+Set `hide-chat-path: true` in `mods.yml` (or `MODS_HIDE_CHAT_PATH=true`) to
+hide the working directory in the chat banner when sharing your screen.
+
 During a response, consecutive successful file reads collapse into a summary.
 `Ctrl+O` toggles tool arguments and output previews; failures show a short
-preview automatically. Live previews are bounded; saved sessions retain the
+diagnostic automatically. Live previews are bounded; saved sessions retain the
 complete tool results. `Ctrl+P` expands the plan, where Up/Down scrolls through
 steps. Press `Ctrl+P` again to return to the compact current-step view. These
 shortcuts yield to approval dialogs and input forms.

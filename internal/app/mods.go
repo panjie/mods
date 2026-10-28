@@ -689,7 +689,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		}
 		if !errors.Is(call.Err, errReviewUnavailable) {
 			outputCmds = append(outputCmds, m.toolResultOutputCmd(call.Name, call.Arguments, call.Err, call.Output))
-			if status := toolCompletionStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
+			if status := m.activityStatus(call.Name, call.Arguments, call.Err, m.width); status != "" {
 				completionStatus = status
 			}
 		}

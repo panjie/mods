@@ -349,7 +349,7 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error, output .
 	if name == toolregistry.TodoWriteToolName && err == nil && IsOutputTTY() && m.updateTodoPanel(data) {
 		return nil
 	}
-	status := ToolResultStatus(name, data, err, m.toolResultStatusWidth())
+	status := m.activityStatus(name, data, err, m.toolResultStatusWidth())
 	if status == "" {
 		return nil
 	}
@@ -359,8 +359,8 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error, output .
 	if m.Config.InteractiveTTYAvailable && IsErrorTTY() {
 		m.appendToolResultDisplayBlock(m.toolResultDisplayLine(status))
 		if len(output) > 0 {
-			activityStatus := ToolResultStatus(name, data, err, activityPreviewLimit)
-			m.recordActivity(name, activityStatus, "Tool: "+name+"\nArguments: "+string(data)+"\n"+output[0], err)
+			activityStatus := m.activityStatus(name, data, err, activityPreviewLimit)
+			m.recordActivity(name, activityStatus, data, output[0], err)
 		}
 		return nil
 	}

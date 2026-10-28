@@ -9,8 +9,8 @@ import (
 )
 
 func (m *Mods) handleShellProgress(_ context.Context, progress toolregistry.ShellProgress) {
-	command := progress.Command
-	lastOutput := progress.LastOutput
+	command := m.redactActivityText(progress.Command)
+	lastOutput := m.redactActivityText(progress.LastOutput)
 	if m.secrets != nil {
 		command = m.secrets.Redact(command)
 		lastOutput = m.secrets.Redact(lastOutput)

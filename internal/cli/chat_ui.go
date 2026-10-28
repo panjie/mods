@@ -81,6 +81,9 @@ func renderChatBanner(width int) string {
 // chatWorkingDir shows the resolved context once at startup. The home
 // directory collapses to "~" so the banner stays short on deep paths.
 func chatWorkingDir() string {
+	if config.HideChatPath {
+		return ""
+	}
 	dir := strings.TrimSpace(config.ResolveWorkingDir().Canonical)
 	if dir == "" {
 		return ""

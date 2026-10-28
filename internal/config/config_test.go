@@ -770,3 +770,13 @@ prompts:
 	require.NotContains(t, string(encoded), "shell-classifier")
 	require.NotContains(t, string(encoded), "shell-classify-prompt")
 }
+
+func TestHideChatPathConfig(t *testing.T) {
+	var cfg Config
+	require.NoError(t, yaml.Unmarshal([]byte("hide-chat-path: true"), &cfg))
+	require.True(t, cfg.HideChatPath)
+	cfg = Config{}
+	t.Setenv("MODS_HIDE_CHAT_PATH", "true")
+	require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
+	require.True(t, cfg.HideChatPath)
+}

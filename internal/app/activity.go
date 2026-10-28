@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -12,10 +13,10 @@ import (
 // Activity is presentation-only. The complete tool result remains in session
 // messages; the live preview is bounded and never contributes to raw stdout.
 type activityRecord struct {
-	status string
-	detail string
-	read   bool
-	failed bool
+	status  string
+	detail  string
+	read    bool
+	failure string
 }
 
 const activityPreviewLimit = 16384
@@ -28,7 +29,7 @@ func cloneActivityBlocks(src map[string][]activityRecord) map[string][]activityR
 	return dst
 }
 
-func (m *Mods) recordActivity(name, status, output string, err error) {
+func (m *Mods) recordActivity(name, status string, data []byte, output string, err error) {
 	marker, ok := m.trailingToolResultBlockMarker()
 	if !ok {
 		return
@@ -36,13 +37,13 @@ func (m *Mods) recordActivity(name, status, output string, err error) {
 	if m.activityBlocks == nil {
 		m.activityBlocks = map[string][]activityRecord{}
 	}
+	rawOutput := output
+	output = "Tool: " + name + "\nArguments: " + string(m.activityDisplayArgs(data)) + "\n" + output
 	if err != nil {
 		output = err.Error() + "\n" + output
 	}
-	if m.secrets != nil {
-		output = m.secrets.Redact(output)
-		status = m.secrets.Redact(status)
-	}
+	output = m.redactActivityText(output)
+	status = m.redactActivityText(status)
 	status = reviewLiteral(ansi.Strip(status))
 	// Strip styling and escape remaining controls before rendering untrusted text.
 	output = strings.TrimSpace(reviewLiteral(ansi.Strip(output)))
@@ -54,7 +55,18 @@ func (m *Mods) recordActivity(name, status, output string, err error) {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "fs_find_images", "fs_read_images", "fs_find_media", "fs_read_media":
 		read = err == nil
 	}
-	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{status: status, detail: output, read: read, failed: err != nil})
+	failure := ""
+	if err != nil {
+		failure = OneLinePreview(m.redactActivityText(err.Error()))
+		// Exit-only errors carry no diagnostic; preserve the first output line.
+		var ec interface{ ExitCode() int }
+		if errors.As(err, &ec) {
+			if first, _, _ := strings.Cut(strings.TrimSpace(rawOutput), "\n"); first != "" {
+				failure += " · " + OneLinePreview(m.redactActivityText(first))
+			}
+		}
+	}
+	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{status: status, detail: output, read: read, failure: failure})
 	m.renderDirty = true
 	m.flushRender()
 }
@@ -74,17 +86,14 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(fmt.Sprintf("✓ Read files · %d operations", end-i), width, "…")))
 		} else {
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.status, width, "…")))
-			if item.detail != "" && (m.activityExpanded || item.failed) {
+			if !m.activityExpanded && item.failure != "" {
+				lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.failure, width, "…")))
+			}
+			if item.detail != "" && m.activityExpanded {
 				detail := strings.Split(ansi.Hardwrap(item.detail, width, false), "\n")
-				limit := 6
-				if m.activityExpanded {
-					limit = 200
-				}
+				const limit = 200
 				if len(detail) > limit {
 					detail = append(detail[:limit], "… More output omitted from live preview")
-					if !m.activityExpanded {
-						detail[len(detail)-1] = "… Ctrl+O to expand details"
-					}
 				}
 				for _, line := range detail {
 					lines = append(lines, m.Styles.Comment.Render("  │ "+ansi.Truncate(line, width, "…")))

@@ -184,3 +184,20 @@ func TestCommandReviewAlignsMultiDigitLineNumbers(t *testing.T) {
 		require.Equal(t, gutterColumns[0], column, "line-number gutters must stay aligned past 9 lines")
 	}
 }
+
+func TestCommandReviewPagesLongWorkingDirectory(t *testing.T) {
+	r := newPagedTestReviewer(strings.Repeat("echo x\n", 20) + "last-command")
+	r.reviewItem.candidateRules = nil
+	r.reviewItem.presentation.rows = append([]interactionRow{{Label: "Working dir", Value: "/" + strings.Repeat("long-directory/", 15) + "end-dir"}}, r.reviewItem.presentation.rows...)
+	styles := makeStyles(true).Interaction
+	r.renderBanner(48, styles, 12)
+	var all string
+	for page := 0; page < r.reviewPages; page++ {
+		r.reviewPage = page
+		view := r.renderBanner(48, styles, 12)
+		require.LessOrEqual(t, lipgloss.Height(view), 12)
+		all += compactReviewText(view)
+	}
+	require.Contains(t, all, "end-dir")
+	require.Contains(t, all, "last-command")
+}

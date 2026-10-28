@@ -439,7 +439,7 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 			ctx, cancel := m.toolCallContext(registry, name, cfg)
 			defer cancel()
 			approvalRecord = approvalTrace{Source: "interactive", Detail: "tool-managed"}
-			m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
+			m.sendToolOperationStatus(ToolOperationLabel(name, m.activityDisplayArgs(data), m.width))
 			result, err := registry.CallResult(ctx, name, data)
 			return result, err
 		}
@@ -493,7 +493,7 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				intent = preparedAccess.Intent
 			}
 		}
-		m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
+		m.sendToolOperationStatus(ToolOperationLabel(name, m.activityDisplayArgs(data), m.width))
 		scope := m.reviewer.scope
 		safeDirs := m.safeDirs()
 		intent = normalizeAccessIntentDirs(intent, scope.Value)

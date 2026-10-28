@@ -698,3 +698,14 @@ func TestChatBannerShowsBrandAndRule(t *testing.T) {
 	require.Contains(t, rendered, "─")
 	require.NotContains(t, rendered, "Ctrl+Enter")
 }
+
+func TestChatBannerCanHideWorkingDirectory(t *testing.T) {
+	saved := config
+	t.Cleanup(func() { config = saved })
+	config.WorkingDir = t.TempDir()
+	config.HideChatPath = false
+	require.NotEmpty(t, chatWorkingDir())
+	config.HideChatPath = true
+	require.Empty(t, chatWorkingDir())
+	require.NotContains(t, renderChatBanner(80), config.WorkingDir)
+}

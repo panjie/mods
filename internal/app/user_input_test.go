@@ -220,7 +220,7 @@ func TestUserInputManagerSelectRoundTrip(t *testing.T) {
 	}
 }
 
-func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
+func TestUserInputSelectRendersSingleCursorWithinWidth(t *testing.T) {
 	manager := newUserInputManager(&Config{})
 	manager.handleStartMsg(userInputStartMsg{item: userInputItem{
 		req: toolregistry.UserInputRequest{
@@ -241,7 +241,8 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 		}
 	}
 	plain := ansi.Strip(manager.render(100, styles))
-	require.Contains(t, plain, "✓ git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "❯ git pull (merge) - create a merge commit")
+	require.NotContains(t, plain, "✓")
 	require.NotContains(t, plain, "❯ ›")
 	require.Contains(t, plain, "git rebase - replay my commit on top of remote")
 	require.Contains(t, plain, "Confirm")
@@ -258,9 +259,13 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 	require.Greater(t, narrowMergeLine, -1)
 	require.Less(t, narrowMergeLine+1, len(narrow))
 	continuation := narrow[narrowMergeLine+1]
-	require.Contains(t, continuation, "commit", "long labels must wrap onto a continuation line")
-	require.True(t, strings.HasPrefix(continuation, "│    "),
+	require.Contains(t, strings.TrimSpace(narrow[narrowMergeLine])+strings.TrimSpace(strings.TrimPrefix(continuation, "│")), "commit", "wrapped text must remain complete")
+	require.True(t, strings.HasPrefix(continuation, "│   "),
 		"continuation must align under the label start: %q", continuation)
+	manager.selected = len(manager.item.req.Options)
+	custom := ansi.Strip(manager.render(100, styles))
+	require.Contains(t, custom, "❯ 自行输入…")
+	require.NotContains(t, custom, "✓")
 }
 
 func TestUserInputSelectRendersNerdGlyphs(t *testing.T) {
@@ -285,7 +290,8 @@ func TestUserInputSelectRendersNerdGlyphs(t *testing.T) {
 		}
 	}
 	plain := ansi.Strip(manager.render(100, styles))
-	require.Contains(t, plain, "✓ git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "❯ git pull (merge) - create a merge commit")
+	require.NotContains(t, plain, "✓")
 	require.NotContains(t, plain, "❯ ›")
 	require.Contains(t, plain, "git rebase - replay my commit on top of remote")
 	require.NotContains(t, plain, "(•)")

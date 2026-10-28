@@ -127,5 +127,10 @@ func (m *Mods) activityHelp() string {
 	if len(keys) == 0 || m.height < 12 {
 		return ""
 	}
-	return m.Styles.Comment.Render(ansi.Truncate(strings.Join(keys, " · "), max(1, m.width), "…"))
+	// Align with the phase label after the one-cell spinner and its space.
+	const indent = "  "
+	if m.width <= len(indent) {
+		return ""
+	}
+	return indent + m.Styles.Comment.Faint(true).Render(ansi.Truncate(strings.Join(keys, " · "), m.width-len(indent), "…"))
 }

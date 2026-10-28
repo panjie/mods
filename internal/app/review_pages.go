@@ -189,7 +189,7 @@ func commandReviewBody(styles ui.InteractionStyles, width int, rows []interactio
 		if row.Label == "Command" {
 			heading := styles.Label.Render("Command:")
 			if cwd != "" {
-				heading += "  " + styles.Muted.Render(cwd)
+				heading += "  " + styles.Muted.Faint(true).Render("running in " + cwd)
 			}
 			lines = append(lines, strings.Split(ansi.Hardwrap(heading, width, false), "\n")...)
 			lines = append(lines, commandSourceLines(styles, width, value)...)

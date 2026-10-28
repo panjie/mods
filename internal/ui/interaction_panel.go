@@ -269,6 +269,23 @@ func renderStackedInteractionAction(styles InteractionStyles, width int, action 
 	if action.Selected {
 		cursor = styles.Cursor.Render("❯")
 	}
+	// A single-select choice needs only the cursor, with identical label
+	// columns for focused, unfocused, and wrapped continuation lines.
+	if action.Key == "" {
+		style := styles.Action
+		if action.Selected {
+			style = styles.Selected.Padding(0)
+		}
+		parts := strings.Split(ansi.Hardwrap(action.Label, max(1, width-2), false), "\n")
+		for i, part := range parts {
+			prefix := "  "
+			if i == 0 {
+				prefix = cursor + " "
+			}
+			parts[i] = prefix + style.Render(part)
+		}
+		return parts
+	}
 	cursorWidth := lipgloss.Width(cursor)
 	labelWidth := max(1, width-cursorWidth-keyWidth-1)
 	labelLines := strings.Split(ansi.Hardwrap(action.Label, labelWidth, false), "\n")

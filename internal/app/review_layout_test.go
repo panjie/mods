@@ -114,13 +114,13 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			require.Contains(t, banner, "Run command?")
 			require.Contains(t, banner, "Purpose: 生成报告供用户检查")
 			require.Contains(t, banner, "Command:")
-			require.Contains(t, banner, "/project", "the command heading keeps its execution directory")
+			require.Contains(t, banner, "Command:  running in /project", "the heading labels the execution directory separately from the command")
 			require.NotContains(t, banner, "Working dir:", "the default directory is folded into the command heading")
 			require.Less(t, strings.Index(banner, "Purpose:"), strings.Index(banner, "Command:"))
 			for _, hidden := range []string{"1/1", "Pages", "Warning", "Model declaration", "Interpreter", "Source:", "1 |"} {
 				require.NotContains(t, banner, hidden)
 			}
-			for _, action := range []string{"Allow once", "Deny", "Cancel task"} {
+			for _, action := range []string{"Y Allow", "Deny", "Cancel task"} {
 				require.Contains(t, banner, action)
 			}
 			require.Contains(t, banner, "←/→ choose")
@@ -128,8 +128,9 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			require.NotContains(t, banner, "run this once", "approval actions carry no redundant descriptions")
 			require.NotContains(t, banner, "do not run it")
 			require.NotContains(t, banner, "Allow for session")
+			require.NotContains(t, banner, "Allow once")
 			lines := strings.Split(banner, "\n")
-			actionLine := lines[lineIndexContaining(lines, "Allow once")]
+			actionLine := lines[lineIndexContaining(lines, "Y Allow")]
 			require.Contains(t, actionLine, "Deny", "choice keys share one compact row")
 			require.Contains(t, actionLine, "Cancel task")
 			// All content remains reachable on a small terminal, with approval

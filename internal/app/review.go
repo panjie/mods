@@ -259,11 +259,16 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 func (r *toolReviewer) reviewOptions() []reviewOption {
+	canAllowForSession := r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0
+	approveLabel := "Allow"
+	if canAllowForSession {
+		approveLabel = "Allow once"
+	}
 	options := []reviewOption{
-		{key: "Y", label: "Allow once", action: reviewOptionApprove},
+		{key: "Y", label: approveLabel, action: reviewOptionApprove},
 		{key: "N", label: "Deny", action: reviewOptionDeny},
 	}
-	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
+	if canAllowForSession {
 		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
 	}
 	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel task", action: reviewOptionCancel})

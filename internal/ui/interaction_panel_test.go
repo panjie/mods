@@ -45,16 +45,14 @@ func lineContaining(text, needle string) string {
 	return ""
 }
 
-func TestStackedChoiceUsesCursorAndDescription(t *testing.T) {
+func TestStackedChoiceUsesCursor(t *testing.T) {
 	styles := MakeStyles(true).Interaction
 	rendered := ansi.Strip(RenderInteractionPanel(styles, 60, InteractionPanel{
 		Title:        "Review",
-		Choices:      []InteractionAction{{Key: "Y", Label: "Allow once", Description: "run this once", Selected: true}, {Key: "N", Label: "Deny", Description: "do not run it"}},
+		Choices:      []InteractionAction{{Key: "Y", Label: "Allow once", Selected: true}, {Key: "N", Label: "Deny"}},
 		StackChoices: true,
 	}))
 	require.Contains(t, rendered, "❯")
 	require.Contains(t, rendered, "Y Allow once")
-	require.Contains(t, rendered, "run this once")
 	require.Contains(t, rendered, "N Deny")
-	require.Contains(t, rendered, "do not run it")
 }

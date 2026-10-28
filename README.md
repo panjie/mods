@@ -307,14 +307,11 @@ and does not affect authorization.
 ```
 Run command?                                    ←/→ choose
 Purpose: Delete the obsolete demo image
-Working dir: /path/to/project
 
-Command:
+Command:  /path/to/project
   rm -f demo.gif
 
- ❯ Y Allow once   run this once
-   N Deny  do not run it
-   Ctrl+C Cancel task  stop the task
+ ❯ Y Allow once  ·  N Deny  ·  Ctrl+C Cancel task
 ```
 
 Long commands can be browsed with Up/Down; approval is available immediately.

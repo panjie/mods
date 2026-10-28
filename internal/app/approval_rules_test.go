@@ -195,7 +195,7 @@ func TestReviewBannerStylesSelectedActionAndKeys(t *testing.T) {
 	}
 	styles := makeStyles(true).Interaction
 	rendered := reviewer.renderBanner(120, styles)
-	require.Contains(t, rendered, styles.Selected.Render("Y Allow once"))
+	require.Contains(t, rendered, styles.Selected.Padding(0).Render("Y Allow once"))
 	require.Contains(t, rendered, styles.Key.Render("N"))
 }
 

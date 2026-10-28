@@ -38,11 +38,9 @@ type InteractionProgress struct {
 }
 
 type InteractionAction struct {
-	Key   string
-	Label string
-	// Description is optional supporting text for stacked choices.
-	Description string
-	Selected    bool
+	Key      string
+	Label    string
+	Selected bool
 }
 
 type InteractionPanel struct {
@@ -251,7 +249,7 @@ func packInteractionActions(styles InteractionStyles, width int, actions []Inter
 
 func renderInteractionAction(styles InteractionStyles, action InteractionAction) string {
 	if action.Selected {
-		return styles.Selected.Render(strings.TrimSpace(action.Key + " " + action.Label))
+		return styles.Cursor.Render("❯") + " " + styles.Selected.Padding(0).Render(strings.TrimSpace(action.Key+" "+action.Label))
 	}
 	key := styles.Key.Render(action.Key)
 	if action.Label == "" {
@@ -283,11 +281,6 @@ func renderStackedInteractionAction(styles InteractionStyles, width int, action 
 				lines = append(lines, strings.Repeat(" ", cursorWidth)+styles.Selected.Render(strings.Repeat(" ", max(0, keyWidth-1))+label))
 			}
 		}
-		if len(labelLines) == 1 {
-			if description := fittedActionDescription(styles, width, lines[0], action.Description); description != "" {
-				lines[0] += "  " + styles.Muted.Render(description)
-			}
-		}
 		return lines
 	}
 	indent := strings.Repeat(" ", cursorWidth+keyWidth)
@@ -298,27 +291,7 @@ func renderStackedInteractionAction(styles InteractionStyles, width int, action 
 			lines = append(lines, indent+styles.Action.Render(label))
 		}
 	}
-	if len(labelLines) == 1 {
-		if description := fittedActionDescription(styles, width, lines[0], action.Description); description != "" {
-			lines[0] += "  " + styles.Muted.Render(description)
-		}
-	}
 	return lines
-}
-
-// fittedActionDescription returns the longest usable description that fits
-// after a one-line choice, or "" when the terminal is too narrow to keep the
-// row readable. Hiding descriptions is preferable to wrapping a menu into an
-// unpredictable height.
-func fittedActionDescription(styles InteractionStyles, width int, rendered, description string) string {
-	if description == "" {
-		return ""
-	}
-	remaining := width - lipgloss.Width(rendered) - 2
-	if remaining < 10 {
-		return ""
-	}
-	return ansi.Truncate(description, remaining, "…")
 }
 
 func interactionToneStyle(styles InteractionStyles, tone InteractionTone) lipgloss.Style {

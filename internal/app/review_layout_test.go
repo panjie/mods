@@ -113,8 +113,10 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			require.Equal(t, 1, r.reviewPages)
 			require.Contains(t, banner, "Run command?")
 			require.Contains(t, banner, "Purpose: 生成报告供用户检查")
-			require.Less(t, strings.Index(banner, "Purpose:"), strings.Index(banner, "Working dir:"))
-			require.Less(t, strings.Index(banner, "Working dir:"), strings.Index(banner, "Command:"))
+			require.Contains(t, banner, "Command:")
+			require.Contains(t, banner, "/project", "the command heading keeps its execution directory")
+			require.NotContains(t, banner, "Working dir:", "the default directory is folded into the command heading")
+			require.Less(t, strings.Index(banner, "Purpose:"), strings.Index(banner, "Command:"))
 			for _, hidden := range []string{"1/1", "Pages", "Warning", "Model declaration", "Interpreter", "Source:", "1 |"} {
 				require.NotContains(t, banner, hidden)
 			}
@@ -122,10 +124,14 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 				require.Contains(t, banner, action)
 			}
 			require.Contains(t, banner, "←/→ choose")
-			require.Contains(t, banner, "run this once")
-			require.Contains(t, banner, "do not run it")
 			require.Contains(t, banner, "❯")
+			require.NotContains(t, banner, "run this once", "approval actions carry no redundant descriptions")
+			require.NotContains(t, banner, "do not run it")
 			require.NotContains(t, banner, "Allow for session")
+			lines := strings.Split(banner, "\n")
+			actionLine := lines[lineIndexContaining(lines, "Allow once")]
+			require.Contains(t, actionLine, "Deny", "choice keys share one compact row")
+			require.Contains(t, actionLine, "Cancel task")
 			// All content remains reachable on a small terminal, with approval
 			// available on every page and no change to the reviewed arguments.
 			for i := range r.reviewItem.presentation.rows {
@@ -146,5 +152,35 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			}
 			require.Contains(t, pages, "last-command-line")
 		})
+	}
+}
+
+func TestCommandReviewAlignsMultiDigitLineNumbers(t *testing.T) {
+	commandLines := make([]string, 0, 12)
+	for i := 1; i <= 12; i++ {
+		commandLines = append(commandLines, fmt.Sprintf("%d | echo %d", i, i))
+	}
+	r := &toolReviewer{}
+	r.handleStartMsg(toolReviewStartMsg{item: toolReviewItem{
+		name: "shell_run", resp: make(chan reviewResponse, 1),
+		presentation: reviewPresentation{tone: interactionToneWarning, rows: []interactionRow{
+			{Label: "Purpose", Value: "probe version"},
+			{Label: "Working dir", Value: "/project"},
+			{Label: "Command", Value: strings.Join(commandLines, "\n")},
+		}},
+	}})
+	banner := ansi.Strip(r.renderBanner(80, makeStyles(true).Interaction, 40))
+	var gutterColumns []int
+	for _, line := range strings.Split(banner, "\n") {
+		if strings.Count(line, "│") != 2 {
+			continue
+		}
+		first := strings.Index(line, "│")
+		rest := line[first+len("│"):]
+		gutterColumns = append(gutterColumns, first+len("│")+strings.Index(rest, "│"))
+	}
+	require.Len(t, gutterColumns, 12, "each numbered command line renders one gutter")
+	for _, column := range gutterColumns {
+		require.Equal(t, gutterColumns[0], column, "line-number gutters must stay aligned past 9 lines")
 	}
 }

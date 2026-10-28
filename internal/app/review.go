@@ -28,10 +28,9 @@ const (
 )
 
 type reviewOption struct {
-	key         string
-	label       string
-	description string
-	action      reviewOptionAction
+	key    string
+	label  string
+	action reviewOptionAction
 }
 
 // toolReviewer manages interactive approval of tool executions (file writes,
@@ -261,13 +260,13 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 
 func (r *toolReviewer) reviewOptions() []reviewOption {
 	options := []reviewOption{
-		{key: "Y", label: "Allow once", description: "run this once", action: reviewOptionApprove},
-		{key: "N", label: "Deny", description: "do not run it", action: reviewOptionDeny},
+		{key: "Y", label: "Allow once", action: reviewOptionApprove},
+		{key: "N", label: "Deny", action: reviewOptionDeny},
 	}
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
-		options = append(options, reviewOption{key: "A", label: "Allow for session", description: "remember for this conversation", action: reviewOptionAlwaysAllow})
+		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
 	}
-	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel task", description: "stop the task", action: reviewOptionCancel})
+	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel task", action: reviewOptionCancel})
 }
 
 func (r *toolReviewer) reviewOptionEnabled(option reviewOption) bool {
@@ -298,7 +297,7 @@ func (r *toolReviewer) reviewActions() []interactionAction {
 	var actions []interactionAction
 	for i, option := range options {
 		if r.reviewOptionEnabled(option) {
-			actions = append(actions, interactionAction{Key: option.key, Label: option.label, Description: option.description, Selected: i == r.selected})
+			actions = append(actions, interactionAction{Key: option.key, Label: option.label, Selected: i == r.selected})
 		}
 	}
 	return actions

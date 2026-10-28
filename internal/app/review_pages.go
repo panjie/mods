@@ -119,29 +119,26 @@ func (r *toolReviewer) renderCommandReview(width, height int, styles ui.Interact
 	p := r.reviewItem.presentation
 	inner := max(1, interactionPanelInnerWidth(styles, width))
 	body := commandReviewBody(styles, inner, reviewOrderedRows(p.rows))
-	choices := r.reviewActions()
-	// The choice keys are direct (Y/N/A), so the only fixed footer is the page
-	// control on multi-page commands. The selection hint lives in the title
-	// meta where it costs no vertical space. Recompute twice so the page
-	// counter and page control participate in the height budget.
+	actions := r.reviewActions()
 	chooseHint := "←/→ choose"
 	if width < 40 {
 		chooseHint = "←/→"
 	}
-	var navigation []interactionAction
+	footer := func(pages int) []interactionAction {
+		out := append([]interactionAction(nil), actions...)
+		if pages > 1 {
+			out = append(out, interactionAction{Key: "↑/↓", Label: "pages"})
+		}
+		return out
+	}
 	pages, pageSize := 0, 1
 	for range 3 {
-		if pages > 1 {
-			navigation = []interactionAction{{Key: "↑/↓", Label: "pages"}}
-		} else {
-			navigation = nil
-		}
 		meta := chooseHint
 		if pages > 1 {
 			meta = fmt.Sprintf("%d/%d · %s", pages, pages, chooseHint)
 		}
 		overhead := lipgloss.Height(renderInteractionPanel(styles, width, interactionPanel{
-			Title: "Run command?", Meta: meta, Tone: p.tone, Choices: choices, StackChoices: true, Actions: navigation,
+			Title: "Run command?", Meta: meta, Tone: p.tone, Actions: footer(pages),
 		}))
 		pageSize = max(1, height-overhead)
 		next := max(1, (len(body)+pageSize-1)/pageSize)
@@ -149,11 +146,6 @@ func (r *toolReviewer) renderCommandReview(width, height int, styles ui.Interact
 			break
 		}
 		pages = next
-	}
-	if pages > 1 {
-		navigation = []interactionAction{{Key: "↑/↓", Label: "pages"}}
-	} else {
-		navigation = nil
 	}
 	layout := fmt.Sprintf("command/%d/%d/%d", width, height, len(body))
 	if r.reviewLayout != layout {
@@ -170,29 +162,40 @@ func (r *toolReviewer) renderCommandReview(width, height int, styles ui.Interact
 	}
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title: "Run command?", Meta: meta,
-		Tone: p.tone, Body: body[start:end],
-		Choices: choices, StackChoices: true, Actions: navigation,
+		Tone: p.tone, Body: body[start:end], Actions: footer(pages),
 	})
 }
 
 func commandReviewBody(styles ui.InteractionStyles, width int, rows []interactionRow) []string {
+	// Keep the normalized execution directory visible for security, but fold
+	// it into the command heading instead of giving it a separate row and blank
+	// line. Relative paths are resolved from this directory.
+	cwd := ""
+	for _, row := range rows {
+		if row.Label == "Working dir" {
+			cwd = reviewLiteral(row.Value)
+			break
+		}
+	}
 	var lines []string
 	for _, row := range rows {
+		if row.Label == "Working dir" {
+			continue
+		}
 		if len(lines) > 0 {
 			lines = append(lines, "")
 		}
 		value := reviewLiteral(row.Value)
 		if row.Label == "Command" {
-			lines = append(lines, styles.Label.Render("Command:"))
+			heading := styles.Label.Render("Command:")
+			if cwd != "" {
+				heading += "  " + styles.Muted.Render(cwd)
+			}
+			lines = append(lines, heading)
 			lines = append(lines, commandSourceLines(styles, width, value)...)
 			continue
 		}
-		label := row.Label + ":"
-		style := styles.Body
-		if row.Label == "Working dir" {
-			style = styles.Code
-		}
-		lines = append(lines, reviewLabeledValue(styles, width, label, style, value)...)
+		lines = append(lines, reviewLabeledValue(styles, width, row.Label+":", styles.Body, value)...)
 	}
 	return lines
 }
@@ -223,23 +226,52 @@ func reviewLabeledValue(styles ui.InteractionStyles, width int, label string, st
 
 func commandSourceLines(styles ui.InteractionStyles, width int, source string) []string {
 	source = strings.ReplaceAll(source, "\r\n", "\n")
-	var lines []string
+	type commandLine struct {
+		number   string
+		code     string
+		numbered bool
+	}
+	parsed := make([]commandLine, 0, strings.Count(source, "\n")+1)
+	numberWidth := 0
 	for _, line := range strings.Split(source, "\n") {
 		number, code, numbered := strings.Cut(line, " | ")
 		if !numbered || !isReviewLineNumber(number) {
-			for _, part := range wrapCommandSource(line, width, 2) {
+			parsed = append(parsed, commandLine{code: line})
+			continue
+		}
+		parsed = append(parsed, commandLine{number: number, code: code, numbered: true})
+		numberWidth = max(numberWidth, lipgloss.Width(number))
+	}
+	if numberWidth == 0 {
+		var lines []string
+		for _, item := range parsed {
+			for _, part := range wrapCommandSource(item.code, width, 2) {
+				lines = append(lines, styles.Code.Render(part))
+			}
+		}
+		return lines
+	}
+
+	// Pad every number to the same width so the gutter bar and code column
+	// stay aligned once commands reach double-digit line numbers.
+	gutterWidth := 2 + numberWidth + 3
+	var lines []string
+	for _, item := range parsed {
+		if !item.numbered {
+			for _, part := range wrapCommandSource(item.code, width, 2) {
 				lines = append(lines, styles.Code.Render(part))
 			}
 			continue
 		}
-		prefixWidth := 2 + lipgloss.Width(number) + 3
-		wrapped := wrapCommandSource(code, width, prefixWidth)
+		available := max(1, width-gutterWidth)
+		wrapped := strings.Split(ansi.Wrap(item.code, available, ""), "\n")
+		number := strings.Repeat(" ", max(0, numberWidth-lipgloss.Width(item.number))) + item.number
 		for i, part := range wrapped {
 			if i == 0 {
-				lines = append(lines, "  "+styles.Muted.Render(number)+" "+styles.Rule.Render("│")+" "+styles.Code.Render(strings.TrimPrefix(part, strings.Repeat(" ", prefixWidth))))
+				lines = append(lines, "  "+styles.Muted.Render(number)+" "+styles.Rule.Render("│")+" "+styles.Code.Render(part))
 				continue
 			}
-			lines = append(lines, styles.Code.Render(part))
+			lines = append(lines, strings.Repeat(" ", gutterWidth)+styles.Code.Render(part))
 		}
 	}
 	return lines

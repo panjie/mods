@@ -241,7 +241,8 @@ func TestUserInputSelectRendersStackedCheckboxesWithinWidth(t *testing.T) {
 		}
 	}
 	plain := ansi.Strip(manager.render(100, styles))
-	require.Contains(t, plain, "› git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "✓ git pull (merge) - create a merge commit")
+	require.NotContains(t, plain, "❯ ›")
 	require.Contains(t, plain, "git rebase - replay my commit on top of remote")
 	require.Contains(t, plain, "Confirm")
 	require.NotContains(t, plain, "Space", "radio select must not advertise the multiselect toggle key")
@@ -284,7 +285,8 @@ func TestUserInputSelectRendersNerdGlyphs(t *testing.T) {
 		}
 	}
 	plain := ansi.Strip(manager.render(100, styles))
-	require.Contains(t, plain, "› git pull (merge) - create a merge commit")
+	require.Contains(t, plain, "✓ git pull (merge) - create a merge commit")
+	require.NotContains(t, plain, "❯ ›")
 	require.Contains(t, plain, "git rebase - replay my commit on top of remote")
 	require.NotContains(t, plain, "(•)")
 	require.NotContains(t, plain, "[x]")

@@ -522,7 +522,10 @@ func (u *userInputManager) choiceRows(includeSelectAll, radio bool) []interactio
 		options = append(options, interactionAction{Key: selectAllCheckbox, Label: "Select all", Selected: u.selected == 0})
 	}
 	for i, option := range u.item.req.Options {
-		on, off := "›", " "
+		// A check marks the current radio choice. The panel's cursor already
+		// identifies focus, so a second right chevron would read as two
+		// arrows (❯ ›) on the same row.
+		on, off := "✓", " "
 		if !radio {
 			on, off = "[x]", "[ ]"
 		}
@@ -538,7 +541,7 @@ func (u *userInputManager) choiceRows(includeSelectAll, radio bool) []interactio
 	if radio {
 		marker := " "
 		if u.selected == len(u.item.req.Options) {
-			marker = "›"
+			marker = "✓"
 		}
 		options = append(options, interactionAction{Key: marker, Label: "自行输入…", Selected: u.selected == len(u.item.req.Options)})
 	}

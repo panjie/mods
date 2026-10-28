@@ -16,6 +16,7 @@ const (
 	flagCategoryModelProvider     = "Model & Provider"
 	flagCategoryModesSessions     = "Modes & Sessions"
 	flagCategoryPromptContext     = "Prompt & Context"
+	flagCategoryMediaInput        = "Media Input"
 	flagCategoryReview            = "Review"
 	flagCategoryToolsIntegrations = "Tools & Integrations"
 	flagCategoryOutputDisplay     = "Output & Display"
@@ -57,8 +58,10 @@ const (
 type flagSpec struct {
 	Name  string
 	Short string
-	// Advanced marks the flag as an advanced-tier entry in --help and in the
-	// runtime self-help catalog.
+	// ValueName labels an argument in CLI help.
+	ValueName string
+	// Advanced marks the flag in the runtime self-help catalog. CLI help
+	// keeps all tiers together within each category.
 	Advanced bool
 	// Set reports whether this flag currently selects its side effect. It reads
 	// the bound config field at call time, so a value supplied by mods.yml or
@@ -82,10 +85,10 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModelProvider,
 		Flags: []flagSpec{
-			{Name: "api", Short: "a"},
-			{Name: "model", Short: "m"},
-			{Name: "max-retries", Advanced: true},
-			{Name: "http-proxy", Short: "x", Advanced: true},
+			{Name: "api", ValueName: "NAME", Short: "a"},
+			{Name: "model", ValueName: "NAME", Short: "m"},
+			{Name: "max-retries", ValueName: "COUNT", Advanced: true},
+			{Name: "http-proxy", ValueName: "URL", Short: "x", Advanced: true},
 		},
 	},
 	{
@@ -93,7 +96,7 @@ var flagCategorySpecs = []flagCategorySpec{
 		Flags: []flagSpec{
 			{Name: flagChat, Set: func() bool { return config.Chat }, Role: roleNoArgs},
 			{Name: "think", Short: "t"},
-			{Name: flagContinue, Short: "C", Role: roleExclusive | roleSessionComplete},
+			{Name: flagContinue, ValueName: "SESSION", Short: "C", Role: roleExclusive | roleSessionComplete},
 			{Name: flagContinueLast, Short: "c", Role: roleExclusive},
 			{Name: flagListSessions, Short: "l", Set: func() bool { return config.List }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: "no-save", Short: "n", Advanced: true},
@@ -103,21 +106,26 @@ var flagCategorySpecs = []flagCategorySpec{
 		Name: flagCategoryPromptContext,
 		Flags: []flagSpec{
 			{Name: "editor", Short: "e"},
-			{Name: "role", Short: "r"},
+			{Name: "role", ValueName: "NAME", Short: "r"},
 			{Name: "list-roles", Set: func() bool { return config.ListRoles }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
-			{Name: "image", Short: "i"},
-			{Name: "audio"},
-			{Name: "video"},
-			{Name: "stdin-image", Advanced: true},
-			{Name: "clipboard-image", Short: "I", Advanced: true},
 			{Name: "no-instructions", Advanced: true},
 			{Name: flagListPrompts, Set: func() bool { return config.ListPrompts }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 		},
 	},
 	{
+		Name: flagCategoryMediaInput,
+		Flags: []flagSpec{
+			{Name: "image", ValueName: "PATH", Short: "i"},
+			{Name: "clipboard-image", Short: "I"},
+			{Name: "stdin-image"},
+			{Name: "audio", ValueName: "PATH"},
+			{Name: "video", ValueName: "PATH"},
+		},
+	},
+	{
 		Name: flagCategoryReview,
 		Flags: []flagSpec{
-			{Name: "review-mode", Short: "V"},
+			{Name: "review-mode", ValueName: "MODE", Short: "V"},
 			{Name: "no-review", Short: "N"},
 		},
 	},
@@ -125,7 +133,7 @@ var flagCategorySpecs = []flagCategorySpec{
 		Name: flagCategoryToolsIntegrations,
 		Flags: []flagSpec{
 			{Name: flagListTools, Advanced: true, Set: func() bool { return config.MCPListTools }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
-			{Name: "skills-dirs"},
+			{Name: "skills-dirs", ValueName: "DIR"},
 			{Name: flagListSkills, Set: func() bool { return config.ListSkills }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: "web-search"},
 			{Name: flagListMCPs, Advanced: true, Set: func() bool { return config.MCPList }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
@@ -134,10 +142,10 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryOutputDisplay,
 		Flags: []flagSpec{
-			{Name: "format", Short: "f"},
+			{Name: "format", ValueName: "FORMAT", Short: "f"},
 			{Name: "minimal"},
 			{Name: "raw"},
-			{Name: "word-wrap", Advanced: true},
+			{Name: "word-wrap", ValueName: "WIDTH", Advanced: true},
 			{Name: "hide-tool-status", Advanced: true},
 			{Name: "show-token-usage", Short: "s", Advanced: true},
 		},
@@ -145,9 +153,9 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryConfigMaintenance,
 		Flags: []flagSpec{
-			{Name: "chatgpt-auth", Set: func() bool { return config.ChatGPTAuth != "" }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
+			{Name: "chatgpt-auth", ValueName: "ACTION", Set: func() bool { return config.ChatGPTAuth != "" }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: flagConfig, Set: func() bool { return config.ConfigSetup }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
-			{Name: flagSettings, Set: func() bool { return config.Settings }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
+			{Name: flagSettings, ValueName: "YAML", Set: func() bool { return config.Settings }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
 			{Name: "dirs", Set: func() bool { return config.Dirs }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: flagResetSettings, Set: func() bool { return config.ResetSettings }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig},
 		},

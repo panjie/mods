@@ -13,12 +13,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHelpQuickStartPrecedesAdvancedAndWraps(t *testing.T) {
+func TestHelpQuickStartPrecedesOptionsAndWraps(t *testing.T) {
 	out := captureStdout(t, func() { require.NoError(t, usageFunc(rootCmd)) })
 	require.Less(t, strings.Index(out, "Quick start:"), strings.Index(out, "Options:"))
-	require.Less(t, strings.Index(out, "--chat"), strings.Index(out, "Advanced options:"))
+	require.NotContains(t, out, "Advanced options:")
+	for _, category := range flagCategorySpecs {
+		require.Equal(t, 1, strings.Count(ansi.Strip(out), "\n"+category.Name+"\n"), category.Name)
+	}
+	for name, label := range map[string]string{
+		"model":           "--model NAME",
+		"image":           "--image PATH",
+		"continue":        "--continue SESSION",
+		"format":          "--format[=FORMAT]",
+		"settings":        "--settings[=YAML]",
+		"skills-dirs":     "--skills-dirs [DIR]",
+		"web-search":      "--web-search[=BOOL]",
+		"clipboard-image": "-I, --clipboard-image",
+	} {
+		require.Contains(t, ansi.Strip(renderFlag(rootCmd.Flags().Lookup(name), 96)), label)
+	}
 	for _, width := range []int{24, 40, 80, 120} {
-		for _, name := range []string{"model", "word-wrap", "max-retries"} {
+		for _, name := range []string{"model", "word-wrap", "max-retries", "clipboard-image", "settings", "web-search"} {
 			text := renderFlag(rootCmd.Flags().Lookup(name), width)
 			require.Contains(t, ansi.Strip(text), "--"+name)
 			for _, line := range strings.Split(text, "\n") {

@@ -16,7 +16,7 @@ import (
 
 const (
 	helpIntroSummary = "Mods is an AI command-line assistant for prompts, pipelines, and local work."
-	helpIntroDetail  = "With built-in tools enabled, it can inspect and edit files, run shell commands, search the web, and keep sessions, with review controls for risky actions."
+	helpIntroDetail  = "With built-in tools enabled, it can inspect and edit files, run shell commands, and search the web, with review controls for writes. Conversations can be saved and resumed."
 )
 
 func useLine() string {
@@ -37,7 +37,7 @@ func usageFunc(cmd *cobra.Command) error {
 		"Usage:\n  %s\n\n",
 		useLine(),
 	)
-	_, _ = lipgloss.Fprintln(os.Stdout, ansi.Wrap("Quick start:\n  mods --config          Configure a provider\n  mods --chat            Start a conversation\n  mods \"Explain this code\"\n  cat main.go | mods \"Review this file\"\n  mods --list-sessions   Browse saved sessions\n", helpWidth(), ""))
+	_, _ = lipgloss.Fprintln(os.Stdout, ansi.Wrap("Quick start:\n  mods --config          Configure a provider\n  mods --chat            Start a conversation\n  mods \"Explain this code\"\n  cat main.go | mods \"Review this file\"\n  mods --list-sessions   Browse saved sessions\n  mods --image photo.jpg \"Describe this image\"\n", helpWidth(), ""))
 	_, _ = lipgloss.Fprintln(os.Stdout, "Options:")
 	printGroupedFlags(cmd)
 	if cmd.HasExample() {
@@ -58,22 +58,13 @@ func printGroupedFlags(cmd *cobra.Command) {
 		categories = append(categories, category.Name)
 	}
 	categories = append(categories, flagCategoryOther)
-	for _, advanced := range []bool{false, true} {
-		if advanced {
-			_, _ = lipgloss.Fprintln(os.Stdout, "\nAdvanced options:")
+	for _, category := range categories {
+		if len(groups[category]) == 0 {
+			continue
 		}
-		for _, category := range categories {
-			heading := false
-			for _, f := range groups[category] {
-				if flagIsAdvanced(f) != advanced {
-					continue
-				}
-				if !heading {
-					_, _ = lipgloss.Fprintln(os.Stdout, "\n"+ui.StdoutStyles().AppName.Render(category))
-					heading = true
-				}
-				printFlag(f)
-			}
+		_, _ = lipgloss.Fprintln(os.Stdout, "\n"+ui.StdoutStyles().AppName.Render(category))
+		for _, f := range groups[category] {
+			printFlag(f)
 		}
 	}
 }
@@ -92,14 +83,11 @@ func printFlag(f *flag.Flag) {
 
 func renderFlag(f *flag.Flag, width int) string {
 	styles := ui.StdoutStyles()
-	name := "--" + f.Name
+	name := "--" + f.Name + flagValueSuffix(f)
 	if f.Shorthand != "" {
 		name = "-" + f.Shorthand + ", " + name
 	}
 	description := f.Usage
-	if flagIsAdvanced(f) {
-		description += " [advanced]"
-	}
 	width = max(8, width)
 	labelWidth := 28
 	if width < 70 || ansi.StringWidth(name) > labelWidth {
@@ -113,4 +101,30 @@ func renderFlag(f *flag.Flag, width int) string {
 func indentHelp(text string, spaces int) string {
 	indent := strings.Repeat(" ", spaces)
 	return indent + strings.ReplaceAll(text, "\n", "\n"+indent)
+}
+
+// flagValueSuffix describes required and optional values without exposing
+// internal defaults such as the settings editor sentinel.
+func flagValueSuffix(f *flag.Flag) string {
+	if f.Name == "web-search" {
+		return "[=BOOL]"
+	}
+	if f.Value.Type() == "bool" {
+		return ""
+	}
+	value := strings.ToUpper(f.Value.Type())
+	for _, category := range flagCategorySpecs {
+		for _, spec := range category.Flags {
+			if spec.Name == f.Name && spec.ValueName != "" {
+				value = spec.ValueName
+			}
+		}
+	}
+	if f.Name == "skills-dirs" {
+		return " [DIR]"
+	}
+	if f.NoOptDefVal != "" {
+		return "[=" + value + "]"
+	}
+	return " " + value
 }

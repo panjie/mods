@@ -107,3 +107,14 @@ styling.
 Use `--show-token-usage` (or `-s`) to print the input, output, and total token
 count for an interaction to stderr without mixing it into the model response on
 stdout.
+
+## Installed skill directories
+
+Use `mods --skills-dirs DIR` to select installed skill directories. Repeat the
+flag to supply multiple directories; later directories override earlier skills
+with the same name. Use `mods --skills-dirs` without a directory to print the
+effective directories.
+
+The default is `~/.agents/skills`. Portable mode also includes a `skills`
+directory next to the executable. Use `mods --list-skills` to list the installed
+skills from the effective directories.

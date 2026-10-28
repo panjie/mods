@@ -752,7 +752,7 @@ func TestHelpUsageShowsAllPublicFlags(t *testing.T) {
 		}
 		require.Contains(t, output, "--"+f.Name)
 	})
-	require.Contains(t, output, "[advanced]")
+	require.NotContains(t, output, "[advanced]")
 	require.NotContains(t, output, "--help-all")
 }
 

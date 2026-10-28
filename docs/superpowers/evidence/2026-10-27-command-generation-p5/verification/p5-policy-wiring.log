@@ -1,6 +1,0 @@
-=== RUN   TestCommandGenerationP5PolicyManifest
---- PASS: TestCommandGenerationP5PolicyManifest (0.00s)
-=== RUN   TestCommandGenerationP5AutomaticOrganizationWiring
---- PASS: TestCommandGenerationP5AutomaticOrganizationWiring (0.00s)
-PASS
-ok  	github.com/panjie/mods/internal/app	0.021s

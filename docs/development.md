@@ -134,6 +134,5 @@ elevated terminal tests inherited privileges instead of the UAC launch.
 
 ## Design Notes
 
-Major subsystem design documents live in `docs/superpowers/specs/` and
-`docs/superpowers/plans/`. Project-specific agent instructions and architecture
-notes live in `AGENTS.md`.
+Project-specific agent instructions and architecture notes live in `AGENTS.md`.
+Historical design plans and development evidence are available in Git history.

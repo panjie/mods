@@ -300,19 +300,25 @@ the task, keep commands clear and reviewable, and declare the final call honestl
 Variables, loops, pipelines and scripts are allowed. Necessary writes should be
 performed normally with `may_write`, not avoided or mislabeled to skip approval.
 Missing or invalid declarations return an argument error without execution.
+Every command also requires a nonblank `purpose` explaining the operation and
+its meaningful effects in the user's language. This text is shown for review
+and does not affect authorization.
 
 ```
-Run command
-Model declaration: may_write
+Run command?
+Purpose: Delete the obsolete demo image
 Working dir: /path/to/project
-1 | rm -f demo.gif
+
+Command:
+rm -f demo.gif
 [Y] Allow once  [N] Deny  [Ctrl+C / Esc] Cancel task
 ```
 
 Long commands can be browsed with Up/Down; approval is available immediately.
 Commands do not save or reuse directory/remote permissions and receive no temporary
-directory exemption. Without interactive review, `may_write` returns an approval
-unavailable error. Denial or cancellation stops the affected operation.
+directory exemption. In `auto` and `always`, `may_write` returns an approval
+unavailable error without an interactive review channel. Denial or cancellation
+stops the affected operation.
 
 Native filesystem and MCP tools keep their existing policy. Reads run without
 review; in `auto`, writes can reuse conversation-scoped directory or remote-origin
@@ -490,10 +496,13 @@ variable and select a model with `--api` and `--model`.
 | Provider     | `--api` value  | Env var                      | Get a key                                     |
 |--------------|----------------|------------------------------|-----------------------------------------------|
 | OpenAI       | `openai`       | `OPENAI_API_KEY`             | [platform.openai.com][OpenAI]                 |
+| ChatGPT      | `chatgpt`      | — (browser sign-in)          | [Subscription setup](#chatgpt-subscription) |
+| GitHub Copilot | `github-copilot` | — (device authentication) | `mods --config` |
 | Anthropic    | `anthropic`    | `ANTHROPIC_API_KEY`          | [console.anthropic.com][Anthropic]            |
 | Google       | `google`       | `GOOGLE_API_KEY`             | [aistudio.google.com][Gemini]                 |
 | Azure OpenAI | `azure`        | `AZURE_OPENAI_KEY`           | [azure.microsoft.com][Azure OpenAI]           |
 | DeepSeek     | `deepseek`     | `DEEPSEEK_API_KEY`           | [platform.deepseek.com][DeepSeek]             |
+| OpenCode Go  | `opencode-go` / `opencode-go-anthropic` | `OPENCODE_GO_API_KEY` | [opencode.ai/auth](https://opencode.ai/auth) |
 | OpenRouter   | `openrouter`   | `OPENROUTER_API_KEY`         | [openrouter.ai][OpenRouter]                   |
 | Ollama       | `ollama`       | — (local)                    | [ollama.com][Ollama]                          |
 | GLM          | `glm`          | `ZAI_API_KEY`                | [open.bigmodel.cn][GLM]                       |
@@ -501,29 +510,31 @@ variable and select a model with `--api` and `--model`.
 | Kimi         | `kimi`         | `MOONSHOT_API_KEY`           | [platform.moonshot.cn][Kimi]                  |
 | MiniMax      | `minimax`      | `MINIMAX_API_KEY`            | [www.minimaxi.com][MiniMax]                   |
 
-Direct requests to `api.openai.com` use the Responses API by default for every
-model and feature; set `endpoint: chat-completions` on a model to override.
+The built-in `openai` provider uses Responses by default when its base URL points
+to `api.openai.com`; set `endpoint: chat-completions` on a model to override.
 Mods sends `store: false` and keeps the encrypted response items needed for
 stateless reasoning and tool continuation in its local session data. Azure
-OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
-Chat Completions.
+OpenAI uses Chat Completions. Custom provider names and gateway URLs default to
+Chat Completions unless an explicit endpoint or the official OpenCode Go routing
+table selects Responses. The `chatgpt` subscription provider requires Responses.
 
-Official `deepseek-flash`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`,
-and `deepseek-v4-pro` requests to `api.deepseek.com` also use the
+With the built-in `deepseek` provider, `deepseek-flash`, `deepseek-v4-flash`,
+`deepseek-v4-flash-vision-exp`, and `deepseek-v4-pro` requests to `api.deepseek.com` also use the
 [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
 automatically. DeepSeek Responses is stateless, so complete response items and
 tool outputs remain in the local session and are replayed on the next turn.
-DeepSeek Flash accepts image attachments and images returned by tools on both
-Responses and Chat Completions; DeepSeek Pro does not accept image input. Set
-`endpoint: chat-completions` on the model to opt out.
+Mods can send images through both DeepSeek protocols; image acceptance is decided
+by the service, without a local model-name allowlist. Set
+`endpoint: chat-completions` on the model to opt out of Responses.
 
 Three independent settings control routing:
 
 - `api-type` chooses the transport adapter (`openai`, `anthropic`, `google`,
-  `ollama`, or `azure`).
+  `ollama`, `azure`, or `github-copilot`).
 - `provider-profile` chooses provider-specific semantics on an OpenAI-compatible
   transport (`openai`, `deepseek`, `qwen`, `glm`, `kimi`, or `minimax`). A
-  model-level value overrides the provider default.
+  model-level value overrides the provider default. The `chatgpt` profile is
+  reserved for the built-in subscription provider.
 - `endpoint` chooses `responses` or `chat-completions` for a model on an
   OpenAI-compatible transport.
 
@@ -581,7 +592,8 @@ the current file and restore the defaults.
 
 ### Sessions & Chat
 
-Every session is saved locally with a title and a short ID. `--continue` resumes
+Sessions are saved locally by default with a title and a short ID; `--no-save`
+disables saving the current interaction. `--continue` resumes
 a session by ID or title; `--continue-last` resumes the most recent one.
 `--list-sessions` opens a full-width, single-column browser. Each session occupies
 one row with its short ID, title, model, provider, and update time.
@@ -653,8 +665,8 @@ ffmpeg, or nested `mods` process:
 ```sh
 mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
-mods --audio meeting.wav "summarize the decisions in this recording"
-mods --video meeting.mp4 "list the action items and who owns each one"
+mods -a qwen -m qwen3.8-omni-flash --audio meeting.wav "summarize the decisions in this recording"
+mods -a qwen -m qwen3.8-omni-flash --video meeting.mp4 "list the action items and who owns each one"
 ```
 
 `--image`, `--audio`, and `--video` are repeatable and can be combined. Direct
@@ -674,10 +686,12 @@ non-matches, and uncertain cases.
   request budget.
 
 Adapters expose media according to their implemented protocol, without a
-model-name allowlist or per-model media settings. If a model cannot understand
-an attachment, the service rejects it; Mods preserves that error instead of
-silently dropping the file. For formats, sampling, pagination, and uncertainty
-details, see [Media details](docs/media.md).
+model-name allowlist or per-model media settings. Audio and video currently
+require the `qwen` protocol profile and a model that supports those inputs.
+Unsupported adapter input kinds fail locally; the service may reject unsupported
+model inputs, and Mods preserves that error instead of silently dropping the
+file. Acceptance does not prove recognition. For formats, sampling, pagination,
+and uncertainty details, see [Media details](docs/media.md).
 
 ## Contributing
 

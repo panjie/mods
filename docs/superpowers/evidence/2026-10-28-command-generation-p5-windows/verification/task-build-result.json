@@ -1,6 +1,0 @@
-{
-  "command": "go run github.com/go-task/task/v3/cmd/task@v3.51.1 build",
-  "exit_code": 0,
-  "direct_check_test_note": "go build ./... and go test ./... were run directly; task check/test were not run",
-  "output": "bin/mods.exe"
-}

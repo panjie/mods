@@ -1,1 +1,0 @@
-task: [build] go run ./internal/buildtask build

@@ -1,9 +1,0 @@
-{"started":"2026-10-28T08:03:21.8384096+08:00","host":"ps51","phase":"FirstRound","seconds":125.8616239,"group":"bc","mode":"normal","exit_code":0}
-{"started":"2026-10-28T08:05:27.7434602+08:00","host":"ps51","phase":"Completion","seconds":133.7822092,"group":"bc","mode":"normal","exit_code":0}
-{"started":"2026-10-28T08:07:41.6630552+08:00","host":"ps51","phase":"FirstRound","seconds":109.4480758,"group":"bc","mode":"minimal","exit_code":0}
-{"started":"2026-10-28T08:09:31.1306501+08:00","host":"ps51","phase":"Completion","seconds":118.3521965,"group":"bc","mode":"minimal","exit_code":0}
-{"started":"2026-10-28T08:11:29.6955422+08:00","host":"ps51","phase":"FirstRound","seconds":79.6710265,"group":"a1","mode":"normal","exit_code":1}
-{"phase":"FirstRound","group":"a1","started":"2026-10-28T08:14:54.6337167+08:00","exit_code":0,"seconds":111.4126185,"mode":"normal","host":"ps51"}
-{"phase":"Completion","group":"a1","started":"2026-10-28T08:16:46.0835835+08:00","exit_code":0,"seconds":137.937888,"mode":"normal","host":"ps51"}
-{"phase":"FirstRound","group":"a1","started":"2026-10-28T08:19:04.1584930+08:00","exit_code":0,"seconds":107.3245818,"mode":"minimal","host":"ps51"}
-{"phase":"Completion","group":"a1","started":"2026-10-28T08:20:51.5036762+08:00","exit_code":0,"seconds":118.1543797,"mode":"minimal","host":"ps51"}

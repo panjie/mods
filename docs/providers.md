@@ -7,6 +7,8 @@ under `apis.<provider>` in `mods.yml`.
 | Provider     | `--api` value  | Env var                      | Get a key                                     |
 |--------------|----------------|------------------------------|-----------------------------------------------|
 | OpenAI       | `openai`       | `OPENAI_API_KEY`             | [platform.openai.com][OpenAI]                 |
+| ChatGPT      | `chatgpt`      | — (browser sign-in)          | [Subscription setup](../README.md#chatgpt-subscription) |
+| GitHub Copilot | `github-copilot` | — (device authentication) | `mods --config` |
 | Anthropic    | `anthropic`    | `ANTHROPIC_API_KEY`          | [console.anthropic.com][Anthropic]            |
 | Google       | `google`       | `GOOGLE_API_KEY`             | [aistudio.google.com][Gemini]                 |
 | Azure OpenAI | `azure`        | `AZURE_OPENAI_KEY`           | [azure.microsoft.com][Azure OpenAI]           |
@@ -34,22 +36,23 @@ under `apis.<provider>` in `mods.yml`.
 
 ## Endpoint Selection
 
-Direct requests to `api.openai.com` use the Responses API by default for every
-model and feature; set `endpoint: chat-completions` on a model to override.
+The built-in `openai` provider uses Responses by default when its base URL points
+to `api.openai.com`; set `endpoint: chat-completions` on a model to override.
 Mods sends `store: false` and keeps the encrypted response items needed for
 stateless reasoning and tool continuation in its local session data. Azure
-OpenAI, custom base URLs, and other OpenAI-compatible providers continue to use
-Chat Completions.
+OpenAI uses Chat Completions. Custom provider names and gateway URLs default to
+Chat Completions unless an explicit endpoint or the official OpenCode Go routing
+table selects Responses. The `chatgpt` subscription provider requires Responses.
 
-Official `deepseek-flash`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`,
-and `deepseek-v4-pro` requests to `api.deepseek.com` use the
+With the built-in `deepseek` provider, `deepseek-flash`, `deepseek-v4-flash`,
+`deepseek-v4-flash-vision-exp`, and `deepseek-v4-pro` requests to `api.deepseek.com` use the
 [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
 automatically. Mods uses its plaintext reasoning events, hosted web search, and
 the Codex-compatible free-form `apply_patch` tool. DeepSeek Responses is
 stateless, so complete response items and tool outputs remain in the local
-session and are replayed on the next turn. DeepSeek Flash accepts image
-attachments and images returned by tools on both Responses and Chat Completions.
-DeepSeek Pro does not accept image input.
+session and are replayed on the next turn. Mods can send images through both
+DeepSeek protocols; image acceptance is decided by the service, without a local
+model-name allowlist.
 
 To opt out of Responses for a model, set `endpoint: chat-completions`:
 
@@ -66,10 +69,12 @@ apis:
 `api-type`, `provider-profile`, and `endpoint` are intentionally separate:
 
 - `api-type` chooses the transport adapter (`openai`, `anthropic`, `google`,
-  `ollama`, or `azure`).
+  `ollama`, `azure`, or `github-copilot`).
 - `provider-profile` chooses provider-specific semantics on an OpenAI-compatible
   transport (`openai`, `deepseek`, `qwen`, `glm`, `kimi`, or `minimax`). A
-  model-level value overrides the provider default.
+  model-level value overrides the provider default. The `chatgpt` profile is
+  reserved for the built-in subscription provider. Native adapters also have
+  `anthropic`, `google`, and `ollama` profiles.
 - `endpoint` chooses `responses` or `chat-completions` for a model on an
   OpenAI-compatible transport.
 
@@ -97,6 +102,10 @@ Tavily key; other endpoints keep the existing local search behavior.
 
 The Azure adapter uses Chat Completions and does not support
 `endpoint: responses`.
+
+GitHub Copilot uses device authentication through `mods --config` and supports
+Chat Completions and Responses routing. Models requiring `endpoint: messages`
+are rejected because Copilot Messages transport is not implemented.
 
 ## OpenCode Go
 

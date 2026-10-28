@@ -1,5 +1,5 @@
 // Package evals scores a finished mods session against the diagnosis rubric
-// documented in docs/superpowers/specs/2026-10-17-agent-diagnosis-evals-design.md.
+// defined by the cases and limits in this package.
 //
 // The rubric is evaluated from the persisted message transcript, not from the
 // model's prose alone. Each dimension is deliberately mechanical so a score is

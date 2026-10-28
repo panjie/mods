@@ -11,15 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project instructions loaded from `AGENTS.md` now emit a one-time tool-style record (`✓ Project instructions: <path>`) in interactive sessions, so the automatic context load is visible like a skill load. `--no-instructions`, `--minimal`, `--raw`, `--hide-tool-status`, and non-interactive runs stay silent.
 
 ### Changed
-- Simple commands and aggregation pipelines run directly; scripts are preferred for complex branching, loops, or reusable logic. Prompt evaluations now cover normal mode with explicit minimal controls, and debug output reports system/tool-definition byte breakdowns backed by assembled-request budget tests.
+- Command guidance prefers reads when sufficient, clear reviewable commands, and appropriate pipelines, variables, loops, and scripts. Prompt evaluations cover normal mode with explicit minimal controls, and debug output reports system/tool-definition byte breakdowns backed by assembled-request budget tests.
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
 - Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.
-- Review now applies only to non-temporary writes: proven reads always run without review, while reusable approvals are scoped to local directory subtrees and normalized remote origins within the current session. `always` reviews every non-temporary write and ignores saved rules.
-- Added opt-in `command-simplification: once` for one narrow, structurally complex built-in command with unproven effects per user request. It defaults to `off`; the original call returns as `not_executed`, and replacement calls go through ordinary analysis and approval. Manual approval-screen simplification remains available independently.
-- Command and download reviews no longer repeat the saved session grant as a separate `If A` row; their target rows already show the affected directories and origins.
+- Command tools require a model-declared `effect` and nonblank `purpose`. In `auto` and `always`, declared reads run without review and `may_write` calls require one-call approval, including temporary writes. Mods trusts the declaration without independently analyzing effects. Native/MCP reads run without review; their writes retain target-based rules and safe temporary-directory exemptions. `always` ignores saved rules.
+- Command reviews show the purpose, normalized working directory, and complete command; long commands remain browsable without a read-every-page approval gate.
+- Download reviews no longer repeat the saved session grant as a separate `If A` row; their target rows already show the affected directories and origins.
 - `request_user_input` accepts up to 10 options, longer option labels, and multi-line `select`/`multiselect` questions, so multi-item approval checklists render completely in one dialog.
 
 ### Removed
+- Removed command-effect analysis, its PowerShell parser bridge, and automatic/manual command simplification. Legacy `command-simplification` and `builtin-tools.shell-read-only-commands` settings are ignored; saved command rules no longer grant permission.
 - Removed all bundled skills. Skills are now loaded only from installed skill directories.
 - Removed the DuckDuckGo web search provider.
 - Removed plan mode, including the `--plan` / `-p` flags and the `prompts.plan` override.

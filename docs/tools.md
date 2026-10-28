@@ -17,11 +17,15 @@ the compact one-line record each completed call leaves in normal output.
 `effect: may_write`. The declaration covers the whole call, including subprocesses,
 pipelines and scripts. `may_write` includes uncertain effects and mixed reads/writes.
 Missing, null, invalid or incorrectly typed values are argument errors.
+Each call also requires a nonblank `purpose` explaining the operation and its
+meaningful effects in the user's language. Purpose is display text and does not
+affect authorization.
 
 In `auto` and `always`, `read_only` executes immediately; `may_write` asks for a
 one-call approval. Saved directory/remote rules and temporary paths do not exempt
 commands. `never` disables review but does not bypass argument validation or UAC.
-Non-interactive `may_write` calls return approval unavailable.
+In `auto` and `always`, `may_write` calls without an interactive review channel
+return approval unavailable.
 
 Mods trusts the model's declaration and does not independently analyze effects.
 The model can misclassify a mutation as a read. There is no command analyzer,
@@ -33,8 +37,10 @@ when they can correctly finish the task, generate clear reviewable commands, and
 label the final call honestly. Variables, loops, .NET calls and scripts are allowed;
 necessary mutations should use `may_write`, not be omitted to avoid approval.
 
-The review displays the declaration, working directory, actual executable and
-source or literal argv. Y approves once, N denies, and Ctrl+C/Esc cancels the task.
+The review displays the purpose, normalized working directory, and complete
+command: quoted executable/arguments for `process_run`, or shell source with line
+numbers for multi-line commands. Y approves once, N denies, and Ctrl+C/Esc
+cancels the task.
 Up/Down browses long commands without disabling approval. Source is escaped and
 known secrets are redacted for display. Approval uses the saved call arguments;
 there is no effect reanalysis or script-content reapproval.

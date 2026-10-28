@@ -1,1 +1,0 @@
-go: -race requires cgo; enable cgo by setting CGO_ENABLED=1

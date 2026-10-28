@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,6 +26,7 @@ const (
 	reviewOptionDeny
 	reviewOptionAlwaysAllow
 	reviewOptionCancel
+	reviewOptionFullControl
 )
 
 type reviewOption struct {
@@ -46,12 +48,17 @@ type reviewOption struct {
 //     snapshot the channel pointer under the lock and then send/receive on
 //     the snapshot so a concurrent reset does not race the receive.
 //
-//   - reviewMode, reviewPending, reviewItem, selected, and scope are only
+//   - reviewMode and scope are immutable after construction. Full control
+//     uses an atomic flag shared across chat turns; rules has its own mutex.
+//
+//   - reviewPending, reviewItem, and selected are only
 //     touched from the Update goroutine (handleStartMsg, handleKey, reset,
 //     isPending, renderBanner) plus the View pass that Bubble Tea runs
-//     synchronously after each Update. rules has its own internal mutex.
+//     synchronously after each Update.
 type toolReviewer struct {
 	mu                         sync.Mutex
+	fullControl                atomic.Bool
+	sharedFullControl          *atomic.Bool
 	reviewChan                 chan toolReviewItem
 	reviewSessionDone          chan struct{}
 	reviewMode                 ReviewMode
@@ -81,6 +88,34 @@ func newToolReviewer(cfg *Config) *toolReviewer {
 	}
 }
 
+// WithReviewSession shares an in-memory full-control choice across chat turns.
+// Each invocation gets a fresh scope; nothing is written to session storage.
+func WithReviewSession(ctx context.Context) context.Context {
+	return context.WithValue(ctx, reviewSessionKey{}, &atomic.Bool{})
+}
+
+type reviewSessionKey struct{}
+
+func newSessionToolReviewer(ctx context.Context, cfg *Config) *toolReviewer {
+	r := newToolReviewer(cfg)
+	r.sharedFullControl, _ = ctx.Value(reviewSessionKey{}).(*atomic.Bool)
+	return r
+}
+
+func (r *toolReviewer) fullControlState() *atomic.Bool {
+	if r.sharedFullControl != nil {
+		return r.sharedFullControl
+	}
+	return &r.fullControl
+}
+
+func (r *toolReviewer) effectiveReviewMode() ReviewMode {
+	if r.fullControlState().Load() {
+		return ReviewNever
+	}
+	return r.reviewMode
+}
+
 func (r *toolReviewer) canReviewInteractively() bool {
 	if r.raw {
 		return false
@@ -92,11 +127,11 @@ func (r *toolReviewer) canReviewInteractively() bool {
 }
 
 func (r *toolReviewer) reviewBypassSource(intent AccessIntent, safeDirSet []string) string {
-	mode := ApprovalReviewMode(r.reviewMode)
+	mode := ApprovalReviewMode(r.effectiveReviewMode())
 	if ClassifyAccess(intent, r.scope, safeDirSet, mode) != DecisionAsk {
 		return "auto"
 	}
-	if r.reviewMode == ReviewAuto && intent.HasAccess() &&
+	if r.effectiveReviewMode() == ReviewAuto && intent.HasAccess() &&
 		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, mode) {
 		return "saved rule"
 	}
@@ -159,6 +194,10 @@ func (r *toolReviewer) startSession() tea.Cmd {
 }
 
 func (r *toolReviewer) handleStartMsg(msg toolReviewStartMsg) {
+	if r.fullControlState().Load() {
+		msg.item.resp <- reviewResponse{action: reviewActionApprove}
+		return
+	}
 	r.reviewPending = true
 	r.cancelRequested = false
 	item := msg.item
@@ -226,6 +265,15 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
+	case "f", "F":
+		if !isCommandReview(r.reviewItem.name) || !r.canApprovePages() {
+			return true, nil
+		}
+		r.fullControlState().Store(true)
+		r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
+		r.reviewPending = false
+		r.reviewItem = nil
+		return true, r.pollReviewCmd()
 	case "ctrl+c", "esc":
 		r.cancelRequested = true
 		return true, msgCmd(reviewCancelMsg{})
@@ -236,7 +284,7 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.moveReviewSelection(options, 1)
 		return true, nil
 	case "enter":
-		if (options[r.selected].action == reviewOptionApprove || options[r.selected].action == reviewOptionAlwaysAllow) && !r.canApprovePages() {
+		if (options[r.selected].action == reviewOptionApprove || options[r.selected].action == reviewOptionAlwaysAllow || options[r.selected].action == reviewOptionFullControl) && !r.canApprovePages() {
 			return true, nil
 		}
 		switch options[r.selected].action {
@@ -246,6 +294,9 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			r.reviewItem.resp <- reviewResponse{}
 		case reviewOptionAlwaysAllow:
 			r.rules.Add(r.reviewItem.candidateRules...)
+			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
+		case reviewOptionFullControl:
+			r.fullControlState().Store(true)
 			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		case reviewOptionCancel:
 			r.cancelRequested = true
@@ -271,11 +322,14 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 	if canAllowForSession {
 		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
 	}
+	if r.reviewItem != nil && isCommandReview(r.reviewItem.name) {
+		options = append(options, reviewOption{key: "F", label: "Full control (this session)", action: reviewOptionFullControl})
+	}
 	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel task", action: reviewOptionCancel})
 }
 
 func (r *toolReviewer) reviewOptionEnabled(option reviewOption) bool {
-	return option.action != reviewOptionApprove && option.action != reviewOptionAlwaysAllow || r.canApprovePages()
+	return option.action != reviewOptionApprove && option.action != reviewOptionAlwaysAllow && option.action != reviewOptionFullControl || r.canApprovePages()
 }
 
 func (r *toolReviewer) normalizeReviewSelection(options []reviewOption) {
@@ -410,7 +464,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		default:
 			return fmt.Errorf("invalid command effect %q", deps.commandEffect)
 		}
-		if r.reviewMode == ReviewNever {
+		if r.effectiveReviewMode() == ReviewNever {
 			trace.Source = "review disabled"
 			return nil
 		}
@@ -436,7 +490,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
 	if deps.commandEffect == "" && intent.HasAccess() {
-		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode))
+		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.effectiveReviewMode()))
 	}
 	presentation := formatReviewPresentationWithIntent(name, data, r.scope, intent)
 	// Redact before quoting/numbering: those transformations can otherwise

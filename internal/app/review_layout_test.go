@@ -132,7 +132,8 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			lines := strings.Split(banner, "\n")
 			actionLine := lines[lineIndexContaining(lines, "Y Allow")]
 			require.Contains(t, actionLine, "Deny", "choice keys share one compact row")
-			require.Contains(t, actionLine, "Cancel task")
+			require.Contains(t, banner, "Full control (this session)")
+			require.Contains(t, banner, "Cancel task")
 			// All content remains reachable on a small terminal, with approval
 			// available on every page and no change to the reviewed arguments.
 			for i := range r.reviewItem.presentation.rows {

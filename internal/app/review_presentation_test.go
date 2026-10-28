@@ -33,7 +33,10 @@ func TestCommandReviewPreservesNumberedSourceAndLiteralArgv(t *testing.T) {
 	require.Contains(t, shell.rows, interactionRow{Label: "Working dir", Value: "C:\\cwd"})
 
 	process := formatReviewPresentationWithIntent("process_run", []byte(`{"program":"python","args":["script path.py","line 1\nline 2",""],"cwd":"C:\\cwd"}`), WorkingDirScope("C:\\cwd"), AccessIntent{})
-	require.Contains(t, process.rows, interactionRow{Label: "Command", Value: "\"python\" \"script path.py\" \"line 1\\nline 2\" \"\""})
+	require.Contains(t, process.rows, interactionRow{Label: "Command", Value: "python \"script path.py\" \"line 1\\nline 2\" \"\""})
+
+	git := formatReviewPresentationWithIntent("process_run", []byte(`{"program":"git","args":["add","-A"]}`), WorkingDirScope("/cwd"), AccessIntent{})
+	require.Contains(t, git.rows, interactionRow{Label: "Command", Value: "git add -A"})
 }
 
 func TestReviewOrdersTargetsWithoutBreakingDownloadPairs(t *testing.T) {

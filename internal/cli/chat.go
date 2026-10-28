@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/panjie/mods/internal/app"
 	"github.com/panjie/mods/internal/mcpclient"
 )
 
@@ -36,6 +37,7 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	ctx = app.WithReviewSession(ctx)
 	ctx, closePool := mcpclient.WithSessionPool(ctx)
 	defer closePool() //nolint:errcheck
 	chatBanner()

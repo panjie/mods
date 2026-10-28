@@ -40,7 +40,13 @@ necessary mutations should use `may_write`, not be omitted to avoid approval.
 The review displays the purpose, normalized working directory, and complete
 command: quoted executable/arguments for `process_run`, or shell source with line
 numbers for multi-line commands. Y approves once, N denies, and Ctrl+C/Esc
-cancels the task. Left/Right moves the highlighted choice; Enter confirms it.
+cancels the task. F selects **Full control (this session)**: approve this command
+and disable subsequent tool review, including native and MCP writes, for the
+current invocation and all subsequent `--chat` turns. This is an in-memory
+switch to `never`, not a saved permission rule or configuration change. Restarting
+Mods (including `--continue`) restores the configured review mode. Argument
+validation, filesystem execution checks, and OS credential/UAC prompts still apply.
+Left/Right moves the highlighted choice; Enter confirms it.
 Up/Down browses long commands without disabling approval. Source is escaped and
 known secrets are redacted for display. Approval uses the saved call arguments;
 there is no effect reanalysis or script-content reapproval.

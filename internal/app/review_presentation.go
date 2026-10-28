@@ -143,7 +143,17 @@ func processReviewArgv(parsed map[string]any) string {
 func quotedReviewArgv(argv []string) string {
 	lines := make([]string, len(argv))
 	for i, arg := range argv {
-		lines[i] = strconv.Quote(redactRemoteURLsForDisplay(arg))
+		arg = redactRemoteURLsForDisplay(arg)
+		// Leave ordinary command words readable; quote empty arguments and
+		// characters that could obscure argument boundaries or imply shell syntax.
+		if arg != "" && strings.IndexFunc(arg, func(r rune) bool {
+			return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+				(r >= '0' && r <= '9') || strings.ContainsRune("_@%+=:,./-", r))
+		}) == -1 {
+			lines[i] = arg
+		} else {
+			lines[i] = strconv.Quote(arg)
+		}
 	}
 	return strings.Join(lines, " ")
 }

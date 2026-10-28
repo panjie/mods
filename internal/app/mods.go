@@ -196,7 +196,7 @@ func New(
 		showOperationStatus: IsOutputTTY() && IsErrorTTY() && !cfg.Raw && !cfg.HideToolStatus,
 		db:                  db,
 		Config:              cfg,
-		reviewer:            newToolReviewer(cfg),
+		reviewer:            newSessionToolReviewer(ctx, cfg),
 		userInput:           newUserInputManager(cfg),
 		secrets:             secrets.New(),
 		ctx:                 requestCtx,
@@ -448,6 +448,9 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case toolReviewStartMsg:
 		m.reviewer.handleStartMsg(msg)
+		if !m.reviewer.isPending() {
+			cmds = append(cmds, m.reviewer.pollReviewCmd())
+		}
 		m.setActiveOperation("")
 	case reviewCancelMsg:
 		m.cancelContext()

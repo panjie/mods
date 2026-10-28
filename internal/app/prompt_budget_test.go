@@ -35,7 +35,8 @@ func TestAssembledPromptBudgets(t *testing.T) {
 	}{
 		{name: "normal/base", system: 5, descriptions: 1, schemas: 1, tools: 2, total: 7},
 		{name: "normal/filesystem", filesystem: true, system: 6, descriptions: 6, schemas: 10, tools: 16, total: 22},
-		{name: "normal/shell", shell: true, system: 6, descriptions: 5, schemas: 4, tools: 9, total: 15},
+		// Command schemas include the user-facing purpose; keep the overall budget.
+		{name: "normal/shell", shell: true, system: 6, descriptions: 5, schemas: 5, tools: 10, total: 15},
 		{name: "normal/both", filesystem: true, shell: true, system: 6, descriptions: 10, schemas: 12, tools: 22, total: 28},
 		{name: "normal/interactive", filesystem: true, shell: true, interactive: true, system: 7, descriptions: 13, schemas: 19, tools: 32, total: 39},
 		{name: "normal/project-role-skill", filesystem: true, shell: true, context: true, system: 8, descriptions: 11, schemas: 13, tools: 24, total: 32},

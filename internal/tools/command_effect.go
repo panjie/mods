@@ -3,6 +3,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // CommandEffect is the model's declaration, not a verified execution property.
@@ -29,7 +30,18 @@ func DeclaredCommandEffect(data json.RawMessage) (CommandEffect, error) {
 	}
 }
 
-func validateCommandEffect(data json.RawMessage) error {
-	_, err := DeclaredCommandEffect(data)
-	return err
+func validateCommandArguments(data json.RawMessage) error {
+	if _, err := DeclaredCommandEffect(data); err != nil {
+		return err
+	}
+	var args struct {
+		Purpose string `json:"purpose"`
+	}
+	if err := json.Unmarshal(data, &args); err != nil {
+		return fmt.Errorf("invalid command purpose: %w", err)
+	}
+	if strings.TrimSpace(args.Purpose) == "" {
+		return fmt.Errorf("purpose is required: briefly explain what this command does and why in the user's language")
+	}
+	return nil
 }

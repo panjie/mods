@@ -141,7 +141,7 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
-		Validate:      validateCommandEffect,
+		Validate:      validateCommandArguments,
 		Spec: proto.ToolSpec{
 			Name:        "process_run",
 			Description: elevationDescription(ProcessRunDescription),

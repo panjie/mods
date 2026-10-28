@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"net/url"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -62,21 +61,18 @@ func formatReviewPresentationWithIntent(name string, args []byte, scope Scope, i
 		result.rows = []interactionRow{{Label: "Target", Value: readReviewTarget(parsed, scope, intent)}}
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
-		result.headline = "Run command"
-		result.rows = []interactionRow{{Label: "Model declaration", Value: ArgString(parsed, "effect")}, {Label: "Source", Value: numberedReviewSource(redactRemoteURLsForDisplay(command))}}
-		interpreter := "PowerShell"
-		if name == "shell_run" && runtime.GOOS != "windows" {
-			interpreter = "POSIX shell"
-		}
-		result.rows = append(result.rows, interactionRow{Label: "Interpreter", Value: interpreter})
-		result.rows = append(result.rows, interactionRow{Label: "Working dir", Value: reviewWorkingDir(parsed, scope)})
-	case "process_run":
-		result.headline = "Run process"
+		result.toneText = ""
 		result.rows = []interactionRow{
-			{Label: "Model declaration", Value: ArgString(parsed, "effect")},
-			{Label: "Program", Value: ArgString(parsed, "program")},
-			{Label: "Argv", Value: processReviewArgv(parsed)},
+			{Label: "Purpose", Value: ArgString(parsed, "purpose")},
 			{Label: "Working dir", Value: reviewWorkingDir(parsed, scope)},
+			{Label: "Command", Value: numberedReviewSource(redactRemoteURLsForDisplay(command))},
+		}
+	case "process_run":
+		result.toneText = ""
+		result.rows = []interactionRow{
+			{Label: "Purpose", Value: ArgString(parsed, "purpose")},
+			{Label: "Working dir", Value: reviewWorkingDir(parsed, scope)},
+			{Label: "Command", Value: processReviewArgv(parsed)},
 		}
 	default:
 		result.headline = "Run " + name
@@ -87,7 +83,7 @@ func formatReviewPresentationWithIntent(name string, args []byte, scope Scope, i
 	if origins := strings.Join(approval.NormalizeRemoteOrigins(intent.AllRemoteOrigins()), ", "); origins != "" && name != "shell_run" && name != "powershell_run" && name != "process_run" {
 		result.rows = append(result.rows, interactionRow{Label: "Remote", Value: origins})
 	}
-	if result.headline == "" {
+	if result.headline == "" && !isCommandReview(name) {
 		result.headline = "This operation requires approval"
 	}
 	if elevated, _ := parsed["elevated"].(bool); elevated && (name == "process_run" || name == "shell_run" || name == "powershell_run") {
@@ -147,14 +143,17 @@ func processReviewArgv(parsed map[string]any) string {
 func quotedReviewArgv(argv []string) string {
 	lines := make([]string, len(argv))
 	for i, arg := range argv {
-		lines[i] = strconv.Itoa(i) + ": " + strconv.Quote(redactRemoteURLsForDisplay(arg))
+		lines[i] = strconv.Quote(redactRemoteURLsForDisplay(arg))
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, " ")
 }
 
 func numberedReviewSource(source string) string {
 	source = strings.ReplaceAll(source, "\r\n", "\n")
 	lines := strings.Split(source, "\n")
+	if len(lines) == 1 {
+		return source
+	}
 	for i := range lines {
 		lines[i] = strconv.Itoa(i+1) + " | " + lines[i]
 	}
@@ -168,7 +167,7 @@ func reviewOrderedRows(rows []interactionRow) []interactionRow {
 	// Batch downloads pair each File N with its following Source. Keep those
 	// pairs adjacent so a source cannot appear to belong to another target.
 	for _, row := range rows {
-		command = command || row.Label == "Model declaration"
+		command = command || row.Label == "Purpose"
 		if strings.HasPrefix(row.Label, "File ") {
 			return out
 		}
@@ -176,11 +175,11 @@ func reviewOrderedRows(rows []interactionRow) []interactionRow {
 	priority := func(label string) int {
 		if command {
 			switch label {
-			case "Model declaration":
+			case "Purpose":
 				return 0
 			case "Working dir":
 				return 1
-			case "Source", "Argv":
+			case "Command":
 				return 3
 			default:
 				return 2

@@ -439,11 +439,10 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if deps.redact != nil {
 		for i := range presentation.rows {
 			switch presentation.rows[i].Label {
-			case "Source":
+			case "Command":
 				if name == "shell_run" || name == "powershell_run" {
 					presentation.rows[i].Value = numberedReviewSource(redactRemoteURLsForDisplay(deps.redact(ExtractShellCommand(data))))
 				}
-			case "Argv":
 				var args struct {
 					Program string   `json:"program"`
 					Args    []string `json:"args"`
@@ -461,7 +460,7 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if len(deps.executionRows) > 0 {
 		rows := presentation.rows[:0]
 		for _, row := range presentation.rows {
-			if row.Label != "Interpreter" && row.Label != "Working dir" {
+			if row.Label != "Working dir" {
 				rows = append(rows, row)
 			}
 		}

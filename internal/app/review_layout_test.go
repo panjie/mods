@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/approval"
 
@@ -95,4 +97,49 @@ func TestSessionGrantOnlyReusesIdenticalTargets(t *testing.T) {
 	require.Contains(t, label, "/tmp/project, /usr/bin")
 	require.Contains(t, label, "including subdirectories")
 	require.NotContains(t, label, "above")
+}
+
+func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
+	for _, name := range []string{"shell_run", "powershell_run", "process_run"} {
+		t.Run(name, func(t *testing.T) {
+			args := []byte(`{"purpose":"生成报告供用户检查","command":"echo report > report.txt","program":"report","args":["--output","report.txt"],"effect":"may_write"}`)
+			r := &toolReviewer{}
+			r.handleStartMsg(toolReviewStartMsg{item: toolReviewItem{
+				name: name, resp: make(chan reviewResponse, 1),
+				presentation: formatReviewPresentationWithIntent(name, args, WorkingDirScope("/project"), AccessIntent{}),
+			}})
+			styles := makeStyles(true).Interaction
+			banner := ansi.Strip(r.renderBanner(100, styles, 24))
+			require.Equal(t, 1, r.reviewPages)
+			require.Contains(t, banner, "Run command?")
+			require.Contains(t, banner, "Purpose: 生成报告供用户检查")
+			require.Less(t, strings.Index(banner, "Purpose:"), strings.Index(banner, "Working dir:"))
+			require.Less(t, strings.Index(banner, "Working dir:"), strings.Index(banner, "Command:"))
+			for _, hidden := range []string{"1/1", "Pages", "Warning", "Model declaration", "Interpreter", "Source:", "1 |"} {
+				require.NotContains(t, banner, hidden)
+			}
+			for _, action := range []string{"Allow once", "Deny", "Cancel task"} {
+				require.Contains(t, banner, action)
+			}
+			// All content remains reachable on a small terminal, with approval
+			// available on every page and no change to the reviewed arguments.
+			for i := range r.reviewItem.presentation.rows {
+				if r.reviewItem.presentation.rows[i].Label == "Command" {
+					r.reviewItem.presentation.rows[i].Value = strings.Repeat("echo full-command-line\n", 30) + "last-command-line"
+				}
+			}
+			r.renderBanner(48, styles, 12)
+			require.Greater(t, r.reviewPages, 1)
+			var pages string
+			for page := 0; page < r.reviewPages; page++ {
+				r.reviewPage = page
+				view := r.renderBanner(48, styles, 12)
+				require.LessOrEqual(t, lipgloss.Height(view), 12)
+				require.True(t, r.canApprovePages())
+				require.Contains(t, ansi.Strip(view), fmt.Sprintf("%d/%d", page+1, r.reviewPages))
+				pages += compactReviewText(view)
+			}
+			require.Contains(t, pages, "last-command-line")
+		})
+	}
 }

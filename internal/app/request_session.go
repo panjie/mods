@@ -509,16 +509,6 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 		var executionRows []interactionRow
 		if registry.ShellExecution(name) {
 			executionRows = append(executionRows, interactionRow{Label: "Working dir", Value: cwd})
-			if name == "process_run" {
-				program := processBinding.Resolved
-				if program == "" {
-					program = processBinding.Requested
-				}
-				executionRows = append(executionRows, interactionRow{Label: "Interpreter", Value: program})
-			} else if name == "shell_run" || name == "powershell_run" {
-				program, _ := toolregistry.ShellReviewInvocation(name, ExtractShellCommand(data))
-				executionRows = append(executionRows, interactionRow{Label: "Interpreter", Value: program})
-			}
 		}
 		// No execution has started here. A changed native target receives a new
 		// review; a continuously changing target fails without retrying the tool.

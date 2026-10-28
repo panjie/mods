@@ -351,14 +351,14 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		m.responseOutputStarted = false
 		got := m.renderWithOperation("")
 		require.NotContains(t, got, "animating", "spinner must not appear above the approval prompt")
-		require.Contains(t, got, "Review")
+		require.Contains(t, got, "Run command?")
 	})
 
 	t.Run("model output present: output kept above the review prompt", func(t *testing.T) {
 		m.responseOutputStarted = true
 		got := m.renderWithOperation("partial answer so far")
 		require.Contains(t, got, "partial answer so far")
-		require.Contains(t, got, "Review")
+		require.Contains(t, got, "Run command?")
 		require.NotContains(t, got, "animating", "spinner stays paused while approval is pending")
 	})
 
@@ -367,7 +367,7 @@ func TestRenderWithOperationDropsSpinnerDuringPreOutputReview(t *testing.T) {
 		lines := strings.Split(ansi.Strip(m.renderWithOperation("partial answer so far")), "\n")
 		contentRow := lineIndexContaining(lines, "partial answer so far")
 		require.Empty(t, strings.TrimSpace(lines[contentRow+1]))
-		require.Contains(t, lines[contentRow+2], "Review")
+		require.Contains(t, lines[contentRow+2], "Run command?")
 	})
 }
 

@@ -42,8 +42,16 @@ func pagedReviewTool(name string) bool {
 	return false
 }
 
+func isCommandReview(name string) bool {
+	return name == "shell_run" || name == "powershell_run" || name == "process_run"
+}
+
 func (r *toolReviewer) renderPagedReview(width, height int, styles ui.InteractionStyles) string {
 	p := r.reviewItem.presentation
+	title := "Review"
+	if isCommandReview(r.reviewItem.name) {
+		title = "Run command?"
+	}
 	if (width < 40 || height < 16) && r.reviewItem.name == "http_download" {
 		r.reviewPages = 0
 		return renderInteractionPanel(styles, width, interactionPanel{Title: "Review", Headline: "Enlarge terminal to review all content (40 columns × 16 rows).", Actions: r.reviewActions()})
@@ -53,6 +61,9 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 	var lines []string
 	for _, row := range rows {
 		text := row.Label + ": " + reviewLiteral(row.Value)
+		if row.Label == "Command" {
+			text = "\nCommand:\n" + reviewLiteral(row.Value)
+		}
 		lines = append(lines, strings.Split(ansi.Hardwrap(text, inner, false), "\n")...)
 	}
 	// Reserve the actual wrapped header and controls before allocating pages.
@@ -61,7 +72,7 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 		reservedActions = append(reservedActions, interactionAction{Key: option.key, Label: option.label, Selected: true})
 	}
 	overhead := lipgloss.Height(renderInteractionPanel(styles, width, interactionPanel{
-		Title: "Review", Meta: "1/1", Tone: p.tone, ToneText: p.toneText, Headline: p.headline, Actions: reservedActions,
+		Title: title, Meta: "1/1", Tone: p.tone, ToneText: p.toneText, Headline: p.headline, Actions: reservedActions,
 	}))
 	pageSize := max(1, height-overhead)
 	const hint = "Review all pages to enable approval."
@@ -90,8 +101,12 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 	if r.reviewPages > 1 {
 		actions = append(actions, interactionAction{Key: "↑/↓", Label: "Pages"})
 	}
+	meta := ""
+	if r.reviewPages > 1 || !isCommandReview(r.reviewItem.name) {
+		meta = fmt.Sprintf("%d/%d", r.reviewPage+1, r.reviewPages)
+	}
 	return renderInteractionPanel(styles, width, interactionPanel{
-		Title: "Review", Meta: fmt.Sprintf("%d/%d", r.reviewPage+1, r.reviewPages),
+		Title: title, Meta: meta,
 		Tone: p.tone, ToneText: p.toneText, Headline: p.headline,
 		Body: body, Actions: actions,
 	})

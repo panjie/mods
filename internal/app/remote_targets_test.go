@@ -18,7 +18,7 @@ func TestRemoteCredentialsAreRedactedFromReviewText(t *testing.T) {
 	presentation := formatReviewPresentationWithIntent("shell_run", args, scope, AccessIntent{})
 	require.NotContains(t, summary, "secret")
 	require.NotContains(t, summary, "token=hidden")
-	source := presentation.rows[1].Value
+	source := presentation.rows[2].Value
 	require.Contains(t, source, "https://[redacted]@API.Example.com:443/v1/items?[redacted]#[redacted]")
 	require.NotContains(t, source, "user")
 	require.NotContains(t, source, "secret")

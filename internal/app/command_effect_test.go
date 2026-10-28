@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/secrets"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -48,6 +49,7 @@ func declaredCommandFixture(t *testing.T, name string, mode ReviewMode, interact
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	args := map[string]any{
+		"purpose": "Delete the important directory",
 		"command": "Remove-Item -Recurse ./important; rm -rf ./important",
 		"program": exe, "args": []string{"--delete-everything"},
 	}
@@ -100,6 +102,50 @@ func TestCommandInvalidDeclarationNeverDispatches(t *testing.T) {
 	}
 }
 
+func TestCommandMissingPurposeNeverDispatches(t *testing.T) {
+	for _, name := range []string{"shell_run", "powershell_run", "process_run"} {
+		for _, mode := range []ReviewMode{ReviewAuto, ReviewAlways, ReviewNever} {
+			m, caller, called, args := declaredCommandFixture(t, name, mode, true)
+			args["effect"] = "may_write"
+			delete(args, "purpose")
+			_, err := caller(proto.ToolCallRequest{Name: name, Arguments: []byte(stringMustJSON(t, args))})
+			require.ErrorContains(t, err, "purpose")
+			require.Zero(t, called.Load())
+			require.Empty(t, m.reviewer.reviewChan)
+		}
+	}
+}
+
+func TestCommandReviewRedactsPurposeAndCommandBeforeFormatting(t *testing.T) {
+	for _, name := range []string{"shell_run", "powershell_run", "process_run"} {
+		t.Run(name, func(t *testing.T) {
+			m, caller, called, args := declaredCommandFixture(t, name, ReviewAuto, true)
+			m.secrets = secrets.New()
+			m.secrets.RememberForRedaction("private\ncredential")
+			args["effect"] = "may_write"
+			args["purpose"] = "Send \x1b[2Jprivate\ncredential to https://example.com/?token=hidden"
+			args["command"] = "echo private\ncredential"
+			args["args"] = []string{"private\ncredential"}
+			done := make(chan error, 1)
+			go func() {
+				_, err := caller(proto.ToolCallRequest{Name: name, Arguments: []byte(stringMustJSON(t, args))})
+				done <- err
+			}()
+			item := receiveReviewItem(t, m.reviewer.reviewChan)
+			m.reviewer.handleStartMsg(toolReviewStartMsg{item: item})
+			view := m.reviewer.renderBanner(160, makeStyles(true).Interaction, 30)
+			for _, secret := range []string{"private", "credential", "token=hidden", "\x1b[2J"} {
+				require.NotContains(t, view, secret)
+			}
+			require.Contains(t, view, "[REDACTED]")
+			require.Contains(t, view, `\u001b[2J`)
+			m.reviewer.handleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
+			require.ErrorContains(t, <-done, "denied")
+			require.Zero(t, called.Load())
+		})
+	}
+}
+
 func stringMustJSON(t *testing.T, value any) string {
 	t.Helper()
 	data, err := json.Marshal(value)
@@ -132,12 +178,15 @@ func TestCommandReviewApprovesOnlyExactCall(t *testing.T) {
 				require.Zero(t, called.Load())
 				require.Empty(t, item.candidateRules)
 				require.JSONEq(t, string(data), string(item.args))
-				require.Contains(t, item.presentation.rows, interactionRow{Label: "Model declaration", Value: "may_write"})
+				require.Contains(t, item.presentation.rows, interactionRow{Label: "Purpose", Value: args["purpose"].(string)})
 				m.reviewer.handleStartMsg(toolReviewStartMsg{item: item})
 				banner := m.reviewer.renderBanner(60, makeStyles(true).Interaction, 12)
 				require.NotContains(t, banner, "Review all pages")
 				require.NotContains(t, banner, "Simplify")
 				require.NotContains(t, banner, "Allow for session")
+				for _, hidden := range []string{"Model declaration", "may_write", "Interpreter", "Warning", "Source:", "Argv:"} {
+					require.NotContains(t, banner, hidden)
+				}
 				switch action {
 				case "approve":
 					m.reviewer.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
@@ -196,7 +245,7 @@ func TestDeclaredReadLoopExecutesWithoutReview(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		command = `$sum = 0; foreach ($n in 1..100) { $sum += $n }; Write-Output $sum`
 	}
-	data := []byte(stringMustJSON(t, map[string]string{"command": command, "effect": "read_only"}))
+	data := []byte(stringMustJSON(t, map[string]string{"command": command, "effect": "read_only", "purpose": "Sum integers 1 through 100 in memory"}))
 	result, err := m.toolResultCaller(registry, &cfg)(proto.ToolCallRequest{Name: "shell_run", Arguments: data})
 	require.NoError(t, err)
 	require.Equal(t, "5050", strings.TrimSpace(result.Text))

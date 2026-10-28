@@ -81,7 +81,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
-		Validate:      validateCommandEffect,
+		Validate:      validateCommandArguments,
 		Spec: proto.ToolSpec{
 			Name:        "shell_run",
 			Description: elevationDescription(desc),
@@ -134,7 +134,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
-		Validate:      validateCommandEffect,
+		Validate:      validateCommandArguments,
 		Spec: proto.ToolSpec{
 			Name:        "powershell_run",
 			Description: elevationDescription(PowerShellRunDescription),

@@ -19,6 +19,7 @@ func TestCommandToolsDeclareEffectInSchemaAndGuidance(t *testing.T) {
 			tool, ok := r.Tool(name)
 			require.True(t, ok)
 			require.Contains(t, tool.Spec.InputSchema["required"], "effect")
+			require.Contains(t, tool.Spec.InputSchema["required"], "purpose")
 			properties := tool.Spec.InputSchema["properties"].(map[string]any)
 			effect := properties["effect"].(map[string]any)
 			require.Equal(t, []string{"read_only", "may_write"}, effect["enum"])
@@ -30,9 +31,13 @@ func TestCommandToolsDeclareEffectInSchemaAndGuidance(t *testing.T) {
 			}
 			require.Error(t, r.ValidateRequiredArgs(name, []byte(`not json`)))
 			for _, declared := range []string{"read_only", "may_write"} {
-				data, err := json.Marshal(map[string]any{"command": "echo hi", "program": "example", "args": []string{}, "effect": declared})
+				data, err := json.Marshal(map[string]any{"command": "echo hi", "program": "example", "args": []string{}, "effect": declared, "purpose": "Print a greeting"})
 				require.NoError(t, err)
 				require.NoError(t, r.ValidateRequiredArgs(name, data))
+			}
+			for _, field := range []string{``, `,"purpose":null`, `,"purpose":true`, `,"purpose":[]`, `,"purpose":""`, `,"purpose":" \n\t"`} {
+				raw := `{"command":"echo hi","program":"example","effect":"may_write"` + field + `}`
+				require.ErrorContains(t, r.ValidateRequiredArgs(name, []byte(raw)), "purpose", raw)
 			}
 		})
 	}

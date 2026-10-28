@@ -29,13 +29,11 @@ func TestReviewPresentationWorkingDirRow(t *testing.T) {
 
 func TestCommandReviewPreservesNumberedSourceAndLiteralArgv(t *testing.T) {
 	shell := formatReviewPresentationWithIntent("powershell_run", []byte(`{"command":"Write-Output one\nWrite-Output two"}`), WorkingDirScope("C:\\cwd"), AccessIntent{})
-	require.Contains(t, shell.rows, interactionRow{Label: "Source", Value: "1 | Write-Output one\n2 | Write-Output two"})
-	require.Contains(t, shell.rows, interactionRow{Label: "Interpreter", Value: "PowerShell"})
+	require.Contains(t, shell.rows, interactionRow{Label: "Command", Value: "1 | Write-Output one\n2 | Write-Output two"})
 	require.Contains(t, shell.rows, interactionRow{Label: "Working dir", Value: "C:\\cwd"})
 
 	process := formatReviewPresentationWithIntent("process_run", []byte(`{"program":"python","args":["script path.py","line 1\nline 2",""],"cwd":"C:\\cwd"}`), WorkingDirScope("C:\\cwd"), AccessIntent{})
-	require.Contains(t, process.rows, interactionRow{Label: "Program", Value: "python"})
-	require.Contains(t, process.rows, interactionRow{Label: "Argv", Value: "0: \"python\"\n1: \"script path.py\"\n2: \"line 1\\nline 2\"\n3: \"\""})
+	require.Contains(t, process.rows, interactionRow{Label: "Command", Value: "\"python\" \"script path.py\" \"line 1\\nline 2\" \"\""})
 }
 
 func TestReviewOrdersTargetsWithoutBreakingDownloadPairs(t *testing.T) {

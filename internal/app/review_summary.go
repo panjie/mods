@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/panjie/mods/internal/commandanalysis"
+	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/textutil"
 )
@@ -17,7 +17,7 @@ type patchFileChange struct {
 	removed int
 }
 
-func formatReviewSummaryWithIntent(name string, args []byte, assessment commandanalysis.CommandAssessment, scope Scope, intent AccessIntent) string {
+func formatReviewSummaryWithIntent(name string, args []byte, scope Scope, intent AccessIntent) string {
 	parsed := ToolOperationArgs(args)
 	switch name {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest":
@@ -45,9 +45,9 @@ func formatReviewSummaryWithIntent(name string, args []byte, assessment commanda
 		return patchSummary(ArgString(parsed, "patch"))
 	case "shell_run", "powershell_run":
 		command := ArgString(parsed, "command")
-		return shellRiskSummary(command, assessment, scope)
+		return "Model declared " + ArgString(parsed, "effect") + " - " + ShellCommandPreview(redactRemoteURLsForDisplay(command))
 	case "process_run":
-		return shellRiskSummary(ProcessCommandPreview(parsed), assessment, scope)
+		return "Model declared " + ArgString(parsed, "effect") + " - " + ProcessCommandPreview(parsed)
 	default:
 		if origins := summarizeRemoteOrigins(intent.AllRemoteOrigins()); origins != "" {
 			return "Remote write: " + origins
@@ -96,151 +96,6 @@ func writeTargetMode(path string, scope Scope) string {
 	}
 }
 
-func shellRiskSummary(command string, assessment commandanalysis.CommandAssessment, scope Scope) string {
-	risk := shellRiskLevel(assessment, scope)
-	if len(assessment.Targets) > 0 {
-		rows := commandReviewRows(command, assessment, risk)
-		parts := []string{}
-		for _, row := range rows[1:] {
-			parts = append(parts, row.Label+": "+OneLinePreview(row.Value))
-		}
-		return "Risk: " + risk + " - " + strings.Join(parts, "; ")
-	}
-	dirs := summarizeAffectedDirs(assessment.KnownDirs)
-	dynamic := summarizeAffectedDirs(pathShapedDynamicTargets(assessment.DynamicTargets))
-	providers := summarizeAffectedDirs(assessment.ProviderWriteTargets)
-	origins := summarizeRemoteOrigins(assessment.RemoteOrigins)
-	remoteUnknown := len(assessment.UnresolvedRemoteTargets) > 0
-	reason := strings.TrimSpace(assessment.Reason)
-	if shellRiskLocationUnknown(risk) {
-		// Classifier reasons for unbounded commands commonly restate the
-		// headline and may speculate about locations that were not verified.
-		// Keep the reason in the assessment/debug log, but do not present it as
-		// evidence in the approval UI or fallback summary.
-		reason = ""
-	}
-	if dynamic != "" {
-		s := fmt.Sprintf("Risk: %s - runtime target %s", risk, dynamic)
-		if dirs != "" {
-			s += "; known scope " + dirs
-		}
-		if reason != "" {
-			s += " (" + OneLinePreview(reason) + ")"
-		}
-		return s
-	}
-	if providers != "" {
-		s := fmt.Sprintf("Risk: %s - provider target %s", risk, providers)
-		if dirs != "" {
-			s += "; known scope " + dirs
-		}
-		if reason != "" {
-			s += " (" + OneLinePreview(reason) + ")"
-		}
-		return s
-	}
-	if dirs == "" {
-		if origins != "" || remoteUnknown {
-			if origins == "" {
-				origins = "Unknown"
-			} else if remoteUnknown {
-				origins += ", Unknown"
-			}
-			s := fmt.Sprintf("Risk: %s - writes to %s", risk, origins)
-			if reason != "" {
-				s += " (" + OneLinePreview(reason) + ")"
-			}
-			return s
-		}
-		displayCommand := redactRemoteURLsForDisplay(command)
-		s := fmt.Sprintf("Risk: %s - %s", risk, ShellCommandPreview(displayCommand))
-		if reason != "" {
-			s = fmt.Sprintf("Risk: %s (%s) - %s", risk, OneLinePreview(reason), ShellCommandPreview(displayCommand))
-		}
-		return s
-	}
-	targets := dirs
-	if origins != "" {
-		targets += "; remote " + origins
-	}
-	if remoteUnknown {
-		targets += "; remote Unknown"
-	}
-	s := fmt.Sprintf("Risk: %s - affects %s", risk, targets)
-	if reason != "" {
-		s = fmt.Sprintf("Risk: %s - affects %s (%s)", risk, targets, OneLinePreview(reason))
-	}
-	return s
-}
-
-func shellRiskLevel(assessment commandanalysis.CommandAssessment, _ Scope) string {
-	if len(assessment.Targets) > 0 {
-		intent := commandResultToIntent(commandanalysis.Result(assessment))
-		assessment.KnownDirs = intent.WriteDirs
-		assessment.RemoteOrigins = intent.WriteOrigins
-		if intent.DominantClass() == AccessRead {
-			assessment.KnownDirs = intent.ReadDirs
-			assessment.RemoteOrigins = intent.ReadOrigins
-		}
-		assessment.DynamicTargets = intent.UnresolvedPaths
-		if intent.DominantClass() == AccessWrite {
-			assessment.DynamicTargets = nil
-			for _, target := range assessment.Targets {
-				if target.Role != commandanalysis.TargetWrite || target.Kind != commandanalysis.TargetFilesystem {
-					continue
-				}
-				if target.Operation == commandanalysis.OperationDestination && target.Path != "" {
-					assessment.KnownDirs = append(assessment.KnownDirs, target.Path)
-					continue
-				}
-				if target.State == commandanalysis.TargetUnresolved {
-					assessment.DynamicTargets = append(assessment.DynamicTargets, target.Raw)
-				}
-			}
-		}
-		assessment.ProviderWriteTargets = intent.ProviderWriteTargets
-		if intent.UncertainEffect {
-			assessment.Effect = commandanalysis.EffectUnknown
-		}
-	}
-	if len(assessment.DynamicTargets) > 0 {
-		switch assessment.Effect {
-		case commandanalysis.EffectRead:
-			return "dynamic read"
-		case commandanalysis.EffectWrite:
-			return "dynamic mutation"
-		default:
-			return "unknown"
-		}
-	}
-	if len(assessment.ProviderWriteTargets) > 0 && assessment.Effect == commandanalysis.EffectWrite {
-		return "provider mutation"
-	}
-	if assessment.Effect == commandanalysis.EffectUnknown {
-		if len(assessment.KnownDirs) == 0 {
-			return "unknown effect and location"
-		}
-		return "unknown"
-	}
-	if assessment.Effect == commandanalysis.EffectWrite && len(assessment.UnresolvedRemoteTargets) > 0 {
-		return "unknown remote mutation"
-	}
-	if assessment.Effect == commandanalysis.EffectRead {
-		return "read-only"
-	}
-	if len(assessment.RemoteOrigins) > 0 && len(assessment.KnownDirs) == 0 {
-		return "remote mutation"
-	}
-	if len(assessment.KnownDirs) == 0 {
-		return "unknown-location mutation"
-	}
-	return "local mutation"
-}
-
-func shellRiskLocationUnknown(risk string) bool {
-	return risk == "unknown effect and location" || risk == "unknown-location mutation" || risk == "unknown remote mutation"
-}
-
 func summarizeAffectedDirs(dirs []string) string {
 	if len(dirs) == 0 {
 		return ""
@@ -260,7 +115,7 @@ func summarizeAffectedDirs(dirs []string) string {
 }
 
 func summarizeRemoteOrigins(origins []string) string {
-	return summarizeAffectedDirs(commandanalysis.NormalizeRemoteOrigins(origins))
+	return summarizeAffectedDirs(approval.NormalizeRemoteOrigins(origins))
 }
 
 func patchSummary(patch string) string {

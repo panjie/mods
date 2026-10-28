@@ -1,0 +1,67 @@
+{
+  "platform": "windows/amd64",
+  "repository": "C:\\Users\\panjie\\dev\\mods",
+  "api_key": "已设置",
+  "cgo_enabled": "0",
+  "gcc_available": false,
+  "provider": {
+    "interactive_tty": false,
+    "review_mode": "auto",
+    "name": "deepseek",
+    "max_tokens": 4096,
+    "model": "deepseek-v4-flash",
+    "think": false,
+    "temperature": 0,
+    "base_url": "https://api.deepseek.com/"
+  },
+  "head_commit": "2c7665b9cfcc4153cc1e41b638545200b70f4143",
+  "powershell_7": {
+    "version": "7.4.14",
+    "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+  },
+  "os_caption": "Microsoft Windows 11 Enterprise",
+  "a1_baseline_commit": "d34fe201d1b3e6a1fc671af2d4331e54a43ff203",
+  "os_version": "10.0.22631",
+  "origin_main": "2c7665b9cfcc4153cc1e41b638545200b70f4143\trefs/heads/main",
+  "time_zone": "Asia/Shanghai",
+  "git": "git version 2.55.0.vfs.0.10",
+  "go": "go version go1.26.3 windows/amd64",
+  "default_simplification": "off",
+  "initial_untracked": [
+    "FNST_AI_16x9_clean_source_4K1.png"
+  ],
+  "recorded_at": "2026-10-28T07:58:26.4443155+08:00",
+  "powershell_51": {
+    "version": "5.1.22621.7649",
+    "path": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+  },
+  "actual_model_identity_note": "Requests use deepseek-v4-flash; availability preflight returned HTTP 200 with response.model=deepseek-flash. No client-side substitution. Exact backend weight identity is not verifiable.",
+  "model_matrix": {
+    "hosts": [
+      "ps7",
+      "ps51"
+    ],
+    "groups": [
+      "A",
+      "A1",
+      "B",
+      "C"
+    ],
+    "modes": [
+      "normal",
+      "minimal"
+    ],
+    "repeats_per_case": 5,
+    "planned_runs": 1440,
+    "preflight_chat_requests_excluded": 1,
+    "additional_unpaired_a1_runs": 140,
+    "aborted_a_subcases_before_api": 140,
+    "additional_runs_reason": "Runner passed Git SHA as MODS_GENERATION_BASELINE; historical harness rejected A before API. All 140 A1 reports retained under attempts/invalid-a1-selector, excluded from paired primary table by configuration failure, not outcome. Fixed selector original matches Linux; archive source unchanged."
+  },
+  "baseline_archive": "C:/Users/panjie/AppData/Local/Temp/mods-p5-windows-d34fe20/source",
+  "manual_ui": {
+    "status": "pending",
+    "reason": "User explicitly deferred manual operation during this chat on 2026-10-28"
+  },
+  "source_changes_during_evaluation": "Test-only Windows fixture selection fix and deterministic replay; production policy fingerprint unchanged. Evidence and manual launcher added."
+}

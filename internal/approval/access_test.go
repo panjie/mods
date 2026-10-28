@@ -37,7 +37,7 @@ func TestClassifyAccessMatrix(t *testing.T) {
 		{"copy cwd source to temp", AccessIntent{WriteCoverage: CoverageComplete, ReadDirs: []string{ws.Value}, WriteDirs: []string{tempDir}}, DecisionAllow},
 		{"copy cwd source to cwd", AccessIntent{WriteCoverage: CoverageComplete, ReadDirs: []string{ws.Value}, WriteDirs: []string{ws.Value}}, DecisionAsk},
 		{"missing access intent fails closed", AccessIntent{WriteCoverage: CoverageComplete}, DecisionAsk},
-		{"dynamic probe without concrete dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, UnresolvedPaths: []string{"$target"}, DynamicProbe: true}, DecisionAllow},
+		{"read without concrete dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
 		{"dynamic content read without concrete dirs", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
 		{"dynamic read with concrete dir", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessRead, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAllow},
 		{"dynamic write target fails closed", AccessIntent{WriteCoverage: CoverageComplete, Class: AccessWrite, Dirs: []string{ws.Value}, UnresolvedPaths: []string{"$target"}}, DecisionAsk},

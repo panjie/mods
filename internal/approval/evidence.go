@@ -1,18 +1,13 @@
 package approval
 
-import "github.com/panjie/mods/internal/commandanalysis"
-
-// Shared evidence vocabulary for tool-neutral policy. No command analysis or
-// conversion to AccessIntent occurs in this package.
-type TargetCoverage = commandanalysis.TargetCoverage
-type AssessmentGap = commandanalysis.AssessmentGap
+// TargetCoverage describes structured native-tool targets. Commands do not use it.
+type TargetCoverage uint8
 
 const (
-	CoverageIncomplete   = commandanalysis.CoverageIncomplete
-	CoverageComplete     = commandanalysis.CoverageComplete
-	GapUnknownInvocation = commandanalysis.GapUnknownInvocation
-	GapControlFlow       = commandanalysis.GapControlFlow
-	GapPathContext       = commandanalysis.GapPathContext
-	GapExecutionContext  = commandanalysis.GapExecutionContext
-	GapWriteTargets      = commandanalysis.GapWriteTargets
+	CoverageIncomplete TargetCoverage = iota
+	CoverageComplete
 )
+
+type AssessmentGap string
+
+const GapWriteTargets AssessmentGap = "unbounded write targets"

@@ -28,7 +28,7 @@ func (r *toolReviewer) canApprovePages() bool {
 	if r.reviewItem == nil {
 		return false
 	}
-	if !pagedReviewTool(r.reviewItem.name) {
+	if r.reviewItem.name != "http_download" {
 		return true
 	}
 	return r.reviewPages > 0 && r.reviewSeen >= r.reviewPages-1
@@ -44,7 +44,7 @@ func pagedReviewTool(name string) bool {
 
 func (r *toolReviewer) renderPagedReview(width, height int, styles ui.InteractionStyles) string {
 	p := r.reviewItem.presentation
-	if width < 40 || height < 16 {
+	if (width < 40 || height < 16) && r.reviewItem.name == "http_download" {
 		r.reviewPages = 0
 		return renderInteractionPanel(styles, width, interactionPanel{Title: "Review", Headline: "Enlarge terminal to review all content (40 columns × 16 rows).", Actions: r.reviewActions()})
 	}
@@ -65,7 +65,7 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 	}))
 	pageSize := max(1, height-overhead)
 	const hint = "Review all pages to enable approval."
-	if len(lines) > pageSize {
+	if len(lines) > pageSize && r.reviewItem.name == "http_download" {
 		// Reserve the navigation hint on every page so enabling approval never
 		// shifts page boundaries.
 		pageSize = max(1, pageSize-lipgloss.Height(ansi.Hardwrap(hint, inner, false)))

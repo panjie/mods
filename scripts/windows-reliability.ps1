@@ -36,7 +36,7 @@ try {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $lane = "$PowerShellHost-$Mode"
     $jsonLog = Join-Path $outputRoot "$lane-$stamp.jsonl"
-    $packages = @('./internal/tools', './internal/approval', './internal/commandanalysis', './internal/app')
+    $packages = @('./internal/tools', './internal/approval', './internal/app')
     $arguments = @('test', '-tags', 'windowsreliability', '-run', 'WindowsReliability', '-json', '-count=1', '-timeout=15m') + $packages
 
     Push-Location $repoRoot

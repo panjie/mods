@@ -44,11 +44,11 @@ func TestBuiltinPrompts(t *testing.T) {
 	require.Contains(t, ToolSelection, "reported PowerShell host")
 	require.Contains(t, ToolSelection, "find ... -print0 | xargs -0")
 	require.Contains(t, ToolSelection, "git ls-files -z only when tracked files are intended")
-	require.Contains(t, ToolSelection, "choose a few direct read/aggregate pipelines")
+	require.Contains(t, ToolSelection, "prefer read-only operations without incidental writes")
 	require.Contains(t, ToolSelection, "Probe availability once in a batch only")
 	require.Contains(t, ToolSelection, "without sh -c or bash -c")
 	require.Contains(t, ToolSelectionShellPOSIXFallback, "without sh -c or bash -c")
-	require.Contains(t, Identity, "Recognized reads run without review")
+	require.Contains(t, Identity, "read_only runs directly")
 	require.NotContains(t, ToolSelection, "Recognized read-only commands run without review")
 	require.Contains(t, ToolSelectionShellWindows, "prefer native cmdlets")
 	require.Contains(t, ToolSelection, "correct once or twice using errors")
@@ -179,7 +179,7 @@ func TestWorkflowHasPlanningPolicy(t *testing.T) {
 // carry ad-hoc shell prohibitions such as the old rm -rf rule.
 func TestReviewPolicyLivesOnlyInIdentity(t *testing.T) {
 	require.Contains(t, Identity, "rely on mods' review step")
-	require.Contains(t, Identity, "Recognized reads run without review")
+	require.Contains(t, Identity, "read_only runs directly")
 	require.NotContains(t, ToolSelection, "review step")
 	require.NotContains(t, ToolSelection, "Use only tools available")
 	require.NotContains(t, ToolSelection, "User denial")
@@ -212,10 +212,10 @@ func TestFixedPromptFragmentsStayCompact(t *testing.T) {
 }
 
 func TestReadOnlyGenerationDoesNotOmitRequiredMutations(t *testing.T) {
-	require.Contains(t, ToolSelectionGeneral, "before writing custom logic")
+	require.Contains(t, ToolSelectionGeneral, "prefer read-only operations without incidental writes")
 	require.Contains(t, ToolSelectionGeneral, "Complete required mutations with explicit targets")
 	require.Contains(t, ToolSelectionGeneral, "builds, tests and scripts can mutate")
-	require.Contains(t, ToolSelectionGeneral, "Return only requested results")
+	require.Contains(t, ToolSelectionGeneral, "Compute requested results in tools")
 	require.Contains(t, ToolSelectionGeneral, "not calls per file")
 	require.Contains(t, ToolSelectionGeneral, "report incomplete coverage")
 	require.Contains(t, Minimal, QueryPolicy)

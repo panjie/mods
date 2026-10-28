@@ -11,25 +11,37 @@ status line shows what Mods is doing between tool calls ("Reading file: ...",
 "Running command: ...", "Searching web: ..."). `--hide-tool-status` hides it and
 the compact one-line record each completed call leaves in normal output.
 
-## Command Reviewability
+## Command Declarations
 
-Command complexity is recorded only in debug diagnostics. It never returns a
-failed tool result or asks the model to resubmit. Every command goes directly to
-ordinary effect and target approval, including in minimal mode. Unknown effects
-still require the existing approval checks, and denial prevents execution.
+`shell_run`, `powershell_run`, and `process_run` require `effect: read_only` or
+`effect: may_write`. The declaration covers the whole call, including subprocesses,
+pipelines and scripts. `may_write` includes uncertain effects and mixed reads/writes.
+Missing, null, invalid or incorrectly typed values are argument errors.
 
-Run simple commands and clear aggregation pipelines directly. Prefer a readable
-script for complex branching, loops, or reusable logic. Reuse collected data for
-subtotals; split calls when a result must be inspected before the next step or
-authorization needs to be separate. Existing scripts such as
-`bash scripts/build.sh`, `python tools/check.py`, and `pwsh -File build.ps1` run
-unchanged once authorized. New multi-step scripts can use the supplied temporary
-directory; that location grants no permission for their execution effects.
-Explicit `--review-mode never` bypasses review.
+In `auto` and `always`, `read_only` executes immediately; `may_write` asks for a
+one-call approval. Saved directory/remote rules and temporary paths do not exempt
+commands. `never` disables review but does not bypass argument validation or UAC.
+Non-interactive `may_write` calls return approval unavailable.
 
-Long command reviews use Up/Down to page; approval becomes available after all
-pages have been displayed. Review is an approval policy, not an execution
-sandbox.
+Mods trusts the model's declaration and does not independently analyze effects.
+The model can misclassify a mutation as a read. There is no command analyzer,
+PowerShell parser bridge, complexity gate, automatic reorganization or script
+content preview/digest. Existing scripts execute by interpreter and path.
+
+Tool descriptions in normal and minimal mode instruct models to prefer reads
+when they can correctly finish the task, generate clear reviewable commands, and
+label the final call honestly. Variables, loops, .NET calls and scripts are allowed;
+necessary mutations should use `may_write`, not be omitted to avoid approval.
+
+The review displays the declaration, working directory, actual executable and
+source or literal argv. Y approves once, N denies, and Ctrl+C/Esc cancels the task.
+Up/Down browses long commands without disabling approval. Source is escaped and
+known secrets are redacted for display. Approval uses the saved call arguments;
+there is no effect reanalysis or script-content reapproval.
+
+Native file tools and MCP tools retain their own capabilities and target policy.
+An `effect` argument cannot relabel a native file write as a read. Downloads retain
+structured destination review and their existing page-reading requirement.
 
 ## http_download
 

@@ -1,5 +1,7 @@
 # 阶段 6：清理与本机验收
 
+> Superseded on 2026-10-28 by [model-declared command effects](../specs/2026-10-28-command-effect-declaration.md). This document records the retired analyzer/organization design; its historical results are unchanged.
+
 2026-10-26 更新：Windows 全量测试、PS7/PS5.1 真实桥、junction 和平台快照已补齐，详见 [Windows 验收记录](2026-10-26-command-analysis-windows.md)。以下为 2026-10-25 的历史结果，未完成项以新记录为准。
 
 日期：2026-10-25。第六阶段代码、结构检查、性质/fuzz、基准与发布说明已实施；真实 Windows/macOS 验收缺口未关闭，不能宣称全平台最终出口完成。本轮与此前第五阶段后续改动已按用户要求合并到本次本地提交，父提交为 `54060c5`，未推送。

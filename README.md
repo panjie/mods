@@ -187,8 +187,8 @@ mods "read README.md and suggest three improvements"
 
 - **Act, don't just talk.** With tools enabled, Mods inspects and edits files,
   runs shell commands, and chains tool calls to complete a task end-to-end.
-- **Review before risk.** Reads run without review. Mutating writes and commands
-  follow the review policy: approve once, deny, or save a per-session rule.
+- **Simple command review.** Model-declared reads run directly; commands that may
+  write ask for approval. Native tools retain their target-based review policy.
 - **Fit your pipeline.** `--minimal` prints only the final answer, with no
   formatting — ready for `| gum choose`, `jq`, or another script.
 - **Search the live web.** Web search is opt-in. `--web-search` uses a supported
@@ -282,70 +282,63 @@ This sends one real search request; ordinary tests do not call the service.
 
 ## Safety & Review
 
-Reads proven by static analysis or explicitly trusted configuration run without review, including reads
-from any local directory and reads whose path is resolved only at runtime.
-Writes are reviewed by target by default.
+Command tools (`shell_run`, `powershell_run`, and `process_run`) require the
+model to declare `effect` for the entire call:
 
-In the default `auto` mode, non-temporary writes require approval unless
-session rules already cover every write target. Choose `Allow for session`
-to save permissions for directory subtrees and exact remote origins. These
-rules are restored with `--continue` and are never shared with another session.
-With `--no-save`, they last only for the current run.
+| Declaration | Behavior in `auto` and `always` |
+|-------------|--------------------------------|
+| `read_only` | Execute without review. |
+| `may_write` | Ask for approval for this call. Use for mutations or uncertainty. |
 
-Writes not covered by the current review policy require confirmation. You see
-what will execute and which write targets the decision covers:
+Mods trusts this declaration; it does not parse commands, prove their effects,
+or independently check the model's judgment. A mistaken `read_only` declaration
+can therefore execute a mutation without approval. This is a confirmation policy,
+not an execution sandbox.
+
+Models are instructed to prefer read-only operations when they correctly satisfy
+the task, keep commands clear and reviewable, and declare the final call honestly.
+Variables, loops, pipelines and scripts are allowed. Necessary writes should be
+performed normally with `may_write`, not avoided or mislabeled to skip approval.
+Missing or invalid declarations return an argument error without execution.
 
 ```
-Review: Run: rm -f /path/to/project/demo.gif
-[Y] Approve  [N] Deny  [A] Allow for session  [Ctrl+C] Cancel
+Run command
+Model declaration: may_write
+Working dir: /path/to/project
+1 | rm -f demo.gif
+[Y] Allow once  [N] Deny  [Ctrl+C / Esc] Cancel task
 ```
 
-- `Y` — approve this one call
-- `N` — deny; Mods gets the failure and can react
-- `A` — in `auto` mode, save per-session rules for every shown directory and
-  remote origin so matching writes skip later prompts
-- `Ctrl+C` — cancel the whole run
+Long commands can be browsed with Up/Down; approval is available immediately.
+Commands do not save or reuse directory/remote permissions and receive no temporary
+directory exemption. Without interactive review, `may_write` returns an approval
+unavailable error. Denial or cancellation stops the affected operation.
 
-`Allow for session` is available only when every write target can be identified.
-Unknown effects or incomplete write targets can be allowed once, but cannot be
-saved. Finding one path does not bound the rest of a command. Command assessment
-uses deterministic analysis; no LLM classifier is involved. Remote rules use a credential-free origin such as
-`https://api.example.com` or `ssh://github.com`; paths, queries, fragments, and
-credentials never appear in the saved rule. Writes confined to Mods' safe
-temporary directories do not require review only when the complete write scope
-is proven. A script's location does not authorize its effects. Native file writes
-are approved against real paths, including symlink/junction targets, and are
-rechecked before execution. Git reviews include all known push destinations;
-unmodeled hooks or helpers require approval for each call.
+Native filesystem and MCP tools keep their existing policy. Reads run without
+review; in `auto`, writes can reuse conversation-scoped directory or remote-origin
+rules when those rules cover all targets. Native writes confined to safe temporary
+directories can be exempt. Native paths are resolved and rechecked before execution.
+`Allow for session` remains available for eligible native/MCP writes. Saved rules
+are restored by `--continue` and are not shared across conversations.
 
-Write targets that still depend on runtime expansion (for example PowerShell's
-`$PROFILE` or a URL stored in a variable) are shown as dynamic and can only be
-approved once. For a reusable approval, resolve the target first and use its
-literal value in the mutation command. Dynamic reads do not require review.
+Choose `-V` / `--review-mode`, `review-mode` in `mods.yml`, or `MODS_REVIEW_MODE`:
 
-Pick the mode that fits the task with `-V` / `--review-mode` (or `review-mode`
-in `mods.yml`, or the `MODS_REVIEW_MODE` env var). Use `-N` / `--no-review` as
-a shortcut for `--review-mode=never`:
+| Mode | Behavior |
+|------|----------|
+| `auto` | Default. Commands follow their declaration; other tools may reuse saved target rules. |
+| `always` | Commands follow the same declaration rule; other tools ignore saved rules. |
+| `never` | Disable review. `-N` / `--no-review` is a shortcut. |
 
-| Mode     | Behavior |
-|----------|----------|
-| `auto`   | Default. Reviews non-temporary writes unless existing session rules cover every target. |
-| `always` | Reviews every non-temporary write and ignores saved rules. Reads stay free. |
-| `never`  | Disables review entirely. Use only for trusted, automated runs. |
-
-```sh
-mods --review-mode always "rename the fn to calculateTotal across the repo"
-```
-
-Review is an approval policy, not an execution sandbox. Use a container or VM
-for untrusted code.
+The retired `command-simplification` and `builtin-tools.shell-read-only-commands`
+settings are ignored when loading old configuration. They no longer appear in new
+config files or help. Existing command-related saved rules do not exempt commands;
+the database and conversation history remain readable.
 
 On Windows, command tools (`process_run`, `powershell_run`, and `shell_run`)
 accept `elevated: true` when one command needs administrator privileges. Mods
-reviews the original command and targets first, then requests Windows UAC
+applies the declaration-based review policy first, then requests Windows UAC
 consent or administrator credentials. Only that command runs elevated; output
-and exit status return to the conversation. Saved target rules still apply,
-and `--no-review` does not bypass UAC. Neither Windows sudo nor an elevated Mods
+and exit status return to the conversation. `--no-review` does not bypass UAC. Neither Windows sudo nor an elevated Mods
 session is required.
 
 UAC consent time counts toward the command timeout. Canceling or timing out
@@ -395,19 +388,16 @@ builtin-tools:
   shell-timeout: 60s        # default timeout; per-call timeout_ms may override
 ```
 
-Command complexity is diagnostic information, not a reason to retry or rewrite
-an invocation. Commands proceed directly to ordinary effect and target approval,
-including in minimal mode. Related reads and aggregations can share a pipeline
-or readable script; Mods encourages reusing results for totals and breakdowns.
-Existing scripts run unchanged once authorized. New multi-step scripts can live
-in the supplied temporary directory, but that location does not grant permission
-for their execution effects. Explicit `--review-mode never` bypasses review.
+Commands use model-declared effects in both normal and minimal mode. Related reads
+and aggregations may share a pipeline or readable script. Existing scripts run
+unchanged once authorized; a temporary script location does not exempt a
+`may_write` invocation from review.
 
 Git HTTP(S) authentication can prompt in the terminal and continue the same
 command when needed; passwords are masked, passed over local IPC, and never sent
 to the model or saved by Mods. Debug traces (`-D`/`--debug`) and token counts
 (`-s`/`--show-token-usage`) go to stderr. See [Tool details](docs/tools.md) for
-reviewability, `http_download`, Git authentication, and debug output.
+command declarations, `http_download`, Git authentication, and debug output.
 
 ### MCP
 

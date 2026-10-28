@@ -24,7 +24,7 @@ const (
 
 	// Minimal omits the full workflow and tool-selection sections. Keep this
 	// small planning rule in both modes; shell mechanics remain in descriptions.
-	QueryPolicy = "For queries, choose a few direct read/aggregate pipelines before writing custom logic. Separate requested metrics if combining needs state. Return only requested results, computed by tools; never count displayed text or infer totals from file sizes. Run ordinary reads without preflight checks; report errors."
+	QueryPolicy = "For queries, prefer read-only operations without incidental writes. Compute requested results in tools; never infer totals from displayed text or file sizes. Group related work when clear; report errors and incomplete coverage."
 
 	// LanguagePolicy is a response-format rule, not runtime safety, so it is
 	// injected in the output-format layer rather than the identity prompt.
@@ -39,8 +39,8 @@ const (
 	gitCredentials                = "mods handles Git HTTP(S) credential prompts. Never embed tokens in URLs or commands, script credential storage, or blindly retry Git writes."
 
 	// ScriptPolicy also reaches minimal mode through the tool descriptions.
-	// Prefer analyzable reads without fragmenting necessary data pipelines.
-	ScriptPolicy = "Select/read/filter/aggregate with read-only pipelines. Compute requested metrics in tools, not from text or file sizes. Group related reads, not stateful scripts. Avoid existence checks, suppressed errors and query files. Use a script only if pipelines cannot suffice; invoke interpreter/path. Location grants no permission."
+	// Choose clear implementations; command effects are declared by the model.
+	ScriptPolicy = "Prefer read-only commands when they can correctly complete the task. Keep each call purposeful and easy to review; avoid unrelated operations, obfuscation and unnecessary nesting. Use pipelines, variables, loops or scripts as needed for clarity and correctness. Compute requested results in tools."
 
 	// ToolSelectionGeneral carries only tool-choice guidance. Tool
 	// availability, review/permission policy, and denial handling live in the
@@ -62,9 +62,9 @@ const (
 
 	ToolSelectionShellPOSIXFallback = `- Use shell_run for executable invocations and shell syntax; pass shell source directly, without sh -c or bash -c, and prefer NUL-delimited file lists (find ... -print0 | xargs -0 ...); use git ls-files -z only when tracked files are intended.`
 
-	POSIXIntentGuidance = `Group related reads around one clear purpose. Keep necessary pipelines intact and omit decorative separators. Resolve unknown write targets before mutation. Authorization depends on effects and targets, not command length. Never rewrite an existing script file for review.`
+	POSIXIntentGuidance = `Keep necessary pipelines intact and omit decorative separators. Use ordinary quoting and literal argv where appropriate.`
 
-	PowerShellIntentGuidance = `Use direct pipelines per metric, not variables, counters, loops, .NET calls or custom objects. Format JSON yourself. Map paths with ForEach-Object { Get-Content -LiteralPath $_.FullName }. Physical lines: Get-Content without -Raw | Measure-Object; use Count, never -Line (skips empty lines). Final unterminated lines count. Resolve $PROFILE/write targets first. No unsolicited policy/settings changes or encoded commands. Never rewrite an existing script file for review.`
+	PowerShellIntentGuidance = `Use the reported PowerShell version and native object pipelines where useful. Variables, loops, .NET APIs and custom objects are available when appropriate. Physical lines: Get-Content without -Raw | Measure-Object; use Count, never -Line (skips empty lines).`
 
 	ToolSelectionShellWindows = `- Use powershell_run, the only Windows shell tool, matching the reported PowerShell host; prefer native cmdlets over POSIX utilities.`
 
@@ -79,7 +79,7 @@ const (
 		ToolSelectionShellPOSIX + "\n" +
 		ToolSelectionShellWindows
 
-	TemporaryDirectoryTemplate = "Temporary directory: {temporary_directory}. The temporary-write exemption applies only when the effect is known and every write target is a resolved local path within this directory or its subdirectories, with no remote writes. Running a command here alone does not qualify. Prefer this directory for temporary scripts, intermediate files, and experimental writes."
+	TemporaryDirectoryTemplate = "Temporary directory: {temporary_directory}. Prefer it for necessary temporary files. Native filesystem tools may use the temporary-write exemption; commands declaring may_write still require approval here."
 )
 
 type Definition struct {

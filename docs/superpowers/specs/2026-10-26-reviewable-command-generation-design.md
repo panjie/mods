@@ -1,7 +1,9 @@
 # 可审查命令生成与有限简化设计
 
+> Superseded on 2026-10-28 by [model-declared command effects](../specs/2026-10-28-command-effect-declaration.md). This document records the retired analyzer/organization design; its historical results are unchanged.
+
 日期：2026-10-26
-状态：P0/P1 已实现；P2a 结构诊断及 P2b 的 Import-Csv/单层读取聚合首批已实施。其余语义扩展、简化及审批界面仍是待实施设计。
+状态：P0/P1、P2a/P2b 首批、P3 基础预览和 P4 已实现。P5 已有 Linux 与 Windows PS5.1/PS7 真实模型证据；人工 UI、其余平台及更大样本仍待验收，默认 off。
 实施计划：[分阶段实施与验收](../plans/2026-10-26-reviewable-command-generation.md)。
 
 实际结果见 [P0/P1 验收记录](../evidence/2026-10-26-command-generation/README.md)：提示调整出现局部改善，但原始代码统计问题仍未解决；分析器、授权和审批机制保持不变。本设计中的后续能力不能视为当前产品保证。
@@ -30,6 +32,8 @@
 发布决策：先交付提示、事实及界面改善，再交付可选择的有限简化。拟新增 `command-simplification: off | once`，首次发布默认 `off`；`once` 通过评测和真实交互验收后才可以在独立变更中讨论成为默认值。这里的 `off` 仅关闭自动重新组织，不关闭只读优先的生成指导、普通审批、结构提示或用户主动要求简化。P1 不增加该设置，P4 才增加；不新增同名 CLI flag。
 
 实施状态（2026-10-27）：P4 已按保守子集实现，配置仍默认 `off`。只针对请求级一次反馈，不改变授权。P5 的 Linux 真实模型 A/A1/B/C 对照已完成：C 组 40 次完成会话（180 次总运行）中自动重组为 0，相对 B 没有可观察净收益；物理行数任务仍因只读 `wc -l` 的语义错误失败。默认值保持 `off`；Windows/macOS/PowerShell 和人工 UI/审批仍未验证。具体实现边界见 [P4 记录](../evidence/2026-10-27-command-generation-p4/README.md)，评测与限制见 [P5 记录](../evidence/2026-10-27-command-generation-p5/README.md)。
+
+2026-10-28 Windows 补充：真实 PS5.1/PS7 的 B/C 各 normal+minimal、每场景 5 次已运行。C 共 80 次完成实验（360 次含首轮运行）出现 3 次 typed 自动重组，均在 PS5.1 physical-lines；2 次随后正确且零审批完成，1 次替代仍 unknown 并失败。PS7 没有触发，宿主/模式间效果不一致，尚不能证明稳定净收益，默认继续 off。实际序列的模拟 dispatch 重放验证原调用零分发和替代重新授权，但原始会话未记录逐调用 dispatch 事件。人工 UI 由用户暂缓，Windows race 因 CGO/gcc 条件缺失未完成；不能据此宣称 P5 整体验收完成。完整数据与范围见 [Windows 证据](../evidence/2026-10-28-command-generation-p5-windows/README.md)。
 
 这不是严格的“所有命令必须易懂”保证：提示不保证模型遵守，静态分析不覆盖任意程序，用户仍可在完整审阅后允许未知效果的调用。若未来要求永久禁止某类载荷，应另行定义执行策略，不把一次简化预算伪装成安全边界。
 

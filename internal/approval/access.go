@@ -28,8 +28,6 @@ const (
 // UnresolvedPaths records runtime expressions that cannot safely become
 // concrete directory rules (for example $PROFILE or $target).
 type AccessIntent struct {
-	// TargetBindings pins command leaf identities for revalidation; it grants no access.
-	TargetBindings  []string
 	WriteCoverage   TargetCoverage
 	Gaps            []AssessmentGap
 	Class           AccessClass
@@ -51,7 +49,6 @@ type AccessIntent struct {
 	// UncertainEffect is presentation metadata. WriteCoverage independently
 	// determines whether the known targets bound all possible writes.
 	UncertainEffect bool
-	DynamicProbe    bool
 	Reason          string
 }
 

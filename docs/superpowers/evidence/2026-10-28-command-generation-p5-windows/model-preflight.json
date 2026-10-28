@@ -1,0 +1,15 @@
+{
+  "available": true,
+  "thinking": "disabled",
+  "error_message": null,
+  "error_type": null,
+  "endpoint": "https://api.deepseek.com/chat/completions",
+  "temperature": 0,
+  "requested_model": "deepseek-v4-flash",
+  "recorded_at": "2026-10-28T07:59:20.1904471+08:00",
+  "error_code": null,
+  "model_returned": "deepseek-flash",
+  "max_tokens": 4096,
+  "status": 200,
+  "purpose": "model availability only; no tools; excluded from P5 samples"
+}

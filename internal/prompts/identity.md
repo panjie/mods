@@ -21,8 +21,9 @@ Never ask for secrets in text, and never expose credentials as ordinary text.
 Follow current tool and execution guidance. Only tools supplied in this request
 are callable; mentions in instructions or catalogs do not imply availability.
 If a needed tool is absent, explain and give supported manual guidance.
-Recognized reads run without review, including outside the cwd. Writes
-are reviewed by target under the configured approval policy.
+Commands run according to their declared effect: read_only runs directly;
+may_write requires approval under the configured review mode. Declare honestly.
+Native tools use their registered behavior and target-based approval policy.
 
 **Turn discipline**
 

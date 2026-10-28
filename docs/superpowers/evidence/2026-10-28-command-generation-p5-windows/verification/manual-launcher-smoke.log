@@ -1,0 +1,9 @@
+Synthetic directory: C:\Users\panjie\AppData\Local\Temp\mods-p5-ui-uhv55er4
+Case: unknown; host: C:\Program Files\PowerShell\7\pwsh.exe; fixed call: C:\Users\panjie\AppData\Local\Temp\mods-p5-ui-uhv55er4\fixed-call.json
+For change review, use another terminal to run this script with change --mutate and that directory.
+
+  Error Tool execution requires review.  
+
+  Details: tool execution requires review but interactive approval is unavailable: powershell_run requires approval, but no interactive approval channel is available; run interactively or use --review-mode never if non-interactive execution is intentional  
+
+CLI exit: 1; human result NOT inferred. Synthetic files retained at C:\Users\panjie\AppData\Local\Temp\mods-p5-ui-uhv55er4

@@ -6,8 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
@@ -38,7 +36,7 @@ func TestElevatedToolDispatchStillRequiresApproval(t *testing.T) {
 						return "ok", nil
 					},
 				}))
-				data, err := json.Marshal(map[string]any{"program": exe, "args": []string{"--unknown-effects"}, "command": "mods-test-uac-unknown-effects", "elevated": true})
+				data, err := json.Marshal(map[string]any{"program": exe, "args": []string{"--unknown-effects"}, "command": "mods-test-uac-unknown-effects", "elevated": true, "effect": "may_write"})
 				require.NoError(t, err)
 				_, err = m.toolCaller(registry, &cfg)(proto.ToolCallRequest{Name: name, Arguments: data})
 				if mode == ReviewNever {
@@ -52,52 +50,9 @@ func TestElevatedToolDispatchStillRequiresApproval(t *testing.T) {
 	}
 }
 
-func TestElevationPreservesTargetRulesAndReadPolicy(t *testing.T) {
-	cwd, err := os.Getwd()
-	require.NoError(t, err)
-	for _, name := range []string{"process_run", "powershell_run", "shell_run"} {
-		registry := toolregistry.NewRegistry()
-		require.NoError(t, registry.Register(toolregistry.Tool{Spec: proto.ToolSpec{Name: name}, Capabilities: toolregistry.ToolCapabilities{ShellExecution: true}, Call: func(context.Context, json.RawMessage) (string, error) { return "", nil }}))
-		for _, tc := range []struct {
-			name        string
-			mode        ReviewMode
-			effect      commandanalysis.CommandEffect
-			rule, allow bool
-		}{
-			{"read", ReviewAlways, commandanalysis.EffectRead, false, true},
-			{"write denied", ReviewAuto, commandanalysis.EffectWrite, false, false},
-			{"saved write rule", ReviewAuto, commandanalysis.EffectWrite, true, true},
-			{"always ignores rule", ReviewAlways, commandanalysis.EffectWrite, true, false},
-		} {
-			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				assessment := commandanalysis.CommandAssessment{Evidence: commandanalysis.EvidenceStatic, WriteCoverage: approval.CoverageComplete, Effect: tc.effect, KnownDirs: []string{cwd}}
-				role := commandanalysis.TargetWrite
-				op := commandanalysis.OperationDirectory
-				if tc.effect == commandanalysis.EffectRead {
-					role = commandanalysis.TargetRead
-				}
-				assessment.Targets = []commandanalysis.Target{{Kind: commandanalysis.TargetFilesystem, Role: role, Operation: op, Raw: cwd, Path: cwd, Dir: cwd, State: commandanalysis.TargetResolved}}
-				plain := buildAccessIntent(name, []byte(`{}`), registry, &assessment)
-				elevated := buildAccessIntent(name, []byte(`{"elevated":true}`), registry, &assessment)
-				require.Equal(t, plain, elevated)
-				r := &toolReviewer{reviewMode: tc.mode, scope: WorkingDirScope(cwd), reviewAvailabilityKnown: true}
-				if tc.rule {
-					r.rules.Add(RulesForDirs([]string{cwd}, r.scope, AccessWrite)...)
-				}
-				err := r.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: elevated, safeDirs: []string{t.TempDir()}}, name, []byte(`{"elevated":true}`))
-				if tc.allow {
-					require.NoError(t, err)
-				} else {
-					require.ErrorIs(t, err, errReviewUnavailable)
-				}
-			})
-		}
-	}
-}
-
 func TestElevationVisibleInReview(t *testing.T) {
 	for _, name := range []string{"process_run", "powershell_run", "shell_run"} {
-		p := formatReviewPresentationWithIntent(name, []byte(`{"command":"powercfg /h off","program":"powercfg","args":["/h","off"],"elevated":true}`), commandanalysis.UnknownCommandAssessment(), Scope{}, AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite})
+		p := formatReviewPresentationWithIntent(name, []byte(`{"command":"powercfg /h off","program":"powercfg","args":["/h","off"],"elevated":true}`), Scope{}, AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite})
 		require.Contains(t, p.rows, interactionRow{Label: "Elevation", Value: "Windows UAC administrator privileges (this command only)"})
 	}
 }

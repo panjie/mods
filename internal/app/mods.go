@@ -66,8 +66,6 @@ type Mods struct {
 	// retryCheckpoint contains only completed model/tool rounds. Failed streams
 	// may append partial assistant messages, so their history is not resumable.
 	retryCheckpoint         *completionCheckpoint
-	commandOrganizationMu   sync.Mutex
-	commandOrganization     *commandOrganizationState
 	cancelRequest           []context.CancelFunc
 	cancelMu                sync.Mutex
 	anim                    tea.Model
@@ -400,7 +398,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = requestState
 		cmds = append(cmds, m.startCompletionCmd(msg.content))
 	case streamEventMsg:
-		if msg.runner != nil && msg.runner.organization != nil && msg.runner.organization != m.currentCommandOrganization() {
+		if msg.runner != nil && m.isRetiredRunner(msg.runner) {
 			return m, nil // A retired request cannot close or modify its successor.
 		}
 		switch msg.kind {
@@ -425,7 +423,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleToolCallsDone(msg)
 		case streamEventDone:
 			m.retries = 0
-			m.closeCommandOrganization()
 			usage := msg.runner.takeUsage()
 			m.tokenUsage.Add(usage)
 			if usage.Available() {
@@ -593,7 +590,6 @@ func (m *Mods) closeActiveRunner() {
 }
 
 func (m *Mods) quit() tea.Msg {
-	m.closeCommandOrganization()
 	// Cancel the request context first so every in-flight provider HTTP
 	// request, tool call, and approval/user-input
 	// select derived from m.ctx aborts immediately. This closes the window
@@ -738,4 +734,11 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.responseBoundaryPending = true
 	m.saveCompletionCheckpoint(msg.runner.messages())
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
+}
+
+// A late event from a closed stream must not affect its replacement.
+func (m *Mods) isRetiredRunner(r *streamRunner) bool {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	return m.activeRunner != nil && m.activeRunner != r
 }

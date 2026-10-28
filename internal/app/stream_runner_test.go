@@ -12,6 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLateStreamEventCannotAffectReplacement(t *testing.T) {
+	old, current := &streamRunner{}, &streamRunner{}
+	m := &Mods{state: requestState}
+	m.setActiveRunner(current)
+	_, cmd := m.Update(streamEventMsg{runner: old, kind: streamEventError, err: errors.New("retired request")})
+	require.Nil(t, cmd)
+	require.Equal(t, requestState, m.state)
+	require.Same(t, current, m.takeActiveRunner())
+}
+
 type scriptedStream struct {
 	chunks   []proto.Chunk
 	idx      int

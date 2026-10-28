@@ -224,7 +224,7 @@ func TestReadOnlyToolAccessIntents(t *testing.T) {
 		}
 		data, ok := args[spec.Name]
 		require.Truef(t, ok, "missing read-only intent sample for %s", spec.Name)
-		intent := buildAccessIntent(spec.Name, data, registry, nil)
+		intent := buildAccessIntent(spec.Name, data, registry)
 		require.NotEqualf(t, AccessWrite, intent.Class, "%s must not fall back to write intent", spec.Name)
 		require.Equalf(t, AccessRead, intent.Class, "%s", spec.Name)
 		seen[spec.Name] = true

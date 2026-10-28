@@ -16,7 +16,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/caarlos0/go-shellwords"
-	"github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/providerinfo"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -55,13 +54,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		cancel()
 	}
 	m.thinkActive = false
-	if m.retries == 0 {
-		var organization *commandOrganizationState
-		if m.Config.CommandSimplification == config.CommandSimplificationOnce {
-			organization = newCommandOrganizationState(m.ctx, m.Config.Prefix+"\n"+content)
-		}
-		m.replaceCommandOrganization(organization)
-	}
 	m.responseOutputStarted = false
 	m.responseBoundaryPending = false
 	m.Thought = ""
@@ -94,9 +86,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		}})
 	}
 
-	organization := m.currentCommandOrganization()
 	startCmd := func() tea.Msg {
-		session, err := m.buildRequestSessionForOrganization(content, organization)
+		session, err := m.buildRequestSession(content)
 		if err != nil {
 			return err
 		}

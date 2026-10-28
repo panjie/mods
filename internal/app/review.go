@@ -11,7 +11,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
@@ -24,7 +23,6 @@ type reviewOptionAction int
 const (
 	reviewOptionApprove reviewOptionAction = iota
 	reviewOptionDeny
-	reviewOptionSimplify
 	reviewOptionAlwaysAllow
 	reviewOptionCancel
 )
@@ -91,13 +89,6 @@ func (r *toolReviewer) canReviewInteractively() bool {
 		return r.interactiveReviewAvailable
 	}
 	return IsInputTTY()
-}
-
-// requiresHumanReview mirrors the policy gates in requestApproval without
-// starting an interaction. Organization feedback may only preempt calls that
-// would otherwise reach a human approval decision.
-func (r *toolReviewer) requiresHumanReview(intent AccessIntent, safeDirSet []string) bool {
-	return r.reviewBypassSource(intent, safeDirSet) == ""
 }
 
 func (r *toolReviewer) reviewBypassSource(intent AccessIntent, safeDirSet []string) string {
@@ -218,14 +209,6 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
-	case "s", "S":
-		if !r.reviewItem.allowSimplify {
-			return true, nil
-		}
-		r.reviewItem.resp <- reviewResponse{action: reviewActionSimplify}
-		r.reviewPending = false
-		r.reviewItem = nil
-		return true, r.pollReviewCmd()
 	case "n", "N":
 		r.reviewItem.resp <- reviewResponse{}
 		r.reviewPending = false
@@ -243,7 +226,7 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
-	case "ctrl+c":
+	case "ctrl+c", "esc":
 		r.cancelRequested = true
 		return true, msgCmd(reviewCancelMsg{})
 	case "left":
@@ -261,8 +244,6 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		case reviewOptionDeny:
 			r.reviewItem.resp <- reviewResponse{}
-		case reviewOptionSimplify:
-			r.reviewItem.resp <- reviewResponse{action: reviewActionSimplify}
 		case reviewOptionAlwaysAllow:
 			r.rules.Add(r.reviewItem.candidateRules...)
 			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
@@ -281,9 +262,6 @@ func (r *toolReviewer) reviewOptions() []reviewOption {
 	options := []reviewOption{
 		{key: "Y", label: "Allow once", action: reviewOptionApprove},
 		{key: "N", label: "Deny", action: reviewOptionDeny},
-	}
-	if r.reviewItem != nil && r.reviewItem.allowSimplify {
-		options = append(options, reviewOption{key: "S", label: "Simplify", action: reviewOptionSimplify})
 	}
 	if r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0 {
 		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
@@ -325,20 +303,8 @@ func (r *toolReviewer) reviewActions() []interactionAction {
 	return actions
 }
 
-// buildAccessIntent derives the unified AccessIntent for a tool call. Shell
-// tools consume a completed CommandAssessment; runtime-resolved targets remain
-// separate so they cannot become directory rules. Tools with a registered IntentExtractor use that;
-// read-only tools without directory semantics become read intents; anything
-// else degrades fail-closed to a write with no known dirs.
-func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry, assessment *commandanalysis.CommandAssessment) AccessIntent {
-	if registry != nil && registry.ShellExecution(name) {
-		if assessment == nil {
-			unknown := commandanalysis.UnknownCommandAssessment()
-			return commandResultToIntent(commandanalysis.Result(unknown))
-		}
-		intent := commandResultToIntent(commandanalysis.Result(*assessment))
-		return intent
-	}
+// buildAccessIntent describes native and MCP tools. Command declarations use a separate gate.
+func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry) AccessIntent {
 	if registry != nil {
 		if ext, ok := registry.IntentExtractor(name); ok {
 			return ext(data)
@@ -364,17 +330,8 @@ func normalizeAffectedDirsForWorkingDir(dirs []string, cwd string) []string {
 	return pathutil.NormalizeDirs(dirs, pathutil.DefaultOptions(cwd, pathutil.FlavorPOSIX))
 }
 
-func normalizeShellAffectedDirsForTool(dirs []string, cwd string, tool string) []string {
-	return pathutil.NormalizeShellDirs(dirs, pathutil.DefaultOptions(cwd, shellPathFlavor(tool)))
-}
-
-func normalizeAccessIntentDirs(intent AccessIntent, cwd, tool string, shell bool) AccessIntent {
-	normalize := func(dirs []string) []string {
-		if shell {
-			return normalizeShellAffectedDirsForTool(dirs, cwd, tool)
-		}
-		return normalizeAffectedDirsForWorkingDir(dirs, cwd)
-	}
+func normalizeAccessIntentDirs(intent AccessIntent, cwd string) AccessIntent {
+	normalize := func(dirs []string) []string { return normalizeAffectedDirsForWorkingDir(dirs, cwd) }
 	if intent.ReadDirs != nil || intent.WriteDirs != nil {
 		if intent.ReadDirs != nil {
 			intent.ReadDirs = normalize(intent.ReadDirs)
@@ -402,19 +359,15 @@ func normalizeAccessIntentDirs(intent AccessIntent, cwd, tool string, shell bool
 // lets the reviewer stay physically independent of the main model: it
 // can be constructed, tested, and reasoned about without a live Mods.
 //
-// A nil assessment is fail-closed when buildAccessIntent runs; the reviewer
-// itself never reparses or reconstructs command facts.
+// Command effects are supplied by the model and never independently classified.
 type reviewerDeps struct {
-	ctx            context.Context
-	shellExecution bool
-	assessment     *commandanalysis.CommandAssessment
-	accessIntent   AccessIntent
-	safeDirs       []string
-	payload        **commandPayload
-	preparePayload func(context.Context) (*commandPayload, error)
-	redact         func(string) string
-	executionRows  []interactionRow
-	onDecision     func(approvalTrace)
+	ctx           context.Context
+	commandEffect toolregistry.CommandEffect
+	accessIntent  AccessIntent
+	safeDirs      []string
+	redact        func(string) string
+	executionRows []interactionRow
+	onDecision    func(approvalTrace)
 }
 
 type approvalTrace struct {
@@ -434,6 +387,9 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			trace.Source = "cancelled"
 		}
 		trace.Duration = time.Since(started)
+		if deps.commandEffect != "" {
+			trace.Detail = "model declared " + string(deps.commandEffect) + "; " + trace.Detail
+		}
 		if deps.onDecision != nil {
 			deps.onDecision(trace)
 		}
@@ -442,18 +398,23 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 	if len(safeDirSet) == 0 {
 		safeDirSet = safeDirs()
 	}
-	shellExecution := deps.shellExecution
 	intent := deps.accessIntent
-	assessment := commandanalysis.CommandAssessment{}
-	if deps.assessment != nil {
-		assessment = *deps.assessment
-	}
-	if shellExecution {
-		intent = normalizeAccessIntentDirs(intent, r.scope.Value, name, true)
-		assessment.KnownDirs = normalizeShellAffectedDirsForTool(assessment.KnownDirs, r.scope.Value, name)
-		debug.Printf("command assessment: effect=%s evidence=%s coverage=%d gaps=%v dirs=%v", assessment.Effect, assessment.Evidence, assessment.WriteCoverage, assessment.Gaps, assessment.KnownDirs)
-	}
-	if source := r.reviewBypassSource(intent, safeDirSet); source != "" {
+	if deps.commandEffect != "" {
+		switch deps.commandEffect {
+		case toolregistry.CommandReadOnly, toolregistry.CommandMayWrite:
+		default:
+			return fmt.Errorf("invalid command effect %q", deps.commandEffect)
+		}
+		if r.reviewMode == ReviewNever {
+			trace.Source = "review disabled"
+			return nil
+		}
+		if deps.commandEffect == toolregistry.CommandReadOnly {
+			trace.Source = "model declaration"
+			trace.Detail = "allowed"
+			return nil
+		}
+	} else if source := r.reviewBypassSource(intent, safeDirSet); source != "" {
 		trace.Source = source
 		trace.Detail = accessIntentSummary(intent)
 		return nil
@@ -467,21 +428,12 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 			name,
 		)
 	}
-	if deps.payload != nil && *deps.payload == nil && deps.preparePayload != nil {
-		payload, err := deps.preparePayload(deps.ctx)
-		if err != nil {
-			trace.Source = "unavailable"
-			trace.Detail = "script payload preparation failed"
-			return err
-		}
-		*deps.payload = payload
-	}
 	respCh := make(chan reviewResponse, 1)
 	var candidateRules []Rule
-	if intent.HasAccess() {
+	if deps.commandEffect == "" && intent.HasAccess() {
 		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.reviewMode))
 	}
-	presentation := formatReviewPresentationWithIntent(name, data, assessment, r.scope, intent)
+	presentation := formatReviewPresentationWithIntent(name, data, r.scope, intent)
 	// Redact before quoting/numbering: those transformations can otherwise
 	// split a multi-line secret or turn its characters into escape sequences.
 	if deps.redact != nil {
@@ -492,7 +444,10 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 					presentation.rows[i].Value = numberedReviewSource(redactRemoteURLsForDisplay(deps.redact(ExtractShellCommand(data))))
 				}
 			case "Argv":
-				var args commandPayloadArgs
+				var args struct {
+					Program string   `json:"program"`
+					Args    []string `json:"args"`
+				}
 				if name == "process_run" && json.Unmarshal(data, &args) == nil {
 					argv := append([]string{args.Program}, args.Args...)
 					for j := range argv {
@@ -512,12 +467,6 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		}
 		presentation.rows = append(rows, deps.executionRows...)
 	}
-	if deps.payload != nil {
-		presentation.rows = append(presentation.rows, (*deps.payload).reviewRows(deps.redact)...)
-	}
-	if assessment.Reviewability.ScriptFilePayload && (deps.payload == nil || *deps.payload == nil) {
-		presentation.rows = append(presentation.rows, interactionRow{Label: "Script preview", Value: "Unavailable for this invocation form; script content has not been reviewed. Ordinary effect/target approval still applies."})
-	}
 	for i := range presentation.rows {
 		if deps.redact != nil {
 			presentation.rows[i].Value = deps.redact(presentation.rows[i].Value)
@@ -528,9 +477,8 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		name:           name,
 		args:           data,
 		candidateRules: candidateRules,
-		summary:        formatReviewSummaryWithIntent(name, data, assessment, r.scope, intent),
+		summary:        formatReviewSummaryWithIntent(name, data, r.scope, intent),
 		presentation:   presentation,
-		allowSimplify:  shellExecution,
 		resp:           respCh,
 	}
 	ch, done := r.snapshotSession()
@@ -558,13 +506,6 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		case reviewActionApprove:
 			trace.Detail = "approved"
 			return nil
-		case reviewActionSimplify:
-			if !shellExecution {
-				trace.Detail = "denied"
-				return fmt.Errorf("execution denied by user for: %s", name)
-			}
-			trace.Detail = "simplification requested"
-			return &commandReorganizationError{ReasonCodes: []string{"user_requested"}}
 		default:
 			trace.Detail = "denied"
 			return fmt.Errorf("execution denied by user for: %s", name)
@@ -621,29 +562,6 @@ func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string
 		rules = append(rules, RulesForRemoteOrigins(group.Origins)...)
 	}
 	return rules
-}
-
-// extractSecretEnvNames returns the environment variable names this call
-// injects as secrets, in original and upper-case form. Static environment
-// path expansion must skip these names: the child shell would observe the
-// secret's value rather than the inherited one classification sees.
-func extractSecretEnvNames(data []byte) map[string]bool {
-	var parsed struct {
-		SecretEnv map[string]string `json:"secret_env"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil || len(parsed.SecretEnv) == 0 {
-		return nil
-	}
-	names := make(map[string]bool, 2*len(parsed.SecretEnv))
-	for name := range parsed.SecretEnv {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		names[name] = true
-		names[strings.ToUpper(name)] = true
-	}
-	return names
 }
 
 func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heights ...int) string {

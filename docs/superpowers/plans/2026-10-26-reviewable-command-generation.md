@@ -1,7 +1,9 @@
 # 可审查命令生成：实施计划与验收
 
+> Superseded on 2026-10-28 by [model-declared command effects](../specs/2026-10-28-command-effect-declaration.md). This document records the retired analyzer/organization design; its historical results are unchanged.
+
 日期：2026-10-26
-状态：P0/P1 已实现；P2a/P2b 首批及标量投影已实施。P3a/P3b 与 P3c 基础预览已实现，范围和验证见 [P3 记录](../evidence/2026-10-27-command-generation-p3/README.md)。P4 已实现，默认关闭，范围见 [P4 记录](../evidence/2026-10-27-command-generation-p4/README.md)。P5 的 Linux 真实模型对照已执行，默认仍为 `off`；范围、负结果和未验证平台见 [P5 记录](../evidence/2026-10-27-command-generation-p5/README.md)。原始复杂代码行数任务仍未解决。
+状态：P0/P1 已实现；P2a/P2b 首批及标量投影已实施。P3a/P3b 与 P3c 基础预览已实现，范围和验证见 [P3 记录](../evidence/2026-10-27-command-generation-p3/README.md)。P4 已实现，默认关闭，范围见 [P4 记录](../evidence/2026-10-27-command-generation-p4/README.md)。P5 的 Linux 真实模型对照已执行，默认仍为 `off`；范围、负结果和未验证平台见 [P5 记录](../evidence/2026-10-27-command-generation-p5/README.md)。Windows PS5.1/PS7 真实模型补充与未完成项见 [Windows 记录](../evidence/2026-10-28-command-generation-p5-windows/README.md)；人工 UI 由用户暂缓，P5 整体仍未完成。原始复杂代码行数任务仍未稳定解决。
 设计：[可审查命令生成与有限简化](../specs/2026-10-26-reviewable-command-generation-design.md)。
 
 执行记录：[P0/P1 实现、证据及验收限制](../evidence/2026-10-26-command-generation/README.md)。本次只修改两段生产提示词及测试/评测/文档，不修改命令分析、权限规则、审批交互或工具执行。下文保留后续阶段计划，不表示已经授权或完成后续机制。
@@ -220,6 +222,8 @@ P1–P3 不恢复自动纠正关卡。P4 才新增 `command-simplification: off 
 
 2026-10-27 实际执行：Linux amd64、DeepSeek `deepseek-v4-flash`、temperature 0、非交互 auto、normal+minimal，每组每场景 5 次。A/A1 在 `d34fe20` 归档上运行，B/C 在 `b906e77` 工作树上运行；A1/B/C 提示一致，A/A1 保持 pre-P2 分析器。C 组 40 次完成会话（180 次总运行）中自动重组为 0，B/C 的 `organization_reasons` 也为 0；模型生成的复杂调用是单层 `process_run sh -c` 或简单 `find | wc -l` 管道，未命中 P4 窄门槛。物理行数任务在所有组仍为 0/5 正确，原因是只读 `wc -l` 对无末尾换行文件的语义错误。C 相对 B 没有可观察净收益，默认值保持 `off`；Windows/macOS/PowerShell、人工 UI 和真实审批未验证。完整数据、限制和发布决策见 [P5 记录](../evidence/2026-10-27-command-generation-p5/README.md)。
 
+2026-10-28 Windows 实际执行：PS5.1 5.1.22621.7649、PS7 7.4.14，固定请求 deepseek-v4-flash / temperature 0 / max_tokens 4096 / think false / 非交互 auto。B/C 的 C 共 80 次完成实验、360 次含首轮运行，3 次自动重组均在 PS5.1 physical-lines：2 次随后正确且零审批完成，1 次替代仍 unknown、审批不可用后达到轮次上限。PS7 无自动重组。每格 5 次、宿主/模式表现不一致，保留 off，不扩大门槛或调整提示。全量证据和失败样本见 [Windows 记录](../evidence/2026-10-28-command-generation-p5-windows/README.md)。接线测试仅修正硬编码 POSIX 的平台夹具；实测触发序列在两个宿主通过只解析/模拟分发重放。人工 UI 未操作、race 缺 CGO/gcc、macOS/Linux pwsh 未测，P5 整体不标完成。
+
 ### 发布条件
 
 - 确定性测试全部通过，完整 check/test 通过。
@@ -354,4 +358,4 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 test
 
 实施中遇到以下情况停止该项扩展并保持保守路径：无法证明子树无副作用；新增规则误把未知写入变成读取；预算可能因重试重置；内容预览与执行上下文不一致；模型质量未改善却明显增加往返。不通过降低安全断言、隐藏失败或放宽统计口径继续推进。
 
-后续通用批量工具、声明式统计工具、强快照执行各自需要独立设计，不混入本计划来掩盖本轮效果不足。各阶段实现状态以执行记录为准，不等于跨平台、人类审阅或产品整体效果验收；P2 其余能力、完整载荷模式及 P4/P5 仍待实施。
+后续通用批量工具、声明式统计工具、强快照执行各自需要独立设计，不混入本计划来掩盖本轮效果不足。各阶段实现状态以执行记录为准，不等于跨平台、人类审阅或产品整体效果验收；P2 其余能力和完整载荷模式仍待实施；P4 已实现，P5 已有 Linux/Windows 模型证据但跨平台及人工验收尚未完成。

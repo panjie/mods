@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -20,15 +19,6 @@ type activityRecord struct {
 }
 
 const activityPreviewLimit = 16384
-
-func isCommandReorganization(err error) bool {
-	var reorganization *commandReorganizationError
-	return errors.As(err, &reorganization)
-}
-
-func reorganizationActivityStatus(name string) string {
-	return "↪ " + name + " · reorganization requested (not executed)"
-}
 
 func cloneActivityBlocks(src map[string][]activityRecord) map[string][]activityRecord {
 	dst := maps.Clone(src)
@@ -68,7 +58,7 @@ func (m *Mods) recordActivity(name, status, output string, err error) {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "fs_find_images", "fs_read_images", "fs_find_media", "fs_read_media":
 		read = err == nil
 	}
-	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{status: status, detail: output, read: read, failed: err != nil && !isCommandReorganization(err)})
+	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{status: status, detail: output, read: read, failed: err != nil})
 	m.renderDirty = true
 	m.flushRender()
 }

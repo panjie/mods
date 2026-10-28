@@ -15,7 +15,6 @@ import (
 	"github.com/panjie/mods/internal/anthropic"
 	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/chatgpt"
-	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/google"
 	imageutil "github.com/panjie/mods/internal/image"
 	"github.com/panjie/mods/internal/ollama"
@@ -34,10 +33,6 @@ type requestSession struct {
 }
 
 func (m *Mods) buildRequestSession(content string) (requestSession, error) {
-	return m.buildRequestSessionForOrganization(content, m.currentCommandOrganization())
-}
-
-func (m *Mods) buildRequestSessionForOrganization(content string, organization *commandOrganizationState) (requestSession, error) {
 	started := time.Now()
 	cfg := m.Config
 	api, mod, err := m.resolveModel(cfg)
@@ -107,7 +102,6 @@ func (m *Mods) buildRequestSessionForOrganization(content string, organization *
 	if err != nil {
 		return requestSession{}, err
 	}
-	organization.bindSourceContext(m.messages)
 	if err := stream.ValidateMediaCapabilities(m.messages, client.Capabilities()); err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Media input is unavailable"}
 	}
@@ -159,7 +153,7 @@ func (m *Mods) buildRequestSessionForOrganization(content string, organization *
 		User:         requestUser,
 		Tools:        tools,
 		TrackUsage:   cfg.ShowTokenUsage,
-		ResultCaller: m.toolResultCallerForOrganization(registry, cfg, organization),
+		ResultCaller: m.toolResultCaller(registry, cfg),
 	}
 	if client.Capabilities().JSONResponseFormat && cfg.Format == "json" {
 		request.ResponseFormat = &cfg.Format
@@ -182,7 +176,6 @@ func (m *Mods) buildRequestSessionForOrganization(content string, organization *
 		return m.handleRequestError(err, mod, m.Input)
 	}
 	runner := newStreamRunner(st, registry, streamCancel, errh)
-	runner.organization = organization
 	runner.requestedAt = requestedAt
 	m.setActiveRunner(runner)
 	return requestSession{
@@ -367,14 +360,7 @@ func debugTools(tools []proto.ToolSpec, total int) {
 }
 
 func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) proto.ToolResultCaller {
-	return m.toolResultCallerForOrganization(registry, cfg, m.currentCommandOrganization())
-}
-
-func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, cfg *Config, organization *commandOrganizationState) proto.ToolResultCaller {
 	return func(call proto.ToolCallRequest) (output proto.ToolResult, returnErr error) {
-		if organization != nil && organization.ctx.Err() != nil {
-			return proto.ToolResult{}, organization.ctx.Err()
-		}
 		name := call.Name
 		data := registry.UnwrapArguments(call.Name, call.Arguments)
 		unwrappedArgs := !bytes.Equal(data, call.Arguments)
@@ -422,8 +408,6 @@ func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, 
 				m.debugToolSucceeded++
 			case strings.HasPrefix(status, "exit "):
 				m.debugToolExited++
-			case status == "reorganize":
-				// A control response is neither a successful dispatch nor a process failure.
 			case status == "denied":
 				m.debugToolDenied++
 			case status == "cancelled":
@@ -441,11 +425,7 @@ func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, 
 		}
 		// Authorization may wait for the user.
 		// Start the execution timeout only after authorization completes.
-		parent := m.ctx
-		if organization != nil {
-			parent = organization.ctx
-		}
-		ctx, cancel := context.WithCancel(parent)
+		ctx, cancel := context.WithCancel(m.ctx)
 		m.addCancel(cancel)
 		defer cancel()
 		// Reject malformed calls (missing/empty required args) before computing
@@ -461,9 +441,6 @@ func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, 
 			approvalRecord = approvalTrace{Source: "interactive", Detail: "tool-managed"}
 			m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
 			result, err := registry.CallResult(ctx, name, data)
-			if err == nil && name == toolregistry.UserInputToolName {
-				organization.protectUserResponse(result.Text)
-			}
 			return result, err
 		}
 		var processBinding toolregistry.ProcessProgramBinding
@@ -495,79 +472,35 @@ func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, 
 			}
 			ctx = toolregistry.WithProcessProgramBinding(ctx, processBinding)
 		}
-		var assessment *commandanalysis.CommandAssessment
+
+		var effect toolregistry.CommandEffect
+		var intent AccessIntent
+		var preparedAccess *toolregistry.PreparedAccess
 		if registry.ShellExecution(name) {
-			command := ExtractShellCommand(data)
-			if name == "process_run" {
-				command = string(data)
-			}
-			assessed, analysisErr := m.assessCommandAtCwdResult(name, command, extractSecretEnvNames(data), cwd)
-			if analysisErr != nil {
-				return proto.ToolResult{}, analysisErr
-			}
-			if err := ctx.Err(); err != nil {
+			var err error
+			effect, err = toolregistry.DeclaredCommandEffect(data)
+			if err != nil {
 				return proto.ToolResult{}, err
 			}
-			if cwd != cfg.ResolveWorkingDir().Canonical {
-				assessed.KnownDirs = normalizeShellAffectedDirsForTool(assessed.KnownDirs, cwd, name)
+		} else {
+			intent = buildAccessIntent(name, data, registry)
+			var err error
+			preparedAccess, err = registry.PrepareAccess(ctx, name, data)
+			if err != nil {
+				return proto.ToolResult{}, err
 			}
-			if name == "process_run" {
-				assessed = m.constrainResolvedProcessAssessment(assessed, processBinding)
+			if preparedAccess != nil {
+				intent = preparedAccess.Intent
 			}
-			assessment = &assessed
-			// HasReviewabilityConcerns remains diagnostic. The opt-in organization
-			// gate below has its own narrower conditions and request budget.
-			// Authorization always consumes the original effect and target facts.
-			if assessed.HasReviewabilityConcerns() {
-				debug.Printf("command reviewability: tool=%s level=%s actions=%d pipelines=%d opaque=%t script_file=%t reasons=%v", name, assessed.Reviewability.Level, assessed.Shape.TopLevelActions, assessed.Shape.Pipelines, assessed.Shape.Opaque, assessed.Reviewability.ScriptFilePayload, assessed.Reviewability.Reasons)
-			}
-		}
-		intent := buildAccessIntent(name, data, registry, assessment)
-		preparedAccess, prepareErr := registry.PrepareAccess(ctx, name, data)
-		if prepareErr != nil {
-			return proto.ToolResult{}, prepareErr
-		}
-		if preparedAccess != nil {
-			intent = preparedAccess.Intent
 		}
 		m.sendToolOperationStatus(redactRemoteURLsForDisplay(ToolOperationLabel(name, data, m.width)))
 		scope := m.reviewer.scope
 		safeDirs := m.safeDirs()
-		intent = normalizeAccessIntentDirs(intent, scope.Value, name, registry.ShellExecution(name))
+		intent = normalizeAccessIntentDirs(intent, scope.Value)
 
-		prepared := preparedToolCall{name: name, args: append([]byte(nil), data...), intent: intent, assessment: assessment, filesystem: preparedAccess}
+		prepared := preparedToolCall{name: name, args: append([]byte(nil), data...), intent: intent, filesystem: preparedAccess}
 		if err := ctx.Err(); err != nil {
 			return proto.ToolResult{}, err
-		}
-		organizationInput := ""
-		if organization != nil && m.reviewer != nil && commandOrganizationEnabled(cfg.CommandSimplification, cfg.ReviewMode) &&
-			m.reviewer.requiresHumanReview(intent, safeDirs) && assessment != nil {
-			if shell, ok := registry.Tool(name); ok && shell.Kind == toolregistry.ToolKindShell &&
-				(name == "shell_run" || name == "powershell_run" || name == "process_run") {
-				input := ExtractShellCommand(data)
-				var sourceFragments []string
-				if name == "process_run" {
-					var process struct {
-						Program string   `json:"program"`
-						Args    []string `json:"args"`
-					}
-					if json.Unmarshal(data, &process) == nil {
-						input = strings.Join(append([]string{process.Program}, process.Args...), " ")
-						sourceFragments = process.Args
-					}
-				}
-				organizationInput = input
-				if reasons := organization.consumeAutomatic(ctx, call.ID, input, assessment, sourceFragments...); len(reasons) > 0 {
-					if err := ctx.Err(); err != nil {
-						return proto.ToolResult{}, err
-					}
-					approvalRecord = approvalTrace{Source: "automatic reorganization", Detail: "one-shot request budget consumed"}
-					return proto.ToolResult{}, &commandReorganizationError{ReasonCodes: reasons, Automatic: true}
-				}
-			}
-		}
-		preparePayload := func(ctx context.Context) (*commandPayload, error) {
-			return prepareCommandPayload(ctx, name, prepared.args, cwd, processBinding)
 		}
 		var redact func(string) string
 		if m.secrets != nil {
@@ -583,31 +516,19 @@ func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, 
 				}
 				executionRows = append(executionRows, interactionRow{Label: "Interpreter", Value: program})
 			} else if name == "shell_run" || name == "powershell_run" {
-				program, argv := toolregistry.ShellReviewInvocation(name, ExtractShellCommand(data))
-				if redact != nil {
-					for i := range argv {
-						argv[i] = redact(argv[i])
-					}
-				}
-				executionRows = append(executionRows,
-					interactionRow{Label: "Interpreter", Value: program},
-					interactionRow{Label: "Host argv", Value: quotedReviewArgv(argv)},
-				)
+				program, _ := toolregistry.ShellReviewInvocation(name, ExtractShellCommand(data))
+				executionRows = append(executionRows, interactionRow{Label: "Interpreter", Value: program})
 			}
 		}
 		// No execution has started here. A changed native target receives a new
 		// review; a continuously changing target fails without retrying the tool.
 		for attempt := 0; ; attempt++ {
 			if err := m.reviewer.requestApproval(reviewerDeps{
-				ctx: ctx, shellExecution: registry.ShellExecution(name),
-				assessment: prepared.assessment, accessIntent: prepared.intent, safeDirs: safeDirs,
-				payload: &prepared.payload, preparePayload: preparePayload, redact: redact, executionRows: executionRows,
+				ctx: ctx, commandEffect: effect,
+				accessIntent: prepared.intent, safeDirs: safeDirs,
+				redact: redact, executionRows: executionRows,
 				onDecision: func(trace approvalTrace) { approvalRecord = trace },
 			}, prepared.name, prepared.args); err != nil {
-				var reorganization *commandReorganizationError
-				if errors.As(err, &reorganization) && organization != nil && !reorganization.Automatic {
-					organization.markManual(call.ID, organizationInput)
-				}
 				return proto.ToolResult{}, err
 			}
 			if err := prepared.filesystem.Revalidate(ctx); err != nil {
@@ -619,49 +540,8 @@ func (m *Mods) toolResultCallerForOrganization(registry *toolregistry.Registry, 
 					return proto.ToolResult{}, err
 				}
 				prepared.filesystem = fresh
-				prepared.intent = normalizeAccessIntentDirs(fresh.Intent, scope.Value, name, false)
+				prepared.intent = normalizeAccessIntentDirs(fresh.Intent, scope.Value)
 				continue
-			}
-			if prepared.payload != nil {
-				changed, err := prepared.payload.revalidate(ctx)
-				if err != nil {
-					return proto.ToolResult{}, err
-				}
-				if changed {
-					if attempt >= 1 {
-						return proto.ToolResult{}, errors.New("script payload changed repeatedly during review")
-					}
-					prepared.payload = nil
-					continue
-				}
-			}
-			if prepared.assessment != nil && prepared.intent.DominantClass() == AccessWrite {
-				input := ExtractShellCommand(prepared.args)
-				if name == "process_run" {
-					input = string(prepared.args)
-				}
-				fresh, analysisErr := m.assessCommandAtCwdResult(name, input, extractSecretEnvNames(prepared.args), cwd)
-				if analysisErr != nil {
-					return proto.ToolResult{}, analysisErr
-				}
-				if err := ctx.Err(); err != nil {
-					return proto.ToolResult{}, err
-				}
-				if cwd != cfg.ResolveWorkingDir().Canonical {
-					fresh.KnownDirs = normalizeShellAffectedDirsForTool(fresh.KnownDirs, cwd, name)
-				}
-				if name == "process_run" {
-					fresh = m.constrainResolvedProcessAssessment(fresh, processBinding)
-				}
-				freshIntent := normalizeAccessIntentDirs(commandResultToIntent(commandanalysis.Result(fresh)), scope.Value, name, true)
-				if !commandAuthorizationEqual(prepared.intent, freshIntent) {
-					if attempt >= 1 {
-						return proto.ToolResult{}, errors.New("command targets changed repeatedly during review")
-					}
-					prepared.assessment, prepared.intent = &fresh, freshIntent
-					continue
-				}
-				prepared.assessment, prepared.intent = &fresh, freshIntent
 			}
 			break
 		}
@@ -726,10 +606,6 @@ func toolDebugStatus(err error) (status, symbol string) {
 	if err == nil {
 		return "success", "✓"
 	}
-	var reorganization *commandReorganizationError
-	if errors.As(err, &reorganization) {
-		return "reorganize", "↪"
-	}
 	var exitErr shellExitCoder
 	if errors.As(err, &exitErr) {
 		return fmt.Sprintf("exit %d", exitErr.ExitCode()), "!"
@@ -756,7 +632,5 @@ type preparedToolCall struct {
 	name       string
 	args       []byte
 	intent     approval.AccessIntent
-	assessment *commandanalysis.CommandAssessment
 	filesystem *toolregistry.PreparedAccess
-	payload    *commandPayload
 }

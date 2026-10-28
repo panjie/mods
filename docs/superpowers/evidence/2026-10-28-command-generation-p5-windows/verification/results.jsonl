@@ -1,0 +1,6 @@
+{"command":"go build ./...","started":"2026-10-28T07:57:46.8037172+08:00","name":"build","exit_code":0,"seconds":35.5018895}
+{"command":"go test ./...","started":"2026-10-28T07:58:22.3253423+08:00","name":"go-test","exit_code":0,"seconds":87.1165072}
+{"command":"go test -race ./internal/app ./internal/config ./internal/commandanalysis ./internal/evals -run Test(CommandOrganization|CommandSimplification|CommandStructureP4|ReorganizationMetrics) -count=1","started":"2026-10-28T07:59:49.4438352+08:00","name":"race","exit_code":2,"seconds":0.2279921}
+{"command":"go test -tags commandtrace ./internal/app -run ^TestCommandAnalysisWorkBaseline$ -count=1","started":"2026-10-28T07:59:49.6746275+08:00","name":"commandtrace","exit_code":0,"seconds":16.4585743}
+{"command":"go test -tags integration ./internal/app -run ^TestCommandGenerationP5PolicyManifest$|^TestCommandGenerationP5AutomaticOrganizationWiring$ -count=1","started":"2026-10-28T08:00:06.1361931+08:00","name":"p5-policy-wiring","exit_code":1,"seconds":22.0550788}
+{"command":"go test -tags integration ./internal/app -run ^TestGenerationPowerShellAggregationSemantics$ -count=1","started":"2026-10-28T08:00:28.1939739+08:00","name":"powershell-aggregation","exit_code":0,"seconds":14.9203877}

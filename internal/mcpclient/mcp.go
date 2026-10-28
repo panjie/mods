@@ -18,7 +18,6 @@ import (
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/debug"
 	"github.com/panjie/mods/internal/platform"
 	"github.com/panjie/mods/internal/proto"
@@ -215,7 +214,7 @@ func NewToolSession(ctx context.Context, cfg *Config) (*ToolSession, error) {
 			mu.Lock()
 			origin := ""
 			if server.Type == "http" || server.Type == "sse" {
-				origin, _ = commandanalysis.NormalizeRemoteOrigin(server.URL)
+				origin, _ = approval.NormalizeRemoteOrigin(server.URL)
 			}
 			session.servers[sname] = &toolServerSession{client: cli, cancel: cancel, tools: tools.Tools, remoteOrigin: origin}
 			mu.Unlock()

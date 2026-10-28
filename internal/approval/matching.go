@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/panjie/mods/internal/pathutil"
 )
 
@@ -76,7 +75,7 @@ func RulesAllowDirs(rules []Rule, dirs []string, scope Scope, mode AccessClass) 
 // RuleSet itself belongs to one saved session, and origins remain stable if
 // that session is continued from another working directory.
 func RulesForRemoteOrigins(origins []string) []Rule {
-	origins = commandanalysis.NormalizeRemoteOrigins(origins)
+	origins = NormalizeRemoteOrigins(origins)
 	if len(origins) == 0 {
 		return nil
 	}
@@ -84,7 +83,7 @@ func RulesForRemoteOrigins(origins []string) []Rule {
 }
 
 func RulesAllowRemoteOrigins(rules []Rule, origins []string) bool {
-	origins = commandanalysis.NormalizeRemoteOrigins(origins)
+	origins = NormalizeRemoteOrigins(origins)
 	if len(origins) == 0 {
 		return false
 	}
@@ -93,7 +92,7 @@ func RulesAllowRemoteOrigins(rules []Rule, origins []string) bool {
 		if rule.Type != RemoteAllow || rule.Mode != AccessWrite {
 			continue
 		}
-		allowed = append(allowed, commandanalysis.NormalizeRemoteOrigins(rule.Origins)...)
+		allowed = append(allowed, NormalizeRemoteOrigins(rule.Origins)...)
 	}
 	for _, origin := range origins {
 		if !slices.Contains(allowed, origin) {

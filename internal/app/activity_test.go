@@ -56,25 +56,6 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	}
 }
 
-func TestActivityDistinguishesReorganizationFromExecutionFailure(t *testing.T) {
-	withOutputTTY(t, true)
-	old := IsErrorTTY
-	IsErrorTTY = func() bool { return true }
-	t.Cleanup(func() { IsErrorTTY = old })
-	m := newTodoTestMods(t)
-	m.Config.InteractiveTTYAvailable = true
-	m.appendToOutput("Answer\n\n")
-	m.toolResultOutputCmd("shell_run", []byte(`{"command":"unknown"}`), &commandReorganizationError{ReasonCodes: []string{"user_requested"}}, "control")
-	marker, ok := m.trailingToolResultBlockMarker()
-	require.True(t, ok)
-	require.Len(t, m.activityBlocks[marker], 1)
-	record := m.activityBlocks[marker][0]
-	require.False(t, record.failed)
-	require.Contains(t, record.status, "reorganization requested")
-	require.NotContains(t, record.status, "failed")
-	require.NotContains(t, record.status, "exit")
-}
-
 func TestActivityHiddenModesDoNotLeakHints(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)

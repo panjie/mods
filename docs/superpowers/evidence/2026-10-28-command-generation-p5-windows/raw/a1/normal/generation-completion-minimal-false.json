@@ -1,0 +1,3794 @@
+[
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "9a9bd5b7c065963e2a768795995c4518e6f38d1caa6b0441239898b0d9c7d4d8",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5901,
+    "input_tokens": 32484,
+    "output_tokens": 512,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines; [pscustomobject]@{ File = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go",
+          "offset": 1,
+          "limit": 100
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "error": "tool round limit reached",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 11,
+      "tool_rounds": 6,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "6faf5ecbb97fb67ecc0476fabc605eaa8ec9134dc2e0494f1d061f93cbe30eab",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5811,
+    "input_tokens": 32805,
+    "output_tokens": 677,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.md','.json','.csv','.log' } | ForEach-Object { $lines = Get-Content -LiteralPath $_.FullName; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines.Count; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "当前目录的代码行数统计如下（Go 源文件）：\n\n| 文件 | 行数 | 说明 |\n|---|---|---|\n| `a.go` | 2 | `package fixture` + 一行注释 |\n| `empty_test.go` | 0 | 空文件 |\n| `nested/space name.go` | 2 | 末行无换行符，仍计为 1 行 |\n| **合计** | **4** | |\n\n补充说明：\n- 统计范围只包含 `.go` 源文件。`README.md`、`settings.json`、`amounts.csv`、`events.log` 属于文档或数据文件，未计入。\n- 这 4 行中有 2 行是注释，因此有效代码行（非空、非注释）为 2 行。\n- 由于当前环境无法执行 shell 命令（`powershell_run` 需要交互式审批，但审批通道不可用），以上行数是我逐个读取文件内容后统计的，并非由工具自动汇总。",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 10,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "51aeb80f501b249f867ec3838ad186bd1f2e23e43206503313cd24bdc201af9f",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4399,
+    "input_tokens": 32838,
+    "output_tokens": 498,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | ForEach-Object { $lines = Get-Content -LiteralPath $_.FullName | Measure-Object; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines.Count } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go",
+          "offset": 1,
+          "limit": 100
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "error": "tool round limit reached",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 11,
+      "tool_rounds": 6,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "c825981559483d33f5a4476687d603f0a784dc9f5c7c4f70d0b544a325b934b7",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4055,
+    "input_tokens": 32367,
+    "output_tokens": 508,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "error": "tool round limit reached",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 12,
+      "tool_rounds": 6,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "c473f459a0700de5983359be01ac9a5fb5b44e43460a67498763449036cf97c9",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5671,
+    "input_tokens": 32557,
+    "output_tokens": 730,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines; [pscustomobject]@{ File = $_.FullName.Substring((Get-Location).Path.Length+1); Lines = $lines; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "## 代码行数统计（Go 源文件）\n\n| 文件 | 行数 | 字节 |\n|---|---|---|\n| `a.go` | 3 | 28 |\n| `nested/space name.go` | 3 | 38 |\n| `empty_test.go` | 0 | 0 |\n| **合计** | **6** | **66** |\n\n说明：\n- 统计范围是当前目录及其子目录中所有 `.go` 文件；`README.md`、`amounts.csv`、`events.log`、`settings.json` 不是代码，因此未计入。\n- 行数按文件内容中的换行符计算：`a.go` 为 `package fixture`、空行、`// comment` 三行；`nested/space name.go` 为 `package fixture`、空行、`// no final newline` 三行，该文件末尾没有换行符，但最后一行仍计入；`empty_test.go` 为空文件，计 0 行。\n- 其中注释行 2 行，空行 2 行，实际代码行 2 行（均为 `package` 声明）。\n- 我尝试用 PowerShell 批量统计，但当前环境没有交互式审批通道，命令未执行；因此上表数据来自逐个读取文件内容与文件大小核对。",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 10,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "45ad5cf424e920ea8d3a85baa419f8aec407455abd3312031c29ba179681f465",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5263,
+    "input_tokens": 32946,
+    "output_tokens": 735,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.js','.ts','.py','.java','.c','.h','.cpp','.cs','.rs','.rb','.php','.sh','.ps1','.md','.json','.csv','.log' } | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count; [PSCustomObject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "当前目录的代码行数统计如下（只统计 Go 源码，不含 README、JSON、CSV、日志等非代码文件）：\n\n| 文件 | 行数 | 说明 |\n|---|---|---|\n| `a.go` | 3 | `package fixture`、空行、`// comment` |\n| `empty_test.go` | 0 | 空文件 |\n| `nested/space name.go` | 3 | 末行无换行符，仍计为 1 行 |\n| **合计** | **6** | |\n\n补充说明：\n- 统计按物理行计算，空行和注释行也计入；若只算有效代码行，则为 2 行（两个 `package` 声明）。\n- 非代码文件行数：`README.md` 2 行、`settings.json` 1 行、`amounts.csv` 4 行、`events.log` 4 行。\n- 我原本想用 PowerShell 批量统计，但该命令需要交互审批而当前不可用，因此改为逐个读取文件内容来计数。",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 10,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f8b4f71ab381db3792b69ec517c51d5f519d944849519c48d4a2417d472ed2f3",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 6317,
+    "input_tokens": 32727,
+    "output_tokens": 529,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | ForEach-Object { [pscustomobject]@{ Name = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = (Get-Content -LiteralPath $_.FullName | Measure-Object).Count; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "error": "tool round limit reached",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 13,
+      "tool_rounds": 6,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "7cd656036b47fc7776124718a085274c2f3c37c937b1e419f5102edc4312c7b5",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4727,
+    "input_tokens": 32484,
+    "output_tokens": 537,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Lines = $lines; Bytes = $_.Length } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "error": "tool round limit reached",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 13,
+      "tool_rounds": 6,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "17ace0f8c5721795c21569625629cf44a3b5f9d04757db9bc724746b400e22f7",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5641,
+    "input_tokens": 32390,
+    "output_tokens": 690,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | ForEach-Object { $lines = (Get-Content -LiteralPath $_.FullName | Measure-Object -Line).Lines; [pscustomobject]@{ Path = $_.FullName.Substring((Get-Location).Path.Length + 1); Ext = $_.Extension; Lines = $lines; Bytes = $_.Length } } | Sort-Object Path | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "当前目录的代码行数统计如下（统计范围：`.go` 源文件）：\n\n| 文件 | 行数 | 说明 |\n|---|---|---|\n| `a.go` | 3 | `package fixture`、空行、`// comment` |\n| `empty_test.go` | 0 | 空文件 |\n| `nested/space name.go` | 2 | `package fixture`、空行、`// no final newline`（末行无换行符） |\n| **合计** | **5** | 3 个 Go 文件 |\n\n补充说明：\n- 非代码文件未计入：`README.md`（2 行）、`settings.json`（1 行）、`amounts.csv`（4 行）、`events.log`（4 行）。\n- 若只统计非空、非注释的有效代码行，则仅 2 行（两个 `package` 声明）。\n- 我原本想用 PowerShell 做自动统计，但当前环境没有交互式审批通道，命令无法执行，因此改为逐个读取文件内容人工计数；结果基于文件实际内容，未做其他工具校验。",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 10,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "ambiguous-code",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "da97e7adc9c00afc601e9b24209c635cc79941ba48eb51b365bee1d90e4f53df",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5534,
+    "input_tokens": 32898,
+    "output_tokens": 740,
+    "calls": [
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.go','.js','.ts','.py','.java','.c','.cpp','.h','.cs','.rs','.rb','.php','.sh','.ps1','.md','.json','.csv','.log' } | ForEach-Object { [pscustomobject]@{ Name=$_.FullName.Substring((Get-Location).Path.Length+1); Lines=(Get-Content -LiteralPath $_.FullName | Measure-Object).Count } } | Format-Table -AutoSize"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "README.md"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "settings.json"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "当前目录的代码行数统计如下（只统计源代码文件，不含 README、CSV、日志、JSON 等数据或文档文件）：\n\n| 文件 | 行数 |\n|---|---|\n| `a.go` | 3 |\n| `empty_test.go` | 0（空文件） |\n| `nested/space name.go` | 3（末行无换行符，仍计为 1 行） |\n| **合计** | **6 行** |\n\n说明：\n- 统计范围是 `.go` 源文件，共 3 个文件、6 行。\n- 如果只算非空、非注释的有效代码行，则 `a.go` 为 1 行（`package fixture`），`nested/space name.go` 为 1 行，合计 2 行。\n- 未统计的文件：`README.md`（2 行）、`amounts.csv`（4 行）、`events.log`（4 行）、`settings.json`（1 行）。\n- 本次统计通过逐个读取文件内容完成；由于当前环境无法执行 shell 命令，因此没有使用 `cloc` 之类的工具。",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": null,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 10,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": null
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "9b825f1aa529d25e73774329d37bcce77cee69594215cfe9234ad28777d357ad",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4956,
+    "input_tokens": 33040,
+    "output_tokens": 591,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$files = Get-ChildItem -Path . -Recurse -File -Filter *.go; $total = 0; foreach ($f in $files) { $bytes = [System.IO.File]::ReadAllBytes($f.FullName); $count = 0; foreach ($b in $bytes) { if ($b -eq 10) { $count++ } }; if ($bytes.Length -gt 0 -and $bytes[-1] -ne 10) { $count++ }; $total += $count }; [pscustomobject]@{ files = $files.Count; lines = $total } | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go",
+          "offset": 0,
+          "limit": 28
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go",
+          "offset": 0,
+          "limit": 38
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "",
+    "error": "tool round limit reached",
+    "outcome": {
+      "query": true,
+      "completed": false,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 11,
+      "tool_rounds": 6,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "86487613d13c02989b4a7a7ef981dd3b04d065db5d5efec901c5da618e962b36",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4579,
+    "input_tokens": 33144,
+    "output_tokens": 410,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $files = ($f | Measure-Object).Count; $lines = ($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object).Count; [pscustomobject]@{files=$files;lines=$lines} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "fe10fdb68f03af5406c54a04573bf760d2ff71bb54725d6b0558da5bfd01dd4c",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 3593,
+    "input_tokens": 27197,
+    "output_tokens": 307,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = $f | ForEach-Object { (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } | Measure-Object -Sum; [pscustomobject]@{files=$f.Count; lines=$lines.Sum} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 6}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 6,
+      "tool_rounds": 4,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "dec4cd3a16a31bdb2486021ddd449bcba65e623bfe61574178b268bebf11fcf1",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4132,
+    "input_tokens": 33045,
+    "output_tokens": 467,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$files = Get-ChildItem -Path . -Recurse -File -Filter *.go; $total = 0; foreach ($f in $files) { $bytes = [System.IO.File]::ReadAllBytes($f.FullName); $n = 0; foreach ($b in $bytes) { if ($b -eq 10) { $n++ } }; if ($bytes.Length -gt 0 -and $bytes[$bytes.Length-1] -ne 10) { $n++ }; $total += $n }; [pscustomobject]@{files=$files.Count; lines=$total} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "cdd52e07437d910a996f1f78e4d32b68413c413794b31c58b6d10560d489d96e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4501,
+    "input_tokens": 33251,
+    "output_tokens": 519,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$files = Get-ChildItem -Path . -Filter *.go -File -Recurse -Force -ErrorAction SilentlyContinue\n$total = 0\nforeach ($f in $files) {\n  $bytes = [System.IO.File]::ReadAllBytes($f.FullName)\n  $count = 0\n  foreach ($b in $bytes) { if ($b -eq 10) { $count++ } }\n  if ($bytes.Length -gt 0 -and $bytes[$bytes.Length-1] -ne 10) { $count++ }\n  $total += $count\n}\n[pscustomobject]@{ files = $files.Count; lines = $total } | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": ".",
+          "max_entries": 200
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "max_entries": 200,
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "265efb87506d0e1bfc223861e7c5dbfd55e5a5573f2b168b6bfc227eb210d4fa",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 3782,
+    "input_tokens": 33144,
+    "output_tokens": 410,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $files = ($f | Measure-Object).Count; $lines = ($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object).Count; [pscustomobject]@{files=$files;lines=$lines} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "8a8be55e5e5c463d3eddb1ee98a5d58e662d993245fa7a457a39a9638a8d40a5",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4839,
+    "input_tokens": 33154,
+    "output_tokens": 412,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -LiteralPath . -Recurse -File -Filter *.go; $lines = $f | ForEach-Object { (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } | Measure-Object -Sum; [pscustomobject]@{files=$f.Count; lines=$lines.Sum} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "198bdfcc5852a1d6ef44736d958527a71817cb4a2397081392d786d6dba102a6",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4109,
+    "input_tokens": 33055,
+    "output_tokens": 469,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$files = Get-ChildItem -Path . -Recurse -File -Filter *.go; $total = 0; foreach ($f in $files) { $bytes = [System.IO.File]::ReadAllBytes($f.FullName); $count = 0; foreach ($b in $bytes) { if ($b -eq 10) { $count++ } }; if ($bytes.Length -gt 0 -and $bytes[$bytes.Length-1] -ne 10) { $count++ }; $total += $count }; [pscustomobject]@{ files = $files.Count; lines = $total } | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "abff4c106cd37c40863340abdce18e6f618dafc768469b06e15ae713b91c8213",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 5513,
+    "input_tokens": 33045,
+    "output_tokens": 467,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$files = Get-ChildItem -Path . -Recurse -File -Filter *.go; $total = 0; foreach ($f in $files) { $bytes = [System.IO.File]::ReadAllBytes($f.FullName); $count = 0; foreach ($b in $bytes) { if ($b -eq 10) { $count++ } }; if ($bytes.Length -gt 0 -and $bytes[$bytes.Length-1] -ne 10) { $count++ }; $total += $count }; [pscustomobject]@{files=$files.Count; lines=$total} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "physical-lines",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "b8a03ea3b2cce625d4be46a503cf648c78e872c456303ac53f1539d6e893b256",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 4012,
+    "input_tokens": 33134,
+    "output_tokens": 408,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = $f | ForEach-Object { (Get-Content -LiteralPath $_.FullName | Measure-Object).Count } | Measure-Object -Sum; [pscustomobject]@{files=$f.Count; lines=$lines.Sum} | ConvertTo-Json -Compress"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "."
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_list_dir",
+        "args": {
+          "path": "nested"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "a.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "empty_test.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "nested/space name.go"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"files\": 3, \"lines\": 5}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": false,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 9,
+      "tool_rounds": 5,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "98a5a567763529b86981a81a0cd7190c03b335499c08b3fe856c05a887ea1830",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1731,
+    "input_tokens": 10306,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "a9c8550407bf370cea28f5ce5a26a2510bc6cf5e6d8c9bfa36c15adcd0517f01",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1298,
+    "input_tokens": 10434,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "eb937d523735c247523ad4fe84c734dcead219cd1d3e95043c753e8746051348",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1103,
+    "input_tokens": 10434,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "d23ed8ea5d46704ef20bd4b6462849e48b4ddeec50e56059a6629eea5b653a89",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 976,
+    "input_tokens": 10306,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "d3462653c438d53f9cd22a02687b3f72ece3b64e941a15c0ce63519c6509ca0a",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1102,
+    "input_tokens": 10306,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "4cd6e1b3ac570102c1235203f455f0e8559f3a7f3b8ca7bef25c72dd01ae39a1",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1171,
+    "input_tokens": 10434,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "21062a4caef92c11b939e005d6e97e1ec5ef96cd57b903e8ce0af40ddbb4594c",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1358,
+    "input_tokens": 10434,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "b3b6f6c17edd88b7d4b50c49d9a545a577a97cf81fdb9e00d8ad2292dd365bc1",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 960,
+    "input_tokens": 10306,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "ee9d4881e85db7810712888a95779c00d4a522fbe36d0a4871d5ccdb9bc3caee",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 941,
+    "input_tokens": 10306,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "csv-sum",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "2b99c99b42ff976b5051b4360bdb1e76d5d83a147ee2f6787f3a4cc2437416c6",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1250,
+    "input_tokens": 10434,
+    "output_tokens": 46,
+    "calls": [
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "amounts.csv"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"total\": 10}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "8197b7e66e0845a428483f0fffb503736021b15b14946af676600b27d8848daf",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 3353,
+    "input_tokens": 21118,
+    "output_tokens": 160,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch | Measure-Object).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 3,
+      "tool_rounds": 3,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 1,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "e7bcf98973e7a21130947211a8fe8307328e4c6077ddd06a1534ad939fd72a3f",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1891,
+    "input_tokens": 10446,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "f24bb685857cf5e5e94bd7f5b1ba896f2252f9249609711f9c6e8913b915fb2a",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1817,
+    "input_tokens": 10446,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 2,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "2985e442205828693998b6a176967d48a6262e81c203614537d8b40c192505ad",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 2872,
+    "input_tokens": 21118,
+    "output_tokens": 160,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch | Measure-Object).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 3,
+      "tool_rounds": 3,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "853c81fb43789522e6e77ba97e678cb4b9e257eea741595f43bff4bc271a214a",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 2632,
+    "input_tokens": 21118,
+    "output_tokens": 160,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch | Measure-Object).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 3,
+      "tool_rounds": 3,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 3,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "5cba5451ef8110ff3d1494696d47c33cf053aecd0675cba15f222dde805e2576",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1756,
+    "input_tokens": 10446,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "e9593002132efc1327375405b7415450a9a1c2972c66dceeb12b01873fe34795",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 2211,
+    "input_tokens": 10446,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 4,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "34778c04d8b5da2fc8921b05c92827cd6c7ed65b1fb4736045a598b734277830",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 2461,
+    "input_tokens": 21118,
+    "output_tokens": 160,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch | Measure-Object).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_stat",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 3,
+      "tool_rounds": 3,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "log-count",
+    "arm": "A",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "b40cf2aae0bbccbe1bb9069c499b2c950a15e73b6718faa3a3efc07e7304efbd",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 2186,
+    "input_tokens": 21120,
+    "output_tokens": 194,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "if (Test-Path events.log) { (Select-String -Path events.log -Pattern 'ERROR' -SimpleMatch | Measure-Object).Count } else { 'MISSING' }"
+        },
+        "effect": "unknown",
+        "static_read": false,
+        "predicted_decision": "ask",
+        "opaque": true
+      },
+      {
+        "name": "fs_search",
+        "args": {
+          "query": "ERROR",
+          "path": "events.log",
+          "max_results": 1000
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      },
+      {
+        "name": "fs_read_file",
+        "args": {
+          "path": "events.log"
+        },
+        "effect": "read",
+        "static_read": false,
+        "read_basis": "native_read_contract",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 1,
+      "tool_calls": 3,
+      "tool_rounds": 3,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": false
+  },
+  {
+    "case": "log-count",
+    "arm": "A1",
+    "baseline_revision": "original",
+    "repeat": 5,
+    "model": "deepseek-v4-flash",
+    "os": "windows",
+    "minimal": false,
+    "policy_fingerprint": "589d17b85f4fdf2ad4b81bf62e2a606da95ac17bfddc4df50bc3ccd56bb71049",
+    "prompt_fingerprint": "8ee827c3ba4edb4393d3993061b45213458a317b4d2dde85276660edb5aba84e",
+    "temperature": 0,
+    "max_tokens": 4096,
+    "think": false,
+    "first_round_only": false,
+    "elapsed_ms": 1643,
+    "input_tokens": 10446,
+    "output_tokens": 73,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-Content -LiteralPath events.log | Select-String -SimpleMatch 'ERROR' | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "effect": "read",
+        "static_read": true,
+        "read_basis": "static_command",
+        "predicted_decision": "allow",
+        "opaque": false
+      }
+    ],
+    "answer": "{\"count\": 2}",
+    "outcome": {
+      "query": true,
+      "completed": true,
+      "correct": true,
+      "actual_review_prompts": 0,
+      "approval_unavailable": 0,
+      "tool_calls": 1,
+      "tool_rounds": 1,
+      "unexpected_writes": 0
+    },
+    "zero_review_completion": true
+  }
+]

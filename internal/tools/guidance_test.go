@@ -27,12 +27,11 @@ func TestScriptGuidanceIsSharedAndConsistent(t *testing.T) {
 	}
 	for name, text := range texts {
 		require.Contains(t, text, prompts.ScriptPolicy, "%s must use the shared script policy", name)
-		require.Contains(t, text, "Select/read/filter/aggregate with read-only pipelines")
-		require.Contains(t, text, "Compute requested metrics in tools, not from text or file sizes")
-		require.Contains(t, text, "Group related reads, not stateful scripts")
-		require.Contains(t, text, "suppressed errors and query files")
-		require.Contains(t, text, "Use a script only if pipelines cannot suffice")
-		require.Contains(t, text, "Avoid existence checks, suppressed errors")
+		require.Contains(t, text, "Prefer read-only commands when they can correctly complete the task")
+		require.Contains(t, text, "easy to review")
+		require.Contains(t, text, "Use pipelines, variables, loops or scripts as needed")
+		require.Contains(t, text, CommandEffectGuidance)
+		require.NotContains(t, text, "not variables, counters, loops")
 		require.NotContains(t, text, "For multi-step or aggregation work, write")
 		for _, phrase := range contradictions {
 			require.NotContains(t, text, phrase, "%s must not reintroduce %q", name, phrase)
@@ -40,7 +39,7 @@ func TestScriptGuidanceIsSharedAndConsistent(t *testing.T) {
 	}
 
 	// The temporary directory is the place the shared policy sends that script.
-	require.Contains(t, prompts.TemporaryDirectoryTemplate, "temporary scripts")
+	require.Contains(t, prompts.TemporaryDirectoryTemplate, "commands declaring may_write still require approval")
 	// The system prompt no longer restates script mechanics; the descriptions
 	// are the single place the model reads them.
 	require.NotContains(t, prompts.ToolSelection, prompts.ScriptPolicy)

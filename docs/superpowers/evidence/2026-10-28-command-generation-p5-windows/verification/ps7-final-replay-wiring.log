@@ -1,0 +1,23 @@
+=== RUN   TestCommandGenerationP5PolicyManifest
+--- PASS: TestCommandGenerationP5PolicyManifest (0.01s)
+=== RUN   TestCommandGenerationP5AutomaticOrganizationWiring
+--- PASS: TestCommandGenerationP5AutomaticOrganizationWiring (1.07s)
+=== RUN   TestCommandGenerationP5WindowsObservedReorganizations
+=== RUN   TestCommandGenerationP5WindowsObservedReorganizations/ps51-minimal-physical-lines-5
+    command_generation_p5_windows_replay_test.go:95: call=0 want=reorganize mock_dispatch_delta=0
+    command_generation_p5_windows_replay_test.go:95: call=1 want=allow mock_dispatch_delta=1
+    command_generation_p5_windows_replay_test.go:95: call=2 want=allow mock_dispatch_delta=1
+=== RUN   TestCommandGenerationP5WindowsObservedReorganizations/ps51-normal-physical-lines-2
+    command_generation_p5_windows_replay_test.go:95: call=0 want=ask mock_dispatch_delta=0
+    command_generation_p5_windows_replay_test.go:95: call=1 want=reorganize mock_dispatch_delta=0
+    command_generation_p5_windows_replay_test.go:95: call=2 want=ask mock_dispatch_delta=0
+=== RUN   TestCommandGenerationP5WindowsObservedReorganizations/ps51-normal-physical-lines-4
+    command_generation_p5_windows_replay_test.go:95: call=0 want=reorganize mock_dispatch_delta=0
+    command_generation_p5_windows_replay_test.go:95: call=1 want=allow mock_dispatch_delta=1
+    command_generation_p5_windows_replay_test.go:95: call=2 want=allow mock_dispatch_delta=1
+--- PASS: TestCommandGenerationP5WindowsObservedReorganizations (0.33s)
+    --- PASS: TestCommandGenerationP5WindowsObservedReorganizations/ps51-minimal-physical-lines-5 (0.12s)
+    --- PASS: TestCommandGenerationP5WindowsObservedReorganizations/ps51-normal-physical-lines-2 (0.10s)
+    --- PASS: TestCommandGenerationP5WindowsObservedReorganizations/ps51-normal-physical-lines-4 (0.06s)
+PASS
+ok  	github.com/panjie/mods/internal/app	2.667s

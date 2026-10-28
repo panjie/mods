@@ -1,5 +1,7 @@
 # 独立命令分析模块与统一命令语义库
 
+> Superseded on 2026-10-28 by [model-declared command effects](../specs/2026-10-28-command-effect-declaration.md). This document records the retired analyzer/organization design; its historical results are unchanged.
+
 日期：2026-10-23  
 状态：设计已认可；阶段 0 基线、阶段 1 分析模块迁移已实施；阶段 2 共享解析/查询边界已实现并通过 Linux/race 验证，Windows 真实验收待补；统一语义库尚未实施。
 实施计划：[分阶段实施计划](../plans/2026-10-23-command-analysis-catalog.md)。  

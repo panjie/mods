@@ -74,8 +74,6 @@ max-retries: 5
 think: false
 # {{ index .Help "review-mode" }}
 review-mode: auto
-# {{ index .Help "command-simplification" }}
-command-simplification: off
 
 # -----------------------------------------------------------------------------
 # Tools and MCP
@@ -116,8 +114,6 @@ builtin-tools:
   filesystem: auto
   # {{ index .Help "builtin-tools.shell" }}
   shell: true
-  # {{ index .Help "builtin-tools.shell-read-only-commands" }}
-  shell-read-only-commands: []
   # {{ index .Help "builtin-tools.shell-timeout" }}
   shell-timeout: 60s
 # {{ index .Help "web-search" }}

@@ -1,0 +1,89 @@
+[
+  {
+    "id": "ps51-minimal-physical-lines-5",
+    "source_report": "ps51/raw/bc/minimal/p5-completion-minimal-true.json",
+    "case": "physical-lines",
+    "minimal": true,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = 0; foreach ($x in $f) { $lines += (Get-Content -LiteralPath $x.FullName | Measure-Object).Count }; [pscustomobject]@{files=$f.Count; lines=$lines} | ConvertTo-Json -Compress"
+        },
+        "want": "reorganize"
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "want": "allow"
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "want": "allow"
+      }
+    ]
+  },
+  {
+    "id": "ps51-normal-physical-lines-2",
+    "source_report": "ps51/raw/bc/normal/p5-completion-minimal-false.json",
+    "case": "physical-lines",
+    "minimal": false,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $files = ($f | Measure-Object).Count; $lines = ($f | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object).Count; [pscustomobject]@{files=$files;lines=$lines} | ConvertTo-Json -Compress"
+        },
+        "want": "ask"
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $b=[System.IO.File]::ReadAllBytes($_.FullName); $n=0; for($i=0;$i -lt $b.Length;$i++){ if($b[$i] -eq 10){$n++} }; if($b.Length -gt 0 -and $b[$b.Length-1] -ne 10){$n++}; \"$($_.FullName) $($b.Length) $n\" }"
+        },
+        "want": "reorganize"
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { $t=[System.IO.File]::ReadAllText($_.FullName); [pscustomobject]@{Name=$_.FullName; Bytes=(Get-Item -LiteralPath $_.FullName).Length; Newlines=([regex]::Matches($t,\"`n\")).Count; EndsWithNewline=$t.EndsWith(\"`n\")} } | Format-Table -AutoSize"
+        },
+        "want": "ask"
+      }
+    ]
+  },
+  {
+    "id": "ps51-normal-physical-lines-4",
+    "source_report": "ps51/raw/bc/normal/p5-completion-minimal-false.json",
+    "case": "physical-lines",
+    "minimal": false,
+    "calls": [
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "$f = Get-ChildItem -Recurse -File -Filter *.go; $lines = 0; foreach ($x in $f) { $lines += (Get-Content -LiteralPath $x.FullName | Measure-Object).Count }; [pscustomobject]@{files=$f.Count; lines=$lines} | ConvertTo-Json -Compress"
+        },
+        "want": "reorganize"
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | ForEach-Object { Get-Content -LiteralPath $_.FullName } | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "want": "allow"
+      },
+      {
+        "name": "powershell_run",
+        "args": {
+          "command": "Get-ChildItem -Recurse -File -Filter *.go | Measure-Object | Select-Object -ExpandProperty Count"
+        },
+        "want": "allow"
+      }
+    ]
+  }
+]

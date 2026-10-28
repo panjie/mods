@@ -11,7 +11,6 @@ import (
 	stdstrings "strings"
 	"text/template"
 	"time"
-	"unicode"
 
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
@@ -50,14 +49,6 @@ const (
 	ReviewNever  ReviewMode = "never"
 	ReviewAuto   ReviewMode = "auto"
 	ReviewAlways ReviewMode = "always"
-)
-
-// CommandSimplification controls the bounded automatic reorganization feedback.
-type CommandSimplification string
-
-const (
-	CommandSimplificationOff  CommandSimplification = "off"
-	CommandSimplificationOnce CommandSimplification = "once"
 )
 
 var Help = map[string]string{
@@ -115,7 +106,6 @@ var Help = map[string]string{
 	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
 	"think":                  "Enable extended thinking for supported models; thinking-type can override provider defaults",
 	"review-mode":            "Set tool review mode: auto (default), always, or never",
-	"command-simplification": "Automatically request one reorganization for a complex, unproven built-in command per user request: off (default) or once; this does not change tool permissions",
 	"no-review":              "Disable tool review; shorthand for --review-mode=never",
 	"skills-dirs":            "Directories containing installed skills. Can be set multiple times; later directories override earlier same-name skills. Pass the CLI flag without a directory to print the effective directories. Defaults to ~/.agents/skills, plus a skills directory next to the executable in portable mode.",
 
@@ -123,10 +113,9 @@ var Help = map[string]string{
 	"prompts.workflow":       "Override the built-in workflow prompt (skills, planning, diagnosis, verification, self-help); empty uses the built-in default",
 	"prompts.tool-selection": "Override tool-selection guidance; empty uses capability-filtered defaults",
 
-	"builtin-tools.filesystem":               "When to expose native filesystem tools: auto, true, or false",
-	"builtin-tools.shell":                    "Enable the native shell execution tool",
-	"builtin-tools.shell-read-only-commands": "Additional executable names to trust as read-only; a match trusts all arguments, subcommands, and internal side effects, while unsafe shell structures are still reviewed",
-	"builtin-tools.shell-timeout":            "Default timeout for shell and process_run commands; per-call timeout_ms may override it in either direction",
+	"builtin-tools.filesystem":    "When to expose native filesystem tools: auto, true, or false",
+	"builtin-tools.shell":         "Enable the native shell execution tool",
+	"builtin-tools.shell-timeout": "Default timeout for shell and process_run commands; per-call timeout_ms may override it in either direction",
 
 	"mcp-servers.<server>.type":         "MCP transport type: stdio, sse, or http",
 	"mcp-servers.<server>.command":      "Command used to start a stdio MCP server",
@@ -252,35 +241,34 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 // file and loaded from environment variables. It is embedded in Config so all
 // fields are promoted and accessible directly on Config.
 type PersistentConfig struct {
-	API                   string     `yaml:"default-api" env:"API"`
-	Model                 string     `yaml:"default-model" env:"MODEL"`
-	Format                string     `yaml:"format" env:"FORMAT"`
-	FormatText            FormatText `yaml:"format-text"`
-	Minimal               bool       `yaml:"minimal" env:"MINIMAL"`
-	Raw                   bool       `yaml:"raw" env:"RAW"`
-	HideToolStatus        bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
-	ShowTokenUsage        bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
-	NoInstructions        bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
-	MaxRetries            int        `yaml:"max-retries" env:"MAX_RETRIES"`
-	WordWrap              int        `yaml:"word-wrap" env:"WORD_WRAP"`
-	HTTPProxy             string     `yaml:"http-proxy" env:"HTTP_PROXY"`
-	APIs                  APIs       `yaml:"apis"`
-	Role                  string     `yaml:"role" env:"ROLE"`
-	Roles                 map[string][]string
-	Prompts               PromptConfig `yaml:"prompts"`
-	Theme                 string
-	NerdFontGlyphs        bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
-	MCPServers            map[string]MCPServerConfig `yaml:"mcp-servers"`
-	MCPTimeout            time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
-	BuiltinTools          BuiltinToolsConfig         `yaml:"builtin-tools"`
-	WebSearch             bool                       `yaml:"web-search" env:"WEB_SEARCH"`
-	WebSearchProvider     string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
-	WebSearchAPIKey       string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
-	WebSearchAPIKeyEnv    string                     `yaml:"web-search-api-key-env"`
-	Think                 bool                       `yaml:"think" env:"THINK"`
-	ReviewMode            ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
-	CommandSimplification CommandSimplification      `yaml:"command-simplification" env:"COMMAND_SIMPLIFICATION"`
-	SkillsDirs            []string                   `yaml:"skills-dirs"`
+	API                string     `yaml:"default-api" env:"API"`
+	Model              string     `yaml:"default-model" env:"MODEL"`
+	Format             string     `yaml:"format" env:"FORMAT"`
+	FormatText         FormatText `yaml:"format-text"`
+	Minimal            bool       `yaml:"minimal" env:"MINIMAL"`
+	Raw                bool       `yaml:"raw" env:"RAW"`
+	HideToolStatus     bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
+	ShowTokenUsage     bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
+	NoInstructions     bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
+	MaxRetries         int        `yaml:"max-retries" env:"MAX_RETRIES"`
+	WordWrap           int        `yaml:"word-wrap" env:"WORD_WRAP"`
+	HTTPProxy          string     `yaml:"http-proxy" env:"HTTP_PROXY"`
+	APIs               APIs       `yaml:"apis"`
+	Role               string     `yaml:"role" env:"ROLE"`
+	Roles              map[string][]string
+	Prompts            PromptConfig `yaml:"prompts"`
+	Theme              string
+	NerdFontGlyphs     bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
+	MCPServers         map[string]MCPServerConfig `yaml:"mcp-servers"`
+	MCPTimeout         time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
+	BuiltinTools       BuiltinToolsConfig         `yaml:"builtin-tools"`
+	WebSearch          bool                       `yaml:"web-search" env:"WEB_SEARCH"`
+	WebSearchProvider  string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
+	WebSearchAPIKey    string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+	WebSearchAPIKeyEnv string                     `yaml:"web-search-api-key-env"`
+	Think              bool                       `yaml:"think" env:"THINK"`
+	ReviewMode         ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	SkillsDirs         []string                   `yaml:"skills-dirs"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
@@ -390,38 +378,9 @@ func (c Config) ResolveWorkingDir() WorkingDir {
 
 // BuiltinToolsConfig controls native tools implemented by mods.
 type BuiltinToolsConfig struct {
-	Filesystem            FilesystemMode `yaml:"filesystem"`
-	Shell                 bool           `yaml:"shell"`
-	ShellReadOnlyCommands []string       `yaml:"shell-read-only-commands"`
-	ShellTimeout          time.Duration  `yaml:"shell-timeout"`
-}
-
-func validateShellReadOnlyCommands(c *Config) error {
-	commands := make([]string, 0, len(c.BuiltinTools.ShellReadOnlyCommands))
-	seen := make(map[string]struct{}, len(c.BuiltinTools.ShellReadOnlyCommands))
-	for i, raw := range c.BuiltinTools.ShellReadOnlyCommands {
-		command := stdstrings.TrimSpace(raw)
-		if command == "" || !validShellReadOnlyCommandName(command) {
-			return fmt.Errorf("builtin-tools.shell-read-only-commands[%d] must be a single command name without paths, whitespace, globs, or shell syntax: %q", i, raw)
-		}
-		if _, ok := seen[command]; ok {
-			continue
-		}
-		seen[command] = struct{}{}
-		commands = append(commands, command)
-	}
-	c.BuiltinTools.ShellReadOnlyCommands = commands
-	return nil
-}
-
-func validShellReadOnlyCommandName(command string) bool {
-	for _, r := range command {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || stdstrings.ContainsRune("._+@%-", r) {
-			continue
-		}
-		return false
-	}
-	return command != ""
+	Filesystem   FilesystemMode `yaml:"filesystem"`
+	Shell        bool           `yaml:"shell"`
+	ShellTimeout time.Duration  `yaml:"shell-timeout"`
 }
 
 // FilesystemMode controls when native filesystem tools are exposed.
@@ -554,14 +513,10 @@ func Ensure() (Config, error) {
 	if err := yaml.Unmarshal(content, &c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not parse settings file."}
 	}
-	if err := validateShellReadOnlyCommands(&c); err != nil {
-		return fallback, modsError{Err: err, ReasonText: "Could not validate settings file."}
-	}
 	if err := validateProviderEnums(&c); err != nil {
 		return fallback, modsError{Err: err, ReasonText: "Could not validate provider settings."}
 	}
 	validateReviewMode(&c)
-	validateCommandSimplification(&c)
 
 	applySessionDirDefault(&c)
 	applySkillsDirsDefault(&c)
@@ -662,23 +617,6 @@ func validateReviewModeStrict(mode ReviewMode) error {
 		return nil
 	default:
 		return fmt.Errorf("invalid review mode %q; expected auto, always, or never", mode)
-	}
-}
-
-func validateCommandSimplification(c *Config) {
-	if validateCommandSimplificationStrict(c.CommandSimplification) == nil {
-		return
-	}
-	fmt.Fprintf(os.Stderr, "Warning: invalid command simplification %q, defaulting to \"off\"\n", c.CommandSimplification)
-	c.CommandSimplification = CommandSimplificationOff
-}
-
-func validateCommandSimplificationStrict(mode CommandSimplification) error {
-	switch mode {
-	case "", CommandSimplificationOff, CommandSimplificationOnce:
-		return nil
-	default:
-		return fmt.Errorf("invalid command simplification %q; expected off or once", mode)
 	}
 }
 
@@ -877,13 +815,12 @@ func Default() Config {
 				"markdown": defaultMarkdownFormatText,
 				"json":     defaultJSONFormatText,
 			},
-			ReviewMode:            ReviewAuto,
-			CommandSimplification: CommandSimplificationOff,
-			WordWrap:              80,
-			MCPTimeout:            15 * time.Second,
-			WebSearch:             false,
-			WebSearchProvider:     DefaultWebSearchProvider,
-			WebSearchAPIKeyEnv:    DefaultWebSearchAPIKeyEnv,
+			ReviewMode:         ReviewAuto,
+			WordWrap:           80,
+			MCPTimeout:         15 * time.Second,
+			WebSearch:          false,
+			WebSearchProvider:  DefaultWebSearchProvider,
+			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
 				Filesystem:   FilesystemAuto,
 				Shell:        true,

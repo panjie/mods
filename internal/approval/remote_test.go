@@ -3,7 +3,6 @@ package approval
 import (
 	"testing"
 
-	"github.com/panjie/mods/internal/commandanalysis"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,12 +16,12 @@ func TestNormalizeRemoteOrigin(t *testing.T) {
 		"git@[2001:db8::1]:org/repo.git":                          "ssh://[2001:db8::1]",
 		"s3://My-Bucket/key":                                      "s3://my-bucket",
 	} {
-		got, ok := commandanalysis.NormalizeRemoteOrigin(input)
+		got, ok := NormalizeRemoteOrigin(input)
 		require.True(t, ok, input)
 		require.Equal(t, want, got, input)
 	}
 	for _, input := range []string{"", "/tmp/file", "file:///tmp/file", "C:\\temp\\file", "https://$HOST/path", "$HOST:repo"} {
-		_, ok := commandanalysis.NormalizeRemoteOrigin(input)
+		_, ok := NormalizeRemoteOrigin(input)
 		require.False(t, ok, input)
 	}
 }

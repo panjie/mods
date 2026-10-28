@@ -15,7 +15,7 @@ func TestIncompleteCoverageNeverBorrowsPermission(t *testing.T) {
 	for _, intent := range []AccessIntent{
 		{Class: AccessWrite, Dirs: []string{target}},
 		{Class: AccessWrite, Dirs: []string{target}, RemoteOrigins: []string{"https://example.com"}},
-		{WriteCoverage: CoverageComplete, Gaps: []AssessmentGap{GapUnknownInvocation}, Class: AccessWrite, Dirs: []string{target}},
+		{WriteCoverage: CoverageComplete, Gaps: []AssessmentGap{GapWriteTargets}, Class: AccessWrite, Dirs: []string{target}},
 	} {
 		for _, mode := range []ReviewMode{ReviewAuto, ReviewAlways} {
 			require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, []string{target}, mode))

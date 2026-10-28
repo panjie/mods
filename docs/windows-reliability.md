@@ -20,8 +20,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-reliabil
 ```
 
 Use `-PowerShellHost ps7` to require PowerShell 7. The PS5.1 lane removes the
-directory containing `pwsh.exe` from the child PATH, ensuring the classifier
-and executor both resolve `powershell.exe`.
+directory containing `pwsh.exe` from the child PATH, ensuring the executor resolves
+`powershell.exe`. Command-effect analysis and its PowerShell parser bridge have
+been retired; the suite covers execution and native-tool authorization.
 
 Set `TEST_UNC_ROOT` to an accessible real UNC directory such as
 `\\server\share\mods-test`. Without it, UNC validation is reported as

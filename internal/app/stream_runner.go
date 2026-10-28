@@ -36,7 +36,6 @@ type streamEventMsg struct {
 // path (receiveCmd returning streamEventDone/streamEventError) and the user
 // quit path can both invoke it without double-close issues.
 type streamRunner struct {
-	organization  *commandOrganizationState
 	stream        stream.Stream
 	cleanup       *toolregistry.Registry
 	errh          func(error) tea.Msg

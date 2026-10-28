@@ -81,6 +81,7 @@ func RegisterShell(registry *Registry, cfg ShellConfig) error {
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
+		Validate:      validateCommandEffect,
 		Spec: proto.ToolSpec{
 			Name:        "shell_run",
 			Description: elevationDescription(desc),
@@ -133,6 +134,7 @@ func RegisterPowerShell(registry *Registry, cfg ShellConfig) error {
 		Kind:          ToolKindShell,
 		TimeoutPolicy: TimeoutPolicySelf,
 		Capabilities:  ToolCapabilities{Mutable: true, ShellExecution: true},
+		Validate:      validateCommandEffect,
 		Spec: proto.ToolSpec{
 			Name:        "powershell_run",
 			Description: elevationDescription(PowerShellRunDescription),
@@ -357,9 +359,7 @@ var (
 // it ships Get-FileHash as a core cmdlet (scoop and other package managers
 // rely on it for hash verification, and the PS5.1 -NoProfile auto-load timing
 // is unreliable on some locales). When pwsh.exe is absent it falls back to
-// Windows PowerShell 5.1 (powershell.exe). The classification bridge
-// (internal/approval.getWindowsShellPath) must resolve to the same host so
-// AST parsing matches execution semantics.
+// Windows PowerShell 5.1 (powershell.exe).
 func windowsPowerShellExe() string {
 	winPwshExeOnce.Do(func() {
 		if p, err := exec.LookPath("pwsh.exe"); err == nil {

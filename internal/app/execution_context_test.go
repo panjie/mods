@@ -7,63 +7,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
-	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/proto"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
-
-func TestShellAssessmentPWDUsesExecutionDirectory(t *testing.T) {
-	parent, child := t.TempDir(), t.TempDir()
-	var err error
-	parent, err = filepath.EvalSymlinks(parent)
-	require.NoError(t, err)
-	child, err = filepath.EvalSymlinks(child)
-	require.NoError(t, err)
-	t.Setenv("PWD", parent)
-	m := &Mods{Config: testConfigForWorkingDir(parent)}
-	for _, command := range []string{`touch "$PWD/probe.txt"`, `touch "${PWD}/probe.txt"`} {
-		a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, command, nil, child)
-		intent := normalizeAccessIntentDirs(commandResultToIntent(a), child, "shell_run", true)
-		require.Empty(t, a.DynamicTargets)
-		require.Equal(t, slashSet([]string{filepath.Join(child, "probe.txt")}), slashSet(a.KnownDirs))
-		for _, tc := range []struct {
-			dir     string
-			allowed bool
-		}{{parent, false}, {child, true}} {
-			rules := approval.RulesForDirs([]string{tc.dir}, WorkingDirScope(parent), AccessWrite)
-			require.Equal(t, tc.allowed, approval.RulesAllowIntent(rules, intent, WorkingDirScope(parent), nil, approval.ReviewAuto), "assessment: %+v", a)
-		}
-	}
-	for _, tc := range []struct {
-		command, cwd string
-		shadow       map[string]bool
-	}{
-		{`touch "$PWD/probe.txt"`, "", nil},
-		{`touch "$PWD/probe.txt"`, child, map[string]bool{"PWD": true}},
-		{`cd /; touch "$PWD/probe.txt"`, child, nil},
-		{`PWD=/; touch "$PWD/probe.txt"`, child, nil},
-	} {
-		a := m.assessShellCommand("shell_run", pathutil.FlavorPOSIX, tc.command, tc.shadow, tc.cwd)
-		require.NotEmpty(t, a.DynamicTargets, "unreliable PWD must remain dynamic: %s", tc.command)
-	}
-	if runtime.GOOS == "windows" {
-		return // The POSIX assessment above is portable; shell_run on Windows is not sh.
-	}
-	registry := toolregistry.NewRegistry()
-	require.NoError(t, toolregistry.RegisterShell(registry, toolregistry.ShellConfig{Root: parent}))
-	data, err := json.Marshal(map[string]string{"command": `touch "$PWD/probe.txt"`, "cwd": child})
-	require.NoError(t, err)
-	_, err = registry.Call(context.Background(), "shell_run", data)
-	require.NoError(t, err)
-	require.FileExists(t, filepath.Join(child, "probe.txt"))
-	require.NoFileExists(t, filepath.Join(parent, "probe.txt"))
-}
 
 func TestDownloadToolCallerUsesOwnTimeoutAndHonorsCancellation(t *testing.T) {
 	t.Setenv("MODS_WEB_SEARCH_ALLOW_PRIVATE", "1")

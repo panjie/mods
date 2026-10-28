@@ -16,10 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/approval"
-	"github.com/panjie/mods/internal/commandanalysis"
-	"github.com/panjie/mods/internal/pathutil"
 	"github.com/panjie/mods/internal/proto"
-	"github.com/panjie/mods/internal/skills"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -47,125 +44,6 @@ func scopedRule(rule ApprovalRule) ApprovalRule {
 	rule.ScopeKind = testApprovalScope.Kind
 	rule.ScopeValue = testApprovalScope.Value
 	return rule
-}
-
-func TestShellUnknownEffectPresentationSurvivesPrebuiltAccessIntent(t *testing.T) {
-	oldInputTTY := IsInputTTY
-	IsInputTTY = func() bool { return true }
-	t.Cleanup(func() { IsInputTTY = oldInputTTY })
-
-	cwdScope := testShellWorkingDirScope(t)
-	registry := testReviewRegistry(t)
-	mods := &Mods{
-		ctx:                 context.Background(),
-		Config:              testConfigForWorkingDir(cwdScope.Value),
-		currentToolRegistry: registry,
-	}
-	reviewer := &toolReviewer{
-		reviewMode: ReviewAuto,
-		scope:      cwdScope,
-		reviewChan: make(chan toolReviewItem, 1),
-	}
-	data := []byte(`{"command":"opaque-command"}`)
-	// POSIX diagnostics are dialect-specific; Windows shell_run uses PowerShell.
-	assessment := mods.assessShellCommand("shell_run", pathutil.FlavorPOSIX, "opaque-command", nil, cwdScope.Value)
-	intent := buildAccessIntent("shell_run", data, registry, &assessment)
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- reviewer.requestApproval(reviewerDeps{
-			ctx:            context.Background(),
-			shellExecution: true,
-			assessment:     &assessment,
-			accessIntent:   intent,
-		}, "shell_run", data)
-	}()
-
-	item := receiveReviewItem(t, reviewer.reviewChan)
-	require.NotContains(t, item.summary, cwdScope.Value)
-	require.Contains(t, item.summary, "Risk: unknown effect and location")
-	require.NotContains(t, item.summary, "effects could not be proven")
-	require.Equal(t, interactionToneWarning, item.presentation.tone)
-	require.Equal(t, "Warning", item.presentation.toneText)
-	require.Equal(t, "Run with unknown effects", item.presentation.headline)
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Target", Value: "Unknown"})
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Effect", Value: "Cannot establish whether additional side effects are present."})
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Working dir", Value: cwdScope.Value})
-	require.Contains(t, item.presentation.rows, interactionRow{Label: "Analysis", Value: "Unmodeled command or arguments: opaque-command"})
-	require.Empty(t, item.candidateRules)
-	item.resp <- reviewResponse{action: reviewActionApprove}
-	require.NoError(t, <-errCh)
-}
-
-func TestDynamicProbeWithoutConcreteDirectorySkipsAutoReview(t *testing.T) {
-	assessment := commandanalysis.CommandAssessment{
-		Evidence:       commandanalysis.EvidenceStatic,
-		WriteCoverage:  commandanalysis.CoverageComplete,
-		Effect:         commandanalysis.EffectRead,
-		DynamicTargets: []string{`$PROFILE.CurrentUserCurrentHost`},
-		DynamicProbe:   true,
-		Reason:         "read-only PowerShell command (AST analysis)",
-	}
-	intent := commandResultToIntent(assessment)
-	require.Equal(t, AccessRead, intent.Class)
-	require.Equal(t, []string{`$PROFILE.CurrentUserCurrentHost`}, intent.UnresolvedPaths)
-	require.True(t, intent.DynamicProbe)
-
-	reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
-	err := reviewer.requestApproval(reviewerDeps{
-		ctx:            context.Background(),
-		shellExecution: true,
-		assessment:     &assessment,
-		accessIntent:   intent,
-	}, "powershell_run", []byte(`{"command":"[PSCustomObject]@{ Path = $PROFILE.CurrentUserCurrentHost; Exists = Test-Path -LiteralPath $PROFILE.CurrentUserCurrentHost } | ConvertTo-Json -Compress"}`))
-	require.NoError(t, err)
-}
-
-func TestOldestDownloadsPipelineReadNeedsNoApproval(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX pipeline coverage applies to non-Windows shell_run")
-	}
-	oldInputTTY := IsInputTTY
-	IsInputTTY = func() bool { return true }
-	t.Cleanup(func() { IsInputTTY = oldInputTTY })
-
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-	downloads := filepath.Join(home, "Downloads")
-	cwd := canonicalTestPath(t, t.TempDir())
-	registry := testReviewRegistry(t)
-	mods := &Mods{
-		ctx:                 context.Background(),
-		Config:              testConfigForWorkingDir(cwd),
-		currentToolRegistry: registry,
-	}
-	reviewer := &toolReviewer{
-		reviewMode: ReviewAuto,
-		scope:      WorkingDirScope(cwd),
-		reviewChan: make(chan toolReviewItem, 1),
-	}
-	cmd := `find "$HOME/Downloads" -type f -print0 | xargs -0 stat -f '%m %N' | sort -n | head -1`
-	data := []byte(fmt.Sprintf(`{"command":%q}`, cmd))
-	assessment := mods.assessCommand("shell_run", cmd)
-	intent := buildAccessIntent("shell_run", data, registry, &assessment)
-
-	require.Contains(t, intent.ReadDirs, downloads)
-	require.Empty(t, intent.WriteDirs)
-	require.NoError(t, reviewer.requestApproval(reviewerDeps{
-		ctx:            context.Background(),
-		shellExecution: true,
-		assessment:     &assessment,
-		accessIntent:   intent,
-	}, "shell_run", data))
-
-	reviewer.reviewChan = nil
-	writeIntent := AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{downloads}}
-	err = reviewer.requestApproval(
-		reviewerDeps{ctx: context.Background(), accessIntent: writeIntent},
-		"fs_delete_file",
-		[]byte(fmt.Sprintf(`{"path":%q}`, filepath.Join(downloads, "old.txt"))),
-	)
-	require.ErrorIs(t, err, errReviewUnavailable)
 }
 
 func TestReviewKeys(t *testing.T) {
@@ -468,7 +346,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 
 	t.Run("review never allows mutable tool", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewNever, scope: scope}
-		intent := buildAccessIntent("fs_write_file", []byte(`{"path":"out.txt","content":"x"}`), registry, nil)
+		intent := buildAccessIntent("fs_write_file", []byte(`{"path":"out.txt","content":"x"}`), registry)
 		require.NoError(t, reviewer.requestApproval(
 			reviewerDeps{ctx: context.Background(), accessIntent: intent},
 			"fs_write_file", []byte(`{"path":"out.txt","content":"x"}`),
@@ -488,7 +366,7 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 
 	t.Run("auto allows read-only filesystem tool", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		intent := buildAccessIntent("fs_read_file", []byte(`{"path":"README.md"}`), registry, nil)
+		intent := buildAccessIntent("fs_read_file", []byte(`{"path":"README.md"}`), registry)
 		require.NoError(t, reviewer.requestApproval(
 			reviewerDeps{ctx: context.Background(), accessIntent: intent},
 			"fs_read_file", []byte(`{"path":"README.md"}`),
@@ -497,129 +375,12 @@ func TestReviewPolicyNonTTY(t *testing.T) {
 
 	t.Run("auto allows read-only tool without directory intent", func(t *testing.T) {
 		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
+		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry)
 		require.Equal(t, AccessRead, intent.Class)
 		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
 		require.NoError(t, err)
 	})
 
-	t.Run("auto requires review for write in loaded skill directory", func(t *testing.T) {
-		skillDir := filepath.Join(filepath.Dir(scope.Value), "mods-test-skill")
-		previousCatalog := mods.skillCatalog
-		mods.skillCatalog = []skills.Skill{{Name: "demo", Dir: skillDir}}
-		defer func() { mods.skillCatalog = previousCatalog }()
-		intent := AccessIntent{Class: AccessWrite, Dirs: []string{skillDir}}
-		deps := reviewerDeps{
-			ctx:            context.Background(),
-			shellExecution: true,
-			accessIntent:   intent,
-			safeDirs:       mods.safeDirs(),
-		}
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := reviewer.requestApproval(deps, "shell_run", []byte(`{"command":"touch generated.txt"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("auto allows statically proven read", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		command := "echo ok"
-		if runtime.GOOS == "windows" {
-			command = "Write-Output ok"
-		}
-		err := testRequestApproval(reviewer, mods, "shell_run", []byte(fmt.Sprintf(`{"command":%q}`, command)))
-		require.NoError(t, err)
-	})
-
-	t.Run("auto allows read-only shell parent traversal in non-TTY", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"cat ../sibling/file"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("auto allows read-only shell tilde path in non-TTY", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"cat ~/Downloads/file"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("auto denies compound shell after read-only prefix", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"echo ok; rm -rf ."}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("auto allows read-only powershell touching external path in non-TTY", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("real PowerShell bridge requires Windows")
-		}
-
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("auto denies nested powershell", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"powershell -EncodedCommand AAAA"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("auto allows read-only powershell pipeline touching external path", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("real PowerShell bridge requires Windows")
-		}
-
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Users | Where-Object { $_.Name -like 'p*' }"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("auto denies mutating powershell command without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: scope}
-		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\tmp\\old.txt"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("saved rule allows matching powershell command", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("real PowerShell bridge requires Windows")
-		}
-
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}, Mode: AccessWrite}))
-		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Remove-Item C:\\Users\\old.txt"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("saved powershell prefix does not allow pipeline mutation", func(t *testing.T) {
-
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"C:\\Users"}}))
-		err := testRequestApproval(reviewer, mods, "powershell_run", []byte(`{"command":"Get-ChildItem C:\\Windows | Remove-Item -Recurse"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("always allows read-only tool without interactive approval", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		err := testRequestApproval(reviewer, mods, "fs_read_file", []byte(`{"path":"README.md"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("always allows read-only tool without directory intent", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		intent := buildAccessIntent("web_search", []byte(`{"query":"mods v2.5.0"}`), registry, nil)
-		require.Equal(t, AccessRead, intent.Class)
-		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "web_search", []byte(`{"query":"mods v2.5.0"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("always ignores saved rule for matching write tool", func(t *testing.T) {
-		reviewer := &toolReviewer{reviewMode: ReviewAlways, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{testApprovalScope.Value}, Mode: AccessWrite}))
-		intent := AccessIntent{Class: AccessWrite, Dirs: []string{testApprovalScope.Value}}
-		err := reviewer.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: intent}, "fs_write_file", []byte(`{"path":"out.txt","content":"x"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
 }
 
 func TestToolCallerReadsOutsideWorkingDirWithoutReview(t *testing.T) {
@@ -645,280 +406,6 @@ func TestToolCallerReadsOutsideWorkingDirWithoutReview(t *testing.T) {
 }
 
 const testCompleteCoverage = approval.CoverageComplete
-
-func TestShellReviewFlowUsesDeterministicAssessment(t *testing.T) {
-	oldInputTTY := IsInputTTY
-	IsInputTTY = func() bool { return true }
-	t.Cleanup(func() { IsInputTTY = oldInputTTY })
-
-	registry := testReviewRegistry(t)
-	cwdScope := testShellWorkingDirScope(t)
-
-	t.Run("auto skips review for proven reads", func(t *testing.T) {
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              testConfigForWorkingDir(cwdScope.Value),
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: cwdScope}
-		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"ls"}`))
-		require.NoError(t, err)
-	})
-
-	t.Run("unknown command cannot create candidate rules", func(t *testing.T) {
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Empty(t, item.candidateRules)
-		item.resp <- reviewResponse{action: reviewActionApprove}
-		require.NoError(t, <-errCh)
-	})
-
-	t.Run("review summary surfaces assessment reason for known scope", func(t *testing.T) {
-		// Reasons remain visible when the assessment carries a verified scope;
-		// only unknown-location reasons are hidden as speculative.
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		intent := AccessIntent{WriteCoverage: testCompleteCoverage,
-			Class:  AccessWrite,
-			Dirs:   []string{"/opt/scoop"},
-			Reason: "installs nodejs via scoop",
-		}
-		assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectWrite, KnownDirs: intent.Dirs, Reason: intent.Reason}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- reviewer.requestApproval(reviewerDeps{
-				ctx:            mods.ctx,
-				shellExecution: true,
-				assessment:     &assessment,
-				accessIntent:   intent,
-			}, "powershell_run", []byte(`{"command":"scoop install nodejs"}`))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Contains(t, item.summary, "installs nodejs via scoop")
-		item.resp <- reviewResponse{action: reviewActionApprove}
-		require.NoError(t, <-errCh)
-	})
-
-	t.Run("candidate dirs expand tilde before saving", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-		require.NotEmpty(t, home)
-
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"rm ~/.ssh"}`))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Len(t, item.candidateRules, 1)
-		require.Equal(t, []string{home}, item.candidateRules[0].Paths, "removing the .ssh entry requires its parent directory")
-		item.resp <- reviewResponse{action: reviewActionApprove}
-		require.NoError(t, <-errCh)
-	})
-
-	t.Run("shell glob affected dirs collapse before review and saving", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-		require.NotEmpty(t, home)
-		downloads := filepath.Join(home, "Downloads")
-
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		assessment := mods.assessShellCommand("shell_run", pathutil.FlavorPOSIX, `du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20`, nil, testApprovalScope.Value)
-		intent := normalizeAccessIntentDirs(commandResultToIntent(assessment), testApprovalScope.Value, "shell_run", true)
-		require.Contains(t, normalizeShellAffectedDirsForTool(assessment.KnownDirs, testApprovalScope.Value, "shell_run"), downloads)
-		require.Empty(t, intent.Dirs)
-		require.Empty(t, intent.WriteDirs)
-		require.Empty(t, candidateRulesForIntent(intent, testApprovalScope, nil, ApprovalReviewMode(ReviewAuto)))
-		require.NoError(t, reviewer.requestApproval(reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent}, "shell_run", []byte(`{"command":"du -sk ~/Downloads/* 2>/dev/null | sort -rn | head -20"}`)))
-	})
-
-	t.Run("redirection target dirs fill unknown shell risk", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("POSIX heredoc redirection is not the Windows shell_run syntax")
-		}
-		targetDir := "/home/panjie/dev/myconfigs/vim"
-
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"cat > /home/panjie/dev/myconfigs/vim/vimrc <<'EOF'\nset path=/\n/this/looks/like/a/path\nEOF"}`))
-		}()
-
-		item := receiveReviewItem(t, reviewer.reviewChan)
-		require.Contains(t, item.summary, "local mutation")
-		require.Contains(t, item.summary, targetDir)
-		require.NotEqual(t, "Risk: local mutation - affects /", item.summary)
-		require.NotContains(t, item.summary, "unknown")
-		require.Len(t, item.candidateRules, 1)
-		require.Equal(t, []string{targetDir}, item.candidateRules[0].Paths)
-		item.resp <- reviewResponse{action: reviewActionApprove}
-		require.NoError(t, <-errCh)
-	})
-
-	t.Run("always allows statically proven reads", func(t *testing.T) {
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              testConfigForWorkingDir(cwdScope.Value),
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAlways,
-			scope:      cwdScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"ls"}`))
-		}()
-
-		require.NoError(t, <-errCh)
-	})
-
-	t.Run("saved rule cannot authorize unknown targets", func(t *testing.T) {
-		cacheDir := "/tmp/cache"
-		if runtime.GOOS == "windows" {
-			// shell_run uses the PowerShell dialect on Windows, where a
-			// leading-slash token is a native-program switch, not a path.
-			cacheDir = `C:\tmp\cache`
-		}
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{cacheDir}, Mode: AccessWrite}))
-		err := testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("legacy rule cannot authorize unknown targets", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-		require.NotEmpty(t, home)
-
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{Type: approvalDirAllow, Paths: []string{"~/.config"}, Mode: AccessWrite}))
-		err = testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"some unsupported writer"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-
-	t.Run("unknown script requires review", func(t *testing.T) {
-		mods := &Mods{
-			ctx:                 context.Background(),
-			Config:              &Config{},
-			currentToolRegistry: registry,
-		}
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-		}
-		require.ErrorIs(t, testRequestApproval(reviewer, mods, "shell_run", []byte(`{"command":"unknown-reader /etc/passwd"}`)), errReviewUnavailable)
-	})
-
-	t.Run("fs external read needs no review or reusable rule", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-		require.NotEmpty(t, home)
-
-		downloads := filepath.Join(home, "Downloads")
-		target := filepath.Join(downloads, "Codex.dmg")
-		reviewer := &toolReviewer{
-			reviewMode: ReviewAuto,
-			scope:      testApprovalScope,
-			reviewChan: make(chan toolReviewItem, 1),
-		}
-		deps := reviewerDeps{
-			ctx:          context.Background(),
-			accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessRead, Dirs: []string{downloads}},
-		}
-
-		require.NoError(t, reviewer.requestApproval(deps, "fs_stat", []byte(fmt.Sprintf(`{"path":%q}`, target))))
-	})
-
-	t.Run("saved fs directory read rule does not allow writes", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-		require.NotEmpty(t, home)
-
-		downloads := filepath.Join(home, "Downloads")
-		reviewer := &toolReviewer{reviewMode: ReviewAuto, scope: testApprovalScope}
-		reviewer.rules.Add(scopedRule(ApprovalRule{
-			Type:  approvalDirAllow,
-			Paths: []string{downloads},
-			Mode:  AccessRead,
-		}))
-
-		readDeps := reviewerDeps{
-			ctx:          context.Background(),
-			accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessRead, Dirs: []string{downloads}},
-		}
-		require.NoError(t, reviewer.requestApproval(readDeps, "fs_stat", []byte(`{"path":"/unused/file"}`)))
-
-		writeDeps := reviewerDeps{
-			ctx:          context.Background(),
-			accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: []string{downloads}},
-		}
-		err = reviewer.requestApproval(writeDeps, "fs_write_file", []byte(`{"path":"/unused/file","content":"x"}`))
-		require.ErrorIs(t, err, errReviewUnavailable)
-	})
-}
 
 func TestReviewUnavailableIsFatal(t *testing.T) {
 	mods := &Mods{
@@ -965,73 +452,10 @@ func receiveReviewItem(t *testing.T, ch <-chan toolReviewItem) toolReviewItem {
 	select {
 	case item := <-ch:
 		return item
-	// Real dispatch tests may start the PowerShell bridge before showing review.
-	// A one-second UI wait also measured host startup and was flaky under load.
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for review item")
 		return toolReviewItem{}
 	}
-}
-
-// testReviewerDeps builds reviewerDeps from a *Mods in the shape these
-// tests historically construct. Prefer constructing reviewerDeps
-// directly in new tests; this helper keeps the diff small while the
-// existing tests migrate off the *Mods signature.
-//
-// Always use the production deterministic assessment pipeline.
-func testRequestApproval(reviewer *toolReviewer, mods *Mods, name string, data []byte) error {
-	registry := mods.currentToolRegistry
-	shellExecution := registry != nil && registry.ShellExecution(name)
-	var assessment *commandanalysis.CommandAssessment
-	if shellExecution {
-		input := string(data)
-		if name != "process_run" {
-			var args struct {
-				Command string `json:"command"`
-			}
-			_ = json.Unmarshal(data, &args)
-			input = args.Command
-		}
-		assessed := mods.assessCommand(name, input)
-		assessment = &assessed
-	}
-	intent := buildAccessIntent(name, data, registry, assessment)
-	ctx, cancel := context.WithTimeout(mods.ctx, 3*time.Second)
-	defer cancel()
-	return reviewer.requestApproval(reviewerDeps{
-		ctx:            ctx,
-		shellExecution: shellExecution,
-		assessment:     assessment,
-		accessIntent:   intent,
-		safeDirs:       mods.safeDirs(),
-	}, name, data)
-}
-
-func TestShellCandidateRulesUseKnownAffectedDirs(t *testing.T) {
-	t.Run("write command stamps write mode", func(t *testing.T) {
-		rules := RulesForDirs([]string{"/tmp/cache", "/var/tmp"}, testApprovalScope, AccessWrite)
-		require.Len(t, rules, 1)
-		require.Equal(t, approvalDirAllow, rules[0].Type)
-		require.Equal(t, AccessWrite, rules[0].Mode)
-		require.Empty(t, rules[0].ScopeKind)
-		require.Empty(t, rules[0].ScopeValue)
-		require.ElementsMatch(t, []string{"/tmp/cache", "/var/tmp"}, rules[0].Paths)
-	})
-
-	t.Run("relative target is saved as an absolute task path", func(t *testing.T) {
-		rules := RulesForDirs([]string{"build"}, testApprovalScope, AccessWrite)
-		require.Len(t, rules, 1)
-		// Stored rule paths use the host separator; the scope value is POSIX
-		// style, so compare through FromSlash instead of the raw literal.
-		require.Equal(t, []string{filepath.FromSlash("/cwd/build")}, rules[0].Paths)
-		require.Empty(t, rules[0].ScopeKind)
-		require.Empty(t, rules[0].ScopeValue)
-	})
-
-	t.Run("read command stamps read mode", func(t *testing.T) {
-		rules := RulesForDirs([]string{"/etc"}, testApprovalScope, AccessRead)
-		require.Empty(t, rules)
-	})
 }
 
 func TestDirAllowModeSplit(t *testing.T) {
@@ -1273,55 +697,17 @@ func TestNormalizeAffectedDirs(t *testing.T) {
 	})
 }
 
-func TestUnknownEffectCannotReuseKnownTargets(t *testing.T) {
-	for _, tool := range []string{"shell_run", "powershell_run", "process_run"} {
-		t.Run(fmt.Sprintf("%s/known-target", tool), func(t *testing.T) {
-			dir := filepath.Clean(t.TempDir())
-			scope := WorkingDirScope(dir)
-			assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectUnknown, KnownDirs: []string{dir}}
-			intent := commandResultToIntent(assessment)
-			r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: true}
-			r.startSession()
-			defer r.reset()
-			deps := reviewerDeps{ctx: context.Background(), shellExecution: true, assessment: &assessment, accessIntent: intent, safeDirs: []string{filepath.Clean(t.TempDir())}}
-			data := []byte(`{"command":"opaque-command"}`)
-			done := make(chan error, 1)
-			go func() { done <- r.requestApproval(deps, tool, data) }()
-			item := receiveReviewItem(t, r.reviewChan)
-			require.Empty(t, item.candidateRules)
-			r.handleStartMsg(toolReviewStartMsg{item: item})
-			banner := r.renderBanner(160, makeStyles(true).Interaction, 40)
-			require.NotContains(t, banner, "Allow for session")
-			require.NotContains(t, banner, "FULL REVIEW")
-			require.NotContains(t, banner, "REVIEW REQUIRED")
-			r.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-			require.NoError(t, <-done)
-			r.raw = true // Reuse must succeed without another interactive prompt.
-			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-			deps.accessIntent.Dirs = []string{filepath.Join(filepath.Dir(dir), "other-target")}
-			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-			deps.accessIntent = intent
-			deps.accessIntent.UnresolvedPaths = []string{"$target"}
-			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-			require.Empty(t, candidateRulesForIntent(deps.accessIntent, scope, nil, ApprovalReviewMode(ReviewAuto)))
-			deps.accessIntent = intent
-			r.reviewMode = ReviewAlways
-			require.ErrorIs(t, r.requestApproval(deps, tool, data), errReviewUnavailable)
-		})
-
-		t.Run(fmt.Sprintf("%s/safe-temp-target", tool), func(t *testing.T) {
-			safe := filepath.Clean(t.TempDir())
-			scope := WorkingDirScope(filepath.Clean(t.TempDir()))
-			assessment := commandanalysis.CommandAssessment{Effect: commandanalysis.EffectUnknown, KnownDirs: []string{safe}}
-			deps := reviewerDeps{
-				ctx:            context.Background(),
-				shellExecution: true,
-				assessment:     &assessment,
-				accessIntent:   commandResultToIntent(assessment),
-				safeDirs:       []string{safe},
-			}
-			r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true, interactiveReviewAvailable: false}
-			require.ErrorIs(t, r.requestApproval(deps, tool, []byte(`{"command":"opaque-command"}`)), errReviewUnavailable)
-		})
+func testRequestApproval(reviewer *toolReviewer, mods *Mods, name string, data []byte) error {
+	registry := mods.currentToolRegistry
+	deps := reviewerDeps{ctx: mods.ctx, safeDirs: mods.safeDirs()}
+	if registry != nil && registry.ShellExecution(name) {
+		effect, err := toolregistry.DeclaredCommandEffect(data)
+		if err != nil {
+			return err
+		}
+		deps.commandEffect = effect
+	} else {
+		deps.accessIntent = buildAccessIntent(name, data, registry)
 	}
+	return reviewer.requestApproval(deps, name, data)
 }

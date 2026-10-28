@@ -121,6 +121,11 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			for _, action := range []string{"Allow once", "Deny", "Cancel task"} {
 				require.Contains(t, banner, action)
 			}
+			require.Contains(t, banner, "←/→ choose")
+			require.Contains(t, banner, "run this once")
+			require.Contains(t, banner, "do not run it")
+			require.Contains(t, banner, "❯")
+			require.NotContains(t, banner, "Allow for session")
 			// All content remains reachable on a small terminal, with approval
 			// available on every page and no change to the reviewed arguments.
 			for i := range r.reviewItem.presentation.rows {

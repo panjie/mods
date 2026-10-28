@@ -38,81 +38,141 @@ func (m *setupModel) styleInputs() {
 func (m *setupModel) heading() (string, string) {
 	switch m.page {
 	case setupProvider:
-		return "Provider", "Choose the API backend mods should use by default."
+		description := "Choose the API backend mods uses by default."
+		if m.provider != addProviderOption && m.api() != "" {
+			description += " Current: " + m.api() + "."
+		}
+		return "Provider", description
 	case setupName:
-		return "New provider name", "Use lowercase letters, digits, '-' or '_'."
+		return "New provider name", "Lowercase letters, digits, '-' and '_'."
 	case setupProtocol:
-		return "API type", "Choose the protocol your endpoint supports."
+		return "API type", "Choose the protocol this endpoint speaks."
 	case setupEndpoint:
 		return "Provider endpoint", "Base URL for " + m.api() + ". Shared by this provider's models."
 	case setupCredentials:
-		return "API key", "Environment variables keep secrets out of the YAML file."
+		return "API key", "Prefer an environment variable so secrets stay out of mods.yml."
 	case setupKey:
-		return "Saved API key", "The key is stored in plaintext in your config file."
+		return "Saved API key", "Stored in plaintext in mods.yml."
 	case setupAuth:
 		if m.api() == "chatgpt" {
-			return "Continue with ChatGPT", "Authorize mods to use your ChatGPT plan. Manage accounts with --chatgpt-auth."
+			return "Continue with ChatGPT", "Sign in with your ChatGPT plan. Manage accounts with --chatgpt-auth."
 		}
-		return "GitHub Copilot sign in", "Authorize mods using GitHub's device flow."
+		return "GitHub Copilot sign in", "Authorize mods with GitHub's device flow."
 	case setupDiscovery:
-		description := "Choose models for " + m.api() + "."
+		description := "Choose the models this provider exposes."
 		if unknown := m.draft().unconfirmed; len(unknown) > 0 {
-			description += "\nUnconfirmed protocol (configure manually in mods.yml): " + strings.Join(unknown, ", ")
+			description += "\nUnconfirmed protocol (set it manually in mods.yml): " + strings.Join(unknown, ", ")
 		}
 		return "Discover models", description
 	case setupManual:
 		return "New models", configWizardManualModelsDescription(m.draft().discoveryErr)
 	case setupDefault:
-		return "Default model", "Choose the model mods uses when no model is specified."
+		return "Default model", "Used when no --model is given."
 	case setupFilesystem:
-		return "Filesystem", "Controls whether mods can read and write local files."
+		return "Filesystem", "Let mods read and write local files."
 	case setupShell:
-		return "Shell execution", "Enable shell execution? Tool review settings control approval."
+		return "Shell execution", "Let mods run shell commands. Tool review controls approval."
 	case setupSearch:
-		return "Web search", "Enable web search when the provider supports tools?"
+		return "Web search", "Let mods search the web when the model supports tools."
 	case setupSearchProvider:
-		return "Search provider", "Choose where web_search sends queries."
+		return "Search provider", "Where web_search sends queries."
 	case setupSearchURL:
-		return "Custom search URL", "Search endpoint responding to /search?q=...&limit=... ."
+		return "Custom search URL", "Endpoint receiving /search?q=...&limit=... ."
 	case setupSearchCredentials:
-		return "Search credentials", "Choose where mods reads the search API key."
+		return "Search credentials", "Prefer an environment variable for the search key."
 	case setupSearchKey:
-		return "Saved search key", "The key is stored in plaintext in your config file."
+		return "Saved search key", "Stored in plaintext in mods.yml."
 	case setupReview:
-		return "Tool review", "Choose how often mods asks before running tools."
+		return "Tool review", "Choose when tool calls need your approval."
 	case setupStorage:
-		return "Config file location", "Portable keeps configuration and sessions next to the executable."
+		return "Config file location", "Portable keeps config and sessions beside the executable."
 	case setupSummary:
-		return "Configuration summary", "Enter saves this configuration. Esc returns to editing."
+		return "Review configuration", "Enter saves. Esc returns to editing."
 	case setupConnectionFailed:
-		return "Connection test failed", "Save configuration anyway?"
+		return "Connection test failed", "The test did not complete. Save anyway?"
 	}
 	return "mods setup", ""
 }
-func (m *setupModel) summary() string {
+
+// summaryGroups is the structured presentation of the review page. Rows stay
+// aligned per section so users can scan provider, tools, safety, and storage
+// independently instead of reading one long label/value stream.
+func (m *setupModel) summaryGroups() []ui.InteractionGroup {
 	d := m.draft()
 	names, _ := configWizardModelNames(m.api(), d.selected, d.manual)
-	rows := []string{"Provider: " + m.api(), "API type: " + m.protocol(), "Base URL: " + m.redact(m.endpoint()), "Default model: " + d.defaultModel, fmt.Sprintf("Models: %d", len(names)), "API key: " + setupStorageLabel(d.storage), "Filesystem: " + m.data.fsMode, "Shell: " + boolLabel(m.data.shellOn), "Web search: " + boolLabel(m.data.webSearchOn)}
+
+	providerRows := []ui.InteractionRow{
+		{Label: "API", Value: m.api()},
+		{Label: "API type", Value: m.protocol()},
+		{Label: "Base URL", Value: m.redact(m.endpoint())},
+		{Label: "Default model", Value: defaultModelSummary(d.defaultModel)},
+		{Label: "Models", Value: fmt.Sprintf("%d", len(names))},
+	}
 	if m.api() == "chatgpt" {
-		rows[5] = "Authentication: ChatGPT subscription"
+		providerRows = append(providerRows, ui.InteractionRow{Label: "Authentication", Value: "ChatGPT subscription"})
 		st, _ := chatgpt.DefaultStore().Load()
 		if account, ok := st.Selected(); ok {
-			rows = append(rows, "Account: "+account.Email+" ("+account.ClientID+")")
+			providerRows = append(providerRows, ui.InteractionRow{Label: "Account", Value: account.Email + " (" + account.ClientID + ")"})
+		}
+	} else if m.protocol() != "ollama" {
+		providerRows = append(providerRows, ui.InteractionRow{Label: "API key", Value: setupStorageLabel(d.storage)})
+		if d.storage == "env" && m.api() != "github-copilot" {
+			providerRows = append(providerRows, ui.InteractionRow{Label: "Key environment", Value: resolveEnvVar(m.api())})
 		}
 	}
-	if d.storage == "env" && m.api() != "ollama" && m.api() != "chatgpt" {
-		rows = append(rows, "Key environment: "+resolveEnvVar(m.api()))
+
+	toolRows := []ui.InteractionRow{
+		{Label: "Filesystem", Value: m.data.fsMode},
+		{Label: "Shell", Value: boolLabel(m.data.shellOn)},
+		{Label: "Web search", Value: boolLabel(m.data.webSearchOn)},
 	}
 	if m.data.webSearchOn {
-		rows = append(rows, "Search provider: "+m.data.webSearchProvider, "Search key: "+m.data.webSearchKeyStorage)
+		toolRows = append(toolRows, ui.InteractionRow{Label: "Search provider", Value: m.data.webSearchProvider})
 		if m.data.webSearchProvider == "custom" {
-			rows = append(rows, "Search URL: "+m.redact(m.data.webSearchProviderValue))
+			toolRows = append(toolRows, ui.InteractionRow{Label: "Search URL", Value: m.redact(m.data.webSearchProviderValue)})
 		}
+		toolRows = append(toolRows, ui.InteractionRow{Label: "Search key", Value: m.data.webSearchKeyStorage})
 		if m.data.webSearchKeyStorage == "env" {
-			rows = append(rows, "Search environment: "+m.data.webSearchAPIKeyEnv)
+			toolRows = append(toolRows, ui.InteractionRow{Label: "Search environment", Value: m.data.webSearchAPIKeyEnv})
 		}
 	}
-	return strings.Join(append(rows, "Review: "+m.data.reviewMode, "Config file: "+m.savePath()), "\n")
+
+	mode := "Standard"
+	if m.data.portable {
+		mode = "Portable"
+	}
+	return []ui.InteractionGroup{
+		{Title: "Provider", Rows: providerRows},
+		{Title: "Tools", Rows: toolRows},
+		{Title: "Safety", Rows: []ui.InteractionRow{{Label: "Tool review", Value: m.data.reviewMode}}},
+		{Title: "Storage", Rows: []ui.InteractionRow{
+			{Label: "Mode", Value: mode},
+			{Label: "Config file", Value: m.savePath()},
+		}},
+	}
+}
+
+func defaultModelSummary(model string) string {
+	if strings.TrimSpace(model) == "" {
+		return "not selected"
+	}
+	return model
+}
+
+// summary preserves the plain label/value form for callers that need a
+// copyable review (tests and future export), while View renders summaryGroups.
+func (m *setupModel) summary() string {
+	var lines []string
+	for i, group := range m.summaryGroups() {
+		if i > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, group.Title)
+		for _, row := range group.Rows {
+			lines = append(lines, "  "+row.Label+": "+row.Value)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 func (m *setupModel) redact(text string) string {
 	for _, secret := range []string{m.draft().key, m.data.webSearchAPIKey, resolveKeyForDiscovery(m.api(), m.draft().key)} {
@@ -138,15 +198,19 @@ func (m *setupModel) View() tea.View {
 	if m.page == setupConnectionFailed {
 		step = len(pages)
 	}
-	progress := fmt.Sprintf("%d/%d", max(1, step), len(pages))
-	if w >= 40 {
-		progress = "Step " + progress
+	progress := fmt.Sprintf("Step %d/%d", max(1, step), len(pages))
+	if w < 40 {
+		progress = fmt.Sprintf("%d/%d", max(1, step), len(pages))
 	}
-	panel := ui.InteractionPanel{Title: ansi.Truncate(title, max(1, w-lipgloss.Width(progress)-1), "…"), Meta: progress, Actions: m.actions()}
+	panel := ui.InteractionPanel{
+		Title:    ansi.Truncate(title, max(1, w-lipgloss.Width(progress)-1), "…"),
+		Meta:     progress,
+		Progress: ui.InteractionProgress{Current: max(1, step), Total: len(pages)},
+		Actions:  m.actions(),
+	}
 	if m.err != nil {
-		panel.Tone = ui.InteractionToneWarning
+		panel.Tone = ui.InteractionToneDanger
 		panel.ToneText = "Error"
-		panel.Headline = ansi.Truncate(m.redact(m.err.Error()), max(1, w-7), "…")
 	}
 	if m.filtering {
 		panel.Body = []string{m.filter.View()}
@@ -158,7 +222,13 @@ func (m *setupModel) View() tea.View {
 		panel.Actions = []ui.InteractionAction{{Key: "enter", Label: "next"}, {Key: "esc", Label: "back"}, {Key: "ctrl+c", Label: "cancel"}}
 		fixedHeight = lipgloss.Height(ui.RenderInteractionPanel(s, m.panelWidth(), panel))
 	}
-	visible := max(1, min(m.height-1, 18)-fixedHeight)
+	maxVisible := 18
+	if m.page == setupSummary {
+		// The review page is a reference table; use the terminal height so the
+		// user can scan every section without paging through a short window.
+		maxVisible = max(1, m.height-1)
+	}
+	visible := max(1, min(m.height-1, maxVisible)-fixedHeight)
 	// Keep headings and help fixed. Long descriptions and bodies scroll together.
 	lines := strings.Split(ansi.Wrap(s.Muted.Render(description), w, ""), "\n")
 	lines = append(lines, "")
@@ -175,7 +245,7 @@ func (m *setupModel) View() tea.View {
 		lines = append(lines, strings.Split(m.area.View(), "\n")...)
 		focusEnd = len(lines) - 1
 	case m.page == setupSummary:
-		lines = append(lines, strings.Split(ansi.Wrap(s.Body.Render(m.summary()), w, ""), "\n")...)
+		lines = append(lines, ui.RenderInteractionGroups(s, w, m.summaryGroups())...)
 	case m.page == setupAuth && m.api() == "chatgpt":
 		if m.device.VerificationURI != "" {
 			if m.browserErr == nil {
@@ -219,7 +289,16 @@ func (m *setupModel) View() tea.View {
 			// Provider rows pair a name with an auxiliary description, so they
 			// truncate instead of wrapping; other pages wrap to keep values
 			// (paths, model names) fully visible.
-			lines = append(lines, setupOptionLines(s, w, o.Key, focused, m.page == setupDiscovery, slices.Contains(m.draft().selected, o.Value), m.page != setupProvider)...)
+			current := o.Value == m.value()
+			if m.page == setupDiscovery {
+				current = slices.Contains(m.draft().selected, o.Value)
+			}
+			if m.page == setupProvider {
+				// Provider labels already carry their configured marker; the
+				// heading names the active provider.
+				current = false
+			}
+			lines = append(lines, setupOptionLines(s, w, o.Key, focused, m.page == setupDiscovery, current, m.page != setupProvider)...)
 			if focused {
 				focusEnd = len(lines) - 1
 			}
@@ -263,34 +342,42 @@ func setupStorageLabel(storage string) string {
 // When wrap is false, overlong labels are truncated with an ellipsis instead,
 // so an option always stays on a single line.
 func setupOptionLines(s ui.InteractionStyles, width int, label string, focused, multi, checked, wrap bool) []string {
-	prefix := "  "
-	if focused {
-		prefix = "> "
+	cursor := "  "
+	switch {
+	case focused:
+		cursor = s.Cursor.Render("❯") + " "
+	case !multi && checked:
+		// A quiet check marks the current single-select value even after the
+		// cursor moves away, without adding another gutter column.
+		cursor = s.Success.Render("✓") + " "
 	}
+	check := ""
 	if multi {
 		if checked {
-			prefix += "[x] "
+			check = s.Success.Render("[x]") + " "
 		} else {
-			prefix += "[ ] "
+			check = s.Muted.Render("[ ]") + " "
 		}
 	}
-	style := s.Body
+	prefix := cursor + check
+	prefixWidth := lipgloss.Width(prefix)
+	style := s.Option
 	if focused {
-		style = s.Selected.Padding(0)
+		style = s.OptionActive
 	}
 	if !wrap {
-		line := ansi.Truncate(ansi.Strip(label), max(1, width-lipgloss.Width(prefix)), "…")
-		return []string{style.Render(prefix + line)}
+		line := ansi.Truncate(ansi.Strip(label), max(1, width-prefixWidth), "…")
+		return []string{prefix + style.Render(line)}
 	}
-	indent := strings.Repeat(" ", lipgloss.Width(prefix))
-	wrapped := strings.Split(ansi.Wrap(ansi.Strip(label), max(1, width-lipgloss.Width(prefix)), ""), "\n")
+	indent := strings.Repeat(" ", prefixWidth)
+	wrapped := strings.Split(ansi.Wrap(ansi.Strip(label), max(1, width-prefixWidth), ""), "\n")
 	lines := make([]string, 0, len(wrapped))
 	for i, line := range wrapped {
 		gutter := indent
 		if i == 0 {
 			gutter = prefix
 		}
-		lines = append(lines, style.Render(gutter+line))
+		lines = append(lines, gutter+style.Render(line))
 	}
 	return lines
 }
@@ -329,30 +416,47 @@ func (m *setupModel) actions() []ui.InteractionAction {
 }
 
 func (m *setupModel) statusLines(s ui.InteractionStyles, width int) []string {
-	text := ""
-	style := s.Muted
+	var lines []string
 	switch {
 	case m.busy != "":
-		text = m.busy + "…"
+		lines = setupStatusText(s.Muted, s.Info.Render("● "), m.busy+"…", width)
 	case m.err != nil:
-		style = s.Danger
-		text = "Error: " + m.redact(m.err.Error())
+		lines = setupStatusText(s.Danger, s.Danger.Render("! "), m.redact(m.err.Error()), width)
+		guidance := ""
 		switch m.page {
 		case setupDiscovery:
-			text += "\nPress r to retry, m to enter models manually, or Esc to check endpoint and credentials."
+			guidance = "Press r to retry, m to enter models manually, or Esc to check the endpoint and credentials."
 		case setupAuth:
-			text += "\nPress Enter to retry sign in, or Esc to go back."
+			guidance = "Press Enter to retry sign in, or Esc to go back."
 		case setupConnectionFailed:
-			text += "\nChoose whether to save anyway, or Esc to review the connection settings."
+			guidance = "Choose whether to save anyway, or Esc to review the connection settings."
 		default:
-			text += "\nCorrect the value and press Enter, or Esc to go back."
+			guidance = "Correct the value and press Enter, or Esc to go back."
 		}
+		lines = append(lines, setupStatusText(s.Muted, "  ", guidance, width)...)
 	case m.page == setupDiscovery && m.draft().discovered:
-		style = s.Success
-		text = fmt.Sprintf("Found %d models · %d selected", len(m.draft().models), len(m.draft().selected))
+		lines = setupStatusText(s.Muted, s.Success.Render("✓ "), fmt.Sprintf("Found %d models · %d selected", len(m.draft().models), len(m.draft().selected)), width)
 	}
-	if text == "" {
+	if len(lines) == 0 {
 		return nil
 	}
-	return append(strings.Split(ansi.Wrap(style.Render(text), width, ""), "\n"), "")
+	return append(lines, "")
+}
+
+// setupStatusText wraps status text under a fixed gutter so wrapped error
+// details and recovery guidance stay aligned.
+func setupStatusText(style lipgloss.Style, prefix, text string, width int) []string {
+	prefixWidth := lipgloss.Width(prefix)
+	available := max(1, width-prefixWidth)
+	var lines []string
+	for i, physical := range strings.Split(text, "\n") {
+		for j, part := range strings.Split(ansi.Wrap(physical, available, ""), "\n") {
+			if len(lines) == 0 && i == 0 && j == 0 {
+				lines = append(lines, prefix+style.Render(part))
+				continue
+			}
+			lines = append(lines, strings.Repeat(" ", prefixWidth)+style.Render(part))
+		}
+	}
+	return lines
 }

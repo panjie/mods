@@ -15,70 +15,70 @@ func TestToolResultStatus(t *testing.T) {
 
 	t.Run("shell success", func(t *testing.T) {
 		got := ToolResultStatus("shell_run", shellArgs, nil, 120)
-		require.Equal(t, "\u2713 shell_run: ls -la \u00b7 exit 0", got)
+		require.Equal(t, "\u2713 shell  ls -la  \u00b7 exit 0", got)
 	})
 
 	t.Run("shell exit error", func(t *testing.T) {
 		got := ToolResultStatus("shell_run", shellArgs, exitCodeErr{code: 2}, 120)
-		require.Equal(t, "\u2717 shell_run: ls -la \u00b7 exit 2", got)
+		require.Equal(t, "\u2717 shell  ls -la  \u00b7 exit 2", got)
 	})
 
 	t.Run("wrapped shell exit error", func(t *testing.T) {
 		err := fmt.Errorf("boom: %w", exitCodeErr{code: 7})
 		got := ToolResultStatus("shell_run", shellArgs, err, 120)
-		require.Equal(t, "\u2717 shell_run: ls -la \u00b7 exit 7", got)
+		require.Equal(t, "\u2717 shell  ls -la  \u00b7 exit 7", got)
 	})
 
 	t.Run("non exit error", func(t *testing.T) {
 		err := errors.New("command not found")
 		got := ToolResultStatus("shell_run", shellArgs, err, 120)
-		require.Equal(t, "\u2717 shell_run: ls -la \u00b7 failed: command not found", got)
+		require.Equal(t, "\u2717 shell  ls -la  \u00b7 command not found", got)
 	})
 
 	t.Run("powershell", func(t *testing.T) {
 		got := ToolResultStatus("powershell_run", []byte(`{"command":"Get-ChildItem"}`), nil, 120)
-		require.Equal(t, "\u2713 powershell_run: Get-ChildItem \u00b7 exit 0", got)
+		require.Equal(t, "\u2713 powershell  Get-ChildItem  \u00b7 exit 0", got)
 	})
 
 	t.Run("process", func(t *testing.T) {
 		got := ToolResultStatus("process_run", []byte(`{"program":"go","args":["test","./..."]}`), nil, 120)
-		require.Equal(t, "✓ process_run: go test ./...", got)
+		require.Equal(t, "✓ process  go test ./...", got)
 	})
 
 	t.Run("non shell tool", func(t *testing.T) {
 		got := ToolResultStatus("fs_read_file", []byte(`{"path":"/a"}`), nil, 120)
-		require.Equal(t, "\u2713 fs_read_file: path=/a", got)
+		require.Equal(t, "\u2713 read  /a", got)
 	})
 
 	t.Run("user input shows question", func(t *testing.T) {
 		got := ToolResultStatus("request_user_input", []byte(`{"question":"你的16寸MacBook内存多大","kind":"select"}`), nil, 120)
-		require.Equal(t, "\u2713 request_user_input: 你的16寸MacBook内存多大", got)
+		require.Equal(t, "\u2713 ask  你的16寸MacBook内存多大", got)
 	})
 
 	t.Run("user input failure keeps reason", func(t *testing.T) {
 		got := ToolResultStatus("request_user_input", []byte(`{"question":"你的16寸MacBook内存多大","kind":"select"}`), errors.New("select input requires at least 2 options"), 120)
-		require.Equal(t, "\u2717 request_user_input: 你的16寸MacBook内存多大 \u00b7 failed: select input requires at least 2 options", got)
+		require.Equal(t, "\u2717 ask  你的16寸MacBook内存多大  \u00b7 select input requires at least 2 options", got)
 	})
 
 	t.Run("missing command still shows tool", func(t *testing.T) {
 		got := ToolResultStatus("shell_run", []byte(`{}`), nil, 120)
-		require.Equal(t, "\u2713 shell_run \u00b7 exit 0", got)
+		require.Equal(t, "\u2713 shell  \u00b7 exit 0", got)
 	})
 
 	t.Run("command collapsed to one line", func(t *testing.T) {
 		got := ToolResultStatus("shell_run", []byte(`{"command":"echo a\n echo b"}`), nil, 120)
-		require.Equal(t, "\u2713 shell_run: echo a \u00b7 exit 0", got)
+		require.Equal(t, "\u2713 shell  echo a  \u00b7 exit 0", got)
 	})
 
 	t.Run("leading comment hidden in preview", func(t *testing.T) {
 		got := ToolResultStatus("shell_run", []byte(`{"command":"# probe cwd config\nls .opencode*"}`), exitCodeErr{code: 1}, 120)
-		require.Equal(t, "\u2717 shell_run: ls .opencode* \u00b7 exit 1", got)
+		require.Equal(t, "\u2717 shell  ls .opencode*  \u00b7 exit 1", got)
 	})
 }
 
 func TestToolResultStatusTruncates(t *testing.T) {
 	got := ToolResultStatus("fs_search", []byte(`{"query":"very long query","path":"/repo"}`), nil, 24)
-	require.Equal(t, "\u2713 fs_search: query=ve...", got)
+	require.Equal(t, "\u2713 search  very long q...", got)
 }
 
 func TestToolResultStatusTruncatesWideContentToOneTerminalLine(t *testing.T) {
@@ -94,7 +94,7 @@ func TestToolResultStatusTruncatesWideContentToOneTerminalLine(t *testing.T) {
 			got := ToolResultStatus("shell_run", []byte(fmt.Sprintf(`{"command":%q}`, tc.command)), nil, 48)
 			require.NotContains(t, got, "\n")
 			require.LessOrEqual(t, ansi.StringWidth(got), 48)
-			require.True(t, strings.HasSuffix(got, " \u00b7 exit 0"), got)
+			require.True(t, strings.HasSuffix(got, "  \u00b7 exit 0"), got)
 		})
 	}
 }
@@ -105,18 +105,18 @@ func TestToolResultStatusTruncatesWideContentToOneTerminalLine(t *testing.T) {
 func TestToolResultStatusPrefersDetailOverSummary(t *testing.T) {
 	t.Run("both fit when summary shrinks", func(t *testing.T) {
 		got := ToolResultStatus("fs_read_file", []byte(`{"path":"`+strings.Repeat("a", 80)+`"}`), errors.New("permission denied"), 60)
-		require.True(t, strings.HasPrefix(got, "✗ fs_read_file: path="), got)
-		require.True(t, strings.HasSuffix(got, " · failed: permission denied"), got)
+		require.True(t, strings.HasPrefix(got, "✗ read  aaa"), got)
+		require.True(t, strings.HasSuffix(got, "  · permission denied"), got)
 	})
 
 	t.Run("summary dropped before detail", func(t *testing.T) {
 		got := ToolResultStatus("fs_delete_file", []byte(`{"path":"`+strings.Repeat("a", 80)+`"}`), errors.New("execution denied by review"), 48)
-		require.Equal(t, "✗ fs_delete_file · failed: execution denied b...", got)
+		require.Equal(t, "✗ delete  · execution denied by review", got)
 	})
 
 	t.Run("detail truncated last", func(t *testing.T) {
 		got := ToolResultStatus("fs_delete_file", []byte(`{}`), errors.New(strings.Repeat("boom ", 30)), 40)
-		require.True(t, strings.HasPrefix(got, "✗ fs_delete_file · failed: boom"), got)
+		require.True(t, strings.HasPrefix(got, "✗ delete  · boom"), got)
 		require.LessOrEqual(t, ansi.StringWidth(got), 40)
 		require.True(t, strings.HasSuffix(got, "..."), got)
 	})

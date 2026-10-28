@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project instructions loaded from `AGENTS.md` now emit a one-time tool-style record (`✓ Project instructions: <path>`) in interactive sessions, so the automatic context load is visible like a skill load. `--no-instructions`, `--minimal`, `--raw`, `--hide-tool-status`, and non-interactive runs stay silent.
 
 ### Changed
+- Refreshed the interactive UI. `--config` shows a step progress bar, quiet option focus, and a grouped review table; `--chat` shows provider/model/working-directory context; tool status uses short verb labels (`✓ shell  go test ./...  · exit 0`); and command approvals pin a clear choice menu with a visible cursor.
 - Command guidance prefers reads when sufficient, clear reviewable commands, and appropriate pipelines, variables, loops, and scripts. Prompt evaluations cover normal mode with explicit minimal controls, and debug output reports system/tool-definition byte breakdowns backed by assembled-request budget tests.
 - Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
 - Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.

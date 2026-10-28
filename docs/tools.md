@@ -7,8 +7,8 @@ tools.
 
 Filesystem paths resolve from the process current working directory. Shell and
 process tools start there by default and accept a per-call `cwd` argument. The
-status line shows what Mods is doing between tool calls ("Reading file: ...",
-"Running command: ...", "Searching web: ..."). `--hide-tool-status` hides it and
+status line shows what Mods is doing between tool calls ("read ...",
+"shell ...", "search web ..."). `--hide-tool-status` hides it and
 the compact one-line record each completed call leaves in normal output.
 
 ## Command Declarations
@@ -40,7 +40,7 @@ necessary mutations should use `may_write`, not be omitted to avoid approval.
 The review displays the purpose, normalized working directory, and complete
 command: quoted executable/arguments for `process_run`, or shell source with line
 numbers for multi-line commands. Y approves once, N denies, and Ctrl+C/Esc
-cancels the task.
+cancels the task. Left/Right moves the highlighted choice; Enter confirms it.
 Up/Down browses long commands without disabling approval. Source is escaped and
 known secrets are redacted for display. Approval uses the saved call arguments;
 there is no effect reanalysis or script-content reapproval.

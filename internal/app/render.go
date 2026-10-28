@@ -306,11 +306,11 @@ func statusBadge(label string, style lipgloss.Style) string {
 }
 
 func runningShellStatus(text string) (prefix, command, suffix string, ok bool) {
-	for _, marker := range []string{"Shell - ", "PS - ", "Shell: ", "PS: "} {
+	for _, marker := range []string{"shell  ", "powershell  ", "process  ", "Shell - ", "PS - ", "Shell: ", "PS: "} {
 		if after, found := strings.CutPrefix(text, marker); found {
-			command, suffix, _ = strings.Cut(after, " - last: ")
+			command, suffix, _ = strings.Cut(after, "  · last: ")
 			if suffix != "" {
-				suffix = " - last: " + suffix
+				suffix = "  · last: " + suffix
 			}
 			return marker, strings.TrimSpace(command), suffix, true
 		}

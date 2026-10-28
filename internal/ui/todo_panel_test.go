@@ -36,9 +36,9 @@ func TestTodoSummary(t *testing.T) {
 }
 
 func TestTodoToolSurfaces(t *testing.T) {
-	require.Equal(t, "Updating plan", ToolOperationLabel("todo_write", todoArgs(), 80))
+	require.Equal(t, "update plan", ToolOperationLabel("todo_write", todoArgs(), 80))
 	status := ToolResultStatus("todo_write", todoArgs(), nil, 80)
-	require.Contains(t, status, "✓ todo_write: 3 items · 1 completed, 1 in progress")
+	require.Contains(t, status, "✓ plan  3 items · 1 completed, 1 in progress")
 }
 
 func TestTodoFooterLine(t *testing.T) {

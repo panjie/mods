@@ -1308,7 +1308,7 @@ func TestToolResultOutput(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"ls -la"}`), nil))
 		})
-		require.Contains(t, stderr, "\u2713 shell_run: ls -la")
+		require.Contains(t, stderr, "\u2713 shell  ls -la")
 		require.Contains(t, stderr, "exit 0")
 		require.Equal(t, ansi.Strip(stderr), stderr)
 		require.Empty(t, m.Output)
@@ -1320,7 +1320,7 @@ func TestToolResultOutput(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"npm test"}`), toolregistry.ShellExitError{Code: 1}))
 		})
-		require.Contains(t, stderr, "\u2717 shell_run: npm test")
+		require.Contains(t, stderr, "\u2717 shell  npm test")
 		require.Contains(t, stderr, "exit 1")
 		require.Empty(t, m.Output)
 	})
@@ -1360,7 +1360,7 @@ func TestToolResultOutput(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"/a"}`), nil))
 		})
-		require.Contains(t, stderr, "\u2713 fs_read_file: path=/a")
+		require.Contains(t, stderr, "\u2713 read  /a")
 		require.Empty(t, m.Output)
 	})
 
@@ -1370,7 +1370,7 @@ func TestToolResultOutput(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("shell_run", []byte(`{"command":"ls"}`), nil))
 		})
-		require.Contains(t, stderr, "\u2713 shell_run: ls")
+		require.Contains(t, stderr, "\u2713 shell  ls")
 		require.Equal(t, "thinking...", m.Output)
 	})
 
@@ -1380,7 +1380,7 @@ func TestToolResultOutput(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("fs_delete_file", []byte(`{"path":"C:\\Users\\panjie\\Downloads\\Designer3_transparent_fine_clean_4x.png"}`), errors.New("execution denied by review")))
 		})
-		require.Contains(t, stderr, "✗ fs_delete_file · failed: execution denied b...")
+		require.Contains(t, stderr, "✗ delete  · execution denied by review")
 		require.NotContains(t, stderr, "Downloads")
 		require.Empty(t, m.Output)
 	})
@@ -1400,7 +1400,7 @@ func TestToolResultOutput(t *testing.T) {
 		require.Empty(t, m.Output)
 		require.Contains(t, m.displayOutput, "MODS_DISPLAY_BLOCK_1\n\n")
 		require.Len(t, m.displayBlocks, 1)
-		require.Contains(t, m.displayBlocks["MODS_DISPLAY_BLOCK_1"], "fs_read_file: path=mods.go")
+		require.Contains(t, m.displayBlocks["MODS_DISPLAY_BLOCK_1"], "read  mods.go")
 	})
 }
 
@@ -1417,8 +1417,8 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			})
 		})
 		require.NotNil(t, cmd)
-		require.Contains(t, stderr, "✓ shell_run: go test ./... · exit 0")
-		require.Equal(t, "✓ shell_run: go test ./... · exit 0", m.getActiveOperation())
+		require.Contains(t, stderr, "✓ shell  go test ./...  · exit 0")
+		require.Equal(t, "✓ shell  go test ./...  · exit 0", m.getActiveOperation())
 		require.Empty(t, m.Output)
 	})
 
@@ -1432,8 +1432,8 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			})
 		})
 		require.NotNil(t, cmd)
-		require.Contains(t, stderr, "✗ powershell_run: npm test · exit 1")
-		require.Equal(t, "✗ powershell_run: npm test · exit 1", m.getActiveOperation())
+		require.Contains(t, stderr, "✗ powershell  npm test  · exit 1")
+		require.Equal(t, "✗ powershell  npm test  · exit 1", m.getActiveOperation())
 		require.Empty(t, m.Output)
 	})
 
@@ -1447,8 +1447,8 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			})
 		})
 		require.NotNil(t, cmd)
-		require.Contains(t, stderr, "✓ fs_read_file: path=mods.go")
-		require.Equal(t, "✓ fs_read_file: path=mods.go", m.getActiveOperation())
+		require.Contains(t, stderr, "✓ read  mods.go")
+		require.Equal(t, "✓ read  mods.go", m.getActiveOperation())
 		require.Empty(t, m.Output)
 	})
 
@@ -1465,9 +1465,9 @@ func TestHandleToolCallsDoneSetsShellCompletionStatus(t *testing.T) {
 			})
 			require.NotNil(t, cmd)
 		})
-		first := strings.Index(stderr, "fs_read_file: path=first.go")
-		second := strings.Index(stderr, "shell_run: go test ./...")
-		third := strings.Index(stderr, "fs_stat: path=last.go")
+		first := strings.Index(stderr, "read  first.go")
+		second := strings.Index(stderr, "shell  go test ./...")
+		third := strings.Index(stderr, "stat  last.go")
 		require.GreaterOrEqual(t, first, 0)
 		require.Greater(t, second, first)
 		require.Greater(t, third, second)

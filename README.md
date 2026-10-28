@@ -305,13 +305,16 @@ its meaningful effects in the user's language. This text is shown for review
 and does not affect authorization.
 
 ```
-Run command?
+Run command?                                    ←/→ choose
 Purpose: Delete the obsolete demo image
 Working dir: /path/to/project
 
 Command:
-rm -f demo.gif
-[Y] Allow once  [N] Deny  [Ctrl+C / Esc] Cancel task
+  rm -f demo.gif
+
+ ❯ Y Allow once   run this once
+   N Deny  do not run it
+   Ctrl+C Cancel task  stop the task
 ```
 
 Long commands can be browsed with Up/Down; approval is available immediately.
@@ -378,11 +381,11 @@ Run `mods --list-tools` for the full catalogue, including any MCP tools.
 
 Filesystem paths resolve from the process current working directory. Shell and
 process tools start there by default and accept a per-call `cwd` argument. The
-status line shows what Mods is doing between tool calls ("Reading file: ...",
-"Running command: ...", "Searching web: ..."). Hide it with
+status line shows what Mods is doing between tool calls ("read ...",
+"shell ...", "search web ..."). Hide it with
 `--hide-tool-status`, which also suppresses the compact one-line record each
 completed tool call leaves in normal output (for example
-`> ✓ shell_run: ls -la · exit 0`).
+`> ✓ shell  ls -la  · exit 0`).
 
 Filesystem tools default to `auto`; shell is enabled by default. Toggle them in
 `mods.yml`:

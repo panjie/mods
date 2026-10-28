@@ -44,10 +44,6 @@ func (m *Mods) recordActivity(name, status, output string, err error) {
 		status = m.secrets.Redact(status)
 	}
 	status = reviewLiteral(ansi.Strip(status))
-	labels := map[string]string{"fs_read_file": "Read file", "fs_list_dir": "List directory", "fs_search": "Search files", "fs_stat": "Inspect path", "fs_write_file": "Write file", "fs_replace": "Replace text", "fs_apply_patch": "Apply patch", "shell_run": "Run command", "powershell_run": "Run PowerShell", "process_run": "Run process", "web_search": "Search web"}
-	if label, ok := labels[name]; ok {
-		status = strings.Replace(status, name, label, 1)
-	}
 	// Strip styling and escape remaining controls before rendering untrusted text.
 	output = strings.TrimSpace(reviewLiteral(ansi.Strip(output)))
 	if len(output) > activityPreviewLimit {

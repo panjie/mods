@@ -114,7 +114,7 @@ func TestTodoWriteNonTTYWritesStderrSummary(t *testing.T) {
 	stderr := captureStderr(t, func() {
 		require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), nil))
 	})
-	require.Contains(t, stderr, "✓ todo_write: 3 items · 1 completed, 1 in progress")
+	require.Contains(t, stderr, "✓ plan  3 items · 1 completed, 1 in progress")
 	require.Empty(t, m.Output)
 	require.Nil(t, m.displayBlocks)
 }
@@ -155,7 +155,7 @@ func TestTodoWriteFailureAndBadArgsFallBackToStatusLine(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("todo_write", todoWriteArgs(), errors.New("boom")))
 		})
-		require.Contains(t, stderr, "✗ todo_write")
+		require.Contains(t, stderr, "✗ plan")
 		require.Empty(t, m.Output)
 	})
 
@@ -164,7 +164,7 @@ func TestTodoWriteFailureAndBadArgsFallBackToStatusLine(t *testing.T) {
 		stderr := captureStderr(t, func() {
 			require.Nil(t, m.toolResultOutputCmd("todo_write", []byte(`nope`), nil))
 		})
-		require.Contains(t, stderr, "✓ todo_write")
+		require.Contains(t, stderr, "✓ plan")
 		require.Empty(t, m.Output)
 	})
 }

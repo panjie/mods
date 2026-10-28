@@ -25,10 +25,10 @@ func shellProgressStatus(tool, command string, lastOutput string, width int) str
 	}
 	status := prefix
 	if command := ShellCommandPreview(redactRemoteURLsForDisplay(command)); command != "" {
-		status += " - " + command
+		status += "  " + command
 	}
 	if output := shellProgressOutputPreview(lastOutput); output != "" {
-		status += " - last: " + output
+		status += "  · last: " + output
 	}
 	return TruncateOperationStatus(status, width)
 }
@@ -40,11 +40,11 @@ func toolCompletionStatus(tool string, data []byte, err error, width int) string
 func shellStatusPrefix(tool string) string {
 	switch tool {
 	case "shell_run":
-		return "Shell"
+		return "shell"
 	case "powershell_run":
-		return "PS"
+		return "powershell"
 	case "process_run":
-		return "Process"
+		return "process"
 	default:
 		return ""
 	}

@@ -47,11 +47,11 @@ func isCommandReview(name string) bool {
 }
 
 func (r *toolReviewer) renderPagedReview(width, height int, styles ui.InteractionStyles) string {
+	if isCommandReview(r.reviewItem.name) {
+		return r.renderCommandReview(width, height, styles)
+	}
 	p := r.reviewItem.presentation
 	title := "Review"
-	if isCommandReview(r.reviewItem.name) {
-		title = "Run command?"
-	}
 	if (width < 40 || height < 16) && r.reviewItem.name == "http_download" {
 		r.reviewPages = 0
 		return renderInteractionPanel(styles, width, interactionPanel{Title: "Review", Headline: "Enlarge terminal to review all content (40 columns × 16 rows).", Actions: r.reviewActions()})
@@ -110,4 +110,162 @@ func (r *toolReviewer) renderPagedReview(width, height int, styles ui.Interactio
 		Tone: p.tone, ToneText: p.toneText, Headline: p.headline,
 		Body: body, Actions: actions,
 	})
+}
+
+// renderCommandReview presents a command approval as a short sheet: why the
+// command runs, where it runs, the complete command, and an unambiguous choice
+// menu. The command body pages independently while the choices stay pinned.
+func (r *toolReviewer) renderCommandReview(width, height int, styles ui.InteractionStyles) string {
+	p := r.reviewItem.presentation
+	inner := max(1, interactionPanelInnerWidth(styles, width))
+	body := commandReviewBody(styles, inner, reviewOrderedRows(p.rows))
+	choices := r.reviewActions()
+	// The choice keys are direct (Y/N/A), so the only fixed footer is the page
+	// control on multi-page commands. The selection hint lives in the title
+	// meta where it costs no vertical space. Recompute twice so the page
+	// counter and page control participate in the height budget.
+	chooseHint := "←/→ choose"
+	if width < 40 {
+		chooseHint = "←/→"
+	}
+	var navigation []interactionAction
+	pages, pageSize := 0, 1
+	for range 3 {
+		if pages > 1 {
+			navigation = []interactionAction{{Key: "↑/↓", Label: "pages"}}
+		} else {
+			navigation = nil
+		}
+		meta := chooseHint
+		if pages > 1 {
+			meta = fmt.Sprintf("%d/%d · %s", pages, pages, chooseHint)
+		}
+		overhead := lipgloss.Height(renderInteractionPanel(styles, width, interactionPanel{
+			Title: "Run command?", Meta: meta, Tone: p.tone, Choices: choices, StackChoices: true, Actions: navigation,
+		}))
+		pageSize = max(1, height-overhead)
+		next := max(1, (len(body)+pageSize-1)/pageSize)
+		if next == pages {
+			break
+		}
+		pages = next
+	}
+	if pages > 1 {
+		navigation = []interactionAction{{Key: "↑/↓", Label: "pages"}}
+	} else {
+		navigation = nil
+	}
+	layout := fmt.Sprintf("command/%d/%d/%d", width, height, len(body))
+	if r.reviewLayout != layout {
+		r.reviewPage = 0
+		r.reviewLayout = layout
+	}
+	r.reviewPages = pages
+	r.reviewPage = min(r.reviewPage, pages-1)
+	start := min(len(body), r.reviewPage*pageSize)
+	end := min(len(body), start+pageSize)
+	meta := chooseHint
+	if pages > 1 {
+		meta = fmt.Sprintf("%d/%d · %s", r.reviewPage+1, pages, chooseHint)
+	}
+	return renderInteractionPanel(styles, width, interactionPanel{
+		Title: "Run command?", Meta: meta,
+		Tone: p.tone, Body: body[start:end],
+		Choices: choices, StackChoices: true, Actions: navigation,
+	})
+}
+
+func commandReviewBody(styles ui.InteractionStyles, width int, rows []interactionRow) []string {
+	var lines []string
+	for _, row := range rows {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		value := reviewLiteral(row.Value)
+		if row.Label == "Command" {
+			lines = append(lines, styles.Label.Render("Command:"))
+			lines = append(lines, commandSourceLines(styles, width, value)...)
+			continue
+		}
+		label := row.Label + ":"
+		style := styles.Body
+		if row.Label == "Working dir" {
+			style = styles.Code
+		}
+		lines = append(lines, reviewLabeledValue(styles, width, label, style, value)...)
+	}
+	return lines
+}
+
+// reviewLabeledValue keeps the label and the first value line together so
+// scans such as "Purpose: ..." remain readable, while continuation lines align
+// under the value column.
+func reviewLabeledValue(styles ui.InteractionStyles, width int, label string, style lipgloss.Style, value string) []string {
+	indent := lipgloss.Width(label) + 1
+	available := max(1, width-indent)
+	physical := strings.Split(value, "\n")
+	var lines []string
+	for _, part := range physical {
+		wrapped := strings.Split(ansi.Wrap(part, available, ""), "\n")
+		for i, line := range wrapped {
+			if len(lines) == 0 && i == 0 {
+				lines = append(lines, styles.Label.Render(label)+" "+style.Render(line))
+				continue
+			}
+			lines = append(lines, strings.Repeat(" ", indent)+style.Render(line))
+		}
+	}
+	if len(lines) == 0 {
+		lines = append(lines, styles.Label.Render(label)+" ")
+	}
+	return lines
+}
+
+func commandSourceLines(styles ui.InteractionStyles, width int, source string) []string {
+	source = strings.ReplaceAll(source, "\r\n", "\n")
+	var lines []string
+	for _, line := range strings.Split(source, "\n") {
+		number, code, numbered := strings.Cut(line, " | ")
+		if !numbered || !isReviewLineNumber(number) {
+			for _, part := range wrapCommandSource(line, width, 2) {
+				lines = append(lines, styles.Code.Render(part))
+			}
+			continue
+		}
+		prefixWidth := 2 + lipgloss.Width(number) + 3
+		wrapped := wrapCommandSource(code, width, prefixWidth)
+		for i, part := range wrapped {
+			if i == 0 {
+				lines = append(lines, "  "+styles.Muted.Render(number)+" "+styles.Rule.Render("│")+" "+styles.Code.Render(strings.TrimPrefix(part, strings.Repeat(" ", prefixWidth))))
+				continue
+			}
+			lines = append(lines, styles.Code.Render(part))
+		}
+	}
+	return lines
+}
+
+// wrapCommandSource wraps a command line and styles each physical line. Plain
+// lines receive the indent as part of their rendered prefix; numbered lines
+// pass their own gutter width so continuations stay under the code column.
+func wrapCommandSource(code string, width, indent int) []string {
+	available := max(1, width-indent)
+	wrapped := strings.Split(ansi.Wrap(code, available, ""), "\n")
+	lines := make([]string, 0, len(wrapped))
+	for _, part := range wrapped {
+		lines = append(lines, strings.Repeat(" ", indent)+part)
+	}
+	return lines
+}
+
+func isReviewLineNumber(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

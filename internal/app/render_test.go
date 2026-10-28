@@ -448,12 +448,12 @@ func TestToolResultDisplayLineUsesSharedThemeStyles(t *testing.T) {
 			styles := ui.MakeStylesWithTheme(theme, true)
 			m := &Mods{Styles: styles}
 
-			success := m.toolResultDisplayLine("✓ fs_read_file: path=mods.go")
+			success := m.toolResultDisplayLine("✓ read  mods.go")
 			require.Equal(t,
-				styles.Comment.Render("  │ ")+styles.Interaction.Success.Render("✓")+styles.Comment.Render(" fs_read_file: path=mods.go"),
+				styles.Comment.Render("  │ ")+styles.Interaction.Success.Render("✓")+styles.Comment.Render(" read  mods.go"),
 				success,
 			)
-			require.Equal(t, "  │ ✓ fs_read_file: path=mods.go", ansi.Strip(success))
+			require.Equal(t, "  │ ✓ read  mods.go", ansi.Strip(success))
 
 			failure := m.toolResultDisplayLine("✗ fs_delete_file: path=mods.go · failed")
 			require.Equal(t,
@@ -472,12 +472,12 @@ func TestToolResultDisplayLineNerdGlyphs(t *testing.T) {
 	cfg.NerdFontGlyphs = true
 	m := &Mods{Styles: styles, Config: cfg}
 
-	success := m.toolResultDisplayLine("✓ fs_read_file: path=mods.go")
+	success := m.toolResultDisplayLine("✓ read  mods.go")
 	require.Equal(t,
-		styles.Comment.Render("  │ ")+styles.Interaction.Success.Render(ui.NerdMark)+styles.Comment.Render(" fs_read_file: path=mods.go"),
+		styles.Comment.Render("  │ ")+styles.Interaction.Success.Render(ui.NerdMark)+styles.Comment.Render(" read  mods.go"),
 		success,
 	)
-	require.Equal(t, "  │ "+ui.NerdMark+" fs_read_file: path=mods.go", ansi.Strip(success))
+	require.Equal(t, "  │ "+ui.NerdMark+" read  mods.go", ansi.Strip(success))
 
 	failure := m.toolResultDisplayLine("✗ fs_delete_file: path=mods.go · failed")
 	require.Equal(t,
@@ -516,8 +516,8 @@ func TestToolResultTTYAppendsInlineDisplayBlockWithoutMutatingResponse(t *testin
 	status := ToolResultStatus("shell_run", data, nil, m.toolResultStatusWidth())
 	activityLine := m.toolResultDisplayLine(status)
 	require.Equal(t, activityLine, m.displayBlocks["MODS_DISPLAY_BLOCK_1"])
-	require.Contains(t, ansi.Strip(activityLine), "  │ ✓ shell_run:")
-	require.Contains(t, ansi.Strip(activityLine), " · exit 0")
+	require.Contains(t, ansi.Strip(activityLine), "  │ ✓ shell  ")
+	require.Contains(t, ansi.Strip(activityLine), "  · exit 0")
 	require.LessOrEqual(t, lipgloss.Width(activityLine), 52)
 	require.Contains(t, activityLine, m.Styles.Comment.Render("  │ "))
 	require.Contains(t, activityLine, m.Styles.Interaction.Success.Render("✓"))
@@ -570,7 +570,7 @@ func TestToolResultInlineBetweenTextRounds(t *testing.T) {
 	// same thing View does on its next pass).
 	m.flushRender()
 	plain := ansi.Strip(m.glamOutput)
-	railIdx := strings.Index(plain, "  │ ✓ fs_read_file: path=mods.go")
+	railIdx := strings.Index(plain, "  │ ✓ read  mods.go")
 	introIdx = strings.Index(plain, "intro text")
 	closingIdx = strings.Index(plain, "closing text")
 	require.GreaterOrEqual(t, railIdx, 0)
@@ -735,7 +735,7 @@ func TestToolResultKeepsJSONStdoutValid(t *testing.T) {
 	stdout := captureStdout(t, func() { _ = m.View() })
 
 	require.JSONEq(t, `{"ok":true}`, stdout)
-	require.Contains(t, stderr, "✓ fs_read_file: path=mods.go")
+	require.Contains(t, stderr, "✓ read  mods.go")
 	require.Equal(t, `{"ok":true}`, m.Output)
 	require.Empty(t, m.RenderedOutput())
 }

@@ -16,7 +16,7 @@ import (
 
 const (
 	chatDefaultWidth = 80
-	chatMinHeight    = 3
+	chatMinHeight    = 1
 	chatMaxHeight    = 8
 	chatMaxWidth     = 96
 )
@@ -67,14 +67,35 @@ func renderChatBanner(width int) string {
 		}
 		meta += role
 	}
-	title := styles.interaction.Title.Render("mods")
+	lines := []string{styles.interaction.Info.Render("◆") + " " + styles.interaction.Title.Render("mods chat")}
 	if meta != "" {
-		if lipgloss.Width(title)+3+lipgloss.Width(meta) > width {
-			return title + "\n" + ansi.Wrap(styles.interaction.Meta.Render(meta), width, "")
-		}
-		title += styles.interaction.Meta.Render(" · " + meta)
+		lines = append(lines, ansi.Wrap(styles.interaction.Meta.Render(meta), width, ""))
 	}
-	return ansi.Wrap(title, width, "")
+	if cwd := chatWorkingDir(); cwd != "" {
+		lines = append(lines, ansi.Wrap(styles.interaction.Muted.Render(cwd), width, ""))
+	}
+	lines = append(lines, styles.interaction.Rule.Render(strings.Repeat("─", width)))
+	return strings.Join(lines, "\n")
+}
+
+// chatWorkingDir shows the resolved context once at startup. The home
+// directory collapses to "~" so the banner stays short on deep paths.
+func chatWorkingDir() string {
+	dir := strings.TrimSpace(config.ResolveWorkingDir().Canonical)
+	if dir == "" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return dir
+	}
+	if dir == home {
+		return "~"
+	}
+	if strings.HasPrefix(dir, home+string(os.PathSeparator)) {
+		return "~" + strings.TrimPrefix(dir, home)
+	}
+	return dir
 }
 
 func normalizedChatWidth(width int) int {
@@ -95,7 +116,7 @@ func renderChatUser(prompt string) {
 	width := normalizedChatWidth(chatTerminalWidth())
 	bodyWidth := max(1, width-styles.userRail.GetHorizontalFrameSize())
 	body := styles.userRail.Render(ansi.Hardwrap(prompt, bodyWidth, false))
-	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Info.Render("You")+"\n"+body)
+	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Info.Bold(true).Render("You")+"\n"+body)
 }
 
 func renderChatAssistant() {
@@ -103,7 +124,7 @@ func renderChatAssistant() {
 		return
 	}
 	styles := makeChatStyles()
-	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Title.Render("mods"))
+	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Info.Render("◆")+" "+styles.interaction.Title.Render("mods"))
 }
 
 func renderChatSaved(id string) {
@@ -115,7 +136,7 @@ func renderChatSaved(id string) {
 	if config.NerdFontGlyphs {
 		marker = ui.NerdMark
 	}
-	_, _ = lipgloss.Fprintln(chatOutput, styles.interaction.Meta.Render(marker+" Saved")+"  "+styles.interaction.Meta.Render(id[:ShortIDLength]))
+	_, _ = lipgloss.Fprintln(chatOutput, styles.interaction.Meta.Render(marker+" Saved")+"  · "+styles.interaction.Meta.Render(id[:ShortIDLength]))
 }
 
 type chatPromptModel struct {
@@ -324,12 +345,12 @@ func (m chatPromptModel) View() tea.View {
 	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	body := m.textarea.View()
 	actions := []ui.InteractionAction{
-		{Key: "Enter", Label: "New line"},
 		{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
+		{Key: "Enter", Label: "New line"},
 		{Key: "Ctrl+C", Label: "Exit"},
 	}
 	if len(m.history) > 0 {
-		actions = append([]ui.InteractionAction{{Key: "Up/Down", Label: "History"}}, actions...)
+		actions = append(actions, ui.InteractionAction{Key: "Up/Down", Label: "History"})
 	}
 	panel := ui.RenderInteractionPanelView(styles.interaction, m.width, ui.InteractionPanel{
 		Title:   "Message",

@@ -490,7 +490,8 @@ func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
 
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 120, Height: 20})
-	require.Equal(t, chatMinHeight, model.textarea.Height())
+	// The pasted text still spans three visual lines at this reading width.
+	require.Equal(t, 3, model.textarea.Height())
 
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
@@ -682,4 +683,18 @@ func TestRenderChatSavedNerdGlyphs(t *testing.T) {
 	got := ansi.Strip(chatOutput.(*bytes.Buffer).String())
 	require.Contains(t, got, ui.NerdMark+" Saved")
 	require.NotContains(t, got, "✓")
+}
+
+func TestChatBannerShowsBrandAndRule(t *testing.T) {
+	saveConfig := config
+	t.Cleanup(func() { config = saveConfig })
+	config.API = "openai"
+	config.Model = "gpt-5"
+	config.Role = "reviewer"
+
+	rendered := ansi.Strip(renderChatBanner(80))
+	require.Contains(t, rendered, "◆ mods chat")
+	require.Contains(t, rendered, "openai / gpt-5")
+	require.Contains(t, rendered, "─")
+	require.NotContains(t, rendered, "Ctrl+Enter")
 }

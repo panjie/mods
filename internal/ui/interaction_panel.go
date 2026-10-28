@@ -23,10 +23,26 @@ type InteractionRow struct {
 	Value string
 }
 
+// InteractionGroup renders a titled set of related rows. Use it for summaries
+// and other reference panels where label/value columns should align.
+type InteractionGroup struct {
+	Title string
+	Rows  []InteractionRow
+}
+
+// InteractionProgress renders a slim, full-width progress bar. Current is
+// 1-based and clamped to Total.
+type InteractionProgress struct {
+	Current int
+	Total   int
+}
+
 type InteractionAction struct {
-	Key      string
-	Label    string
-	Selected bool
+	Key   string
+	Label string
+	// Description is optional supporting text for stacked choices.
+	Description string
+	Selected    bool
 }
 
 type InteractionPanel struct {
@@ -35,6 +51,8 @@ type InteractionPanel struct {
 	Tone     InteractionTone
 	ToneText string
 	Headline string
+	// Progress draws a thin progress bar below the title.
+	Progress InteractionProgress
 	Rows     []InteractionRow
 	Body     []string
 	Choices  []InteractionAction
@@ -58,6 +76,9 @@ func RenderInteractionPanelView(styles InteractionStyles, width int, panel Inter
 	panelStyle := styles.Panel.BorderForeground(interactionToneColor(styles, panel.Tone))
 	innerWidth := max(1, width-panelStyle.GetHorizontalFrameSize())
 	lines := []string{renderInteractionTitle(styles, innerWidth, panel.Tone, panel.Title, panel.Meta)}
+	if panel.Progress.Total > 0 {
+		lines = append(lines, renderInteractionProgress(styles, innerWidth, panel.Progress))
+	}
 	var cursor *tea.Cursor
 	if panel.Headline != "" || panel.ToneText != "" {
 		lines = append(lines, renderInteractionHeadline(styles, innerWidth, panel.Tone, panel.ToneText, panel.Headline)...)
@@ -100,6 +121,38 @@ func InteractionPanelInnerWidth(styles InteractionStyles, width int) int {
 	return max(1, width-styles.Panel.GetHorizontalFrameSize())
 }
 
+// RenderInteractionGroups renders grouped rows as standalone lines. Callers
+// use it when grouped content must participate in their own scrolling layout
+// instead of being pinned below a panel body.
+func RenderInteractionGroups(styles InteractionStyles, width int, groups []InteractionGroup) []string {
+	labelWidth := interactionGroupLabelWidth(groups, width)
+	var lines []string
+	for i, group := range groups {
+		if i > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, styles.Section.Render(group.Title))
+		for _, row := range group.Rows {
+			lines = append(lines, renderInteractionRowWidth(styles, width, row, labelWidth)...)
+		}
+	}
+	return lines
+}
+
+// interactionGroupLabelWidth sizes one label column for every group so values
+// line up across the whole summary, not just within a section. It never
+// starves the value column on narrow terminals.
+func interactionGroupLabelWidth(groups []InteractionGroup, width int) int {
+	labelWidth := 0
+	for _, group := range groups {
+		for _, row := range group.Rows {
+			labelWidth = max(labelWidth, lipgloss.Width(row.Label))
+		}
+	}
+	labelWidth = max(labelWidth, 12)
+	return min(labelWidth, max(1, width-8))
+}
+
 func renderInteractionTitle(styles InteractionStyles, width int, tone InteractionTone, title, meta string) string {
 	titleStyle := styles.Title
 	if tone == InteractionToneSuccess {
@@ -117,6 +170,22 @@ func renderInteractionTitle(styles InteractionStyles, width int, tone Interactio
 	return left + strings.Repeat(" ", spaces) + right
 }
 
+// renderInteractionProgress keeps the bar exactly the inner width so the
+// panel's right edge stays aligned with the title and footer.
+func renderInteractionProgress(styles InteractionStyles, width int, progress InteractionProgress) string {
+	if progress.Total <= 0 || width <= 0 {
+		return ""
+	}
+	current := min(max(1, progress.Current), progress.Total)
+	filled := (width*current + progress.Total/2) / progress.Total
+	filled = min(max(0, filled), width)
+	bar := styles.Info.Render(strings.Repeat("━", filled))
+	if filled < width {
+		bar += styles.Rule.Render(strings.Repeat("─", width-filled))
+	}
+	return bar
+}
+
 func renderInteractionHeadline(styles InteractionStyles, width int, tone InteractionTone, toneText, headline string) []string {
 	var prefix string
 	if toneText != "" {
@@ -131,8 +200,17 @@ func renderInteractionHeadline(styles InteractionStyles, width int, tone Interac
 }
 
 func renderInteractionRow(styles InteractionStyles, width int, row InteractionRow) []string {
-	const preferredLabelWidth = 9
-	labelWidth := min(preferredLabelWidth, max(1, width/3))
+	// Twelve cells fit the labels used by approval panels ("Working dir" is the
+	// longest) so values align without truncating a security-relevant label.
+	const preferredLabelWidth = 12
+	labelWidth := preferredLabelWidth
+	if width < 30 {
+		labelWidth = min(preferredLabelWidth, max(1, width/3))
+	}
+	return renderInteractionRowWidth(styles, width, row, labelWidth)
+}
+
+func renderInteractionRowWidth(styles InteractionStyles, width int, row InteractionRow, labelWidth int) []string {
 	valueWidth := max(1, width-labelWidth-1)
 	valueLines := strings.Split(ansi.Hardwrap(row.Value, valueWidth, false), "\n")
 	lines := make([]string, 0, len(valueLines))
@@ -151,11 +229,12 @@ func renderInteractionRow(styles InteractionStyles, width int, row InteractionRo
 func packInteractionActions(styles InteractionStyles, width int, actions []InteractionAction) []string {
 	var lines []string
 	current := ""
+	const separator = "  · "
 	for _, action := range actions {
 		part := renderInteractionAction(styles, action)
 		candidate := part
 		if current != "" {
-			candidate = current + "  " + part
+			candidate = current + styles.Muted.Render(separator) + part
 		}
 		if current != "" && lipgloss.Width(candidate) > width {
 			lines = append(lines, current)
@@ -187,28 +266,59 @@ func renderInteractionAction(styles InteractionStyles, action InteractionAction)
 // first-line offset produced by the styled key (or the selected highlight).
 func renderStackedInteractionAction(styles InteractionStyles, width int, action InteractionAction) []string {
 	keyWidth := lipgloss.Width(styles.Key.Render(action.Key))
-	labelWidth := max(1, width-keyWidth-1)
+	// Keep a cursor column so selection does not depend on color alone.
+	cursor := " "
+	if action.Selected {
+		cursor = styles.Cursor.Render("❯")
+	}
+	cursorWidth := lipgloss.Width(cursor)
+	labelWidth := max(1, width-cursorWidth-keyWidth-1)
 	labelLines := strings.Split(ansi.Hardwrap(action.Label, labelWidth, false), "\n")
 	lines := make([]string, 0, len(labelLines))
 	if action.Selected {
 		for i, label := range labelLines {
 			if i == 0 {
-				lines = append(lines, styles.Selected.Render(strings.TrimSpace(action.Key+" "+label)))
+				lines = append(lines, cursor+styles.Selected.Render(strings.TrimSpace(action.Key+" "+label)))
 			} else {
-				lines = append(lines, styles.Selected.Render(strings.Repeat(" ", max(0, keyWidth-1))+label))
+				lines = append(lines, strings.Repeat(" ", cursorWidth)+styles.Selected.Render(strings.Repeat(" ", max(0, keyWidth-1))+label))
+			}
+		}
+		if len(labelLines) == 1 {
+			if description := fittedActionDescription(styles, width, lines[0], action.Description); description != "" {
+				lines[0] += "  " + styles.Muted.Render(description)
 			}
 		}
 		return lines
 	}
-	indent := strings.Repeat(" ", keyWidth)
+	indent := strings.Repeat(" ", cursorWidth+keyWidth)
 	for i, label := range labelLines {
 		if i == 0 {
-			lines = append(lines, styles.Key.Render(action.Key)+styles.Action.Render(label))
+			lines = append(lines, cursor+styles.Key.Render(action.Key)+styles.Action.Render(label))
 		} else {
 			lines = append(lines, indent+styles.Action.Render(label))
 		}
 	}
+	if len(labelLines) == 1 {
+		if description := fittedActionDescription(styles, width, lines[0], action.Description); description != "" {
+			lines[0] += "  " + styles.Muted.Render(description)
+		}
+	}
 	return lines
+}
+
+// fittedActionDescription returns the longest usable description that fits
+// after a one-line choice, or "" when the terminal is too narrow to keep the
+// row readable. Hiding descriptions is preferable to wrapping a menu into an
+// unpredictable height.
+func fittedActionDescription(styles InteractionStyles, width int, rendered, description string) string {
+	if description == "" {
+		return ""
+	}
+	remaining := width - lipgloss.Width(rendered) - 2
+	if remaining < 10 {
+		return ""
+	}
+	return ansi.Truncate(description, remaining, "…")
 }
 
 func interactionToneStyle(styles InteractionStyles, tone InteractionTone) lipgloss.Style {

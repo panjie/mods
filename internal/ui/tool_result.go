@@ -3,7 +3,6 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -16,90 +15,147 @@ type exitCoder interface {
 
 // ToolResultStatus returns the unstyled one-line status text used by the live
 // operation footer. It starts with a success/failure marker so callers can
-// apply styling uniformly.
+// apply styling uniformly, then names the action and its most useful target.
 func ToolResultStatus(name string, data []byte, err error, width int) string {
 	if name == "" {
 		return ""
 	}
-	prefix := "\u2713 " + name
+	marker := "\u2713"
 	if err != nil {
-		prefix = "\u2717 " + name
+		marker = "\u2717"
 	}
+	prefix := marker + " " + ToolDisplayName(name)
 	summary := toolResultSummary(name, data)
-	if summary != "" {
-		prefix += ": "
-	}
 	suffix := ""
 	detail := ""
 	if err == nil {
 		if isShellTool(name) {
-			suffix = " \u00b7 exit 0"
+			suffix = "exit 0"
 		}
-		return toolStatusLine(prefix, summary, suffix, detail, width)
+	} else {
+		var ec exitCoder
+		if errors.As(err, &ec) {
+			suffix = fmt.Sprintf("exit %d", ec.ExitCode())
+		} else {
+			detail = OneLinePreview(err.Error())
+		}
 	}
-	var ec exitCoder
-	if errors.As(err, &ec) {
-		suffix = fmt.Sprintf(" \u00b7 exit %d", ec.ExitCode())
-		return toolStatusLine(prefix, summary, suffix, detail, width)
-	}
-	suffix = " \u00b7 failed"
-	detail = OneLinePreview(err.Error())
 	return toolStatusLine(prefix, summary, suffix, detail, width)
 }
 
-func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
-	if detail != "" {
-		return toolStatusLineWithDetail(prefix, summary, suffix, detail, width)
-	}
-	if summary == "" {
-		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
-	}
-	available := width - displayWidth(prefix) - displayWidth(suffix)
-	if available <= 0 {
-		return TruncateOperationStatus(strings.TrimSuffix(prefix, ": ")+suffix, width)
-	}
-	return prefix + TruncateOperationStatus(summary, available) + suffix
-}
+const toolStatusSeparator = "  \u00b7 "
 
-// toolStatusLineWithDetail renders a line that carries an error detail. The
-// failure reason outranks the argument summary: the summary shrinks first,
-// is dropped next, and only then is the detail itself truncated so the
-// reason behind a failure is never hidden by a long argument preview.
-func toolStatusLineWithDetail(prefix, summary, suffix, detail string, width int) string {
-	fullSuffix := suffix + ": " + detail
-	if available := width - displayWidth(prefix) - displayWidth(fullSuffix); summary != "" && available >= minToolSummaryWidth {
-		return prefix + TruncateOperationStatus(summary, available) + fullSuffix
+func toolStatusLine(prefix, summary, suffix, detail string, width int) string {
+	tail := suffix
+	if detail != "" {
+		if tail != "" {
+			tail += toolStatusSeparator + detail
+		} else {
+			tail = detail
+		}
 	}
-	base := strings.TrimSuffix(prefix, ": ")
-	if displayWidth(base)+displayWidth(fullSuffix) <= width {
-		return base + fullSuffix
+	full := prefix
+	if summary != "" {
+		full += "  " + summary
 	}
-	detailWidth := width - displayWidth(base) - displayWidth(suffix) - displayWidth(": ")
-	if detailWidth < 1 {
-		return TruncateOperationStatus(base+fullSuffix, width)
+	if tail != "" {
+		full += toolStatusSeparator + tail
 	}
-	return base + suffix + ": " + TruncateOperationStatus(detail, detailWidth)
+	if width <= 0 || displayWidth(full) <= width {
+		return full
+	}
+	// Shrink the argument summary first; the exit status and failure reason
+	// carry the information users need after a call completes.
+	if summary != "" {
+		if tail == "" {
+			if available := width - displayWidth(prefix) - len("  "); available > 0 {
+				return prefix + "  " + TruncateOperationStatus(summary, available)
+			}
+		} else {
+			available := width - displayWidth(prefix) - len("  ") - displayWidth(toolStatusSeparator) - displayWidth(tail)
+			if available >= minToolSummaryWidth {
+				return prefix + "  " + TruncateOperationStatus(summary, available) + toolStatusSeparator + tail
+			}
+		}
+	}
+	if detail != "" {
+		base := prefix
+		if suffix != "" {
+			base += toolStatusSeparator + suffix
+		}
+		fullDetail := base + toolStatusSeparator + detail
+		if displayWidth(fullDetail) <= width {
+			return fullDetail
+		}
+		if available := width - displayWidth(base) - displayWidth(toolStatusSeparator); available > 0 {
+			return base + toolStatusSeparator + TruncateOperationStatus(detail, available)
+		}
+	}
+	if tail != "" {
+		if available := width - displayWidth(prefix) - displayWidth(toolStatusSeparator); available > 0 {
+			return prefix + toolStatusSeparator + TruncateOperationStatus(tail, available)
+		}
+	}
+	return TruncateOperationStatus(full, width)
 }
 
 const minToolSummaryWidth = 12
 
 func toolResultSummary(name string, data []byte) string {
-	if name == "todo_write" {
+	args := ToolOperationArgs(data)
+	switch name {
+	case "todo_write":
 		if summary := TodoSummary(data); summary != "" {
 			return summary
 		}
-	}
-	args := ToolOperationArgs(data)
-	if name == "request_user_input" {
-		if question := OneLinePreview(ArgString(args, "question")); question != "" {
-			return question
-		}
-	}
-	if name == "process_run" {
+	case "request_user_input":
+		return OneLinePreview(ArgString(args, "question"))
+	case "process_run":
 		return ProcessCommandPreview(args)
-	}
-	if isShellTool(name) {
+	case "shell_run", "powershell_run":
 		return ShellCommandPreview(ArgString(args, "command"))
+	case "web_search":
+		return OneLinePreview(ArgString(args, "query"))
+	case "load_skill":
+		skillName := OneLinePreview(ArgString(args, "name"))
+		if file := OneLinePreview(ArgString(args, "file")); file != "" {
+			if skillName != "" {
+				return skillName + "  (" + file + ")"
+			}
+			return file
+		}
+		return skillName
+	case "fs_apply_patch":
+		return ""
+	case "fs_read_file", "fs_write_file", "fs_replace", "fs_delete_file", "fs_delete_dir", "fs_mkdir", "fs_list_dir", "fs_stat":
+		return OneLinePreview(ArgString(args, "path"))
+	case "fs_search":
+		query := OneLinePreview(ArgString(args, "query"))
+		path := OneLinePreview(ArgString(args, "path"))
+		switch {
+		case query != "" && path != "":
+			return query + " in " + path
+		case query != "":
+			return query
+		case path != "":
+			return "in " + path
+		}
+	case "fs_largest":
+		path := OneLinePreview(ArgString(args, "path"))
+		kind := OneLinePreview(ArgString(args, "kind"))
+		if kind == "" {
+			kind = "files"
+		}
+		if path != "" {
+			return kind + " in " + path
+		}
+		return kind
+	case "fs_copy", "fs_move":
+		source := OneLinePreview(ArgString(args, "source_path"))
+		dest := OneLinePreview(ArgString(args, "dest_path"))
+		if source != "" && dest != "" {
+			return source + " \u2192 " + dest
+		}
 	}
 	return ToolArgsSummary(args)
 }

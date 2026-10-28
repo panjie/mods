@@ -51,10 +51,21 @@ type InteractionStyles struct {
 	Key      lipgloss.Style
 	Action   lipgloss.Style
 	Selected lipgloss.Style
-	Danger   lipgloss.Style
-	Warning  lipgloss.Style
-	Info     lipgloss.Style
-	Success  lipgloss.Style
+	// Cursor marks the focused row without painting a full-width block.
+	Cursor lipgloss.Style
+	// Section labels a group of related rows.
+	Section lipgloss.Style
+	// Rule draws quiet separators and rails.
+	Rule lipgloss.Style
+	// Code renders command or patch text.
+	Code lipgloss.Style
+	// Option and OptionActive render selectable rows.
+	Option       lipgloss.Style
+	OptionActive lipgloss.Style
+	Danger       lipgloss.Style
+	Warning      lipgloss.Style
+	Info         lipgloss.Style
+	Success      lipgloss.Style
 }
 
 func MakeStyles(isDark bool) (s Styles) {
@@ -145,19 +156,25 @@ func makeInteractionStyles(p InteractionPalette) InteractionStyles {
 			BorderLeft(true).
 			BorderForeground(p.Accent).
 			PaddingLeft(1),
-		Title:    lipgloss.NewStyle().Bold(true),
-		Meta:     lipgloss.NewStyle().Foreground(p.Muted),
-		Body:     lipgloss.NewStyle(),
-		Label:    lipgloss.NewStyle().Foreground(p.Muted),
-		Muted:    lipgloss.NewStyle().Foreground(p.Muted),
-		Input:    lipgloss.NewStyle().Padding(0, 1),
-		Key:      lipgloss.NewStyle().Bold(true).Padding(0, 1),
-		Action:   lipgloss.NewStyle().Foreground(p.Muted),
-		Selected: lipgloss.NewStyle().Foreground(contrastForeground(p.Accent)).Background(p.Accent).Bold(true).Padding(0, 1),
-		Danger:   lipgloss.NewStyle().Foreground(p.Danger).Bold(true),
-		Warning:  lipgloss.NewStyle().Foreground(p.Warning),
-		Info:     lipgloss.NewStyle().Foreground(p.Accent),
-		Success:  lipgloss.NewStyle().Foreground(p.Success),
+		Title:        lipgloss.NewStyle().Bold(true),
+		Meta:         lipgloss.NewStyle().Foreground(p.Muted),
+		Body:         lipgloss.NewStyle(),
+		Label:        lipgloss.NewStyle().Foreground(p.Muted),
+		Muted:        lipgloss.NewStyle().Foreground(p.Muted),
+		Input:        lipgloss.NewStyle().Padding(0, 1),
+		Key:          lipgloss.NewStyle().Bold(true).Padding(0, 1),
+		Action:       lipgloss.NewStyle().Foreground(p.Muted),
+		Selected:     lipgloss.NewStyle().Foreground(contrastForeground(p.Accent)).Background(p.Accent).Bold(true).Padding(0, 1),
+		Cursor:       lipgloss.NewStyle().Foreground(p.Accent).Bold(true),
+		Section:      lipgloss.NewStyle().Foreground(p.Muted).Bold(true),
+		Rule:         lipgloss.NewStyle().Foreground(p.Muted),
+		Code:         lipgloss.NewStyle().Foreground(p.Text),
+		Option:       lipgloss.NewStyle().Foreground(p.Text),
+		OptionActive: lipgloss.NewStyle().Foreground(p.Accent).Bold(true),
+		Danger:       lipgloss.NewStyle().Foreground(p.Danger).Bold(true),
+		Warning:      lipgloss.NewStyle().Foreground(p.Warning),
+		Info:         lipgloss.NewStyle().Foreground(p.Accent),
+		Success:      lipgloss.NewStyle().Foreground(p.Success),
 	}
 }
 

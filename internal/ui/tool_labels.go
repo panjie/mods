@@ -17,55 +17,113 @@ func IncreaseIndent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
+// ToolDisplayName returns the short, human-facing name used by status lines
+// and live activity labels. Unknown tools fall back to their protocol name.
+func ToolDisplayName(name string) string {
+	switch name {
+	case "shell_run":
+		return "shell"
+	case "powershell_run":
+		return "powershell"
+	case "process_run":
+		return "process"
+	case "web_search":
+		return "search web"
+	case "fs_read_file":
+		return "read"
+	case "fs_write_file":
+		return "write"
+	case "fs_replace":
+		return "replace"
+	case "fs_list_dir":
+		return "list"
+	case "fs_stat":
+		return "stat"
+	case "fs_search":
+		return "search"
+	case "fs_largest":
+		return "largest"
+	case "fs_delete_file":
+		return "delete"
+	case "fs_delete_dir":
+		return "delete dir"
+	case "fs_mkdir":
+		return "mkdir"
+	case "fs_copy":
+		return "copy"
+	case "fs_move":
+		return "move"
+	case "fs_apply_patch":
+		return "apply patch"
+	case "fs_find_images", "fs_read_images":
+		return "images"
+	case "fs_find_media", "fs_read_media":
+		return "media"
+	case "http_download":
+		return "download"
+	case "todo_write":
+		return "plan"
+	case "request_user_input":
+		return "ask"
+	case "load_skill":
+		return "skill"
+	default:
+		return name
+	}
+}
+
+// ToolOperationLabel renders the live "running" label. It favors a short verb
+// plus the most meaningful argument so the footer reads like a status line,
+// not a protocol dump.
 func ToolOperationLabel(name string, data []byte, width int) string {
 	args := ToolOperationArgs(data)
 	switch name {
 	case "web_search":
 		if query := OneLinePreview(ArgString(args, "query")); query != "" {
-			return TruncateOperationStatus("Searching web: "+query, width)
+			return TruncateOperationStatus("search web  "+query, width)
 		}
 	case "shell_run":
 		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
-			return TruncateOperationStatus("Shell: "+command, width)
+			return TruncateOperationStatus("shell  "+command, width)
 		}
 	case "powershell_run":
 		if command := ShellCommandPreview(ArgString(args, "command")); command != "" {
-			return TruncateOperationStatus("PS: "+command, width)
+			return TruncateOperationStatus("powershell  "+command, width)
 		}
 	case "process_run":
 		if command := ProcessCommandPreview(args); command != "" {
-			return TruncateOperationStatus("Process: "+command, width)
+			return TruncateOperationStatus("process  "+command, width)
 		}
 	case "fs_read_file":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Reading file: "+path, width)
+			return TruncateOperationStatus("read  "+path, width)
 		}
 	case "fs_write_file":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Writing file: "+path, width)
+			return TruncateOperationStatus("write  "+path, width)
 		}
 	case "fs_replace":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Replacing text in: "+path, width)
+			return TruncateOperationStatus("replace  "+path, width)
 		}
 	case "fs_list_dir":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Listing directory: "+path, width)
+			return TruncateOperationStatus("list  "+path, width)
 		}
 	case "fs_stat":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Inspecting path: "+path, width)
+			return TruncateOperationStatus("stat  "+path, width)
 		}
 	case "fs_search":
 		query := OneLinePreview(ArgString(args, "query"))
 		path := OneLinePreview(ArgString(args, "path"))
 		switch {
 		case query != "" && path != "":
-			return TruncateOperationStatus("Searching files: "+query+" in "+path, width)
+			return TruncateOperationStatus("search  "+query+" in "+path, width)
 		case query != "":
-			return TruncateOperationStatus("Searching files: "+query, width)
+			return TruncateOperationStatus("search  "+query, width)
 		case path != "":
-			return TruncateOperationStatus("Searching files in: "+path, width)
+			return TruncateOperationStatus("search  in "+path, width)
 		}
 	case "fs_largest":
 		path := OneLinePreview(ArgString(args, "path"))
@@ -74,56 +132,56 @@ func ToolOperationLabel(name string, data []byte, width int) string {
 			kind = "files"
 		}
 		if path != "" {
-			return TruncateOperationStatus("Finding largest "+kind+" in: "+path, width)
+			return TruncateOperationStatus("largest  "+kind+" in "+path, width)
 		}
-		return TruncateOperationStatus("Finding largest "+kind, width)
+		return TruncateOperationStatus("largest  "+kind, width)
 	case "fs_delete_file":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Deleting file: "+path, width)
+			return TruncateOperationStatus("delete  "+path, width)
 		}
 	case "fs_delete_dir":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Deleting directory: "+path, width)
+			return TruncateOperationStatus("delete dir  "+path, width)
 		}
 	case "fs_mkdir":
 		if path := OneLinePreview(ArgString(args, "path")); path != "" {
-			return TruncateOperationStatus("Creating directory: "+path, width)
+			return TruncateOperationStatus("mkdir  "+path, width)
 		}
 	case "fs_copy":
 		source := OneLinePreview(ArgString(args, "source_path"))
 		dest := OneLinePreview(ArgString(args, "dest_path"))
 		if source != "" && dest != "" {
-			return TruncateOperationStatus("Copying: "+source+" to "+dest, width)
+			return TruncateOperationStatus("copy  "+source+" → "+dest, width)
 		}
 	case "fs_move":
 		source := OneLinePreview(ArgString(args, "source_path"))
 		dest := OneLinePreview(ArgString(args, "dest_path"))
 		if source != "" && dest != "" {
-			return TruncateOperationStatus("Moving: "+source+" to "+dest, width)
+			return TruncateOperationStatus("move  "+source+" → "+dest, width)
 		}
 	case "fs_apply_patch":
-		return TruncateOperationStatus("Applying patch", width)
+		return TruncateOperationStatus("apply patch", width)
 	case "todo_write":
-		return TruncateOperationStatus("Updating plan", width)
+		return TruncateOperationStatus("update plan", width)
 	case "request_user_input":
 		if question := OneLinePreview(ArgString(args, "question")); question != "" {
-			return TruncateOperationStatus("Asking: "+question, width)
+			return TruncateOperationStatus("ask  "+question, width)
 		}
 	case "load_skill":
 		skillName := OneLinePreview(ArgString(args, "name"))
 		file := OneLinePreview(ArgString(args, "file"))
 		if skillName != "" && file != "" {
-			return TruncateOperationStatus("Loading skill: "+skillName+" ("+file+")", width)
+			return TruncateOperationStatus("skill  "+skillName+"  ("+file+")", width)
 		}
 		if skillName != "" {
-			return TruncateOperationStatus("Loading skill: "+skillName, width)
+			return TruncateOperationStatus("skill  "+skillName, width)
 		}
-		return TruncateOperationStatus("Loading skill", width)
+		return TruncateOperationStatus("load skill", width)
 	}
 	if summary := ToolArgsSummary(args); summary != "" {
-		return TruncateOperationStatus("Running tool: "+name+" ("+summary+")", width)
+		return TruncateOperationStatus("run  "+name+"  ("+summary+")", width)
 	}
-	return TruncateOperationStatus("Running tool: "+name, width)
+	return TruncateOperationStatus("run  "+name, width)
 }
 
 func ToolOperationArgs(data []byte) map[string]any {

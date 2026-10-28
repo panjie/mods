@@ -584,13 +584,15 @@ func TestSetupOptionFocusKeepsLabelColumns(t *testing.T) {
 								gutter = 6
 							}
 							for i, line := range normal {
-								plain := ansi.Strip(line)
-								focus := ansi.Strip(focused[i])
-								check := ansi.Strip(checked[i])
-								require.Equal(t, plain[gutter:], focus[gutter:], "focus must not move or rewrap label text")
-								require.Equal(t, plain[gutter:], check[gutter:], "checking must not move label text")
-								require.Equal(t, lipgloss.Width(plain), lipgloss.Width(focus))
-								require.LessOrEqual(t, lipgloss.Width(focus), width)
+								plain := []rune(ansi.Strip(line))
+								focus := []rune(ansi.Strip(focused[i]))
+								check := []rune(ansi.Strip(checked[i]))
+								// The gutter is measured in cells; each cursor or
+								// checkbox rune occupies exactly one cell.
+								require.Equal(t, string(plain[gutter:]), string(focus[gutter:]), "focus must not move or rewrap label text")
+								require.Equal(t, string(plain[gutter:]), string(check[gutter:]), "checking must not move label text")
+								require.Equal(t, lipgloss.Width(string(plain)), lipgloss.Width(string(focus)))
+								require.LessOrEqual(t, lipgloss.Width(string(focus)), width)
 							}
 						}
 					}
@@ -731,5 +733,19 @@ func TestChatGPTSetupUsesOAuthWithoutPersistingTokens(t *testing.T) {
 		stale := setupResult{request: m.request + 1, provider: "chatgpt", kind: "Waiting for ChatGPT authorization"}
 		require.Nil(t, m.receive(stale))
 		require.Equal(t, setupAuth, m.page)
+	})
+}
+
+func TestSetupSummaryUsesSectionsAndOmitsIrrelevantKeyRows(t *testing.T) {
+	setupFixture(t, func(m *setupModel) {
+		m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+		m.enter(setupSummary)
+		view := ansi.Strip(m.View().Content)
+		for _, section := range []string{"Provider", "Tools", "Safety", "Storage", "Config file"} {
+			require.Contains(t, view, section)
+		}
+		require.NotContains(t, view, "API key", "ollama does not use an API key")
+		require.Contains(t, view, "━", "the review page keeps the step progress visible")
+		require.LessOrEqual(t, lipgloss.Height(view), 40)
 	})
 }

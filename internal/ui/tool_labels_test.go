@@ -83,25 +83,25 @@ func TestToolOperationLabel(t *testing.T) {
 		args string
 		want string
 	}{
-		"web search":                  {"web_search", `{"query":"GUI wrapper for command line tools"}`, "Searching web: GUI wrapper for command line tools"},
-		"shell preview":               {"shell_run", `{"command":"go   test   ./...\necho done"}`, "Shell: go test ./..."},
-		"shell leading comment":       {"shell_run", `{"command":"# check cwd config\nls .opencode*"}`, "Shell: ls .opencode*"},
-		"process argv":                {"process_run", `{"program":"go","args":["test","./path with space","$HOME"]}`, `Process: go test "./path with space" $HOME`},
-		"file read":                   {"fs_read_file", `{"path":"mods.go"}`, "Reading file: mods.go"},
-		"file write":                  {"fs_write_file", `{"path":"mods.go","content":"package main"}`, "Writing file: mods.go"},
-		"file replace":                {"fs_replace", `{"path":"mods.go","old_text":"old","new_text":"new"}`, "Replacing text in: mods.go"},
-		"file search":                 {"fs_search", `{"path":"internal","query":"ToolOperationLabel"}`, "Searching files: ToolOperationLabel in internal"},
-		"largest file":                {"fs_largest", `{"path":"Downloads","kind":"file"}`, "Finding largest file in: Downloads"},
-		"copy":                        {"fs_copy", `{"source_path":"a.txt","dest_path":"b.txt"}`, "Copying: a.txt to b.txt"},
-		"move":                        {"fs_move", `{"source_path":"a.txt","dest_path":"b.txt"}`, "Moving: a.txt to b.txt"},
-		"skill":                       {"load_skill", `{"name":"mcp-builder"}`, "Loading skill: mcp-builder"},
-		"skill file":                  {"load_skill", `{"name":"mcp-builder","file":"reference/foo.md"}`, "Loading skill: mcp-builder (reference/foo.md)"},
-		"skill missing name":          {"load_skill", `{}`, "Loading skill"},
-		"user input":                  {"request_user_input", `{"question":"你的16寸MacBook内存多大","kind":"select","options":["16GB","32GB"]}`, "Asking: 你的16寸MacBook内存多大"},
-		"user input missing question": {"request_user_input", `{"kind":"text"}`, "Running tool: request_user_input (kind=text)"},
-		"unknown preferred fields":    {"github_search", `{"query":"mods status bar","repo":"panjie/mods","irrelevant":"x"}`, "Running tool: github_search (query=mods status bar, repo=panjie/mods)"},
-		"invalid json":                {"mcp_tool", `{nope`, "Running tool: mcp_tool"},
-		"empty args":                  {"mcp_tool", `{}`, "Running tool: mcp_tool"},
+		"web search":                  {"web_search", `{"query":"GUI wrapper for command line tools"}`, "search web  GUI wrapper for command line tools"},
+		"shell preview":               {"shell_run", `{"command":"go   test   ./...\necho done"}`, "shell  go test ./..."},
+		"shell leading comment":       {"shell_run", `{"command":"# check cwd config\nls .opencode*"}`, "shell  ls .opencode*"},
+		"process argv":                {"process_run", `{"program":"go","args":["test","./path with space","$HOME"]}`, `process  go test "./path with space" $HOME`},
+		"file read":                   {"fs_read_file", `{"path":"mods.go"}`, "read  mods.go"},
+		"file write":                  {"fs_write_file", `{"path":"mods.go","content":"package main"}`, "write  mods.go"},
+		"file replace":                {"fs_replace", `{"path":"mods.go","old_text":"old","new_text":"new"}`, "replace  mods.go"},
+		"file search":                 {"fs_search", `{"path":"internal","query":"ToolOperationLabel"}`, "search  ToolOperationLabel in internal"},
+		"largest file":                {"fs_largest", `{"path":"Downloads","kind":"file"}`, "largest  file in Downloads"},
+		"copy":                        {"fs_copy", `{"source_path":"a.txt","dest_path":"b.txt"}`, "copy  a.txt → b.txt"},
+		"move":                        {"fs_move", `{"source_path":"a.txt","dest_path":"b.txt"}`, "move  a.txt → b.txt"},
+		"skill":                       {"load_skill", `{"name":"mcp-builder"}`, "skill  mcp-builder"},
+		"skill file":                  {"load_skill", `{"name":"mcp-builder","file":"reference/foo.md"}`, "skill  mcp-builder  (reference/foo.md)"},
+		"skill missing name":          {"load_skill", `{}`, "load skill"},
+		"user input":                  {"request_user_input", `{"question":"你的16寸MacBook内存多大","kind":"select","options":["16GB","32GB"]}`, "ask  你的16寸MacBook内存多大"},
+		"user input missing question": {"request_user_input", `{"kind":"text"}`, "run  request_user_input  (kind=text)"},
+		"unknown preferred fields":    {"github_search", `{"query":"mods status bar","repo":"panjie/mods","irrelevant":"x"}`, "run  github_search  (query=mods status bar, repo=panjie/mods)"},
+		"invalid json":                {"mcp_tool", `{nope`, "run  mcp_tool"},
+		"empty args":                  {"mcp_tool", `{}`, "run  mcp_tool"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -110,6 +110,6 @@ func TestToolOperationLabel(t *testing.T) {
 	}
 
 	got := ToolOperationLabel("web_search", []byte(`{"query":"搜索 一个 很长 很长 的 查询 内容"}`), 20)
-	require.Equal(t, "Searching web: 搜...", got)
+	require.Equal(t, "search web  搜索 ...", got)
 	require.LessOrEqual(t, ansi.StringWidth(got), 20)
 }

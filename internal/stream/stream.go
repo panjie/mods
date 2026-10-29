@@ -13,6 +13,10 @@ import (
 // ErrNoContent happens when the client is returning no content.
 var ErrNoContent = errors.New("no content")
 
+// ErrToolCallerUnavailable indicates an incomplete tool execution binding.
+// Return it as a tool error instead of panicking on a missing callback.
+var ErrToolCallerUnavailable = errors.New("tool execution callback is unavailable")
+
 // Client is a streaming client.
 type Client interface {
 	Request(context.Context, proto.Request) Stream
@@ -99,8 +103,10 @@ func CallTool(call proto.ToolCallRequest, caller proto.ToolCaller, rich ...proto
 	var err error
 	if len(rich) > 0 && rich[0] != nil {
 		result, err = rich[0](call)
-	} else {
+	} else if caller != nil {
 		result.Text, err = caller(call)
+	} else {
+		err = ErrToolCallerUnavailable
 	}
 	content := result.Text
 	duration := time.Since(started)

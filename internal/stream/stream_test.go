@@ -16,6 +16,16 @@ func callToolForTest(id, name string, data []byte, caller func(string, []byte) (
 }
 
 func TestCallToolPreservesResults(t *testing.T) {
+	t.Run("missing caller returns a tool error", func(t *testing.T) {
+		msg, status := CallTool(proto.ToolCallRequest{ID: "missing", Name: "read"}, nil)
+		if !errors.Is(status.Err, ErrToolCallerUnavailable) {
+			t.Fatalf("expected missing callback error, got %v", status.Err)
+		}
+		if msg.Content != ErrToolCallerUnavailable.Error() || !msg.ToolCalls[0].IsError {
+			t.Fatalf("missing callback must be reported to the model: %#v", msg)
+		}
+	})
+
 	t.Run("short result unchanged", func(t *testing.T) {
 		short := "hello world"
 		msg, status := callToolForTest("tid", "tool", nil, func(name string, data []byte) (string, error) {

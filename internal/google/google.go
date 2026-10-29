@@ -181,9 +181,23 @@ func (c *Client) Capabilities() stream.Capabilities {
 	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, Reasoning: true, ReasoningReplay: true}
 }
 
+// Tool-result media has no implemented wire representation in this adapter.
+// Reject it before formatting, including when restoring a saved conversation.
+func (c *Client) validateMediaCapabilities(messages []proto.Message) error {
+	if err := stream.ValidateMediaCapabilities(messages, c.Capabilities()); err != nil {
+		return err
+	}
+	for _, message := range messages {
+		if message.Role == proto.RoleTool && len(message.Attachments()) > 0 {
+			return errors.New("Google adapter does not support media in tool results")
+		}
+	}
+	return nil
+}
+
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
-	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
+	if err := c.validateMediaCapabilities(request.Messages); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
 	stream := new(Stream)
@@ -244,6 +258,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 	stream.client = c
 	stream.ctx = ctx
 	stream.toolCall = request.ToolCaller
+	stream.resultCall = request.ResultCaller
 	stream.trackUsage = request.TrackUsage
 	return stream
 }
@@ -328,6 +343,7 @@ type Stream struct {
 	client      *Client
 	ctx         context.Context
 	toolCall    proto.ToolCaller
+	resultCall  proto.ToolResultCaller
 	callSeq     int
 	trackUsage  bool
 	roundUsage  proto.TokenUsage
@@ -345,7 +361,7 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 	for i, call := range calls {
 		msg, status := stream.CallTool(
 			proto.ToolCallRequest{ID: call.ID, Index: i + 1, Total: len(calls), Name: call.Function.Name, Arguments: call.Function.Arguments},
-			s.toolCall,
+			s.toolCall, s.resultCall,
 		)
 		s.request.Contents = append(s.request.Contents, fromProtoMessage(msg))
 		s.messages = append(s.messages, msg)
@@ -356,6 +372,11 @@ func (s *Stream) CallTools() []proto.ToolCallStatus {
 	}
 
 	s.message = proto.Message{}
+	if err := s.client.validateMediaCapabilities(s.messages); err != nil {
+		s.err = err
+		s.isFinished = true
+		return statuses
+	}
 	s.isFinished = false
 	req, err := s.client.newRequest(s.ctx, http.MethodPost, s.client.config.BaseURL, withBody(s.request))
 	if err != nil {

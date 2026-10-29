@@ -46,10 +46,10 @@ func TestChatGPTSubscriptionToolContinuation(t *testing.T) {
 		Model: "account-model", User: "user", Temperature: &temperature, MaxTokens: &limit,
 		Messages: []proto.Message{{Role: proto.RoleSystem, Content: "instructions"}, {Role: proto.RoleUser, Content: "lookup"}},
 		Tools:    []proto.ToolSpec{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
-		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
+		ResultCaller: func(call proto.ToolCallRequest) (proto.ToolResult, error) {
 			calls++
 			require.Equal(t, "lookup", call.Name)
-			return "result", nil
+			return proto.ToolResult{Text: "result"}, nil
 		},
 	})
 	defer s.Close()

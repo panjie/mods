@@ -71,6 +71,22 @@ Ollama integration uses `OLLAMA_HOST` or `http://localhost:11434` and the
 
 ## Real-AI Black-Box Tests
 
+The default root-module suite includes `TestProviderToolContract`, which uses
+local HTTP fixtures and the production request assembly, registry, review and
+dispatch path. It covers Chat Completions, Responses, Anthropic, Google and
+Ollama, including OpenAI-compatible profiles and Azure. Each route checks reads,
+approved and denied writes, unavailable approval, tool failures and unknown
+tools, then verifies the result sent to the provider and final continuation.
+No provider key or external service is needed:
+
+```sh
+go test ./internal/app -run 'TestProviderToolContract|TestProviderCapabilityDocumentation' -count=1
+```
+
+The capability matrix in [Provider details](providers.md#adapter-capabilities)
+is checked against adapter declarations by `TestProviderCapabilityDocumentation`.
+When an adapter changes, update its contract fixtures and the matrix together.
+
 CLI black-box scenarios are kept behind the `integration` build tag and are not
 part of the default CI suite. They build and execute the `mods` binary with
 isolated config, data, cache, home, and working directories:
@@ -85,8 +101,8 @@ session continuation across processes, complex read-only shell pipelines,
 filesystem tool use, and absolute-path reads outside the current directory.
 
 The runner uses the first available key in this provider order: DeepSeek, Qwen,
-OpenAI, Anthropic, GLM, then Google. Google runs the non-tool scenarios because
-its adapter does not expose built-in filesystem or shell tools.
+OpenAI, Anthropic, GLM, then Google. All six adapters participate in filesystem
+and shell scenarios; individual models and gateways must also support tools.
 
 Set `MODS_BLACKBOX_PROVIDER` to select a provider explicitly and
 `MODS_BLACKBOX_MODEL` to override its default model:

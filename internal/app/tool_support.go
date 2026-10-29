@@ -61,7 +61,7 @@ func (m *Mods) buildToolRegistryForProvider(
 		m.selfHelpFallback = ""
 		return nil, modsError{
 			Err:        fmt.Errorf("provider does not support tool execution"),
-			ReasonText: "Tools are not supported for this provider. Use OpenAI, Anthropic, Ollama, or an OpenAI-compatible provider for tools.",
+			ReasonText: "The selected provider adapter does not support tool execution. Select an adapter with tool support or disable explicitly enabled tools.",
 		}
 	}
 	m.selfHelpFallback = formatSelfHelpFallback(m.selfHelpReference, cfg, prompt)

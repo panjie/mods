@@ -34,6 +34,47 @@ under `apis.<provider>` in `mods.yml`.
 [Kimi]: https://platform.moonshot.cn/
 [MiniMax]: https://www.minimaxi.com/
 
+## Adapter Capabilities
+
+This matrix describes implemented protocols, not what a particular model can
+understand. The service decides whether the selected model accepts a tool or
+media input. `chat` means Chat Completions; `responses` means the Responses API.
+In paired columns, the first value is direct input support and the second is
+support for attachments returned by tools. Tool execution always passes through
+the same registration, argument validation and approval path.
+
+<!-- provider-capabilities:start -->
+| Route | Function tools | Image input | Tool images | Audio input/tools | Video input/tools |
+|---|---|---|---|---|---|
+| openai / chat | yes | yes | yes | no/no | no/no |
+| openai / responses | yes | yes | yes | no/no | no/no |
+| custom-gateway / chat | yes | yes | yes | no/no | no/no |
+| deepseek / chat | yes | yes | yes | no/no | no/no |
+| deepseek / responses | yes | yes | yes | no/no | no/no |
+| qwen / chat | yes | yes | yes | yes/yes | yes/yes |
+| qwen / responses | yes | yes | yes | yes/yes | yes/yes |
+| glm / chat | yes | yes | yes | no/no | no/no |
+| kimi / chat | yes | yes | yes | no/no | no/no |
+| minimax / chat | yes | yes | yes | no/no | no/no |
+| azure / chat | yes | yes | yes | no/no | no/no |
+| anthropic / anthropic | yes | yes | yes | no/no | no/no |
+| google / google | yes | yes | no | no/no | no/no |
+| ollama / ollama | yes | yes | yes | no/no | no/no |
+<!-- provider-capabilities:end -->
+
+`TestProviderCapabilityDocumentation` checks this block against the actual
+adapters used by `TestProviderToolContract`. OpenRouter and OpenCode Go use their
+configured OpenAI or Anthropic adapters. GitHub Copilot uses its selected
+Chat Completions or Responses endpoint; its Messages endpoint is not implemented.
+ChatGPT subscription uses its dedicated Responses profile and authentication flow.
+Those authentication flows have separate tests; local protocol fixtures do not
+certify a live account, gateway or model.
+
+Google supports filesystem, command and MCP tool calls with text results.
+It accepts direct image input, but tool-result image transport is not implemented;
+unsupported tool media is rejected rather than silently removed from requests.
+Audio and video support currently requires the Qwen profile.
+
 ## Endpoint Selection
 
 The built-in `openai` provider uses Responses by default when its base URL points

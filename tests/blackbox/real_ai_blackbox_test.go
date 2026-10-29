@@ -353,7 +353,7 @@ var providerPriority = []providerProfile{
 		name:            "google",
 		keyEnv:          "GOOGLE_API_KEY",
 		defaultModel:    "gemini-2.5-flash",
-		filesystemTools: false,
+		filesystemTools: true,
 	},
 }
 

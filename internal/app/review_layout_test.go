@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -114,7 +115,7 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			require.Contains(t, banner, "Run command?")
 			require.Contains(t, banner, "Purpose: 生成报告供用户检查")
 			require.Contains(t, banner, "Command:")
-			require.Contains(t, banner, "Command:  running in /project", "the heading labels the execution directory separately from the command")
+			require.Contains(t, banner, "Command:  running in "+filepath.FromSlash("/project"), "the heading labels the execution directory separately from the command")
 			require.NotContains(t, banner, "Working dir:", "the default directory is folded into the command heading")
 			require.Less(t, strings.Index(banner, "Purpose:"), strings.Index(banner, "Command:"))
 			for _, hidden := range []string{"1/1", "Pages", "Warning", "Model declaration", "Interpreter", "Source:", "1 |"} {

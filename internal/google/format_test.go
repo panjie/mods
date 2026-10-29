@@ -582,3 +582,66 @@ func TestCallToolsSerializesFailureAsError(t *testing.T) {
 	require.Equal(t, proto.RoleTool, messages[2].Role)
 	require.True(t, messages[2].ToolCalls[0].IsError)
 }
+
+func TestRichToolResults(t *testing.T) {
+	for _, kind := range []string{"text", "error", "media"} {
+		t.Run(kind, func(t *testing.T) {
+			client, captured, closeServer := newCapturingSequenceServer(t, []string{
+				"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"call_1\",\"name\":\"lookup\",\"args\":{}}}]}}]}\n\n",
+				"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"done\"}]}}]}\n\n",
+			})
+			defer closeServer()
+			st := client.Request(context.Background(), proto.Request{
+				Messages: []proto.Message{{Role: proto.RoleUser, Content: "lookup"}},
+				ToolCaller: func(proto.ToolCallRequest) (string, error) {
+					t.Error("rich callback must take precedence over legacy callback")
+					return "legacy", nil
+				},
+				ResultCaller: func(call proto.ToolCallRequest) (proto.ToolResult, error) {
+					require.Equal(t, "call_1", call.ID)
+					result := proto.ToolResult{Text: "rich result"}
+					if kind == "error" {
+						return result, errors.New("fixture failure")
+					}
+					if kind == "media" {
+						result.Media = []proto.MediaAttachment{{Kind: "image", Data: []byte("fixture"), MimeType: "image/png"}}
+					}
+					return result, nil
+				},
+			})
+			defer st.Close()
+			for st.Next() {
+				_, err := st.Current()
+				if !errors.Is(err, stream.ErrNoContent) {
+					require.NoError(t, err)
+				}
+			}
+			require.NoError(t, st.Err())
+			statuses := st.CallTools()
+			require.Len(t, statuses, 1)
+			require.Equal(t, "rich result", statuses[0].Output)
+			if kind == "media" {
+				require.ErrorContains(t, st.Err(), "does not support media in tool results")
+				require.False(t, st.Next())
+				require.Len(t, *captured, 1, "must not send a request that silently drops media")
+				messages := st.Messages()
+				require.Len(t, messages[2].Attachments(), 1, "retain evidence for history")
+				restored := client.Request(context.Background(), proto.Request{Messages: messages})
+				require.ErrorContains(t, restored.Err(), "does not support media in tool results")
+				require.Len(t, *captured, 1, "restored history must also fail before network access")
+				return
+			}
+			require.Len(t, *captured, 2)
+			var body MessageCompletionRequest
+			require.NoError(t, json.Unmarshal((*captured)[1], &body))
+			key := "result"
+			if kind == "error" {
+				key = "error"
+				require.ErrorContains(t, statuses[0].Err, "fixture failure")
+			} else {
+				require.NoError(t, statuses[0].Err)
+			}
+			require.Equal(t, map[string]any{key: "rich result"}, body.Contents[2].Parts[0].FunctionResponse.Response)
+		})
+	}
+}

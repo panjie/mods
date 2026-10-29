@@ -424,6 +424,40 @@ func TestTodoDockSeparatesApprovalPanel(t *testing.T) {
 	}
 }
 
+func TestTodoDockAutoCollapseThreshold(t *testing.T) {
+	withOutputTTY(t, true)
+	for _, height := range []int{18, 24, 40} {
+		for _, count := range []int{3, 4, 5, 6} {
+			t.Run(fmt.Sprintf("height=%d/items=%d", height, count), func(t *testing.T) {
+				m := newTodoTestMods(t)
+				m.width, m.height = 80, height
+				m.showOperationStatus = true
+				m.setActiveOperation("Working")
+				for i := range count {
+					status := "completed"
+					if i == count-1 {
+						status = "in_progress"
+					}
+					m.todoItems = append(m.todoItems, ui.TodoItem{Content: fmt.Sprintf("step-%02d", i), Status: status})
+				}
+				view := ansi.Strip(m.View().Content)
+				require.LessOrEqual(t, lipgloss.Height(view), height)
+				require.Contains(t, view, fmt.Sprintf("step-%02d", count-1))
+				if count <= 5 {
+					for _, item := range m.todoItems {
+						require.Contains(t, view, item.Content)
+					}
+					require.NotContains(t, view, "earlier steps")
+					require.NotContains(t, view, "more steps")
+				} else {
+					require.NotContains(t, view, "step-00")
+					require.Contains(t, view, "earlier steps")
+				}
+			})
+		}
+	}
+}
+
 func TestExpandedPlanCanBrowseEarlierAndLaterSteps(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)

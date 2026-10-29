@@ -152,7 +152,8 @@ func (m *Mods) footerView() string {
 			footerHeight = lipgloss.Height(footer) + gap
 		}
 		height := min(8, m.height/3, m.height-footerHeight-3)
-		if !m.planExpanded {
+		// Keep short plans fully visible when the terminal has room.
+		if !m.planExpanded && len(m.todoItems) > 5 {
 			height = min(4, height)
 		}
 		if height >= 4 && (!todoItemsAllCompleted(m.todoItems) || m.planExpanded) {

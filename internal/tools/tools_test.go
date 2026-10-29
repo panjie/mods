@@ -1043,6 +1043,39 @@ func TestFilesystemApplyPatchCodexFormatRejectsTraversal(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(root, "..", "escape.txt"))
 }
 
+// fs_apply_patch must treat its root as the patch base even when that root is a
+// Git repository or a subdirectory of one: git apply otherwise resolves patch
+// paths against the repository root and silently skips the rest.
+func TestFilesystemApplyPatchInsideRepository(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		rootDir string
+	}{
+		{name: "repository root", rootDir: "."},
+		{name: "repository subdirectory", rootDir: "workspace"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := t.TempDir()
+			out, err := exec.Command("git", "init", "-q", repo).CombinedOutput()
+			require.NoError(t, err, "%s", out)
+
+			root := filepath.Join(repo, tc.rootDir)
+			require.NoError(t, os.MkdirAll(root, 0o700))
+			path := filepath.Join(root, "note.txt")
+			require.NoError(t, os.WriteFile(path, []byte("alpha\nbeta\n"), 0o644))
+
+			registry := NewRegistry()
+			require.NoError(t, RegisterFilesystem(registry, FilesystemConfig{Root: root}))
+			patch := "*** Begin Patch\n*** Update File: note.txt\n@@\n alpha\n-beta\n+changed\n*** End Patch\n"
+			_, err = callWithTestApproval(registry, context.Background(), "fs_apply_patch", []byte(`{"patch":`+strconv.Quote(patch)+`}`))
+			require.NoError(t, err)
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, "alpha\nchanged\n", string(content))
+		})
+	}
+}
+
 func TestFilesystemReplace(t *testing.T) {
 	root := t.TempDir()
 	registry := NewRegistry()

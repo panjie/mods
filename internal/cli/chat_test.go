@@ -9,6 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/ui"
 	"github.com/stretchr/testify/require"
@@ -326,6 +328,91 @@ func TestChatPromptEmacsEditing(t *testing.T) {
 	require.Equal(t, "Xhello worldY", model.textarea.Value())
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 	require.Empty(t, model.textarea.Value())
+}
+
+func TestChatPromptChineseDeletionKeepsRemainingTextVisible(t *testing.T) {
+	for name, keys := range map[string][]tea.KeyPressMsg{
+		"backspace": {{Code: tea.KeyLeft}, {Code: tea.KeyBackspace}},
+		"delete":    {{Code: tea.KeyHome}, {Code: tea.KeyDelete}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			model := newChatPromptModel(nil)
+			model.resize(80)
+			model = updateChatPrompt(t, model, tea.PasteMsg{Content: "你好"})
+			var output bytes.Buffer
+			renderer := uv.NewTerminalRenderer(&output, []string{"TERM=xterm-256color"})
+			renderer.SetColorProfile(colorprofile.Ascii)
+			renderer.Resize(80, 24)
+			renderer.SetRelativeCursor(true)
+			draw := func() {
+				buffer := uv.NewScreenBuffer(80, lipgloss.Height(model.View().Content))
+				uv.NewStyledString(model.View().Content).Draw(buffer, buffer.Bounds())
+				renderer.Render(buffer.RenderBuffer)
+				require.NoError(t, renderer.Flush())
+			}
+			draw()
+			for _, key := range keys {
+				output.Reset()
+				model = updateChatPrompt(t, model, key)
+				draw()
+			}
+			require.Equal(t, "好", model.textarea.Value())
+			require.Contains(t, ansi.Strip(model.View().Content), "好")
+			require.Contains(t, output.String(), "好")
+			// Checking View alone misses this regression: the renderer wrote
+			// 好, moved back onto its continuation cell, then erased the glyph.
+			require.NotContains(t, output.String(), "好"+ansi.CursorBackward(1)+ansi.EraseLineRight)
+			require.Equal(t, 2, model.View().Cursor.X)
+		})
+	}
+}
+
+func TestChatPromptDeletePreservesFollowingLine(t *testing.T) {
+	for _, text := range []string{"ab\ncd", "你好\n世界", strings.Repeat("界", 20) + "你好\n世界"} {
+		t.Run(text, func(t *testing.T) {
+			model := newChatPromptModel(nil)
+			model.resize(20)
+			model = updateChatPrompt(t, model, tea.PasteMsg{Content: text})
+			model.textarea.MoveToBegin()
+			lines := strings.SplitN(text, "\n", 2)
+			first := []rune(lines[0])
+			model.textarea.SetCursorColumn(len(first) - 1)
+			model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyDelete})
+			remaining := string(first[:len(first)-1])
+			require.Equal(t, remaining+"\n"+lines[1], model.textarea.Value())
+			// Deleting again at the line boundary should merge the two lines.
+			model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyDelete})
+			require.Equal(t, remaining+lines[1], model.textarea.Value())
+		})
+	}
+}
+
+func TestChatPromptChineseKillAndYank(t *testing.T) {
+	for _, tt := range []struct {
+		text   string
+		column int
+		key    rune
+		after  string
+		killed string
+	}{
+		{"你们", 1, 'u', "们", "你"},
+		{"你们你", 2, 'u', "你", "你们"},
+		{"上一行\n你们你", 2, 'u', "上一行\n你", "你们"},
+		{"你们你", 1, 'k', "你", "们你"},
+		{"你们 你", 2, 'w', " 你", "你们"},
+		{"上一行\n下一行", 0, 'u', "上一行下一行", "\n"},
+	} {
+		t.Run(tt.text+"/ctrl+"+string(tt.key), func(t *testing.T) {
+			model := newChatPromptModel(nil)
+			model = updateChatPrompt(t, model, tea.PasteMsg{Content: tt.text})
+			model.textarea.SetCursorColumn(tt.column)
+			model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tt.key, Mod: tea.ModCtrl})
+			require.Equal(t, tt.after, model.textarea.Value())
+			require.Equal(t, tt.killed, model.killText)
+			model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+			require.Equal(t, tt.text, model.textarea.Value())
+		})
+	}
 }
 
 func TestChatPromptUpDownCyclesHistoryAndRestoresDraft(t *testing.T) {

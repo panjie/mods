@@ -246,11 +246,39 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	before := m.textarea.Value()
+	killKey := editKey == "ctrl+k" || editKey == "ctrl+u" || editKey == "ctrl+w"
+	var beforeKill []rune
+	killOffset := 0
+	if killKey {
+		beforeKill = []rune(before)
+		info := m.textarea.LineInfo()
+		killOffset = info.StartColumn + info.ColumnOffset
+		for _, line := range strings.Split(before, "\n")[:m.textarea.Line()] {
+			killOffset += len([]rune(line)) + 1
+		}
+	}
+	if press, ok := msg.(tea.KeyPressMsg); ok && key.Matches(press, m.textarea.KeyMap.DeleteCharacterForward) {
+		info := m.textarea.LineInfo()
+		column := info.StartColumn + info.ColumnOffset
+		line := strings.Split(before, "\n")[m.textarea.Line()]
+		if column < len([]rune(line)) {
+			// Bubbles' forward delete also merges the following line when
+			// removing the last character. Delete that character via backspace
+			// instead; only a Delete already at EOL should remove the newline.
+			m.textarea.SetCursorColumn(column + 1)
+			msg = tea.KeyPressMsg{Code: tea.KeyBackspace}
+		}
+	}
 	var cmd tea.Cmd
 	m.textarea, cmd = m.textarea.Update(msg)
-	if editKey == "ctrl+k" || editKey == "ctrl+u" || editKey == "ctrl+w" {
-		if removed := removedText(before, m.textarea.Value()); removed != "" {
-			m.killText = removed
+	if killKey {
+		if removed := len(beforeKill) - len([]rune(m.textarea.Value())); removed > 0 {
+			// Anchor the removed runes to the original cursor. A text diff
+			// cannot identify the right occurrence when the input repeats.
+			if editKey != "ctrl+k" {
+				killOffset -= removed
+			}
+			m.killText = string(beforeKill[killOffset : killOffset+removed])
 		}
 	}
 	return m, cmd
@@ -293,18 +321,6 @@ func (m *chatPromptModel) recallNextHistory() bool {
 func (m *chatPromptModel) loadHistoryValue(value string) {
 	m.textarea.SetValue(value)
 	m.textarea.MoveToEnd()
-}
-
-func removedText(before, after string) string {
-	prefix := 0
-	for prefix < len(before) && prefix < len(after) && before[prefix] == after[prefix] {
-		prefix++
-	}
-	suffix := 0
-	for suffix < len(before)-prefix && suffix < len(after)-prefix && before[len(before)-1-suffix] == after[len(after)-1-suffix] {
-		suffix++
-	}
-	return before[prefix : len(before)-suffix]
 }
 
 func (m chatPromptModel) submit() (tea.Model, tea.Cmd) {

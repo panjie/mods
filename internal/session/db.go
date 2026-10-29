@@ -75,7 +75,7 @@ func MigrateDefaultStorage(sessionDir string) error {
 
 // schemaVersion advances whenever the on-disk schema changes. Version zero
 // identifies databases written before versioned migrations were introduced.
-const schemaVersion = 1
+const schemaVersion = 2
 
 func Open(ds string) (*DB, error) {
 	db, err := sqlx.Open("sqlite", ds)
@@ -233,7 +233,13 @@ func Open(ds string) (*DB, error) {
 		}
 	}
 
-	// Record success last: failed/partial migrations retain version zero and
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS context_summaries (
+		session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+		snapshot BLOB NOT NULL
+	)`); err != nil {
+		return nil, fmt.Errorf("migrate context summaries: %w", err)
+	}
+	// Record success last: failed/partial migrations retain their old version and
 	// retry the existing idempotent, column-guarded migration path next time.
 	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
 		return nil, fmt.Errorf("record schema version: %w", err)
@@ -545,6 +551,7 @@ func (c *DB) SaveSession(
 	id, title, api, model string,
 	messages []proto.Message,
 	rules []approval.Rule,
+	summaries ...*ContextSummary,
 ) error {
 	encoded, err := encodeSession(messages)
 	if err != nil {
@@ -585,6 +592,22 @@ func (c *DB) SaveSession(
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`), id, rule.ScopeKind, rule.ScopeValue, rule.Type, rule.Tool, rule.Pattern, string(paths), string(origins), string(rule.Mode)); err != nil {
 			return fmt.Errorf("SaveSession rule: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`DELETE FROM context_summaries WHERE session_id = ?`, id); err != nil {
+		return err
+	}
+	if len(summaries) > 0 && summaries[0] != nil {
+		summary := summaries[0]
+		if !summary.Matches(messages) {
+			return fmt.Errorf("context summary does not match the saved transcript")
+		}
+		data, err := json.Marshal(summary)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO context_summaries(session_id, snapshot) VALUES (?, ?)`, id, data); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {

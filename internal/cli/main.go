@@ -180,6 +180,8 @@ func registerFlags(flags *pflag.FlagSet, c *Config, memprofileFlag *bool) {
 	regStrArr(flags, &c.SkillsDirs, "skills-dirs", "", c.SkillsDirs)
 	regBool(flags, &c.NoSave, "no-save", "n", c.NoSave)
 	regBool(flags, &c.NoInstructions, "no-instructions", "", c.NoInstructions)
+	regBool(flags, &c.Compact, "compact", "", false)
+	regInt(flags, &c.ContextMaxBytes, "context-max-bytes", c.ContextMaxBytes)
 	regBool(flags, &c.ResetSettings, "reset-settings", "", c.ResetSettings)
 	regSettingsFlag(flags, c)
 	regBool(flags, &c.ConfigSetup, "config", "", false)
@@ -629,6 +631,7 @@ func persistSession(mods *Mods) (string, string, error) {
 		config.Model,
 		mods.Messages(),
 		mods.ApprovalRules(),
+		mods.ContextSummary(),
 	); err != nil {
 		return "", "", modsError{Err: err, ReasonText: errReason}
 	}

@@ -66,3 +66,7 @@
 
 - `internal/video` validates bounded, non-fragmented H.264/AAC-LC MP4 using pure-Go `go-mp4`; no runtime transcoder. `internal/media` owns shared byte/duration/frame accounting; audio-bearing videos consume audio duration but bytes only once. Revalidate saved metadata against original bytes before transmission.
 - `--video` and `fs_read_media` use the same `MediaAttachment` as images/audio. Qwen Chat sends `video_url.url`, Responses sends `input_video.video_url`, both with `fps: 2`. Capability checks include video audio; never turn unknown media into image blocks or drop sound. Label audio presence and sampled coverage; delivery is not proof of recognition.
+
+## Conversation context
+- Manual --compact and opt-in context-max-bytes trigger compaction before user turns. The byte threshold is conversation JSON size, not tokens or a model window. internal/contextplan keeps complete tool groups. internal/app/context_compaction.go makes tool-free summaries; original history is restored by Mods.Messages before saving.
+- Session schema v2 stores context_summaries separately, with prefix fingerprints and atomic SaveSession persistence alongside original history and rules. Stale coverage is ignored; unchanged coverage is reused; larger coverage summarizes the previous summary plus new records. history_read exposes bounded text pages from the invocation's archived prefix, never raw media or provider continuation data. Single-turn tool-loop compaction is not implemented.

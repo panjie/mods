@@ -72,6 +72,8 @@ no-instructions: false
 # http-proxy: ""  # HTTP proxy for API requests
 # {{ index .Help "max-retries" }}
 max-retries: 5
+# {{ index .Help "context-max-bytes" }}
+context-max-bytes: 0
 # {{ index .Help "think" }}
 think: false
 # {{ index .Help "review-mode" }}

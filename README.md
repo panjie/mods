@@ -370,6 +370,7 @@ when a request needs them; shell tools are enabled by default.
 | `fs_find_images` / `fs_find_media` | Find image, audio, and video candidates recursively. |
 | `fs_read_images` / `fs_read_media` | Read original media into the current model. |
 | `todo_write` | Keep a visible plan for multi-step work. |
+| `history_read` | Page original archived text evidence after context compaction. |
 | `request_user_input` | Ask a necessary question with a compact local dialog. |
 | `load_skill` / `search_skills` | Load installed [skills](#skills). |
 | `mods_help` | Version-matched help for Mods itself. |
@@ -591,6 +592,33 @@ in `mods.yml` and are documented inline. Run `mods --reset-settings` to back up
 the current file and restore the defaults.
 
 ### Sessions & Chat
+
+Use `mods --continue SESSION --compact "Continue the task"` to summarize older
+conversation context before sending a request. The current turn and the preceding
+user turn remain verbatim. Summarization makes an additional model request without
+tools; it cannot execute commands or grant permissions. A status message goes to
+stderr. The saved session retains the complete original transcript, available in
+`--list-sessions`, including original tool results and media.
+
+`--compact` is opt-in and non-persistent. With `--chat`, it runs before each
+eligible turn. Summaries are saved separately and atomically with the complete
+transcript. Matching coverage is reused; expanding it summarizes the previous
+summary plus newly covered messages. Edited history invalidates stale summaries.
+Restarting without compaction enabled uses full history.
+
+For automatic compaction before turns, set `context-max-bytes: 131072` in
+`mods.yml`, or use `--context-max-bytes 131072`. The default `0` disables it.
+This is a trigger based on conversation JSON bytes, not a token estimate or a
+guarantee that the resulting request fits a model's context window. Neither mode
+yet compacts within a single long tool loop. The summary source is limited to 256 KiB of text and
+media references; larger sources fail explicitly instead of being truncated.
+Media references are not a substitute for inspecting original attachments.
+If summarization fails or requests a tool, the task stops without replacing the
+original history. Use the command without `--compact` to retry with full context.
+Also set `--context-max-bytes 0` if automatic compaction is configured.
+After compaction, the read-only `history_read` tool can page original archived
+messages by 1-based message number. It exposes text and media references, not
+raw media or private provider continuation data, and cannot access other sessions.
 
 Sessions are saved locally by default with a title and a short ID; `--no-save`
 disables saving the current interaction. `--continue` resumes

@@ -102,8 +102,19 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if err != nil {
 		return requestSession{}, err
 	}
+	if cfg.ContextMaxBytes < 0 {
+		return requestSession{}, modsError{Err: fmt.Errorf("context-max-bytes must be nonnegative"), ReasonText: "Invalid context budget"}
+	}
+	if m.shouldCompactContext() && m.retryCheckpoint == nil {
+		if err := m.compactContext(client, mod); err != nil {
+			return requestSession{}, modsError{Err: err, ReasonText: "Could not compact conversation context"}
+		}
+	}
 	if err := stream.ValidateMediaCapabilities(m.messages, client.Capabilities()); err != nil {
 		return requestSession{}, modsError{Err: err, ReasonText: "Media input is unavailable"}
+	}
+	if err := stream.ValidateMedia(m.messages); err != nil {
+		return requestSession{}, modsError{Err: err, ReasonText: "Media input exceeds request limits"}
 	}
 	m.sanitizeProviderContinuation(mod, ccfg.UseResponses)
 	debug.Printf("Startup: context=%s", time.Since(contextStarted))

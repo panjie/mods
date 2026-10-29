@@ -109,6 +109,8 @@ var flagCategorySpecs = []flagCategorySpec{
 			{Name: "role", ValueName: "NAME", Short: "r"},
 			{Name: "list-roles", Set: func() bool { return config.ListRoles }, Role: roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 			{Name: "no-instructions", Advanced: true},
+			{Name: "compact", Advanced: true},
+			{Name: "context-max-bytes", ValueName: "BYTES", Advanced: true},
 			{Name: flagListPrompts, Set: func() bool { return config.ListPrompts }, Role: roleExclusive | roleNoArgs | roleBlocksChat | roleBlocksAutoConfig | roleBlocksPassiveAutoConfig},
 		},
 	},

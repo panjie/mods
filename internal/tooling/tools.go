@@ -52,6 +52,13 @@ type builtinTool struct {
 func builtinTools() []builtinTool {
 	return []builtinTool{
 		{
+			group:   "history_read",
+			enabled: func(env builtinEnv) bool { return len(env.handlers.History) > 0 },
+			register: func(env builtinEnv) error {
+				return toolregistry.RegisterHistoryRead(env.registry, env.handlers.History)
+			},
+		},
+		{
 			group: "mods_help",
 			register: func(env builtinEnv) error {
 				return toolregistry.RegisterModsHelp(env.registry, toolregistry.ModsHelpConfig{

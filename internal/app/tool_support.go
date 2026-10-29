@@ -47,6 +47,7 @@ func (m *Mods) buildToolRegistryForProvider(
 	if client.Capabilities().Tools {
 		m.selfHelpFallback = ""
 		handlers := toolregistry.InteractionHandlers{
+			History:       m.compactedPrefix,
 			ShellProgress: m.handleShellProgress,
 			SelfHelp:      m.selfHelpReference,
 		}

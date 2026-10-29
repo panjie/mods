@@ -63,6 +63,9 @@ type Mods struct {
 	// There is intentionally no per-field mutex; callers must not introduce
 	// new background goroutines that touch m.messages outside this pattern.
 	messages []proto.Message
+	// compactedPrefix retains original history independently of the model view.
+	compactedPrefix []proto.Message
+	compactedText   string
 	// retryCheckpoint contains only completed model/tool rounds. Failed streams
 	// may append partial assistant messages, so their history is not resumable.
 	retryCheckpoint         *completionCheckpoint
@@ -247,6 +250,9 @@ func (m *Mods) RenderMarkdown(content string) (string, error) {
 }
 
 func (m *Mods) Messages() []proto.Message {
+	if len(m.compactedPrefix) > 0 {
+		return restoreCompactedTranscript(m.compactedPrefix, m.messages)
+	}
 	return append([]proto.Message(nil), m.messages...)
 }
 

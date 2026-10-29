@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/panjie/mods/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,7 +66,7 @@ func TestPreparedSecretContentCannotChangeTarget(t *testing.T) {
 }
 
 func TestPreparedWriteIncludesCreatedAncestors(t *testing.T) {
-	root := t.TempDir()
+	root := testutil.CanonicalTempDir(t)
 	p, err := prepareFilesystemAccess(context.Background(), root, nil, "fs_write_file", []byte(`{"path":"new/nested/file","content":"x"}`))
 	require.NoError(t, err)
 	require.Contains(t, p.Intent.WriteDirs, filepath.Join(root, "new"))

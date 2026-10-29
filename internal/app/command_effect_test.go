@@ -120,12 +120,16 @@ func TestCommandReviewRedactsPurposeAndCommandBeforeFormatting(t *testing.T) {
 	for _, name := range []string{"shell_run", "powershell_run", "process_run"} {
 		t.Run(name, func(t *testing.T) {
 			m, caller, called, args := declaredCommandFixture(t, name, ReviewAuto, true)
+			// The secret words must not occur in the fixture's temporary path:
+			// macOS canonicalizes temp dirs under /private, so a word such as
+			// "private" would trip the absence check for an unrelated reason.
+			const secretBody = "hunter2\nswordfish"
 			m.secrets = secrets.New()
-			m.secrets.RememberForRedaction("private\ncredential")
+			m.secrets.RememberForRedaction(secretBody)
 			args["effect"] = "may_write"
-			args["purpose"] = "Send \x1b[2Jprivate\ncredential to https://example.com/?token=hidden"
-			args["command"] = "echo private\ncredential"
-			args["args"] = []string{"private\ncredential"}
+			args["purpose"] = "Send \x1b[2J" + secretBody + " to https://example.com/?token=hidden"
+			args["command"] = "echo " + secretBody
+			args["args"] = []string{secretBody}
 			done := make(chan error, 1)
 			go func() {
 				_, err := caller(proto.ToolCallRequest{Name: name, Arguments: []byte(stringMustJSON(t, args))})
@@ -134,7 +138,7 @@ func TestCommandReviewRedactsPurposeAndCommandBeforeFormatting(t *testing.T) {
 			item := receiveReviewItem(t, m.reviewer.reviewChan)
 			m.reviewer.handleStartMsg(toolReviewStartMsg{item: item})
 			view := m.reviewer.renderBanner(160, makeStyles(true).Interaction, 30)
-			for _, secret := range []string{"private", "credential", "token=hidden", "\x1b[2J"} {
+			for _, secret := range []string{"hunter2", "swordfish", "token=hidden", "\x1b[2J"} {
 				require.NotContains(t, view, secret)
 			}
 			require.Contains(t, view, "[REDACTED]")

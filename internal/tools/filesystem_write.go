@@ -388,6 +388,12 @@ func filesystemApplyPatchTool(root string, safeDirs []string) Tool {
 			cmd := exec.CommandContext(ctx, "git", "-c", "core.autocrlf=false", "apply", "--whitespace=nowarn", "--recount")
 			platform.HideCommandWindow(cmd)
 			cmd.Dir = root
+			// Treat root as the patch base even when it sits inside a Git
+			// repository: git otherwise strips the repository-relative prefix
+			// from patch paths and silently skips everything outside it, while
+			// still exiting zero. The ceiling hides the parent repository from
+			// discovery without hiding root itself.
+			cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+filepath.Dir(root))
 			cmd.Stdin = strings.NewReader(patch)
 			out, err := cmd.CombinedOutput()
 			if err != nil {

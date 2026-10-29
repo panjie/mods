@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/testutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPreparedNativeWriteReapprovesChangedTarget(t *testing.T) {
-	root := t.TempDir()
+	root := testutil.CanonicalTempDir(t)
 	first, second := filepath.Join(root, "first"), filepath.Join(root, "second")
 	require.NoError(t, os.Mkdir(first, 0o700))
 	require.NoError(t, os.Mkdir(second, 0o700))
@@ -71,7 +72,7 @@ func approvalTestDirectoryLink(t *testing.T, target, link string) {
 }
 
 func TestApprovalP1DirectoryLinkCannotExpandSavedRule(t *testing.T) {
-	root := t.TempDir()
+	root := testutil.CanonicalTempDir(t)
 	allowed, other := filepath.Join(root, "allowed"), filepath.Join(root, "other")
 	require.NoError(t, os.Mkdir(allowed, 0o700))
 	require.NoError(t, os.Mkdir(other, 0o700))

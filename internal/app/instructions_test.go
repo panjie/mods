@@ -8,9 +8,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/panjie/mods/internal/proto"
+	"github.com/panjie/mods/internal/testutil"
 )
 
 func TestLoadProjectInstructions(t *testing.T) {
@@ -128,7 +130,7 @@ func TestSetupStreamContextInjectsAgentsMD(t *testing.T) {
 // announces AGENTS.md was loaded. The record follows the same visibility
 // switches as tool status records and is emitted once per process.
 func TestProjectInstructionsNotice(t *testing.T) {
-	root := t.TempDir()
+	root := testutil.CanonicalTempDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# Agents\nBuild with `task check`."), 0o644))
 
 	newMods := func(modify func(*Config)) *Mods {
@@ -147,8 +149,16 @@ func TestProjectInstructionsNotice(t *testing.T) {
 	t.Run("announces the loaded file once per process", func(t *testing.T) {
 		m := newMods(nil)
 		line := m.projectInstructionsNoticeLine()
-		require.Contains(t, line, "Project instructions:")
-		require.Contains(t, line, filepath.Join(root, "AGENTS.md"))
+		plain := ansi.Strip(line)
+		const marker = "Project instructions: "
+		index := strings.Index(plain, marker)
+		require.NotEqual(t, -1, index, "notice should name the loaded file: %q", plain)
+		// Status lines cap at 120 cells, so long temporary paths are truncated;
+		// whatever remains must still be the prefix of the announced path.
+		shown := strings.TrimSuffix(strings.TrimSpace(plain[index+len(marker):]), "...")
+		want := filepath.Join(root, "AGENTS.md")
+		require.NotEmpty(t, shown)
+		require.True(t, strings.HasPrefix(want, shown), "notice should identify %s, rendered %q", want, shown)
 
 		require.NotNil(t, m.emitProjectInstructionsNotice())
 		require.True(t, m.Config.ProjectInstructionsNoticeShown)

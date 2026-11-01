@@ -173,10 +173,22 @@ func renderSkillSearch(matches []skillSearchMatch) string {
 	if len(matches) == 0 {
 		return "No matching skills found."
 	}
+	const omitted = "More matches omitted due to output size; narrow the search.\n"
+	const incomplete = "[Description omitted: too large; use load_skill with this exact name to check applicability.]"
 	var sb strings.Builder
-	for _, match := range matches {
-		line := "- " + match.skill.Name + ": " + skills.BoundedDescription(match.skill.Description) + "\n"
-		if sb.Len()+len(line) > skillSearchMaxBytes {
+	for i, match := range matches {
+		prefix := "- " + match.skill.Name + ": "
+		line := prefix + match.skill.Description + "\n"
+		reserve := 0
+		if i < len(matches)-1 {
+			reserve = len(omitted)
+		}
+		// Never present a partial description as the skill's full scope.
+		if len(line)+reserve > skillSearchMaxBytes {
+			line = prefix + incomplete + "\n"
+		}
+		if sb.Len()+len(line)+reserve > skillSearchMaxBytes {
+			sb.WriteString(omitted)
 			break
 		}
 		sb.WriteString(line)

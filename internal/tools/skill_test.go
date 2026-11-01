@@ -203,7 +203,7 @@ func TestSearchSkillsValidationAndInformationIsolation(t *testing.T) {
 	reg, _ := loadSkillTool(t, catalog)
 	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"PRIVATE"}`))
 	require.NoError(t, err)
-	require.LessOrEqual(t, len(strings.TrimPrefix(out, "- private: ")), skills.MaxDescriptionBytes)
+	require.Equal(t, catalog[0].Description, strings.TrimPrefix(out, "- private: "))
 	require.NotContains(t, out, "SECRET BODY")
 	require.NotContains(t, out, "/secret/path")
 	require.True(t, utf8.ValidString(out))
@@ -219,13 +219,14 @@ func TestSearchSkillsOutputBound(t *testing.T) {
 	for i := range catalog {
 		catalog[i] = skills.Skill{
 			Name:        fmt.Sprintf("matching-%02d", i),
-			Description: strings.Repeat("x", skills.MaxDescriptionBytes),
+			Description: strings.Repeat("x", 600),
 		}
 	}
 	reg, _ := loadSkillTool(t, catalog)
 	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"matching","limit":20}`))
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(out), skillSearchMaxBytes)
+	require.Contains(t, out, "More matches omitted")
 }
 
 func TestLoadSkillLargeFileRejected(t *testing.T) {
@@ -241,4 +242,23 @@ func TestLoadSkillLargeFileRejected(t *testing.T) {
 	reg, _ := loadSkillTool(t, catalog)
 	got := callLoadSkill(t, reg, `{"name":"multi","file":"scripts/big.txt"}`)
 	require.Contains(t, got, "file too large")
+}
+
+func TestSearchSkillsPreservesLateTriggers(t *testing.T) {
+	description := strings.Repeat("Desktop configuration. ", 20) + "Triggers: idle, lock screen."
+	reg, _ := loadSkillTool(t, []skills.Skill{{Name: "desktop", Description: description}})
+	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"lock screen"}`))
+	require.NoError(t, err)
+	require.Equal(t, "- desktop: "+description, out)
+}
+
+func TestSearchSkillsMarksOversizedDescription(t *testing.T) {
+	reg, _ := loadSkillTool(t, []skills.Skill{{Name: "desktop", Description: strings.Repeat("界", skillSearchMaxBytes) + "lock screen"}})
+	out, err := reg.Call(context.Background(), "search_skills", []byte(`{"query":"lock screen"}`))
+	require.NoError(t, err)
+	require.Contains(t, out, "- desktop:")
+	require.Contains(t, out, "Description omitted")
+	require.Contains(t, out, "load_skill")
+	require.True(t, utf8.ValidString(out))
+	require.LessOrEqual(t, len(out), skillSearchMaxBytes)
 }

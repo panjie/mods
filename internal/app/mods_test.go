@@ -713,7 +713,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		m.skillCatalog = catalog
 		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
-		require.Contains(t, joined, "Load a skill by name with load_skill")
+		require.Contains(t, joined, "When the user names a skill or the task matches its description")
 		require.Contains(t, joined, "demo: Demo skill.")
 		require.NotContains(t, joined, "Skill safe directories:")
 		require.NotContains(t, joined, filepath.Dir(skillDir))
@@ -723,7 +723,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		m := newTestMods(Config{})
 		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
-		require.NotContains(t, joined, "Load a skill by name with load_skill")
+		require.NotContains(t, joined, "When the user names a skill or the task matches its description")
 		require.NotContains(t, joined, "Skill safe directories:")
 	})
 
@@ -740,7 +740,7 @@ func TestSetupStreamContextInjectsSkillCatalog(t *testing.T) {
 		m.skillCatalog = catalog
 		require.NoError(t, m.setupStreamContext("hello"))
 		joined := strings.Join(systemContents(m.messages), "\n")
-		require.NotContains(t, joined, "Load a skill by name with load_skill")
+		require.NotContains(t, joined, "When the user names a skill or the task matches its description")
 		require.NotContains(t, joined, "Skill safe directories:")
 	})
 }

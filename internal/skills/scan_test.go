@@ -277,7 +277,7 @@ func TestCatalogPromptFormat(t *testing.T) {
 	require.Less(t, strings.Index(got, "alpha"), strings.Index(got, "bravo"))
 }
 
-func TestCatalogPromptBoundsDescriptionsAndTotal(t *testing.T) {
+func TestCatalogPromptPreservesDescriptionsWithinTotalBudget(t *testing.T) {
 	catalog := make([]Skill, 40)
 	for i := range catalog {
 		catalog[i] = Skill{
@@ -298,12 +298,24 @@ func TestCatalogPromptBoundsDescriptionsAndTotal(t *testing.T) {
 			break
 		}
 	}
-	require.NotEmpty(t, line, "catalog must render the bounded entry")
-	require.LessOrEqual(t, len(line), MaxDescriptionBytes)
+	require.Equal(t, catalog[0].Description, line)
 }
 
 func TestCatalogPromptBudgetCanOmitEntireCatalog(t *testing.T) {
 	render := CatalogPromptBudget([]Skill{{Name: "alpha", Description: "desc"}}, 8)
 	require.Empty(t, render.Prompt)
 	require.Equal(t, 1, render.Omitted)
+}
+
+func TestCatalogPromptPreservesLateTriggersAndSkipsOversizedEntries(t *testing.T) {
+	description := strings.Repeat("Desktop configuration. ", 20) + "Triggers: idle, lock screen."
+	catalog := []Skill{{Name: "a-huge", Description: strings.Repeat("x", MaxCatalogBytes)}, {Name: "desktop", Description: description}}
+	result := CatalogPromptBudget(catalog, MaxCatalogBytes)
+	require.Equal(t, 1, result.Included)
+	require.Equal(t, 1, result.Omitted)
+	require.Contains(t, result.Prompt, "- desktop: "+description)
+	require.NotContains(t, result.Prompt, "- a-huge:")
+	require.Contains(t, result.Prompt, "1 more skills omitted; use search_skills")
+	require.Contains(t, result.Prompt, "before related investigation or changes, including read-only queries")
+	require.LessOrEqual(t, len(result.Prompt), MaxCatalogBytes)
 }

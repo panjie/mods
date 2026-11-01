@@ -18,9 +18,6 @@ import (
 )
 
 const (
-	// MaxDescriptionBytes bounds each description placed in a provider prompt
-	// or tool result. The in-memory Skill remains unchanged.
-	MaxDescriptionBytes = 256
 	// MaxCatalogBytes bounds the always-on skill catalog prompt.
 	MaxCatalogBytes = 4096
 )
@@ -333,16 +330,6 @@ type CatalogRender struct {
 	Omitted  int
 }
 
-// BoundedDescription returns a UTF-8-safe prompt representation without
-// changing the full description held in memory.
-func BoundedDescription(description string) string {
-	if len(description) <= MaxDescriptionBytes {
-		return description
-	}
-	const suffix = "..."
-	return textutil.TruncateUTF8Bytes(description, MaxDescriptionBytes-len(suffix)) + suffix
-}
-
 // CatalogPrompt renders the system-prompt section listing available skills
 // within the hard catalog limit.
 func CatalogPrompt(skills []Skill) string {
@@ -364,21 +351,21 @@ func CatalogPromptBudget(catalog []Skill, maxBytes int) CatalogRender {
 
 	// The surrounding system section already titles this catalogue, so the
 	// header carries only the operating instruction and never its own heading.
-	const header = "Load a skill by name with load_skill(<name>); use search_skills when the name is unknown or omitted. Do not reload a skill already loaded.\n"
+	const header = "When the user names a skill or the task matches its description, load_skill by exact name before related investigation or changes, including read-only queries. If applicability is unclear or entries are omitted, use search_skills; limited discovery to establish applicability is allowed. Do not reload a skill already loaded.\n"
 	if len(header) > maxBytes {
 		return CatalogRender{Omitted: len(sorted)}
 	}
 
 	lines := make([]string, 0, len(sorted))
 	for _, skill := range sorted {
-		line := "- " + skill.Name + ": " + BoundedDescription(skill.Description) + "\n"
+		line := "- " + skill.Name + ": " + skill.Description + "\n"
 		omittedAfter := len(sorted) - len(lines) - 1
 		candidate := header + strings.Join(append(append([]string(nil), lines...), line), "")
 		if omittedAfter > 0 {
 			candidate += catalogOmittedNotice(omittedAfter)
 		}
 		if len(candidate) > maxBytes {
-			break
+			continue
 		}
 		lines = append(lines, line)
 	}

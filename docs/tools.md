@@ -124,3 +124,15 @@ effective directories.
 The default is `~/.agents/skills`. Portable mode also includes a `skills`
 directory next to the executable. Use `mods --list-skills` to list the installed
 skills from the effective directories.
+
+When a task matches an installed skill's description, or the user names a skill,
+the model is instructed to load it before related investigation or changes.
+This includes read-only questions covered by the skill. Limited discovery to
+establish applicability is allowed; already loaded skills need not be reloaded.
+
+The prompt catalog preserves complete descriptions within a 4096-byte total
+budget. Entries that do not fit are omitted with a notice to use `search_skills`.
+Search matches full descriptions and returns complete descriptions within its
+own 4096-byte output budget. An oversized description is explicitly marked as
+omitted, with instructions to load that skill to check applicability. These are
+model instructions, not a runtime gate on other tools.

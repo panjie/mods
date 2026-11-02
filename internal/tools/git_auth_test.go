@@ -213,6 +213,30 @@ func TestGitAuthTimeoutClosesPendingRequest(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 }
 
+func TestGitAskpassResponseSurvivesDelayedRead(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	_, address, token, cleanup, err := startGitAuthBroker(context.Background(), exe, "git fetch", func(context.Context, GitAuthRequest) (string, error) {
+		return "fixture-answer", nil
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := dialGitAuth(ctx, address)
+	require.NoError(t, err)
+	defer conn.Close()
+	require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
+	require.NoError(t, json.NewEncoder(conn).Encode(gitAskpassRequest{Token: token, Prompt: "Password for 'https://example.invalid': "}))
+	// A client need not have a read pending when the broker writes its reply.
+	// Windows must retain that reply until the client consumes it.
+	time.Sleep(50 * time.Millisecond)
+	var response gitAskpassResponse
+	require.NoError(t, json.NewDecoder(conn).Decode(&response))
+	require.Empty(t, response.Error)
+	require.Equal(t, "fixture-answer", response.Value)
+}
+
 func TestGitAuthEnvironmentAndLauncher(t *testing.T) {
 	isolateGitAuth(t)
 	cmd := exec.Command("unused")

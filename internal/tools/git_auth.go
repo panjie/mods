@@ -203,7 +203,15 @@ func serveGitAuth(ctx context.Context, listener net.Listener, token, display str
 				failed = true
 			}
 			_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
-			_ = json.NewEncoder(conn).Encode(response)
+			if err := json.NewEncoder(conn).Encode(response); err != nil {
+				return
+			}
+			// Closing a Windows named pipe can discard an unread response. Let
+			// the helper read it and close first, with a bounded wait for clients
+			// that stay connected. Context cancellation still closes the pipe.
+			_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+			var end [1]byte
+			_, _ = conn.Read(end[:])
 		}()
 	}
 }

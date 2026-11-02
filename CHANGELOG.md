@@ -39,7 +39,7 @@ This release includes the following changes since v4.5.0.
 - Improved startup latency by overlapping terminal probing and session lookup and creating Markdown renderers only when needed. Debug output includes startup and first-response timings.
 - Fixed Chinese terminal rendering, multiline prompt editing, duplicate streamed/final output, command review pagination, and sensitive activity details. Todo plans with five or fewer items stay expanded.
 - CI runs the build/test commands directly, avoiding a Go 1.27 incompatibility in the Task runner's transitive dependencies.
-- Windows Git authentication keeps the named pipe open until the helper consumes its response, preventing credentials from being lost when the broker closes first.
+- Windows Git authentication uses bounded pipe buffers to prevent request/response write deadlocks and keeps the pipe open until the helper consumes its response.
 
 ## [3.3.0] - 2026-07-06
 

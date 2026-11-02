@@ -16,8 +16,13 @@ func listenGitAuth(_ string, token string) (net.Listener, string, error) {
 		return nil, "", err
 	}
 	address := `\\.\pipe\mods-git-auth-` + token
+	// A JSON decoder may finish before consuming the encoder's trailing
+	// newline. Buffer bounded messages so request/response writes cannot
+	// deadlock while the other side switches from decoding to encoding.
 	listener, err := winio.ListenPipe(address, &winio.PipeConfig{
 		SecurityDescriptor: "D:P(A;;GA;;;" + user.User.Sid.String() + ")",
+		InputBufferSize:    gitAuthMaxMessage,
+		OutputBufferSize:   gitAuthMaxMessage,
 	})
 	return listener, address, err
 }

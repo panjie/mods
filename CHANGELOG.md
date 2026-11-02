@@ -7,26 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-02
+
+This release includes the following changes since v4.5.0.
+
 ### Added
+- Persistent conversation compaction with `--compact` and opt-in `context-max-bytes`. Summaries are stored separately from the complete original transcript, and `history_read` retrieves archived text evidence after compaction. Compaction runs before user turns, not within a tool loop.
+- ChatGPT subscription sign-in and inference through the `chatgpt` provider and configuration wizard.
+- Per-call Windows UAC elevation for command tools, with bounded output, cancellation, and ordinary command approval before OS consent.
+- **Full control (this session)** in command approvals disables subsequent tool review for the current invocation, including later chat turns, without changing configuration or saving a permission rule.
 - Project instructions loaded from `AGENTS.md` now emit a one-time tool-style record (`✓ Project instructions: <path>`) in interactive sessions, so the automatic context load is visible like a skill load. `--no-instructions`, `--minimal`, `--raw`, `--hide-tool-status`, and non-interactive runs stay silent.
 
 ### Changed
 - Refreshed the interactive UI. `--config` shows a step progress bar, quiet option focus, and a grouped review table; `--chat` shows provider/model/working-directory context; tool status uses short verb labels (`✓ shell  go test ./...  · exit 0`); and command approvals keep a compact, single-row choice menu with a visible cursor.
 - Command guidance prefers reads when sufficient, clear reviewable commands, and appropriate pipelines, variables, loops, and scripts. Prompt evaluations cover normal mode with explicit minimal controls, and debug output reports system/tool-definition byte breakdowns backed by assembled-request budget tests.
-- Made web search opt-in and Tavily the default provider; custom providers remain available when explicitly configured.
-- Windows now registers only `powershell_run` for shell work; `shell_run` is no longer offered there because it executed the same PowerShell host under a second name.
 - Command tools require a model-declared `effect` and nonblank `purpose`. In `auto` and `always`, declared reads run without review and `may_write` calls require one-call approval, including temporary writes. Mods trusts the declaration without independently analyzing effects. Native/MCP reads run without review; their writes retain target-based rules and safe temporary-directory exemptions. `always` ignores saved rules.
 - Command reviews show the purpose, normalized working directory, and complete command; long commands remain browsable without a read-every-page approval gate.
 - Download reviews no longer repeat the saved session grant as a separate `If A` row; their target rows already show the affected directories and origins.
-- `request_user_input` accepts up to 10 options, longer option labels, and multi-line `select`/`multiselect` questions, so multi-item approval checklists render completely in one dialog.
+- Chat invocations reuse MCP transports while refreshing tools and annotations on each turn; failed transports are retired without replaying tool calls.
+- Skill catalogs cache bounded metadata and load current instruction bodies on demand. Applicable installed skills must be loaded, and their full applicability descriptions remain available.
+- OpenCode Go routing follows the configured gateway protocol, with automatic Responses selection on supported official endpoints.
 
 ### Removed
 - Removed command-effect analysis, its PowerShell parser bridge, and automatic/manual command simplification. Legacy `command-simplification` and `builtin-tools.shell-read-only-commands` settings are ignored; saved command rules no longer grant permission.
 - Removed all bundled skills. Skills are now loaded only from installed skill directories.
-- Removed the DuckDuckGo web search provider.
-- Removed plan mode, including the `--plan` / `-p` flags and the `prompts.plan` override.
-- Removed the `max-input-chars`, `max-tokens`, `no-limit`, and `builtin-tools.shell-max-output` settings and their related input, response, and tool-output truncation behavior.
-- Removed prompt-intent, write-scope authorization, and model-based write-target inference, including runtime hooks, prompts, configuration remnants, and dedicated tests. Session write permissions now come from explicit review decisions.
+- Removed model-based write-target inference. Session write permissions now come from explicit review decisions.
+
+### Fixed
+- Mutable filesystem and download tools prepare canonical targets before approval and bind execution to the approved call. Changed targets require fresh preparation and review; continued changes fail closed. `fs_apply_patch` remains scoped to its root.
+- Aligned provider tool registration, approval, dispatch, and continuation contracts; unsupported tool media fails explicitly instead of being dropped.
+- Improved startup latency by overlapping terminal probing and session lookup and creating Markdown renderers only when needed. Debug output includes startup and first-response timings.
+- Fixed Chinese terminal rendering, multiline prompt editing, duplicate streamed/final output, command review pagination, and sensitive activity details. Todo plans with five or fewer items stay expanded.
+- CI runs the build/test commands directly, avoiding a Go 1.27 incompatibility in the Task runner's transitive dependencies.
 
 ## [3.3.0] - 2026-07-06
 
@@ -159,6 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Review deadlock in pipe mode and Ctrl+C deadlock on review channel.
 - Cross-platform compatibility; glamour newline collapsing; empty LLM response due to low MaxTokens.
 
+[Unreleased]: https://github.com/panjie/mods/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/panjie/mods/compare/v4.5.0...v5.0.0
 [3.2.0]: https://github.com/panjie/mods/compare/v3.0.0...v3.2.0
 [3.0.0]: https://github.com/panjie/mods/compare/v2.5.0...v3.0.0
 [2.5.0]: https://github.com/panjie/mods/compare/v2.0.0...v2.5.0

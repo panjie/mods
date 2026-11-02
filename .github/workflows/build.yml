@@ -24,7 +24,9 @@ jobs:
         run: go mod download
 
       - name: Build and test
-        run: go run github.com/go-task/task/v3/cmd/task@v3.51.1 ci
+        run: |
+          go build -v ./...
+          go test -v -cover -timeout=90s ./...
 
       - name: Windows reliability quick checks
         if: runner.os == 'Windows'

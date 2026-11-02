@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/panjie/mods/internal/testutil"
 	"golang.org/x/sys/windows"
 )
 
@@ -136,7 +137,7 @@ func TestWindowsReliabilityExitTimeoutRace(t *testing.T) {
 }
 
 func TestWindowsReliabilityPathsAndJunctionBoundary(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "space 项目")
+	root := filepath.Join(testutil.CanonicalTempDir(t), "space 项目")
 	deep := root
 	for len(deep) < 280 {
 		deep = filepath.Join(deep, "long-segment")

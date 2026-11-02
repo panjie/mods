@@ -227,7 +227,7 @@ func dispatchTurnResult(mods *Mods) error {
 	}
 	printTokenUsage(mods)
 
-	if config.SessionWriteToID != "" {
+	if resultConfig(mods).SessionWriteToID != "" {
 		return saveSession(mods)
 	}
 

@@ -25,6 +25,7 @@ import (
 func (m *Mods) setupStreamContext(content string) error {
 	cfg := m.Config
 	m.messages = []proto.Message{}
+	m.transcript = nil
 	m.compactedPrefix = nil
 	m.compactedText = ""
 	m.toolSelectionInsertAt = -1

@@ -45,7 +45,6 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	// cancel slice and the active streamRunner can both linger if a previous
 	// stream is in flight (e.g. retry path); close them explicitly so HTTP
 	// bodies, MCP processes, and tool-call contexts are not leaked.
-	m.closeActiveRunner()
 	m.cancelMu.Lock()
 	cancels := m.cancelRequest
 	m.cancelRequest = nil
@@ -53,6 +52,8 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 	for _, cancel := range cancels {
 		cancel()
 	}
+	// Wake any active tool before waiting for its batch to commit.
+	m.closeActiveRunner()
 	m.thinkActive = false
 	m.responseOutputStarted = false
 	m.responseBoundaryPending = false

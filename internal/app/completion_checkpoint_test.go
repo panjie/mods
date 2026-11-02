@@ -88,7 +88,7 @@ func TestCompletionRetryPreservesExecutedTools(t *testing.T) {
 			require.NoError(t, results.results[0].Err)
 			m.Update(results) // publish the completed batch before receiving the next round
 			require.Equal(t, runner.messages(), m.Messages(), "saving during cancellation must include completed tool effects")
-			checkpointLen := len(m.retryCheckpoint.messages)
+			checkpointLen := len(m.transcript.Snapshot())
 			event := consume(runner.receiveCmd()().(streamEventMsg))
 			<-requests // initial request
 			completedRequest, err := json.Marshal(<-requests)

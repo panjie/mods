@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -52,13 +51,17 @@ func New(config Config) (*Client, error) {
 }
 
 // Capabilities reports Ollama backend features. The Ollama adapter
-// supports tool/function calling via CallTools.
+// supports tool/function calls through the shared conversation executor.
 func (c *Client) Capabilities() stream.Capabilities {
 	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, ToolImages: true, Reasoning: true}
 }
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	return stream.NewConversation(ctx, request, c.requestRound)
+}
+
+func (c *Client) requestRound(ctx context.Context, request proto.Request) stream.Round {
 	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
@@ -66,14 +69,13 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		return stream.Failed(err, request.Messages)
 	}
 	s := &Stream{
-		toolCall:   request.ToolCaller,
-		resultCall: request.ResultCaller,
+
 		trackUsage: request.TrackUsage,
 	}
 	body := newChatRequest(request, c.config.Think)
 	s.request = body
 	s.messages = request.Messages
-	s.factory = func() {
+	start := func() {
 		s.mu.Lock()
 		s.run++
 		run := s.run
@@ -97,7 +99,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 			}))
 		}()
 	}
-	s.factory()
+	start()
 	return s
 }
 
@@ -127,19 +129,17 @@ func newChatRequest(request proto.Request, configuredThink ...any) api.ChatReque
 
 // Stream ollama stream.
 type Stream struct {
-	mu         sync.Mutex
-	closed     bool
-	request    api.ChatRequest
-	err        error
-	done       bool
-	run        uint64
-	factory    func()
-	respCh     chan api.ChatResponse
-	message    api.Message
-	content    strings.Builder
-	thinking   strings.Builder
-	toolCall   proto.ToolCaller
-	resultCall proto.ToolResultCaller
+	mu       sync.Mutex
+	closed   bool
+	request  api.ChatRequest
+	err      error
+	done     bool
+	run      uint64
+	respCh   chan api.ChatResponse
+	message  api.Message
+	content  strings.Builder
+	thinking strings.Builder
+
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
@@ -173,29 +173,6 @@ func (s *Stream) finish(run uint64, ch chan api.ChatResponse, err error) {
 	s.mu.Unlock()
 }
 
-// CallTools implements stream.Stream.
-func (s *Stream) CallTools() []proto.ToolCallStatus {
-	statuses := make([]proto.ToolCallStatus, 0, len(s.message.ToolCalls))
-	var results []proto.Message
-	for i, call := range s.message.ToolCalls {
-		msg, status := stream.CallTool(
-			proto.ToolCallRequest{ID: strconv.Itoa(call.Function.Index), Index: i + 1, Total: len(s.message.ToolCalls), Name: call.Function.Name, Arguments: []byte(call.Function.Arguments.String())},
-			s.toolCall, s.resultCall,
-		)
-		s.messages = append(s.messages, msg)
-		results = append(results, msg)
-		statuses = append(statuses, status)
-	}
-	if len(statuses) > 0 {
-		s.request.Messages = append(s.request.Messages, fromProtoMessages(results)...)
-		s.message = api.Message{}
-		s.content.Reset()
-		s.thinking.Reset()
-		s.factory()
-	}
-	return statuses
-}
-
 // Close implements stream.Stream.
 func (s *Stream) Close() error {
 	s.mu.Lock()
@@ -226,6 +203,7 @@ func (s *Stream) Current() (proto.Chunk, error) {
 	s.mu.Lock()
 	s.content.WriteString(resp.Message.Content)
 	s.thinking.WriteString(resp.Message.Thinking)
+	s.message.Role = "assistant"
 	s.message.Content = s.content.String()
 	s.message.Thinking = s.thinking.String()
 	s.message.ToolCalls = append(s.message.ToolCalls, resp.Message.ToolCalls...)

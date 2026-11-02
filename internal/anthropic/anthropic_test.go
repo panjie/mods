@@ -74,7 +74,7 @@ func TestThinkingRequestConfiguration(t *testing.T) {
 			Model:       "claude-opus-4-8",
 			Messages:    []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
 			Temperature: &temperature,
-		}).(*Stream)
+		}).(*stream.Conversation).Round().(*Stream)
 
 		require.NotNil(t, st.request.Thinking.OfAdaptive)
 		require.Equal(t, SDK.OutputConfigEffort("xhigh"), st.request.OutputConfig.Effort)
@@ -91,7 +91,7 @@ func TestThinkingRequestConfiguration(t *testing.T) {
 		st := client.Request(context.Background(), proto.Request{
 			Model:    "claude-sonnet-4-5-20250929",
 			Messages: []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
-		}).(*Stream)
+		}).(*stream.Conversation).Round().(*Stream)
 
 		require.Equal(t, int64(12288), st.request.MaxTokens)
 		require.Equal(t, int64(8192), st.request.Thinking.OfEnabled.BudgetTokens)
@@ -141,7 +141,7 @@ func TestThinkingRequestConfiguration(t *testing.T) {
 			Model:       "claude-sonnet-5",
 			Messages:    []proto.Message{{Role: proto.RoleUser, Content: "hello"}},
 			Temperature: &temperature,
-		}).(*Stream)
+		}).(*stream.Conversation).Round().(*Stream)
 
 		require.NotNil(t, st.request.Thinking.OfDisabled)
 		require.True(t, st.request.Temperature.Valid())
@@ -163,15 +163,12 @@ func TestCallToolsGroupsParallelResults(t *testing.T) {
 			{"type":"tool_use","id":"tool_2","name":"second","input":{"n":2}}
 		]
 	}`), &message))
-	st := &Stream{
-		message: message,
-		request: SDK.MessageNewParams{
-			Messages: []SDK.MessageParam{SDK.NewUserMessage(SDK.NewTextBlock("start"))},
-		},
-		toolCall: func(call proto.ToolCallRequest) (string, error) {
-			return call.Name + " result", nil
-		},
-	}
+	pm, err := toProtoMessage(message)
+	require.NoError(t, err)
+	st := stream.NewConversation(context.Background(), proto.Request{ToolCaller: func(call proto.ToolCallRequest) (string, error) { return call.Name + " result", nil }}, func(context.Context, proto.Request) stream.Round {
+		return stream.Failed(nil, []proto.Message{{Role: proto.RoleUser, Content: "start"}, pm})
+	})
+	require.False(t, st.Next())
 
 	statuses := st.CallTools()
 
@@ -180,8 +177,10 @@ func TestCallToolsGroupsParallelResults(t *testing.T) {
 	require.Equal(t, 1, statuses[0].Index)
 	require.Equal(t, 2, statuses[0].Total)
 	require.Equal(t, "tool_2", statuses[1].ID)
-	require.Len(t, st.request.Messages, 2)
-	results := st.request.Messages[1]
+	_, wire, err := fromProtoMessages(st.Messages())
+	require.NoError(t, err)
+	require.Len(t, wire, 3)
+	results := wire[2]
 	require.Equal(t, SDK.MessageParamRoleUser, results.Role)
 	require.Len(t, results.Content, 2)
 	require.Equal(t, "tool_1", results.Content[0].OfToolResult.ToolUseID)
@@ -271,9 +270,9 @@ func TestThinkingToolRoundReplaysOpaqueBlocksAfterBudgeting(t *testing.T) {
 		}
 	}
 	require.NoError(t, st.Err())
-	require.Len(t, st.Messages(), 2)
-	require.NotEmpty(t, st.Messages()[1].ProviderData[messagesProviderDataKey])
 	require.Len(t, st.CallTools(), 1)
+	require.Len(t, st.Messages(), 3)
+	require.NotEmpty(t, st.Messages()[1].ProviderData[messagesProviderDataKey])
 
 	for st.Next() {
 		_, err := st.Current()

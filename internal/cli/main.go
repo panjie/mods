@@ -587,6 +587,7 @@ func printList(sessions []Session) {
 }
 
 func saveSession(mods *Mods) error {
+	config := resultConfig(mods)
 	if config.NoSave {
 		_, _ = lipgloss.Fprintf(
 			os.Stderr,
@@ -611,6 +612,7 @@ func saveSession(mods *Mods) error {
 }
 
 func persistSession(mods *Mods) (string, string, error) {
+	config := resultConfig(mods)
 	// if message is a sha1, use the last prompt instead.
 	id := config.SessionWriteToID
 	title := strings.TrimSpace(config.SessionWriteToTitle)

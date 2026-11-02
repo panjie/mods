@@ -197,6 +197,10 @@ func (c *Client) validateMediaCapabilities(messages []proto.Message) error {
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	return stream.NewConversation(ctx, request, c.requestRound)
+}
+
+func (c *Client) requestRound(ctx context.Context, request proto.Request) stream.Round {
 	if err := c.validateMediaCapabilities(request.Messages); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
@@ -254,11 +258,7 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		return stream
 	}
 	stream.messages = append([]proto.Message(nil), request.Messages...)
-	stream.request = body
-	stream.client = c
-	stream.ctx = ctx
-	stream.toolCall = request.ToolCaller
-	stream.resultCall = request.ResultCaller
+
 	stream.trackUsage = request.TrackUsage
 	return stream
 }
@@ -339,62 +339,11 @@ type Stream struct {
 	unmarshaler Unmarshaler
 	message     proto.Message
 	messages    []proto.Message
-	request     MessageCompletionRequest
-	client      *Client
-	ctx         context.Context
-	toolCall    proto.ToolCaller
-	resultCall  proto.ToolResultCaller
-	callSeq     int
-	trackUsage  bool
-	roundUsage  proto.TokenUsage
-	usage       proto.TokenUsage
-}
 
-// CallTools implements stream.Stream.
-func (s *Stream) CallTools() []proto.ToolCallStatus {
-	calls := s.message.ToolCalls
-	statuses := make([]proto.ToolCallStatus, 0, len(calls))
-	if len(calls) > 0 {
-		s.request.Contents = append(s.request.Contents, fromProtoMessage(s.message))
-		s.messages = append(s.messages, s.message)
-	}
-	for i, call := range calls {
-		msg, status := stream.CallTool(
-			proto.ToolCallRequest{ID: call.ID, Index: i + 1, Total: len(calls), Name: call.Function.Name, Arguments: call.Function.Arguments},
-			s.toolCall, s.resultCall,
-		)
-		s.request.Contents = append(s.request.Contents, fromProtoMessage(msg))
-		s.messages = append(s.messages, msg)
-		statuses = append(statuses, status)
-	}
-	if len(statuses) == 0 {
-		return statuses
-	}
-
-	s.message = proto.Message{}
-	if err := s.client.validateMediaCapabilities(s.messages); err != nil {
-		s.err = err
-		s.isFinished = true
-		return statuses
-	}
-	s.isFinished = false
-	req, err := s.client.newRequest(s.ctx, http.MethodPost, s.client.config.BaseURL, withBody(s.request))
-	if err != nil {
-		s.err = err
-		s.isFinished = true
-		return statuses
-	}
-	next, err := googleSendRequestStream(s.client, req)
-	if err != nil {
-		s.err = err
-		s.isFinished = true
-		return statuses
-	}
-	s.reader = next.reader
-	s.response = next.response
-	s.unmarshaler = next.unmarshaler
-	s.err = nil
-	return statuses
+	callSeq    int
+	trackUsage bool
+	roundUsage proto.TokenUsage
+	usage      proto.TokenUsage
 }
 
 // Err implements stream.Stream.

@@ -19,7 +19,7 @@ import (
 
 var errResponsesStreamEnded = errors.New("OpenAI Responses stream ended before a terminal event")
 
-func (c *Client) requestResponses(ctx context.Context, request proto.Request) stream.Stream {
+func (c *Client) requestResponses(ctx context.Context, request proto.Request) stream.Round {
 	profile := c.profile()
 	input, err := fromProtoResponseInput(request.Messages, profile)
 	if err != nil {
@@ -77,24 +77,11 @@ func (c *Client) requestResponses(ctx context.Context, request proto.Request) st
 	}
 	s := &responseStream{
 		stream:     c.Responses.NewStreaming(ctx, body, opts...),
-		request:    body,
-		toolCall:   request.ToolCaller,
-		resultCall: request.ResultCaller,
 		messages:   request.Messages,
 		trackUsage: request.TrackUsage,
 		profile:    profile,
 	}
-	s.factory = func() *ssestream.Stream[responses.ResponseStreamEventUnion] {
-		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == ProviderProfileQwen, Video: s.profile == ProviderProfileQwen, VideoAudio: s.profile == ProviderProfileQwen}); err != nil {
-			s.requestErr = err
-			return nil
-		}
-		if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
-			s.requestErr = err
-			return nil
-		}
-		return c.Responses.NewStreaming(ctx, s.request, opts...)
-	}
+
 	return s
 }
 
@@ -155,13 +142,11 @@ func responsesRequestOptions(extra map[string]any, profile ResponsesProfile) []o
 }
 
 type responseStream struct {
-	done       bool
-	stream     *ssestream.Stream[responses.ResponseStreamEventUnion]
-	factory    func() *ssestream.Stream[responses.ResponseStreamEventUnion]
-	request    responses.ResponseNewParams
-	messages   []proto.Message
-	toolCall   proto.ToolCaller
-	resultCall proto.ToolResultCaller
+	done   bool
+	stream *ssestream.Stream[responses.ResponseStreamEventUnion]
+
+	messages []proto.Message
+
 	trackUsage bool
 	profile    ResponsesProfile
 
@@ -174,58 +159,6 @@ type responseStream struct {
 	requestErr   error
 	responseErr  error
 	customInputs map[string]*strings.Builder
-}
-
-type pendingResponseToolCall struct {
-	id        string
-	name      string
-	arguments []byte
-	custom    bool
-}
-
-func (s *responseStream) pendingToolCalls() []pendingResponseToolCall {
-	if s.terminal == nil || s.incomplete || s.responseErr != nil {
-		return nil
-	}
-	var calls []pendingResponseToolCall
-	for _, item := range s.terminal.Output {
-		if item.Type == "function_call" {
-			call := item.AsFunctionCall()
-			calls = append(calls, pendingResponseToolCall{id: call.CallID, name: call.Name, arguments: []byte(call.Arguments)})
-		} else if item.Type == "custom_tool_call" {
-			call, err := customToolCallFromRaw(item.RawJSON())
-			if err != nil {
-				s.responseErr = err
-				return nil
-			}
-			input := call.Input
-			if input == "" && s.customInputs != nil && s.customInputs[item.ID] != nil {
-				input = s.customInputs[item.ID].String()
-			}
-			calls = append(calls, pendingResponseToolCall{
-				id: call.CallID, name: canonicalCustomToolName(call.Name),
-				arguments: customToolArguments(call.Name, input), custom: true,
-			})
-		}
-	}
-	return calls
-}
-
-func (s *responseStream) CallTools() []proto.ToolCallStatus {
-	calls := s.pendingToolCalls()
-	statuses := make([]proto.ToolCallStatus, 0, len(calls))
-	for i, call := range calls {
-		msg, status := stream.CallTool(
-			proto.ToolCallRequest{ID: call.id, Index: i + 1, Total: len(calls), Name: call.name, Arguments: call.arguments},
-			s.toolCall, s.resultCall,
-		)
-		if call.custom && len(msg.ToolCalls) > 0 {
-			msg.ToolCalls[0].Type = "custom"
-		}
-		s.messages = append(s.messages, msg)
-		statuses = append(statuses, status)
-	}
-	return statuses
 }
 
 func (s *responseStream) Close() error {
@@ -402,10 +335,7 @@ func (s *responseStream) Next() bool {
 		return false
 	}
 	if s.done {
-		if err := s.startFollowup(); err != nil {
-			s.requestErr = err
-			return false
-		}
+		return false
 	}
 	if s.stream.Next() {
 		return true
@@ -442,24 +372,4 @@ func (s *responseStream) Next() bool {
 	}
 	s.messages = append(s.messages, msg)
 	return false
-}
-
-func (s *responseStream) startFollowup() error {
-	s.done = false
-	input, err := fromProtoResponseInput(s.messages, s.profile)
-	if err != nil {
-		return err
-	}
-	s.request.Input = responses.ResponseNewParamsInputUnion{OfInputItemList: input}
-	s.stream = s.factory()
-	if s.requestErr != nil {
-		return s.requestErr
-	}
-	s.terminal = nil
-	s.terminalSeen = false
-	s.incomplete = false
-	s.roundContent.Reset()
-	s.customInputs = nil
-	s.responseErr = nil
-	return nil
 }

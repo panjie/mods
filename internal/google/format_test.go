@@ -513,6 +513,7 @@ func TestCallToolsSendsFunctionResponseAndContinues(t *testing.T) {
 	require.Equal(t, "call_1", statuses[0].ID)
 	require.Equal(t, 1, statuses[0].Index)
 	require.Equal(t, 1, statuses[0].Total)
+	require.True(t, st.Next())
 	require.Len(t, *captured, 2)
 	for _, body := range *captured {
 		var request map[string]any
@@ -569,6 +570,7 @@ func TestCallToolsSerializesFailureAsError(t *testing.T) {
 	statuses := st.CallTools()
 	require.Len(t, statuses, 1)
 	require.Error(t, statuses[0].Err)
+	require.True(t, st.Next())
 
 	var followup map[string]any
 	require.NoError(t, json.Unmarshal((*captured)[1], &followup))
@@ -621,8 +623,8 @@ func TestRichToolResults(t *testing.T) {
 			require.Len(t, statuses, 1)
 			require.Equal(t, "rich result", statuses[0].Output)
 			if kind == "media" {
-				require.ErrorContains(t, st.Err(), "does not support media in tool results")
 				require.False(t, st.Next())
+				require.ErrorContains(t, st.Err(), "does not support media in tool results")
 				require.Len(t, *captured, 1, "must not send a request that silently drops media")
 				messages := st.Messages()
 				require.Len(t, messages[2].Attachments(), 1, "retain evidence for history")
@@ -631,6 +633,7 @@ func TestRichToolResults(t *testing.T) {
 				require.Len(t, *captured, 1, "restored history must also fail before network access")
 				return
 			}
+			require.True(t, st.Next())
 			require.Len(t, *captured, 2)
 			var body MessageCompletionRequest
 			require.NoError(t, json.Unmarshal((*captured)[1], &body))

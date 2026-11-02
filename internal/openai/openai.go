@@ -108,8 +108,7 @@ func New(config Config) *Client {
 }
 
 // Capabilities reports OpenAI-compatible backend features. The OpenAI
-// adapter supports tool/function calling (CallTools implements the
-// multi-round tool loop).
+// adapter encodes tool/function calls for the shared conversation executor.
 func (c *Client) Capabilities() stream.Capabilities {
 	capabilities := stream.Capabilities{
 		Tools: true, FunctionTools: true, JSONResponseFormat: true,
@@ -147,6 +146,10 @@ func (c *Client) profile() ProviderProfile {
 
 // Request makes a new request and returns a stream.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	return stream.NewConversation(ctx, request, c.requestRound)
+}
+
+func (c *Client) requestRound(ctx context.Context, request proto.Request) stream.Round {
 	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
@@ -200,10 +203,9 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		return stream.Failed(err, request.Messages)
 	}
 	s := &Stream{
-		stream:        c.Chat.Completions.NewStreaming(ctx, body, opts...),
-		request:       body,
-		toolCall:      request.ToolCaller,
-		resultCall:    request.ResultCaller,
+		stream:  c.Chat.Completions.NewStreaming(ctx, body, opts...),
+		request: body,
+
 		messages:      request.Messages,
 		trackUsage:    request.TrackUsage,
 		parseThink:    c.config.ThinkTags,
@@ -214,23 +216,20 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 			closeTag: "</" + tag + ">",
 		},
 	}
-	s.factory = func() *ssestream.Stream[openai.ChatCompletionChunk] {
-		return c.Chat.Completions.NewStreaming(ctx, s.request, opts...)
-	}
+
 	return s
 }
 
 // Stream openai stream.
 type Stream struct {
-	requestErr     error
-	done           bool
-	request        openai.ChatCompletionNewParams
-	stream         *ssestream.Stream[openai.ChatCompletionChunk]
-	factory        func() *ssestream.Stream[openai.ChatCompletionChunk]
-	message        openai.ChatCompletionAccumulator
-	messages       []proto.Message
-	toolCall       proto.ToolCaller
-	resultCall     proto.ToolResultCaller
+	requestErr error
+	done       bool
+	request    openai.ChatCompletionNewParams
+	stream     *ssestream.Stream[openai.ChatCompletionChunk]
+
+	message  openai.ChatCompletionAccumulator
+	messages []proto.Message
+
 	parseThink     bool
 	think          thinkParser
 	thoughtFields  []string
@@ -242,36 +241,6 @@ type Stream struct {
 	visible        strings.Builder
 	finalChunk     *proto.Chunk
 	finalDelivered bool
-}
-
-func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
-	if s.requestErr != nil {
-		return nil
-	}
-	if len(s.message.Choices) == 0 {
-		return nil
-	}
-	return s.message.Choices[0].Message.ToolCalls
-}
-
-// CallTools implements stream.Stream.
-func (s *Stream) CallTools() []proto.ToolCallStatus {
-	calls := s.pendingToolCalls()
-	statuses := make([]proto.ToolCallStatus, 0, len(calls))
-	var results []proto.Message
-	for i, call := range calls {
-		msg, status := stream.CallTool(
-			proto.ToolCallRequest{ID: call.ID, Index: i + 1, Total: len(calls), Name: call.Function.Name, Arguments: []byte(call.Function.Arguments)},
-			s.toolCall, s.resultCall,
-		)
-		s.messages = append(s.messages, msg)
-		results = append(results, msg)
-		statuses = append(statuses, status)
-	}
-	if len(statuses) > 0 {
-		s.request.Messages = append(s.request.Messages, fromProtoMessagesForProfile(results, s.profile)...)
-	}
-	return statuses
 }
 
 // Close implements stream.Stream.
@@ -480,19 +449,7 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
-		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true, Audio: s.profile == ProviderProfileQwen, Video: s.profile == ProviderProfileQwen, VideoAudio: s.profile == ProviderProfileQwen}); err != nil {
-			s.requestErr = err
-			return false
-		}
-		if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
-			s.requestErr = err
-			return false
-		}
-		s.done = false
-		s.stream = s.factory()
-		s.message = openai.ChatCompletionAccumulator{}
-		s.reasoning.Reset()
-		s.visible.Reset()
+		return false
 	}
 
 	if s.stream.Next() {

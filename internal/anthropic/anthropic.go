@@ -23,13 +23,17 @@ type Client struct {
 }
 
 // Capabilities reports Anthropic backend features. The Anthropic
-// adapter supports tool/function calling via CallTools.
+// adapter encodes tool/function calls for the shared conversation executor.
 func (c *Client) Capabilities() stream.Capabilities {
 	return stream.Capabilities{Tools: true, FunctionTools: true, Images: true, ToolImages: true, Reasoning: true, ReasoningReplay: true}
 }
 
 // Request implements stream.Client.
 func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stream {
+	return stream.NewConversation(ctx, request, c.requestRound)
+}
+
+func (c *Client) requestRound(ctx context.Context, request proto.Request) stream.Round {
 	if err := stream.ValidateMediaCapabilities(request.Messages, c.Capabilities()); err != nil {
 		return stream.Failed(err, request.Messages)
 	}
@@ -108,17 +112,13 @@ func (c *Client) Request(ctx context.Context, request proto.Request) stream.Stre
 		return stream.Failed(err, request.Messages)
 	}
 	s := &Stream{
-		stream:     c.Messages.NewStreaming(ctx, body),
-		request:    body,
-		toolCall:   request.ToolCaller,
-		resultCall: request.ResultCaller,
+		stream:  c.Messages.NewStreaming(ctx, body),
+		request: body,
+
 		messages:   request.Messages,
 		trackUsage: request.TrackUsage,
 	}
 
-	s.factory = func() *ssestream.Stream[anthropic.MessageStreamEventUnion] {
-		return c.Messages.NewStreaming(ctx, s.request)
-	}
 	return s
 }
 
@@ -182,48 +182,16 @@ func NormalizeBaseURL(base string) string {
 
 // Stream represents a stream for chat completion.
 type Stream struct {
-	done       bool
-	stream     *ssestream.Stream[anthropic.MessageStreamEventUnion]
-	request    anthropic.MessageNewParams
-	factory    func() *ssestream.Stream[anthropic.MessageStreamEventUnion]
-	message    anthropic.Message
-	toolCall   proto.ToolCaller
-	resultCall proto.ToolResultCaller
+	done    bool
+	stream  *ssestream.Stream[anthropic.MessageStreamEventUnion]
+	request anthropic.MessageNewParams
+
+	message anthropic.Message
+
 	messages   []proto.Message
 	trackUsage bool
 	usage      proto.TokenUsage
 	requestErr error
-}
-
-// CallTools implements stream.Stream.
-func (s *Stream) CallTools() []proto.ToolCallStatus {
-	var statuses []proto.ToolCallStatus
-	var results []anthropic.ContentBlockParamUnion
-	total := 0
-	for _, block := range s.message.Content {
-		if _, ok := block.AsAny().(anthropic.ToolUseBlock); ok {
-			total++
-		}
-	}
-	for _, block := range s.message.Content {
-		switch call := block.AsAny().(type) {
-		case anthropic.ToolUseBlock:
-			msg, status := stream.CallTool(
-				proto.ToolCallRequest{ID: call.ID, Index: len(statuses) + 1, Total: total, Name: call.Name, Arguments: []byte(call.JSON.Input.Raw())},
-				s.toolCall, s.resultCall,
-			)
-			results = append(
-				results,
-				newToolResultBlock(call.ID, msg.Content, status.Err != nil, msg.ImageAttachments()...),
-			)
-			s.messages = append(s.messages, msg)
-			statuses = append(statuses, status)
-		}
-	}
-	if len(results) > 0 {
-		s.request.Messages = append(s.request.Messages, anthropic.NewUserMessage(results...))
-	}
-	return statuses
 }
 
 // Close implements stream.Stream.
@@ -292,17 +260,7 @@ func (s *Stream) Next() bool {
 		return false
 	}
 	if s.done {
-		if err := stream.ValidateMediaCapabilities(s.messages, stream.Capabilities{Images: true}); err != nil {
-			s.requestErr = err
-			return false
-		}
-		s.done = false
-		if err := stream.ValidateMediaWireRequest(s.messages, s.request); err != nil {
-			s.requestErr = err
-			return false
-		}
-		s.stream = s.factory()
-		s.message = anthropic.Message{}
+		return false
 	}
 
 	if s.stream.Next() {

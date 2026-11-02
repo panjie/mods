@@ -68,10 +68,9 @@ type Capabilities struct {
 	ReasoningReplay bool
 }
 
-// Stream is an ongoing stream.
-type Stream interface {
-	// returns false when no more messages, caller should run [Stream.CallTools()]
-	// once that happens, and then check for this again
+// Round is one provider request; adapters only encode and decode protocol data.
+type Round interface {
+	// returns false when the response has ended
 	Next() bool
 
 	// the current chunk
@@ -88,10 +87,13 @@ type Stream interface {
 	// the whole conversation
 	Messages() []proto.Message
 
-	// cumulative token usage across all model calls in this stream
+	// token usage for this response (Stream aggregates all rounds)
 	Usage() proto.TokenUsage
+}
 
-	// handles any pending tool calls
+// Stream is a conversation driven by the shared executor.
+type Stream interface {
+	Round
 	CallTools() []proto.ToolCallStatus
 }
 

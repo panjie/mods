@@ -17,6 +17,7 @@ import (
 	"github.com/panjie/mods/internal/secrets"
 	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
+	"github.com/panjie/mods/internal/stream"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
 )
@@ -53,7 +54,7 @@ type Mods struct {
 	retries         int
 	glam            *glamour.TermRenderer
 	glamViewport    viewport.Model
-	// messages is the session history fed to the provider on each
+	// messages is the draft request history fed to the provider on each
 	// turn. It is mutated by setupStreamContext (in a tea.Cmd goroutine
 	// dispatched by startCompletionCmd) and re-read from the
 	// stream on the Update goroutine after the stream finishes. Concurrent
@@ -62,7 +63,8 @@ type Mods struct {
 	// observes them through Bubble Tea's internal channel send/receive.
 	// There is intentionally no per-field mutex; callers must not introduce
 	// new background goroutines that touch m.messages outside this pattern.
-	messages []proto.Message
+	messages   []proto.Message
+	transcript *stream.Transcript
 	// compactedPrefix retains original history independently of the model view.
 	compactedPrefix []proto.Message
 	compactedText   string
@@ -250,10 +252,14 @@ func (m *Mods) RenderMarkdown(content string) (string, error) {
 }
 
 func (m *Mods) Messages() []proto.Message {
-	if len(m.compactedPrefix) > 0 {
-		return restoreCompactedTranscript(m.compactedPrefix, m.messages)
+	messages := m.messages
+	if m.transcript != nil {
+		messages = m.transcript.Snapshot()
 	}
-	return append([]proto.Message(nil), m.messages...)
+	if len(m.compactedPrefix) > 0 {
+		return restoreCompactedTranscript(m.compactedPrefix, messages)
+	}
+	return cloneCompletionMessages(messages)
 }
 
 // TokenUsage returns token consumption accumulated for this interaction.
@@ -726,6 +732,9 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 				m.appendToOutput(note)
 			}
 			m.messages = append(m.messages, proto.Message{Role: proto.RoleAssistant, Content: note})
+			if m.transcript != nil {
+				m.transcript.Replace(m.messages)
+			}
 		}
 		// The next generation round renders the spinner animation on its
 		// own; mirroring a status line here would produce a duplicate row
@@ -743,7 +752,7 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.responseBoundaryPending = true
 	m.saveCompletionCheckpoint(msg.runner.messages())
 	// Completed tool batches must survive cancellation before the next reply.
-	m.messages = cloneCompletionMessages(m.retryCheckpoint.messages)
+	m.messages = m.transcript.Snapshot()
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
 }
 

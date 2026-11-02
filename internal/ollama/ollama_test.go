@@ -1,7 +1,9 @@
 package ollama
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/panjie/mods/internal/stream"
 	"testing"
 	"time"
 
@@ -56,16 +58,9 @@ func TestNewChatRequestIncludesThinkValue(t *testing.T) {
 }
 
 func TestCallToolsPreservesCallMetadata(t *testing.T) {
-	s := &Stream{
-		message: api.Message{ToolCalls: []api.ToolCall{{Function: api.ToolCallFunction{
-			Index: 7, Name: "lookup", Arguments: api.ToolCallFunctionArguments{"q": "mods"},
-		}}}},
-		toolCall: func(call proto.ToolCallRequest) (string, error) {
-			require.Equal(t, "7", call.ID)
-			return "found", nil
-		},
-		factory: func() {},
-	}
+	pm := toProtoMessage(api.Message{Role: "assistant", ToolCalls: []api.ToolCall{{Function: api.ToolCallFunction{Index: 7, Name: "lookup", Arguments: api.ToolCallFunctionArguments{"q": "mods"}}}}})
+	s := stream.NewConversation(context.Background(), proto.Request{ToolCaller: func(call proto.ToolCallRequest) (string, error) { require.Equal(t, "7", call.ID); return "found", nil }}, func(context.Context, proto.Request) stream.Round { return stream.Failed(nil, []proto.Message{pm}) })
+	require.False(t, s.Next())
 
 	statuses := s.CallTools()
 	require.Len(t, statuses, 1)

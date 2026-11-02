@@ -43,8 +43,10 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 		return requestSession{}, m.apiNotConfiguredError(cfg, api)
 	}
 
-	if err := validateImagePaths(cfg.Images); err != nil {
-		return requestSession{}, err
+	if m.retryCheckpoint == nil {
+		if err := validateImagePaths(cfg.Images); err != nil {
+			return requestSession{}, err
+		}
 	}
 
 	cfgs, err := m.buildProviderConfigs(mod, api)
@@ -178,11 +180,15 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// streamRunner and released by close().
 	streamCtx, streamCancel := context.WithCancel(m.ctx)
 	if m.retryCheckpoint == nil {
-		m.retryCheckpoint = &completionCheckpoint{messages: cloneCompletionMessages(m.messages)}
+		m.saveCompletionCheckpoint(m.messages)
 	}
 	debug.Printf("Startup: request-ready=%s", time.Since(started))
 	requestedAt := time.Now()
-	st := client.Request(streamCtx, request)
+	if m.transcript == nil {
+		m.transcript = &stream.Transcript{}
+	}
+	m.transcript.Replace(m.messages)
+	st := client.Request(stream.WithTranscript(streamCtx, m.transcript), request)
 	errh := func(err error) tea.Msg {
 		return m.handleRequestError(err, mod, m.Input)
 	}

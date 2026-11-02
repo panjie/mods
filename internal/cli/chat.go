@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/panjie/mods/internal/app"
+	cfgpkg "github.com/panjie/mods/internal/config"
 	"github.com/panjie/mods/internal/mcpclient"
 )
 
@@ -40,6 +41,8 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 	ctx = app.WithReviewSession(ctx)
 	ctx, closePool := mcpclient.WithSessionPool(ctx)
 	defer closePool() //nolint:errcheck
+	session := &chatSession{options: cfgpkg.NewInvocationOptions(config), initial: config.InitialInput()}
+	ctx = context.WithValue(ctx, chatSessionKey{}, session)
 	chatBanner()
 	history := []string{}
 	firstPrompt := strings.TrimSpace(strings.Join(args, " "))
@@ -108,11 +111,21 @@ func readChatPromptOnce(history []string) (string, bool, error) {
 func runChatMessage(ctx context.Context, prompt string, opts []tea.ProgramOption) error {
 	renderChatUser(prompt)
 	renderChatAssistant()
-	if _, err := chatTurn(ctx, prompt, opts); err != nil {
+	session, _ := ctx.Value(chatSessionKey{}).(*chatSession)
+	if session != nil {
+		ctx = session.next(ctx, prompt)
+	}
+	mods, err := chatTurn(ctx, prompt, opts)
+	if err != nil {
 		return err
 	}
-	renderChatSaved(config.SessionWriteToID)
-	prepareNextChatTurn()
+	cfg := resultConfig(mods)
+	renderChatSaved(cfg.SessionWriteToID)
+	if session != nil {
+		session.id = cfg.SessionWriteToID
+		session.started = true
+		session.instructionsShown = cfg.ProjectInstructionsNoticeShown
+	}
 	return nil
 }
 
@@ -142,14 +155,16 @@ func hasChatSessionAction() bool {
 }
 
 func runChatTurn(ctx context.Context, prompt string, opts []tea.ProgramOption) (*Mods, error) {
-	config.Prefix = RemoveWhitespace(prompt)
+	cfg := turnConfig(ctx).Clone()
+	cfg.Prefix = RemoveWhitespace(prompt)
+	ctx = context.WithValue(ctx, turnConfigKey{}, &cfg)
 	mods, err := oneTurn(ctx, opts)
 	if err != nil {
 		return mods, err
 	}
 	printChatTurnOutput(mods)
 	printTokenUsage(mods)
-	if config.SessionWriteToID != "" {
+	if resultConfig(mods).SessionWriteToID != "" {
 		if _, _, err := persistSession(mods); err != nil {
 			return mods, err
 		}
@@ -166,23 +181,6 @@ func printChatTurnOutput(mods *Mods) {
 		return
 	}
 	_, _ = lipgloss.Fprint(os.Stdout, mods.Output)
-}
-
-func prepareNextChatTurn() {
-	if config.SessionWriteToID == "" {
-		return
-	}
-	config.Continue = config.SessionWriteToID
-	config.ContinueLast = false
-	config.SessionReadFromID = ""
-	config.SessionWriteToID = ""
-	config.SessionWriteToTitle = ""
-	// CLI attachments belong to the first turn; later turns replay saved media.
-	config.Images = nil
-	config.Audio = nil
-	config.Video = nil
-	config.StdinImage = false
-	config.ClipboardImage = false
 }
 
 func chatBanner() {
@@ -209,7 +207,8 @@ func runOneTurn(ctx context.Context, opts []tea.ProgramOption) (*Mods, error) {
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	mods, err := newMods(signalCtx, &config, db, withSelfHelpCLI(registeredSelfHelpFlags))
+	cfg := turnConfig(ctx).Clone()
+	mods, err := newMods(signalCtx, &cfg, db, withSelfHelpCLI(registeredSelfHelpFlags))
 	if err != nil {
 		return nil, modsError{Err: err, ReasonText: "Couldn't start Bubble Tea program."}
 	}

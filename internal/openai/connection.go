@@ -13,7 +13,7 @@ import (
 // real turn, without tools. A successful HTTP response alone is insufficient.
 func CheckConnection(ctx context.Context, cfg Config, model string) error {
 	limit := int64(512)
-	s := New(cfg).Request(ctx, proto.Request{
+	s := New(cfg).requestRound(ctx, proto.Request{
 		Model: model, MaxTokens: &limit,
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "Reply with only OK."}},
 	})

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +37,8 @@ type streamEventMsg struct {
 // path (receiveCmd returning streamEventDone/streamEventError) and the user
 // quit path can both invoke it without double-close issues.
 type streamRunner struct {
+	closeOnce     sync.Once
+	toolMu        sync.Mutex
 	stream        stream.Stream
 	cleanup       *toolregistry.Registry
 	errh          func(error) tea.Msg
@@ -76,6 +79,11 @@ func (r *streamRunner) receiveCmd() tea.Cmd {
 
 func (r *streamRunner) toolCallsCmd() tea.Cmd {
 	return func() tea.Msg {
+		r.toolMu.Lock()
+		defer r.toolMu.Unlock()
+		if r.closed.Load() {
+			return streamEventMsg{kind: streamEventToolCalls, runner: r}
+		}
 		return streamEventMsg{
 			kind:    streamEventToolCalls,
 			runner:  r,
@@ -105,22 +113,25 @@ func (r *streamRunner) takeUsage() proto.TokenUsage {
 // close releases the stream's context, the underlying HTTP/SSE body, and any
 // tool registry created for this request. It is safe to call from multiple
 // goroutines (quit path versus the natural receiveCmd error/done path); the
-// first caller wins, subsequent calls are no-ops.
+// concurrent callers wait for the same cleanup to finish.
 func (r *streamRunner) close() {
 	if r == nil {
 		return
 	}
-	if !r.closed.CompareAndSwap(false, true) {
-		return
-	}
-	if r.cancel != nil {
-		r.cancel()
-	}
-	if r.stream != nil {
-		_ = r.stream.Close()
-	}
-	if r.cleanup != nil {
-		_ = r.cleanup.Close()
-		r.cleanup = nil
-	}
+	r.closeOnce.Do(func() {
+		r.closed.Store(true)
+		if r.cancel != nil {
+			r.cancel()
+		}
+		// Wait until the active tool batch publishes its results before saving.
+		r.toolMu.Lock()
+		defer r.toolMu.Unlock()
+		if r.stream != nil {
+			_ = r.stream.Close()
+		}
+		if r.cleanup != nil {
+			_ = r.cleanup.Close()
+			r.cleanup = nil
+		}
+	})
 }

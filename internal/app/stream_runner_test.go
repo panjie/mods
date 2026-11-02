@@ -6,6 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/panjie/mods/internal/stream"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/proto"
@@ -216,4 +219,40 @@ func (s *countingStream) CallTools() []proto.ToolCallStatus { return s.inner.Cal
 func (s *countingStream) Close() error {
 	s.closes.Add(1)
 	return s.inner.Close()
+}
+
+func TestStreamRunnerCancellationPublishesToolResultsBeforeCloseReturns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	var transcript stream.Transcript
+	st := stream.NewConversation(stream.WithTranscript(ctx, &transcript), proto.Request{
+		ToolCaller: func(call proto.ToolCallRequest) (string, error) {
+			close(started)
+			<-ctx.Done()
+			return "execution interrupted; effects may have occurred", ctx.Err()
+		},
+	}, func(context.Context, proto.Request) stream.Round {
+		return stream.Failed(nil, []proto.Message{{Role: proto.RoleAssistant, ToolCalls: []proto.ToolCall{
+			{ID: "one", Function: proto.Function{Name: "write"}},
+			{ID: "two", Function: proto.Function{Name: "write"}},
+		}}})
+	})
+	require.False(t, st.Next())
+	runner := newStreamRunner(st, nil, cancel, nil)
+	finished := make(chan struct{})
+	go func() { runner.toolCallsCmd()(); close(finished) }()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("tool did not start")
+	}
+	runner.close()
+	saved := (&Mods{transcript: &transcript}).Messages()
+	require.Len(t, saved, 3)
+	require.Contains(t, saved[1].Content, "effects may have occurred")
+	require.Contains(t, saved[2].Content, "before execution")
+	require.True(t, saved[1].ToolCalls[0].IsError)
+	require.True(t, saved[2].ToolCalls[0].IsError)
+	<-finished
 }

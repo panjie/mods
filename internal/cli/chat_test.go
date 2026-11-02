@@ -40,11 +40,11 @@ func TestRunChatUsesArgsBeforePromptedInput(t *testing.T) {
 func TestRunChatPreservesSessionID(t *testing.T) {
 	withChatTest(t, "second\n", func(calls *[]string) {
 		var continues []string
-		chatTurn = func(_ context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
+		chatTurn = func(ctx context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
 			*calls = append(*calls, prompt)
-			continues = append(continues, config.Continue)
-			config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
-			return &Mods{}, nil
+			continues = append(continues, turnConfig(ctx).Continue)
+			turnConfig(ctx).SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
+			return &Mods{Config: turnConfig(ctx)}, nil
 		}
 
 		require.NoError(t, runChat(context.Background(), []string{"first"}, nil))
@@ -59,8 +59,9 @@ func TestChatConsumesInitialMedia(t *testing.T) {
 		config.Images, config.Audio, config.Video = []string{"image"}, []string{"audio"}, []string{"video"}
 		config.ClipboardImage = true
 		turn := 0
-		chatTurn = func(_ context.Context, _ string, _ []tea.ProgramOption) (*Mods, error) {
+		chatTurn = func(ctx context.Context, _ string, _ []tea.ProgramOption) (*Mods, error) {
 			turn++
+			config := turnConfig(ctx)
 			if turn == 1 {
 				require.NotEmpty(t, config.Images)
 			} else {
@@ -69,8 +70,8 @@ func TestChatConsumesInitialMedia(t *testing.T) {
 				require.Empty(t, config.Video)
 				require.False(t, config.ClipboardImage)
 			}
-			config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
-			return &Mods{}, nil
+			turnConfig(ctx).SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
+			return &Mods{Config: turnConfig(ctx)}, nil
 		}
 		require.NoError(t, runChat(context.Background(), []string{"first"}, nil))
 		require.Equal(t, 2, turn)
@@ -731,10 +732,10 @@ func withChatTest(t *testing.T, input string, fn func(calls *[]string)) {
 	chatInput = strings.NewReader(input)
 	chatOutput = &bytes.Buffer{}
 	calls := []string{}
-	chatTurn = func(_ context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
+	chatTurn = func(ctx context.Context, prompt string, _ []tea.ProgramOption) (*Mods, error) {
 		calls = append(calls, prompt)
-		config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
-		return &Mods{}, nil
+		turnConfig(ctx).SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
+		return &Mods{Config: turnConfig(ctx)}, nil
 	}
 
 	fn(&calls)

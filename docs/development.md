@@ -152,3 +152,32 @@ elevated terminal tests inherited privileges instead of the UAC launch.
 
 Project-specific agent instructions and architecture notes live in `AGENTS.md`.
 Historical design plans and development evidence are available in Git history.
+
+## Conversation ownership
+
+`config.PersistentConfig` remains the YAML settings model. At the CLI boundary,
+`config.InvocationOptions` freezes a deep copy of parsed options; `TurnInput`
+contains the prompt, media sources and manual compaction request for one turn.
+`cli.chatSession` carries the saved session ID and instruction-notice state.
+Each runtime receives its own `Config` copy, so model resolution and session
+saving do not mutate parsed flags or leak first-turn media into later turns.
+
+Provider adapters implement `stream.Round`: one request's wire encoding,
+stream decoding and provider continuation metadata. `stream.Conversation`
+owns tool dispatch and starts the next request only when `Next` is called after
+results are committed. Adapters receive no tool execution callbacks.
+
+`stream.Transcript` publishes deep-copied snapshots of complete message groups.
+Retries and saving read this committed history; the app's completion checkpoint
+contains presentation state only. Request assembly uses a draft copy. Context
+compaction retains its archived prefix, which `Mods.Messages` restores when
+saving the original transcript. Cancelling a tool batch waits for the active
+callback to return and records cancellation results for remaining calls before
+cleanup and persistence. This avoids replaying completed calls during retries;
+it does not provide exactly-once execution across process crashes or roll back
+external effects from an interrupted tool.
+
+Regression coverage includes `TestConversationCommitsBeforeFollowupAndDoesNotReplay`,
+`TestConversationCancellationCompletesToolGroup`,
+`TestStreamRunnerCancellationPublishesToolResultsBeforeCloseReturns`,
+`TestInvocationOptionsIsolateTurns`, and the provider contract fixtures.

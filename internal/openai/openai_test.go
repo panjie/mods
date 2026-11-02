@@ -466,7 +466,7 @@ func TestConfigHeadersAreSentWithChatCompletionRequests(t *testing.T) {
 		_, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 	}))
 	defer server.Close()
 
@@ -481,6 +481,7 @@ func TestConfigHeadersAreSentWithChatCompletionRequests(t *testing.T) {
 		Messages: []proto.Message{{Role: proto.RoleUser, Content: "hi"}},
 	})
 	for st.Next() {
+		_, _ = st.Current()
 	}
 	require.NoError(t, st.Err())
 	require.Equal(t, "mods/test", gotEditorVersion)

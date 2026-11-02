@@ -742,6 +742,8 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.debugStartModelRound()
 	m.responseBoundaryPending = true
 	m.saveCompletionCheckpoint(msg.runner.messages())
+	// Completed tool batches must survive cancellation before the next reply.
+	m.messages = cloneCompletionMessages(m.retryCheckpoint.messages)
 	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
 }
 

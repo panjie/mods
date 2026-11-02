@@ -555,9 +555,8 @@ func movePath(source, dest string, overwrite bool) (string, error) {
 			if !overwrite {
 				return "", fmt.Errorf("destination %s already exists; set overwrite=true to replace it", dest)
 			}
-			if err := os.Remove(dest); err != nil {
-				return "", err
-			}
+			// Rename replaces an existing file without deleting it first. If
+			// replacement fails (for example, a locked source), retain the target.
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return "", err
 		}

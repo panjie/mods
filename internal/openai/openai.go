@@ -4,6 +4,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -244,6 +245,9 @@ type Stream struct {
 }
 
 func (s *Stream) pendingToolCalls() []openai.ChatCompletionMessageToolCall {
+	if s.requestErr != nil {
+		return nil
+	}
 	if len(s.message.Choices) == 0 {
 		return nil
 	}
@@ -498,6 +502,18 @@ func (s *Stream) Next() bool {
 	s.done = true
 	s.usage.Add(s.roundUsage)
 	s.roundUsage = proto.TokenUsage{}
+	if err := s.stream.Err(); err != nil {
+		s.requestErr = err
+		return false
+	}
+	if len(s.message.Choices) == 0 || s.message.Choices[0].FinishReason == "" {
+		s.requestErr = fmt.Errorf("Chat Completions stream ended without a finish reason")
+		return false
+	}
+	if s.message.Choices[0].FinishReason == "length" || s.message.Choices[0].FinishReason == "content_filter" {
+		s.requestErr = fmt.Errorf("Chat Completions response incomplete: %s", s.message.Choices[0].FinishReason)
+		return false
+	}
 	if s.parseThink {
 		content, thought := s.think.flush()
 		s.visible.WriteString(content)

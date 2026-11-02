@@ -54,6 +54,29 @@ func TestRunChatPreservesSessionID(t *testing.T) {
 	})
 }
 
+func TestChatConsumesInitialMedia(t *testing.T) {
+	withChatTest(t, "follow up\n", func(_ *[]string) {
+		config.Images, config.Audio, config.Video = []string{"image"}, []string{"audio"}, []string{"video"}
+		config.ClipboardImage = true
+		turn := 0
+		chatTurn = func(_ context.Context, _ string, _ []tea.ProgramOption) (*Mods, error) {
+			turn++
+			if turn == 1 {
+				require.NotEmpty(t, config.Images)
+			} else {
+				require.Empty(t, config.Images)
+				require.Empty(t, config.Audio)
+				require.Empty(t, config.Video)
+				require.False(t, config.ClipboardImage)
+			}
+			config.SessionWriteToID = "df31ae23ab8b75b5643c2f846c570997edc71333"
+			return &Mods{}, nil
+		}
+		require.NoError(t, runChat(context.Background(), []string{"first"}, nil))
+		require.Equal(t, 2, turn)
+	})
+}
+
 func TestRunChatRejectsNoSave(t *testing.T) {
 	withChatTest(t, "", func(_ *[]string) {
 		config.NoSave = true

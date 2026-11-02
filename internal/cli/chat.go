@@ -177,6 +177,12 @@ func prepareNextChatTurn() {
 	config.SessionReadFromID = ""
 	config.SessionWriteToID = ""
 	config.SessionWriteToTitle = ""
+	// CLI attachments belong to the first turn; later turns replay saved media.
+	config.Images = nil
+	config.Audio = nil
+	config.Video = nil
+	config.StdinImage = false
+	config.ClipboardImage = false
 }
 
 func chatBanner() {

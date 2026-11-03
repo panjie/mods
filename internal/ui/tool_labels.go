@@ -29,6 +29,8 @@ func ToolDisplayName(name string) string {
 		return "process"
 	case "web_search":
 		return "search web"
+	case "web_fetch":
+		return "read web"
 	case "fs_read_file":
 		return "read"
 	case "fs_write_file":
@@ -78,6 +80,10 @@ func ToolDisplayName(name string) string {
 func ToolOperationLabel(name string, data []byte, width int) string {
 	args := ToolOperationArgs(data)
 	switch name {
+	case "web_fetch":
+		if url := OneLinePreview(ArgString(args, "url")); url != "" {
+			return TruncateOperationStatus("read web  "+url, width)
+		}
 	case "web_search":
 		if query := OneLinePreview(ArgString(args, "query")); query != "" {
 			return TruncateOperationStatus("search web  "+query, width)

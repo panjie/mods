@@ -46,6 +46,7 @@ const (
 	// availability, review/permission policy, and denial handling live in the
 	// identity prompt and are deliberately not restated here.
 	ToolSelectionGeneral = "Tool selection:\n" + QueryPolicy + `
+- Read ordinary web documents with web_fetch, not browser skills/commands, even on failure. Reserve browsers for explicit interaction tasks.
 - Avoid incidental writes or installs; builds, tests and scripts can mutate. Complete required mutations with explicit targets.
 - Group related reads, not calls per file. Probe availability once in a batch only to avoid complex logic.
 - On failure, correct once or twice using errors; report incomplete coverage. Finish once supported.`

@@ -84,6 +84,7 @@ func TestToolOperationLabel(t *testing.T) {
 		want string
 	}{
 		"web search":                  {"web_search", `{"query":"GUI wrapper for command line tools"}`, "search web  GUI wrapper for command line tools"},
+		"web fetch":                   {"web_fetch", `{"url":"https://example.com/docs"}`, "read web  https://example.com/docs"},
 		"shell preview":               {"shell_run", `{"command":"go   test   ./...\necho done"}`, "shell  go test ./..."},
 		"shell leading comment":       {"shell_run", `{"command":"# check cwd config\nls .opencode*"}`, "shell  ls .opencode*"},
 		"process argv":                {"process_run", `{"program":"go","args":["test","./path with space","$HOME"]}`, `process  go test "./path with space" $HOME`},

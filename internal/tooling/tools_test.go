@@ -36,6 +36,7 @@ func TestBuiltinSpecs(t *testing.T) {
 		"mods_help":     false,
 		"search_skills": false,
 		"web_search":    false,
+		"web_fetch":     false,
 	}
 	if runtime.GOOS == "windows" {
 		want["powershell_run"] = false
@@ -103,6 +104,22 @@ func TestBuildRegistrySkipsLoadSkillWhenCatalogEmpty(t *testing.T) {
 	require.False(t, ok, "load_skill must NOT be registered when catalog is empty")
 	_, ok = reg.Tool("mods_help")
 	require.True(t, ok, "mods_help must be registered independently of skills")
+}
+
+func TestWebFetchAvailableWithoutSearchShellOrFilesystem(t *testing.T) {
+	cfg := cfgpkg.Default()
+	cfg.WebSearch = false
+	cfg.BuiltinTools.Shell = false
+	cfg.BuiltinTools.Filesystem = cfgpkg.FilesystemNever
+	reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "read a document", nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reg.Close()) })
+	tool, ok := reg.Tool("web_fetch")
+	require.True(t, ok)
+	require.True(t, tool.Capabilities.ReadOnly)
+	require.Contains(t, tool.Spec.Description, "do not invoke browser skills or browser commands")
+	_, ok = reg.Tool("web_search")
+	require.False(t, ok)
 }
 
 func TestBuildRegistryPassesSharedReferenceToModsHelp(t *testing.T) {

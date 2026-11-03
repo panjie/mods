@@ -111,6 +111,12 @@ func builtinTools() []builtinTool {
 			},
 		},
 		{
+			group: "web_fetch",
+			register: func(env builtinEnv) error {
+				return toolregistry.RegisterWebFetch(env.registry)
+			},
+		},
+		{
 			group:   "web_search",
 			enabled: func(env builtinEnv) bool { return env.cfg.WebSearch },
 			register: func(env builtinEnv) error {

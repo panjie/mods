@@ -116,6 +116,8 @@ func toolResultSummary(name string, data []byte) string {
 		return ShellCommandPreview(ArgString(args, "command"))
 	case "web_search":
 		return OneLinePreview(ArgString(args, "query"))
+	case "web_fetch":
+		return OneLinePreview(ArgString(args, "url"))
 	case "load_skill":
 		skillName := OneLinePreview(ArgString(args, "name"))
 		if file := OneLinePreview(ArgString(args, "file")); file != "" {

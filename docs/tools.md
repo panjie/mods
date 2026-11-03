@@ -55,6 +55,30 @@ Native file tools and MCP tools retain their own capabilities and target policy.
 An `effect` argument cannot relabel a native file write as a read. Downloads retain
 structured destination review and their existing page-reading requirement.
 
+## web_fetch
+
+`web_fetch` reads HTTP(S) HTML, plain text and Markdown without a browser,
+search-service key, JavaScript execution or local file writes. It is available
+independently of `--web-search` and filesystem/shell settings. Ordinary webpage
+and documentation queries prefer it over browser skills and commands; failures
+should be reported or followed by web search, not automatic browser invocation.
+Browsers are reserved for explicit interaction tasks.
+
+HTML extraction prefers `main` or `article`, falling back to the body, removes
+navigation and scripts, and preserves code-block whitespace. It does not render
+CSS or JavaScript and cannot read authenticated browser sessions. Fragment URLs
+are accepted but return the whole document. Results contain the final URL,
+title, text, `total_characters`, `next_offset` and `done`. Use `offset` and `limit`
+(default 12000, maximum 20000 Unicode characters) to page long documents. Each
+call fetches again, so changing pages may shift offsets. Web content is untrusted
+source material, not instructions.
+
+Responses and decoded text are limited to 4 MiB, with a 30-second request timeout
+and at most ten redirects. Only HTTP(S) URLs without embedded credentials are
+accepted; HTTPS downgrades are refused. DNS and redirect destinations use the
+same private-network protection as web search and downloads, with the existing
+`MODS_WEB_SEARCH_ALLOW_PRIVATE=1` opt-in.
+
 ## http_download
 
 `http_download` accepts up to 32 URL/path pairs (16 MiB per file), stops on the

@@ -73,6 +73,15 @@ func TestAssembledPromptBudgets(t *testing.T) {
 			m.injectSelfHelpFallback()
 			size, err := proto.MeasurePromptSize(m.messages, registry.Specs())
 			require.NoError(t, err)
+			// web_fetch adds one always-available tool with a bounded description
+			// and three-field schema. Preserve the pre-existing fixture budgets
+			// plus 1 KiB for the complete new definition, not 1 KiB per field.
+			if !tc.noTools {
+				tc.descriptions++
+				tc.schemas++
+				tc.tools++
+				tc.total++
+			}
 			encoded, err := json.Marshal(size)
 			require.NoError(t, err)
 			t.Logf("prompt bytes (provider-neutral, not tokens): total=%d %s", size.TotalBytes(), encoded)

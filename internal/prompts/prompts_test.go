@@ -208,7 +208,12 @@ func TestFixedPromptFragmentsStayCompact(t *testing.T) {
 	// budgets measure rendered system sections and registered tool definitions.
 	require.LessOrEqual(t,
 		len(Identity)+len(Workflow)+len(LanguagePolicy)+len(ToolSelection)+len(InteractiveCredentials),
-		5376, "default runtime prompts must stay within 5.25 KiB")
+		5632, "default runtime prompts including web tool selection must stay within 5.5 KiB")
+}
+
+func TestOrdinaryWebDocumentsAvoidBrowsers(t *testing.T) {
+	require.Contains(t, ToolSelectionGeneral, "web_fetch, not browser skills/commands, even on failure")
+	require.Contains(t, ToolSelectionGeneral, "Reserve browsers for explicit interaction tasks")
 }
 
 func TestReadOnlyGenerationDoesNotOmitRequiredMutations(t *testing.T) {

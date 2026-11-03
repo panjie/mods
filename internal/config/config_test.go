@@ -96,7 +96,7 @@ func TestSelfHelpSettingsIncludeNestedSchemasAndSafeDefaults(t *testing.T) {
 		require.Contains(t, documented, path)
 		require.NotEmpty(t, documented[path].Description, path)
 	}
-	require.Equal(t, "80", documented["word-wrap"].Default)
+	require.Equal(t, "0", documented["word-wrap"].Default)
 	require.Equal(t, "auto", documented["review-mode"].Default)
 	require.Equal(t, "false", documented["web-search"].Default)
 	require.Equal(t, DefaultWebSearchProvider, documented["web-search-provider"].Default)
@@ -779,4 +779,14 @@ func TestHideChatPathConfig(t *testing.T) {
 	t.Setenv("MODS_HIDE_CHAT_PATH", "true")
 	require.NoError(t, env.ParseWithOptions(&cfg, env.Options{Prefix: "MODS_"}))
 	require.True(t, cfg.HideChatPath)
+}
+
+func TestWordWrapDefaultsAndExplicitValues(t *testing.T) {
+	require.Zero(t, Default().WordWrap)
+	for _, width := range []int{0, 40, 100} {
+		cfg := Default()
+		cfg.WordWrap = width
+		cfg.ApplyDefaults()
+		require.Equal(t, width, cfg.WordWrap)
+	}
 }

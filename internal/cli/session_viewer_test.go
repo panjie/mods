@@ -284,6 +284,9 @@ func TestViewerSearchInputAndNavigation(t *testing.T) {
 }
 
 func TestViewerSearchNoMatchesPreservesPositionAndReportsStatus(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	m := newLoadedViewer(t, 14, 8, []proto.Message{{
 		Role:    proto.RoleAssistant,
 		Content: strings.Repeat("x", 200),
@@ -300,6 +303,9 @@ func TestViewerSearchNoMatchesPreservesPositionAndReportsStatus(t *testing.T) {
 }
 
 func TestViewerSearchCorrectsLongSoftWrappedMatchPosition(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	content := strings.Repeat("x", 75) + "needle" + strings.Repeat("x", 39) + "needle" + strings.Repeat("x", 100)
 	m := newLoadedViewer(t, 14, 8, []proto.Message{{Role: proto.RoleAssistant, Content: content}})
 	require.True(t, m.viewport.SoftWrap)
@@ -319,6 +325,9 @@ func TestViewerSearchCorrectsLongSoftWrappedMatchPosition(t *testing.T) {
 }
 
 func TestViewerResizeAndWrapTogglePreserveReadingAnchor(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	m := newLoadedViewer(t, 24, 8, []proto.Message{{
 		Role:    proto.RoleUser,
 		Content: strings.Repeat("界", 150),
@@ -341,6 +350,9 @@ func TestViewerResizeAndWrapTogglePreserveReadingAnchor(t *testing.T) {
 }
 
 func TestViewerNoWrapHorizontalKeysAndShiftWheel(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	m := newLoadedViewer(t, 20, 8, []proto.Message{{
 		Role:    proto.RoleUser,
 		Content: strings.Repeat("x", 100),

@@ -315,7 +315,7 @@ func (m *browserModel) resetViewerViewport(height int) {
 		viewport.WithWidth(m.width),
 		viewport.WithHeight(max(1, height)),
 	)
-	m.viewport.SoftWrap = true
+	m.viewport.SoftWrap = config.WordWrap > 0
 	m.viewport.SetHorizontalStep(viewerHorizontalStep)
 	m.applyViewerStyles()
 }

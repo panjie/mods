@@ -221,10 +221,7 @@ func newMarkdownRenderer(wordWrap int, isDark bool) (*glamour.TermRenderer, erro
 		styleOption = glamour.WithStandardStyle(style)
 	}
 
-	opts := []glamour.TermRendererOption{styleOption}
-	if wordWrap > 0 {
-		opts = append(opts, glamour.WithWordWrap(wordWrap))
-	}
+	opts := []glamour.TermRendererOption{styleOption, glamour.WithWordWrap(max(0, wordWrap))}
 	return glamour.NewTermRenderer(opts...)
 }
 

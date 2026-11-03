@@ -481,6 +481,9 @@ func TestChatPromptHistoryNavigationPreservesMultilineArrowMovement(t *testing.T
 }
 
 func TestChatPromptHistoryNavigationPreservesWrappedLineMovement(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	model := newChatPromptModel([]string{"previous"})
 	model.resize(18)
 	model.textarea.SetValue(strings.Repeat("wrapped ", 8))
@@ -576,6 +579,9 @@ func TestChatPromptIgnoresBlankCtrlEnterAndCtrlCExits(t *testing.T) {
 }
 
 func TestChatPromptResizesWithinBounds(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	model := newChatPromptModel(nil)
 	require.True(t, model.textarea.DynamicHeight)
 	require.Equal(t, chatMinHeight, model.textarea.MinHeight)
@@ -595,6 +601,9 @@ func TestChatPromptResizesWithinBounds(t *testing.T) {
 }
 
 func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 80
+	t.Cleanup(func() { config.WordWrap = oldWrap })
 	model := newChatPromptModel(nil)
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
 	model = updateChatPrompt(t, model, tea.PasteMsg{Content: strings.Repeat("wrapped content ", 12)})

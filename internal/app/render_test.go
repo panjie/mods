@@ -826,3 +826,20 @@ func TestActivityFooterUsesOneIndicatorAndFitsTerminal(t *testing.T) {
 	require.NotContains(t, footer, "go test")
 	require.Contains(t, footer, "Working")
 }
+
+func TestMarkdownWrappingIsOptIn(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "")
+	text := strings.Repeat("long words ", 30)
+	for _, width := range []int{0, 40} {
+		renderer, err := newMarkdownRenderer(width, true)
+		require.NoError(t, err)
+		rendered, err := renderer.Render(text)
+		require.NoError(t, err)
+		plain := ansi.Strip(rendered)
+		if width == 0 {
+			require.Contains(t, plain, strings.TrimSpace(text))
+		} else {
+			require.NotContains(t, plain, strings.TrimSpace(text))
+		}
+	}
+}

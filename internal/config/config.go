@@ -78,7 +78,7 @@ var Help = map[string]string{
 	"no-instructions":   "Disable auto-loading AGENTS.md from the current working directory as project context",
 	"compact":           "Summarize older conversation context before this request, retaining recent turns and saving the complete transcript",
 	"context-max-bytes": "Automatically compact before a turn when conversation JSON exceeds this many bytes; 0 disables (not a token or model context limit)",
-	"word-wrap":         "Wrap formatted output at specific width (default is 80)",
+	"word-wrap":         "Wrap output and editors at a specific width (0 disables wrapping, default)",
 	"settings":          "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
 	"config":            "Interactive setup wizard for provider, model, API key, and tools",
 	"dirs":              "Print the directories in which mods store its data",
@@ -574,8 +574,8 @@ func (c *Config) ApplyDefaults() {
 }
 
 func (c *Config) applyDefaults() {
-	if c.WordWrap <= 0 {
-		c.WordWrap = 80
+	if c.WordWrap < 0 {
+		c.WordWrap = 0
 	}
 	if c.MCPTimeout <= 0 {
 		c.MCPTimeout = 15 * time.Second
@@ -822,7 +822,7 @@ func Default() Config {
 				"json":     defaultJSONFormatText,
 			},
 			ReviewMode:         ReviewAuto,
-			WordWrap:           80,
+			WordWrap:           0,
 			MCPTimeout:         15 * time.Second,
 			WebSearch:          false,
 			WebSearchProvider:  DefaultWebSearchProvider,

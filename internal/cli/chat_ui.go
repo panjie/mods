@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -118,7 +117,10 @@ func renderChatUser(prompt string) {
 	styles := makeChatStyles()
 	width := normalizedChatWidth(chatTerminalWidth())
 	bodyWidth := max(1, width-styles.userRail.GetHorizontalFrameSize())
-	body := styles.userRail.Render(ansi.Hardwrap(prompt, bodyWidth, false))
+	if config.WordWrap > 0 {
+		prompt = ansi.Hardwrap(prompt, bodyWidth, false)
+	}
+	body := styles.userRail.Render(prompt)
 	_, _ = lipgloss.Fprintln(chatOutput, "\n"+styles.interaction.Info.Bold(true).Render("You")+"\n"+body)
 }
 
@@ -143,7 +145,7 @@ func renderChatSaved(id string) {
 }
 
 type chatPromptModel struct {
-	textarea        textarea.Model
+	textarea        promptArea
 	width           int
 	prompt          string
 	killText        string
@@ -159,7 +161,7 @@ type chatPromptModel struct {
 func newChatPromptModel(history []string) chatPromptModel {
 	isDark := ui.StderrIsDark()
 	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, isDark, ui.StaticBackgroundKnown()))
-	input := textarea.New()
+	input := newPromptArea(config.WordWrap > 0)
 	input.Placeholder = "Type a message…"
 	input.Prompt = ""
 	input.ShowLineNumbers = false

@@ -610,8 +610,8 @@ func TestChatPromptDynamicHeightTracksPasteAndTerminalResize(t *testing.T) {
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
 
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 120, Height: 20})
-	// The pasted text still spans three visual lines at this reading width.
-	require.Equal(t, 3, model.textarea.Height())
+	// A wider terminal reduces the soft-wrapped editor height.
+	require.Equal(t, 2, model.textarea.Height())
 
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 28, Height: 20})
 	require.Equal(t, chatMaxHeight, model.textarea.Height())
@@ -628,11 +628,11 @@ func TestChatPromptEnterInsertsNewlineAfterLargePaste(t *testing.T) {
 	require.Equal(t, content+"\n", model.textarea.Value())
 }
 
-func TestChatPromptTracksReadingWidth(t *testing.T) {
+func TestChatPromptTracksTerminalWidth(t *testing.T) {
 	model := newChatPromptModel(nil)
 	for _, width := range []int{60, 120, 180, 72} {
 		model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: width, Height: 30})
-		require.Equal(t, normalizedChatWidth(width), model.width)
+		require.Equal(t, width, model.width)
 
 		widest := 0
 		for _, line := range strings.Split(model.View().Content, "\n") {
@@ -640,7 +640,7 @@ func TestChatPromptTracksReadingWidth(t *testing.T) {
 			require.LessOrEqual(t, lineWidth, width, line)
 			widest = max(widest, lineWidth)
 		}
-		require.Equal(t, normalizedChatWidth(width), widest, "message input should match the reading column")
+		require.Equal(t, width, widest, "message input should match the terminal width")
 	}
 }
 
@@ -828,4 +828,26 @@ func TestChatBannerCanHideWorkingDirectory(t *testing.T) {
 	config.HideChatPath = true
 	require.Empty(t, chatWorkingDir())
 	require.NotContains(t, renderChatBanner(80), config.WorkingDir)
+}
+
+func TestChatPromptSoftWrapUsesTerminalWidthIndependentlyOfOutput(t *testing.T) {
+	oldWrap := config.WordWrap
+	t.Cleanup(func() { config.WordWrap = oldWrap })
+	for _, outputWidth := range []int{0, 40, 80} {
+		config.WordWrap = outputWidth
+		model := newChatPromptModel(nil)
+		model.resize(140)
+		content := strings.Repeat("x", 120)
+		model = updateChatPrompt(t, model, tea.PasteMsg{Content: content})
+		require.Equal(t, 1, model.textarea.Height())
+		for range 40 {
+			model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: 'x', Text: "x"})
+		}
+		require.Equal(t, 2, model.textarea.Height())
+		require.Equal(t, strings.Repeat("x", 160), model.textarea.Value())
+		require.Equal(t, 1, model.textarea.LineCount())
+		require.Greater(t, model.textarea.LineInfo().RowOffset, 0)
+		model.resize(200)
+		require.Equal(t, 1, model.textarea.Height())
+	}
 }

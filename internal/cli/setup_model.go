@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/panjie/mods/internal/chatgpt"
@@ -71,7 +72,7 @@ type setupModel struct {
 	data                                     configWizardSaveData
 	standardPath, portablePath, previousPath string
 	input                                    textinput.Model
-	area                                     promptArea
+	area                                     textarea.Model
 	filter                                   textinput.Model
 	filtering                                bool
 	manualScroll                             bool
@@ -115,7 +116,8 @@ func newSetupModel() *setupModel {
 	m.filter = textinput.New()
 	m.filter.Prompt = "/ "
 	m.filter.CharLimit = 0
-	m.area = newPromptArea(config.WordWrap > 0)
+	m.area = textarea.New()
+	m.area.MaxWidth = 0
 	m.area.CharLimit = 0
 	m.area.ShowLineNumbers = false
 	m.area.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("ctrl+j"))

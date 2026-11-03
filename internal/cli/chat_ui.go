@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -17,7 +18,6 @@ const (
 	chatDefaultWidth = 80
 	chatMinHeight    = 1
 	chatMaxHeight    = 8
-	chatMaxWidth     = 96
 )
 
 var chatTerminalWidth = func() int {
@@ -107,7 +107,7 @@ func normalizedChatWidth(width int) int {
 	if config.WordWrap > 0 {
 		return min(width, config.WordWrap)
 	}
-	return min(width, chatMaxWidth)
+	return width
 }
 
 func renderChatUser(prompt string) {
@@ -145,7 +145,7 @@ func renderChatSaved(id string) {
 }
 
 type chatPromptModel struct {
-	textarea        promptArea
+	textarea        textarea.Model
 	width           int
 	prompt          string
 	killText        string
@@ -161,7 +161,8 @@ type chatPromptModel struct {
 func newChatPromptModel(history []string) chatPromptModel {
 	isDark := ui.StderrIsDark()
 	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, isDark, ui.StaticBackgroundKnown()))
-	input := newPromptArea(config.WordWrap > 0)
+	input := textarea.New()
+	input.MaxWidth = 0
 	input.Placeholder = "Type a message…"
 	input.Prompt = ""
 	input.ShowLineNumbers = false
@@ -339,8 +340,8 @@ func (m *chatPromptModel) resize(width int) {
 	if width <= 0 {
 		width = chatDefaultWidth
 	}
-	// Use the same reading column for messages and the composer.
-	m.width = normalizedChatWidth(width)
+	// Editing uses the terminal width independently of output wrapping.
+	m.width = width
 	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	innerWidth := ui.InteractionPanelInnerWidth(styles.interaction, m.width)
 	m.textarea.SetWidth(innerWidth)

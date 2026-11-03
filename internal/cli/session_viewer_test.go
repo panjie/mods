@@ -410,3 +410,11 @@ func TestViewerLoadingErrorEmptyAndCloseReset(t *testing.T) {
 	require.Empty(t, m.viewerDoc.content)
 	require.Empty(t, m.viewerSearch.query)
 }
+
+func TestViewerDefaultsToNoWrap(t *testing.T) {
+	oldWrap := config.WordWrap
+	config.WordWrap = 0
+	t.Cleanup(func() { config.WordWrap = oldWrap })
+	m := newLoadedViewer(t, 20, 8, []proto.Message{{Role: proto.RoleUser, Content: strings.Repeat("x", 100)}})
+	require.False(t, m.viewport.SoftWrap)
+}

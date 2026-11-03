@@ -631,11 +631,12 @@ session and `D` deletes marked sessions after confirmation. Inside a transcript,
 `/` searches text, `n`/`N` moves between matches, `w` toggles wrapping, and `Esc`
 returns to the list.
 
-Output and multiline editors default to no automatic wrapping. Set
+Output defaults to no automatic wrapping. Set
 `--word-wrap 80` or `word-wrap: 80` in `mods.yml` to enable wrapping;
 `--word-wrap 0` disables it, including when overriding an existing configuration.
-Long editor lines scroll horizontally to keep the cursor visible. Explicit
-newlines are preserved. Terminal scrollback and external `$EDITOR` applications
+Multiline editors use the available terminal width and soft-wrap long lines,
+independently of `word-wrap`. Soft wrapping does not insert newlines into the
+submitted text; explicit newlines are preserved. Terminal scrollback and external `$EDITOR` applications
 may still wrap according to their own settings.
 
 Set `hide-chat-path: true` in `mods.yml` (or `MODS_HIDE_CHAT_PATH=true`) to

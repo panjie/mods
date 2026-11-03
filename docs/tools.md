@@ -55,6 +55,13 @@ Native file tools and MCP tools retain their own capabilities and target policy.
 An `effect` argument cannot relabel a native file write as a read. Downloads retain
 structured destination review and their existing page-reading requirement.
 
+## web_search
+
+Enable `web_search` with `web-search: true` or `--web-search`. It uses the
+configured `web-search-provider` (Tavily, DeepSeek, or a custom search URL) and
+its search API key. The selected model and endpoint do not replace this service
+with provider-hosted search. Disabling web search removes the tool.
+
 ## web_fetch
 
 `web_fetch` reads HTTP(S) HTML, plain text and Markdown without a browser,

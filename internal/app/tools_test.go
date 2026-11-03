@@ -318,28 +318,3 @@ func TestBuildToolRegistryForUnsupportedProvider(t *testing.T) {
 		}
 	})
 }
-
-func TestResolveWebSearch(t *testing.T) {
-	native := stream.Capabilities{NativeWebSearch: true}
-	nonNative := stream.Capabilities{}
-	tests := []struct {
-		name     string
-		enabled  bool
-		caps     stream.Capabilities
-		local    bool
-		provider bool
-	}{
-		{name: "disabled", caps: native},
-		{name: "provider hosted", enabled: true, caps: native, provider: true},
-		{name: "local fallback", enabled: true, caps: nonNative, local: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := defaultConfig()
-			cfg.WebSearch = tt.enabled
-			local, provider := resolveWebSearch(&cfg, tt.caps)
-			require.Equal(t, tt.local, local)
-			require.Equal(t, tt.provider, provider)
-		})
-	}
-}

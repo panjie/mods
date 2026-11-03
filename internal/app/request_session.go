@@ -95,8 +95,8 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 			ReasonText: "The selected provider endpoint does not support image input",
 		}
 	}
-	localWebSearch, providerWebSearch := resolveWebSearch(cfg, client.Capabilities())
-	debug.Printf("Web search tools: local=%v provider_hosted=%v", localWebSearch, providerWebSearch)
+	// Search routing follows the configured provider, independent of model capabilities.
+	debug.Printf("Web search tools: local=%v provider=%s", cfg.WebSearch, cfg.WebSearchProvider)
 
 	debug.Printf("Startup: provider=%s", time.Since(started))
 	contextStarted := time.Now()
@@ -126,11 +126,8 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	// timeout without attaching that deadline to a persistent SSE transport.
 	registryCtx, cancel := context.WithCancel(m.ctx)
 	m.addCancel(cancel)
-	toolCfg := *cfg
-	toolCfg.WebSearch = localWebSearch
-	wscfg.Enabled = localWebSearch
 	registry, err := m.buildToolRegistryForProvider(
-		registryCtx, &toolCfg, wscfg, toolIntentContext(m.messages), client,
+		registryCtx, cfg, wscfg, toolIntentContext(m.messages), client,
 	)
 	if err != nil {
 		cancel()
@@ -152,9 +149,6 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 				tools[i].WireName = "apply_patch"
 			}
 		}
-	}
-	if providerWebSearch {
-		tools = append(tools, proto.ToolSpec{Name: "web_search", WireType: "web_search"})
 	}
 	debugTools(tools, registry.Len())
 

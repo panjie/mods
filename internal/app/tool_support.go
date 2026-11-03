@@ -70,16 +70,6 @@ func (m *Mods) buildToolRegistryForProvider(
 	return toolregistry.NewRegistry(), nil
 }
 
-func resolveWebSearch(cfg *Config, capabilities stream.Capabilities) (local, provider bool) {
-	if !cfg.WebSearch {
-		return false, false
-	}
-	if capabilities.NativeWebSearch {
-		return false, true
-	}
-	return true, false
-}
-
 const maxToolIntentChars = 8 * 1024
 
 func toolIntentContext(messages []proto.Message) string {

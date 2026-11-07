@@ -262,8 +262,9 @@ func (m *Mods) Messages() []proto.Message {
 // TokenUsage returns token consumption accumulated for this interaction.
 func (m *Mods) TokenUsage() proto.TokenUsage { return m.tokenUsage }
 
+// ApprovalRules retains the session storage interface; new sessions never save grants.
 func (m *Mods) ApprovalRules() []Rule {
-	return m.reviewer.rules.Snapshot()
+	return nil
 }
 
 type startupSessionMsg struct{ result tea.Msg }
@@ -350,7 +351,6 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Config.SessionWriteToID = msg.WriteID
 		m.Config.SessionWriteToTitle = msg.Title
 		m.Config.SessionReadFromID = msg.ReadID
-		m.reviewer.rules.Replace(msg.Rules)
 
 		m.anim = NewAnim(m.Styles)
 		cmds = append(cmds, m.anim.Init())

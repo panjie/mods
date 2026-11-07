@@ -52,15 +52,11 @@ roles:
 
 `builtin-tools.filesystem` accepts `auto`, `true`, or `false`. Auto enables file
 tools when the current or recent request concerns files or a mods config
-mutation. Trusted shell command names apply to every argument and subcommand;
-shell structures such as redirection are still assessed for effects and write
-targets.
-Mods can resolve eligible environment paths and PowerShell automatic variables
-such as `$PROFILE` into concrete targets before review. Resolved write targets
-can qualify for saved directory rules in auto mode or the temporary-write
-exemption. Unresolved write targets require per-use review in auto and always
-modes and cannot create saved rules. When a target remains unresolved, inspect
-it in a read-only call and use the literal absolute result.
+mutation. Command tools require a model-declared `read_only` or `may_write`
+effect; Mods does not analyze shell syntax or resolve shell variables for approval.
+Native filesystem tools resolve their paths before review. Only complete native
+write targets inside safe temporary directories qualify for the temporary-write
+exemption; saved directory and remote-origin grants are no longer used.
 
 ## Providers
 
@@ -113,14 +109,13 @@ timeout state. Use shell tools for pipelines and other shell syntax. On
 Windows, native shell tools execute the reported PowerShell host. Use
 `runtime_info` only when platform or executable availability is uncertain.
 
-All recognized reads run without review. `review-mode: auto` reviews
-non-temporary writes unless conversation-scoped directory and remote-origin
-rules cover every target; `review-mode: always` reviews every non-temporary
-write and ignores saved rules; `review-mode: never` suppresses interactive
-review. The temporary-write exemption requires a known effect and all write
-targets to be resolved local paths inside safe temporary directories, with no
-remote writes; the command's working directory alone does not qualify. In auto
-and always modes, unknown write targets can only be allowed once.
+Reads run without review. In `auto` and `always`, commands declared `may_write`
+require approval, and native/MCP writes require approval unless all write targets
+qualify for the safe temporary-directory exemption. Commands never receive that
+exemption. `never` suppresses review. Every review offers Y to allow once, N to
+deny, F for full control during this invocation and subsequent `--chat` turns,
+and Ctrl+C/Esc to cancel. Full control is not persisted; restarting or continuing
+Mods restores the configured mode. Historical saved rules no longer bypass review.
 
 MCP tools declaring `readOnlyHint: true` use the read-only path in all review
 modes; unannotated tools are treated as mutable. User MCP tools are intentionally

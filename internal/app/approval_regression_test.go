@@ -82,7 +82,7 @@ func TestApprovalP1DirectoryLinkCannotExpandSavedRule(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.WorkingDir, cfg.ReviewMode, cfg.InteractiveTTYAvailable = root, ReviewAuto, false
 	m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
-	m.reviewer.rules.Add(RulesForDirs([]string{allowed}, m.reviewer.scope, AccessWrite)...)
+	assertHistoricalRulesIgnored(t, m.reviewer, RulesForDirs([]string{allowed}, m.reviewer.scope, AccessWrite)...)
 	registry := toolregistry.NewRegistry()
 	require.NoError(t, toolregistry.RegisterFilesystem(registry, toolregistry.FilesystemConfig{Root: root}))
 	args, err := json.Marshal(map[string]string{"path": filepath.Join(link, "audit.txt"), "content": "audit"})
@@ -91,10 +91,9 @@ func TestApprovalP1DirectoryLinkCannotExpandSavedRule(t *testing.T) {
 	require.ErrorIs(t, err, errReviewUnavailable)
 	_, err = os.Stat(filepath.Join(other, "audit.txt"))
 	require.True(t, os.IsNotExist(err), "unapproved target must stay untouched")
-	m.reviewer.rules.Add(RulesForDirs([]string{other}, m.reviewer.scope, AccessWrite)...)
+	assertHistoricalRulesIgnored(t, m.reviewer, RulesForDirs([]string{other}, m.reviewer.scope, AccessWrite)...)
 	_, err = m.toolCaller(registry, &cfg)(proto.ToolCallRequest{Name: "fs_write_file", Arguments: args})
-	require.NoError(t, err)
-	content, err := os.ReadFile(filepath.Join(other, "audit.txt"))
-	require.NoError(t, err)
-	require.Equal(t, "audit", string(content))
+	require.ErrorIs(t, err, errReviewUnavailable)
+	_, err = os.Stat(filepath.Join(other, "audit.txt"))
+	require.True(t, os.IsNotExist(err), "saved rules no longer authorize writes")
 }

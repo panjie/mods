@@ -53,38 +53,16 @@ func TestReviewKeys(t *testing.T) {
 			scope:         testApprovalScope,
 			reviewItem: &toolReviewItem{
 				resp: make(chan reviewResponse, 1),
-				candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
-					Type:  approvalDirAllow,
-					Paths: []string{"a"},
-				})},
 			},
 		}
 		handled, _ := reviewer.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 		require.True(t, handled)
-		require.Empty(t, reviewer.rules.Snapshot())
+		require.Empty(t, (&Mods{reviewer: reviewer}).ApprovalRules())
 	})
 
-	t.Run("always remembers displayed rules", func(t *testing.T) {
-		rule := ApprovalRule{
-			Type:  approvalDirAllow,
-			Paths: []string{"a"},
-		}
-		rule = scopedRule(rule)
-		reviewer := &toolReviewer{
-			reviewPending: true,
-			scope:         testApprovalScope,
-			reviewItem: &toolReviewItem{
-				resp:           make(chan reviewResponse, 1),
-				candidateRules: []ApprovalRule{rule},
-			},
-		}
-		handled, _ := reviewer.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
-		require.True(t, handled)
-		require.Equal(t, []ApprovalRule{rule}, reviewer.rules.Snapshot())
-	})
 }
 
-func TestReviewBannerShowsSavedRule(t *testing.T) {
+func TestReviewBannerOmitsSessionRule(t *testing.T) {
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
@@ -92,33 +70,27 @@ func TestReviewBannerShowsSavedRule(t *testing.T) {
 			name:    "shell_run",
 			args:    []byte(`{"command":"rm -f /Users/panjie/temp/demo.gif"}`),
 			summary: "Risk: external mutation - affects /Users/panjie/temp",
-			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
-				Type:  approvalDirAllow,
-				Paths: []string{"/Users/panjie/temp"},
-				Mode:  AccessWrite,
-			})},
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Allow for session")
+	require.NotContains(t, rendered, "Allow for session")
+	require.NotContains(t, rendered, "If A")
+	require.Contains(t, rendered, "Full control")
 }
 
-func TestReviewBannerAlwaysAllowRemoteWrite(t *testing.T) {
+func TestReviewBannerRemoteWriteFullControl(t *testing.T) {
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
 			name:    "github_create_issue",
 			summary: "Remote write: https://api.github.com",
-			candidateRules: []ApprovalRule{{
-				Type:    approval.RemoteAllow,
-				Origins: []string{"https://api.github.com"},
-				Mode:    AccessWrite,
-			}},
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
-	require.Contains(t, rendered, "Allow for session")
+	require.NotContains(t, rendered, "Allow for session")
+	require.NotContains(t, rendered, "If A")
+	require.Contains(t, rendered, "Full control")
 	require.Contains(t, rendered, "https://api.github.com")
 }
 
@@ -127,10 +99,9 @@ func TestReviewBannerDoesNotOfferLegacyRule(t *testing.T) {
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			name:           "fs_write_file",
-			args:           []byte(`{"path":"/Users/panjie/temp/out.txt","content":"x"}`),
-			summary:        "Target: /Users/panjie/temp/out.txt - creates new file",
-			candidateRules: nil,
+			name:    "fs_write_file",
+			args:    []byte(`{"path":"/Users/panjie/temp/out.txt","content":"x"}`),
+			summary: "Target: /Users/panjie/temp/out.txt - creates new file",
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
@@ -142,30 +113,28 @@ func TestReviewBannerShowsNoReusableRuleSummary(t *testing.T) {
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			name:           "shell_run",
-			args:           []byte(`{"command":"git commit -m message"}`),
-			candidateRules: nil,
+			name: "shell_run",
+			args: []byte(`{"command":"git commit -m message"}`),
 		},
 	}
 	rendered := reviewer.renderBanner(120, makeStyles(true).Interaction)
 	require.NotContains(t, rendered, "Allow for session")
 }
 
-func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
+func TestReviewKeysIgnoreRemovedSessionApproval(t *testing.T) {
 	reviewer := &toolReviewer{
 		reviewPending: true,
 		scope:         testApprovalScope,
 		reviewItem: &toolReviewItem{
-			resp:           make(chan reviewResponse, 1),
-			candidateRules: nil,
+			resp: make(chan reviewResponse, 1),
 		},
 	}
 	handled, _ := reviewer.handleKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	require.True(t, handled)
-	require.Empty(t, reviewer.rules.Snapshot())
+	require.Empty(t, (&Mods{reviewer: reviewer}).ApprovalRules())
 	select {
 	case <-reviewer.reviewItem.resp:
-		t.Fatal("always allow without candidate rules should not approve")
+		t.Fatal("removed A key must not approve")
 	default:
 	}
 
@@ -177,6 +146,8 @@ func TestReviewKeysIgnoreAlwaysAllowWithoutCandidateRules(t *testing.T) {
 	require.Equal(t, 2, reviewer.selected)
 	handled, _ = reviewer.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.True(t, handled)
+	require.Equal(t, 3, reviewer.selected)
+	reviewer.handleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.Equal(t, 0, reviewer.selected)
 }
 
@@ -187,10 +158,6 @@ func TestReviewBannerStylesSelectedActionAndKeys(t *testing.T) {
 		reviewItem: &toolReviewItem{
 			name: "shell_run",
 			args: []byte(`{"command":"git commit -m message"}`),
-			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
-				Type:  approvalDirAllow,
-				Paths: []string{"git", "commit"},
-			})},
 		},
 	}
 	styles := makeStyles(true).Interaction
@@ -207,10 +174,6 @@ func TestReviewBannerTruncatesSavedRule(t *testing.T) {
 			name:    "shell_run",
 			args:    []byte(`{"command":"cat >> ~/.config/ghostty/config.ghostty << 'EOF'\nfont-family = JetBrainsMono Nerd Font\nfont-family-bold = JetBrainsMono Nerd Font\nfont-family-italic = JetBrainsMono Nerd Font\nfont-family-bold-italic = JetBrainsMono Nerd Font\nEOF"}`),
 			summary: "Risk: external mutation - affects ~/.config/ghostty",
-			candidateRules: []ApprovalRule{scopedRule(ApprovalRule{
-				Type:  approvalDirAllow,
-				Paths: []string{"~/.config/ghostty"},
-			})},
 		},
 	}
 	rendered := reviewer.renderBanner(80, makeStyles(true).Interaction)
@@ -540,10 +503,6 @@ func TestMixedAccessIntentRules(t *testing.T) {
 		nil, intent, scope, safeDirs(), ApprovalReviewMode(ReviewAuto),
 	))
 
-	candidates := candidateRulesForIntent(intent, scope, safeDirs(), ApprovalReviewMode(ReviewAuto))
-	require.Len(t, candidates, 1)
-	require.Equal(t, AccessWrite, candidates[0].Mode)
-	require.Equal(t, []string{writeDir}, candidates[0].Paths)
 }
 
 // TestToolReviewerSnapshotSessionRaceFree exercises the mu-guarded reviewChan

@@ -22,7 +22,7 @@ func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
 				Actions: []interactionAction{
 					{Key: "Y", Label: "Allow once", Selected: true},
 					{Key: "N", Label: "Deny"},
-					{Key: "A", Label: "Always allow"},
+					{Key: "F", Label: "Full control"},
 					{Key: "Ctrl+C", Label: "Cancel"},
 				},
 			})
@@ -32,7 +32,7 @@ func TestInteractionPanelFitsWidthsAndPreservesSecurityDetails(t *testing.T) {
 			plain := ansi.Strip(rendered)
 			normalized := strings.ReplaceAll(strings.Join(strings.Fields(plain), ""), "│", "")
 			require.Contains(t, normalized, strings.Join(strings.Fields(command), ""))
-			assertTextOrder(t, plain, "Y", "Allow once", "N", "Deny", "A", "Always allow", "Ctrl+C", "Cancel")
+			assertTextOrder(t, plain, "Y", "Allow once", "N", "Deny", "F", "Full control", "Ctrl+C", "Cancel")
 		})
 	}
 }

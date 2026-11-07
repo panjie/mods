@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/panjie/mods/internal/approval"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,28 +44,10 @@ func TestReviewURLRedactionPreservesCommandSyntax(t *testing.T) {
 	}
 }
 
-func TestRemoteWriteCandidatesAndSavedRules(t *testing.T) {
-	scope := WorkingDirScope(t.TempDir())
-	intent := AccessIntent{WriteCoverage: testCompleteCoverage,
-		Class:         AccessWrite,
-		Dirs:          []string{scope.Value},
-		RemoteOrigins: []string{"https://API.example.com:443/v1"},
-	}
-	rules := candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto))
-	require.Len(t, rules, 2)
-	require.Equal(t, approval.DirAllow, rules[0].Type)
-	require.Equal(t, approval.RemoteAllow, rules[1].Type)
-	require.Equal(t, []string{"https://api.example.com"}, rules[1].Origins)
-	require.True(t, RulesAllowIntent(rules, intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
-	require.False(t, RulesAllowIntent(rules[:1], intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
-	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAlways)))
-}
-
 func TestUnknownRemoteWriteHasNoAlwaysRule(t *testing.T) {
 	scope := WorkingDirScope(t.TempDir())
 	intent := AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, UnresolvedRemoteTargets: []string{"$API_URL"}}
 	require.Equal(t, DecisionAsk, ClassifyAccess(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
-	require.Empty(t, candidateRulesForIntent(intent, scope, nil, ApprovalReviewMode(ReviewAuto)))
 }
 
 func TestTemporaryWriteAlwaysAllowsEvenInAlwaysMode(t *testing.T) {

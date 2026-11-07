@@ -211,26 +211,3 @@ func reviewOrderedRows(rows []interactionRow) []interactionRow {
 	slices.SortStableFunc(out, func(a, b interactionRow) int { return priority(a.Label) - priority(b.Label) })
 	return out
 }
-
-// Only reuse a displayed target when its full text exactly matches the grant.
-// A file target or a narrower directory must never hide a broader session grant.
-func sessionRuleLabel(rules []Rule, rows []interactionRow) string {
-	var parts []string
-	for _, rule := range rules {
-		label := rule.String()
-		if rule.Type == approval.DirAllow && rule.Mode == AccessWrite {
-			target := strings.Join(rule.Paths, ", ")
-			label = "Write dirs: " + target + " (including subdirectories)"
-			for _, row := range rows {
-				if row.Label == "Target" && row.Value == target && target != "" {
-					label = "Write above directories and subdirectories"
-					break
-				}
-			}
-		} else if rule.Type == approval.RemoteAllow {
-			label += " (exact origins)"
-		}
-		parts = append(parts, label)
-	}
-	return strings.Join(parts, "; ") + "; this conversation only"
-}

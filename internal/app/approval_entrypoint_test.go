@@ -27,25 +27,24 @@ func TestRequestApprovalSavedDirectoryTargets(t *testing.T) {
 		name           string
 		paths, targets []string
 		originalCwd    string
-		want           bool
 	}{
-		{name: "same directory", paths: []string{allowed}, targets: []string{allowed}, want: true},
-		{name: "subdirectory", paths: []string{allowed}, targets: []string{filepath.Join(allowed, "sub")}, want: true},
+		{name: "same directory", paths: []string{allowed}, targets: []string{allowed}},
+		{name: "subdirectory", paths: []string{allowed}, targets: []string{filepath.Join(allowed, "sub")}},
 		{name: "outside directory", paths: []string{allowed}, targets: []string{other}},
 		{name: "sibling prefix", paths: []string{allowed}, targets: []string{allowed + "2"}},
-		{name: "all targets covered", paths: []string{allowed, other}, targets: []string{allowed, other}, want: true},
+		{name: "all targets covered", paths: []string{allowed, other}, targets: []string{allowed, other}},
 		{name: "one target uncovered", paths: []string{allowed}, targets: []string{allowed, other}},
 		{name: "unknown target", paths: []string{allowed}},
-		{name: "changed cwd", paths: []string{allowed}, targets: []string{allowed}, originalCwd: other, want: true},
-		{name: "legacy relative path", paths: []string{"allowed"}, targets: []string{allowed}, originalCwd: root, want: true},
-		{name: "legacy glob", paths: []string{filepath.Join(allowed, "*")}, targets: []string{allowed}, want: true},
+		{name: "changed cwd", paths: []string{allowed}, targets: []string{allowed}, originalCwd: other},
+		{name: "legacy relative path", paths: []string{"allowed"}, targets: []string{allowed}, originalCwd: root},
+		{name: "legacy glob", paths: []string{filepath.Join(allowed, "*")}, targets: []string{allowed}},
 		{name: "legacy glob sibling", paths: []string{filepath.Join(allowed, "*")}, targets: []string{allowed + "2"}},
-		{name: "legacy home path", paths: []string{"~/.config"}, targets: []string{filepath.Join(home, ".config", "mods")}, want: true},
+		{name: "legacy home path", paths: []string{"~/.config"}, targets: []string{filepath.Join(home, ".config", "mods")}},
 		{name: "legacy home sibling", paths: []string{"~/.config"}, targets: []string{filepath.Join(home, ".ssh")}},
-		{name: "windows case insensitive", paths: []string{`C:\Users`}, targets: []string{`c:\users\project`}, want: true},
+		{name: "windows case insensitive", paths: []string{`C:\Users`}, targets: []string{`c:\users\project`}},
 		{name: "windows sibling prefix", paths: []string{`C:\Users`}, targets: []string{`C:\Users2`}},
-		{name: "windows drive root", paths: []string{`C:\`}, targets: []string{`C:\project`}, want: true},
-		{name: "windows legacy glob", paths: []string{`C:\Users\Test\Downloads\*`}, targets: []string{`C:\Users\Test\Downloads`}, want: true},
+		{name: "windows drive root", paths: []string{`C:\`}, targets: []string{`C:\project`}},
+		{name: "windows legacy glob", paths: []string{`C:\Users\Test\Downloads\*`}, targets: []string{`C:\Users\Test\Downloads`}},
 		{name: "windows legacy glob sibling", paths: []string{`C:\Users\Test\Downloads\*`}, targets: []string{`C:\Users\Test\Downloads2`}},
 	}
 	for _, tc := range cases {
@@ -56,7 +55,7 @@ func TestRequestApprovalSavedDirectoryTargets(t *testing.T) {
 				rule.ScopeKind = approval.ScopeWorkingDir
 				rule.ScopeValue = tc.originalCwd
 			}
-			r.rules.Add(rule)
+			assertHistoricalRulesIgnored(t, r, rule)
 			var trace approvalTrace
 			err := r.requestApproval(reviewerDeps{
 				ctx: context.Background(), accessIntent: AccessIntent{WriteCoverage: testCompleteCoverage, Class: AccessWrite, Dirs: tc.targets},
@@ -64,12 +63,8 @@ func TestRequestApprovalSavedDirectoryTargets(t *testing.T) {
 				// from masking missing rule coverage in these synthetic fixtures.
 				safeDirs: []string{t.TempDir()}, onDecision: func(got approvalTrace) { trace = got },
 			}, "fs_write_file", []byte(`{"path":"target","content":"x"}`))
-			if tc.want {
-				require.NoError(t, err)
-				require.Equal(t, "saved rule", trace.Source)
-			} else {
-				require.ErrorIs(t, err, errReviewUnavailable)
-			}
+			require.ErrorIs(t, err, errReviewUnavailable)
+			require.NotEqual(t, "saved rule", trace.Source)
 		})
 	}
 }
@@ -95,7 +90,7 @@ func TestRequestApprovalIgnoresLegacyPermissions(t *testing.T) {
 			}
 			t.Run(rule.String()+"/"+string(rule.ScopeKind), func(t *testing.T) {
 				r := &toolReviewer{reviewMode: ReviewAuto, scope: scope, reviewAvailabilityKnown: true}
-				r.rules.Add(rule)
+				assertHistoricalRulesIgnored(t, r, rule)
 				for _, name := range []string{"fs_write_file", "shell_run", "powershell_run", "process_run", "mcp_update"} {
 					for _, intent := range []AccessIntent{
 						{Class: AccessWrite, Dirs: []string{root}},
@@ -117,8 +112,8 @@ func TestRequestApprovalTargetRulesRespectModes(t *testing.T) {
 	for _, mode := range []ReviewMode{ReviewAuto, ReviewAlways, ReviewNever} {
 		t.Run(string(mode), func(t *testing.T) {
 			r := &toolReviewer{reviewMode: mode, scope: scope, reviewAvailabilityKnown: true}
-			r.rules.Add(RulesForDirs([]string{root}, scope, AccessWrite)...)
-			r.rules.Add(RulesForRemoteOrigins([]string{"https://api.example.com"})...)
+			assertHistoricalRulesIgnored(t, r, RulesForDirs([]string{root}, scope, AccessWrite)...)
+			assertHistoricalRulesIgnored(t, r, RulesForRemoteOrigins([]string{"https://api.example.com"})...)
 			for _, tc := range []struct {
 				name     string
 				intent   AccessIntent
@@ -134,7 +129,7 @@ func TestRequestApprovalTargetRulesRespectModes(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					err := r.requestApproval(reviewerDeps{ctx: context.Background(), accessIntent: tc.intent, safeDirs: []string{t.TempDir()}}, "mcp_update", nil)
-					if mode == ReviewNever || mode == ReviewAuto && tc.reusable {
+					if mode == ReviewNever {
 						require.NoError(t, err)
 					} else {
 						require.ErrorIs(t, err, errReviewUnavailable)
@@ -159,7 +154,7 @@ func TestToolCallerUsesTargetApproval(t *testing.T) {
 			targetRule, allow bool
 		}{
 			{"legacy permission", ReviewAuto, false, false},
-			{"approved target", ReviewAuto, true, true},
+			{"auto ignores target rule", ReviewAuto, true, false},
 			{"always ignores target rule", ReviewAlways, true, false},
 			{"never bypasses review", ReviewNever, false, true},
 		} {
@@ -169,9 +164,9 @@ func TestToolCallerUsesTargetApproval(t *testing.T) {
 				cfg.ReviewMode = tc.mode
 				cfg.InteractiveTTYAvailable = false
 				m := &Mods{Config: &cfg, ctx: context.Background(), reviewer: newToolReviewer(&cfg)}
-				m.reviewer.rules.Add(Rule{Type: approval.EditAll, Tool: "file_edit", ScopeKind: approval.ScopeWorkingDir, ScopeValue: cwd}, Rule{Type: approval.ToolAll, Tool: name, ScopeKind: approval.ScopeWorkingDir, ScopeValue: cwd})
+				assertHistoricalRulesIgnored(t, m.reviewer, Rule{Type: approval.EditAll, Tool: "file_edit", ScopeKind: approval.ScopeWorkingDir, ScopeValue: cwd}, Rule{Type: approval.ToolAll, Tool: name, ScopeKind: approval.ScopeWorkingDir, ScopeValue: cwd})
 				if tc.targetRule {
-					m.reviewer.rules.Add(RulesForDirs([]string{cwd}, m.reviewer.scope, AccessWrite)...)
+					assertHistoricalRulesIgnored(t, m.reviewer, RulesForDirs([]string{cwd}, m.reviewer.scope, AccessWrite)...)
 				}
 				registry := toolregistry.NewRegistry()
 				called := false
@@ -218,4 +213,25 @@ func TestToolCallerRejectsUnknownToolBeforeApproval(t *testing.T) {
 	})
 	require.ErrorContains(t, err, `unknown tool "powerRun"`)
 	require.ErrorContains(t, err, `did you mean "powershell_run"?`)
+}
+
+// Exercise the actual session loading boundary with historical grants. They
+// remain readable in storage but cannot reach the runtime approval gate.
+func assertHistoricalRulesIgnored(t *testing.T, r *toolReviewer, rules ...Rule) {
+	t.Helper()
+	db := testDB(t)
+	id := NewID()
+	require.NoError(t, db.SaveSession(id, "legacy grants", "openai", "fixture", nil, rules))
+	stored, err := db.ApprovalRules(id)
+	require.NoError(t, err)
+	require.Len(t, stored, len(rules))
+	cfg := &Config{}
+	cfg.Continue = id
+	m := &Mods{Config: cfg, db: db, reviewer: r}
+	msg := m.findSessionDetails()()
+	details, ok := msg.(sessionDetailsMsg)
+	require.True(t, ok, "%v", msg)
+	require.Equal(t, id, details.ReadID)
+	require.Empty(t, details.Rules)
+	require.Empty(t, m.ApprovalRules())
 }

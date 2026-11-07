@@ -284,7 +284,7 @@ func TestFindSessionDetails(t *testing.T) {
 		dets := msg.(sessionDetailsMsg)
 		require.Equal(t, id, dets.ReadID)
 		require.Equal(t, id, dets.WriteID)
-		require.Equal(t, rules, dets.Rules)
+		require.Empty(t, dets.Rules)
 	})
 
 	t.Run("continue id preserves existing title", func(t *testing.T) {

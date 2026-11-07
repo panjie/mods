@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/panjie/mods/internal/approval"
 	"github.com/panjie/mods/internal/pathutil"
 	toolregistry "github.com/panjie/mods/internal/tools"
 	"github.com/panjie/mods/internal/ui"
@@ -24,7 +23,6 @@ type reviewOptionAction int
 const (
 	reviewOptionApprove reviewOptionAction = iota
 	reviewOptionDeny
-	reviewOptionAlwaysAllow
 	reviewOptionCancel
 	reviewOptionFullControl
 )
@@ -49,7 +47,7 @@ type reviewOption struct {
 //     the snapshot so a concurrent reset does not race the receive.
 //
 //   - reviewMode and scope are immutable after construction. Full control
-//     uses an atomic flag shared across chat turns; rules has its own mutex.
+//     uses an atomic flag shared across chat turns.
 //
 //   - reviewPending, reviewItem, and selected are only
 //     touched from the Update goroutine (handleStartMsg, handleKey, reset,
@@ -65,7 +63,6 @@ type toolReviewer struct {
 	reviewPending              bool
 	cancelRequested            bool
 	reviewItem                 *toolReviewItem
-	rules                      RuleSet
 	scope                      Scope
 	selected                   int
 	reviewPage                 int
@@ -130,10 +127,6 @@ func (r *toolReviewer) reviewBypassSource(intent AccessIntent, safeDirSet []stri
 	mode := ApprovalReviewMode(r.effectiveReviewMode())
 	if ClassifyAccess(intent, r.scope, safeDirSet, mode) != DecisionAsk {
 		return "auto"
-	}
-	if r.effectiveReviewMode() == ReviewAuto && intent.HasAccess() &&
-		RulesAllowIntent(r.rules.Snapshot(), intent, r.scope, safeDirSet, mode) {
-		return "saved rule"
 	}
 	return ""
 }
@@ -253,20 +246,8 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.reviewPending = false
 		r.reviewItem = nil
 		return true, r.pollReviewCmd()
-	case "a", "A":
-		if !r.canApprovePages() {
-			return true, nil
-		}
-		if len(r.reviewItem.candidateRules) == 0 {
-			return true, nil
-		}
-		r.rules.Add(r.reviewItem.candidateRules...)
-		r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
-		r.reviewPending = false
-		r.reviewItem = nil
-		return true, r.pollReviewCmd()
 	case "f", "F":
-		if !isCommandReview(r.reviewItem.name) || !r.canApprovePages() {
+		if !r.canApprovePages() {
 			return true, nil
 		}
 		r.fullControlState().Store(true)
@@ -284,7 +265,7 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		r.moveReviewSelection(options, 1)
 		return true, nil
 	case "enter":
-		if (options[r.selected].action == reviewOptionApprove || options[r.selected].action == reviewOptionAlwaysAllow || options[r.selected].action == reviewOptionFullControl) && !r.canApprovePages() {
+		if (options[r.selected].action == reviewOptionApprove || options[r.selected].action == reviewOptionFullControl) && !r.canApprovePages() {
 			return true, nil
 		}
 		switch options[r.selected].action {
@@ -292,9 +273,6 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		case reviewOptionDeny:
 			r.reviewItem.resp <- reviewResponse{}
-		case reviewOptionAlwaysAllow:
-			r.rules.Add(r.reviewItem.candidateRules...)
-			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
 		case reviewOptionFullControl:
 			r.fullControlState().Store(true)
 			r.reviewItem.resp <- reviewResponse{action: reviewActionApprove}
@@ -310,26 +288,16 @@ func (r *toolReviewer) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 func (r *toolReviewer) reviewOptions() []reviewOption {
-	canAllowForSession := r.reviewItem != nil && len(r.reviewItem.candidateRules) > 0
-	approveLabel := "Allow"
-	if canAllowForSession {
-		approveLabel = "Allow once"
-	}
 	options := []reviewOption{
-		{key: "Y", label: approveLabel, action: reviewOptionApprove},
+		{key: "Y", label: "Allow once", action: reviewOptionApprove},
 		{key: "N", label: "Deny", action: reviewOptionDeny},
-	}
-	if canAllowForSession {
-		options = append(options, reviewOption{key: "A", label: "Allow for session", action: reviewOptionAlwaysAllow})
-	}
-	if r.reviewItem != nil && isCommandReview(r.reviewItem.name) {
-		options = append(options, reviewOption{key: "F", label: "Full control (this session)", action: reviewOptionFullControl})
+		{key: "F", label: "Full control (this session)", action: reviewOptionFullControl},
 	}
 	return append(options, reviewOption{key: "Ctrl+C", label: "Cancel task", action: reviewOptionCancel})
 }
 
 func (r *toolReviewer) reviewOptionEnabled(option reviewOption) bool {
-	return option.action != reviewOptionApprove && option.action != reviewOptionAlwaysAllow && option.action != reviewOptionFullControl || r.canApprovePages()
+	return option.action != reviewOptionApprove && option.action != reviewOptionFullControl || r.canApprovePages()
 }
 
 func (r *toolReviewer) normalizeReviewSelection(options []reviewOption) {
@@ -377,10 +345,10 @@ func buildAccessIntent(name string, data []byte, registry *toolregistry.Registry
 
 // normalizeAffectedDirs reduces file paths to their parent directories and
 // drops entries already covered by a broader directory, so the review
-// summary and candidate DirAllow rule only mention directories. The
+// summary only mentions directories. The
 // external-path extractor occasionally reports a file path
 // alongside (or instead of) its containing directory; without this, the
-// "Always allows" line would advertise a file name as if it were a dir.
+// summary would advertise a file name as if it were a dir.
 func normalizeAffectedDirs(dirs []string) []string {
 	return normalizeAffectedDirsForWorkingDir(dirs, "")
 }
@@ -488,10 +456,6 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		)
 	}
 	respCh := make(chan reviewResponse, 1)
-	var candidateRules []Rule
-	if deps.commandEffect == "" && intent.HasAccess() {
-		candidateRules = candidateRulesForIntent(intent, r.scope, safeDirSet, ApprovalReviewMode(r.effectiveReviewMode()))
-	}
 	presentation := formatReviewPresentationWithIntent(name, data, r.scope, intent)
 	// Redact before quoting/numbering: those transformations can otherwise
 	// split a multi-line secret or turn its characters into escape sequences.
@@ -532,12 +496,11 @@ func (r *toolReviewer) requestApproval(deps reviewerDeps, name string, data []by
 		presentation.rows[i].Value = redactRemoteURLsForDisplay(presentation.rows[i].Value)
 	}
 	item := toolReviewItem{
-		name:           name,
-		args:           data,
-		candidateRules: candidateRules,
-		summary:        formatReviewSummaryWithIntent(name, data, r.scope, intent),
-		presentation:   presentation,
-		resp:           respCh,
+		name:         name,
+		args:         data,
+		summary:      formatReviewSummaryWithIntent(name, data, r.scope, intent),
+		presentation: presentation,
+		resp:         respCh,
 	}
 	ch, done := r.snapshotSession()
 	if ch == nil {
@@ -598,30 +561,6 @@ func accessIntentSummary(intent AccessIntent) string {
 	return strings.Join(parts, " · ")
 }
 
-func candidateRulesForIntent(intent AccessIntent, scope Scope, safeDirs []string, reviewMode ApprovalReviewMode) []Rule {
-	if reviewMode != ApprovalReviewMode(ReviewAuto) || intent.HasNonReusableWriteTargets() {
-		return nil
-	}
-	var rules []Rule
-	for _, group := range intent.Groups() {
-		if group.Class == AccessRead {
-			continue
-		}
-		if group.Class != AccessWrite || len(group.Dirs) == 0 && len(group.Origins) == 0 {
-			return nil
-		}
-		var reviewDirs []string
-		for _, dir := range group.Dirs {
-			if ClassifyAccess(AccessIntent{Class: AccessWrite, Dirs: []string{dir}, WriteCoverage: approval.CoverageComplete}, scope, safeDirs, reviewMode) == DecisionAsk {
-				reviewDirs = append(reviewDirs, dir)
-			}
-		}
-		rules = append(rules, RulesForDirs(reviewDirs, scope, AccessWrite)...)
-		rules = append(rules, RulesForRemoteOrigins(group.Origins)...)
-	}
-	return rules
-}
-
 func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heights ...int) string {
 	if width <= 0 {
 		width = 80
@@ -641,9 +580,6 @@ func (r *toolReviewer) renderBanner(width int, styles ui.InteractionStyles, heig
 		}
 	}
 	rows := reviewOrderedRows(presentation.rows)
-	if len(r.reviewItem.candidateRules) > 0 {
-		rows = append(rows, interactionRow{Label: "If A", Value: sessionRuleLabel(r.reviewItem.candidateRules, rows)})
-	}
 	return renderInteractionPanel(styles, width, interactionPanel{
 		Title:    "Review",
 		Tone:     presentation.tone,

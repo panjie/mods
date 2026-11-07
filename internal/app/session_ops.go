@@ -17,7 +17,6 @@ func (m *Mods) findSessionDetails() tea.Cmd {
 		readID := m.Config.Continue
 		writeID := m.Config.Continue
 		title := writeID
-		var rules []Rule
 
 		if readID != "" || continueLast {
 			found, err := m.findReadID(readID)
@@ -31,15 +30,6 @@ func (m *Mods) findSessionDetails() tea.Cmd {
 				readID = found.ID
 				if m.Config.Continue != "" {
 					title = found.Title
-				}
-				if !m.Config.NoSave {
-					rules, err = m.db.ApprovalRules(readID)
-					if err != nil {
-						return modsError{
-							Err:        err,
-							ReasonText: "Could not load session approval rules.",
-						}
-					}
 				}
 			}
 		}
@@ -68,7 +58,6 @@ func (m *Mods) findSessionDetails() tea.Cmd {
 			WriteID: writeID,
 			Title:   title,
 			ReadID:  readID,
-			Rules:   rules,
 		}
 	}
 }

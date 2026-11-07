@@ -40,7 +40,7 @@ necessary mutations should use `may_write`, not be omitted to avoid approval.
 The review displays the purpose, normalized working directory, and complete
 command: quoted executable/arguments for `process_run`, or shell source with line
 numbers for multi-line commands. Y approves once, N denies, and Ctrl+C/Esc
-cancels the task. F selects **Full control (this session)**: approve this command
+cancels the task. F selects **Full control (this session)**: approve this operation
 and disable subsequent tool review, including native and MCP writes, for the
 current invocation and all subsequent `--chat` turns. This is an in-memory
 switch to `never`, not a saved permission rule or configuration change. Restarting
@@ -51,7 +51,10 @@ Up/Down browses long commands without disabling approval. Source is escaped and
 known secrets are redacted for display. Approval uses the saved call arguments;
 there is no effect reanalysis or script-content reapproval.
 
-Native file tools and MCP tools retain their own capabilities and target policy.
+Native file, download, and MCP review prompts offer the same Y/N/F/cancel choices.
+`Allow for session` and saved target grants are retired; historical approval rules
+never bypass review. Native file tools and MCP tools retain their own capabilities
+and target policy.
 An `effect` argument cannot relabel a native file write as a read. Downloads retain
 structured destination review and their existing page-reading requirement.
 

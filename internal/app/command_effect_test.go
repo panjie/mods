@@ -64,8 +64,8 @@ func TestCommandDeclarationControlsDispatch(t *testing.T) {
 					m, caller, called, args := declaredCommandFixture(t, name, mode, false)
 					// The cwd is temporary and both local and remote saved grants exist.
 					// Neither may turn a may_write command into an automatic approval.
-					m.reviewer.rules.Add(RulesForDirs([]string{m.Config.WorkingDir}, m.reviewer.scope, AccessWrite)...)
-					m.reviewer.rules.Add(RulesForRemoteOrigins([]string{"https://example.com"})...)
+					assertHistoricalRulesIgnored(t, m.reviewer, RulesForDirs([]string{m.Config.WorkingDir}, m.reviewer.scope, AccessWrite)...)
+					assertHistoricalRulesIgnored(t, m.reviewer, RulesForRemoteOrigins([]string{"https://example.com"})...)
 					args["effect"] = effect
 					data, err := json.Marshal(args)
 					require.NoError(t, err)
@@ -180,7 +180,6 @@ func TestCommandReviewApprovesOnlyExactCall(t *testing.T) {
 				}()
 				item := receiveReviewItem(t, m.reviewer.reviewChan)
 				require.Zero(t, called.Load())
-				require.Empty(t, item.candidateRules)
 				require.JSONEq(t, string(data), string(item.args))
 				require.Contains(t, item.presentation.rows, interactionRow{Label: "Purpose", Value: args["purpose"].(string)})
 				m.reviewer.handleStartMsg(toolReviewStartMsg{item: item})

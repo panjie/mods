@@ -48,12 +48,11 @@ type toolOperationStatusMsg struct {
 }
 
 type toolReviewItem struct {
-	name           string
-	args           []byte
-	candidateRules []Rule
-	summary        string
-	presentation   reviewPresentation
-	resp           chan reviewResponse
+	name         string
+	args         []byte
+	summary      string
+	presentation reviewPresentation
+	resp         chan reviewResponse
 }
 
 type toolReviewStartMsg struct {

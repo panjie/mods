@@ -320,24 +320,24 @@ directory exemption. In `auto` and `always`, `may_write` returns an approval
 unavailable error without an interactive review channel. Denial or cancellation
 stops the affected operation.
 
-Native filesystem and MCP tools keep their existing policy. Reads run without
-review; in `auto`, writes can reuse conversation-scoped directory or remote-origin
-rules when those rules cover all targets. Native writes confined to safe temporary
-directories can be exempt. Native paths are resolved and rechecked before execution.
-`Allow for session` remains available for eligible native/MCP writes. Saved rules
-are restored by `--continue` and are not shared across conversations.
+Native filesystem and MCP reads run without review. Writes require approval,
+except native writes confined to safe temporary directories. Native paths are
+resolved and rechecked before execution. All review prompts offer Y to allow once,
+N to deny, F for full control during this invocation (including later `--chat`
+turns), and Ctrl+C/Esc to cancel. `Allow for session` has been removed; old saved
+rules no longer authorize writes and are not restored by `--continue`.
 
 Choose `-V` / `--review-mode`, `review-mode` in `mods.yml`, or `MODS_REVIEW_MODE`:
 
 | Mode | Behavior |
 |------|----------|
-| `auto` | Default. Commands follow their declaration; other tools may reuse saved target rules. |
-| `always` | Commands follow the same declaration rule; other tools ignore saved rules. |
+| `auto` | Default. Commands follow their declaration; native/MCP writes require approval unless exempt. |
+| `always` | Same approval policy as `auto`; retained for configuration compatibility. |
 | `never` | Disable review. `-N` / `--no-review` is a shortcut. |
 
 The retired `command-simplification` and `builtin-tools.shell-read-only-commands`
 settings are ignored when loading old configuration. They no longer appear in new
-config files or help. Existing command-related saved rules do not exempt commands;
+config files or help. Existing saved rules do not exempt tools;
 the database and conversation history remain readable.
 
 On Windows, command tools (`process_run`, `powershell_run`, and `shell_run`)

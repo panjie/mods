@@ -23,7 +23,6 @@ func newPagedTestReviewer(command string) *toolReviewer {
 	r := &toolReviewer{}
 	r.handleStartMsg(toolReviewStartMsg{item: toolReviewItem{
 		name: "shell_run", resp: make(chan reviewResponse, 1),
-		candidateRules: []Rule{{Type: approval.DirAllow, Mode: AccessWrite, Paths: []string{"/project"}}},
 		presentation: reviewPresentation{headline: "Modify local files", tone: interactionToneWarning, toneText: "Warning", rows: []interactionRow{
 			{Label: "Target", Value: "/project"}, {Label: "Command", Value: command},
 		}},
@@ -88,18 +87,6 @@ func TestReviewDenyKeepsTaskRunning(t *testing.T) {
 	require.NoError(t, ctx.Err())
 }
 
-func TestSessionGrantOnlyReusesIdenticalTargets(t *testing.T) {
-	rules := []Rule{{Type: approval.DirAllow, Mode: AccessWrite, Paths: []string{"/tmp/project", "/usr/bin"}}}
-	rows := []interactionRow{{Label: "Target", Value: "/tmp/project, /usr/bin"}}
-	label := sessionRuleLabel(rules, rows)
-	require.Equal(t, "Write above directories and subdirectories; this conversation only", label)
-	rows[0].Value = "/tmp/project/reader.py"
-	label = sessionRuleLabel(rules, rows)
-	require.Contains(t, label, "/tmp/project, /usr/bin")
-	require.Contains(t, label, "including subdirectories")
-	require.NotContains(t, label, "above")
-}
-
 func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 	for _, name := range []string{"shell_run", "powershell_run", "process_run"} {
 		t.Run(name, func(t *testing.T) {
@@ -129,7 +116,7 @@ func TestCommandReviewCompactLayoutAndPaging(t *testing.T) {
 			require.NotContains(t, banner, "run this once", "approval actions carry no redundant descriptions")
 			require.NotContains(t, banner, "do not run it")
 			require.NotContains(t, banner, "Allow for session")
-			require.NotContains(t, banner, "Allow once")
+			require.Contains(t, banner, "Allow once")
 			lines := strings.Split(banner, "\n")
 			actionLine := lines[lineIndexContaining(lines, "Y Allow")]
 			require.Contains(t, actionLine, "Deny", "choice keys share one compact row")
@@ -190,7 +177,6 @@ func TestCommandReviewAlignsMultiDigitLineNumbers(t *testing.T) {
 
 func TestCommandReviewPagesLongWorkingDirectory(t *testing.T) {
 	r := newPagedTestReviewer(strings.Repeat("echo x\n", 20) + "last-command")
-	r.reviewItem.candidateRules = nil
 	r.reviewItem.presentation.rows = append([]interactionRow{{Label: "Working dir", Value: "/" + strings.Repeat("long-directory/", 15) + "end-dir"}}, r.reviewItem.presentation.rows...)
 	styles := makeStyles(true).Interaction
 	r.renderBanner(48, styles, 12)

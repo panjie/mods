@@ -86,7 +86,9 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 build        # binary lands i
 go run github.com/go-task/task/v3/cmd/task@v3.51.1 install      # installs to ~/.local/bin/mods (or $XDG_BIN_HOME)
 ```
 
-The `install` task honors `PREFIX`, `BINDIR`, `DESTDIR`, and `XDG_BIN_HOME`.
+The `install` task builds from source with the same settings as `release`, stripping
+debug information while retaining git version metadata. It honors `PREFIX`,
+`BINDIR`, `DESTDIR`, and `XDG_BIN_HOME`.
 On all platforms the default install path is `$HOME/.local/bin/mods` (`mods.exe` on Windows).
 
 Prebuilt Windows portable ZIPs are published on the [releases] page.

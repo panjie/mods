@@ -16,7 +16,7 @@ tasks:
       - go run ./internal/buildtask release
 
   install:
-    desc: Build and install the mods binary.
+    desc: Build and install a stripped release binary with git version metadata.
     cmds:
       - go run ./internal/buildtask install
 

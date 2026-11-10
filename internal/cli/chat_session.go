@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"slices"
 
 	cfgpkg "github.com/panjie/mods/internal/config"
 )
@@ -18,11 +19,13 @@ type chatSession struct {
 type chatSessionKey struct{}
 type turnConfigKey struct{}
 
-func (s *chatSession) next(ctx context.Context, prompt string) context.Context {
-	input := cfgpkg.TurnInput{Prompt: RemoveWhitespace(prompt)}
+func (s *chatSession) next(ctx context.Context, input cfgpkg.TurnInput) context.Context {
+	input.Prompt = RemoveWhitespace(input.Prompt)
 	if !s.started {
-		input = s.initial
-		input.Prompt = RemoveWhitespace(prompt)
+		initial := s.initial
+		initial.Prompt = input.Prompt
+		initial.Media = append(slices.Clone(initial.Media), input.Media...)
+		input = initial
 	}
 	cfg := s.options.ForTurn(input, s.id)
 	cfg.ProjectInstructionsNoticeShown = s.instructionsShown

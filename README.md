@@ -653,6 +653,14 @@ shortcuts yield to approval dialogs and input forms.
 `Ctrl+Enter` or `Ctrl+S` to send, and `Ctrl+C` while composing to leave. Each turn is saved to the
 same session so you can resume it later with `--continue`.
 
+While composing, press `Ctrl+V` to attach an image from the system clipboard
+(or paste text when no image is available). Images are captured immediately and
+shown as attachment labels; repeat to attach more, or press `Alt+Backspace` to
+remove the last image. You can send images with or without text. Attachments
+are cleared from the composer after sending and remain in conversation history.
+Linux image paste requires `wl-paste` (Wayland) or `xclip` (X11). The shortcut
+must reach mods; a terminal's own paste shortcut may only deliver text.
+
 ### Portable Mode
 
 Put a `mods.yml` next to the `mods` executable. Config and sessions then live in

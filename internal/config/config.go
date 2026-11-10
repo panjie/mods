@@ -15,6 +15,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/caarlos0/env/v9"
 	"github.com/panjie/mods/internal/prompts"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/providerinfo"
 	"github.com/panjie/mods/internal/textutil"
 	"github.com/panjie/mods/internal/tools"
@@ -309,11 +310,12 @@ type Config struct {
 	ListSkills     bool
 	MCPList        bool
 	MCPListTools   bool
-	Video          []string `yaml:"-" env:"-"`
-	Audio          []string `yaml:"-" env:"-"`
-	Images         []string `yaml:"-" env:"-"`
-	StdinImage     bool     `yaml:"-" env:"-"`
-	ClipboardImage bool     `yaml:"-" env:"-"`
+	Video          []string                `yaml:"-" env:"-"`
+	Audio          []string                `yaml:"-" env:"-"`
+	Images         []string                `yaml:"-" env:"-"`
+	StdinImage     bool                    `yaml:"-" env:"-"`
+	Media          []proto.MediaAttachment `yaml:"-" env:"-"`
+	ClipboardImage bool                    `yaml:"-" env:"-"`
 
 	NoSave bool
 

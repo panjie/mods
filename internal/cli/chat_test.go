@@ -193,9 +193,9 @@ func TestGatherInteractivePromptComposerCancelReturnsUserCanceled(t *testing.T) 
 			Model: "gpt-4o",
 			APIs:  APIs{{Name: "openai", Models: map[string]Model{"gpt-4o": {}}}},
 		}}
-		chatPromptInput = func([]string) (string, bool, error) {
+		chatPromptInput = func([]string) (chatPromptResult, bool, error) {
 			*calls = append(*calls, "cancel")
-			return "", true, nil
+			return chatPromptResult{}, true, nil
 		}
 
 		err := gatherInteractivePrompt()
@@ -215,8 +215,8 @@ func TestRunChatRendersEnhancedUIOnlyToStderr(t *testing.T) {
 		config.Role = "reviewer"
 		IsErrorTTY = func() bool { return true }
 		chatTerminalWidth = func() int { return 80 }
-		chatPromptInput = func([]string) (string, bool, error) {
-			return "", true, nil
+		chatPromptInput = func([]string) (chatPromptResult, bool, error) {
+			return chatPromptResult{}, true, nil
 		}
 
 		stdout := captureStdout(t, func() {
@@ -243,14 +243,14 @@ func TestRunChatPassesAccumulatedHistoryToPrompt(t *testing.T) {
 		IsErrorTTY = func() bool { return true }
 		prompts := []string{"second"}
 		var histories [][]string
-		chatPromptInput = func(history []string) (string, bool, error) {
+		chatPromptInput = func(history []string) (chatPromptResult, bool, error) {
 			histories = append(histories, append([]string(nil), history...))
 			if len(prompts) == 0 {
-				return "", true, nil
+				return chatPromptResult{}, true, nil
 			}
 			prompt := prompts[0]
 			prompts = prompts[1:]
-			return prompt, false, nil
+			return chatPromptResult{Prompt: prompt}, false, nil
 		}
 
 		require.NoError(t, runChat(context.Background(), []string{"first"}, nil))
@@ -532,7 +532,7 @@ func TestRunInteractiveChatPromptRecognizesKittyCtrlEnter(t *testing.T) {
 	prompt, exit, err := runInteractiveChatPrompt(nil)
 	require.NoError(t, err)
 	require.False(t, exit)
-	require.Equal(t, "hello", prompt)
+	require.Equal(t, "hello", prompt.Prompt)
 }
 
 func TestRunInteractiveChatPromptRecognizesKittyCtrlS(t *testing.T) {
@@ -548,7 +548,7 @@ func TestRunInteractiveChatPromptRecognizesKittyCtrlS(t *testing.T) {
 	prompt, exit, err := runInteractiveChatPrompt(nil)
 	require.NoError(t, err)
 	require.False(t, exit)
-	require.Equal(t, "hello", prompt)
+	require.Equal(t, "hello", prompt.Prompt)
 }
 
 func TestRunInteractiveChatPromptRecognizesKittyCtrlC(t *testing.T) {
@@ -775,9 +775,9 @@ func withInteractivePromptTest(t *testing.T, fn func(calls *[]string)) {
 	chatInput = strings.NewReader("")
 	chatOutput = &bytes.Buffer{}
 	calls := []string{}
-	chatPromptInput = func([]string) (string, bool, error) {
+	chatPromptInput = func([]string) (chatPromptResult, bool, error) {
 		calls = append(calls, "hello from composer")
-		return "hello from composer", false, nil
+		return chatPromptResult{Prompt: "hello from composer"}, false, nil
 	}
 
 	fn(&calls)

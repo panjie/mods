@@ -17,6 +17,8 @@ import (
 	"github.com/panjie/mods/internal/mcpclient"
 )
 
+type chatPromptResult = cfgpkg.TurnInput
+
 var (
 	chatInput       io.Reader = os.Stdin
 	chatOutput      io.Writer = os.Stderr
@@ -62,18 +64,18 @@ func runChat(ctx context.Context, args []string, opts []tea.ProgramOption) error
 		if exit {
 			return nil
 		}
-		if prompt == "" {
+		if prompt.Prompt == "" && len(prompt.Media) == 0 {
 			continue
 		}
 
-		if err := runChatMessage(ctx, prompt, opts); err != nil {
+		if err := runChatInput(ctx, prompt, opts); err != nil {
 			return err
 		}
-		history = append(history, prompt)
+		history = append(history, prompt.Prompt)
 	}
 }
 
-func readChatPrompt(scanner *bufio.Scanner, history []string) (string, bool, error) {
+func readChatPrompt(scanner *bufio.Scanner, history []string) (chatPromptResult, bool, error) {
 	if IsErrorTTY() {
 		return readChatPromptOnce(history)
 	}
@@ -81,39 +83,49 @@ func readChatPrompt(scanner *bufio.Scanner, history []string) (string, bool, err
 	chatPrompt()
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
-			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
+			return chatPromptResult{}, false, modsError{Err: err, ReasonText: "Could not read chat input."}
 		}
-		return "", true, nil
+		return chatPromptResult{}, true, nil
 	}
-	return strings.TrimSpace(scanner.Text()), false, nil
+	return chatPromptResult{Prompt: strings.TrimSpace(scanner.Text())}, false, nil
 }
 
-func readChatPromptOnce(history []string) (string, bool, error) {
+func readChatPromptOnce(history []string) (chatPromptResult, bool, error) {
 	if IsErrorTTY() {
 		prompt, exit, err := chatPromptInput(history)
 		if err != nil {
-			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
+			return chatPromptResult{}, false, modsError{Err: err, ReasonText: "Could not read chat input."}
 		}
-		return strings.TrimSpace(prompt), exit, nil
+		prompt.Prompt = strings.TrimSpace(prompt.Prompt)
+		return prompt, exit, nil
 	}
 
 	scanner := bufio.NewScanner(chatInput)
 	chatPrompt()
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
-			return "", false, modsError{Err: err, ReasonText: "Could not read chat input."}
+			return chatPromptResult{}, false, modsError{Err: err, ReasonText: "Could not read chat input."}
 		}
-		return "", true, nil
+		return chatPromptResult{}, true, nil
 	}
-	return strings.TrimSpace(scanner.Text()), false, nil
+	return chatPromptResult{Prompt: strings.TrimSpace(scanner.Text())}, false, nil
 }
 
 func runChatMessage(ctx context.Context, prompt string, opts []tea.ProgramOption) error {
-	renderChatUser(prompt)
+	return runChatInput(ctx, chatPromptResult{Prompt: prompt}, opts)
+}
+
+func runChatInput(ctx context.Context, input chatPromptResult, opts []tea.ProgramOption) error {
+	prompt := input.Prompt
+	display := prompt
+	for _, media := range input.Media {
+		display += "\n[" + media.Source + "]"
+	}
+	renderChatUser(display)
 	renderChatAssistant()
 	session, _ := ctx.Value(chatSessionKey{}).(*chatSession)
 	if session != nil {
-		ctx = session.next(ctx, prompt)
+		ctx = session.next(ctx, input)
 	}
 	mods, err := chatTurn(ctx, prompt, opts)
 	if err != nil {

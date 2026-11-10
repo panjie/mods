@@ -1,11 +1,16 @@
 package config
 
-import "maps"
+import (
+	"maps"
+
+	"github.com/panjie/mods/internal/proto"
+)
 
 // TurnInput is consumed once by a user turn. Model retries reuse its prepared
 // messages, including original media bytes, instead of rereading these sources.
 type TurnInput struct {
 	Prompt                              string
+	Media                               []proto.MediaAttachment
 	Images, Audio, Video                []string
 	StdinImage, ClipboardImage, Compact bool
 }
@@ -17,17 +22,19 @@ type InvocationOptions struct{ config Config }
 func NewInvocationOptions(cfg Config) InvocationOptions {
 	cfg = cfg.Clone()
 	cfg.Prefix = ""
+	cfg.Media = nil
 	cfg.Images, cfg.Audio, cfg.Video = nil, nil, nil
 	cfg.StdinImage, cfg.ClipboardImage, cfg.Compact = false, false, false
 	cfg.SessionReadFromID, cfg.SessionWriteToID, cfg.SessionWriteToTitle = "", "", ""
 	return InvocationOptions{config: cfg}
 }
 func (c Config) InitialInput() TurnInput {
-	return TurnInput{Prompt: c.Prefix, Images: append([]string(nil), c.Images...), Audio: append([]string(nil), c.Audio...), Video: append([]string(nil), c.Video...), StdinImage: c.StdinImage, ClipboardImage: c.ClipboardImage, Compact: c.Compact}
+	return TurnInput{Media: cloneInputMedia(c.Media), Prompt: c.Prefix, Images: append([]string(nil), c.Images...), Audio: append([]string(nil), c.Audio...), Video: append([]string(nil), c.Video...), StdinImage: c.StdinImage, ClipboardImage: c.ClipboardImage, Compact: c.Compact}
 }
 func (o InvocationOptions) ForTurn(input TurnInput, sessionID string) Config {
 	c := o.config.Clone()
 	c.Prefix = input.Prompt
+	c.Media = cloneInputMedia(input.Media)
 	c.Images, c.Audio, c.Video = append([]string(nil), input.Images...), append([]string(nil), input.Audio...), append([]string(nil), input.Video...)
 	c.StdinImage, c.ClipboardImage, c.Compact = input.StdinImage, input.ClipboardImage, input.Compact
 	if sessionID != "" {
@@ -40,6 +47,7 @@ func (o InvocationOptions) ForTurn(input TurnInput, sessionID string) Config {
 // Clone isolates maps and slices that model resolution and request assembly may
 // otherwise share across turns, including nested provider extra parameters.
 func (c Config) Clone() Config {
+	c.Media = cloneInputMedia(c.Media)
 	c.Images = append([]string(nil), c.Images...)
 	c.Audio = append([]string(nil), c.Audio...)
 	c.Video = append([]string(nil), c.Video...)
@@ -88,4 +96,11 @@ func cloneConfigValue(value any) any {
 	default:
 		return value
 	}
+}
+
+func cloneInputMedia(media []proto.MediaAttachment) []proto.MediaAttachment {
+	if media == nil {
+		return nil
+	}
+	return proto.CloneMessages([]proto.Message{{Media: media}})[0].Media
 }

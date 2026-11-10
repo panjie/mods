@@ -173,6 +173,7 @@ func (m *Mods) setupStreamContext(content string) error {
 	}
 
 	current := proto.Message{
+		Media:   proto.CloneMessages([]proto.Message{{Media: cfg.Media}})[0].Media,
 		Role:    proto.RoleUser,
 		Content: content,
 	}

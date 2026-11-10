@@ -9,7 +9,11 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	textclipboard "github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/panjie/mods/internal/clipboard"
+	imageutil "github.com/panjie/mods/internal/image"
+	"github.com/panjie/mods/internal/proto"
 	"github.com/panjie/mods/internal/ui"
 	"golang.org/x/term"
 )
@@ -145,6 +149,9 @@ func renderChatSaved(id string) {
 }
 
 type chatPromptModel struct {
+	media           []proto.MediaAttachment
+	pasting         bool
+	pasteError      string
 	textarea        textarea.Model
 	width           int
 	prompt          string
@@ -206,6 +213,27 @@ func (m chatPromptModel) Init() tea.Cmd {
 func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	editKey := ""
 	switch msg := msg.(type) {
+	case chatClipboardMsg:
+		m.pasting = false
+		m.pasteError = ""
+		if msg.err != nil {
+			m.pasteError = msg.err.Error()
+			return m, nil
+		}
+		if len(msg.data) == 0 {
+			m.textarea.InsertString(msg.text)
+			return m, nil
+		}
+		total := len(msg.data)
+		for _, a := range m.media {
+			total += len(a.Data)
+		}
+		if len(m.media) >= imageutil.MaxImageCount || total > imageutil.MaxTotalImageBytes {
+			m.pasteError = "Clipboard image exceeds attachment limits"
+			return m, nil
+		}
+		m.media = append(m.media, proto.MediaAttachment{Kind: "image", Data: append([]byte(nil), msg.data...), MimeType: msg.mime, Source: fmt.Sprintf("clipboard image %d", len(m.media)+1)})
+		return m, nil
 	case tea.BackgroundColorMsg:
 		m.isDark = msg.IsDark()
 		m.backgroundKnown = true
@@ -214,9 +242,22 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.resize(msg.Width)
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		editKey = msg.String()
 		switch msg.String() {
+		case "ctrl+v":
+			if m.pasting {
+				return m, nil
+			}
+			m.pasting = true
+			m.pasteError = ""
+			return m, readChatClipboard
+		case "alt+backspace":
+			if len(m.media) > 0 {
+				m.media[len(m.media)-1] = proto.MediaAttachment{}
+				m.media = m.media[:len(m.media)-1]
+			}
+			return m, nil
 		case "ctrl+c":
 			m.exit = true
 			m.done = true
@@ -328,7 +369,7 @@ func (m *chatPromptModel) loadHistoryValue(value string) {
 
 func (m chatPromptModel) submit() (tea.Model, tea.Cmd) {
 	prompt := strings.TrimSpace(m.textarea.Value())
-	if prompt == "" {
+	if m.pasting || (prompt == "" && len(m.media) == 0) {
 		return m, nil
 	}
 	m.prompt = prompt
@@ -366,10 +407,24 @@ func (m chatPromptModel) View() tea.View {
 	}
 	styles := makeChatStylesForInteraction(ui.MakeInteractionStyles(config.Theme, m.isDark, m.backgroundKnown))
 	body := m.textarea.View()
+	for _, a := range m.media {
+		body += "\n[" + a.Source + "]"
+	}
+	if m.pasting {
+		body += "\nReading clipboard…"
+	}
+	if m.pasteError != "" {
+		body += "\n" + m.pasteError
+	}
 	actions := []ui.InteractionAction{
+		{Key: "Ctrl+V", Label: "Paste"},
+
 		{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
 		{Key: "Enter", Label: "New line"},
 		{Key: "Ctrl+C", Label: "Exit"},
+	}
+	if len(m.media) > 0 {
+		actions = append(actions, ui.InteractionAction{Key: "Alt+Backspace", Label: "Remove last image"})
 	}
 	if len(m.history) > 0 {
 		actions = append(actions, ui.InteractionAction{Key: "Up/Down", Label: "History"})
@@ -386,7 +441,7 @@ func (m chatPromptModel) View() tea.View {
 	return panel.TeaView()
 }
 
-func runInteractiveChatPrompt(history []string) (string, bool, error) {
+func runInteractiveChatPrompt(history []string) (chatPromptResult, bool, error) {
 	program := tea.NewProgram(
 		newChatPromptModel(history),
 		tea.WithInput(chatInput),
@@ -394,11 +449,42 @@ func runInteractiveChatPrompt(history []string) (string, bool, error) {
 	)
 	result, err := program.Run()
 	if err != nil {
-		return "", false, err
+		return chatPromptResult{}, false, err
 	}
 	model, ok := result.(chatPromptModel)
 	if !ok {
-		return "", false, fmt.Errorf("unexpected chat input model %T", result)
+		return chatPromptResult{}, false, fmt.Errorf("unexpected chat input model %T", result)
 	}
-	return model.prompt, model.exit, nil
+	if model.exit {
+		return chatPromptResult{}, true, nil
+	}
+	return chatPromptResult{Prompt: model.prompt, Media: model.media}, false, nil
+}
+
+type chatClipboardMsg struct {
+	data       []byte
+	mime, text string
+	err        error
+}
+
+var chatReadImage = clipboard.ReadImage
+var chatReadText = textclipboard.ReadAll
+
+func readChatClipboard() tea.Msg {
+	data, _, imageErr := chatReadImage()
+	if imageErr == nil {
+		if len(data) > imageutil.MaxTotalImageBytes {
+			return chatClipboardMsg{err: fmt.Errorf("Clipboard image exceeds 20 MiB")}
+		}
+		mime, err := imageutil.DetectMimeType(data)
+		if err == nil {
+			err = imageutil.ValidateImage(data)
+		}
+		return chatClipboardMsg{data: data, mime: mime, err: err}
+	}
+	text, err := chatReadText()
+	if err != nil || text == "" {
+		return chatClipboardMsg{err: fmt.Errorf("Could not paste clipboard image: %w", imageErr)}
+	}
+	return chatClipboardMsg{text: text}
 }

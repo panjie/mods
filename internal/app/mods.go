@@ -359,7 +359,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stdinImageInput:
 		m.stdinImageData = msg.data
-		if m.Config.Prefix == "" {
+		if m.Config.Prefix == "" && len(m.Config.Media) == 0 {
 			return m, m.quit
 		}
 		if m.Config.Dirs ||
@@ -389,7 +389,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.content != "" {
 			m.Input = RemoveWhitespace(msg.content)
 		}
-		if m.Input == "" && m.Config.Prefix == "" {
+		if m.Input == "" && m.Config.Prefix == "" && len(m.Config.Media) == 0 {
 			return m, m.quit
 		}
 		if m.Config.Dirs ||

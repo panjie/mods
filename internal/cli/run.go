@@ -110,7 +110,8 @@ func gatherInteractivePrompt() error {
 				ReasonText: "User canceled.",
 			}
 		}
-		config.Prefix = RemoveWhitespace(prompt)
+		config.Prefix = RemoveWhitespace(prompt.Prompt)
+		config.Media = prompt.Media
 	}
 	return nil
 }

@@ -46,6 +46,31 @@ func TestChatClipboardPasteSnapshotAndRemoval(t *testing.T) {
 	require.False(t, blank.(chatPromptModel).done)
 }
 
+func TestChatClipboardAltVPaste(t *testing.T) {
+	oldImage, oldText := chatReadImage, chatReadText
+	t.Cleanup(func() { chatReadImage, chatReadText = oldImage, oldText })
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	chatReadImage = func() ([]byte, string, error) { return buf.Bytes(), "image/png", nil }
+	chatReadText = func() (string, error) { t.Fatal("image must take precedence"); return "", nil }
+	m := newChatPromptModel(nil)
+	m.textarea.SetValue("describe this")
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModAlt})
+	m = updated.(chatPromptModel)
+	require.True(t, m.pasting)
+	require.NotNil(t, cmd)
+	for _, mod := range []tea.KeyMod{tea.ModAlt, tea.ModCtrl} {
+		_, duplicate := m.Update(tea.KeyPressMsg{Code: 'v', Mod: mod})
+		require.Nil(t, duplicate, "ignore repeated paste while clipboard read is pending")
+	}
+	m = updateChatPrompt(t, m, cmd())
+	require.False(t, m.pasting)
+	require.Len(t, m.media, 1)
+	require.Equal(t, buf.Bytes(), m.media[0].Data)
+	require.Equal(t, "describe this", m.textarea.Value())
+	require.Contains(t, m.View().Content, "Alt+V")
+}
+
 func TestChatClipboardTextAndErrorsPreserveDraft(t *testing.T) {
 	oldImage, oldText := chatReadImage, chatReadText
 	t.Cleanup(func() { chatReadImage, chatReadText = oldImage, oldText })

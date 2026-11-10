@@ -245,7 +245,9 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		editKey = msg.String()
 		switch msg.String() {
-		case "ctrl+v":
+		case "ctrl+v", "alt+v":
+			// Terminal paste bindings can consume Ctrl+V without sending a
+			// key event (or image data). Alt+V reads the clipboard directly.
 			if m.pasting {
 				return m, nil
 			}
@@ -417,7 +419,7 @@ func (m chatPromptModel) View() tea.View {
 		body += "\n" + m.pasteError
 	}
 	actions := []ui.InteractionAction{
-		{Key: "Ctrl+V", Label: "Paste"},
+		{Key: "Alt+V", Label: "Paste image/text"},
 
 		{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
 		{Key: "Enter", Label: "New line"},

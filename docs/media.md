@@ -35,6 +35,13 @@ mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
 ```
 
+In `mods --chat`, press **Alt+V** to attach an image from the system clipboard
+(or paste text if no image is available). The input panel lists attached images;
+**Alt+Backspace** removes the last one. **Ctrl+V** also works when the terminal
+forwards that key to Mods. Windows Terminal can intercept Ctrl+V for its own text
+paste action, so use Alt+V for clipboard images there. Copy the image itself
+(for example, a screenshot), rather than a file in Explorer.
+
 Discovery supports recursive pagination. The reader checks file content,
 preserves original pixels, and accepts up to eight images per call. Animated
 image interpretation depends on the provider. Unsupported formats require

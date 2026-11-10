@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -254,7 +255,8 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pasting = true
 			m.pasteError = ""
 			return m, readChatClipboard
-		case "alt+backspace":
+		// Legacy terminals may encode Alt+Backspace as ESC + Ctrl+H.
+		case "alt+backspace", "ctrl+alt+h", "ctrl+x":
 			if len(m.media) > 0 {
 				m.media[len(m.media)-1] = proto.MediaAttachment{}
 				m.media = m.media[:len(m.media)-1]
@@ -418,19 +420,7 @@ func (m chatPromptModel) View() tea.View {
 	if m.pasteError != "" {
 		body += "\n" + m.pasteError
 	}
-	actions := []ui.InteractionAction{
-		{Key: "Alt+V", Label: "Paste image/text"},
-
-		{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
-		{Key: "Enter", Label: "New line"},
-		{Key: "Ctrl+C", Label: "Exit"},
-	}
-	if len(m.media) > 0 {
-		actions = append(actions, ui.InteractionAction{Key: "Alt+Backspace", Label: "Remove last image"})
-	}
-	if len(m.history) > 0 {
-		actions = append(actions, ui.InteractionAction{Key: "Up/Down", Label: "History"})
-	}
+	actions := chatPromptActions(runtime.GOOS, len(m.media) > 0)
 	panel := ui.RenderInteractionPanelView(styles.interaction, m.width, ui.InteractionPanel{
 		Title:   "Message",
 		Tone:    ui.InteractionToneInfo,
@@ -441,6 +431,21 @@ func (m chatPromptModel) View() tea.View {
 	panel.Content = "\n" + panel.Content
 	panel = panel.Translate(0, 1)
 	return panel.TeaView()
+}
+
+func chatPromptActions(goos string, hasImages bool) []ui.InteractionAction {
+	actions := []ui.InteractionAction{
+		{Key: "Ctrl+S", Label: "Send"},
+		{Key: "Enter", Label: "New line"},
+		{Key: "Ctrl+C", Label: "Exit"},
+	}
+	if goos == "windows" {
+		actions = append(actions, ui.InteractionAction{Key: "Alt+V", Label: "Paste"})
+	}
+	if hasImages {
+		actions = append(actions, ui.InteractionAction{Key: "Ctrl+X", Label: "Remove image"})
+	}
+	return actions
 }
 
 func runInteractiveChatPrompt(history []string) (chatPromptResult, bool, error) {

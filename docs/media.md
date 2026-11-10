@@ -35,10 +35,11 @@ mods --image assets/mods-product.png "suggest alt text for this image"
 mods -I "describe the image on my clipboard"
 ```
 
-In `mods --chat`, press **Alt+V** to attach an image from the system clipboard
+In `mods --chat`, press **Ctrl+V** to attach an image from the system clipboard
 (or paste text if no image is available). The input panel lists attached images;
-**Alt+Backspace** removes the last one. **Ctrl+V** also works when the terminal
-forwards that key to Mods. Windows Terminal can intercept Ctrl+V for its own text
+**Ctrl+X** removes the last one (**Alt+Backspace** is also supported).
+The paste shortcut must reach Mods. **Alt+V** is available as an alternative.
+Windows Terminal can intercept Ctrl+V for its own text
 paste action, so use Alt+V for clipboard images there. Copy the image itself
 (for example, a screenshot), rather than a file in Explorer.
 

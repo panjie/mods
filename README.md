@@ -652,12 +652,13 @@ steps. Press `Ctrl+P` again to return to the compact current-step view. These
 shortcuts yield to approval dialogs and input forms.
 
 `--chat` starts a continuous conversation. Press `Enter` for a newline,
-`Ctrl+Enter` or `Ctrl+S` to send, and `Ctrl+C` while composing to leave. Each turn is saved to the
+`Ctrl+S` to send, and `Ctrl+C` while composing to leave. `Ctrl+Enter` also sends
+when the terminal reports it distinctly from Enter. Each turn is saved to the
 same session so you can resume it later with `--continue`.
 
 While composing, press `Ctrl+V` to attach an image from the system clipboard
 (or paste text when no image is available). Images are captured immediately and
-shown as attachment labels; repeat to attach more, or press `Alt+Backspace` to
+shown as attachment labels; repeat to attach more, or press `Ctrl+X` (or `Alt+Backspace`) to
 remove the last image. You can send images with or without text. Attachments
 are cleared from the composer after sending and remain in conversation history.
 Linux image paste requires `wl-paste` (Wayland) or `xclip` (X11). The shortcut

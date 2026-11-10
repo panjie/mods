@@ -68,7 +68,6 @@ func TestChatClipboardAltVPaste(t *testing.T) {
 	require.Len(t, m.media, 1)
 	require.Equal(t, buf.Bytes(), m.media[0].Data)
 	require.Equal(t, "describe this", m.textarea.Value())
-	require.Contains(t, m.View().Content, "Alt+V")
 }
 
 func TestChatClipboardTextAndErrorsPreserveDraft(t *testing.T) {
@@ -147,4 +146,57 @@ func TestChatInitialMediaAndPastedMediaAreIsolated(t *testing.T) {
 	require.Equal(t, byte(1), s.initial.Media[0].Data[0])
 	s.started = true
 	require.Empty(t, turnConfig(s.next(context.Background(), chatPromptResult{Prompt: "next"})).Media)
+}
+
+func TestChatRemoveImageKeysPreserveDraft(t *testing.T) {
+	for _, press := range []tea.KeyPressMsg{
+		{Code: tea.KeyBackspace, Mod: tea.ModAlt},
+		{Code: 'h', Mod: tea.ModCtrl | tea.ModAlt},
+		{Code: 'x', Mod: tea.ModCtrl},
+	} {
+		t.Run(press.String(), func(t *testing.T) {
+			m := newChatPromptModel(nil)
+			m.textarea.SetValue("keep this draft")
+			m.media = []proto.MediaAttachment{
+				{Kind: "image", Source: "first", Data: []byte{1}},
+				{Kind: "image", Source: "second", Data: []byte{2}},
+			}
+			m = updateChatPrompt(t, m, press)
+			require.Len(t, m.media, 1)
+			require.Equal(t, "first", m.media[0].Source)
+			require.Contains(t, m.View().Content, "Remove image")
+			m = updateChatPrompt(t, m, press)
+			m = updateChatPrompt(t, m, press)
+			require.Empty(t, m.media)
+			require.NotContains(t, m.View().Content, "Remove image")
+			require.Equal(t, "keep this draft", m.textarea.Value())
+			require.False(t, m.done)
+		})
+	}
+}
+
+func TestChatPromptActionsByPlatform(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin", "windows"} {
+		t.Run(goos, func(t *testing.T) {
+			for _, hasImages := range []bool{false, true} {
+				actions := chatPromptActions(goos, hasImages)
+				keys := make([]string, 0, len(actions))
+				for _, action := range actions {
+					keys = append(keys, action.Key)
+				}
+				require.Contains(t, keys, "Ctrl+S")
+				require.NotContains(t, keys, "Ctrl+Enter/Ctrl+S")
+				if goos == "windows" {
+					require.Contains(t, keys, "Alt+V")
+				} else {
+					require.NotContains(t, keys, "Alt+V")
+				}
+				if hasImages {
+					require.Contains(t, keys, "Ctrl+X")
+				} else {
+					require.NotContains(t, keys, "Ctrl+X")
+				}
+			}
+		})
+	}
 }

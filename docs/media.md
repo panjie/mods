@@ -37,7 +37,8 @@ mods -I "describe the image on my clipboard"
 
 In `mods --chat`, press **Ctrl+V** or **Ctrl+Shift+V** to attach an image from the system clipboard
 (or paste text if no image is available). The input panel lists attached images;
-**Alt+Backspace** removes the last one. Mods handles both a forwarded Ctrl+V key
+**Ctrl+X** removes the last one (**Alt+Backspace** is also supported).
+Mods handles both a forwarded Ctrl+V key
 and the empty bracketed paste that Windows Terminal sends for an image-only
 clipboard, without terminal configuration changes. Nonempty terminal pastes
 remain text. Some Windows Terminal builds stopped sending empty pastes; Microsoft

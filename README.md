@@ -86,7 +86,9 @@ go run github.com/go-task/task/v3/cmd/task@v3.51.1 build        # binary lands i
 go run github.com/go-task/task/v3/cmd/task@v3.51.1 install      # installs to ~/.local/bin/mods (or $XDG_BIN_HOME)
 ```
 
-The `install` task honors `PREFIX`, `BINDIR`, `DESTDIR`, and `XDG_BIN_HOME`.
+The `install` task builds from source with the same settings as `release`, stripping
+debug information while retaining git version metadata. It honors `PREFIX`,
+`BINDIR`, `DESTDIR`, and `XDG_BIN_HOME`.
 On all platforms the default install path is `$HOME/.local/bin/mods` (`mods.exe` on Windows).
 
 Prebuilt Windows portable ZIPs are published on the [releases] page.
@@ -650,16 +652,18 @@ steps. Press `Ctrl+P` again to return to the compact current-step view. These
 shortcuts yield to approval dialogs and input forms.
 
 `--chat` starts a continuous conversation. Press `Enter` for a newline,
-`Ctrl+Enter` or `Ctrl+S` to send, and `Ctrl+C` while composing to leave. Each turn is saved to the
+`Ctrl+S` to send, and `Ctrl+C` while composing to leave. `Ctrl+Enter` also sends
+when the terminal reports it distinctly from Enter. Each turn is saved to the
 same session so you can resume it later with `--continue`.
 
-While composing, press `Ctrl+V` to attach an image from the system clipboard
+While composing, press `Ctrl+V` or `Ctrl+Shift+V` to attach an image from the system clipboard
 (or paste text when no image is available). Images are captured immediately and
-shown as attachment labels; repeat to attach more, or press `Alt+Backspace` to
+shown as attachment labels; repeat to attach more, or press `Ctrl+X` (or `Alt+Backspace`) to
 remove the last image. You can send images with or without text. Attachments
 are cleared from the composer after sending and remain in conversation history.
-Linux image paste requires `wl-paste` (Wayland) or `xclip` (X11). The shortcut
-must reach mods; a terminal's own paste shortcut may only deliver text.
+Linux image paste requires `wl-paste` (Wayland) or `xclip` (X11). Mods handles
+both forwarded paste keys and empty bracketed paste events from Windows Terminal;
+see [media details](docs/media.md#images) for terminal version requirements.
 
 ### Portable Mode
 

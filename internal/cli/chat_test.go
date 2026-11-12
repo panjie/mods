@@ -514,9 +514,9 @@ func TestChatPromptDownMovesWithinMultilineInputBeforeHistory(t *testing.T) {
 	require.Equal(t, 1, model.historyIndex)
 }
 
-func TestChatPromptHistoryHintOnlyAppearsWhenHistoryExists(t *testing.T) {
+func TestChatPromptOmitsHistoryHint(t *testing.T) {
 	require.NotContains(t, ansi.Strip(newChatPromptModel(nil).View().Content), "History")
-	require.Contains(t, ansi.Strip(newChatPromptModel([]string{"previous"}).View().Content), "History")
+	require.NotContains(t, ansi.Strip(newChatPromptModel([]string{"previous"}).View().Content), "History")
 }
 
 func TestRunInteractiveChatPromptRecognizesKittyCtrlEnter(t *testing.T) {
@@ -647,9 +647,9 @@ func TestChatPromptTracksTerminalWidth(t *testing.T) {
 func TestChatPromptTypingKeepsActionRowStable(t *testing.T) {
 	model := newChatPromptModel(nil)
 	model = updateChatPrompt(t, model, tea.WindowSizeMsg{Width: 30, Height: 20})
-	before := chatActionLine(model.View().Content, "Ctrl+Enter", "Send")
+	before := chatActionLine(model.View().Content, "Ctrl+S", "Send")
 	model = updateChatPrompt(t, model, tea.KeyPressMsg{Code: tea.KeyExtended, Text: "a"})
-	after := chatActionLine(model.View().Content, "Ctrl+Enter", "Send")
+	after := chatActionLine(model.View().Content, "Ctrl+S", "Send")
 	require.NotEqual(t, -1, before)
 	require.Equal(t, before, after)
 }

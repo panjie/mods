@@ -46,7 +46,7 @@ func runTask(args []string) error {
 }
 
 func install() error {
-	if err := build(binaryPath(), false); err != nil {
+	if err := build(binaryPath(), true); err != nil {
 		return err
 	}
 

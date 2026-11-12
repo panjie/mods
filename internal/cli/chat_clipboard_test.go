@@ -6,7 +6,9 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"io"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	cfgpkg "github.com/panjie/mods/internal/config"
@@ -46,7 +48,7 @@ func TestChatClipboardPasteSnapshotAndRemoval(t *testing.T) {
 	require.False(t, blank.(chatPromptModel).done)
 }
 
-func TestChatClipboardAltVPaste(t *testing.T) {
+func TestChatClipboardCtrlShiftVPaste(t *testing.T) {
 	oldImage, oldText := chatReadImage, chatReadText
 	t.Cleanup(func() { chatReadImage, chatReadText = oldImage, oldText })
 	var buf bytes.Buffer
@@ -55,11 +57,11 @@ func TestChatClipboardAltVPaste(t *testing.T) {
 	chatReadText = func() (string, error) { t.Fatal("image must take precedence"); return "", nil }
 	m := newChatPromptModel(nil)
 	m.textarea.SetValue("describe this")
-	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModAlt})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl | tea.ModShift})
 	m = updated.(chatPromptModel)
 	require.True(t, m.pasting)
 	require.NotNil(t, cmd)
-	for _, mod := range []tea.KeyMod{tea.ModAlt, tea.ModCtrl} {
+	for _, mod := range []tea.KeyMod{tea.ModCtrl | tea.ModShift, tea.ModCtrl} {
 		_, duplicate := m.Update(tea.KeyPressMsg{Code: 'v', Mod: mod})
 		require.Nil(t, duplicate, "ignore repeated paste while clipboard read is pending")
 	}
@@ -68,7 +70,104 @@ func TestChatClipboardAltVPaste(t *testing.T) {
 	require.Len(t, m.media, 1)
 	require.Equal(t, buf.Bytes(), m.media[0].Data)
 	require.Equal(t, "describe this", m.textarea.Value())
-	require.Contains(t, m.View().Content, "Alt+V")
+	require.Contains(t, m.View().Content, "Ctrl+V")
+	require.NotContains(t, m.View().Content, "Alt+V")
+}
+
+func TestChatClipboardAltVDoesNotPaste(t *testing.T) {
+	m := updateChatPrompt(t, newChatPromptModel(nil), tea.KeyPressMsg{Code: 'v', Mod: tea.ModAlt})
+	require.False(t, m.pasting)
+	require.Empty(t, m.media)
+}
+
+func TestChatClipboardEmptyTerminalPaste(t *testing.T) {
+	oldImage, oldText := chatReadImage, chatReadText
+	t.Cleanup(func() { chatReadImage, chatReadText = oldImage, oldText })
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	chatReadImage = func() ([]byte, string, error) { return buf.Bytes(), "image/png", nil }
+	chatReadText = func() (string, error) { t.Fatal("image must take precedence"); return "", nil }
+	m := newChatPromptModel(nil)
+	m.textarea.SetValue("describe this")
+	updated, cmd := m.Update(tea.PasteMsg{})
+	m = updated.(chatPromptModel)
+	require.True(t, m.pasting)
+	require.NotNil(t, cmd)
+	for _, event := range []tea.Msg{tea.PasteMsg{}, tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl}} {
+		_, duplicate := m.Update(event)
+		require.Nil(t, duplicate)
+	}
+	blocked, _ := m.submit()
+	require.False(t, blocked.(chatPromptModel).done)
+	m = updateChatPrompt(t, m, cmd())
+	require.False(t, m.pasting)
+	require.Len(t, m.media, 1)
+	require.Equal(t, buf.Bytes(), m.media[0].Data)
+	require.Equal(t, "describe this", m.textarea.Value())
+
+	chatReadImage = func() ([]byte, string, error) { return nil, "", errors.New("no image") }
+	chatReadText = func() (string, error) { return "", nil }
+	updated, cmd = m.Update(tea.PasteMsg{})
+	m = updateChatPrompt(t, updated.(chatPromptModel), cmd())
+	require.False(t, m.pasting)
+	require.NotEmpty(t, m.pasteError)
+	require.Len(t, m.media, 1)
+	require.Equal(t, "describe this", m.textarea.Value())
+}
+
+func TestChatClipboardTerminalTextDoesNotReadClipboard(t *testing.T) {
+	oldImage, oldText := chatReadImage, chatReadText
+	t.Cleanup(func() { chatReadImage, chatReadText = oldImage, oldText })
+	chatReadImage = func() ([]byte, string, error) { t.Fatal("terminal text must not read images"); return nil, "", nil }
+	chatReadText = func() (string, error) { t.Fatal("terminal text must not reread clipboard"); return "", nil }
+	for _, text := range []string{"hello\nworld", " \n "} {
+		t.Run(text, func(t *testing.T) {
+			m := updateChatPrompt(t, newChatPromptModel(nil), tea.PasteMsg{Content: text})
+			require.False(t, m.pasting)
+			require.Empty(t, m.media)
+			require.Equal(t, text, m.textarea.Value())
+		})
+	}
+}
+
+// Exercise the real terminal decoder and Bubble Tea message conversion, not
+// only a manufactured PasteMsg. Windows Terminal 1.24 emits these bytes for
+// Ctrl+V with an image-only clipboard.
+func TestChatClipboardBracketedPasteWire(t *testing.T) {
+	oldImage, oldText := chatReadImage, chatReadText
+	t.Cleanup(func() { chatReadImage, chatReadText = oldImage, oldText })
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	chatReadImage = func() ([]byte, string, error) { return buf.Bytes(), "image/png", nil }
+	chatReadText = func() (string, error) { return "", errors.New("unexpected text read") }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	go func() { _, _ = io.WriteString(writer, "\x1b[200~\x1b[201~") }()
+	program := tea.NewProgram(chatClipboardWireModel{newChatPromptModel(nil)},
+		tea.WithContext(ctx), tea.WithInput(reader), tea.WithOutput(io.Discard),
+		tea.WithoutSignals(), tea.WithoutRenderer())
+	result, err := program.Run()
+	require.NoError(t, err)
+	m := result.(chatClipboardWireModel).chatPromptModel
+	require.Empty(t, m.pasteError)
+	require.Len(t, m.media, 1)
+	require.Equal(t, buf.Bytes(), m.media[0].Data)
+}
+
+type chatClipboardWireModel struct{ chatPromptModel }
+
+func (m chatClipboardWireModel) Init() tea.Cmd { return nil }
+
+func (m chatClipboardWireModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.chatPromptModel.Update(msg)
+	m.chatPromptModel = updated.(chatPromptModel)
+	if _, ok := msg.(chatClipboardMsg); ok {
+		return m, tea.Quit
+	}
+	return m, cmd
 }
 
 func TestChatClipboardTextAndErrorsPreserveDraft(t *testing.T) {

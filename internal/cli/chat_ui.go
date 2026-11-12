@@ -213,6 +213,14 @@ func (m chatPromptModel) Init() tea.Cmd {
 func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	editKey := ""
 	switch msg := msg.(type) {
+	case tea.PasteMsg:
+		// Windows Terminal sends an empty bracketed paste for an
+		// image-only clipboard, even when its paste binding consumes Ctrl+V.
+		// Nonempty pastes must stay on the textarea path: they are the text
+		// supplied by the terminal, not a request to reread the clipboard.
+		if msg.Content == "" {
+			return m.startClipboardPaste()
+		}
 	case chatClipboardMsg:
 		m.pasting = false
 		m.pasteError = ""
@@ -245,15 +253,8 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		editKey = msg.String()
 		switch msg.String() {
-		case "ctrl+v", "alt+v":
-			// Terminal paste bindings can consume Ctrl+V without sending a
-			// key event (or image data). Alt+V reads the clipboard directly.
-			if m.pasting {
-				return m, nil
-			}
-			m.pasting = true
-			m.pasteError = ""
-			return m, readChatClipboard
+		case "ctrl+v", "ctrl+shift+v":
+			return m.startClipboardPaste()
 		case "alt+backspace":
 			if len(m.media) > 0 {
 				m.media[len(m.media)-1] = proto.MediaAttachment{}
@@ -328,6 +329,15 @@ func (m chatPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, cmd
+}
+
+func (m chatPromptModel) startClipboardPaste() (tea.Model, tea.Cmd) {
+	if m.pasting {
+		return m, nil
+	}
+	m.pasting = true
+	m.pasteError = ""
+	return m, readChatClipboard
 }
 
 func (m chatPromptModel) onFirstLine() bool {
@@ -419,7 +429,7 @@ func (m chatPromptModel) View() tea.View {
 		body += "\n" + m.pasteError
 	}
 	actions := []ui.InteractionAction{
-		{Key: "Alt+V", Label: "Paste image/text"},
+		{Key: "Ctrl+V", Label: "Paste image/text"},
 
 		{Key: "Ctrl+Enter/Ctrl+S", Label: "Send"},
 		{Key: "Enter", Label: "New line"},

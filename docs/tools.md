@@ -67,7 +67,7 @@ with provider-hosted search. Disabling web search removes the tool.
 
 ## web_fetch
 
-`web_fetch` reads HTTP(S) HTML, plain text and Markdown without a browser,
+By default (`web-fetch-provider: local`), `web_fetch` reads HTTP(S) HTML, plain text and Markdown without a browser,
 search-service key, JavaScript execution or local file writes. It is available
 independently of `--web-search` and filesystem/shell settings. Ordinary webpage
 and documentation queries prefer it over browser skills and commands; failures
@@ -170,3 +170,73 @@ Search matches full descriptions and returns complete descriptions within its
 own 4096-byte output budget. An oversized description is explicitly marked as
 omitted, with instructions to load that skill to check applicability. These are
 model instructions, not a runtime gate on other tools.
+
+
+## DeepSeek document and speech tools
+
+These opt-in standalone services return text usable by any model with function
+tools, including local models. They do not require switching the chat provider.
+Configure `mods.yml`:
+
+```yaml
+deepseek-tools: true
+deepseek-tools-api-key-env: DEEPSEEK_API_KEY
+# Or supply deepseek-tools-api-key directly.
+web-fetch-provider: deepseek # optional; default local needs no API key
+```
+
+Set `DEEPSEEK_API_KEY` in your environment. Chat provider keys and the web-search
+key are separate settings; no key is copied from them automatically.
+`deepseek-tools` enables `document_read` and `audio_transcribe` unless
+`builtin-tools.filesystem` is `false`. Neither requires shell tools or a
+multimodal chat model. Both use ordinary filesystem read authorization and send
+the requested local file to DeepSeek, incurring service charges. They do not
+create remote Files API objects or write local files. Results, like other tool
+results, become conversation history.
+
+Example prompts (with tools enabled):
+
+```sh
+mods 'Read report.pdf with document_read and summarize it with page references.'
+mods 'Transcribe note.wav with audio_transcribe and list the action items.'
+```
+
+- `document_read`: PDF, Word, PowerPoint and images accepted by DeepSeek OCR;
+  mods limits uploads to 32 MiB and responses to 16 MiB. `purpose` defaults to
+  `text_recognition`; `rich_layout_recognition` returns raw layout recognition
+  text, not image attachments. The whole document is uploaded and recognized,
+  even when only one page is requested. Read using 1-based `page` and character
+  `offset`/`limit` (default 12,000, maximum 20,000). Follow `next_page` and
+  `next_offset` until `done`. `recognition_complete: false` and
+  `finish_reason: length` mean that OCR truncated the page; `done` only means
+  the available text has been read. Quote the returned source and page number.
+  The most recent document's result is cached by content and purpose within
+  the current request's tool loop. Another document replaces it; later chat
+  turns or resumed sessions may upload and bill again. Cancellation does not
+  guarantee cancellation of server-side recognition. Requests are not retried.
+- `audio_transcribe`: accepts validated 16-bit PCM WAV, mono or stereo, at most
+  6 MiB and 120 seconds. Supported sample rates are 8, 16, 22.05, 24, 32, 44.1
+  and 48 kHz. For stereo only the left channel is recognized. This tool does
+  not accept MP3/Ogg, record audio, convert formats, or provide streaming ASR.
+  The response includes source, transcript, duration and an explicit truncation
+  flag (20,000-character output limit). Existing native `--audio` behavior is
+  unchanged; this is a separate transcription tool.
+- `web-fetch-provider: deepseek`: sends URLs to DeepSeek Fetch and returns
+  paginated Markdown using the existing `web_fetch` schema. It is independent
+  of `deepseek-tools` and `web-search`. Every call, including pagination, may
+  incur a fee. Content is limited to 4 MiB and requests to 30 seconds. Local
+  preflight checks reject private initial targets unless
+  `MODS_WEB_SEARCH_ALLOW_PRIVATE=1`; remote DNS and redirects are controlled
+  by DeepSeek, not mods' local transport. The service can still reject targets.
+  There is no automatic fallback between local and remote extraction.
+
+All returned text is untrusted source material. The standalone HTTP client
+refuses redirects, bounds responses and timeouts, and never retries potentially
+billable requests automatically. OCR and ASR have a 185-second client deadline
+(or an earlier caller cancellation).
+
+Sources: [OCR](https://api-docs.deepseek.com/guides/ocr/),
+[ASR](https://api-docs.deepseek.com/guides/asr/),
+[Fetch](https://api-docs.deepseek.com/guides/search/).
+Remote `file_id` document attachments, hosted Flash search, TTS and Ogg ASR are
+not implemented by these tools.

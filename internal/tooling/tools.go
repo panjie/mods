@@ -2,6 +2,7 @@ package tooling
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/panjie/mods/internal/approval"
 	cfgpkg "github.com/panjie/mods/internal/config"
+	"github.com/panjie/mods/internal/deepseektools"
 	"github.com/panjie/mods/internal/mcpclient"
 	"github.com/panjie/mods/internal/selfhelp"
 	"github.com/panjie/mods/internal/skills"
@@ -111,9 +113,34 @@ func builtinTools() []builtinTool {
 			},
 		},
 		{
+			group: "document_read",
+			enabled: func(env builtinEnv) bool {
+				return env.cfg.DeepSeekTools && env.cfg.BuiltinTools.Filesystem != cfgpkg.FilesystemNever
+			},
+			register: func(env builtinEnv) error {
+				return toolregistry.RegisterDocumentRead(env.registry, toolregistry.FilesystemConfig{Root: env.root, SafeDirs: env.safeDirs}, deepseekToolsClient(env.cfg))
+			},
+		},
+		{
+			group: "audio_transcribe",
+			enabled: func(env builtinEnv) bool {
+				return env.cfg.DeepSeekTools && env.cfg.BuiltinTools.Filesystem != cfgpkg.FilesystemNever
+			},
+			register: func(env builtinEnv) error {
+				return toolregistry.RegisterAudioTranscribe(env.registry, toolregistry.FilesystemConfig{Root: env.root, SafeDirs: env.safeDirs}, deepseekToolsClient(env.cfg))
+			},
+		},
+		{
 			group: "web_fetch",
 			register: func(env builtinEnv) error {
-				return toolregistry.RegisterWebFetch(env.registry)
+				switch env.cfg.WebFetchProvider {
+				case "", "local":
+					return toolregistry.RegisterWebFetch(env.registry)
+				case "deepseek":
+					return toolregistry.RegisterDeepSeekWebFetch(env.registry, deepseekToolsClient(env.cfg))
+				default:
+					return fmt.Errorf("unknown web-fetch-provider %q: expected local or deepseek", env.cfg.WebFetchProvider)
+				}
 			},
 		},
 		{
@@ -337,4 +364,16 @@ func buildBuiltinSpecs() ([]BuiltinToolInfo, error) {
 		})
 	}
 	return infos, nil
+}
+
+func deepseekToolsClient(cfg *cfgpkg.Config) deepseektools.Client {
+	key := cfg.DeepSeekToolsAPIKey
+	if key == "" {
+		name := cfg.DeepSeekToolsAPIKeyEnv
+		if name == "" {
+			name = "DEEPSEEK_API_KEY"
+		}
+		key = os.Getenv(name)
+	}
+	return deepseektools.Client{APIKey: key}
 }

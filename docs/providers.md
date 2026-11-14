@@ -88,7 +88,7 @@ table selects Responses. The `chatgpt` subscription provider requires Responses.
 With the built-in `deepseek` provider, `deepseek-flash`, `deepseek-v4-flash`,
 `deepseek-v4-flash-vision-exp`, and `deepseek-v4-pro` requests to `api.deepseek.com` use the
 [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
-automatically. Mods uses its plaintext reasoning events, hosted web search, and
+automatically. Mods uses its plaintext reasoning events and
 the Codex-compatible free-form `apply_patch` tool. DeepSeek Responses is
 stateless, so complete response items and tool outputs remain in the local
 session and are replayed on the next turn. Mods can send images through both
@@ -137,9 +137,18 @@ Unknown enum values are rejected instead of silently falling back. Custom
 providers must configure `base-url`; only built-in providers with a known
 official endpoint may omit it. `extra-params` must match the selected protocol.
 
-When web search is enabled, an endpoint with hosted search capability uses that
-capability automatically. DeepSeek Responses therefore searches without a
-Tavily key; other endpoints keep the existing local search behavior.
+Web search always uses the configured `web-search-provider` and its separate
+search key, including on DeepSeek Responses. Mods does not automatically enable
+DeepSeek's hosted `web_search`, `deepseek_web_search` or `deepseek_read_url` tools.
+The new Flash hosted tools differ from the older Pro `web_search` protocol;
+these are not interchangeable.
+
+DeepSeek's standalone OCR, speech recognition and Fetch APIs can also be used
+with any chat provider. Enable `deepseek-tools: true` for `document_read` and
+`audio_transcribe`, or select `web-fetch-provider: deepseek` for remote webpage
+extraction. These use `deepseek-tools-api-key` or the environment variable named
+by `deepseek-tools-api-key-env` (default `DEEPSEEK_API_KEY`), independently of
+chat and search credentials. See [tool configuration and limits](tools.md#deepseek-document-and-speech-tools).
 
 The Azure adapter uses Chat Completions and does not support
 `endpoint: responses`.

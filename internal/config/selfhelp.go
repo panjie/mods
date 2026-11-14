@@ -163,7 +163,7 @@ func safeDefault(path string, typ reflect.Type, value reflect.Value) string {
 }
 
 func secretOrOpaqueSetting(path string) bool {
-	return path == "web-search-api-key" ||
+	return path == "web-search-api-key" || path == "deepseek-tools-api-key" ||
 		strings.HasSuffix(path, ".api-key") ||
 		strings.HasSuffix(path, ".api-key-cmd") ||
 		strings.HasPrefix(path, "prompts.") ||

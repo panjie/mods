@@ -790,3 +790,23 @@ func TestWordWrapDefaultsAndExplicitValues(t *testing.T) {
 		require.Equal(t, width, cfg.WordWrap)
 	}
 }
+
+func TestDeepSeekToolsConfig(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "env-key")
+	cfg := Default()
+	require.False(t, cfg.DeepSeekTools)
+	require.Equal(t, "local", cfg.WebFetchProvider)
+	require.NoError(t, yaml.Unmarshal([]byte("deepseek-tools: true\nweb-fetch-provider: deepseek\n"), &cfg))
+	cfg.ApplyDefaults()
+	require.True(t, cfg.DeepSeekTools)
+	require.Equal(t, "env-key", cfg.DeepSeekToolsAPIKey)
+	require.Equal(t, "deepseek", cfg.WebFetchProvider)
+	require.NoError(t, yaml.Unmarshal([]byte("deepseek-tools-api-key: explicit-key\n"), &cfg))
+	cfg.ApplyDefaults()
+	require.Equal(t, "explicit-key", cfg.DeepSeekToolsAPIKey)
+	for _, s := range SelfHelpSettings() {
+		if s.Path == "deepseek-tools-api-key" {
+			require.NotContains(t, s.Default, "key")
+		}
+	}
+}

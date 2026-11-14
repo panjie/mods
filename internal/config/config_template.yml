@@ -120,6 +120,15 @@ builtin-tools:
   shell: true
   # {{ index .Help "builtin-tools.shell-timeout" }}
   shell-timeout: 60s
+# {{ index .Help "deepseek-tools" }}
+deepseek-tools: {{ .Config.DeepSeekTools }}
+# {{ index .Help "deepseek-tools-api-key" }}
+# deepseek-tools-api-key:
+# {{ index .Help "deepseek-tools-api-key-env" }}
+deepseek-tools-api-key-env: {{ .Config.DeepSeekToolsAPIKeyEnv }}
+# {{ index .Help "web-fetch-provider" }}
+web-fetch-provider: {{ .Config.WebFetchProvider }}
+
 # {{ index .Help "web-search" }}
 web-search: {{ .Config.WebSearch }}
 # {{ index .Help "web-search-provider" }}

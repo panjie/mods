@@ -94,24 +94,28 @@ var Help = map[string]string{
 	"editor":            "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
 	"mcp-servers":       "MCP Servers configurations",
 
-	"list-mcps":              "List all available MCP servers",
-	"list-tools":             "List all available tools (built-in and MCP), with built-in tools annotated",
-	"mcp-timeout":            "Timeout for MCP server calls, defaults to 15 seconds",
-	"builtin-tools":          "Native tool configuration for filesystem and shell tools",
-	"web-search":             "Enable or disable the web_search tool (disabled by default)",
-	"web-search-provider":    "Web search provider: tavily (default), deepseek, or custom",
-	"web-search-api-key":     "API key for the web search provider (required for tavily and deepseek)",
-	"web-search-api-key-env": "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + "; set DEEPSEEK_API_KEY for deepseek)",
-	"video":                  "Attach a short H.264 MP4 video with optional AAC audio (repeatable); requires a supported video model",
-	"audio":                  "Attach a WAV or MP3 recording (repeatable); requires a supported audio model",
-	"image":                  "Attach PNG, JPG, GIF, or WebP images; repeatable or comma-separated paths",
-	"stdin-image":            "Treat piped stdin input as raw image data instead of text",
-	"clipboard-image":        "Attach the current image in the system clipboard to the prompt",
-	"debug":                  "Enable debug mode to print execution steps, tool calls, and request details",
-	"think":                  "Enable extended thinking for supported models; thinking-type can override provider defaults",
-	"review-mode":            "Write review mode: auto = use session permissions (default); always = ask each time; never = disable review",
-	"no-review":              "Disable tool review; shorthand for --review-mode=never",
-	"skills-dirs":            "Set installed skill directories (repeatable); omit DIR to print effective directories.",
+	"list-mcps":                  "List all available MCP servers",
+	"list-tools":                 "List all available tools (built-in and MCP), with built-in tools annotated",
+	"mcp-timeout":                "Timeout for MCP server calls, defaults to 15 seconds",
+	"builtin-tools":              "Native tool configuration for filesystem and shell tools",
+	"deepseek-tools":             "Enable paid document_read OCR and audio_transcribe tools for any chat model (uploads local files to DeepSeek; disabled by default)",
+	"deepseek-tools-api-key":     "API key for standalone DeepSeek OCR, ASR and Fetch services",
+	"deepseek-tools-api-key-env": "Environment variable for standalone DeepSeek services (default DEEPSEEK_API_KEY)",
+	"web-fetch-provider":         "Web fetch backend: local (default) or paid deepseek",
+	"web-search":                 "Enable or disable the web_search tool (disabled by default)",
+	"web-search-provider":        "Web search provider: tavily (default), deepseek, or custom",
+	"web-search-api-key":         "API key for the web search provider (required for tavily and deepseek)",
+	"web-search-api-key-env":     "Environment variable name that holds the web search API key (defaults to " + DefaultWebSearchAPIKeyEnv + "; set DEEPSEEK_API_KEY for deepseek)",
+	"video":                      "Attach a short H.264 MP4 video with optional AAC audio (repeatable); requires a supported video model",
+	"audio":                      "Attach a WAV or MP3 recording (repeatable); requires a supported audio model",
+	"image":                      "Attach PNG, JPG, GIF, or WebP images; repeatable or comma-separated paths",
+	"stdin-image":                "Treat piped stdin input as raw image data instead of text",
+	"clipboard-image":            "Attach the current image in the system clipboard to the prompt",
+	"debug":                      "Enable debug mode to print execution steps, tool calls, and request details",
+	"think":                      "Enable extended thinking for supported models; thinking-type can override provider defaults",
+	"review-mode":                "Write review mode: auto = use session permissions (default); always = ask each time; never = disable review",
+	"no-review":                  "Disable tool review; shorthand for --review-mode=never",
+	"skills-dirs":                "Set installed skill directories (repeatable); omit DIR to print effective directories.",
 
 	"prompts.identity":       "Override the built-in runtime safety identity prompt; empty uses the built-in default",
 	"prompts.workflow":       "Override the built-in workflow prompt (skills, planning, diagnosis, verification, self-help); empty uses the built-in default",
@@ -245,36 +249,40 @@ func (ft *FormatText) UnmarshalYAML(unmarshal func(any) error) error {
 // file and loaded from environment variables. It is embedded in Config so all
 // fields are promoted and accessible directly on Config.
 type PersistentConfig struct {
-	API                string     `yaml:"default-api" env:"API"`
-	Model              string     `yaml:"default-model" env:"MODEL"`
-	Format             string     `yaml:"format" env:"FORMAT"`
-	FormatText         FormatText `yaml:"format-text"`
-	Minimal            bool       `yaml:"minimal" env:"MINIMAL"`
-	Raw                bool       `yaml:"raw" env:"RAW"`
-	HideToolStatus     bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
-	HideChatPath       bool       `yaml:"hide-chat-path" env:"HIDE_CHAT_PATH"`
-	ShowTokenUsage     bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
-	NoInstructions     bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
-	MaxRetries         int        `yaml:"max-retries" env:"MAX_RETRIES"`
-	ContextMaxBytes    int        `yaml:"context-max-bytes" env:"CONTEXT_MAX_BYTES"`
-	WordWrap           int        `yaml:"word-wrap" env:"WORD_WRAP"`
-	HTTPProxy          string     `yaml:"http-proxy" env:"HTTP_PROXY"`
-	APIs               APIs       `yaml:"apis"`
-	Role               string     `yaml:"role" env:"ROLE"`
-	Roles              map[string][]string
-	Prompts            PromptConfig `yaml:"prompts"`
-	Theme              string
-	NerdFontGlyphs     bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
-	MCPServers         map[string]MCPServerConfig `yaml:"mcp-servers"`
-	MCPTimeout         time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
-	BuiltinTools       BuiltinToolsConfig         `yaml:"builtin-tools"`
-	WebSearch          bool                       `yaml:"web-search" env:"WEB_SEARCH"`
-	WebSearchProvider  string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
-	WebSearchAPIKey    string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
-	WebSearchAPIKeyEnv string                     `yaml:"web-search-api-key-env"`
-	Think              bool                       `yaml:"think" env:"THINK"`
-	ReviewMode         ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
-	SkillsDirs         []string                   `yaml:"skills-dirs"`
+	API                    string     `yaml:"default-api" env:"API"`
+	Model                  string     `yaml:"default-model" env:"MODEL"`
+	Format                 string     `yaml:"format" env:"FORMAT"`
+	FormatText             FormatText `yaml:"format-text"`
+	Minimal                bool       `yaml:"minimal" env:"MINIMAL"`
+	Raw                    bool       `yaml:"raw" env:"RAW"`
+	HideToolStatus         bool       `yaml:"hide-tool-status" env:"HIDE_TOOL_STATUS"`
+	HideChatPath           bool       `yaml:"hide-chat-path" env:"HIDE_CHAT_PATH"`
+	ShowTokenUsage         bool       `yaml:"show-token-usage" env:"SHOW_TOKEN_USAGE"`
+	NoInstructions         bool       `yaml:"no-instructions" env:"NO_INSTRUCTIONS"`
+	MaxRetries             int        `yaml:"max-retries" env:"MAX_RETRIES"`
+	ContextMaxBytes        int        `yaml:"context-max-bytes" env:"CONTEXT_MAX_BYTES"`
+	WordWrap               int        `yaml:"word-wrap" env:"WORD_WRAP"`
+	HTTPProxy              string     `yaml:"http-proxy" env:"HTTP_PROXY"`
+	APIs                   APIs       `yaml:"apis"`
+	Role                   string     `yaml:"role" env:"ROLE"`
+	Roles                  map[string][]string
+	Prompts                PromptConfig `yaml:"prompts"`
+	Theme                  string
+	NerdFontGlyphs         bool                       `yaml:"nerd-font-glyphs" env:"NERD_FONT_GLYPHS"`
+	MCPServers             map[string]MCPServerConfig `yaml:"mcp-servers"`
+	MCPTimeout             time.Duration              `yaml:"mcp-timeout" env:"MCP_TIMEOUT"`
+	BuiltinTools           BuiltinToolsConfig         `yaml:"builtin-tools"`
+	DeepSeekTools          bool                       `yaml:"deepseek-tools" env:"DEEPSEEK_TOOLS"`
+	DeepSeekToolsAPIKey    string                     `yaml:"deepseek-tools-api-key" env:"DEEPSEEK_TOOLS_API_KEY"`
+	DeepSeekToolsAPIKeyEnv string                     `yaml:"deepseek-tools-api-key-env"`
+	WebFetchProvider       string                     `yaml:"web-fetch-provider" env:"WEB_FETCH_PROVIDER"`
+	WebSearch              bool                       `yaml:"web-search" env:"WEB_SEARCH"`
+	WebSearchProvider      string                     `yaml:"web-search-provider" env:"WEB_SEARCH_PROVIDER"`
+	WebSearchAPIKey        string                     `yaml:"web-search-api-key" env:"WEB_SEARCH_API_KEY"`
+	WebSearchAPIKeyEnv     string                     `yaml:"web-search-api-key-env"`
+	Think                  bool                       `yaml:"think" env:"THINK"`
+	ReviewMode             ReviewMode                 `yaml:"review-mode" env:"REVIEW_MODE"`
+	SkillsDirs             []string                   `yaml:"skills-dirs"`
 
 	// Deprecated: retained for YAML backward compatibility; no longer read at runtime.
 	System string `yaml:"system"`
@@ -591,6 +599,15 @@ func (c *Config) applyDefaults() {
 	if c.Format != "" && c.FormatText[c.Format] == "" {
 		c.FormatText[c.Format] = defaultFormatTextFor(c.Format)
 	}
+	if c.DeepSeekToolsAPIKeyEnv == "" {
+		c.DeepSeekToolsAPIKeyEnv = "DEEPSEEK_API_KEY"
+	}
+	if c.DeepSeekToolsAPIKey == "" {
+		c.DeepSeekToolsAPIKey = os.Getenv(c.DeepSeekToolsAPIKeyEnv)
+	}
+	if c.WebFetchProvider == "" {
+		c.WebFetchProvider = "local"
+	}
 	if c.WebSearchAPIKeyEnv == "" {
 		c.WebSearchAPIKeyEnv = DefaultWebSearchAPIKeyEnv
 	}
@@ -823,12 +840,14 @@ func Default() Config {
 				"markdown": defaultMarkdownFormatText,
 				"json":     defaultJSONFormatText,
 			},
-			ReviewMode:         ReviewAuto,
-			WordWrap:           0,
-			MCPTimeout:         15 * time.Second,
-			WebSearch:          false,
-			WebSearchProvider:  DefaultWebSearchProvider,
-			WebSearchAPIKeyEnv: DefaultWebSearchAPIKeyEnv,
+			ReviewMode:             ReviewAuto,
+			WordWrap:               0,
+			MCPTimeout:             15 * time.Second,
+			DeepSeekToolsAPIKeyEnv: "DEEPSEEK_API_KEY",
+			WebFetchProvider:       "local",
+			WebSearch:              false,
+			WebSearchProvider:      DefaultWebSearchProvider,
+			WebSearchAPIKeyEnv:     DefaultWebSearchAPIKeyEnv,
 			BuiltinTools: BuiltinToolsConfig{
 				Filesystem:   FilesystemAuto,
 				Shell:        true,

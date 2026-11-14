@@ -325,3 +325,46 @@ func TestImageIntentEnablesFilesystem(t *testing.T) {
 		require.True(t, PromptLooksFileRelated(prompt), prompt)
 	}
 }
+
+func TestDeepSeekStandaloneToolPolicy(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "fixture-key")
+	for _, tc := range []struct {
+		enabled    bool
+		filesystem cfgpkg.FilesystemMode
+		want       bool
+	}{
+		{false, cfgpkg.FilesystemAlways, false},
+		{true, cfgpkg.FilesystemAuto, true},
+		{true, cfgpkg.FilesystemNever, false},
+	} {
+		cfg := cfgpkg.Default()
+		cfg.DeepSeekTools = tc.enabled
+		cfg.BuiltinTools.Filesystem = tc.filesystem
+		cfg.WorkingDir = t.TempDir()
+		cfg.MCPServers = nil
+		reg, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "hello", nil)
+		require.NoError(t, err)
+		for _, name := range []string{"document_read", "audio_transcribe"} {
+			tool, ok := reg.Tool(name)
+			require.Equal(t, tc.want, ok)
+			if ok {
+				require.True(t, tool.Capabilities.ReadOnly)
+				require.Equal(t, toolregistry.TimeoutPolicySelf, reg.TimeoutPolicy(name))
+			}
+		}
+		require.NoError(t, reg.Close())
+	}
+	cfg := cfgpkg.Default()
+	cfg.WebFetchProvider = "typo"
+	cfg.MCPServers = nil
+	_, err := BuildRegistry(context.Background(), &cfg, websearch.Config{}, "", nil)
+	require.ErrorContains(t, err, "web-fetch-provider")
+	specs, err := BuiltinSpecs()
+	require.NoError(t, err)
+	names := map[string]bool{}
+	for _, s := range specs {
+		names[s.Name] = true
+	}
+	require.True(t, names["document_read"])
+	require.True(t, names["audio_transcribe"])
+}

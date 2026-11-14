@@ -55,8 +55,11 @@ func builtinTools() []builtinTool {
 	return []builtinTool{
 		{
 			group:   "history_read",
-			enabled: func(env builtinEnv) bool { return len(env.handlers.History) > 0 },
+			enabled: func(env builtinEnv) bool { return len(env.handlers.History) > 0 || env.handlers.HistorySource != nil },
 			register: func(env builtinEnv) error {
+				if env.handlers.HistorySource != nil {
+					return toolregistry.RegisterHistorySource(env.registry, env.handlers.HistorySource)
+				}
 				return toolregistry.RegisterHistoryRead(env.registry, env.handlers.History)
 			},
 		},

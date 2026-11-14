@@ -28,6 +28,8 @@ func (m *Mods) setupStreamContext(content string) error {
 	m.transcript = nil
 	m.compactedPrefix = nil
 	m.compactedText = ""
+	m.compactedRetained = 0
+	m.historyArchive = nil
 	m.toolSelectionInsertAt = -1
 	if todoItemsAllCompleted(m.todoItems) {
 		m.todoItems = nil

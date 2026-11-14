@@ -66,8 +66,10 @@ type Mods struct {
 	messages   []proto.Message
 	transcript *stream.Transcript
 	// compactedPrefix retains original history independently of the model view.
-	compactedPrefix []proto.Message
-	compactedText   string
+	compactedPrefix   []proto.Message
+	compactedRetained int // verbatim user messages duplicated in the model view
+	historyArchive    *stream.Transcript
+	compactedText     string
 	// retryCheckpoint contains only completed model/tool rounds. Failed streams
 	// may append partial assistant messages, so their history is not resumable.
 	retryCheckpoint         *completionCheckpoint
@@ -254,7 +256,7 @@ func (m *Mods) Messages() []proto.Message {
 		messages = m.transcript.Snapshot()
 	}
 	if len(m.compactedPrefix) > 0 {
-		return restoreCompactedTranscript(m.compactedPrefix, messages)
+		return restoreCompactedTranscript(m.compactedPrefix, messages, m.compactedRetained)
 	}
 	return cloneCompletionMessages(messages)
 }
@@ -430,6 +432,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.startToolCalls(msg.runner)...)
 		case streamEventToolCalls:
 			return m, m.handleToolCallsDone(msg)
+		case streamEventCompacted:
+			return m, m.handleContextCompacted(msg)
 		case streamEventDone:
 			m.retries = 0
 			usage := msg.runner.takeUsage()
@@ -750,7 +754,11 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 	m.saveCompletionCheckpoint(msg.runner.messages())
 	// Completed tool batches must survive cancellation before the next reply.
 	m.messages = m.transcript.Snapshot()
-	return tea.Sequence(append(outputCmds, msg.runner.receiveCmd())...)
+	next := m.compactToolLoopCmd(msg.runner)
+	if next == nil {
+		next = msg.runner.receiveCmd()
+	}
+	return tea.Sequence(append(outputCmds, next)...)
 }
 
 // A late event from a closed stream must not affect its replacement.

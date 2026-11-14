@@ -608,12 +608,21 @@ transcript. Matching coverage is reused; expanding it summarizes the previous
 summary plus newly covered messages. Edited history invalidates stale summaries.
 Restarting without compaction enabled uses full history.
 
-For automatic compaction before turns, set `context-max-bytes: 131072` in
-`mods.yml`, or use `--context-max-bytes 131072`. The default `0` disables it.
+For automatic compaction before turns and during long tool loops, set
+`context-max-bytes: 131072` in `mods.yml`, or use `--context-max-bytes 131072`. The default `0` disables it.
 This is a trigger based on conversation JSON bytes, not a token estimate or a
-guarantee that the resulting request fits a model's context window. Neither mode
-yet compacts within a single long tool loop. The summary source is limited to 256 KiB of text and
-media references; larger sources fail explicitly instead of being truncated.
+guarantee that the resulting request fits a model's context window.
+
+During a tool loop, automatic compaction runs only after a complete tool batch,
+retains the latest batch and the current user's verbatim input (including media),
+and summarizes older evidence. It requires at least two completed batches and
+only replaces the context when the resulting view is smaller. `--compact` alone
+continues to run only before user turns.
+
+Large summary sources are processed in sequential chunks of at most 256 KiB of
+text and media references per request, carrying the previous summary forward.
+All chunks must succeed before the model view is replaced; no source text is
+silently truncated. These extra summary requests consume provider usage.
 Media references are not a substitute for inspecting original attachments.
 If summarization fails or requests a tool, the task stops without replacing the
 original history. Use the command without `--compact` to retry with full context.

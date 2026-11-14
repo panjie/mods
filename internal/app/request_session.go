@@ -188,6 +188,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	runner := newStreamRunner(st, registry, streamCancel, errh)
 	runner.requestedAt = requestedAt
+	runner.ctx, runner.client, runner.model = streamCtx, client, mod
 	m.setActiveRunner(runner)
 	return requestSession{
 		stream:  st,

@@ -84,6 +84,7 @@ type SecretPromptHandler func(context.Context, string, string) (string, error)
 
 type InteractionHandlers struct {
 	History       []proto.Message
+	HistorySource func() []proto.Message
 	UserInput     UserInputHandler
 	SudoPrompt    SecretPromptHandler
 	GitAuth       GitAuthHandler

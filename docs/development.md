@@ -171,7 +171,16 @@ results are committed. Adapters receive no tool execution callbacks.
 Retries and saving read this committed history; the app's completion checkpoint
 contains presentation state only. Request assembly uses a draft copy. Context
 compaction retains its archived prefix, which `Mods.Messages` restores when
-saving the original transcript. Cancelling a tool batch waits for the active
+saving the original transcript. With `context-max-bytes` enabled, the app can
+summarize between complete tool batches before the executor starts its next
+request. An isolated worker produces a candidate view; Update commits the
+archive, view and dynamic `history_read` snapshot together. The current user
+input is retained verbatim in that view and removed as a duplicate when
+restoring the original transcript. Summary failures or cancellation leave the
+committed tool results untouched. Large sources are folded through bounded
+summary chunks without tools, committing only after every chunk succeeds.
+
+Cancelling a tool batch waits for the active
 callback to return and records cancellation results for remaining calls before
 cleanup and persistence. This avoids replaying completed calls during retries;
 it does not provide exactly-once execution across process crashes or roll back

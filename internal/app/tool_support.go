@@ -51,6 +51,13 @@ func (m *Mods) buildToolRegistryForProvider(
 			ShellProgress: m.handleShellProgress,
 			SelfHelp:      m.selfHelpReference,
 		}
+		if cfg.ContextMaxBytes > 0 {
+			if m.historyArchive == nil {
+				m.historyArchive = &stream.Transcript{}
+			}
+			m.historyArchive.Replace(m.compactedPrefix)
+			handlers.HistorySource = m.historyArchive.Snapshot
+		}
 		if m.userInput != nil && m.userInput.available() {
 			handlers.UserInput = m.handleUserInput
 			handlers.SudoPrompt = m.handleSudoPrompt

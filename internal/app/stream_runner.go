@@ -20,15 +20,17 @@ const (
 	streamEventToolCallsStart
 	streamEventToolCalls
 	streamEventDone
+	streamEventCompacted
 	streamEventError
 )
 
 type streamEventMsg struct {
-	kind    streamEventKind
-	chunk   proto.Chunk
-	results []proto.ToolCallStatus
-	runner  *streamRunner
-	err     error
+	kind       streamEventKind
+	chunk      proto.Chunk
+	results    []proto.ToolCallStatus
+	runner     *streamRunner
+	err        error
+	compaction *Mods // isolated worker; applied only on the Update goroutine
 }
 
 // streamRunner owns the per-request lifecycle of a provider stream together
@@ -37,6 +39,9 @@ type streamEventMsg struct {
 // path (receiveCmd returning streamEventDone/streamEventError) and the user
 // quit path can both invoke it without double-close issues.
 type streamRunner struct {
+	ctx           context.Context
+	client        stream.Client
+	model         Model
 	closeOnce     sync.Once
 	toolMu        sync.Mutex
 	stream        stream.Stream

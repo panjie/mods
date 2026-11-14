@@ -49,3 +49,44 @@ func Prefix(messages []proto.Message, keepTurns int) int {
 	}
 	return turns[len(turns)-keepTurns]
 }
+
+// ToolPrefix retains the latest complete tool batch. It only permits compaction
+// once at least two batches have completed, and rejects malformed/in-flight
+// groups. The caller must retain the current user input separately.
+func ToolPrefix(messages []proto.Message) int {
+	pending := map[string]bool{}
+	var batches []int
+	for i, m := range messages {
+		switch m.Role {
+		case proto.RoleSystem:
+			return 0
+		case proto.RoleAssistant:
+			if len(pending) != 0 {
+				return 0
+			}
+			if len(m.ToolCalls) > 0 {
+				batches = append(batches, i)
+			}
+			for _, call := range m.ToolCalls {
+				if call.ID == "" || pending[call.ID] {
+					return 0
+				}
+				pending[call.ID] = true
+			}
+		case proto.RoleTool:
+			if len(m.ToolCalls) == 0 {
+				return 0
+			}
+			for _, call := range m.ToolCalls {
+				if !pending[call.ID] {
+					return 0
+				}
+				delete(pending, call.ID)
+			}
+		}
+	}
+	if len(pending) != 0 || len(batches) < 2 {
+		return 0
+	}
+	return batches[len(batches)-1]
+}

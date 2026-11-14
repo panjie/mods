@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/panjie/mods/internal/proto"
@@ -133,20 +132,6 @@ func TestManualCompactionPreservesSavedTranscript(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestCompactionSourceLimitPreservesHistory(t *testing.T) {
-	m := &Mods{ctx: context.Background(), messages: []proto.Message{
-		{Role: proto.RoleUser, Content: strings.Repeat("x", 256*1024)},
-		{Role: proto.RoleAssistant, Content: "done"},
-		{Role: proto.RoleUser, Content: "recent"},
-		{Role: proto.RoleAssistant, Content: "done"},
-		{Role: proto.RoleUser, Content: "current"},
-	}}
-	original := cloneCompletionMessages(m.messages)
-	require.ErrorContains(t, m.compactContext(noToolsClient{}, Model{}), "exceeds 256 KiB")
-	require.Equal(t, original, m.Messages())
-	require.Empty(t, m.compactedPrefix)
 }
 
 func TestAutomaticContextThreshold(t *testing.T) {

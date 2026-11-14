@@ -78,7 +78,7 @@ var Help = map[string]string{
 	"max-retries":       "Maximum number of times to retry API calls",
 	"no-instructions":   "Disable auto-loading AGENTS.md from the current working directory as project context",
 	"compact":           "Summarize older conversation context before this request, retaining recent turns and saving the complete transcript",
-	"context-max-bytes": "Automatically compact before a turn when conversation JSON exceeds this many bytes; 0 disables (not a token or model context limit)",
+	"context-max-bytes": "Automatically compact before turns and between complete tool batches when conversation JSON exceeds this many bytes; 0 disables (not a token or model context limit)",
 	"word-wrap":         "Wrap output at a specific width (0 disables wrapping, default)",
 	"settings":          "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
 	"config":            "Interactive setup wizard for provider, model, API key, and tools",

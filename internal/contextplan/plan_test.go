@@ -36,3 +36,26 @@ func TestPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestToolPrefix(t *testing.T) {
+	user := proto.Message{Role: proto.RoleUser, Content: "task"}
+	call := proto.Message{Role: proto.RoleAssistant, ToolCalls: []proto.ToolCall{{ID: "a"}, {ID: "b"}}}
+	a := proto.Message{Role: proto.RoleTool, ToolCalls: []proto.ToolCall{{ID: "a"}}}
+	b := proto.Message{Role: proto.RoleTool, ToolCalls: []proto.ToolCall{{ID: "b"}}}
+	for _, tc := range []struct {
+		name     string
+		messages []proto.Message
+		want     int
+	}{
+		{"no group", []proto.Message{user}, 0},
+		{"one group", []proto.Message{user, call, a, b}, 0},
+		{"two complete groups", []proto.Message{user, call, a, b, call, a, b}, 4},
+		{"pending", []proto.Message{user, call, a, b, call, a}, 0},
+		{"orphan", []proto.Message{user, a, call, a, b, call, a, b}, 0},
+		{"overlapping", []proto.Message{user, call, a, call, a, b}, 0},
+		{"duplicate result", []proto.Message{user, call, a, b, a, call, a, b}, 0},
+		{"projected media", []proto.Message{user, call, a, user, b, call, a, b}, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) { require.Equal(t, tc.want, ToolPrefix(tc.messages)) })
+	}
+}

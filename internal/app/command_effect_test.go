@@ -281,3 +281,23 @@ func TestDeclaredReadElevationReachesExecutionLayer(t *testing.T) {
 		require.Equal(t, int32(1), called.Load())
 	}
 }
+
+func TestCommandWatchStillRequiresDeclarationAndReview(t *testing.T) {
+	for _, effect := range []string{"", "may_write", "read_only"} {
+		t.Run(effect, func(t *testing.T) {
+			_, caller, called, args := declaredCommandFixture(t, "process_run", ReviewAuto, false)
+			args["watch"] = true
+			args["effect"] = effect
+			data, err := json.Marshal(args)
+			require.NoError(t, err)
+			_, err = caller(proto.ToolCallRequest{Name: "process_run", Arguments: data})
+			if effect == "read_only" {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), called.Load())
+			} else {
+				require.Error(t, err)
+				require.Zero(t, called.Load())
+			}
+		})
+	}
+}

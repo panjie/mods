@@ -660,6 +660,11 @@ complete tool results. `Ctrl+P` expands the plan, where Up/Down scrolls through
 steps. Press `Ctrl+P` again to return to the compact current-step view. These
 shortcuts yield to approval dialogs and input forms.
 
+To react to ongoing command output, use `--watch file:./build.log` or
+`--watch process` with a task prompt. Watch mode has bounded output, serial model
+actions, ordinary approval checks and time/request limits. See
+[Watching command output](docs/watch.md) for examples and controls.
+
 `--chat` starts a continuous conversation. Press `Enter` for a newline,
 `Ctrl+S` to send, and `Ctrl+C` while composing to leave. `Ctrl+Enter` also sends
 when the terminal reports it distinctly from Enter. Each turn is saved to the

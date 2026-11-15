@@ -41,6 +41,9 @@ const (
 // Mods is the Bubble Tea model that manages reading stdin and querying
 // LLM APIs (OpenAI, Anthropic, Google, Ollama, and others).
 type Mods struct {
+	// TurnCanceled records explicit user cancellation, not normal request cleanup.
+	TurnCanceled bool
+
 	outputRenderer
 	Input           string
 	Styles          Styles
@@ -468,6 +471,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case reviewCancelMsg:
 		m.cancelContext()
 		m.reviewer.reset()
+		m.TurnCanceled = true
 		m.debugEndTurn("cancelled", context.Canceled)
 		m.state = doneState
 		return m, m.quit
@@ -526,6 +530,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.renderDirty = true
 			return m, nil
 		case "q", "ctrl+c":
+			m.TurnCanceled = true
 			m.debugEndTurn("cancelled", context.Canceled)
 			m.state = doneState
 			return m, m.quit

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,7 @@ const maxRuntimeInfoCommands = 20
 var runtimeCommandNamePattern = regexp.MustCompile(`^[A-Za-z0-9._+@%-]+$`)
 
 type ProcessConfig struct {
+	AllowWatch bool
 	Root       string
 	SafeDirs   []string
 	Timeout    time.Duration
@@ -32,6 +34,7 @@ type ProcessConfig struct {
 }
 
 type processRunArgs struct {
+	Watch     bool              `json:"watch"`
 	Elevated  bool              `json:"elevated"`
 	Program   string            `json:"program"`
 	Args      []string          `json:"args"`
@@ -146,6 +149,7 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 			Name:        "process_run",
 			Description: elevationDescription(ProcessRunDescription),
 			InputSchema: commandSchema(map[string]any{
+				"watch":      map[string]any{"type": "boolean", "description": "Only in --watch process mode: run as the invocation-owned monitored process after ordinary command approval; returns before completion. Set timeout_ms explicitly for long jobs. No elevation or interactive credentials."},
 				"program":    stringProp("Executable name or path. Shell builtins, pipelines, redirection, globbing, and variable expansion are not supported."),
 				"args":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Literal argument vector. Each item is passed as one argument without shell parsing."},
 				"cwd":        stringProp("Optional working directory. Defaults to the current working directory; relative paths resolve from that cwd."),
@@ -157,6 +161,9 @@ func RegisterProcess(registry *Registry, cfg ProcessConfig) error {
 			var args processRunArgs
 			if err := decodeArgs(data, &args); err != nil {
 				return "", err
+			}
+			if args.Watch {
+				return startWatchedProcess(ctx, cfg, root, args)
 			}
 			return runProcess(ctx, cfg, root, args)
 		},
@@ -219,6 +226,11 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 	}
 	stdout := newBoundedOutput(commandOutputLimit)
 	stderr := newBoundedOutput(commandOutputLimit)
+	var outWriter, errWriter io.Writer = stdout, stderr
+	if w, ok := ctx.Value(watchOutputKey{}).(io.Writer); ok {
+		outWriter = io.MultiWriter(stdout, w)
+		errWriter = io.MultiWriter(stderr, w)
+	}
 	runResult, err := (commandRunner{
 		Elevated: args.Elevated,
 		Parent:   ctx,
@@ -234,8 +246,8 @@ func runProcess(ctx context.Context, cfg ProcessConfig, root string, args proces
 		Prepare: func(runCtx context.Context, cmd *exec.Cmd) (func(), error) {
 			return prepareGitAuth(runCtx, cmd, display, cfg.GitAuth)
 		},
-		Stdout: stdout,
-		Stderr: stderr,
+		Stdout: outWriter,
+		Stderr: errWriter,
 		Progress: func(elapsed time.Duration) {
 			if cfg.Progress == nil {
 				return

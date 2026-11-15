@@ -131,6 +131,9 @@ func runChatInput(ctx context.Context, input chatPromptResult, opts []tea.Progra
 	if err != nil {
 		return err
 	}
+	if mods != nil && mods.TurnCanceled && config.Watch != "" {
+		return context.Canceled
+	}
 	cfg := resultConfig(mods)
 	renderChatSaved(cfg.SessionWriteToID)
 	if session != nil {

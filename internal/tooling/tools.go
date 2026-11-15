@@ -53,6 +53,7 @@ type builtinTool struct {
 
 func builtinTools() []builtinTool {
 	return []builtinTool{
+		{group: "watch_control", enabled: func(env builtinEnv) bool { return env.cfg.Watch != "" }, register: func(env builtinEnv) error { return toolregistry.RegisterWatch(env.registry) }},
 		{
 			group:   "history_read",
 			enabled: func(env builtinEnv) bool { return len(env.handlers.History) > 0 || env.handlers.HistorySource != nil },
@@ -158,6 +159,7 @@ func builtinTools() []builtinTool {
 			enabled: func(env builtinEnv) bool { return env.cfg.BuiltinTools.Shell },
 			register: func(env builtinEnv) error {
 				return toolregistry.RegisterProcess(env.registry, toolregistry.ProcessConfig{
+					AllowWatch: env.cfg.Watch == "process",
 					Root:       env.root,
 					SafeDirs:   env.safeDirs,
 					Timeout:    env.cfg.BuiltinTools.ShellTimeout,

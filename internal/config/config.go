@@ -53,46 +53,51 @@ const (
 )
 
 var Help = map[string]string{
-	"api":               "Select a configured API provider",
-	"apis":              "Aliases and endpoints for OpenAI compatible REST API",
-	"default-api":       "Active provider name configured under apis",
-	"default-model":     "Default model name or alias configured under the active provider",
-	"api-type":          "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, or azure. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
-	"http-proxy":        "HTTP proxy to use for API requests",
-	"model":             "Select a model name or alias under the selected API provider",
-	"format":            "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
-	"format-text":       "Text to append when using the -f flag",
-	"minimal":           "Output only the final result, optimized for pipelines",
-	"role":              "System role to use",
-	"roles":             "List of predefined system messages that can be used as roles",
-	"list-roles":        "List the roles defined in your configuration file",
-	"list-prompts":      "List built-in prompts and prompt templates",
-	"list-skills":       "List installed skills from the configured skills directories",
-	"prompts":           "Override built-in runtime prompts; empty values use the built-in defaults",
-	"raw":               "Render output as raw text when connected to a TTY",
-	"hide-tool-status":  "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
-	"hide-chat-path":    "Hide the working directory in the interactive chat banner (useful when sharing your screen)",
-	"show-token-usage":  "Show input, output, and total token usage after each interaction",
-	"help":              "Show Help and exit",
-	"version":           "Show version and exit",
-	"max-retries":       "Maximum number of times to retry API calls",
-	"no-instructions":   "Disable auto-loading AGENTS.md from the current working directory as project context",
-	"compact":           "Summarize older conversation context before this request, retaining recent turns and saving the complete transcript",
-	"context-max-bytes": "Automatically compact before turns and between complete tool batches when conversation JSON exceeds this many bytes; 0 disables (not a token or model context limit)",
-	"word-wrap":         "Wrap output at a specific width (0 disables wrapping, default)",
-	"settings":          "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
-	"config":            "Interactive setup wizard for provider, model, API key, and tools",
-	"dirs":              "Print the directories in which mods store its data",
-	"reset-settings":    "Backup your old settings file and reset everything to the defaults",
-	"continue":          "Resume a saved session by ID or title",
-	"continue-last":     "Resume the most recent saved session",
-	"no-save":           "Disable saving and resuming sessions",
-	"chat":              "Start a continuous session; press Ctrl+C to quit",
-	"list-sessions":     "Interactively browse, view, and delete saved sessions",
-	"theme":             "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
-	"nerd-font-glyphs":  "Use Nerd Font icons for radio/checkbox markers and status glyphs; requires a Nerd Font terminal font",
-	"editor":            "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
-	"mcp-servers":       "MCP Servers configurations",
+	"api":                "Select a configured API provider",
+	"apis":               "Aliases and endpoints for OpenAI compatible REST API",
+	"default-api":        "Active provider name configured under apis",
+	"default-model":      "Default model name or alias configured under the active provider",
+	"api-type":           "Wire protocol for a custom provider, overriding name-based routing: openai (default), anthropic, ollama, google, or azure. Use 'anthropic' for any endpoint that speaks the Anthropic Messages API",
+	"http-proxy":         "HTTP proxy to use for API requests",
+	"model":              "Select a model name or alias under the selected API provider",
+	"format":             "Ask for the response to be formatted (markdown, json, or a custom format-text key); bare -f defaults to markdown",
+	"format-text":        "Text to append when using the -f flag",
+	"minimal":            "Output only the final result, optimized for pipelines",
+	"role":               "System role to use",
+	"roles":              "List of predefined system messages that can be used as roles",
+	"list-roles":         "List the roles defined in your configuration file",
+	"list-prompts":       "List built-in prompts and prompt templates",
+	"list-skills":        "List installed skills from the configured skills directories",
+	"prompts":            "Override built-in runtime prompts; empty values use the built-in defaults",
+	"raw":                "Render output as raw text when connected to a TTY",
+	"hide-tool-status":   "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
+	"hide-chat-path":     "Hide the working directory in the interactive chat banner (useful when sharing your screen)",
+	"show-token-usage":   "Show input, output, and total token usage after each interaction",
+	"help":               "Show Help and exit",
+	"version":            "Show version and exit",
+	"max-retries":        "Maximum number of times to retry API calls",
+	"no-instructions":    "Disable auto-loading AGENTS.md from the current working directory as project context",
+	"compact":            "Summarize older conversation context before this request, retaining recent turns and saving the complete transcript",
+	"context-max-bytes":  "Automatically compact before turns and between complete tool batches when conversation JSON exceeds this many bytes; 0 disables (not a token or model context limit)",
+	"word-wrap":          "Wrap output at a specific width (0 disables wrapping, default)",
+	"settings":           "Open settings in your $EDITOR, or recursively merge a YAML mapping into the settings file",
+	"config":             "Interactive setup wizard for provider, model, API key, and tools",
+	"dirs":               "Print the directories in which mods store its data",
+	"reset-settings":     "Backup your old settings file and reset everything to the defaults",
+	"continue":           "Resume a saved session by ID or title",
+	"continue-last":      "Resume the most recent saved session",
+	"no-save":            "Disable saving and resuming sessions",
+	"watch":              "Monitor file:PATH or process, driving serial model turns until stopped (requires session saving)",
+	"watch-match":        "Regular expression triggering on new output; empty matches any output; process completion always triggers",
+	"watch-timeout":      "Maximum watch invocation duration, including actions (default 30m)",
+	"watch-max-requests": "Maximum provider rounds across setup, actions and summaries; transport retries use max-retries (default 100)",
+	"watch-max-turns":    "Maximum model turns including setup (default 10)",
+	"chat":               "Start a continuous session; press Ctrl+C to quit",
+	"list-sessions":      "Interactively browse, view, and delete saved sessions",
+	"theme":              "Theme to use in interactive forms and panels; valid choices are charm, catppuccin, dracula, and base16",
+	"nerd-font-glyphs":   "Use Nerd Font icons for radio/checkbox markers and status glyphs; requires a Nerd Font terminal font",
+	"editor":             "Edit the prompt in your $EDITOR; only taken into account if no other args and if STDIN is a TTY",
+	"mcp-servers":        "MCP Servers configurations",
 
 	"list-mcps":                  "List all available MCP servers",
 	"list-tools":                 "List all available tools (built-in and MCP), with built-in tools annotated",
@@ -293,8 +298,13 @@ type PersistentConfig struct {
 // so that all persisted fields are promoted and accessible directly on Config.
 // The remaining fields are CLI-only flags or computed runtime state.
 type Config struct {
-	Compact     bool   `yaml:"-" env:"-"`
-	ChatGPTAuth string `yaml:"-"`
+	WatchMaxRequests int    `yaml:"-" env:"-"`
+	Watch            string `yaml:"-" env:"-"`
+	WatchMatch       string `yaml:"-" env:"-"`
+	WatchTimeout     string `yaml:"-" env:"-"`
+	WatchMaxTurns    int    `yaml:"-" env:"-"`
+	Compact          bool   `yaml:"-" env:"-"`
+	ChatGPTAuth      string `yaml:"-"`
 	// WorkingDir is runtime execution context, never a persistent setting. Empty uses os.Getwd.
 	WorkingDir string `yaml:"-"`
 

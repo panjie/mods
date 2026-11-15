@@ -837,7 +837,7 @@ func TestOneShotRoleAssignments(t *testing.T) {
 	require.Equal(t, []string{"continue"}, sessionCompleteFlags, "flags taking a session id")
 
 	require.ElementsMatch(t, []string{"chatgpt-auth",
-		"help", "chat", "list-sessions", "list-roles", "list-prompts", "list-tools",
+		"help", "chat", "watch", "list-sessions", "list-roles", "list-prompts", "list-tools",
 		"list-skills", "list-mcps", "config", "settings", "dirs", "reset-settings",
 	}, flagNamesWithRole(roleNoArgs), "flags that make the invocation non-empty")
 

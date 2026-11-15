@@ -94,6 +94,11 @@ var flagCategorySpecs = []flagCategorySpec{
 	{
 		Name: flagCategoryModesSessions,
 		Flags: []flagSpec{
+			{Name: "watch", ValueName: "SOURCE", Set: func() bool { return config.Watch != "" }, Role: roleNoArgs},
+			{Name: "watch-match", ValueName: "REGEX"},
+			{Name: "watch-timeout", ValueName: "DURATION"},
+			{Name: "watch-max-requests", ValueName: "COUNT"},
+			{Name: "watch-max-turns", ValueName: "COUNT"},
 			{Name: flagChat, Set: func() bool { return config.Chat }, Role: roleNoArgs},
 			{Name: "think", Short: "t"},
 			{Name: flagContinue, ValueName: "SESSION", Short: "C", Role: roleExclusive | roleSessionComplete},

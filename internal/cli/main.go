@@ -88,6 +88,11 @@ var (
 				return cmd.Usage()
 			}
 
+			if config.Watch != "" {
+				if _, err := validateWatchMode(); err != nil {
+					return err
+				}
+			}
 			if config.ChatGPTAuth != "" {
 				return runChatGPTAuth(cmd.Context(), config.ChatGPTAuth, cmd.OutOrStdout())
 			}
@@ -127,6 +132,9 @@ var (
 
 			maybePrintMissingAPIKeyHint()
 
+			if config.Watch != "" {
+				return runWatch(cmd.Context(), args, buildTeaProgramOptions())
+			}
 			if config.Chat {
 				opts := buildTeaProgramOptions()
 				return runChat(cmd.Context(), args, opts)
@@ -171,6 +179,11 @@ func registerFlags(flags *pflag.FlagSet, c *Config, memprofileFlag *bool) {
 	regBool(flags, &c.ContinueLast, "continue-last", "c", false)
 	regBool(flags, &c.List, flagListSessions, "l", c.List)
 	regBool(flags, &c.Chat, flagChat, "", false)
+	regStr(flags, &c.Watch, "watch", "", "")
+	regStr(flags, &c.WatchMatch, "watch-match", "", "")
+	regStr(flags, &c.WatchTimeout, "watch-timeout", "", "30m")
+	regInt(flags, &c.WatchMaxTurns, "watch-max-turns", 10)
+	regInt(flags, &c.WatchMaxRequests, "watch-max-requests", 100)
 	regBool(flags, &c.HideToolStatus, "hide-tool-status", "", c.HideToolStatus)
 	regBool(flags, &c.ShowTokenUsage, "show-token-usage", "s", c.ShowTokenUsage)
 	regBool(flags, &c.ShowHelp, "help", "h", false)

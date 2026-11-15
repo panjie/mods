@@ -74,6 +74,9 @@ func formatReviewPresentationWithIntent(name string, args []byte, scope Scope, i
 			{Label: "Working dir", Value: reviewWorkingDir(parsed, scope)},
 			{Label: "Command", Value: processReviewArgv(parsed)},
 		}
+		if watched, _ := parsed["watch"].(bool); watched {
+			result.rows = append(result.rows, interactionRow{Label: "Lifetime", Value: "Monitored background process; stopping watch terminates its process tree"})
+		}
 	default:
 		result.headline = "Run " + name
 		if summary := ToolArgsSummary(parsed); summary != "" {

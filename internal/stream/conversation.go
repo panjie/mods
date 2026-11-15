@@ -42,6 +42,8 @@ func (c *Conversation) start() {
 	var round Round
 	if err := c.ctx.Err(); err != nil {
 		round = Failed(err, request.Messages)
+	} else if err := reserveRequest(c.ctx); err != nil {
+		round = Failed(err, request.Messages)
 	} else {
 		round = c.factory(c.ctx, request)
 	}

@@ -240,3 +240,11 @@ Sources: [OCR](https://api-docs.deepseek.com/guides/ocr/),
 [Fetch](https://api-docs.deepseek.com/guides/search/).
 Remote `file_id` document attachments, hosted Flash search, TTS and Ogg ASR are
 not implemented by these tools.
+
+## Monitored processes
+
+In `--watch process` mode, `process_run` accepts `watch: true`. This retains the
+ordinary `effect`/`purpose` gate and executable binding, but the invocation owns
+the process after the tool returns. Background lifetime is shown in review.
+`watch_control` offers `status` and `stop` for the current invocation; it cannot
+create sources or grant permissions. See [Watching command output](watch.md).

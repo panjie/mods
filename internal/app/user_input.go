@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/panjie/mods/internal/secrets"
 	toolregistry "github.com/panjie/mods/internal/tools"
@@ -20,6 +21,16 @@ import (
 )
 
 var errUserInputUnavailable = errors.New("interactive user input is unavailable")
+
+var userInputReadClipboard = clipboard.ReadAll
+
+type userInputPasteMsg struct {
+	item        *userInputItem
+	focus       int
+	customInput bool
+	content     string
+	err         error
+}
 
 type userInputResult struct {
 	value  string
@@ -254,12 +265,7 @@ func (u *userInputManager) handleStartMsg(msg userInputStartMsg) {
 		return
 	}
 	if item.req.Kind == "secret" {
-		u.secret = textinput.New()
-		u.secret.EchoMode = textinput.EchoPassword
-		u.secret.EchoCharacter = '•'
-		u.secret.Placeholder = "Enter secret"
-		u.secret.Prompt = ""
-		u.secret.SetVirtualCursor(false)
+		u.secret = newTextinputSecret()
 		u.secret.Focus()
 		return
 	}
@@ -361,6 +367,63 @@ func (u *userInputManager) handleCancelMsg(msg userInputCancelMsg) tea.Cmd {
 	return nil
 }
 
+// handleMsg routes terminal pastes and asynchronous clipboard results as well
+// as keys. Bind clipboard reads to the request and field that initiated them
+// so a delayed password paste cannot land in another input.
+func (u *userInputManager) handleMsg(msg tea.Msg) (bool, tea.Cmd) {
+	if pasted, ok := msg.(userInputPasteMsg); ok {
+		if !u.isPending() || u.item != pasted.item || u.focus != pasted.focus || u.customInput != pasted.customInput || pasted.err != nil {
+			return true, nil
+		}
+		return true, u.paste(pasted.content)
+	}
+	if !u.isPending() {
+		return false, nil
+	}
+	switch msg := msg.(type) {
+	case tea.PasteMsg:
+		return true, u.paste(msg.Content)
+	case tea.KeyMsg:
+		return u.handleKey(msg)
+	}
+	return false, nil
+}
+
+func (u *userInputManager) editable() bool {
+	switch u.item.req.Kind {
+	case "form":
+		return len(u.formFields) > 0 && u.formFields[u.focus].field.Kind != "select"
+	case "multiselect":
+		return false
+	case "select":
+		return u.customInput
+	default:
+		return true
+	}
+}
+
+func (u *userInputManager) paste(content string) tea.Cmd {
+	if !u.editable() {
+		return nil
+	}
+	u.missingKey = ""
+	msg := tea.PasteMsg{Content: content}
+	var cmd tea.Cmd
+	if u.item.req.Kind == "form" {
+		field := &u.formFields[u.focus]
+		if field.field.Kind == "secret" {
+			field.secret, cmd = field.secret.Update(msg)
+		} else {
+			field.text, cmd = field.text.Update(msg)
+		}
+	} else if u.item.req.Kind == "secret" {
+		u.secret, cmd = u.secret.Update(msg)
+	} else {
+		u.text, cmd = u.text.Update(msg)
+	}
+	return cmd
+}
+
 func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	if !u.isPending() {
 		return false, nil
@@ -376,6 +439,17 @@ func (u *userInputManager) handleKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	}
 	if msg.String() == "ctrl+c" {
 		return false, nil
+	}
+	if _, pressed := msg.(tea.KeyPressMsg); pressed && u.editable() {
+		switch msg.String() {
+		case "ctrl+v", "ctrl+shift+v", "shift+insert":
+			result := userInputPasteMsg{item: u.item, focus: u.focus, customInput: u.customInput}
+			read := userInputReadClipboard
+			return true, func() tea.Msg {
+				result.content, result.err = read()
+				return result
+			}
+		}
 	}
 	if req.Kind == "form" {
 		return u.handleFormKey(msg)
@@ -687,7 +761,7 @@ func (u *userInputManager) renderView(width int, styles ui.InteractionStyles) ui
 		input := ui.NewCursorView("› "+u.secret.View(), u.secret.Cursor()).Translate(2, 0).InStyle(styles.Input)
 		panel.Body = []string{input.Content}
 		panel.Cursor = input.Cursor
-		panel.Actions = []interactionAction{{Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}}
+		panel.Actions = []interactionAction{{Key: "Ctrl+V", Label: "Paste"}, {Key: "Enter", Label: "Submit"}, {Key: "Esc", Label: "Cancel"}}
 	default:
 		contentWidth := max(1, innerWidth-styles.Input.GetHorizontalFrameSize()-2)
 		u.text.SetWidth(contentWidth)
@@ -784,6 +858,8 @@ func (u *userInputManager) renderFormBody(panel interactionPanel, innerWidth int
 		field := u.formFields[u.focus].field
 		if field.Kind == "select" {
 			actions = append([]interactionAction{{Key: "← →", Label: "Change"}}, actions...)
+		} else if field.Kind == "secret" {
+			actions = append([]interactionAction{{Key: "Ctrl+V", Label: "Paste"}}, actions...)
 		} else if field.Multiline {
 			actions = append([]interactionAction{{Key: "Ctrl+J", Label: "New line"}}, actions...)
 		}

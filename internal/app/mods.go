@@ -345,10 +345,8 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if inputMsg, ok := msg.(tea.KeyMsg); ok {
-		if handled, cmd := m.userInput.handleKey(inputMsg); handled {
-			return m, cmd
-		}
+	if handled, cmd := m.userInput.handleMsg(msg); handled {
+		return m, cmd
 	}
 
 	switch msg := msg.(type) {

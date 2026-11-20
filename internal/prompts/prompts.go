@@ -51,8 +51,8 @@ const (
 - Group related reads, not calls per file. Probe availability once in a batch only to avoid complex logic.
 - On failure, correct once or twice using errors; report incomplete coverage. Finish once supported.`
 
-	ToolSelectionFilesystem = `- When http_download is available, use its explicit URL/path list for downloads instead of shell loops.
-- Prefer fs_* tools for direct file reads and edits. Use fs_replace for a small exact change after reading, fs_apply_patch for multi-file diffs, and the type-specific delete tool.`
+	ToolSelectionFilesystem = `- Download via http_download URL/path lists, not shell loops.
+- Prefer fs_* tools: read before small fs_replace edits; fs_apply_patch for multi-file diffs; type-specific tools for deletion.`
 
 	// Tool mechanics (arguments, shell source, script policy, platform rules)
 	// live in the tool descriptions, which are sent whenever the tool exists.

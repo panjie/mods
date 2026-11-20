@@ -181,7 +181,7 @@ func (m *Manager) StartFile(path string) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("watch requires an existing regular file")
 	}
-	f, err := os.Open(path)
+	f, err := openWatchFile(path)
 	if err != nil {
 		return err
 	}

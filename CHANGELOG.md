@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-11-20
+
+This release includes the following changes since v5.1.0.
+
+### Added
+- Watch an existing log file or a process launched by mods with `--watch`, with output matching, bounded event collection, time/turn/request limits, and ordinary tool approvals. `watch_control` reports status or stops the current watch.
+- Opt-in DeepSeek document OCR (`document_read`), WAV transcription (`audio_transcribe`), and a DeepSeek backend for `web_fetch`, independently of the chat provider.
+
+### Changed
+- Opt-in automatic context compaction now runs between complete tool batches, retaining the latest batch and the current user's input. Large summary sources are processed in sequential chunks while preserving the original transcript.
+- Simplified chat shortcuts: `Ctrl+S` sends, `Ctrl+V` / `Ctrl+Shift+V` pastes clipboard images, and `Ctrl+X` removes the last image. Removed the `Alt+V` fallback.
+- The install task builds stripped release binaries while retaining git version metadata.
+
+### Fixed
+- Handle terminal image paste events, including empty bracketed pastes from compatible Windows Terminal versions, and improve image removal in the chat composer.
+- Support pasting into password fields in request-input forms.
+- Allow watched log files to rotate on Windows, stopping monitoring without reading replacement files.
+- Keep command and file-tool guidance within the existing assembled prompt size budgets.
+
 ## [5.0.0] - 2026-11-02
 
 This release includes the following changes since v4.5.0.
@@ -172,7 +191,8 @@ This release includes the following changes since v4.5.0.
 - Review deadlock in pipe mode and Ctrl+C deadlock on review channel.
 - Cross-platform compatibility; glamour newline collapsing; empty LLM response due to low MaxTokens.
 
-[Unreleased]: https://github.com/panjie/mods/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/panjie/mods/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/panjie/mods/compare/v5.1.0...v5.2.0
 [5.0.0]: https://github.com/panjie/mods/compare/v4.5.0...v5.0.0
 [3.2.0]: https://github.com/panjie/mods/compare/v3.0.0...v3.2.0
 [3.0.0]: https://github.com/panjie/mods/compare/v2.5.0...v3.0.0

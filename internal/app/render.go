@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -512,10 +513,7 @@ func (m *Mods) flushRender() {
 	}
 	wasAtBottom := m.glamViewport.ScrollPercent() == 1.0
 	oldHeight := m.glamHeight
-	preprocessed := strings.ReplaceAll(m.displayOutput, "\n\n", "\r")
-	preprocessed = strings.ReplaceAll(preprocessed, "\n", "  \n")
-	preprocessed = strings.ReplaceAll(preprocessed, "\r", "\n\n")
-	m.glamOutput, _ = m.RenderMarkdown(preprocessed)
+	m.glamOutput, _ = m.RenderMarkdown(preprocessMarkdownForRender(m.displayOutput))
 	m.glamOutput = strings.TrimRightFunc(m.glamOutput, unicode.IsSpace)
 	m.glamOutput = strings.ReplaceAll(m.glamOutput, "\t", strings.Repeat(" ", tabWidth))
 	m.glamOutput = m.replaceDisplayBlocks(m.glamOutput)
@@ -544,6 +542,48 @@ func (m *Mods) flushRender() {
 	}
 	m.renderDirty = false
 	m.lastRenderFlush = time.Now()
+}
+
+// preprocessMarkdownForRender prepares streamed display markdown for glamour:
+// ordered task checkboxes are escaped first so item numbers survive, then
+// single newlines become hard line breaks while paragraph boundaries stay
+// intact.
+func preprocessMarkdownForRender(display string) string {
+	preprocessed := escapeOrderedTaskCheckboxes(display)
+	preprocessed = strings.ReplaceAll(preprocessed, "\n\n", "\r")
+	preprocessed = strings.ReplaceAll(preprocessed, "\n", "  \n")
+	return strings.ReplaceAll(preprocessed, "\r", "\n\n")
+}
+
+// orderedTaskMarkerRe matches a GFM task checkbox at the start of an ordered
+// list item. Leading indent is capped at three spaces so indented code blocks
+// never match.
+var orderedTaskMarkerRe = regexp.MustCompile(`^([ ]{0,3}\d{1,9}[.)] +)\[([ xX]\])`)
+
+// escapeOrderedTaskCheckboxes escapes GFM task checkboxes that begin ordered
+// list items. Glamour renders ordered task items with the checkbox in place
+// of the item number, so a numbered todo list such as "4. [ ] fix" loses its
+// numbering from the first pending item onward. Escaping the bracket keeps
+// the marker as literal text and preserves the number. Bullet task lists,
+// fenced code blocks, and indented code are left untouched.
+func escapeOrderedTaskCheckboxes(md string) string {
+	if !strings.Contains(md, "[") {
+		return md
+	}
+	lines := strings.Split(md, "\n")
+	fenced := false
+	for i, line := range lines {
+		opening := strings.TrimLeft(line, " ")
+		if strings.HasPrefix(opening, "```") || strings.HasPrefix(opening, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		lines[i] = orderedTaskMarkerRe.ReplaceAllString(line, "$1\\[$2")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *Mods) replaceDisplayBlocks(rendered string) string {

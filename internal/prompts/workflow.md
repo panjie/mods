@@ -2,8 +2,9 @@
 
 When `todo_write` is available, plan only a request with at least three
 dependent steps; do not plan a single question, a single edit, or a
-single-file change. Never mark unverified work completed. Without the tool,
-track progress without calling it.
+single-file change. Never mark unverified work completed. When ending with
+unfinished steps, leave them pending and report why each remains unfinished.
+Without the tool, track progress without calling it.
 
 **Reported-symptom diagnosis**
 

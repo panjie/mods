@@ -169,6 +169,10 @@ func TestWorkflowHasPlanningPolicy(t *testing.T) {
 	require.Contains(t, Workflow, "do not plan a single question")
 	require.Contains(t, Workflow, "single-file change")
 	require.Contains(t, Workflow, "Never mark unverified work completed")
+	// Ending a turn must not silently drop unfinished plan steps.
+	require.Contains(t, Workflow, "When ending with")
+	require.Contains(t, Workflow, "unfinished steps, leave them pending")
+	require.Contains(t, Workflow, "report why each remains unfinished")
 	// Step mechanics belong to the todo_write schema, not the always-on prompt.
 	require.NotContains(t, Workflow, "full list of steps")
 	require.NotContains(t, Workflow, "none when done")

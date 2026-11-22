@@ -16,6 +16,9 @@ func TestTodoWrite(t *testing.T) {
 	require.True(t, tool.Capabilities.ReadOnly)
 	require.False(t, tool.Capabilities.Mutable)
 	require.False(t, tool.Capabilities.ShellExecution)
+	// Ending with unfinished steps must be reported, not silently dropped.
+	require.Contains(t, tool.Spec.Description, "when ending with unfinished steps")
+	require.Contains(t, tool.Spec.Description, "report why each remains")
 	required, hasRequired := tool.Spec.InputSchema["required"].([]string)
 	require.True(t, hasRequired)
 	require.Equal(t, []string{"todos"}, required)

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `todo_write` guidance now requires the model to report why each step remains unfinished whenever it ends a turn with a partial plan, instead of only reporting blockers.
+
+### Fixed
+- Ordered todo lists in rendered Markdown replies keep their item numbers when pending steps use `[ ]`/`[x]` task markers (glamour replaces the number with a checkbox for such items; mods now escapes the marker in ordered lists so the number survives).
+
 ## [5.2.0] - 2026-11-20
 
 This release includes the following changes since v5.1.0.

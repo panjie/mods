@@ -25,7 +25,7 @@ func RegisterTodoWrite(registry *Registry) error {
 		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
 			Name:        TodoWriteToolName,
-			Description: "Create or update the session task plan so the user can follow progress. Send the FULL list of steps on every call; each call replaces the previous plan. While executing, keep exactly one step in_progress; on completion mark all completed, and when blocked leave unfinished steps pending and report the blocker.",
+			Description: "Create or update the session task plan so the user can follow progress. Send the FULL list of steps on every call; each call replaces the previous plan. While executing, keep exactly one step in_progress; on completion mark all completed, and when ending with unfinished steps leave them pending and report why each remains.",
 			InputSchema: objectSchema(map[string]any{
 				"todos": map[string]any{
 					"type":        "array",

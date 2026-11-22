@@ -14,6 +14,11 @@ import (
 	"github.com/panjie/mods/internal/skills"
 )
 
+// LoadSkillToolName is the built-in tool that loads a skill's instructions;
+// activity previews keep its records on their own line so the skills a run
+// used stay visible.
+const LoadSkillToolName = "load_skill"
+
 // SkillFileMaxBytes caps how much of an auxiliary file load_skill reads
 // into the conversation. 256 KB is enough for reference markdown and
 // most source files while preventing accidental context blowup.
@@ -39,7 +44,7 @@ func RegisterSkill(reg *Registry, catalog []skills.Skill) error {
 		Kind:         ToolKindBuiltin,
 		Capabilities: ToolCapabilities{ReadOnly: true},
 		Spec: proto.ToolSpec{
-			Name:        "load_skill",
+			Name:        LoadSkillToolName,
 			Description: "Load a skill's full instructions by name, or fetch an auxiliary file from its directory. If the name is unknown or absent from the system prompt, call search_skills first.",
 			InputSchema: objectSchema(map[string]any{
 				"name": stringProp("Exact skill name. Use search_skills first when unknown."),

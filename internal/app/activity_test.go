@@ -131,6 +131,31 @@ func TestCollapsedActivityFoldsRunsAcrossInterleavedReads(t *testing.T) {
 	require.Contains(t, lines[2], "exited with status 1")
 }
 
+func TestCollapsedActivityPinsSkillLoads(t *testing.T) {
+	m := newTodoTestMods(t)
+	m.width = 100
+	m.appendToolResultDisplayBlock("start")
+	record := func(name string, data []byte, output string, err error) {
+		status := m.activityStatus(name, data, err, activityPreviewLimit)
+		m.recordActivity(name, status, data, output, err)
+	}
+	record("shell_run", []byte(`{"command":"ls -la"}`), "files", nil)
+	record("load_skill", []byte(`{"name":"omarchy"}`), "skill body", nil)
+	record("shell_run", []byte(`{"command":"grep -rn voxtype ~/.config/hypr/"}`), "bindings", nil)
+	record("shell_run", []byte(`{"command":"docker ps -a"}`), "containers", nil)
+	marker, ok := m.trailingToolResultBlockMarker()
+	require.True(t, ok)
+
+	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	lines := strings.Split(collapsed, "\n")
+	require.Len(t, lines, 3, "skill load splits the run into two folds plus its own line")
+	require.Contains(t, lines[0], "ls -la", "the lone command before the skill keeps its own line")
+	require.Contains(t, lines[1], "skill  omarchy", "skill loads never fold and stay visible")
+	require.Contains(t, lines[2], "×2", "commands after the skill fold separately")
+	require.Contains(t, lines[2], "docker ps -a")
+	require.NotContains(t, collapsed, "skill body", "details still wait for Ctrl+O")
+}
+
 func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
 	m := newTodoTestMods(t)
 	m.width = 100

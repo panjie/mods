@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+	toolregistry "github.com/panjie/mods/internal/tools"
 )
 
 // Activity is presentation-only. The complete tool result remains in session
@@ -17,6 +18,10 @@ type activityRecord struct {
 	detail  string
 	read    bool
 	failure string
+	// pinned records always render on their own line: they never fold into
+	// a counted run and never get absorbed by one. Skill loads are pinned so
+	// the skills a run used remain visible while collapsed.
+	pinned bool
 }
 
 const activityPreviewLimit = 16384
@@ -66,7 +71,13 @@ func (m *Mods) recordActivity(name, status string, data []byte, output string, e
 			}
 		}
 	}
-	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{status: status, detail: output, read: read, failure: failure})
+	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{
+		status:  status,
+		detail:  output,
+		read:    read,
+		failure: failure,
+		pinned:  name == toolregistry.LoadSkillToolName,
+	})
 	m.renderDirty = true
 	m.flushRender()
 }
@@ -82,14 +93,16 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 	for i := 0; i < len(records); {
 		item := records[i]
 		end := i + 1
-		if !m.activityExpanded && item.failure == "" {
+		if !m.activityExpanded && item.failure == "" && !item.pinned {
 			// Collapse consecutive successful operations into a single
 			// line so a long tool run cannot crowd out the response
 			// text. Reads fold together with commands — an interleaved
 			// read must not split a command run into separate lines.
 			// Failed records never fold and split the run, so their
-			// diagnostic stays visible until expanded.
-			for end < len(records) && records[end].failure == "" {
+			// diagnostic stays visible until expanded. Pinned records
+			// (skill loads) split runs the same way: which skills a run
+			// used stays readable while collapsed.
+			for end < len(records) && records[end].failure == "" && !records[end].pinned {
 				end++
 			}
 		}

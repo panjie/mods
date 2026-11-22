@@ -82,23 +82,26 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 	for i := 0; i < len(records); {
 		item := records[i]
 		end := i + 1
-		if !m.activityExpanded && item.read {
-			for end < len(records) && records[end].read {
-				end++
-			}
-		} else if !m.activityExpanded && item.failure == "" {
-			// Collapse consecutive successful non-read operations into a
-			// single line so a long command run cannot crowd out the
-			// response text. The run size heads the line — ahead of the
-			// newest status, where truncation can never hide it. Failed
-			// records never fold; they stay visible with their diagnostic
-			// until expanded.
-			for end < len(records) && !records[end].read && records[end].failure == "" {
+		if !m.activityExpanded && item.failure == "" {
+			// Collapse consecutive successful operations into a single
+			// line so a long tool run cannot crowd out the response
+			// text. Reads fold together with commands — an interleaved
+			// read must not split a command run into separate lines.
+			// Failed records never fold and split the run, so their
+			// diagnostic stays visible until expanded.
+			for end < len(records) && records[end].failure == "" {
 				end++
 			}
 		}
+		allRead := true
+		for j := i; j < end; j++ {
+			if !records[j].read {
+				allRead = false
+				break
+			}
+		}
 		switch {
-		case end-i > 1 && item.read:
+		case end-i > 1 && allRead:
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(fmt.Sprintf("✓ Read files · %d operations", end-i), width, "…")))
 		case end-i > 1:
 			line := records[end-1].status

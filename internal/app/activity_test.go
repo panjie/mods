@@ -105,6 +105,32 @@ func TestCollapsedActivityFoldsSuccessfulCommandRunsToOneLine(t *testing.T) {
 	require.NotContains(t, expanded, "×4")
 }
 
+func TestCollapsedActivityFoldsRunsAcrossInterleavedReads(t *testing.T) {
+	m := newTodoTestMods(t)
+	m.width = 100
+	m.appendToolResultDisplayBlock("start")
+	record := func(name string, data []byte, output string, err error) {
+		status := m.activityStatus(name, data, err, activityPreviewLimit)
+		m.recordActivity(name, status, data, output, err)
+	}
+	record("shell_run", []byte(`{"command":"grep -rniE \"voice|speech\" ~/.config/hypr/"}`), "matches", nil)
+	record("fs_read_file", []byte(`{"path":"/home/panjie/.config/hypr/bindings.lua"}`), "bindings", nil)
+	record("shell_run", []byte(`{"command":"grep -rn voxtype ~/.config/hypr/"}`), "voxtype bindings", nil)
+	record("shell_run", []byte(`{"command":"grep -rn voxtype ~/.config/voxtype/"}`), "voxtype config", nil)
+	record("shell_run", []byte(`{"command":"sed -n 1,30p /usr/share/omarchy/default/hypr/bindings/dictation.lua"}`), "", tools.ShellExitError{Code: 1})
+	marker, ok := m.trailingToolResultBlockMarker()
+	require.True(t, ok)
+
+	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	lines := strings.Split(collapsed, "\n")
+	require.Len(t, lines, 3, "folded run + failed status + diagnostic")
+	require.Contains(t, lines[0], "×4", "the read folds into the counted run instead of splitting it")
+	require.Contains(t, lines[0], "grep -rn voxtype ~/.config/voxtype/", "the newest status stays visible")
+	require.NotContains(t, collapsed, "bindings.lua", "the interleaved read is folded away")
+	require.Contains(t, lines[1], "✗ shell")
+	require.Contains(t, lines[2], "exited with status 1")
+}
+
 func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
 	m := newTodoTestMods(t)
 	m.width = 100

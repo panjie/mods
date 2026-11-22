@@ -71,6 +71,11 @@ func (m *Mods) recordActivity(name, status string, data []byte, output string, e
 	m.flushRender()
 }
 
+// collapsedCountPrefix heads a folded run's line with the operation count so
+// the total stays visible even when the status text itself is truncated,
+// e.g. "✓ ×4 shell  git status · exit 0".
+func collapsedCountPrefix(n int) string { return fmt.Sprintf("✓ ×%d ", n) }
+
 func (m *Mods) renderActivity(records []activityRecord) string {
 	width := max(1, m.toolResultStatusWidth())
 	var lines []string
@@ -81,10 +86,29 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 			for end < len(records) && records[end].read {
 				end++
 			}
+		} else if !m.activityExpanded && item.failure == "" {
+			// Collapse consecutive successful non-read operations into a
+			// single line so a long command run cannot crowd out the
+			// response text. The run size heads the line — ahead of the
+			// newest status, where truncation can never hide it. Failed
+			// records never fold; they stay visible with their diagnostic
+			// until expanded.
+			for end < len(records) && !records[end].read && records[end].failure == "" {
+				end++
+			}
 		}
-		if end-i > 1 {
+		switch {
+		case end-i > 1 && item.read:
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(fmt.Sprintf("✓ Read files · %d operations", end-i), width, "…")))
-		} else {
+		case end-i > 1:
+			line := records[end-1].status
+			if rest, ok := strings.CutPrefix(line, "✓ "); ok {
+				line = collapsedCountPrefix(end-i) + rest
+			} else {
+				line = collapsedCountPrefix(end-i) + "· " + line
+			}
+			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(line, width, "…")))
+		default:
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.status, width, "…")))
 			if !m.activityExpanded && item.failure != "" {
 				lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.failure, width, "…")))

@@ -63,6 +63,69 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	}
 }
 
+func TestCollapsedActivityFoldsSuccessfulCommandRunsToOneLine(t *testing.T) {
+	m := newTodoTestMods(t)
+	m.width = 100
+	m.appendToolResultDisplayBlock("start")
+	record := func(name string, data []byte, output string, err error) {
+		status := m.activityStatus(name, data, err, activityPreviewLimit)
+		m.recordActivity(name, status, data, output, err)
+	}
+	record("shell_run", []byte(`{"command":"docker ps -a"}`), "container ids", nil)
+	record("shell_run", []byte(`{"command":"ls -l /dev/kvm"}`), "crw-rw----", nil)
+	record("shell_run", []byte(`{"command":"vgcfgrestore -l"}`), "snapshots", nil)
+	record("web_search", []byte(`{"query":"qemu docker"}`), "results", nil)
+	marker, ok := m.trailingToolResultBlockMarker()
+	require.True(t, ok)
+
+	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	lines := strings.Split(collapsed, "\n")
+	require.Len(t, lines, 1, "a successful run folds to one rail line")
+	require.Contains(t, lines[0], "×4", "the run size heads the folded line")
+	require.Contains(t, lines[0], "search web", "the newest status stays visible")
+	require.NotContains(t, collapsed, "docker ps")
+	require.NotContains(t, collapsed, "container ids")
+
+	// The count must survive narrow terminals: it sits ahead of the status
+	// text that truncation trims.
+	m.width = 40
+	narrow := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	require.Len(t, strings.Split(narrow, "\n"), 1)
+	require.Contains(t, strings.Split(narrow, "\n")[0], "×4")
+	for _, line := range strings.Split(narrow, "\n") {
+		require.LessOrEqual(t, lipgloss.Width(line), 40)
+	}
+	m.width = 100
+
+	m.activityExpanded = true
+	expanded := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	for _, want := range []string{"docker ps -a", "ls -l /dev/kvm", "vgcfgrestore -l", "container ids"} {
+		require.Contains(t, expanded, want)
+	}
+	require.NotContains(t, expanded, "×4")
+}
+
+func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
+	m := newTodoTestMods(t)
+	m.width = 100
+	m.appendToolResultDisplayBlock("start")
+	record := func(name string, data []byte, output string, err error) {
+		status := m.activityStatus(name, data, err, activityPreviewLimit)
+		m.recordActivity(name, status, data, output, err)
+	}
+	record("shell_run", []byte(`{"command":"docker ps -a"}`), "container ids", nil)
+	record("shell_run", []byte(`{"command":"go test ./..."}`), "compile error: missing symbol", tools.ShellExitError{Code: 1})
+	record("shell_run", []byte(`{"command":"git diff"}`), "diff", nil)
+	marker, ok := m.trailingToolResultBlockMarker()
+	require.True(t, ok)
+
+	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	require.Contains(t, collapsed, "docker ps -a", "records before the failure stay visible")
+	require.Contains(t, collapsed, "✗ shell")
+	require.Contains(t, collapsed, "missing symbol", "collapsed failures retain a diagnostic")
+	require.Contains(t, collapsed, "git diff", "records after the failure stay visible")
+}
+
 func TestActivityHiddenModesDoNotLeakHints(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)

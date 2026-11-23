@@ -12,10 +12,9 @@ import (
 )
 
 // Activity is presentation-only. The complete tool result remains in session
-// messages; the live preview is bounded and never contributes to raw stdout.
+// messages; compact status lines never contribute to raw stdout.
 type activityRecord struct {
 	status  string
-	detail  string
 	read    bool
 	failure string
 	// pinned records always render on their own line: they never fold into
@@ -24,7 +23,7 @@ type activityRecord struct {
 	pinned bool
 }
 
-const activityPreviewLimit = 16384
+const activityStatusLimit = 16384
 
 func cloneActivityBlocks(src map[string][]activityRecord) map[string][]activityRecord {
 	dst := maps.Clone(src)
@@ -34,7 +33,7 @@ func cloneActivityBlocks(src map[string][]activityRecord) map[string][]activityR
 	return dst
 }
 
-func (m *Mods) recordActivity(name, status string, data []byte, output string, err error) {
+func (m *Mods) recordActivity(name, status, output string, err error) {
 	marker, ok := m.trailingToolResultBlockMarker()
 	if !ok {
 		return
@@ -42,19 +41,8 @@ func (m *Mods) recordActivity(name, status string, data []byte, output string, e
 	if m.activityBlocks == nil {
 		m.activityBlocks = map[string][]activityRecord{}
 	}
-	rawOutput := output
-	output = "Tool: " + name + "\nArguments: " + string(m.activityDisplayArgs(data)) + "\n" + output
-	if err != nil {
-		output = err.Error() + "\n" + output
-	}
-	output = m.redactActivityText(output)
 	status = m.redactActivityText(status)
 	status = reviewLiteral(ansi.Strip(status))
-	// Strip styling and escape remaining controls before rendering untrusted text.
-	output = strings.TrimSpace(reviewLiteral(ansi.Strip(output)))
-	if len(output) > activityPreviewLimit {
-		output = strings.ToValidUTF8(output[:activityPreviewLimit], "") + "\n… Preview shortened."
-	}
 	read := false
 	switch name {
 	case "fs_read_file", "fs_list_dir", "fs_stat", "fs_search", "fs_largest", "fs_find_images", "fs_read_images", "fs_find_media", "fs_read_media":
@@ -66,20 +54,35 @@ func (m *Mods) recordActivity(name, status string, data []byte, output string, e
 		// Exit-only errors carry no diagnostic; preserve the first output line.
 		var ec interface{ ExitCode() int }
 		if errors.As(err, &ec) {
-			if first, _, _ := strings.Cut(strings.TrimSpace(rawOutput), "\n"); first != "" {
+			if first, _, _ := strings.Cut(strings.TrimSpace(output), "\n"); first != "" {
 				failure += " · " + OneLinePreview(m.redactActivityText(first))
 			}
 		}
 	}
 	m.activityBlocks[marker] = append(m.activityBlocks[marker], activityRecord{
 		status:  status,
-		detail:  output,
 		read:    read,
 		failure: failure,
 		pinned:  name == toolregistry.LoadSkillToolName,
 	})
 	m.renderDirty = true
 	m.flushRender()
+}
+
+// Only runs that actually fold can be expanded. Lone operations, failures,
+// and pinned skill loads already show their status and have no detail view.
+func (m *Mods) hasFoldableActivity() bool {
+	for _, records := range m.activityBlocks {
+		previous := false
+		for _, item := range records {
+			foldable := item.failure == "" && !item.pinned
+			if previous && foldable {
+				return true
+			}
+			previous = foldable
+		}
+	}
+	return false
 }
 
 // collapsedCountPrefix heads a folded run's line with the operation count so
@@ -99,7 +102,7 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 			// text. Reads fold together with commands — an interleaved
 			// read must not split a command run into separate lines.
 			// Failed records never fold and split the run, so their
-			// diagnostic stays visible until expanded. Pinned records
+			// diagnostic stays visible. Pinned records
 			// (skill loads) split runs the same way: which skills a run
 			// used stays readable while collapsed.
 			for end < len(records) && records[end].failure == "" && !records[end].pinned {
@@ -126,18 +129,8 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(line, width, "…")))
 		default:
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.status, width, "…")))
-			if !m.activityExpanded && item.failure != "" {
+			if item.failure != "" {
 				lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.failure, width, "…")))
-			}
-			if item.detail != "" && m.activityExpanded {
-				detail := strings.Split(ansi.Hardwrap(item.detail, width, false), "\n")
-				const limit = 200
-				if len(detail) > limit {
-					detail = append(detail[:limit], "… More output omitted from live preview")
-				}
-				for _, line := range detail {
-					lines = append(lines, m.Styles.Comment.Render("  │ "+ansi.Truncate(line, width, "…")))
-				}
 			}
 		}
 		i = end
@@ -150,8 +143,8 @@ func (m *Mods) activityHelp() string {
 		return ""
 	}
 	var keys []string
-	if len(m.activityBlocks) > 0 {
-		label := "details"
+	if m.hasFoldableActivity() {
+		label := "expand"
 		if m.activityExpanded {
 			label = "collapse"
 		}

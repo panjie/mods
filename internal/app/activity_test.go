@@ -33,7 +33,10 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	require.Equal(t, raw, m.Output)
 	m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
 	expanded := ansi.Strip(m.glamOutput)
-	require.Contains(t, expanded, "first file")
+	require.NotContains(t, expanded, "first file", "expanding reveals statuses, not output")
+	require.NotContains(t, expanded, "Tool:")
+	require.NotContains(t, expanded, "Arguments:")
+	require.NotContains(t, expanded, "2 operations")
 	require.Contains(t, expanded, "a.go")
 	require.Contains(t, expanded, "b.go")
 	require.NotContains(t, expanded, "secret-token")
@@ -41,20 +44,22 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	require.Equal(t, raw, m.Output)
 	m.toolResultOutputCmd("shell_run", []byte(`{"command":"go test ./..."}`), errors.New("test failed"), "diagnostic output")
 	m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
-	require.NotContains(t, ansi.Strip(m.glamOutput), "diagnostic output", "failed results stay collapsed")
+	require.NotContains(t, ansi.Strip(m.glamOutput), "diagnostic output")
 	require.NotContains(t, ansi.Strip(m.glamOutput), "Arguments:")
 	require.Contains(t, ansi.Strip(m.glamOutput), "✗ shell")
 	require.Contains(t, ansi.Strip(m.glamOutput), "test failed", "collapsed failures retain a diagnostic")
 	m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
-	require.Contains(t, ansi.Strip(m.glamOutput), "diagnostic output")
+	require.NotContains(t, ansi.Strip(m.glamOutput), "diagnostic output", "expanding never opens result details")
 	require.Contains(t, ansi.Strip(m.glamOutput), "test failed")
 	m.saveCompletionCheckpoint(nil)
 	marker, _ := m.trailingToolResultBlockMarker()
-	m.activityBlocks[marker][0].detail = "changed"
+	savedStatus := m.activityBlocks[marker][0].status
+	m.activityBlocks[marker][0].status = "changed"
 	m.outputBuilder.Reset()
 	m.displayOutputBuilder.Reset()
 	m.restoreCompletionOutput()
-	require.Equal(t, "Tool: fs_read_file\nArguments: {\"path\":\"a.go\"}\nfirst file", m.activityBlocks[marker][0].detail)
+	require.Equal(t, savedStatus, m.activityBlocks[marker][0].status)
+	require.Equal(t, raw, m.Output)
 	m.width = 30
 	m.renderDirty = true
 	m.flushRender()
@@ -68,8 +73,8 @@ func TestCollapsedActivityFoldsSuccessfulCommandRunsToOneLine(t *testing.T) {
 	m.width = 100
 	m.appendToolResultDisplayBlock("start")
 	record := func(name string, data []byte, output string, err error) {
-		status := m.activityStatus(name, data, err, activityPreviewLimit)
-		m.recordActivity(name, status, data, output, err)
+		status := m.activityStatus(name, data, err, activityStatusLimit)
+		m.recordActivity(name, status, output, err)
 	}
 	record("shell_run", []byte(`{"command":"docker ps -a"}`), "container ids", nil)
 	record("shell_run", []byte(`{"command":"ls -l /dev/kvm"}`), "crw-rw----", nil)
@@ -99,8 +104,12 @@ func TestCollapsedActivityFoldsSuccessfulCommandRunsToOneLine(t *testing.T) {
 
 	m.activityExpanded = true
 	expanded := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
-	for _, want := range []string{"docker ps -a", "ls -l /dev/kvm", "vgcfgrestore -l", "container ids"} {
+	require.Len(t, strings.Split(expanded, "\n"), 4, "each operation expands to one status line")
+	for _, want := range []string{"docker ps -a", "ls -l /dev/kvm", "vgcfgrestore -l", "search web"} {
 		require.Contains(t, expanded, want)
+	}
+	for _, detail := range []string{"container ids", "crw-rw----", "snapshots", "Tool:", "Arguments:"} {
+		require.NotContains(t, expanded, detail)
 	}
 	require.NotContains(t, expanded, "×4")
 }
@@ -110,8 +119,8 @@ func TestCollapsedActivityFoldsRunsAcrossInterleavedReads(t *testing.T) {
 	m.width = 100
 	m.appendToolResultDisplayBlock("start")
 	record := func(name string, data []byte, output string, err error) {
-		status := m.activityStatus(name, data, err, activityPreviewLimit)
-		m.recordActivity(name, status, data, output, err)
+		status := m.activityStatus(name, data, err, activityStatusLimit)
+		m.recordActivity(name, status, output, err)
 	}
 	record("shell_run", []byte(`{"command":"grep -rniE \"voice|speech\" ~/.config/hypr/"}`), "matches", nil)
 	record("fs_read_file", []byte(`{"path":"/home/panjie/.config/hypr/bindings.lua"}`), "bindings", nil)
@@ -136,8 +145,8 @@ func TestCollapsedActivityPinsSkillLoads(t *testing.T) {
 	m.width = 100
 	m.appendToolResultDisplayBlock("start")
 	record := func(name string, data []byte, output string, err error) {
-		status := m.activityStatus(name, data, err, activityPreviewLimit)
-		m.recordActivity(name, status, data, output, err)
+		status := m.activityStatus(name, data, err, activityStatusLimit)
+		m.recordActivity(name, status, output, err)
 	}
 	record("shell_run", []byte(`{"command":"ls -la"}`), "files", nil)
 	record("load_skill", []byte(`{"name":"omarchy"}`), "skill body", nil)
@@ -153,7 +162,7 @@ func TestCollapsedActivityPinsSkillLoads(t *testing.T) {
 	require.Contains(t, lines[1], "skill  omarchy", "skill loads never fold and stay visible")
 	require.Contains(t, lines[2], "×2", "commands after the skill fold separately")
 	require.Contains(t, lines[2], "docker ps -a")
-	require.NotContains(t, collapsed, "skill body", "details still wait for Ctrl+O")
+	require.NotContains(t, collapsed, "skill body")
 }
 
 func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
@@ -161,8 +170,8 @@ func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
 	m.width = 100
 	m.appendToolResultDisplayBlock("start")
 	record := func(name string, data []byte, output string, err error) {
-		status := m.activityStatus(name, data, err, activityPreviewLimit)
-		m.recordActivity(name, status, data, output, err)
+		status := m.activityStatus(name, data, err, activityStatusLimit)
+		m.recordActivity(name, status, output, err)
 	}
 	record("shell_run", []byte(`{"command":"docker ps -a"}`), "container ids", nil)
 	record("shell_run", []byte(`{"command":"go test ./..."}`), "compile error: missing symbol", tools.ShellExitError{Code: 1})
@@ -181,12 +190,60 @@ func TestActivityHiddenModesDoNotLeakHints(t *testing.T) {
 	withOutputTTY(t, true)
 	m := newTodoTestMods(t)
 	m.width, m.height = 80, 24
-	m.activityBlocks = map[string][]activityRecord{"x": {{status: "read"}}}
+	m.activityBlocks = map[string][]activityRecord{"x": {{status: "read a"}, {status: "read b"}}}
+	require.Contains(t, m.activityHelp(), "Ctrl+O expand")
 	m.Config.HideToolStatus = true
 	require.Empty(t, m.activityHelp())
 	m.Config.HideToolStatus = false
 	m.Config.Raw = true
 	require.Empty(t, m.activityHelp())
+}
+
+func TestActivityToggleRequiresFoldedGroup(t *testing.T) {
+	withOutputTTY(t, true)
+	for _, tc := range []struct {
+		name   string
+		blocks map[string][]activityRecord
+		folds  bool
+	}{
+		{name: "no completed operations"},
+		{name: "single command", blocks: map[string][]activityRecord{
+			"a": {{status: "✓ shell  git status"}},
+		}},
+		{name: "failure splits commands", blocks: map[string][]activityRecord{
+			"a": {{status: "✓ shell  git status"}, {failure: "failed"}, {status: "✓ shell  git diff"}},
+		}},
+		{name: "skill splits commands", blocks: map[string][]activityRecord{
+			"a": {{status: "✓ shell  git status"}, {pinned: true}, {status: "✓ shell  git diff"}},
+		}},
+		{name: "commands in separate blocks", blocks: map[string][]activityRecord{
+			"a": {{status: "✓ shell  git status"}},
+			"b": {{status: "✓ shell  git diff"}},
+		}},
+		{name: "consecutive commands", blocks: map[string][]activityRecord{
+			"a": {{status: "✓ shell  git status"}, {status: "✓ shell  git diff"}},
+		}, folds: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTodoTestMods(t)
+			m.width, m.height = 80, 24
+			m.activityBlocks = tc.blocks
+			if tc.folds {
+				require.Contains(t, m.activityHelp(), "Ctrl+O expand")
+			} else {
+				require.Empty(t, m.activityHelp())
+			}
+			m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+			require.Equal(t, tc.folds, m.activityExpanded)
+			if tc.folds {
+				require.Contains(t, m.activityHelp(), "Ctrl+O collapse")
+			} else {
+				require.Empty(t, m.activityHelp())
+			}
+			m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+			require.False(t, m.activityExpanded)
+		})
+	}
 }
 
 func TestActivityRedactsBeforeTruncationAndPreservesArguments(t *testing.T) {
@@ -206,14 +263,19 @@ func TestActivityRedactsBeforeTruncationAndPreservesArguments(t *testing.T) {
 	require.NotContains(t, string(m.activityDisplayArgs(escaped)), "known")
 	m.appendToOutput("Answer\n\n")
 	m.appendToolResultDisplayBlock("done")
-	m.recordActivity("shell_run", "done", data, "https://example.com/?token=private&sig=other", errors.New("failed"))
+	m.width = 400
+	status := m.activityStatus("shell_run", data, nil, activityStatusLimit)
+	m.recordActivity("shell_run", status, "known-secret-with-a-long-suffix https://example.com/?token=private&sig=other\a", tools.ShellExitError{Code: 1})
 	marker, ok := m.trailingToolResultBlockMarker()
 	require.True(t, ok)
-	detail := m.activityBlocks[marker][0].detail
-	for _, secret := range []string{"known-secret", "password", "private", "other", "fragment"} {
-		require.NotContains(t, detail, secret)
+	for _, expanded := range []bool{false, true} {
+		m.activityExpanded = expanded
+		view := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+		for _, secret := range []string{"known-secret", "password", "private", "other", "fragment", "\a"} {
+			require.NotContains(t, view, secret)
+		}
+		require.Contains(t, view, "[redacted]")
 	}
-	require.Contains(t, detail, "[redacted]")
 }
 
 func TestCollapsedActivityKeepsExitDiagnostic(t *testing.T) {
@@ -224,7 +286,7 @@ func TestCollapsedActivityKeepsExitDiagnostic(t *testing.T) {
 	err := tools.ShellExitError{Code: 1}
 	status := m.activityStatus("shell_run", data, err, 76)
 	require.Contains(t, status, "exit 1")
-	m.recordActivity("shell_run", status, data, "compile error: missing symbol\nmore details", err)
+	m.recordActivity("shell_run", status, "compile error: missing symbol\nmore details", err)
 	marker, ok := m.trailingToolResultBlockMarker()
 	require.True(t, ok)
 	view := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))

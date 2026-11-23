@@ -361,8 +361,8 @@ func (m *Mods) toolResultOutputCmd(name string, data []byte, err error, output .
 	if m.Config.InteractiveTTYAvailable && IsErrorTTY() {
 		m.appendToolResultDisplayBlock(m.toolResultDisplayLine(status))
 		if len(output) > 0 {
-			activityStatus := m.activityStatus(name, data, err, activityPreviewLimit)
-			m.recordActivity(name, activityStatus, data, output[0], err)
+			activityStatus := m.activityStatus(name, data, err, activityStatusLimit)
+			m.recordActivity(name, activityStatus, output[0], err)
 		}
 		return nil
 	}

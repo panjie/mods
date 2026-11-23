@@ -653,9 +653,9 @@ may still wrap according to their own settings.
 Set `hide-chat-path: true` in `mods.yml` (or `MODS_HIDE_CHAT_PATH=true`) to
 hide the working directory in the chat banner when sharing your screen.
 
-During a response, consecutive successful file reads collapse into a summary.
-`Ctrl+O` toggles tool arguments and output previews; failures show a short
-diagnostic automatically. Live previews are bounded; saved sessions retain the
+During a response, consecutive successful tool operations collapse into a summary.
+When a folded group exists, `Ctrl+O` expands or collapses its individual status
+lines. Failures show a short diagnostic automatically; saved sessions retain the
 complete tool results. `Ctrl+P` expands the plan, where Up/Down scrolls through
 steps. Press `Ctrl+P` again to return to the compact current-step view. These
 shortcuts yield to approval dialogs and input forms.

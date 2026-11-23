@@ -518,9 +518,11 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "ctrl+o":
-			m.activityExpanded = !m.activityExpanded
-			m.renderDirty = true
-			m.flushRender()
+			if m.hasFoldableActivity() {
+				m.activityExpanded = !m.activityExpanded
+				m.renderDirty = true
+				m.flushRender()
+			}
 			return m, nil
 		case "ctrl+p":
 			m.planExpanded = !m.planExpanded

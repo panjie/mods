@@ -653,12 +653,14 @@ may still wrap according to their own settings.
 Set `hide-chat-path: true` in `mods.yml` (or `MODS_HIDE_CHAT_PATH=true`) to
 hide the working directory in the chat banner when sharing your screen.
 
-During a response, consecutive successful tool operations collapse into a summary.
-When a folded group exists, `Ctrl+O` expands or collapses its individual status
-lines. Failures show a short diagnostic automatically; saved sessions retain the
-complete tool results. `Ctrl+P` expands the plan, where Up/Down scrolls through
-steps. Press `Ctrl+P` again to return to the compact current-step view. These
-shortcuts yield to approval dialogs and input forms.
+During a response, consecutive tool calls collapse into one summary line with
+the operation count plus success and failure counts. Failed calls are folded
+too: a short diagnostic stays on the collapsed line and the full output waits
+for expansion. When a folded group exists, `Ctrl+O` expands or collapses its
+individual status lines. Saved sessions retain the complete tool results.
+`Ctrl+P` expands the plan, where Up/Down scrolls through steps. Press `Ctrl+P`
+again to return to the compact current-step view. These shortcuts yield to
+approval dialogs and input forms.
 
 To react to ongoing command output, use `--watch file:./build.log` or
 `--watch process` with a task prompt. Watch mode has bounded output, serial model

@@ -69,13 +69,13 @@ func (m *Mods) recordActivity(name, status, output string, err error) {
 	m.flushRender()
 }
 
-// Only runs that actually fold can be expanded. Lone operations, failures,
-// and pinned skill loads already show their status and have no detail view.
+// Only runs that actually fold can be expanded. Lone operations and pinned
+// skill loads already show their status and have no extra fold to reveal.
 func (m *Mods) hasFoldableActivity() bool {
 	for _, records := range m.activityBlocks {
 		previous := false
 		for _, item := range records {
-			foldable := item.failure == "" && !item.pinned
+			foldable := !item.pinned
 			if previous && foldable {
 				return true
 			}
@@ -85,10 +85,43 @@ func (m *Mods) hasFoldableActivity() bool {
 	return false
 }
 
-// collapsedCountPrefix heads a folded run's line with the operation count so
-// the total stays visible even when the status text itself is truncated,
-// e.g. "✓ ×4 shell  git status · exit 0".
-func collapsedCountPrefix(n int) string { return fmt.Sprintf("✓ ×%d ", n) }
+// collapsedActivitySummary describes a folded run of tool calls. It always
+// carries the operation, success, and failure counts so hidden failures cannot
+// go unnoticed, and keeps the newest call's status as trailing context when
+// room allows. All-read runs use a friendlier label.
+func collapsedActivitySummary(records []activityRecord) string {
+	succeeded := 0
+	failed := 0
+	allRead := true
+	for _, record := range records {
+		if record.failure != "" {
+			failed++
+		} else {
+			succeeded++
+		}
+		if !record.read {
+			allRead = false
+		}
+	}
+	marker := "✓"
+	if failed > 0 {
+		marker = "✗"
+	}
+	if allRead {
+		return fmt.Sprintf("%s Read files · %d succeeded · %d failed", marker, succeeded, failed)
+	}
+	line := fmt.Sprintf("%s ×%d  %d succeeded · %d failed", marker, len(records), succeeded, failed)
+	last := records[len(records)-1].status
+	if rest, ok := strings.CutPrefix(last, "✓ "); ok {
+		last = rest
+	} else if rest, ok := strings.CutPrefix(last, "✗ "); ok {
+		last = rest
+	}
+	if last != "" {
+		line += "  ·  " + last
+	}
+	return line
+}
 
 func (m *Mods) renderActivity(records []activityRecord) string {
 	width := max(1, m.toolResultStatusWidth())
@@ -96,38 +129,23 @@ func (m *Mods) renderActivity(records []activityRecord) string {
 	for i := 0; i < len(records); {
 		item := records[i]
 		end := i + 1
-		if !m.activityExpanded && item.failure == "" && !item.pinned {
-			// Collapse consecutive successful operations into a single
-			// line so a long tool run cannot crowd out the response
-			// text. Reads fold together with commands — an interleaved
-			// read must not split a command run into separate lines.
-			// Failed records never fold and split the run, so their
-			// diagnostic stays visible. Pinned records
-			// (skill loads) split runs the same way: which skills a run
+		if !m.activityExpanded && !item.pinned {
+			// Collapse consecutive operations into a single summary line
+			// so a long tool run cannot crowd out the response text.
+			// Failed calls fold too: the summary marker and counts keep
+			// them visible, and the short diagnostic renders underneath
+			// its own status line once expanded. Reads fold together with
+			// commands — an interleaved read must not split a command run.
+			// Pinned records (skill loads) split runs: which skills a run
 			// used stays readable while collapsed.
-			for end < len(records) && records[end].failure == "" && !records[end].pinned {
+			for end < len(records) && !records[end].pinned {
 				end++
 			}
 		}
-		allRead := true
-		for j := i; j < end; j++ {
-			if !records[j].read {
-				allRead = false
-				break
-			}
-		}
-		switch {
-		case end-i > 1 && allRead:
-			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(fmt.Sprintf("✓ Read files · %d operations", end-i), width, "…")))
-		case end-i > 1:
-			line := records[end-1].status
-			if rest, ok := strings.CutPrefix(line, "✓ "); ok {
-				line = collapsedCountPrefix(end-i) + rest
-			} else {
-				line = collapsedCountPrefix(end-i) + "· " + line
-			}
+		if end-i > 1 {
+			line := collapsedActivitySummary(records[i:end])
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(line, width, "…")))
-		default:
+		} else {
 			lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.status, width, "…")))
 			if item.failure != "" {
 				lines = append(lines, m.toolResultDisplayLine(ansi.Truncate(item.failure, width, "…")))

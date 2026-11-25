@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Collapsed tool activity now folds failed calls as well and summarizes the operation, success, and failure counts; the short failure diagnostic stays on the collapsed line while the full output waits for `Ctrl+O`.
 - `todo_write` guidance now requires the model to report why each step remains unfinished whenever it ends a turn with a partial plan, instead of only reporting blockers.
 
 ### Fixed

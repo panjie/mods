@@ -10,6 +10,8 @@ process tools start there by default and accept a per-call `cwd` argument. The
 status line shows what Mods is doing between tool calls ("read ...",
 "shell ...", "search web ..."). `--hide-tool-status` hides it and
 the compact one-line record each completed call leaves in normal output.
+Consecutive calls collapse into one line with operation, success, and failure
+counts; `Ctrl+O` reveals the full output, including failures.
 
 ## Command Declarations
 

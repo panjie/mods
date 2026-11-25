@@ -653,12 +653,14 @@ may still wrap according to their own settings.
 Set `hide-chat-path: true` in `mods.yml` (or `MODS_HIDE_CHAT_PATH=true`) to
 hide the working directory in the chat banner when sharing your screen.
 
-During a response, consecutive successful file reads collapse into a summary.
-`Ctrl+O` toggles tool arguments and output previews; failures show a short
-diagnostic automatically. Live previews are bounded; saved sessions retain the
-complete tool results. `Ctrl+P` expands the plan, where Up/Down scrolls through
-steps. Press `Ctrl+P` again to return to the compact current-step view. These
-shortcuts yield to approval dialogs and input forms.
+During a response, consecutive tool calls collapse into one summary line with
+the operation count plus success and failure counts. Failed calls are folded
+too; their output stays hidden by default. `Ctrl+O` toggles tool arguments and
+output previews, including failure diagnostics. Live previews are bounded;
+saved sessions retain the complete tool results. `Ctrl+P` expands the plan,
+where Up/Down scrolls through steps. Press `Ctrl+P` again to return to the
+compact current-step view. These shortcuts yield to approval dialogs and input
+forms.
 
 To react to ongoing command output, use `--watch file:./build.log` or
 `--watch process` with a task prompt. Watch mode has bounded output, serial model

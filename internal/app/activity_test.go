@@ -28,7 +28,8 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"a.go"}`), nil, "first file")
 	m.toolResultOutputCmd("fs_read_file", []byte(`{"path":"b.go"}`), nil, "second secret-token\x1b[2J\a")
 	collapsed := ansi.Strip(m.glamOutput)
-	require.Contains(t, collapsed, "2 operations")
+	require.Contains(t, collapsed, "2 succeeded")
+	require.Contains(t, collapsed, "0 failed")
 	require.NotContains(t, collapsed, "first file")
 	require.Equal(t, raw, m.Output)
 	m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
@@ -41,10 +42,13 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	require.Equal(t, raw, m.Output)
 	m.toolResultOutputCmd("shell_run", []byte(`{"command":"go test ./..."}`), errors.New("test failed"), "diagnostic output")
 	m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
-	require.NotContains(t, ansi.Strip(m.glamOutput), "diagnostic output", "failed results stay collapsed")
-	require.NotContains(t, ansi.Strip(m.glamOutput), "Arguments:")
-	require.Contains(t, ansi.Strip(m.glamOutput), "✗ shell")
-	require.Contains(t, ansi.Strip(m.glamOutput), "test failed", "collapsed failures retain a diagnostic")
+	folded := ansi.Strip(m.glamOutput)
+	require.NotContains(t, folded, "diagnostic output", "failed results stay collapsed")
+	require.NotContains(t, folded, "Arguments:")
+	require.Contains(t, folded, "✗")
+	require.Contains(t, folded, "2 succeeded")
+	require.Contains(t, folded, "1 failed", "collapsed failures still report the count")
+	require.Contains(t, folded, "test failed", "the one-line status keeps the short failure reason")
 	m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
 	require.Contains(t, ansi.Strip(m.glamOutput), "diagnostic output")
 	require.Contains(t, ansi.Strip(m.glamOutput), "test failed")
@@ -61,6 +65,24 @@ func TestActivityCollapseExpandAndRetryPreserveRawOutput(t *testing.T) {
 	for _, line := range strings.Split(m.renderActivity(m.activityBlocks[marker]), "\n") {
 		require.LessOrEqual(t, lipgloss.Width(line), 30)
 	}
+}
+
+func TestCollapsedActivitySummaryReportsSuccessAndFailureCounts(t *testing.T) {
+	require.Equal(t,
+		"✗ ×3  2 succeeded · 1 failed  ·  read  c.go",
+		collapsedActivitySummary([]activityRecord{
+			{status: "✓ shell  make  · exit 0"},
+			{status: "✗ shell  make test  · exit 1", failed: true},
+			{status: "✓ read  c.go", read: true},
+		}),
+	)
+	require.Equal(t,
+		"✓ Read files · 2 succeeded · 0 failed",
+		collapsedActivitySummary([]activityRecord{
+			{status: "✓ read  a.go", read: true},
+			{status: "✓ read  b.go", read: true},
+		}),
+	)
 }
 
 func TestCollapsedActivityFoldsSuccessfulCommandRunsToOneLine(t *testing.T) {
@@ -82,6 +104,8 @@ func TestCollapsedActivityFoldsSuccessfulCommandRunsToOneLine(t *testing.T) {
 	lines := strings.Split(collapsed, "\n")
 	require.Len(t, lines, 1, "a successful run folds to one rail line")
 	require.Contains(t, lines[0], "×4", "the run size heads the folded line")
+	require.Contains(t, lines[0], "4 succeeded")
+	require.Contains(t, lines[0], "0 failed")
 	require.Contains(t, lines[0], "search web", "the newest status stays visible")
 	require.NotContains(t, collapsed, "docker ps")
 	require.NotContains(t, collapsed, "container ids")
@@ -123,12 +147,13 @@ func TestCollapsedActivityFoldsRunsAcrossInterleavedReads(t *testing.T) {
 
 	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
 	lines := strings.Split(collapsed, "\n")
-	require.Len(t, lines, 3, "folded run + failed status + diagnostic")
-	require.Contains(t, lines[0], "×4", "the read folds into the counted run instead of splitting it")
-	require.Contains(t, lines[0], "grep -rn voxtype ~/.config/voxtype/", "the newest status stays visible")
+	require.Len(t, lines, 1, "the mixed run folds into one summary line")
+	require.Contains(t, lines[0], "✗ ×5", "the failure is reflected in the summary marker and total")
+	require.Contains(t, lines[0], "4 succeeded")
+	require.Contains(t, lines[0], "1 failed")
+	require.Contains(t, lines[0], "sed -n 1,30p", "the newest status stays visible")
 	require.NotContains(t, collapsed, "bindings.lua", "the interleaved read is folded away")
-	require.Contains(t, lines[1], "✗ shell")
-	require.Contains(t, lines[2], "exited with status 1")
+	require.NotContains(t, collapsed, "exited with status 1", "failure output waits for Ctrl+O")
 }
 
 func TestCollapsedActivityPinsSkillLoads(t *testing.T) {
@@ -156,7 +181,7 @@ func TestCollapsedActivityPinsSkillLoads(t *testing.T) {
 	require.NotContains(t, collapsed, "skill body", "details still wait for Ctrl+O")
 }
 
-func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
+func TestCollapsedActivityFoldsFailuresIntoSummary(t *testing.T) {
 	m := newTodoTestMods(t)
 	m.width = 100
 	m.appendToolResultDisplayBlock("start")
@@ -171,10 +196,21 @@ func TestCollapsedActivityKeepsFailuresVisibleOutsideFoldedRuns(t *testing.T) {
 	require.True(t, ok)
 
 	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
-	require.Contains(t, collapsed, "docker ps -a", "records before the failure stay visible")
-	require.Contains(t, collapsed, "✗ shell")
-	require.Contains(t, collapsed, "missing symbol", "collapsed failures retain a diagnostic")
-	require.Contains(t, collapsed, "git diff", "records after the failure stay visible")
+	lines := strings.Split(collapsed, "\n")
+	require.Len(t, lines, 1, "failures no longer split the folded run")
+	require.Contains(t, lines[0], "✗ ×3")
+	require.Contains(t, lines[0], "2 succeeded")
+	require.Contains(t, lines[0], "1 failed")
+	require.Contains(t, lines[0], "git diff", "the newest status stays visible")
+	require.NotContains(t, collapsed, "docker ps -a", "older calls stay folded away")
+	require.NotContains(t, collapsed, "missing symbol", "failure output waits for Ctrl+O")
+
+	m.activityExpanded = true
+	expanded := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	require.Contains(t, expanded, "docker ps -a")
+	require.Contains(t, expanded, "missing symbol")
+	require.Contains(t, expanded, "git diff")
+	require.NotContains(t, expanded, "×3")
 }
 
 func TestActivityHiddenModesDoNotLeakHints(t *testing.T) {
@@ -216,7 +252,7 @@ func TestActivityRedactsBeforeTruncationAndPreservesArguments(t *testing.T) {
 	require.Contains(t, detail, "[redacted]")
 }
 
-func TestCollapsedActivityKeepsExitDiagnostic(t *testing.T) {
+func TestCollapsedActivityHidesExitDiagnosticUntilExpanded(t *testing.T) {
 	m := newTodoTestMods(t)
 	m.width = 80
 	m.appendToolResultDisplayBlock("failed")
@@ -227,8 +263,16 @@ func TestCollapsedActivityKeepsExitDiagnostic(t *testing.T) {
 	m.recordActivity("shell_run", status, data, "compile error: missing symbol\nmore details", err)
 	marker, ok := m.trailingToolResultBlockMarker()
 	require.True(t, ok)
-	view := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
-	require.Contains(t, view, "missing symbol")
-	require.NotContains(t, view, "Arguments:")
-	require.NotContains(t, view, "more details")
+
+	collapsed := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	require.Contains(t, collapsed, "✗ shell")
+	require.Contains(t, collapsed, "exit 1")
+	require.NotContains(t, collapsed, "missing symbol")
+	require.NotContains(t, collapsed, "Arguments:")
+	require.NotContains(t, collapsed, "more details")
+
+	m.activityExpanded = true
+	expanded := ansi.Strip(m.renderActivity(m.activityBlocks[marker]))
+	require.Contains(t, expanded, "missing symbol")
+	require.Contains(t, expanded, "more details")
 }

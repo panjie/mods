@@ -42,6 +42,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	if api.Name == "" {
 		return requestSession{}, m.apiNotConfiguredError(cfg, api)
 	}
+	m.setStatsModel(mod.API, mod.Name)
 
 	if m.retryCheckpoint == nil {
 		if err := validateImagePaths(cfg.Images); err != nil {
@@ -167,6 +168,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 
 	m.debugRequest(cfg, &mod, &m.messages, tools, &request)
+	m.startModelRound()
 	m.thinkActive = thinkActive
 	// Derive a cancellable context for the stream so quit() / a subsequent
 	// start*Cmd can tear down the in-flight HTTP/SSE request rather than
@@ -188,6 +190,7 @@ func (m *Mods) buildRequestSession(content string) (requestSession, error) {
 	}
 	runner := newStreamRunner(st, registry, streamCancel, errh)
 	runner.requestedAt = requestedAt
+	runner.onFirstResponse = m.recordFirstResponse
 	runner.ctx, runner.client, runner.model = streamCtx, client, mod
 	m.setActiveRunner(runner)
 	return requestSession{
@@ -378,11 +381,13 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 		unwrappedArgs := !bytes.Equal(data, call.Arguments)
 		started := time.Now()
 		approvalRecord := approvalTrace{Source: "not reached"}
+		var reviewWait time.Duration
 		redactedArgs := string(data)
 		if m.secrets != nil {
 			redactedArgs = m.secrets.Redact(redactedArgs)
 		}
-		title := fmt.Sprintf("tool · turn %d · round %d · call %d/%d", m.debugTurn, m.debugRound, call.Index, call.Total)
+		turn, round := m.currentTurnRound()
+		title := fmt.Sprintf("tool · turn %d · round %d · call %d/%d", turn, round, call.Index, call.Total)
 		callValue := fmt.Sprintf("→ %s [%s]", name, call.ID)
 		if unwrappedArgs {
 			callValue += " · unwrapped arguments"
@@ -414,19 +419,8 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				Fields: fields,
 				Blocks: []DebugBlock{debug.Result(redactedOutput)},
 			})
-			m.debugToolTotal++
-			switch {
-			case status == "success":
-				m.debugToolSucceeded++
-			case strings.HasPrefix(status, "exit "):
-				m.debugToolExited++
-			case status == "denied":
-				m.debugToolDenied++
-			case status == "cancelled":
-				m.debugToolCancelled++
-			default:
-				m.debugToolFailed++
-			}
+			execDuration := max(0, duration-reviewWait)
+			m.recordToolCall(status, execDuration, reviewWait)
 		}()
 
 		// Unknown tools fail before intent computation or approval: a
@@ -529,7 +523,12 @@ func (m *Mods) toolResultCaller(registry *toolregistry.Registry, cfg *Config) pr
 				ctx: ctx, commandEffect: effect,
 				accessIntent: prepared.intent, safeDirs: safeDirs,
 				redact: redact, executionRows: executionRows,
-				onDecision: func(trace approvalTrace) { approvalRecord = trace },
+				onDecision: func(trace approvalTrace) {
+					approvalRecord = trace
+					if trace.Source == "user" || strings.Contains(trace.Detail, "while waiting for user") {
+						reviewWait += trace.Duration
+					}
+				},
 			}, prepared.name, prepared.args); err != nil {
 				return proto.ToolResult{}, err
 			}

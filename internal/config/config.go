@@ -72,7 +72,7 @@ var Help = map[string]string{
 	"raw":                "Render output as raw text when connected to a TTY",
 	"hide-tool-status":   "Hide tool status: the running-operation label and the compact one-line result emitted for each completed tool call (the spinner stays visible)",
 	"hide-chat-path":     "Hide the working directory in the interactive chat banner (useful when sharing your screen)",
-	"show-token-usage":   "Show input, output, and total token usage after each interaction",
+	"show-token-usage":   "Show interaction statistics (token usage, elapsed time, model rounds, and tool calls) after each interaction",
 	"help":               "Show Help and exit",
 	"version":            "Show version and exit",
 	"max-retries":        "Maximum number of times to retry API calls",

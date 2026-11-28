@@ -102,6 +102,7 @@ func (m *Mods) compactPrefix(client stream.Client, model Model, system, history 
 }
 
 func (m *Mods) reportContextCompaction() {
+	m.recordCompaction()
 	fmt.Fprintf(os.Stderr, "[mods] Compacted %d older messages; retained recent context and the complete saved transcript.\n", len(m.compactedPrefix))
 }
 

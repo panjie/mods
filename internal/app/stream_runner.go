@@ -39,19 +39,20 @@ type streamEventMsg struct {
 // path (receiveCmd returning streamEventDone/streamEventError) and the user
 // quit path can both invoke it without double-close issues.
 type streamRunner struct {
-	ctx           context.Context
-	client        stream.Client
-	model         Model
-	closeOnce     sync.Once
-	toolMu        sync.Mutex
-	stream        stream.Stream
-	cleanup       *toolregistry.Registry
-	errh          func(error) tea.Msg
-	cancel        context.CancelFunc
-	closed        atomic.Bool
-	usageTaken    atomic.Bool
-	firstResponse atomic.Bool
-	requestedAt   time.Time
+	ctx             context.Context
+	client          stream.Client
+	model           Model
+	closeOnce       sync.Once
+	toolMu          sync.Mutex
+	stream          stream.Stream
+	cleanup         *toolregistry.Registry
+	errh            func(error) tea.Msg
+	cancel          context.CancelFunc
+	closed          atomic.Bool
+	usageTaken      atomic.Bool
+	firstResponse   atomic.Bool
+	requestedAt     time.Time
+	onFirstResponse func(time.Duration)
 }
 
 func newStreamRunner(st stream.Stream, cleanup *toolregistry.Registry, cancel context.CancelFunc, errh func(error) tea.Msg) *streamRunner {
@@ -62,7 +63,11 @@ func (r *streamRunner) receiveCmd() tea.Cmd {
 	return func() tea.Msg {
 		if r.stream.Next() {
 			if r.firstResponse.CompareAndSwap(false, true) && !r.requestedAt.IsZero() {
-				debug.Printf("Startup: first-response=%s", time.Since(r.requestedAt))
+				elapsed := time.Since(r.requestedAt)
+				debug.Printf("Startup: first-response=%s", elapsed)
+				if r.onFirstResponse != nil {
+					r.onFirstResponse(elapsed)
+				}
 			}
 			chunk, err := r.stream.Current()
 			if err != nil && !errors.Is(err, stream.ErrNoContent) {

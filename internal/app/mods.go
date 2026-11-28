@@ -95,6 +95,17 @@ type Mods struct {
 	// --continue while still in progress.
 	todoItems          []ui.TodoItem
 	tokenUsage         proto.TokenUsage
+	statsMu            sync.Mutex
+	statsProvider      string
+	statsModel         string
+	turnDuration       time.Duration
+	firstResponse      time.Duration
+	modelDuration      time.Duration
+	reviewDuration     time.Duration
+	toolDuration       time.Duration
+	statsModelRounds   int
+	statsRetries       int
+	statsCompactions   int
 	debugTurn          int
 	debugRound         int
 	debugTurnStarted   time.Time
@@ -443,12 +454,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				debug.Printf("token usage: input=%d cached_input=%d output=%d reasoning_output=%d total=%d",
 					usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.ReasoningOutputTokens, usage.TotalTokens)
 			}
-			m.debugEndTurn("complete", nil)
+			m.endTurn("complete", nil)
 			m.state = doneState
 			return m, m.quit
 		case streamEventError:
 			m.tokenUsage.Add(msg.runner.takeUsage())
-			m.debugEndModelRound("error", 0, msg.err)
+			m.endModelRound("error", 0, msg.err)
 			return m, msgCmd(msg.runner.errh(msg.err))
 		}
 	case toolOperationStatusMsg:
@@ -470,7 +481,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelContext()
 		m.reviewer.reset()
 		m.TurnCanceled = true
-		m.debugEndTurn("cancelled", context.Canceled)
+		m.endTurn("cancelled", context.Canceled)
 		m.state = doneState
 		return m, m.quit
 	case userInputStartMsg:
@@ -484,12 +495,12 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case userInputCancelMsg:
 		cmds = append(cmds, m.userInput.handleCancelMsg(msg))
 	case modsError:
-		m.debugEndTurn("failed", msg.Err)
+		m.endTurn("failed", msg.Err)
 		m.Error = &msg
 		m.state = errorState
 		return m, m.quit
 	case error:
-		m.debugEndTurn("failed", msg)
+		m.endTurn("failed", msg)
 		m.Error = &modsError{Err: msg, ReasonText: msg.Error()}
 		m.state = errorState
 		return m, m.quit
@@ -531,7 +542,7 @@ func (m *Mods) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "q", "ctrl+c":
 			m.TurnCanceled = true
-			m.debugEndTurn("cancelled", context.Canceled)
+			m.endTurn("cancelled", context.Canceled)
 			m.state = doneState
 			return m, m.quit
 		}
@@ -673,7 +684,7 @@ func (m *Mods) handleStreamChunk(msg streamEventMsg) tea.Cmd {
 }
 
 func (m *Mods) startToolCalls(runner *streamRunner) []tea.Cmd {
-	m.debugEndModelRound("response received", 0, nil)
+	m.endModelRound("response received", 0, nil)
 	// The model may reason and then immediately call a tool without emitting any
 	// answer text; flush the thought so it is still shown.
 	if m.thinkActive && !m.thoughtFlushed {
@@ -749,12 +760,8 @@ func (m *Mods) handleToolCallsDone(msg streamEventMsg) tea.Cmd {
 		return tea.Sequence(append(outputCmds, msgCmd(msg.runner.doneMsg()))...)
 	}
 	m.setActiveOperation(completionStatus)
-	m.debugToolRounds++
-	debug.Print(DebugSection{Title: fmt.Sprintf("tool · turn %d · round %d · complete", m.debugTurn, m.debugRound), Fields: []DebugField{
-		{Label: "calls", Value: fmt.Sprintf("%d", len(msg.results))},
-	}})
-	m.debugRound++
-	m.debugStartModelRound()
+	m.recordToolRoundDone(len(msg.results))
+	m.startModelRound()
 	m.responseBoundaryPending = true
 	m.saveCompletionCheckpoint(msg.runner.messages())
 	// Completed tool batches must survive cancellation before the next reply.

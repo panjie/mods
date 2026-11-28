@@ -147,9 +147,12 @@ resolved credential values are never sent to the debug renderer. Terminal
 output uses color; redirected debug output contains the same labels without ANSI
 styling.
 
-Use `--show-token-usage` (or `-s`) to print the input, output, and total token
-count for an interaction to stderr without mixing it into the model response on
-stdout.
+Use `--show-token-usage` (or `-s`) to print interaction statistics to stderr
+without mixing them into the model response on stdout: token usage (including
+cached input, reasoning output, and output throughput in `tok/s` when
+available), elapsed time breakdown (total, model, tools, review wait, and first
+response), and run details (provider/model, model rounds, tool call counts and
+non-success outcome breakdown, retries, and context compactions).
 
 ## Installed skill directories
 

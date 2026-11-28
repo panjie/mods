@@ -7,13 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/editor"
-	"github.com/panjie/mods/internal/proto"
 )
 
 var canOpenReviewTTY = func() bool {
@@ -226,88 +223,13 @@ func dispatchTurnResult(mods *Mods) error {
 			_, _ = lipgloss.Fprint(os.Stdout, mods.Output)
 		}
 	}
-	printTokenUsage(mods)
+	printInteractionStats(mods)
 
 	if resultConfig(mods).SessionWriteToID != "" {
 		return saveSession(mods)
 	}
 
 	return nil
-}
-
-func printTokenUsage(mods *Mods) {
-	if !config.ShowTokenUsage || mods == nil {
-		return
-	}
-	usage := mods.TokenUsage()
-	if IsErrorTTY() {
-		_, _ = lipgloss.Fprintln(os.Stderr, "\n"+styledTokenUsageLine(usage, StderrStyles()))
-		return
-	}
-	fmt.Fprintln(os.Stderr, tokenUsageLine(usage))
-}
-
-func tokenUsageLine(usage proto.TokenUsage) string {
-	if !usage.Available() {
-		return "Token usage: unavailable"
-	}
-	line := fmt.Sprintf("Token usage: input %s, output %s, total %s",
-		formatTokenCount(usage.InputTokens),
-		formatTokenCount(usage.OutputTokens),
-		formatTokenCount(usage.TotalTokens))
-	if usage.CachedInputTokens != 0 {
-		line += ", cached input " + formatTokenCount(usage.CachedInputTokens)
-	}
-	if usage.ReasoningOutputTokens != 0 {
-		line += ", reasoning output " + formatTokenCount(usage.ReasoningOutputTokens)
-	}
-	return line
-}
-
-func styledTokenUsageLine(usage proto.TokenUsage, styles Styles) string {
-	if !usage.Available() {
-		return styles.Comment.Render("  Tokens  unavailable")
-	}
-	line := styles.Comment.Render("  Tokens  ") +
-		styles.Flag.Render(formatTokenCount(usage.InputTokens)) +
-		styles.Comment.Render(" input  ·  ") +
-		styles.Flag.Render(formatTokenCount(usage.OutputTokens)) +
-		styles.Comment.Render(" output  ·  ") +
-		styles.Flag.Render(formatTokenCount(usage.TotalTokens)) +
-		styles.Comment.Render(" total")
-	if usage.CachedInputTokens != 0 {
-		line += styles.Comment.Render("  ·  ") + styles.Flag.Render(formatTokenCount(usage.CachedInputTokens)) + styles.Comment.Render(" cached input")
-	}
-	if usage.ReasoningOutputTokens != 0 {
-		line += styles.Comment.Render("  ·  ") + styles.Flag.Render(formatTokenCount(usage.ReasoningOutputTokens)) + styles.Comment.Render(" reasoning output")
-	}
-	return line
-}
-
-func formatTokenCount(value int64) string {
-	digits := strconv.FormatInt(value, 10)
-	sign := ""
-	if strings.HasPrefix(digits, "-") {
-		sign = "-"
-		digits = digits[1:]
-	}
-	if len(digits) <= 3 {
-		return sign + digits
-	}
-
-	firstGroup := len(digits) % 3
-	if firstGroup == 0 {
-		firstGroup = 3
-	}
-	var result strings.Builder
-	result.Grow(len(digits) + len(digits)/3)
-	result.WriteString(sign)
-	result.WriteString(digits[:firstGroup])
-	for i := firstGroup; i < len(digits); i += 3 {
-		result.WriteByte(',')
-		result.WriteString(digits[i : i+3])
-	}
-	return result.String()
 }
 
 // runDirsAction prints either a single requested path (config | sessions) or

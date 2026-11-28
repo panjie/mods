@@ -10,18 +10,20 @@ import (
 )
 
 type (
-	modsError    = apperr.Error
-	Config       = cfgpkg.Config
-	API          = cfgpkg.API
-	Model        = cfgpkg.Model
-	FieldUpdate  = cfgpkg.FieldUpdate
-	ReviewMode   = cfgpkg.ReviewMode
-	DB           = session.DB
-	Session      = session.Session
-	Mods         = app.Mods
-	Styles       = ui.Styles
-	DebugSection = debugpkg.Section
-	DebugField   = debugpkg.Field
+	modsError        = apperr.Error
+	Config           = cfgpkg.Config
+	API              = cfgpkg.API
+	Model            = cfgpkg.Model
+	FieldUpdate      = cfgpkg.FieldUpdate
+	ReviewMode       = cfgpkg.ReviewMode
+	DB               = session.DB
+	Session          = session.Session
+	Mods             = app.Mods
+	InteractionStats = app.InteractionStats
+	ToolStats        = app.ToolStats
+	Styles           = ui.Styles
+	DebugSection     = debugpkg.Section
+	DebugField       = debugpkg.Field
 )
 
 var (

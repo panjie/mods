@@ -404,7 +404,7 @@ unchanged once authorized; a temporary script location does not exempt a
 
 Git HTTP(S) authentication can prompt in the terminal and continue the same
 command when needed; passwords are masked, passed over local IPC, and never sent
-to the model or saved by Mods. Debug traces (`-D`/`--debug`) and token counts
+to the model or saved by Mods. Debug traces (`-D`/`--debug`) and interaction statistics
 (`-s`/`--show-token-usage`) go to stderr. See [Tool details](docs/tools.md) for
 command declarations, `http_download`, Git authentication, and debug output.
 

@@ -541,13 +541,13 @@ func TestShowTokenUsageFlagAndFormatting(t *testing.T) {
 		require.NoError(t, rootCmd.Flags().Parse([]string{"-s"}))
 		require.True(t, config.ShowTokenUsage)
 	})
-	require.Equal(t, "Token usage: unavailable", tokenUsageLine(proto.TokenUsage{}))
+	require.Equal(t, "Token usage: unavailable", tokenUsageLine(proto.TokenUsage{}, 0))
 	require.Equal(t, "Token usage: input 7,735, output 9, total 7,744", tokenUsageLine(proto.TokenUsage{
 		InputTokens: 7735, OutputTokens: 9, TotalTokens: 7744,
-	}))
+	}, 0))
 	require.Equal(t, "Token usage: input 100, output 20, total 120, cached input 40, reasoning output 7", tokenUsageLine(proto.TokenUsage{
 		InputTokens: 100, CachedInputTokens: 40, OutputTokens: 20, ReasoningOutputTokens: 7, TotalTokens: 120,
-	}))
+	}, 0))
 }
 
 func TestFormatTokenCount(t *testing.T) {
@@ -575,12 +575,12 @@ func TestStyledTokenUsageLine(t *testing.T) {
 
 	got := styledTokenUsageLine(proto.TokenUsage{
 		InputTokens: 7735, OutputTokens: 9, TotalTokens: 7744,
-	}, styles)
+	}, 0, styles)
 	require.Equal(t, "  Tokens  7,735 input  ·  9 output  ·  7,744 total", ansi.Strip(got))
 	require.NotEqual(t, ansi.Strip(got), got, "TTY status line must contain styling")
 	require.Contains(t, got, styles.Flag.Render("7,735"))
 
-	unavailable := styledTokenUsageLine(proto.TokenUsage{}, styles)
+	unavailable := styledTokenUsageLine(proto.TokenUsage{}, 0, styles)
 	require.Equal(t, "  Tokens  unavailable", ansi.Strip(unavailable))
 	require.NotEqual(t, ansi.Strip(unavailable), unavailable)
 }
@@ -598,7 +598,7 @@ func TestPrintTokenUsageNonTTYUsesOnlyStderr(t *testing.T) {
 	var stderr string
 	stdout := captureStdout(t, func() {
 		stderr = captureStderr(t, func() {
-			printTokenUsage(&Mods{})
+			printInteractionStats(&Mods{})
 		})
 	})
 	require.Empty(t, stdout)
@@ -628,7 +628,7 @@ func TestPrintTokenUsageTTYAddsSpacingAndStyle(t *testing.T) {
 	var stderr string
 	stdout := captureStdout(t, func() {
 		stderr = captureStderr(t, func() {
-			printTokenUsage(&Mods{})
+			printInteractionStats(&Mods{})
 		})
 	})
 	require.Empty(t, stdout)

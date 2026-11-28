@@ -37,6 +37,7 @@ func (m *Mods) retry(content string, err modsError) tea.Msg {
 	// would freeze the Bubble Tea Update loop, blocking animation redraws and
 	// keystrokes (including Ctrl+C) for up to several seconds during back-off.
 	// Update() schedules a tea.Tick that delivers completionInput after wait.
+	m.recordRetry()
 	return retryMsg{content: content, wait: wait}
 }
 
@@ -70,22 +71,7 @@ func (m *Mods) startCompletionCmd(content string) tea.Cmd {
 		m.retryCheckpoint = nil
 		m.activityBlocks = nil
 	}
-	if !m.debugTurnActive {
-		m.debugTurn++
-		m.debugRound = 1
-		m.debugTurnStarted = time.Now()
-		m.debugTurnActive = true
-		m.debugToolTotal = 0
-		m.debugToolRounds = 0
-		m.debugToolSucceeded = 0
-		m.debugToolExited = 0
-		m.debugToolFailed = 0
-		m.debugToolDenied = 0
-		m.debugToolCancelled = 0
-		debug.Print(DebugSection{Title: fmt.Sprintf("turn %d · start", m.debugTurn), Fields: []DebugField{
-			{Label: "input", Value: fmt.Sprintf("%d chars", len(m.Input)+len(content))},
-		}})
-	}
+	m.beginTurn(len(m.Input) + len(content))
 
 	startCmd := func() tea.Msg {
 		session, err := m.buildRequestSession(content)
@@ -335,12 +321,12 @@ func (m *Mods) debugRequest(cfg *Config, mod *Model, messages *[]proto.Message, 
 	if cfg.HTTPProxy != "" {
 		fields = append(fields, DebugField{Label: "proxy", Value: cfg.HTTPProxy})
 	}
-	title := fmt.Sprintf("turn %d · request", m.debugTurn)
+	turn, _ := m.currentTurnRound()
+	title := fmt.Sprintf("turn %d · request", turn)
 	if m.retries > 0 {
-		title = fmt.Sprintf("turn %d · retry %d", m.debugTurn, m.retries)
+		title = fmt.Sprintf("turn %d · retry %d", turn, m.retries)
 	}
 	debug.Print(DebugSection{Title: title, Fields: fields})
-	m.debugStartModelRound()
 }
 
 func ptrOrNil[T number](t T) *T {
